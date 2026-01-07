@@ -371,7 +371,78 @@ The `transformers serve` server is also an MCP client, so it can interact with M
 > [!TIP]
 > At the moment, MCP tool usage in `transformers` is limited to the `qwen` family of models.
 
-<!-- TODO: example with a minimal python example, and explain that it is possible to pass a full generation config in the request -->
+### Minimal Python Clients
+
+Below are minimal, dependency-light Python examples that interact directly with the server using HTTP.
+
+#### Chat Completions (streaming) with generation_config
+
+```python
+import json
+import httpx
+
+url = "http://localhost:8000/v1/chat/completions"
+
+payload = {
+    "model": "Qwen/Qwen2.5-0.5B-Instruct",
+    "messages": [{"role": "user", "content": "Say hello in one short sentence."}],
+    "stream": True,
+    "max_tokens": 128,
+    "temperature": 0.7,
+    "top_p": 0.95,
+    "generation_config": json.dumps({
+        "max_new_tokens": 128,
+        "temperature": 0.7,
+        "top_p": 0.95
+    })
+}
+
+with httpx.Client(timeout=None) as client:
+    with client.stream("POST", url, json=payload) as r:
+        for line in r.iter_lines():
+            if not line:
+                continue
+            if line.startswith("data: "):
+                chunk = json.loads(line[6:])
+                delta = chunk["choices"][0]["delta"].get("content")
+                if delta:
+                    print(delta, end="")
+```
+
+> [!TIP]
+> Tool calls over streaming are currently supported for the `qwen` family of models.
+
+#### Responses (non-streaming) with generation_config
+
+```python
+import json
+import httpx
+
+url = "http://localhost:8000/v1/responses"
+
+payload = {
+    "model": "Qwen/Qwen2.5-0.5B-Instruct",
+    "input": "Provide a one-sentence summary of Transformers.",
+    "stream": False,
+    "max_output_tokens": 128,
+    "temperature": 0.7,
+    "top_p": 0.95,
+    "generation_config": json.dumps({
+        "max_new_tokens": 128,
+        "temperature": 0.7,
+        "top_p": 0.95
+    })
+}
+
+with httpx.Client() as client:
+    resp = client.post(url, json=payload)
+    print(resp.json())
+```
+
+#### Parameter precedence
+
+- When `generation_config` is present, it seeds the configuration; request-level fields like `max_tokens` (Completions) or `max_output_tokens` (Responses), `temperature`, and `top_p` then override.
+- Use `generation_config` for reusable defaults and the request body for per-call adjustments.
 
 ## Continuous Batching
 
