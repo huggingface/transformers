@@ -269,7 +269,6 @@ class GraniteSpeechCTCEncoder(nn.Module):
         self.out_mid = nn.Linear(config.output_dim, config.hidden_dim, bias=True)
         self.num_layers = config.num_layers
 
-    @check_model_inputs(tie_last_hidden_states=False)
     def forward(self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutputWithPooling:
         hidden_states = self.input_linear(hidden_states)
         for idx, layer in enumerate(self.layers, start=1):
