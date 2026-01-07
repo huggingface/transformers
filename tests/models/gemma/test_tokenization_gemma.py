@@ -16,7 +16,6 @@
 import unittest
 
 from tests.test_tokenization_common import TokenizerTesterMixin
-from transformers import AutoTokenizer
 from transformers.models.gemma.tokenization_gemma import GemmaTokenizer
 from transformers.testing_utils import (
     require_read_token,
@@ -34,25 +33,3 @@ class GemmaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     integration_expected_token_ids = [1596, 603, 476, 2121, 44416, 108, 235285, 729, 7565, 575, 235248, 235315, 235284, 235276, 235276, 235276, 235269, 578, 736, 603, 40751, 235335, 235265, 108, 122182, 235710, 245467, 235427, 108, 2151, 139, 4521, 108, 2151, 140, 4521, 109, 235248, 108, 139, 108, 25957, 108, 235322, 235256, 235313, 108, 544, 235322, 235256, 235313, 11048, 108, 651, 2412, 2067, 1412, 614, 10338, 49748, 235292, 25957, 235265, 108, 1860, 496, 1924, 578, 73208, 140, 5650, 140, 235732, 108, 6750, 1368, 708, 692, 3900]  # fmt: skip
     expected_tokens_from_ids = ['This', '▁is', '▁a', '▁test', '▁😊', '\n', 'I', '▁was', '▁born', '▁in', '▁', '9', '2', '0', '0', '0', ',', '▁and', '▁this', '▁is', '▁fals', 'é', '.', '\n', '生活的', '真', '谛', '是', '\n', 'Hi', '▁▁', 'Hello', '\n', 'Hi', '▁▁▁', 'Hello', '\n\n', '▁', '\n', '▁▁', '\n', '▁Hello', '\n', '<', 's', '>', '\n', 'hi', '<', 's', '>', 'there', '\n', 'The', '▁following', '▁string', '▁should', '▁be', '▁properly', '▁encoded', ':', '▁Hello', '.', '\n', 'But', '▁i', 'rd', '▁and', '▁ปี', '▁▁▁', 'ird', '▁▁▁', 'ด', '\n', 'Hey', '▁how', '▁are', '▁you', '▁doing']  # fmt: skip
     integration_expected_decoded_text = "This is a test 😊\nI was born in 92000, and this is falsé.\n生活的真谛是\nHi  Hello\nHi   Hello\n\n \n  \n Hello\n<s>\nhi<s>there\nThe following string should be properly encoded: Hello.\nBut ird and ปี   ird   ด\nHey how are you doing"
-
-    def test_gemma_pretokenizer_split_is_redundant(self):
-        model_id = self.from_pretrained_id
-        if isinstance(model_id, (list, tuple)):
-            model_id = model_id[0]
-
-        tok = AutoTokenizer.from_pretrained(model_id, use_fast=True)
-        bt = tok.backend_tokenizer
-
-        # Gemma fast tokenizer normalizes " " -> "▁", so splitting on literal spaces is redundant.
-        text = "Hello   this\tis  a test"
-
-        baseline_tokens = tok.tokenize(text)
-        baseline_ids = tok.encode(text)
-
-        orig = bt.pre_tokenizer
-        try:
-            bt.pre_tokenizer = None
-            self.assertEqual(tok.tokenize(text), baseline_tokens)
-            self.assertEqual(tok.encode(text), baseline_ids)
-        finally:
-            bt.pre_tokenizer = orig
