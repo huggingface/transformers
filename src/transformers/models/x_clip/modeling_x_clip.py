@@ -1247,7 +1247,7 @@ class XCLIPModel(XCLIPPreTrainedModel):
         self,
         pixel_values: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.FloatTensor:
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         r"""
         Returns:
             video_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The video embeddings obtained by

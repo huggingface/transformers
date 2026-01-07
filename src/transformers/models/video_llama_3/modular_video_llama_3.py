@@ -597,7 +597,7 @@ class VideoLlama3Model(Qwen2VLModel):
         video_grid_thw: torch.LongTensor,
         video_merge_sizes: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         """
         Encodes videos into continuous embeddings that can be forwarded to the language model.
 

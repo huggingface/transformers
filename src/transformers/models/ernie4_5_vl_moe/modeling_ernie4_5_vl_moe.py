@@ -1609,7 +1609,7 @@ class Ernie4_5_VL_MoeForConditionalGeneration(Ernie4_5_VL_MoePreTrainedModel, Ge
         pixel_values_videos: torch.FloatTensor,
         video_grid_thw: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         return self.model.get_video_features(
             pixel_values_videos=pixel_values_videos, video_grid_thw=video_grid_thw, **kwargs
         )

@@ -1800,7 +1800,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         pixel_values_videos: torch.FloatTensor,
         video_grid_thw: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         """
         Encodes videos into continuous embeddings that can be forwarded to the language model.
 

@@ -1093,7 +1093,7 @@ class Qwen3VLModel(Qwen3VLPreTrainedModel):
         pixel_values_videos: torch.FloatTensor,
         video_grid_thw: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithDeepstackFeatures:
+    ) -> Union[tuple, BaseModelOutputWithDeepstackFeatures]:
         """
         Encodes videos into continuous embeddings that can be forwarded to the language model. The deepstack visual features are also returned.
 
@@ -1346,7 +1346,7 @@ class Qwen3VLForConditionalGeneration(Qwen3VLPreTrainedModel, GenerationMixin):
         pixel_values_videos: torch.FloatTensor,
         video_grid_thw: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> Union[tuple, BaseModelOutputWithDeepstackFeatures]:
         return self.model.get_video_features(
             pixel_values_videos=pixel_values_videos, video_grid_thw=video_grid_thw, **kwargs
         )

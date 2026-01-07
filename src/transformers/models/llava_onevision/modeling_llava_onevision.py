@@ -608,7 +608,7 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
         vision_feature_layer: Union[int, list[int]],
         vision_feature_select_strategy: str,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         """
         Obtains video last hidden states from the vision tower, apply multimodal projection and pooling.
 
@@ -949,7 +949,7 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
         vision_feature_layer: Optional[Union[int, list[int]]] = None,
         vision_feature_select_strategy: Optional[str] = None,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         return self.model.get_video_features(
             pixel_values=pixel_values,
             vision_feature_layer=vision_feature_layer,

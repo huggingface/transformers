@@ -414,7 +414,7 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
         vision_feature_layer: Union[int, list[int]],
         vision_feature_select_strategy: str,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         """
         Obtains video last hidden states from the vision tower, apply multimodal projection and pooling.
 

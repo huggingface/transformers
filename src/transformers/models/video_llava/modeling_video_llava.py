@@ -236,7 +236,7 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
         pixel_values_videos: torch.FloatTensor,
         vision_feature_layer: Optional[Union[int, list[int]]] = None,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         """
         Obtains video last hidden states from the vision tower and apply multimodal projection.
 

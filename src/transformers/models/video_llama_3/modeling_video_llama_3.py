@@ -553,7 +553,7 @@ class VideoLlama3Model(VideoLlama3PreTrainedModel):
         video_grid_thw: torch.LongTensor,
         video_merge_sizes: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         """
         Encodes videos into continuous embeddings that can be forwarded to the language model.
 
@@ -784,7 +784,7 @@ class VideoLlama3ForConditionalGeneration(VideoLlama3PreTrainedModel, Generation
         pixel_values_videos: torch.FloatTensor,
         video_grid_thw: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> Union[tuple, BaseModelOutputWithPooling]:
         return self.model.get_video_features(
             pixel_values_videos=pixel_values_videos, video_grid_thw=video_grid_thw, **kwargs
         )
