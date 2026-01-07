@@ -60,7 +60,7 @@ def get_keys_to_not_convert(model) -> list:
 
 def _assign_is_quantized(model):
     from ..modeling_utils import PreTrainedModel
-
+    # TODO: need a better check
     model.config._is_quantized = True
     for child in model.children():
         if isinstance(child, PreTrainedModel):
