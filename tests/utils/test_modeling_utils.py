@@ -133,6 +133,7 @@ if is_torch_available():
         FLASH_ATTN_KERNEL_FALLBACK,
         _find_disjoint,
         _find_identical,
+        get_total_byte_count,
     )
     from transformers.pytorch_utils import isin_mps_friendly
 
@@ -397,6 +398,23 @@ class ModelUtilsTest(TestCasePlus):
     def tearDown(self):
         torch.set_default_dtype(self.old_dtype)
         super().tearDown()
+
+    @require_torch
+    def test_get_total_byte_count_does_not_require_process_group(self):
+        model = BaseModel(PreTrainedConfig())
+        model._tp_plan = {"linear.weight": "rowwise"}
+        accelerator_device_map = {"linear.weight": torch.device("cpu")}
+
+        with (
+            patch("transformers.modeling_utils.torch.distributed.is_available", return_value=True),
+            patch("transformers.modeling_utils.torch.distributed.is_initialized", return_value=False),
+            patch("transformers.modeling_utils.torch.distributed.get_world_size") as mock_world_size,
+        ):
+            total_byte_count = get_total_byte_count(model, accelerator_device_map, None)
+
+        mock_world_size.assert_not_called()
+        self.assertIn(torch.device("cpu"), total_byte_count)
+        self.assertGreater(total_byte_count[torch.device("cpu")], 0)
 
     def test_hub_retry(self):
         @hub_retry(max_attempts=2)
@@ -1682,7 +1700,7 @@ class ModelUtilsTest(TestCasePlus):
         Calling `model.save_pretrained` with generation parameters should raise a `ValueError`
         """
         model = AutoModelForCausalLM.from_pretrained("openai-community/gpt2")
-        self.assertTrue(model.generation_config.repetition_penalty == 1.0)
+        self.assertTrue(model.generation_config.repetition_penalty is None)
         self.assertFalse(hasattr(model.config, "repetition_penalty"))
 
         # If the user attempts to save a custom generation parameter, we raise an Error
@@ -1791,11 +1809,8 @@ class ModelUtilsTest(TestCasePlus):
         """
         model = T5ForConditionalGeneration.from_pretrained(TINY_T5)
 
-        # The default for `num_beams` is 1 and `early_stopping` is False
-        # NOTE: accessible only from generation config, EVEN IF they are saved
-        # in `config.json` file in the hub
-        self.assertTrue(model.generation_config.num_beams == 1)
-        self.assertTrue(model.generation_config.early_stopping is False)
+        self.assertTrue(model.generation_config.num_beams is None)
+        self.assertTrue(model.generation_config.early_stopping is None)
         self.assertFalse(hasattr(model.config, "num_beams"))
         self.assertFalse(hasattr(model.config, "early_stopping"))
 
@@ -1809,7 +1824,7 @@ class ModelUtilsTest(TestCasePlus):
         # we will throw an error, nudging user to save attributes in the generation_config
         model.config.num_beams = 5
         model.config.early_stopping = True
-        self.assertTrue(model.generation_config.num_beams == 1)  # unmodified generation config
+        self.assertTrue(model.generation_config.num_beams is None)  # default value
         with tempfile.TemporaryDirectory() as tmp_dir:
             with self.assertRaises(ValueError):
                 model.save_pretrained(tmp_dir)

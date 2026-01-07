@@ -293,6 +293,12 @@ class GraniteSpeechPreTrainedModel(PreTrainedModel):
         super()._init_weights(module)
         if isinstance(module, GraniteSpeechEncoderProjector):
             init.normal_(module.query)
+        elif isinstance(module, GraniteSpeechCTCEncoder):
+            context_size = module.config.context_size
+            seq = torch.arange(context_size)
+            relpos_dist = seq.view(-1, 1) - seq.view(1, -1)
+            attention_dists = torch.clamp(relpos_dist, -context_size, context_size) + module.config.max_pos_emb
+            init.copy_(module.attention_dists, attention_dists)
 
 
 @auto_docstring(
@@ -321,6 +327,12 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
             )
 
         self.post_init()
+
+    def set_decoder(self, decoder):
+        self.language_model.set_decoder(decoder)
+
+    def get_decoder(self):
+        return self.language_model.get_decoder()
 
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
@@ -458,6 +470,7 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
         attention_mask=None,
         cache_position=None,
         logits_to_keep=None,
+        is_first_iteration=False,
         **kwargs,
     ):
         # Overwritten -- in specific circumstances we don't want to forward audio inputs to the model
@@ -469,13 +482,14 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
             attention_mask=attention_mask,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
+            is_first_iteration=is_first_iteration,
             **kwargs,
         )
 
         # If we're in cached decoding stage, input_features should be None because
         # input ids do not contain special audio token anymore Otherwise we need
         # input feature values to be passed to the model
-        if cache_position[0] == 0:
+        if is_first_iteration or not kwargs.get("use_cache", True):
             model_inputs["input_features"] = input_features
         return model_inputs
 

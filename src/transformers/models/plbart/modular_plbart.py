@@ -21,6 +21,7 @@ import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
+from ... import initialization as init
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_outputs import (
@@ -55,6 +56,11 @@ class PLBartPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
+
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, PLBartForConditionalGeneration):
+            init.zeros_(module.final_logits_bias)
 
 
 class PLBartEncoder(BartEncoder):
