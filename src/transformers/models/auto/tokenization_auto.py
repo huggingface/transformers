@@ -63,11 +63,9 @@ REGISTERED_FAST_ALIASES: dict[str, type[Any]] = {}
 
 TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
     [
-        ("aimv2", "CLIPTokenizerFast" if is_tokenizers_available() else None),
+        ("aimv2", "CLIPTokenizer" if is_tokenizers_available() else None),
         ("albert", "AlbertTokenizer" if is_tokenizers_available() else None),
         ("align", "BertTokenizer" if is_tokenizers_available() else None),
-        ("arcee", "LlamaTokenizer" if is_tokenizers_available() else None),
-        ("aria", "LlamaTokenizer" if is_tokenizers_available() else None),
         ("audioflamingo3", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("aya_vision", "CohereTokenizer" if is_tokenizers_available() else None),
         ("bark", "BertTokenizer" if is_tokenizers_available() else None),
@@ -81,19 +79,15 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
         ("big_bird", "BigBirdTokenizer" if is_tokenizers_available() else None),
         ("bigbird_pegasus", "PegasusTokenizer" if is_tokenizers_available() else None),
         ("biogpt", "BioGptTokenizer"),
-        ("bitnet", "TokenizersBackend" if is_tokenizers_available() else None),
         ("blenderbot", "BlenderbotTokenizer" if is_tokenizers_available() else None),
         ("blenderbot-small", "BlenderbotSmallTokenizer"),
         ("blip", "BertTokenizer" if is_tokenizers_available() else None),
         ("blip-2", "GPT2Tokenizer" if is_tokenizers_available() else None),
-        ("bloom", "TokenizersBackend" if is_tokenizers_available() else None),
-        ("blt", "TokenizersBackend" if is_tokenizers_available() else None),
         ("bridgetower", "RobertaTokenizer"),
         ("bros", "BertTokenizer" if is_tokenizers_available() else None),
         ("byt5", "ByT5Tokenizer"),
         ("camembert", "CamembertTokenizer" if is_tokenizers_available() else None),
         ("canine", "CanineTokenizer"),
-        ("chameleon", "LlamaTokenizer" if is_tokenizers_available() else None),
         ("chinese_clip", "BertTokenizer" if is_tokenizers_available() else None),
         ("clap", "RobertaTokenizer"),
         ("clip", "CLIPTokenizer" if is_tokenizers_available() else None),
@@ -103,193 +97,141 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
         ("codegen", "GPT2Tokenizer" if is_tokenizers_available() else None),
         ("cohere", "CohereTokenizer" if is_tokenizers_available() else None),
         ("cohere2", "CohereTokenizer" if is_tokenizers_available() else None),
-        ("colpali", "LlamaTokenizer" if is_tokenizers_available() else None),
-        ("colqwen2", "Qwen2TokenizerFast" if is_tokenizers_available() else None),
+        ("colqwen2", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("convbert", "BertTokenizer" if is_tokenizers_available() else None),
         ("cpm", "CpmTokenizer" if is_tokenizers_available() else None),
         ("cpmant", "CpmAntTokenizer"),
-        ("csm", "TokenizersBackend" if is_tokenizers_available() else None),
         ("ctrl", "CTRLTokenizer"),
         ("data2vec-audio", "Wav2Vec2CTCTokenizer"),
         ("data2vec-text", "RobertaTokenizer"),
         ("dbrx", "GPT2Tokenizer" if is_tokenizers_available() else None),
         ("deberta", "DebertaTokenizer" if is_tokenizers_available() else None),
         ("deberta-v2", "DebertaV2Tokenizer" if is_tokenizers_available() else None),
-        ("deepseek_v2", "LlamaTokenizer" if is_tokenizers_available() else None),
-        ("deepseek_v3", "LlamaTokenizer" if is_tokenizers_available() else None),
-        ("deepseek_vl", "LlamaTokenizer" if is_tokenizers_available() else None),
-        ("deepseek_vl_hybrid", "LlamaTokenizer" if is_tokenizers_available() else None),
         ("dia", "DiaTokenizer"),
-        ("diffllama", "LlamaTokenizer" if is_tokenizers_available() else None),
         ("distilbert", "BertTokenizer" if is_tokenizers_available() else None),
-        ("dpr", "DPRQuestionEncoderTokenizerFast" if is_tokenizers_available() else None),
+        ("dpr", "DPRQuestionEncoderTokenizer" if is_tokenizers_available() else None),
         ("electra", "BertTokenizer" if is_tokenizers_available() else None),
         ("emu3", "GPT2Tokenizer" if is_tokenizers_available() else None),
         ("ernie", "BertTokenizer" if is_tokenizers_available() else None),
-        ("ernie4_5", "LlamaTokenizer" if is_tokenizers_available() else None),
-        ("ernie4_5_moe", "LlamaTokenizer" if is_tokenizers_available() else None),
-        ("ernie4_5_vl_moe", "TokenizersBackend" if is_tokenizers_available() else None),
         ("esm", "EsmTokenizer"),
         ("exaone4", "GPT2Tokenizer" if is_tokenizers_available() else None),
-        ("falcon", "TokenizersBackend" if is_tokenizers_available() else None),
-        ("falcon_mamba", "GPTNeoXTokenizerFast" if is_tokenizers_available() else None),
+        ("falcon_mamba", "GPTNeoXTokenizer" if is_tokenizers_available() else None),
         ("fastspeech2_conformer", "FastSpeech2ConformerTokenizer" if is_g2p_en_available() else None),
         ("flaubert", "FlaubertTokenizer"),
         ("flava", "BertTokenizer" if is_tokenizers_available() else None),
         ("flex_olmo", "GPT2Tokenizer" if is_tokenizers_available() else None),
         ("florence2", "BartTokenizer" if is_tokenizers_available() else None),
-        ("fnet", "FNetTokenizerFast" if is_tokenizers_available() else None),
+        ("fnet", "FNetTokenizer" if is_tokenizers_available() else None),
         ("fsmt", "FSMTTokenizer"),
         ("funnel", "FunnelTokenizer" if is_tokenizers_available() else None),
-        ("fuyu", "TokenizersBackend" if is_tokenizers_available() else None),
-        ("gemma", "GemmaTokenizerFast" if is_tokenizers_available() else None),
-        ("gemma2", "GemmaTokenizerFast" if is_tokenizers_available() else None),
-        ("gemma3", "GemmaTokenizerFast" if is_tokenizers_available() else None),
-        ("gemma3_text", "GemmaTokenizerFast" if is_tokenizers_available() else None),
-        ("gemma3n", "GemmaTokenizerFast" if is_tokenizers_available() else None),
-        ("gemma3n_text", "GemmaTokenizerFast" if is_tokenizers_available() else None),
+        ("gemma", "GemmaTokenizer" if is_tokenizers_available() else None),
+        ("gemma2", "GemmaTokenizer" if is_tokenizers_available() else None),
+        ("gemma3", "GemmaTokenizer" if is_tokenizers_available() else None),
+        ("gemma3_text", "GemmaTokenizer" if is_tokenizers_available() else None),
+        ("gemma3n", "GemmaTokenizer" if is_tokenizers_available() else None),
+        ("gemma3n_text", "GemmaTokenizer" if is_tokenizers_available() else None),
         ("git", "BertTokenizer" if is_tokenizers_available() else None),
-        ("glm", "TokenizersBackend" if is_tokenizers_available() else None),
-        ("glm4", "TokenizersBackend" if is_tokenizers_available() else None),
-        ("glm4_moe", "TokenizersBackend" if is_tokenizers_available() else None),
-        ("glm4v", "TokenizersBackend" if is_tokenizers_available() else None),
-        ("glm4v_moe", "TokenizersBackend" if is_tokenizers_available() else None),
-        ("glmasr", "TokenizersBackend" if is_tokenizers_available() else None),
-        ("got_ocr2", "TokenizersBackend" if is_tokenizers_available() else None),
         ("gpt-sw3", "GPTSw3Tokenizer" if is_sentencepiece_available() else None),
         ("gpt2", "GPT2Tokenizer" if is_tokenizers_available() else None),
         ("gpt_bigcode", "GPT2Tokenizer" if is_tokenizers_available() else None),
         ("gpt_neo", "GPT2Tokenizer" if is_tokenizers_available() else None),
         ("gpt_neox", "GPTNeoXTokenizer" if is_tokenizers_available() else None),
         ("gpt_neox_japanese", "GPTNeoXJapaneseTokenizer"),
-        ("gpt_oss", "TokenizersBackend" if is_tokenizers_available() else None),
         ("gptj", "GPT2Tokenizer" if is_tokenizers_available() else None),
         ("granite", "GPT2Tokenizer"),
         ("granitemoe", "GPT2Tokenizer"),
         ("granitemoehybrid", "GPT2Tokenizer"),
         ("granitemoeshared", "GPT2Tokenizer"),
         ("grounding-dino", "BertTokenizer" if is_tokenizers_available() else None),
-        ("groupvit", "CLIPTokenizerFast" if is_tokenizers_available() else None),
-        ("helium", "TokenizersBackend" if is_tokenizers_available() else None),
+        ("groupvit", "CLIPTokenizer" if is_tokenizers_available() else None),
         ("herbert", "HerbertTokenizer" if is_tokenizers_available() else None),
         ("hubert", "Wav2Vec2CTCTokenizer"),
         ("ibert", "RobertaTokenizer"),
         ("idefics", "LlamaTokenizer" if is_tokenizers_available() else None),
         ("idefics2", "LlamaTokenizer" if is_tokenizers_available() else None),
-        ("idefics3", "LlamaTokenizer" if is_tokenizers_available() else None),
         ("instructblip", "GPT2Tokenizer" if is_tokenizers_available() else None),
         ("instructblipvideo", "GPT2Tokenizer" if is_tokenizers_available() else None),
-        ("internvl", "Qwen2TokenizerFast" if is_tokenizers_available() else None),
+        ("internvl", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("jais2", "GPT2Tokenizer" if is_tokenizers_available() else None),
-        ("jamba", "LlamaTokenizer" if is_tokenizers_available() else None),
-        ("janus", "LlamaTokenizer" if is_tokenizers_available() else None),
-        ("jetmoe", "LlamaTokenizer" if is_tokenizers_available() else None),
         ("kosmos-2", "XLMRobertaTokenizer" if is_tokenizers_available() else None),
-        ("kosmos-2.5", "TokenizersBackend" if is_tokenizers_available() else None),
-        ("lasr_ctc", "ParakeetTokenizerFast" if is_tokenizers_available() else None),
-        ("lasr_encoder", "ParakeetTokenizerFast" if is_tokenizers_available() else None),
+        ("lasr_ctc", "ParakeetTokenizer" if is_tokenizers_available() else None),
+        ("lasr_encoder", "ParakeetTokenizer" if is_tokenizers_available() else None),
         ("layoutlm", "BertTokenizer" if is_tokenizers_available() else None),
         ("layoutlmv2", "LayoutLMv2Tokenizer" if is_tokenizers_available() else None),
         ("layoutlmv3", "LayoutLMv3Tokenizer" if is_tokenizers_available() else None),
         ("layoutxlm", "LayoutXLMTokenizer" if is_tokenizers_available() else None),
         ("led", "LEDTokenizer" if is_tokenizers_available() else None),
-        ("lfm2_vl", "TokenizersBackend" if is_tokenizers_available() else None),
         ("lilt", "RobertaTokenizer" if is_tokenizers_available() else None),
-        ("llama", "LlamaTokenizer" if is_tokenizers_available() else None),
-        ("llama4", "LlamaTokenizer" if is_tokenizers_available() else None),
-        ("llama4_text", "LlamaTokenizer" if is_tokenizers_available() else None),
-        ("llava", "LlamaTokenizer" if is_tokenizers_available() else None),
-        ("llava_next", "LlamaTokenizer" if is_tokenizers_available() else None),
-        ("llava_next_video", "LlamaTokenizer" if is_tokenizers_available() else None),
-        ("llava_onevision", "LlamaTokenizer" if is_tokenizers_available() else None),
         ("longformer", "RobertaTokenizer" if is_tokenizers_available() else None),
         ("longt5", "T5Tokenizer" if is_tokenizers_available() else None),
         ("luke", "LukeTokenizer"),
         ("lxmert", "LxmertTokenizer" if is_tokenizers_available() else None),
         ("m2m_100", "M2M100Tokenizer" if is_sentencepiece_available() else None),
-        ("mamba", "GPTNeoXTokenizerFast" if is_tokenizers_available() else None),
-        ("mamba2", "GPTNeoXTokenizerFast" if is_tokenizers_available() else None),
+        ("mamba", "GPTNeoXTokenizer" if is_tokenizers_available() else None),
+        ("mamba2", "GPTNeoXTokenizer" if is_tokenizers_available() else None),
         ("marian", "MarianTokenizer" if is_sentencepiece_available() else None),
+        ("markuplm", "MarkupLMTokenizer" if is_tokenizers_available() else None),
         ("mbart", "MBartTokenizer" if is_tokenizers_available() else None),
         ("mbart50", "MBart50Tokenizer" if is_tokenizers_available() else None),
         ("mega", "RobertaTokenizer"),
         ("megatron-bert", "BertTokenizer" if is_tokenizers_available() else None),
-        ("metaclip_2", "XLMRobertaTokenizerFast" if is_tokenizers_available() else None),
+        ("metaclip_2", "XLMRobertaTokenizer" if is_tokenizers_available() else None),
         ("mgp-str", "MgpstrTokenizer"),
-        ("minimax", "GPT2Tokenizer" if is_tokenizers_available() else None),
         (
             "ministral3",
             "MistralCommonBackend"
             if is_mistral_common_available()
-            else (
-                "LlamaTokenizer"
-                if is_tokenizers_available()
-                else ("LlamaTokenizer" if is_sentencepiece_available() else None)
-            ),
+            else ("TokenizersBackend" if is_tokenizers_available() else None),
         ),
         (
             "mistral",
             "MistralCommonBackend"
             if is_mistral_common_available()
-            else ("LlamaTokenizer" if is_tokenizers_available() else None),
+            else ("TokenizersBackend" if is_tokenizers_available() else None),
         ),
         (
             "mistral3",
             "MistralCommonBackend"
             if is_mistral_common_available()
-            else (
-                "LlamaTokenizer"
-                if is_tokenizers_available()
-                else ("LlamaTokenizer" if is_sentencepiece_available() else None)
-            ),
+            else ("TokenizersBackend" if is_tokenizers_available() else None),
         ),
         (
             "mixtral",
             "MistralCommonBackend"
             if is_mistral_common_available()
-            else ("LlamaTokenizer" if is_tokenizers_available() else None),
+            else ("TokenizersBackend" if is_tokenizers_available() else None),
         ),
-        ("mllama", "LlamaTokenizer" if is_tokenizers_available() else None),
         ("mluke", "MLukeTokenizer" if is_sentencepiece_available() else None),
         ("mm-grounding-dino", "BertTokenizer" if is_tokenizers_available() else None),
         ("mobilebert", "MobileBertTokenizer" if is_tokenizers_available() else None),
-        ("modernbert", "TokenizersBackend" if is_tokenizers_available() else None),
-        ("moonshine", "TokenizersBackend" if is_tokenizers_available() else None),
-        ("moshi", "TokenizersBackend" if is_tokenizers_available() else None),
         ("mpnet", "MPNetTokenizer" if is_tokenizers_available() else None),
-        ("mpt", "GPTNeoXTokenizerFast" if is_tokenizers_available() else None),
+        ("mpt", "GPTNeoXTokenizer" if is_tokenizers_available() else None),
         ("mra", "RobertaTokenizer"),
         ("mt5", "T5Tokenizer" if is_tokenizers_available() else None),
         ("musicgen", "T5Tokenizer" if is_tokenizers_available() else None),
         ("musicgen_melody", "T5Tokenizer" if is_tokenizers_available() else None),
         ("mvp", "MvpTokenizer" if is_tokenizers_available() else None),
         ("myt5", "MyT5Tokenizer"),
-        ("nemotron", "TokenizersBackend" if is_tokenizers_available() else None),
         ("nezha", "BertTokenizer" if is_tokenizers_available() else None),
         ("nllb", "NllbTokenizer" if is_tokenizers_available() else None),
         ("nllb-moe", "NllbTokenizer" if is_tokenizers_available() else None),
         ("nougat", "NougatTokenizer" if is_tokenizers_available() else None),
-        ("nystromformer", "AlbertTokenizerFast" if is_tokenizers_available() else None),
-        ("olmo", "GPTNeoXTokenizerFast" if is_tokenizers_available() else None),
-        ("olmo2", "GPTNeoXTokenizerFast" if is_tokenizers_available() else None),
+        ("nystromformer", "AlbertTokenizer" if is_tokenizers_available() else None),
+        ("olmo", "GPTNeoXTokenizer" if is_tokenizers_available() else None),
+        ("olmo2", "GPTNeoXTokenizer" if is_tokenizers_available() else None),
         ("olmo3", "GPT2Tokenizer" if is_tokenizers_available() else None),
-        ("olmoe", "GPTNeoXTokenizerFast" if is_tokenizers_available() else None),
-        ("omdet-turbo", "CLIPTokenizerFast" if is_tokenizers_available() else None),
-        ("oneformer", "CLIPTokenizerFast" if is_tokenizers_available() else None),
+        ("olmoe", "GPTNeoXTokenizer" if is_tokenizers_available() else None),
+        ("omdet-turbo", "CLIPTokenizer" if is_tokenizers_available() else None),
+        ("oneformer", "CLIPTokenizer" if is_tokenizers_available() else None),
         ("openai-gpt", "OpenAIGPTTokenizer" if is_tokenizers_available() else None),
         ("opt", "GPT2Tokenizer" if is_tokenizers_available() else None),
-        ("ovis2", "Qwen2TokenizerFast" if is_tokenizers_available() else None),
-        ("owlv2", "CLIPTokenizerFast" if is_tokenizers_available() else None),
-        ("owlvit", "CLIPTokenizerFast" if is_tokenizers_available() else None),
-        ("paddleocr_vl", "TokenizersBackend" if is_tokenizers_available() else None),
-        ("paligemma", "LlamaTokenizer" if is_tokenizers_available() else None),
+        ("ovis2", "Qwen2Tokenizer" if is_tokenizers_available() else None),
+        ("owlv2", "CLIPTokenizer" if is_tokenizers_available() else None),
+        ("owlvit", "CLIPTokenizer" if is_tokenizers_available() else None),
         ("pegasus", "PegasusTokenizer" if is_tokenizers_available() else None),
         ("pegasus_x", "PegasusTokenizer" if is_tokenizers_available() else None),
         ("perceiver", "PerceiverTokenizer"),
-        ("persimmon", "LlamaTokenizer" if is_tokenizers_available() else None),
         ("phi", "GPT2Tokenizer" if is_tokenizers_available() else None),
-        ("phi3", "LlamaTokenizer" if is_tokenizers_available() else None),
-        ("phimoe", "LlamaTokenizer" if is_tokenizers_available() else None),
         ("phobert", "PhobertTokenizer"),
         ("pix2struct", "T5Tokenizer" if is_tokenizers_available() else None),
         (
@@ -301,21 +243,21 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
         ("plbart", "PLBartTokenizer" if is_tokenizers_available() else None),
         ("prophetnet", "ProphetNetTokenizer"),
         ("qdqbert", "BertTokenizer" if is_tokenizers_available() else None),
-        ("qwen2", "Qwen2TokenizerFast" if is_tokenizers_available() else None),
-        ("qwen2_5_omni", "Qwen2TokenizerFast" if is_tokenizers_available() else None),
-        ("qwen2_5_vl", "Qwen2TokenizerFast" if is_tokenizers_available() else None),
-        ("qwen2_audio", "Qwen2TokenizerFast" if is_tokenizers_available() else None),
-        ("qwen2_moe", "Qwen2TokenizerFast" if is_tokenizers_available() else None),
-        ("qwen2_vl", "Qwen2TokenizerFast" if is_tokenizers_available() else None),
-        ("qwen3", "Qwen2TokenizerFast" if is_tokenizers_available() else None),
-        ("qwen3_moe", "Qwen2TokenizerFast" if is_tokenizers_available() else None),
-        ("qwen3_next", "Qwen2TokenizerFast" if is_tokenizers_available() else None),
-        ("qwen3_omni_moe", "Qwen2TokenizerFast" if is_tokenizers_available() else None),
-        ("qwen3_vl", "Qwen2TokenizerFast" if is_tokenizers_available() else None),
-        ("qwen3_vl_moe", "Qwen2TokenizerFast" if is_tokenizers_available() else None),
+        ("qwen2", "Qwen2Tokenizer" if is_tokenizers_available() else None),
+        ("qwen2_5_omni", "Qwen2Tokenizer" if is_tokenizers_available() else None),
+        ("qwen2_5_vl", "Qwen2Tokenizer" if is_tokenizers_available() else None),
+        ("qwen2_audio", "Qwen2Tokenizer" if is_tokenizers_available() else None),
+        ("qwen2_moe", "Qwen2Tokenizer" if is_tokenizers_available() else None),
+        ("qwen2_vl", "Qwen2Tokenizer" if is_tokenizers_available() else None),
+        ("qwen3", "Qwen2Tokenizer" if is_tokenizers_available() else None),
+        ("qwen3_moe", "Qwen2Tokenizer" if is_tokenizers_available() else None),
+        ("qwen3_next", "Qwen2Tokenizer" if is_tokenizers_available() else None),
+        ("qwen3_omni_moe", "Qwen2Tokenizer" if is_tokenizers_available() else None),
+        ("qwen3_vl", "Qwen2Tokenizer" if is_tokenizers_available() else None),
+        ("qwen3_vl_moe", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("rag", "RagTokenizer"),
         ("realm", "BertTokenizer" if is_tokenizers_available() else None),
-        ("recurrent_gemma", "GemmaTokenizerFast" if is_tokenizers_available() else None),
+        ("recurrent_gemma", "GemmaTokenizer" if is_tokenizers_available() else None),
         ("reformer", "ReformerTokenizer" if is_tokenizers_available() else None),
         ("rembert", "RemBertTokenizer" if is_tokenizers_available() else None),
         ("retribert", "BertTokenizer" if is_tokenizers_available() else None),
@@ -323,54 +265,51 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
         ("roberta-prelayernorm", "RobertaTokenizer"),
         ("roc_bert", "RoCBertTokenizer"),
         ("roformer", "RoFormerTokenizer" if is_tokenizers_available() else None),
-        ("rwkv", "GPTNeoXTokenizerFast" if is_tokenizers_available() else None),
+        ("rwkv", "GPTNeoXTokenizer" if is_tokenizers_available() else None),
         ("seamless_m4t", "SeamlessM4TTokenizer" if is_tokenizers_available() else None),
         ("seamless_m4t_v2", "SeamlessM4TTokenizer" if is_tokenizers_available() else None),
-        ("shieldgemma2", "GemmaTokenizerFast" if is_tokenizers_available() else None),
+        ("shieldgemma2", "GemmaTokenizer" if is_tokenizers_available() else None),
         ("siglip", "SiglipTokenizer" if is_sentencepiece_available() else None),
-        ("siglip2", "GemmaTokenizerFast" if is_tokenizers_available() else None),
-        ("smollm3", "TokenizersBackend" if is_tokenizers_available() else None),
+        ("siglip2", "GemmaTokenizer" if is_tokenizers_available() else None),
         ("speech_to_text", "Speech2TextTokenizer" if is_sentencepiece_available() else None),
         ("speecht5", "SpeechT5Tokenizer" if is_sentencepiece_available() else None),
         ("splinter", "SplinterTokenizer"),
         ("squeezebert", "BertTokenizer" if is_tokenizers_available() else None),
-        ("stablelm", "GPTNeoXTokenizerFast" if is_tokenizers_available() else None),
+        ("stablelm", "GPTNeoXTokenizer" if is_tokenizers_available() else None),
         ("starcoder2", "GPT2Tokenizer" if is_tokenizers_available() else None),
         ("switch_transformers", "T5Tokenizer" if is_tokenizers_available() else None),
         ("t5", "T5Tokenizer" if is_tokenizers_available() else None),
-        ("t5gemma", "GemmaTokenizerFast" if is_tokenizers_available() else None),
+        ("t5gemma", "GemmaTokenizer" if is_tokenizers_available() else None),
         ("tapas", "TapasTokenizer"),
         ("trocr", "XLMRobertaTokenizer" if is_tokenizers_available() else None),
         ("tvp", "BertTokenizer" if is_tokenizers_available() else None),
         ("udop", "UdopTokenizer" if is_tokenizers_available() else None),
         ("umt5", "T5Tokenizer" if is_tokenizers_available() else None),
-        ("video_llava", "LlamaTokenizer" if is_tokenizers_available() else None),
+        ("unispeech", "Wav2Vec2CTCTokenizer"),
+        ("unispeech-sat", "Wav2Vec2CTCTokenizer"),
         ("vilt", "BertTokenizer" if is_tokenizers_available() else None),
-        ("vipllava", "LlamaTokenizer" if is_tokenizers_available() else None),
         ("visual_bert", "BertTokenizer" if is_tokenizers_available() else None),
         ("vits", "VitsTokenizer"),
         (
             "voxtral",
             "MistralCommonBackend"
             if is_mistral_common_available()
-            else ("LlamaTokenizer" if is_tokenizers_available() else None),
+            else ("TokenizersBackend" if is_tokenizers_available() else None),
         ),
         ("wav2vec2", "Wav2Vec2CTCTokenizer"),
         ("wav2vec2-bert", "Wav2Vec2CTCTokenizer"),
         ("wav2vec2-conformer", "Wav2Vec2CTCTokenizer"),
         ("wav2vec2_phoneme", "Wav2Vec2PhonemeCTCTokenizer"),
         ("whisper", "WhisperTokenizer" if is_tokenizers_available() else None),
-        ("xclip", "CLIPTokenizerFast" if is_tokenizers_available() else None),
+        ("xclip", "CLIPTokenizer" if is_tokenizers_available() else None),
         ("xglm", "XGLMTokenizer" if is_tokenizers_available() else None),
         ("xlm", "XLMTokenizer"),
         ("xlm-roberta", "XLMRobertaTokenizer" if is_tokenizers_available() else None),
         ("xlm-roberta-xl", "XLMRobertaTokenizer" if is_tokenizers_available() else None),
         ("xlnet", "XLNetTokenizer" if is_tokenizers_available() else None),
-        ("xlstm", "GPTNeoXTokenizerFast" if is_tokenizers_available() else None),
-        ("xmod", "XLMRobertaTokenizerFast" if is_tokenizers_available() else None),
+        ("xlstm", "GPTNeoXTokenizer" if is_tokenizers_available() else None),
+        ("xmod", "XLMRobertaTokenizer" if is_tokenizers_available() else None),
         ("yoso", "AlbertTokenizer" if is_tokenizers_available() else None),
-        ("zamba", "LlamaTokenizer" if is_tokenizers_available() else None),
-        ("zamba2", "LlamaTokenizer" if is_tokenizers_available() else None),
     ]
 )
 
@@ -670,11 +609,43 @@ class AutoTokenizer:
 
             return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
+        if gguf_file:
+            gguf_path = cached_file(pretrained_model_name_or_path, gguf_file, **kwargs)
+            config_dict = load_gguf_checkpoint(gguf_path, return_tensors=False)["config"]
+            config = AutoConfig.for_model(**config_dict)
+        elif config is None:
+            try:
+                config = AutoConfig.from_pretrained(
+                    pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
+                )
+            except Exception:
+                config = PreTrainedConfig.from_pretrained(pretrained_model_name_or_path, **kwargs)
+
+        config_model_type = config.model_type
+
         # Next, let's try to use the tokenizer_config file to get the tokenizer class.
         tokenizer_config = get_tokenizer_config(pretrained_model_name_or_path, **kwargs)
+        tokenizer_config_class = tokenizer_config.get("tokenizer_class", None)
+        # if there is a config, we can check that the tokenizer class != than model class and can thus assume we need to use `TokenizersBackend`
+        if (
+            tokenizer_config_class is not None
+            and config_model_type is not None
+            and config_model_type != ""
+            and TOKENIZER_MAPPING_NAMES.get(config_model_type, "").replace("Fast", "")
+            != tokenizer_config_class.replace("Fast", "")
+        ):
+            # new model, but we ignore it unless the model type is the same
+            try:
+                return TokenizersBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+            except Exception:
+                return tokenizer_class_from_name(tokenizer_config_class).from_pretrained(
+                    pretrained_model_name_or_path, *inputs, **kwargs
+                )
+
         if "_commit_hash" in tokenizer_config:
             kwargs["_commit_hash"] = tokenizer_config["_commit_hash"]
-        config_tokenizer_class = tokenizer_config.get("tokenizer_class")
+
+        # Check for auto_map early to handle dynamic tokenizers properly
         tokenizer_auto_map = None
         if "auto_map" in tokenizer_config:
             if isinstance(tokenizer_config["auto_map"], (tuple, list)):
@@ -683,34 +654,15 @@ class AutoTokenizer:
             else:
                 tokenizer_auto_map = tokenizer_config["auto_map"].get("AutoTokenizer", None)
 
-        # If that did not work, let's try to use the config.
-        if config_tokenizer_class is None:
-            if not isinstance(config, PreTrainedConfig):
-                if gguf_file:
-                    gguf_path = cached_file(pretrained_model_name_or_path, gguf_file, **kwargs)
-                    config_dict = load_gguf_checkpoint(gguf_path, return_tensors=False)["config"]
-                    config = AutoConfig.for_model(**config_dict)
-                else:
-                    config = AutoConfig.from_pretrained(
-                        pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
-                    )
-            config_tokenizer_class = config.tokenizer_class
-            if hasattr(config, "auto_map") and "AutoTokenizer" in config.auto_map:
-                tokenizer_auto_map = config.auto_map["AutoTokenizer"]
-
-        if (
-            config_tokenizer_class is not None
-            and config_tokenizer_class != "TokenizersBackend"
-            and "Fast" in config_tokenizer_class
-        ):
-            config_tokenizer_class = config_tokenizer_class[:-4]
+        if tokenizer_config_class:
+            tokenizer_config_class = tokenizer_config_class.replace("Fast", "")
 
         has_remote_code = tokenizer_auto_map is not None
         has_local_code = type(config) in TOKENIZER_MAPPING or (
-            config_tokenizer_class is not None
+            tokenizer_config_class is not None
             and (
-                tokenizer_class_from_name(config_tokenizer_class) is not None
-                or tokenizer_class_from_name(config_tokenizer_class + "Fast") is not None
+                tokenizer_class_from_name(tokenizer_config_class) is not None
+                or tokenizer_class_from_name(tokenizer_config_class + "Fast") is not None
             )
         )
         if has_remote_code:
@@ -734,18 +686,23 @@ class AutoTokenizer:
             return tokenizer_class.from_pretrained(
                 pretrained_model_name_or_path, *inputs, trust_remote_code=trust_remote_code, **kwargs
             )
-        elif config_tokenizer_class is not None:
-            fast_tokenizer_class = None
-            if fast_tokenizer_class is None:
-                tokenizer_class_candidate = config_tokenizer_class
-                tokenizer_class = tokenizer_class_from_name(tokenizer_class_candidate)
-                if tokenizer_class is None and not tokenizer_class_candidate.endswith("Fast"):
-                    tokenizer_class = tokenizer_class_from_name(tokenizer_class_candidate + "Fast")
-                if tokenizer_class.__name__ == "PythonBackend":  # unless you inherit from it?
-                    tokenizer_class = TokenizersBackend
-            else:
-                tokenizer_class = fast_tokenizer_class
+        elif tokenizer_config_class is not None:
+            tokenizer_class_candidate = tokenizer_config_class
+            tokenizer_class = tokenizer_class_from_name(tokenizer_class_candidate)
+            if tokenizer_class is None and not tokenizer_class_candidate.endswith("Fast"):
+                tokenizer_class = tokenizer_class_from_name(tokenizer_class_candidate + "Fast")
+            if tokenizer_class is not None and tokenizer_class.__name__ == "PythonBackend":
+                tokenizer_class = TokenizersBackend
+            # Fallback to TokenizersBackend if the class wasn't found
+            if tokenizer_class is None:
+                tokenizer_class = TokenizersBackend
 
+            return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+        elif getattr(config, "tokenizer_class"):
+            _class = config.tokenizer_class
+            if "PreTrainedTokenizerFast" not in _class:
+                _class = _class.replace("Fast", "")
+            tokenizer_class = tokenizer_class_from_name(_class)
             return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
         # Otherwise we have to be creative.
@@ -760,11 +717,25 @@ class AutoTokenizer:
                 )
             config = config.encoder
 
-        model_type = config_class_to_model_type(type(config).__name__)
+        model_type = config_class_to_model_type(type(config).__name__) or config.get("model_type", None)
         if model_type is not None:
             tokenizer_class = TOKENIZER_MAPPING.get(type(config), TokenizersBackend)
             if tokenizer_class is not None:
                 return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+
+        # Fallback: try tokenizer_class from tokenizer_config.json
+        tokenizer_config_class = tokenizer_config.get("tokenizer_class", None)
+        if tokenizer_config_class is not None:
+            if tokenizer_config_class != "TokenizersBackend" and "Fast" in tokenizer_config_class:
+                tokenizer_config_class = tokenizer_config_class[:-4]
+            tokenizer_class = tokenizer_class_from_name(tokenizer_config_class)
+            if tokenizer_class is None and not tokenizer_config_class.endswith("Fast"):
+                tokenizer_class = tokenizer_class_from_name(tokenizer_config_class + "Fast")
+            if tokenizer_class is not None and tokenizer_class.__name__ == "PythonBackend":
+                tokenizer_class = TokenizersBackend
+            if tokenizer_class is None:
+                tokenizer_class = TokenizersBackend
+            return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
         raise ValueError(
             f"Unrecognized configuration class {config.__class__} to build an AutoTokenizer.\n"

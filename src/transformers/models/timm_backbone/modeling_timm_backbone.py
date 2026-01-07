@@ -16,22 +16,18 @@
 from typing import Optional, Union
 
 import torch
+from torch import Tensor, nn
 
+from ... import initialization as init
 from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import is_timm_available, is_torch_available, requires_backends
+from ...utils import is_timm_available, requires_backends
 from ...utils.backbone_utils import BackboneMixin
 from .configuration_timm_backbone import TimmBackboneConfig
 
 
 if is_timm_available():
     import timm
-
-    from ...integrations.timm import _maybe_reinit_non_persistent_buffer
-
-
-if is_torch_available():
-    from torch import Tensor
 
 
 class TimmBackbone(PreTrainedModel, BackboneMixin):
@@ -121,7 +117,12 @@ class TimmBackbone(PreTrainedModel, BackboneMixin):
     def _init_weights(self, module):
         """We need to at least re-init the non-persistent buffers if the model was initialized on meta device (we
         assume weights and persistent buffers will be part of checkpoint as we have no way to control timm inits)"""
-        _maybe_reinit_non_persistent_buffer(module)
+        if hasattr(module, "init_non_persistent_buffers"):
+            module.init_non_persistent_buffers()
+        elif isinstance(module, nn.BatchNorm2d) and getattr(module, "running_mean", None) is not None:
+            init.zeros_(module.running_mean)
+            init.ones_(module.running_var)
+            init.zeros_(module.num_batches_tracked)
 
     def forward(
         self,
