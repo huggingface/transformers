@@ -282,6 +282,8 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
         ("tvp", "BertTokenizer" if is_tokenizers_available() else None),
         ("udop", "UdopTokenizer" if is_tokenizers_available() else None),
         ("umt5", "T5Tokenizer" if is_tokenizers_available() else None),
+        ("unispeech", "Wav2Vec2CTCTokenizer"),
+        ("unispeech-sat", "Wav2Vec2CTCTokenizer"),
         ("vilt", "BertTokenizer" if is_tokenizers_available() else None),
         ("visual_bert", "BertTokenizer" if is_tokenizers_available() else None),
         ("vits", "VitsTokenizer"),
@@ -294,8 +296,6 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
         ("wav2vec2", "Wav2Vec2CTCTokenizer"),
         ("wav2vec2-bert", "Wav2Vec2CTCTokenizer"),
         ("wav2vec2-conformer", "Wav2Vec2CTCTokenizer"),
-        ("unispeech", "Wav2Vec2CTCTokenizer"),
-        ("unispeech-sat", "Wav2Vec2CTCTokenizer"),
         ("wav2vec2_phoneme", "Wav2Vec2PhonemeCTCTokenizer"),
         ("whisper", "WhisperTokenizer" if is_tokenizers_available() else None),
         ("xclip", "CLIPTokenizerFast" if is_tokenizers_available() else None),
@@ -606,29 +606,38 @@ class AutoTokenizer:
 
             return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
+        if gguf_file:
+            gguf_path = cached_file(pretrained_model_name_or_path, gguf_file, **kwargs)
+            config_dict = load_gguf_checkpoint(gguf_path, return_tensors=False)["config"]
+            config = AutoConfig.for_model(**config_dict)
+        else:
+            config = AutoConfig.from_pretrained(
+                pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
+            )
+
+        config_model_type = None
+        if config is None:
+            try:
+                config_model_type = PreTrainedConfig.get_config_dict(pretrained_model_name_or_path, **kwargs)[0].get(
+                    "model_type", None
+                )
+            except Exception:
+                pass
+        else:
+            config_model_type = config.model_type
+
         # Next, let's try to use the tokenizer_config file to get the tokenizer class.
         tokenizer_config = get_tokenizer_config(pretrained_model_name_or_path, **kwargs)
+        tokenizer_config_class = tokenizer_config.get("tokenizer_class", None)
+        if (
+            tokenizer_config_class is not None
+            and TOKENIZER_MAPPING_NAMES.get(config_model_type, None) != tokenizer_config_class
+        ):
+            # new model, but we ignore it unless the model type is the same
+            return TokenizersBackend.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+
         if "_commit_hash" in tokenizer_config:
             kwargs["_commit_hash"] = tokenizer_config["_commit_hash"]
-
-        if config is None:
-            # First check config.json for tokenizer_class
-            try:
-                config_tokenizer_class = PreTrainedConfig.get_config_dict(pretrained_model_name_or_path, **kwargs)[0].get(
-                    "tokenizer_class", None)
-            except Exception:
-                config_tokenizer_class = None
-        else:
-            config_tokenizer_class = getattr(config, "tokenizer_class", None)
-
-        try:
-            config_model_type = (
-                getattr(config, "model_type", None)
-                if isinstance(config, PreTrainedConfig)
-                else PreTrainedConfig.get_config_dict(pretrained_model_name_or_path, **kwargs)[0].get("model_type")
-            )
-        except Exception:
-            config_model_type = None
 
         # Check for auto_map early to handle dynamic tokenizers properly
         tokenizer_auto_map = None
@@ -639,37 +648,15 @@ class AutoTokenizer:
             else:
                 tokenizer_auto_map = tokenizer_config["auto_map"].get("AutoTokenizer", None)
 
-        # If that did not work, let's try to use the config.
-        if config_tokenizer_class is None:
-            try:
-                if not isinstance(config, PreTrainedConfig):
-                    if gguf_file:
-                        gguf_path = cached_file(pretrained_model_name_or_path, gguf_file, **kwargs)
-                        config_dict = load_gguf_checkpoint(gguf_path, return_tensors=False)["config"]
-                        config = AutoConfig.for_model(**config_dict)
-                    else:
-                        config = AutoConfig.from_pretrained(
-                            pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
-                        )
-                config_tokenizer_class = config.tokenizer_class
-                if hasattr(config, "auto_map") and "AutoTokenizer" in config.auto_map:
-                    tokenizer_auto_map = config.auto_map["AutoTokenizer"]
-            except Exception:
-                pass
-
-        if (
-            config_tokenizer_class is not None
-            and config_tokenizer_class != "TokenizersBackend"
-            and "Fast" in config_tokenizer_class
-        ):
-            config_tokenizer_class = config_tokenizer_class[:-4]
+        if tokenizer_config_class:
+            tokenizer_config_class = tokenizer_config_class.replace("Fast", "")
 
         has_remote_code = tokenizer_auto_map is not None
         has_local_code = type(config) in TOKENIZER_MAPPING or (
-            config_tokenizer_class is not None
+            tokenizer_config_class is not None
             and (
-                tokenizer_class_from_name(config_tokenizer_class) is not None
-                or tokenizer_class_from_name(config_tokenizer_class + "Fast") is not None
+                tokenizer_class_from_name(tokenizer_config_class) is not None
+                or tokenizer_class_from_name(tokenizer_config_class + "Fast") is not None
             )
         )
         if has_remote_code:
@@ -687,18 +674,14 @@ class AutoTokenizer:
             )
 
         if has_remote_code and trust_remote_code:
-
-
-
-
             tokenizer_class = get_class_from_dynamic_module(class_ref, pretrained_model_name_or_path, **kwargs)
             _ = kwargs.pop("code_revision", None)
             tokenizer_class.register_for_auto_class()
             return tokenizer_class.from_pretrained(
                 pretrained_model_name_or_path, *inputs, trust_remote_code=trust_remote_code, **kwargs
             )
-        elif config_tokenizer_class is not None:
-            tokenizer_class_candidate = config_tokenizer_class
+        elif tokenizer_config_class is not None:
+            tokenizer_class_candidate = tokenizer_config_class
             tokenizer_class = tokenizer_class_from_name(tokenizer_class_candidate)
             if tokenizer_class is None and not tokenizer_class_candidate.endswith("Fast"):
                 tokenizer_class = tokenizer_class_from_name(tokenizer_class_candidate + "Fast")
@@ -708,6 +691,10 @@ class AutoTokenizer:
             if tokenizer_class is None:
                 tokenizer_class = TokenizersBackend
 
+            return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
+        elif "tokenizer_class" in config:
+            tokenizer_class_candidate = config.tokenizer_class
+            tokenizer_class = tokenizer_class_from_name(tokenizer_class_candidate.replace("Fast", ""))
             return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
 
         # Otherwise we have to be creative.
