@@ -28,6 +28,12 @@ The `transformers serve` command spawns a local server compatible with the [Open
 - `/v1/audio/transcriptions` for audio transcriptions
 - `/v1/models` lists available models for third-party integrations
 
+Install the serving dependencies.
+
+```bash
+pip install transformers[serving]
+```
+
 Run `transformers serve` to launch a server. The default server address is http://localhost:8000.
 
 ```shell
@@ -351,7 +357,15 @@ The command returns the following response.
 
 ## v1/models
 
-The `v1/models` endpoint returns a list of available models in the OpenAI-compatible format. Third-party integrations use this to discover which models are available on the server.
+The `v1/models` endpoint scans your local Hugging Face cache and returns a list of downloaded models in the OpenAI-compatible format. Third-party tools use this endpoint to discover available models.
+
+Use the command below to download a model before running `transformers serve`.
+
+```bash
+transformers download Qwen/Qwen2.5-0.5B-Instruct
+```
+
+The model is now discoverable by the `/v1/models` endpoint.
 
 ```shell
 curl http://localhost:8000/v1/models
@@ -359,16 +373,14 @@ curl http://localhost:8000/v1/models
 
 This command returns a JSON object containing the list of models.
 
-## MCP
+## Tool calling
 
-The `transformers serve` server acts as an MCP client. LLMs designed for tool-use can interact with tools for agentic use cases.
+The `transformers serve` server supports OpenAI-style function calling. Models trained for tool-use generate structured function calls that your application executes.
 
 > [!NOTE]
-> MCP tool usage in Transformers is limited to the Qwen model family.
+> Tool calling is currently limited to the Qwen model family.
 
-<!-- TODO: example with a minimal python example, and explain that it is possible to pass a full generation config in the request -->
-
-The example below shows tool-use and how to customize the generation configuration.
+Define tools as a list of function specifications following the OpenAI format.
 
 ```py
 import json
@@ -430,7 +442,7 @@ for event in response:
 
 ## Port forwarding
 
-The `transformers serve` server supports port fowarding, which is useful for serving models from a different server. Make sure you have ssh access from your device to the server. Run the following command on your device to set up port forwarding.
+The `transformers serve` server supports port forwarding. This lets you serve models from a remote server. Make sure you have ssh access from your device to the server. Run the following command on your device to set up port forwarding.
 
 ```bash
 ssh -N -f -L 8000:localhost:8000 your_server_account@your_server_IP -p port_to_ssh_into_your_server
@@ -442,7 +454,7 @@ ssh -N -f -L 8000:localhost:8000 your_server_account@your_server_IP -p port_to_s
 
 ### Continuous batching
 
-[Continuous batching](./continuous_batching) dynamically groups and interleaves requests to share forward passes on the GPU. Instead of processing each request sequentially, new requests are added as others progress (prefill). Completed requests are dropped after decoding. This increases GPU utilization and throughput without compromising latency.
+[Continuous batching](./continuous_batching) dynamically groups and interleaves requests to share forward passes on the GPU. New requests join the batch as others progress through prefill. Completed requests drop out after decoding. This increases GPU utilization and throughput without compromising latency.
 
 Add the `--continuous-batching` argument to enable continuous batching.
 
@@ -464,7 +476,7 @@ pip install transformers[open-telemetry]
 
 [Quantization](./quantization/overview) reduces memory usage by mapping weights to a lower precision. `transformers serve` is compatible with all quantization methods in Transformers. It supports pre-quantized models and runtime quantization.
 
-Pre-quantized models don't require any changes. They generally provide the best balance between performance and accuracy. Install the appropriate quantization library, then pass the pre-quantized model from the Hub to the `model` argument.
+Pre-quantized models don't require any changes. They generally provide the best balance between performance and accuracy. Install the appropriate quantization library. Then pass the pre-quantized model from the Hub to the `model` argument.
 
 ```sh
 curl http://localhost:8000/v1/responses \
@@ -476,7 +488,7 @@ curl http://localhost:8000/v1/responses \
   }'
 ```
 
-Use the `--quantization` argument to quantize a model at runtime. This is useful for experimenting with new checkpoints or finetunes that don't have quantized weights yet. Only 4-bit and 8-bit quantization with [bitsandbytes](./quantization/bitsandbytes) is supported.
+Use the `--quantization` argument to quantize a model at runtime. This helps when experimenting with new checkpoints or finetunes that don't have quantized weights yet. Only [bitsandbytes](./quantization/bitsandbytes) 4-bit and 8-bit quantization is supported.
 
 ```sh
 transformers serve \
