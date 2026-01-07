@@ -248,6 +248,8 @@ class EdgeTamVideoAttention(nn.Module):
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
+            if "flash" in self.config._attn_implementation and attention_similarity is not None:
+                raise ValueError("Target-guided attention is not supported for Flash Attention")
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
