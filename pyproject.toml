@@ -26,7 +26,6 @@ select = [
     "UP",  # pyupgrade
     "FURB",  # refurb
     "SIM",  # flake8-simplify
-    "COM",  # flake8-commas
     "C4",  # flake8-comprehensions
     "RUF013",  # Checks for the use of implicit Optional in type annotations when the default parameter value is None.
     "PERF102",  # Checks for uses of dict.items() that discard either the key or the value when iterating over the dictionary.
@@ -51,7 +50,6 @@ ignore = [
     "UP045",  # Check for typing.Optional annotations that can be rewritten based on PEP 604 syntax.
     "UP007",  # Check for type annotations that can be rewritten based on PEP 604 syntax.
     "UP038",  # Dangerous and removed in newer versions - would replace `isinstance(x, (y,z))` -> `isinstance(x, y | z)` which is bad practice
-    "COM812",  # This is part of the formatter, so skip it in the linter - Checks for the absence of trailing commas.
 ]
 extend-safe-fixes = [
     "UP006",  # Checks for the use of generics that can be replaced with standard library variants based on PEP 585.
