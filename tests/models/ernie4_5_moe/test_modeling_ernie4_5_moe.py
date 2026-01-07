@@ -161,10 +161,7 @@ class Ernie4_5_MoeIntegrationTest(unittest.TestCase):
     @classmethod
     def get_small_model(cls):
         cls.model = Ernie4_5_MoeForCausalLM.from_pretrained(
-            "hf-internal-testing/ERNIE-4.5-Small-Moe",
-            device_map="auto",
-            dtype="auto",
-            experts_implementation="eager",
+            "hf-internal-testing/ERNIE-4.5-Small-Moe", device_map="auto", dtype="auto", experts_implementation="eager"
         )
 
         return cls.model

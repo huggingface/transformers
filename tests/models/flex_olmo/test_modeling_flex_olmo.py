@@ -16,8 +16,6 @@
 
 import unittest
 
-import pytest
-
 from transformers import is_torch_available
 from transformers.models.auto.tokenization_auto import AutoTokenizer
 from transformers.testing_utils import (
@@ -56,11 +54,6 @@ class FlexOlmoModelTest(CausalLMModelTest, unittest.TestCase):
 
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = FlexOlmoForCausalLM if is_torch_available() else None
-
-    @unittest.skip("Dynamic control flow in MoE")
-    @pytest.mark.torch_compile_test
-    def test_torch_compile_for_training(self):
-        pass
 
 
 @require_torch
