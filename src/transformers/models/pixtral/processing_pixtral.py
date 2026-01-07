@@ -197,10 +197,10 @@ class PixtralProcessor(ProcessorMixin):
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
-        # Remove return_token_type_ids as TokenizersBackend doesn't need it for Mistral models
+        # Remove return_token_type_ids as MistralCommonBackend doesn't support it
         output_kwargs["text_kwargs"].pop("return_token_type_ids", None)
         text_inputs = self.tokenizer(
-            prompt_strings, **output_kwargs["text_kwargs"], return_tensors=None, return_token_type_ids=False
+            prompt_strings, **output_kwargs["text_kwargs"], return_tensors=None
         )
         self._check_special_mm_tokens(prompt_strings, text_inputs, modalities=["image"])
 

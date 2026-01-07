@@ -312,22 +312,6 @@ TOKENIZER_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, TOKENIZER_MAPPING_NAM
 
 CONFIG_TO_TYPE = {v: k for k, v in CONFIG_MAPPING_NAMES.items()}
 
-# Model types that should prioritize TOKENIZER_MAPPING over tokenizer_config
-PRIORITIZE_MAPPING_FOR_MODELS = [
-    "ministral3",
-    "mistral3",
-    "mixtral",
-    "pixtral",
-    "voxtral",
-    "qwen2",
-    "paligemma",
-    "llava_onevision",
-]
-
-TOKENIZER_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, TOKENIZER_MAPPING_NAMES)
-
-CONFIG_TO_TYPE = {v: k for k, v in CONFIG_MAPPING_NAMES.items()}
-
 
 def load_vocab(vocab_file):
     """Loads a vocabulary file into a dictionary."""
