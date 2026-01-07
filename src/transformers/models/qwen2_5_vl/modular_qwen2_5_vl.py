@@ -50,6 +50,7 @@ from ..qwen2_vl.modeling_qwen2_vl import (
     Qwen2VLModel,
     Qwen2VLModelOutputWithPast,
     Qwen2VLPreTrainedModel,
+    Qwen2VLAttention,
     TransformersKwargs,
     VisionAttention,
     VisionRotaryEmbedding,
@@ -178,10 +179,18 @@ class Qwen2_5_VLPreTrainedModel(Qwen2VLPreTrainedModel):
             init.copy_(module.inv_freq, inv_freq)
 
 
+
+class Qwen2_5_VLAttention(Qwen2VLAttention):
+    pass
+
 class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
     config: Qwen2_5_VLVisionConfig
     _no_split_modules = ["Qwen2_5_VLVisionBlock"]
     _input_embed_layer = "patch_embed"
+    _can_record_inputs = {
+        "hidden_states": Qwen2_5_VLVisionBlock,
+        "attentions": Qwen2_5_VLAttention,
+    }
 
     def __init__(self, config, *inputs, **kwargs) -> None:
         super().__init__(config, *inputs, **kwargs)
