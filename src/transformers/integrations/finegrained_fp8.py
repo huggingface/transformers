@@ -545,7 +545,7 @@ class FP8Expert(nn.Module):
             if expert_idx == self.num_experts:
                 continue
             top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
-            current_state = hidden_states.index_select(0, token_idx)
+            current_state = hidden_states[token_idx]
             gate, up = self.linear(
                 current_state, self.gate_up_proj[expert_idx], self.gate_up_proj_scale_inv[expert_idx]
             ).chunk(2, dim=-1)
