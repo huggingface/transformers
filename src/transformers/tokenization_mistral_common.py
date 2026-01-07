@@ -250,6 +250,15 @@ class MistralCommonBackend(PushToHubMixin):
         if kwargs:
             raise ValueError(f"Kwargs {list(kwargs.keys())} are not supported to init `MistralCommonBackend`.")
 
+        self.init_kwargs = {
+            "tokenizer_path": tokenizer_path,
+            "mode": mode,
+            "model_max_length": model_max_length,
+            "padding_side": padding_side,
+            "truncation_side": truncation_side,
+            "model_input_names": model_input_names,
+            "clean_up_tokenization_spaces": clean_up_tokenization_spaces,
+        }
         self._tokenizer_path = Path(tokenizer_path)
         self._mode = self._get_validation_mode(mode)
         self.tokenizer: MistralTokenizer = MistralTokenizer.from_file(str(self._tokenizer_path), mode=self._mode)
