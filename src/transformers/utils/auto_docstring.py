@@ -294,7 +294,7 @@ class ProcessorArgs:
 
     chat_template = {
         "description": """
-    A Jinja template which will be used to convert lists of messages in a chat into a tokenizable string.
+    A Jinja template to convert lists of messages in a chat into a tokenizable string.
     """,
         "type": "str",
     }
@@ -303,8 +303,7 @@ class ProcessorArgs:
     text = {
         "description": """
     The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-    (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-    `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
+    (pretokenized string). If you pass a pretokenized input, set `is_split_into_words=True` to avoid ambiguity with batched inputs.
     """,
     }
 
@@ -338,7 +337,7 @@ class ProcessorArgs:
     add_special_tokens = {
         "description": """
     Whether or not to add special tokens when encoding the sequences. This will use the underlying
-    `PretrainedTokenizerBase.build_inputs_with_special_tokens` function, which defines which tokens are
+    [`PretrainedTokenizerBase.build_inputs_with_special_tokens`] function, which defines which tokens are
     automatically added to the input ids. This is useful if you want to add `bos` or `eos` tokens
     automatically.
     """,
@@ -403,7 +402,7 @@ class ProcessorArgs:
     pad_to_multiple_of = {
         "description": """
     If set will pad the sequence to a multiple of the provided value. Requires `padding` to be activated.
-    This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability
+    This is especially useful to enable using Tensor Cores on NVIDIA hardware with compute capability
     `>= 7.5` (Volta).
     """,
         "type": "int",
@@ -481,8 +480,8 @@ class ProcessorArgs:
     text_target = {
         "description": """
     The sequence or batch of sequences to be encoded as target texts. Each sequence can be a string or a
-    list of strings (pretokenized string). If the sequences are provided as list of strings (pretokenized),
-    you must set `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
+    list of strings (pretokenized string). If you pass pretokenized input, set `is_split_into_words=True`
+    to avoid ambiguity with batched inputs.
     """,
         "type": "str, list[str] or list[list[str]]",
     }
@@ -490,8 +489,8 @@ class ProcessorArgs:
     text_pair_target = {
         "description": """
     The sequence or batch of sequences to be encoded as target texts. Each sequence can be a string or a
-    list of strings (pretokenized string). If the sequences are provided as list of strings (pretokenized),
-    you must set `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
+    list of strings (pretokenized string). If you pass pretokenized input, set `is_split_into_words=True`
+    to avoid ambiguity with batched inputs.
     """,
         "type": "str, list[str] or list[list[str]]",
     }
