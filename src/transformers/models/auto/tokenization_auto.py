@@ -294,6 +294,8 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
         ("wav2vec2", "Wav2Vec2CTCTokenizer"),
         ("wav2vec2-bert", "Wav2Vec2CTCTokenizer"),
         ("wav2vec2-conformer", "Wav2Vec2CTCTokenizer"),
+        ("unispeech", "Wav2Vec2CTCTokenizer"),
+        ("unispeech-sat", "Wav2Vec2CTCTokenizer"),
         ("wav2vec2_phoneme", "Wav2Vec2PhonemeCTCTokenizer"),
         ("whisper", "WhisperTokenizer" if is_tokenizers_available() else None),
         ("xclip", "CLIPTokenizerFast" if is_tokenizers_available() else None),
