@@ -108,7 +108,9 @@ class MiniMaxM2IntegrationTest(unittest.TestCase):
         dummy_input = torch.LongTensor([[0, 0, 0, 0, 0, 0, 1, 2, 3], [1, 1, 2, 3, 4, 5, 6, 7, 8]]).to(torch_device)
         attention_mask = dummy_input.ne(0).to(torch.long)
 
-        model = MiniMaxM2ForCausalLM.from_pretrained(model_id, dtype="auto", device_map="auto")
+        model = MiniMaxM2ForCausalLM.from_pretrained(
+            model_id, dtype="auto", device_map="auto", experts_implementation="eager"
+        )
 
         EXPECTED_LOGITS_LEFT_UNPADDED = Expectations(
             {
@@ -151,7 +153,7 @@ class MiniMaxM2IntegrationTest(unittest.TestCase):
 
         tokenizer = AutoTokenizer.from_pretrained("MiniMaxAI/MiniMax-M2")
         model = MiniMaxM2ForCausalLM.from_pretrained(
-            "hf-internal-testing/MiniMax-M2-Small", device_map="auto", dtype="auto"
+            "hf-internal-testing/MiniMax-M2-Small", device_map="auto", dtype="auto", experts_implementation="eager"
         )
         input_text = ["Tell me about the french revolution."]
         model_inputs = tokenizer(input_text, return_tensors="pt").to(model.device)
