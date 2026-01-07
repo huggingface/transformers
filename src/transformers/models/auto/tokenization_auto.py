@@ -672,6 +672,27 @@ class AutoTokenizer:
 
         # Next, let's try to use the tokenizer_config file to get the tokenizer class.
         tokenizer_config = get_tokenizer_config(pretrained_model_name_or_path, **kwargs)
+        # --- START OF PROPOSED FIX ---
+        if gguf_file:
+            # If a GGUF file is provided, we inspect its metadata to ensure the correct tokenizer is used,
+            # especially for cases like Gemma where the model type alone is not enough.
+            try:
+                from ...utils.gguf import GGUFReader
+
+                # We need to resolve the path to the GGUF file
+                gguf_path = cached_file(pretrained_model_name_or_path, gguf_file, **kwargs)
+                if gguf_path is not None:
+                    reader = GGUFReader(gguf_path)
+                    architecture = reader.get_architecture()
+                    tokenizer_model = reader.get_tokenizer_model()
+
+                    # This is the key condition
+                    if architecture == "gemma" and tokenizer_model == "bpe":
+                        logger.info("Gemma GGUF with BPE tokenizer detected. Forcing tokenizer class to 'GemmaTokenizer'.")
+                        tokenizer_config["tokenizer_class"] = "GemmaTokenizer"
+            except Exception as e:
+                logger.warning(f"Could not read GGUF metadata to determine tokenizer class: {e}")
+        # --- END OF PROPOSED FIX ---
         if "_commit_hash" in tokenizer_config:
             kwargs["_commit_hash"] = tokenizer_config["_commit_hash"]
         config_tokenizer_class = tokenizer_config.get("tokenizer_class")
@@ -689,6 +710,11 @@ class AutoTokenizer:
                 if gguf_file:
                     gguf_path = cached_file(pretrained_model_name_or_path, gguf_file, **kwargs)
                     config_dict = load_gguf_checkpoint(gguf_path, return_tensors=False)["config"]
+                    # TODO: This is a workaround for Gemma tokenizer type, as it is not defined in the config.
+                    # We should find a better way to get the tokenizer type from GGUF metadata.
+                    if config_dict.get("model_type") == "gemma" and tokenizer_config.get("tokenizer_model") == "bpe":
+                        tokenizer_config["tokenizer_class"] = "GemmaTokenizer"
+
                     config = AutoConfig.for_model(**config_dict)
                 else:
                     config = AutoConfig.from_pretrained(
