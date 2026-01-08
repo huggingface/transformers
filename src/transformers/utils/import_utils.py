@@ -37,6 +37,7 @@ import packaging.version
 from packaging import version
 
 from . import logging
+from .generic import strtobool
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
@@ -1377,29 +1378,36 @@ def is_tracing(tensor=None) -> bool:
     _is_tracing = is_torchdynamo_compiling() or is_jit_tracing() or is_cuda_stream_capturing()
     if tensor is not None:
         _is_tracing |= is_torch_fx_proxy(tensor)
-
         _is_tracing |= is_fake_tensor(tensor)
-
         _is_tracing |= is_jax_jitting(tensor)
 
     return _is_tracing
 
 
-def check_with(error_type: Exception, cond: Any, msg: Callable[[], str]) -> None:
+def check_with(error_type: type[Exception], cond: Any, msg: Callable[[], str]) -> None:
     """
-    Same as `torch._check_with()` but supports cond being a tensor.
-    Note: `torch._check_with()` is the same as `torch_check()` but allows specifying the error type.
+    Same as `torch._check_with()` but supports cond being a boolean, a boolean tensor, or a callable returning either.
+    Note: We use `torch._check_with()` which is the same as `torch._check()` but supports specifying the error type.
+
     Args:
-        error_type (`Exception`): The type of the exception to raise.
-        cond (`Any`): The condition to check (`bool`, `SymBool` or `torch.Tensor`).
+        error_type (`type[Exception]`): The type of error to raise if the condition is not met.
+        cond (`Any`): The condition to check for (`bool`, `torch.Tensor` or `Callable[[], bool | torch.Tensor]`).
         msg (`Callable[[], str]`): A callable that returns the message to display if the check fails.
+
     Raises:
         error_type: If the condition is not met.
     """
+    if strtobool(os.getenv("TRANSFORMERS_DISABLE_TORCH_CHECKS", "false")):
+        return
+
     import torch
+
+    if callable(cond):
+        cond = cond()
 
     if isinstance(cond, torch.Tensor):
         cond = cond.item()
+
     torch._check_with(error_type, cond, msg)
 
 
