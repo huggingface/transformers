@@ -15,6 +15,7 @@
 import gc
 import itertools
 import unittest
+from unittest.mock import patch
 
 import torch
 from parameterized import parameterized
@@ -33,7 +34,7 @@ from transformers.generation.continuous_batching.cache import (
     SlidingAttentionCacheAllocator,
     group_layers_by_attn_type,
 )
-from transformers.generation.continuous_batching.continuous_api import build_attention_mask
+from transformers.generation.continuous_batching.continuous_api import ContinuousBatchProcessor, build_attention_mask
 from transformers.testing_utils import (
     Expectations,
     require_deterministic_for_xpu,
@@ -265,6 +266,8 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
         use_cuda_graph: bool,
         use_compile: bool,
         max_new_tokens: int = 20,
+        num_blocks: int | None = None,
+        num_repeat_prompts: int = 1,
     ) -> None:
         """Tests the parity between continuous batching and non-continuous batching generation."""
 
@@ -283,6 +286,8 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
             "A robe takes 2 bolts of blue fiber and half that much white fiber. How many bolts in total does it take?",
             "A basket contains 25 oranges among which 1 is bad, 20% are unripe, 2 are sour and the rest are good. How many oranges are good?",
         ]  # fmt: skip
+        if num_repeat_prompts > 1:
+            user_messages = user_messages * num_repeat_prompts
         chats = [[{"role": "user", "content": user_message}] for user_message in user_messages]
         tokenized = [tokenizer.apply_chat_template(chat, add_generation_prompt=True) for chat in chats]
         input_ids = [(x if isinstance(x, list) else x["input_ids"]) for x in tokenized]
@@ -297,6 +302,7 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
         model.generation_config.max_new_tokens = max_new_tokens
         model.generation_config.do_sample = False
         model.generation_config.use_cuda_graph = use_cuda_graph
+        model.generation_config.num_blocks = num_blocks
         if use_compile:
             model.generation_config.compile_config = CompileConfig(fullgraph=True, mode="default")
 
@@ -408,6 +414,23 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
     def test_continuous_batching_long_generate(self) -> None:
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
         self._test_continuous_batching_parity(model_id, True, "flash_attention_2", True, True, max_new_tokens=80)
+
+    @require_torch_accelerator
+    def test_continuous_batching_few_blocks(self) -> None:
+        """This test verifies that generation works with a very small number of blocks, ie. small enough that we need to
+        offload a request at some point. To add more complexity, we repeat the same prompt 4 times and enable prefix 
+        sharing."""
+        model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+
+        # Patch soft_reset_one_request to verify it's called at least once
+        original_soft_reset = ContinuousBatchProcessor.soft_reset_one_request
+        with patch.object(
+            ContinuousBatchProcessor, "soft_reset_one_request", autospec=True, side_effect=original_soft_reset,
+        ) as mock_soft_reset:
+            self._test_continuous_batching_parity(
+                model_id, True, "sdpa", True, False, num_blocks=4, num_repeat_prompts=4
+            )
+            self.assertTrue(mock_soft_reset.called, "Soft reset method was not called.")
 
     # ---------------------------------------Streaming tests--------------------------------------- #
     #           Ensures the requests have the right behavior with and without streaming             #
