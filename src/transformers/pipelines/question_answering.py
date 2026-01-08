@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING
 import numpy as np
 
 from ..data import SquadExample, SquadFeatures, squad_convert_examples_to_features
-from ..modelcard import ModelCard
 from ..tokenization_python import PreTrainedTokenizer
 from ..utils import (
     PaddingStrategy,
@@ -255,22 +254,8 @@ class QuestionAnsweringPipeline(ChunkPipeline):
     default_input_names = "question,context"
     handle_impossible_answer = False
 
-    def __init__(
-        self,
-        model: "PreTrainedModel",
-        tokenizer: PreTrainedTokenizer,
-        modelcard: ModelCard | None = None,
-        task: str = "",
-        **kwargs,
-    ):
-        super().__init__(
-            model=model,
-            tokenizer=tokenizer,
-            modelcard=modelcard,
-            task=task,
-            **kwargs,
-        )
-
+    def __init__(self, model: "PreTrainedModel", tokenizer: PreTrainedTokenizer, task: str = "", **kwargs):
+        super().__init__(model=model, tokenizer=tokenizer, task=task, **kwargs)
         self._args_parser = QuestionAnsweringArgumentHandler()
         self.check_model_type(MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES)
 
