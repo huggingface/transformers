@@ -544,7 +544,7 @@ class ModernBertAttention(nn.Module):
         qkv = self.Wqkv(hidden_states)
 
         bs = hidden_states.shape[0]
-        if self.config._attn_implementation == "flash_attention_2":
+        if "flash-attn2" in self.config._attn_implementation or "flash_attention" in self.config._attn_implementation:
             qkv = qkv.view(-1, 3, self.num_heads, self.head_dim)
         else:
             qkv = qkv.view(bs, -1, 3, self.num_heads, self.head_dim)
@@ -910,7 +910,7 @@ class ModernBertModel(ModernBertPreTrainedModel):
             attention_mask = torch.ones((batch_size, seq_len), device=device, dtype=torch.bool)
 
         repad = False
-        if self.config._attn_implementation == "flash_attention_2":
+        if "flash-attn2" in self.config._attn_implementation or "flash_attention" in self.config._attn_implementation:
             if indices is None and cu_seqlens is None and max_seqlen is None:
                 repad = True
                 if inputs_embeds is None:
@@ -972,7 +972,8 @@ class ModernBertModel(ModernBertPreTrainedModel):
         # If the attention implementation is FA2 and there is no need for repadding, there might still be the batch
         # dimension missing
         elif (
-            self.config._attn_implementation == "flash_attention_2"
+            "flash-attn2" in self.config._attn_implementation
+            or "flash_attention" in self.config._attn_implementation
             and all_hidden_states is not None
             and all_hidden_states[-1].dim() == 2
         ):
@@ -1100,7 +1101,7 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         self._maybe_set_compile()
 
-        if self.config._attn_implementation == "flash_attention_2":
+        if "flash-attn2" in self.config._attn_implementation or "flash_attention" in self.config._attn_implementation:
             if indices is None and cu_seqlens is None and max_seqlen is None:
                 if batch_size is None and seq_len is None:
                     if inputs_embeds is not None:
@@ -1159,7 +1160,7 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
         if labels is not None:
             loss = self.loss_function(logits, labels, vocab_size=self.config.vocab_size, **kwargs)
 
-        if self.config._attn_implementation == "flash_attention_2":
+        if "flash-attn2" in self.config._attn_implementation or "flash_attention" in self.config._attn_implementation:
             # Logits padding
             with nullcontext() if self.config.repad_logits_with_grad or labels is None else torch.no_grad():
                 logits = _pad_modernbert_output(inputs=logits, indices=indices, batch=batch_size, seqlen=seq_len)

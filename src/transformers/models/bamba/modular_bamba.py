@@ -936,7 +936,7 @@ class BambaModel(BambaPreTrainedModel):
         past_key_values: HybridMambaAttentionDynamicCache,
         output_attentions: bool,
     ):
-        if self.config._attn_implementation == "flash_attention_2":
+        if "flash-attn2" in self.config._attn_implementation or "flash_attention" in self.config._attn_implementation:
             if attention_mask is not None and 0.0 in attention_mask:
                 return attention_mask
             return None

@@ -716,7 +716,7 @@ class Qwen3OmniMoeAudioEncoder(Qwen3OmniMoePreTrainedModel):
         # NOTE: the created attention masl only approximates the ragged FA2 attention by
         # allowing bidirectional attention within `cu_seqlens` blocks, and not attending between
         # blocks. Though it will not be a 100% match for FA2's `varlen` path
-        if self.config._attn_implementation == "flash_attention_2":
+        if "flash-attn2" in self.config._attn_implementation or "flash_attention" in self.config._attn_implementation:
             return None
 
         seq_length = inputs_tensor.shape[0]

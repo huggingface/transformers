@@ -817,7 +817,7 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
         # NOTE: the created attention masl only approximates the ragged FA2 attention by
         # allowing bidirectional attention within `cu_seqlens` blocks, and not attending between
         # blocks. Though it will not be a 100% match for FA2's `varlen` path
-        if self.config._attn_implementation == "flash_attention_2":
+        if "flash-attn2" in self.config._attn_implementation or "flash_attention" in self.config._attn_implementation:
             return None
 
         seq_length = inputs_tensor.shape[0]
@@ -999,7 +999,7 @@ class Qwen2_5OmniVisionAttention(nn.Module):
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        if self.config._attn_implementation == "flash_attention_2":
+        if "flash-attn2" in self.config._attn_implementation or "flash_attention" in self.config._attn_implementation:
             # Flash Attention 2: Use cu_seqlens for variable length attention
             max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
             attn_output, _ = attention_interface(
@@ -1522,7 +1522,8 @@ class Qwen2_5OmniDecoderLayer(GradientCheckpointingLayer):
         super().__init__()
         self.hidden_size = config.hidden_size
 
-        if config.use_sliding_window and config._attn_implementation != "flash_attention_2":
+        using_fa = "flash-attn2" in config._attn_implementation or "flash_attention" in config._attn_implementation
+        if config.use_sliding_window and not using_fa:
             logger.warning_once(
                 f"Sliding Window Attention is enabled but not implemented for `{config._attn_implementation}`; "
                 "unexpected results may be encountered."
@@ -3739,7 +3740,8 @@ class Qwen2_5OmniToken2WavModel(Qwen2_5OmniPreTrainedModel):
     def __init__(self, config: Qwen2_5OmniToken2WavConfig):
         super().__init__(config)
         attn_impl = config._attn_implementation
-        if config._attn_implementation == "flash_attention_2":
+        using_fa = "flash-attn2" in config._attn_implementation or "flash_attention" in config._attn_implementation
+        if using_fa:
             logger.warning_once(
                 "Qwen2_5OmniToken2WavModel must inference with fp32, but flash_attention_2 only supports fp16 and bf16, "
                 "attention implementation of Qwen2_5OmniToken2WavModel will fallback to sdpa."

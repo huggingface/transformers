@@ -632,6 +632,8 @@ class AttentionMaskInterface(GeneralInterface):
         "eager": eager_mask,
         "flash_attention_2": flash_attention_mask,
         "flash_attention_3": flash_attention_mask,
+        "kernels-community/flash-attn2": flash_attention_mask,
+        "kernels-community/vllm-flash-attn3": flash_attention_mask,
         "flex_attention": flex_attention_mask,
     }
 

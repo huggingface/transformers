@@ -586,7 +586,10 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
             mask_len = self._get_feat_extract_output_lengths(attention_mask.shape[-1])
             downsample_stride = 64 * 3 * 2  # conv strides
             attention_mask = attention_mask[..., ::downsample_stride][..., :mask_len]
-            if self.config._attn_implementation == "flash_attention_2":
+            if (
+                "flash-attn2" in self.config._attn_implementation
+                or "flash_attention" in self.config._attn_implementation
+            ):
                 attention_mask = attention_mask if (attention_mask == 0.0).any() else None
             elif self.config._attn_implementation == "sdpa":
                 attention_mask = _prepare_4d_attention_mask_for_sdpa(attention_mask, hidden_states.dtype)
@@ -695,7 +698,10 @@ class MoonshineDecoder(MoonshinePreTrainedModel):
             mask_len = encoder_hidden_states.shape[-2]
             downsample_stride = 64 * 3 * 2  # conv strides
             encoder_attention_mask = encoder_attention_mask[..., ::downsample_stride][..., :mask_len]
-            if self.config._attn_implementation == "flash_attention_2":
+            if (
+                "flash-attn2" in self.config._attn_implementation
+                or "flash_attention" in self.config._attn_implementation
+            ):
                 encoder_attention_mask = encoder_attention_mask if (encoder_attention_mask == 0.0).any() else None
             elif self.config._attn_implementation == "sdpa":
                 encoder_attention_mask = _prepare_4d_attention_mask_for_sdpa(

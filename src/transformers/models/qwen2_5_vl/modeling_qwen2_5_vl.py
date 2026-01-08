@@ -724,7 +724,8 @@ class Qwen2_5_VLDecoderLayer(GradientCheckpointingLayer):
         super().__init__()
         self.hidden_size = config.hidden_size
 
-        if config.use_sliding_window and config._attn_implementation != "flash_attention_2":
+        using_fa = "flash-attn2" in config._attn_implementation or "flash_attention" in config._attn_implementation
+        if config.use_sliding_window and not using_fa:
             logger.warning_once(
                 f"Sliding Window Attention is enabled but not implemented for `{config._attn_implementation}`; "
                 "unexpected results may be encountered."
