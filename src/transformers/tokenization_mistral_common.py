@@ -484,7 +484,7 @@ class MistralCommonBackend(PushToHubMixin):
         skip_special_tokens: bool = False,
         clean_up_tokenization_spaces: bool | None = None,
         **kwargs,
-    ) -> Union[str, list[str]]:
+    ) -> str | list[str]:
         """
         Converts a sequence of ids in a string, using the tokenizer and vocabulary with options to remove special
         tokens and clean up tokenization spaces.
@@ -1781,7 +1781,7 @@ class MistralCommonBackend(PushToHubMixin):
         cls,
         pretrained_model_name_or_path: str | os.PathLike,
         *init_inputs,
-        mode: Union[str, ValidationMode] = ValidationMode.test,
+        mode: str | ValidationMode = ValidationMode.test,
         cache_dir: str | os.PathLike | None = None,
         force_download: bool = False,
         local_files_only: bool = False,
@@ -1971,7 +1971,7 @@ class MistralCommonBackend(PushToHubMixin):
         return (str(save_directory / self._tokenizer_path.name),)
 
     @staticmethod
-    def _get_validation_mode(mode: Union[str, ValidationMode]) -> ValidationMode:
+    def _get_validation_mode(mode: str | ValidationMode) -> ValidationMode:
         """Get the validation mode from a string or a ValidationMode."""
         _invalid_mode_msg = (
             f"Invalid `mistral-common` tokenizer mode: {mode}. Possible values are 'finetuning' or 'test'."

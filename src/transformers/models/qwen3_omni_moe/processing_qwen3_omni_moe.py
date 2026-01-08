@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_qwen3_omni_moe.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 The Qwen team, Alibaba Group and the HuggingFace Inc. team. All rights reserved.
 #
 #
@@ -20,7 +19,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import re
-from typing import Optional, Union
+from typing import Union
 
 import numpy as np
 
@@ -117,9 +116,9 @@ class Qwen3OmniMoeProcessor(ProcessorMixin):
     def __call__(
         self,
         text: TextInput = None,
-        images: Optional[ImageInput] = None,
-        videos: Optional[VideoInput] = None,
-        audio: Optional[AudioInput] = None,
+        images: ImageInput | None = None,
+        videos: VideoInput | None = None,
+        audio: AudioInput | None = None,
         **kwargs,
     ) -> BatchFeature:
         """
