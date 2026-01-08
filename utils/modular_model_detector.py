@@ -101,8 +101,11 @@ import argparse
 import ast
 import json
 import logging
+import math
 import os
 import re
+from datetime import datetime
+from functools import cache
 from pathlib import Path
 
 import numpy as np
@@ -113,30 +116,20 @@ from safetensors.numpy import load_file as safetensors_load
 from safetensors.numpy import save_file as safetensors_save
 from tqdm import tqdm
 
+import transformers
 from transformers import AutoModel, AutoTokenizer
 from transformers.utils import enable_tf32
 from transformers.utils import logging as transformers_logging
 
-from modular_model_detector_helpers import (
-    ANSI_BOLD,
-    ANSI_HIGHLIGHT_CANDIDATE,
-    ANSI_HIGHLIGHT_OLD,
-    ANSI_HIGHLIGHT_TOP,
-    ANSI_RESET,
-    ANSI_ROW,
-    ANSI_SECTION,
-    _build_display_path,
-    _colorize_heading,
-    _compute_idf,
-    _format_table,
-    _parse_identifier,
-    _parse_release_date,
-    _split_match_name,
-    _weighted_jaccard,
-    build_date_data,
-    write_json,
-    _resolve_definition_location,
-)
+# ANSI color codes for CLI output styling
+ANSI_RESET = "\033[0m"
+ANSI_BOLD = "\033[1m"
+ANSI_HEADER = "\033[1;36m"
+ANSI_SECTION = "\033[1;35m"
+ANSI_ROW = "\033[0;37m"
+ANSI_HIGHLIGHT_TOP = "\033[1;32m"
+ANSI_HIGHLIGHT_OLD = "\033[1;33m"
+ANSI_HIGHLIGHT_CANDIDATE = "\033[1;34m"
 
 os.environ["HF_HUB_DISABLE_PROGRESS_BARS"] = "1"
 os.environ["TRANSFORMERS_VERBOSITY"] = "error"
@@ -144,7 +137,6 @@ os.environ["TRANSFORMERS_VERBOSITY"] = "error"
 MODELS_ROOT = Path("src/transformers/models")
 EMBEDDINGS_PATH = "embeddings.safetensors"
 EMBEDDINGS_INT8_PATH = "embeddings_int8.safetensors"
-EMBEDDINGS_BINARY_PATH = "embeddings_binary.safetensors"
 INDEX_MAP_PATH = "code_index_map.json"
 TOKENS_PATH = "code_index_tokens.json"
 INDEX_MAP_METHODS_PATH = "code_index_map_methods.json"
@@ -154,62 +146,7 @@ HUB_DATASET_DEFAULT = "hf-internal-testing/transformers_code_embeddings"
 EMBEDDING_MODEL = "Qwen/Qwen3-Embedding-8B"
 BATCH_SIZE = 16
 MAX_LENGTH = 4096
-_POPCOUNT_TABLE = np.array([(i).bit_count() for i in range(256)], dtype=np.uint8)
-
-
-def _normalize(string: str | None) -> str:
-    """
-    Normalize a string by removing all non-alphanumeric characters and converting to lowercase.
-
-    Args:
-        string (`str` or `None`): The string to normalize.
-
-    Returns:
-        `str`: The normalized string, or empty string if input is None.
-    """
-    return re.sub(r"[^a-z0-9]+", "", string.lower()) if string else ""
-
-
-def _strip_source_for_tokens(code: str) -> str:
-    """
-    Strip docstrings, comments, and import statements from source code.
-
-    Args:
-        code (`str`): The source code to strip.
-
-    Returns:
-        `str`: The stripped source code.
-    """
-    code = re.sub(r'("""|\'\'\')(?:.|\n)*?\1', "", code)
-    code = re.sub(r"#.*", "", code)
-    return "\n".join(line for line in code.splitlines() if not re.match(r"\s*(from|import)\s+", line))
-
-
-def _tokenize(code: str) -> set[str]:
-    """
-    Extract all Python identifiers from source code.
-
-    Args:
-        code (`str`): The source code to tokenize.
-
-    Returns:
-        `set[str]`: A set of all identifiers found in the code.
-    """
-    return set(re.findall(r"\b[a-zA-Z_][a-zA-Z0-9_]*\b", code))
-
-
-def _leading_symbol_prefix(name: str) -> str:
-    """
-    Extract the leading prefix from a symbol name (e.g., 'Llama' from 'LlamaAttention').
-
-    Args:
-        name (`str`): The symbol name to extract prefix from.
-
-    Returns:
-        `str`: The leading prefix, or empty string if no match.
-    """
-    match = re.match(r"^([A-Z][a-z0-9]+)", name) or re.match(r"^([A-Za-z0-9]+)", name)
-    return match.group(1) if match else ""
+HYBRID_ALPHA = 0.7
 
 
 def _sanitize_for_embedding(code: str, model_hint: str | None, symbol_hint: str | None) -> str:
@@ -224,14 +161,19 @@ def _sanitize_for_embedding(code: str, model_hint: str | None, symbol_hint: str 
     Returns:
         `str`: The sanitized code with model-specific identifiers replaced by 'Model'.
     """
-    base = _strip_source_for_tokens(code)
+    base = "\n".join(
+        line
+        for line in re.sub(r"#.*", "", re.sub(r'("""|\'\'\')(?:.|\n)*?\1', "", code)).splitlines()
+        if not re.match(r"\s*(from|import)\s+", line)
+    )
     variants = set()
     if model_hint:
         variants.add(model_hint)
         variants.add(model_hint.replace("_", ""))
         variants.add(re.sub(r"\d+", "", model_hint))
     if symbol_hint:
-        prefix = _leading_symbol_prefix(symbol_hint)
+        match = re.match(r"^([A-Z][a-z0-9]+)", symbol_hint) or re.match(r"^([A-Za-z0-9]+)", symbol_hint)
+        prefix = match.group(1) if match else ""
         if prefix:
             variants.add(prefix)
             variants.add(prefix.replace("_", ""))
@@ -241,6 +183,193 @@ def _sanitize_for_embedding(code: str, model_hint: str | None, symbol_hint: str 
     for variant in sorted({x for x in variants if len(x) >= 3}, key=len, reverse=True):
         sanitized = re.sub(re.escape(variant), "Model", sanitized, flags=re.IGNORECASE)
     return sanitized
+
+
+def _format_table(headers: list[str], rows: list[tuple[str, ...] | None], row_styles: list[str] | None = None) -> str:
+    if not rows:
+        return f"{ANSI_ROW}(no matches){ANSI_RESET}"
+
+    widths = [len(header) for header in headers]
+    for row in rows:
+        if row is None:
+            continue
+        for idx, cell in enumerate(row):
+            widths[idx] = max(widths[idx], len(cell))
+
+    header_line = " | ".join(header.ljust(widths[idx]) for idx, header in enumerate(headers))
+    divider = "-+-".join("-" * widths[idx] for idx in range(len(headers)))
+    total_width = sum(widths) + 3 * (len(headers) - 1)
+
+    styled_rows = []
+    style_idx = 0
+    for row in rows:
+        if row is None:
+            styled_rows.append(f"{ANSI_SECTION}{'-' * total_width}{ANSI_RESET}")
+            continue
+
+        line = " | ".join(cell.ljust(widths[col_idx]) for col_idx, cell in enumerate(row))
+        style = ANSI_ROW
+        if row_styles and style_idx < len(row_styles) and row_styles[style_idx]:
+            style = row_styles[style_idx]
+        styled_rows.append(f"{style}{line}{ANSI_RESET}")
+        style_idx += 1
+
+    return "\n".join([f"{ANSI_SECTION}{header_line}{ANSI_RESET}", divider] + styled_rows)
+
+
+def _parse_release_date(value: str) -> datetime | None:
+    try:
+        return datetime.strptime(value, "%Y-%m-%d")
+    except (TypeError, ValueError):
+        return None
+
+
+@cache
+def _load_definition_line_map(relative_path: str) -> dict[str, int]:
+    file_path = MODELS_ROOT / relative_path
+    try:
+        source = file_path.read_text(encoding="utf-8")
+    except (FileNotFoundError, OSError):
+        return {}
+
+    try:
+        tree = ast.parse(source)
+    except SyntaxError:
+        return {}
+
+    line_map: dict[str, int] = {}
+    for node in ast.iter_child_nodes(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            line_map[node.name] = getattr(node, "lineno", None) or 1
+            if isinstance(node, ast.ClassDef):
+                for child in node.body:
+                    if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                        key = f"{node.name}.{child.name}"
+                        line_map[key] = getattr(child, "lineno", None) or 1
+    return line_map
+
+
+def _resolve_definition_location(relative_path: str, definition: str) -> tuple[str, str]:
+    full_path = MODELS_ROOT / relative_path
+    line = _load_definition_line_map(relative_path).get(definition)
+    line_str = str(line) if line is not None else "?"
+    return str(full_path), line_str
+
+
+def _build_display_path(relative_path: str, match_name: str) -> tuple[str, str]:
+    full_path, line = _resolve_definition_location(relative_path, match_name)
+    return f"{full_path}:{line} ({match_name})", line
+
+
+def _colorize_heading(text: str) -> str:
+    return f"{ANSI_HEADER}{ANSI_BOLD}{text}{ANSI_RESET}"
+
+
+def build_date_data() -> dict[str, str]:
+    root_dir = transformers.__file__.split("src/transformers")[0]
+    root = Path(root_dir).joinpath("docs/source/en/model_doc")
+    result: dict[str, str] = {}
+
+    for md_path in root.glob("*.md"):
+        try:
+            text = md_path.read_text(encoding="utf-8", errors="ignore")
+        except Exception:
+            logging.info(f"Failed to read md for {md_path}")
+            continue
+
+        m = re.search(
+            r"(?:^|[\*_`\s>])(?:this|the)\s+model\s+was\s+released\s+on\s+(\d{4}-\d{2}-\d{2})\b",
+            text,
+            re.IGNORECASE,
+        )
+        if m:
+            result[md_path.stem] = m.group(1)
+
+    return result
+
+
+def write_json(path: Path, payload: dict) -> None:
+    path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+
+
+def _match_entry(
+    identifier: str,
+    score: float,
+    dates: dict[str, str],
+    embedding_scores: dict[str, float] | None = None,
+    jaccard_scores: dict[str, float] | None = None,
+) -> dict | None:
+    if ":" not in identifier:
+        return None
+    relative_path, match_name = identifier.split(":", 1)
+    match_class, match_method = match_name.split(".", 1) if "." in match_name else (None, None)
+    model_id = Path(relative_path).parts[0] if Path(relative_path).parts else "?"
+    full_path, line = _resolve_definition_location(relative_path, match_name)
+    entry = {
+        "identifier": identifier,
+        "relative_path": relative_path,
+        "match_name": match_name,
+        "class_name": match_class,
+        "method_name": match_method,
+        "score": score,
+        "release_date": dates.get(model_id, "unknown release date"),
+        "full_path": full_path,
+        "line": int(line) if line.isdigit() else None,
+    }
+    if embedding_scores is not None:
+        entry["embedding_score"] = embedding_scores.get(identifier)
+    if jaccard_scores is not None:
+        entry["jaccard_score"] = jaccard_scores.get(identifier)
+    return entry
+
+
+def _match_row(
+    identifier: str,
+    score: float,
+    dates: dict[str, str],
+    include_metric_column: bool,
+    metric: str,
+) -> tuple[tuple[str, ...], str, float, str] | None:
+    if ":" not in identifier:
+        return None
+    relative_path, match_name = identifier.split(":", 1)
+    model_id = Path(relative_path).parts[0] if Path(relative_path).parts else "?"
+    match_release = dates.get(model_id, "unknown release date")
+    display_path, _ = _build_display_path(relative_path, match_name)
+    if include_metric_column:
+        row = ("", metric, display_path, f"{score:.4f}", match_release)
+    else:
+        row = ("", display_path, f"{score:.4f}", match_release)
+    return row, relative_path, score, match_release
+
+
+def _compute_idf(tokens_map: dict[str, list[str]]) -> tuple[dict[str, float], float]:
+    doc_count = len(tokens_map)
+    if doc_count == 0:
+        return {}, 1.0
+    df: dict[str, int] = {}
+    for tokens in tokens_map.values():
+        for token in set(tokens):
+            df[token] = df.get(token, 0) + 1
+    idf = {token: math.log((doc_count + 1) / (count + 1)) + 1.0 for token, count in df.items()}
+    default_idf = math.log((doc_count + 1) / 1) + 1.0
+    return idf, default_idf
+
+
+def _weighted_jaccard(
+    query_tokens: set[str], candidate_tokens: set[str], idf_map: dict[str, float], default_idf: float
+) -> float:
+    if not query_tokens or not candidate_tokens:
+        return 0.0
+    intersection = query_tokens & candidate_tokens
+    if not intersection:
+        return 0.0
+    union = query_tokens | candidate_tokens
+    union_weight = sum(idf_map.get(token, default_idf) for token in union)
+    if union_weight <= 0:
+        return 0.0
+    intersection_weight = sum(idf_map.get(token, default_idf) for token in intersection)
+    return intersection_weight / union_weight
 
 
 class CodeSimilarityAnalyzer:
@@ -281,8 +410,6 @@ class CodeSimilarityAnalyzer:
             suffix += "_methods"
         if self.precision == "int8":
             suffix += "_int8"
-        elif self.precision == "binary":
-            suffix += "_binary"
         if not suffix:
             return EMBEDDINGS_PATH
         return f"embeddings{suffix}.safetensors"
@@ -312,14 +439,13 @@ class CodeSimilarityAnalyzer:
         output = []
         for match_id in indices:
             identifier = identifier_map[int(match_id)]
-            parsed = _parse_identifier(identifier)
-            if parsed is None:
+            if ":" not in identifier:
                 continue
-            relative_path, match_name = parsed
+            relative_path, match_name = identifier.split(":", 1)
             parent_model = Path(relative_path).parts[0]
             if match_name == self_name:
                 continue
-            if self_model_normalized and _normalize(parent_model) == self_model_normalized:
+            if self_model_normalized and re.sub(r"[^a-z0-9]+", "", parent_model.lower()) == self_model_normalized:
                 continue
             output.append((int(match_id), identifier))
         return output
@@ -407,7 +533,9 @@ class CodeSimilarityAnalyzer:
                 definitions_raw[identifier] = segment
                 sanitized = _sanitize_for_embedding(segment, model_hint, node.name)
                 definitions_sanitized[identifier] = sanitized
-                definitions_tokens[identifier] = sorted(_tokenize(sanitized))
+                definitions_tokens[identifier] = sorted(
+                    set(re.findall(r"\b[a-zA-Z_][a-zA-Z0-9_]*\b", sanitized))
+                )
                 definitions_kind[identifier] = "function"
                 continue
 
@@ -437,7 +565,9 @@ class CodeSimilarityAnalyzer:
                     definitions_raw[identifier] = class_segment
                     sanitized = _sanitize_for_embedding(class_segment, model_hint, node.name)
                     definitions_sanitized[identifier] = sanitized
-                    definitions_tokens[identifier] = sorted(_tokenize(sanitized))
+                    definitions_tokens[identifier] = sorted(
+                        set(re.findall(r"\b[a-zA-Z_][a-zA-Z0-9_]*\b", sanitized))
+                    )
                     definitions_kind[identifier] = "class"
                     continue
 
@@ -461,7 +591,9 @@ class CodeSimilarityAnalyzer:
                     definitions_raw[identifier] = segment
                     sanitized = _sanitize_for_embedding(combined, model_hint, node.name)
                     definitions_sanitized[identifier] = sanitized
-                    definitions_tokens[identifier] = sorted(_tokenize(sanitized))
+                    definitions_tokens[identifier] = sorted(
+                        set(re.findall(r"\b[a-zA-Z_][a-zA-Z0-9_]*\b", sanitized))
+                    )
                     definitions_kind[identifier] = "method"
         return definitions_raw, definitions_sanitized, definitions_tokens, definitions_kind
 
@@ -537,9 +669,12 @@ class CodeSimilarityAnalyzer:
         quantized = np.round(embeddings / scales).clip(-127, 127).astype("int8")
         return quantized, scales
 
-    def _quantize_binary(self, embeddings: np.ndarray) -> np.ndarray:
-        bits = (embeddings > 0).astype("uint8")
-        return np.packbits(bits, axis=1)
+    def _save_embeddings(self, embeddings: np.ndarray, path: Path) -> None:
+        if self.precision == "int8":
+            quantized, scales = self._quantize_int8(embeddings)
+            safetensors_save({"embeddings": quantized, "scale": scales}, path)
+        else:
+            safetensors_save({"embeddings": embeddings}, path)
 
     # ---------- build & search ----------
 
@@ -571,15 +706,7 @@ class CodeSimilarityAnalyzer:
         )
         embeddings = self.encode(sanitized_sources)
         embedding_path = self._embedding_filename()
-        if self.precision == "int8":
-            quantized, scales = self._quantize_int8(embeddings)
-            safetensors_save({"embeddings": quantized, "scale": scales}, embedding_path)
-        elif self.precision == "binary":
-            packed = self._quantize_binary(embeddings)
-            dim = np.array([embeddings.shape[1]], dtype="int32")
-            safetensors_save({"embeddings": packed, "dim": dim}, embedding_path)
-        else:
-            safetensors_save({"embeddings": embeddings}, embedding_path)
+        self._save_embeddings(embeddings, Path(embedding_path))
         with open(self._index_map_filename(), "w", encoding="utf-8") as file:
             json.dump({int(i): identifiers[i] for i in range(len(identifiers))}, file)
         with open(self._tokens_filename(), "w", encoding="utf-8") as file:
@@ -618,7 +745,7 @@ class CodeSimilarityAnalyzer:
         idf_map: dict[str, float],
         default_idf: float,
         k: int,
-        hybrid_alpha: float,
+        hybrid_alpha: float = HYBRID_ALPHA,
     ) -> tuple[list[tuple[str, float]], dict[str, float], dict[str, float]]:
         embedding_scores: dict[str, float] = {}
         jaccard_scores: dict[str, float] = {}
@@ -632,6 +759,40 @@ class CodeSimilarityAnalyzer:
             hybrid_scores.append((identifier, hybrid))
         hybrid_scores.sort(key=lambda item: item[1], reverse=True)
         return hybrid_scores[:k], embedding_scores, jaccard_scores
+
+    def _topk_candidates(
+        self,
+        query_embedding_row: np.ndarray,
+        base_embeddings: np.ndarray,
+        scales: np.ndarray | None,
+        identifier_map: dict[int, str],
+        self_model_normalized: str,
+        self_name: str,
+        k: int,
+        pool_size: int | None = None,
+    ) -> list[tuple[str, float]]:
+        if self.precision == "int8":
+            if scales is None:
+                raise ValueError("Missing int8 scales for int8 search.")
+            return self._topk_int8(
+                query_embedding_row,
+                base_embeddings,
+                scales,
+                identifier_map,
+                self_model_normalized,
+                self_name,
+                k,
+                pool_size=pool_size,
+            )
+        return self._topk_embedding(
+            query_embedding_row,
+            base_embeddings,
+            identifier_map,
+            self_model_normalized,
+            self_name,
+            k,
+            pool_size=pool_size,
+        )
 
     def _topk_int8(
         self,
@@ -654,32 +815,6 @@ class CodeSimilarityAnalyzer:
             indices, identifier_map, self_model_normalized, self_name
         ):
             output.append((identifier, float(similarities[match_id])))
-            if len(output) >= k:
-                break
-        return output
-
-    def _topk_binary(
-        self,
-        query_packed: np.ndarray,
-        base_embeddings: np.ndarray,
-        total_bits: int,
-        identifier_map: dict[int, str],
-        self_model_normalized: str,
-        self_name: str,
-        k: int,
-        pool_size: int | None = None,
-    ) -> list[tuple[str, float]]:
-        xor = np.bitwise_xor(base_embeddings, query_packed)
-        distances = _POPCOUNT_TABLE[xor].sum(axis=1).astype("int32")
-        pool = k + 32 if pool_size is None else max(k, pool_size)
-        indices = np.argpartition(distances, pool)[:pool]
-        indices = indices[np.argsort(distances[indices])]
-        output = []
-        for match_id, identifier in self._iter_filtered_identifiers(
-            indices, identifier_map, self_model_normalized, self_name
-        ):
-            similarity = 1.0 - float(distances[match_id]) / float(total_bits)
-            output.append((identifier, similarity))
             if len(output) >= k:
                 break
         return output
@@ -711,11 +846,13 @@ class CodeSimilarityAnalyzer:
         """
         scores = []
         for identifier in identifiers:
+            if ":" not in identifier:
+                continue
             parent_relative_path, match_name = identifier.split(":", 1)
             parent_model = Path(parent_relative_path).parts[0]
             if match_name == self_name:
                 continue
-            if self_model_normalized and _normalize(parent_model) == self_model_normalized:
+            if self_model_normalized and re.sub(r"[^a-z0-9]+", "", parent_model.lower()) == self_model_normalized:
                 continue
             tokens = set(tokens_map.get(identifier, []))
             score = _weighted_jaccard(query_tokens, tokens, idf_map, default_idf)
@@ -730,8 +867,6 @@ class CodeSimilarityAnalyzer:
         top_k_per_item: int = 5,
         allow_hub_fallback: bool = True,
         use_jaccard: bool = False,
-        score_mode: str = "hybrid",
-        hybrid_alpha: float = 0.7,
     ) -> dict[str, dict[str, list]]:
         """
         Analyze a modeling file and find similar code definitions in the index.
@@ -747,21 +882,16 @@ class CodeSimilarityAnalyzer:
         """
         if allow_hub_fallback:
             self.ensure_local_index()
-        hybrid_alpha = min(max(hybrid_alpha, 0.0), 1.0)
+        hybrid_alpha = HYBRID_ALPHA
 
         base = None
         base_embeddings = None
         scales = None
-        total_bits = None
         embedding_path = self._resolve_index_path(self._embedding_filename())
         if self.precision == "int8":
             base = safetensors_load(str(embedding_path))
             base_embeddings = base["embeddings"]
             scales = base["scale"]
-        elif self.precision == "binary":
-            base = safetensors_load(str(embedding_path))
-            base_embeddings = base["embeddings"]
-            total_bits = int(base["dim"][0])
         else:
             base = safetensors_load(str(embedding_path))
             base_embeddings = base["embeddings"]
@@ -778,8 +908,10 @@ class CodeSimilarityAnalyzer:
         )
         query_identifiers = list(definitions_raw.keys())
         query_sources_sanitized = [definitions_sanitized[key] for key in query_identifiers]
-        query_tokens_list = [set(_tokenize(source)) for source in query_sources_sanitized]
-        self_model_normalized = _normalize(self_model)
+        query_tokens_list = [
+            set(re.findall(r"\b[a-zA-Z_][a-zA-Z0-9_]*\b", source)) for source in query_sources_sanitized
+        ]
+        self_model_normalized = re.sub(r"[^a-z0-9]+", "", self_model.lower()) if self_model else ""
 
         logging.info(
             f"encoding {len(query_sources_sanitized)} query definitions with {EMBEDDING_MODEL} (device={self.device.type}, batch={BATCH_SIZE}, max_length={MAX_LENGTH})"
@@ -791,84 +923,29 @@ class CodeSimilarityAnalyzer:
             query_name = query_identifier.split(":")[-1]
             embedding_scores = None
             jaccard_scores = None
-            if score_mode == "hybrid":
-                pool_size = max(top_k_per_item * 5, top_k_per_item + 32)
-                if self.precision == "int8":
-                    candidates = self._topk_int8(
-                        query_embeddings[i],
-                        base_embeddings,
-                        scales,
-                        identifier_map,
-                        self_model_normalized,
-                        query_name,
-                        pool_size,
-                        pool_size=pool_size,
-                    )
-                elif self.precision == "binary":
-                    packed_query = self._quantize_binary(query_embeddings[[i]])[0]
-                    candidates = self._topk_binary(
-                        packed_query,
-                        base_embeddings,
-                        total_bits,
-                        identifier_map,
-                        self_model_normalized,
-                        query_name,
-                        pool_size,
-                        pool_size=pool_size,
-                    )
-                else:
-                    candidates = self._topk_embedding(
-                        query_embeddings[i],
-                        base_embeddings,
-                        identifier_map,
-                        self_model_normalized,
-                        query_name,
-                        pool_size,
-                        pool_size=pool_size,
-                    )
-                embedding_top, embedding_scores, jaccard_scores = self._combine_hybrid(
-                    candidates,
-                    query_tokens_list[i],
-                    tokens_map,
-                    idf_map,
-                    default_idf,
-                    top_k_per_item,
-                    hybrid_alpha,
-                )
-            else:
-                if self.precision == "int8":
-                    embedding_top = self._topk_int8(
-                        query_embeddings[i],
-                        base_embeddings,
-                        scales,
-                        identifier_map,
-                        self_model_normalized,
-                        query_name,
-                        top_k_per_item,
-                    )
-                elif self.precision == "binary":
-                    packed_query = self._quantize_binary(query_embeddings[[i]])[0]
-                    embedding_top = self._topk_binary(
-                        packed_query,
-                        base_embeddings,
-                        total_bits,
-                        identifier_map,
-                        self_model_normalized,
-                        query_name,
-                        top_k_per_item,
-                    )
-                else:
-                    embedding_top = self._topk_embedding(
-                        query_embeddings[i],
-                        base_embeddings,
-                        identifier_map,
-                        self_model_normalized,
-                        query_name,
-                        top_k_per_item,
-                    )
+            pool_size = max(top_k_per_item * 5, top_k_per_item + 32)
+            candidates = self._topk_candidates(
+                query_embeddings[i],
+                base_embeddings,
+                scales,
+                identifier_map,
+                self_model_normalized,
+                query_name,
+                pool_size,
+                pool_size=pool_size,
+            )
+            embedding_top, embedding_scores, jaccard_scores = self._combine_hybrid(
+                candidates,
+                query_tokens_list[i],
+                tokens_map,
+                idf_map,
+                default_idf,
+                top_k_per_item,
+                hybrid_alpha,
+            )
             embedding_set = {identifier for identifier, _ in embedding_top}
             kind = definitions_kind.get(query_identifier, "function")
-            entry = {"kind": kind, "embedding": embedding_top, "score_mode": "hybrid"}
+            entry = {"kind": kind, "embedding": embedding_top}
             if embedding_scores is not None:
                 entry["embedding_scores"] = embedding_scores
             if jaccard_scores is not None:
@@ -908,7 +985,7 @@ def main():
     parser.add_argument("--top-k", type=int, default=5, help="Top-k matches to return per symbol.")
     parser.add_argument(
         "--precision",
-        choices=["float32", "int8", "binary"],
+        choices=["float32", "int8"],
         default="float32",
         help="Embedding precision for building/loading the index.",
     )
@@ -952,10 +1029,9 @@ def main():
     aggregate_scores: dict[str, float] = {}
     for data in results.values():
         for identifier, score in data.get("embedding", []):
-            try:
-                relative_path, _ = identifier.split(":", 1)
-            except ValueError:
+            if ":" not in identifier:
                 continue
+            relative_path, _ = identifier.split(":", 1)
             aggregate_scores[relative_path] = aggregate_scores.get(relative_path, 0.0) + score
 
     best_candidate_path: str | None = None
@@ -974,7 +1050,7 @@ def main():
             "precision": args.precision,
             "granularity": args.granularity,
             "score_mode": "hybrid",
-            "hybrid_alpha": 0.7,
+            "hybrid_alpha": HYBRID_ALPHA,
             "release_date": release_date,
             "best_candidate": None,
             "results": {},
@@ -1001,51 +1077,15 @@ def main():
                 "embedding": [],
             }
             for identifier, score in data.get("embedding", []):
-                parsed = _parse_identifier(identifier)
-                if parsed is None:
-                    continue
-                relative_path, match_name = parsed
-                match_class, match_method = _split_match_name(match_name)
-                model_id = Path(relative_path).parts[0] if Path(relative_path).parts else "?"
-                full_path, line = _resolve_definition_location(MODELS_ROOT, relative_path, match_name)
-                entry["embedding"].append(
-                    {
-                        "identifier": identifier,
-                        "relative_path": relative_path,
-                        "match_name": match_name,
-                        "class_name": match_class,
-                        "method_name": match_method,
-                        "score": score,
-                        "embedding_score": embedding_scores.get(identifier),
-                        "jaccard_score": jaccard_scores.get(identifier),
-                        "release_date": dates.get(model_id, "unknown release date"),
-                        "full_path": full_path,
-                        "line": int(line) if line.isdigit() else None,
-                    }
-                )
+                match_entry = _match_entry(identifier, score, dates, embedding_scores, jaccard_scores)
+                if match_entry:
+                    entry["embedding"].append(match_entry)
             if args.use_jaccard:
                 entry["jaccard"] = []
                 for identifier, score in data.get("jaccard", []):
-                    parsed = _parse_identifier(identifier)
-                    if parsed is None:
-                        continue
-                    relative_path, match_name = parsed
-                    match_class, match_method = _split_match_name(match_name)
-                    model_id = Path(relative_path).parts[0] if Path(relative_path).parts else "?"
-                    full_path, line = _resolve_definition_location(MODELS_ROOT, relative_path, match_name)
-                    entry["jaccard"].append(
-                        {
-                            "identifier": identifier,
-                            "relative_path": relative_path,
-                            "match_name": match_name,
-                            "class_name": match_class,
-                            "method_name": match_method,
-                            "score": score,
-                            "release_date": dates.get(model_id, "unknown release date"),
-                            "full_path": full_path,
-                            "line": int(line) if line.isdigit() else None,
-                        }
-                    )
+                    match_entry = _match_entry(identifier, score, dates)
+                    if match_entry:
+                        entry["jaccard"].append(match_entry)
                 entry["intersection"] = sorted(data.get("intersection", []))
             payload["results"][query_name] = entry
         write_json(Path(args.output_json), payload)
@@ -1089,51 +1129,36 @@ def main():
                 table_rows.append(None)
 
             symbol_label = query_name
-            if release_date:
-                symbol_label = f"{symbol_label}"
 
             symbol_row = (symbol_label,) + ("",) * (len(headers) - 1)
             table_rows.append(symbol_row)
             row_styles.append(ANSI_BOLD)
 
-            embedding_details: list[tuple[str, str, str, float, str]] = []
+            embedding_details: list[tuple[str, float, str]] = []
             embedding_style_indices: list[int] = []
 
             for identifier, score in data.get("embedding", []):
-                parsed = _parse_identifier(identifier)
-                if parsed is None:
+                match_row = _match_row(identifier, score, dates, include_metric_column, "embedding")
+                if match_row is None:
                     continue
-                relative_path, match_name = parsed
-                model_id = Path(relative_path).parts[0] if Path(relative_path).parts else "?"
-                match_release = dates.get(model_id, "unknown release date")
-                display_path, _ = _build_display_path(MODELS_ROOT, relative_path, match_name)
-
-                if include_metric_column:
-                    row = ("", "embedding", display_path, f"{score:.4f}", match_release)
-                else:
-                    row = ("", display_path, f"{score:.4f}", match_release)
+                row, relative_path, score, match_release = match_row
 
                 table_rows.append(row)
                 row_styles.append(ANSI_ROW)
                 embedding_style_indices.append(len(row_styles) - 1)
-                embedding_details.append((relative_path, model_id, match_name, score, match_release))
+                embedding_details.append((relative_path, score, match_release))
                 has_metric_rows = True
 
             if embedding_details:
-                highest_score = None
-                highest_idx = None
-                for idx, (_, _, _, score, _) in enumerate(embedding_details):
-                    if highest_score is None or score > highest_score:
-                        highest_score = score
-                        highest_idx = idx
+                highest_idx = max(range(len(embedding_details)), key=lambda idx: embedding_details[idx][1])
+                highest_score = embedding_details[highest_idx][1]
 
-                if highest_idx is not None:
-                    row_styles[embedding_style_indices[highest_idx]] = ANSI_HIGHLIGHT_TOP
+                row_styles[embedding_style_indices[highest_idx]] = ANSI_HIGHLIGHT_TOP
 
                 if highest_score is not None:
                     oldest_idx = None
                     oldest_date = None
-                    for idx, (_, model_id, _, score, release_value) in enumerate(embedding_details):
+                    for idx, (_, score, release_value) in enumerate(embedding_details):
                         if highest_score - score > 0.1:
                             continue
                         parsed = _parse_release_date(release_value)
@@ -1149,7 +1174,7 @@ def main():
                         row_styles[embedding_style_indices[oldest_idx]] = ANSI_HIGHLIGHT_OLD
 
                 if best_candidate_path is not None:
-                    for idx, (relative_path, _, _, _, _) in enumerate(embedding_details):
+                    for idx, (relative_path, _, _) in enumerate(embedding_details):
                         style_position = embedding_style_indices[idx]
                         if row_styles[style_position] != ANSI_ROW:
                             continue
@@ -1158,18 +1183,10 @@ def main():
 
             if args.use_jaccard:
                 for identifier, score in data.get("jaccard", []):
-                    parsed = _parse_identifier(identifier)
-                    if parsed is None:
+                    match_row = _match_row(identifier, score, dates, include_metric_column, "jaccard")
+                    if match_row is None:
                         continue
-                    relative_path, match_name = parsed
-                    model_id = Path(relative_path).parts[0] if Path(relative_path).parts else "?"
-                    match_release = dates.get(model_id, "unknown release date")
-                    display_path, _ = _build_display_path(MODELS_ROOT, relative_path, match_name)
-
-                    if include_metric_column:
-                        row = ("", "jaccard", display_path, f"{score:.4f}", match_release)
-                    else:
-                        row = ("", display_path, f"{score:.4f}", match_release)
+                    row, relative_path, _, _ = match_row
 
                     table_rows.append(row)
                     row_styles.append(ANSI_ROW)
@@ -1178,18 +1195,11 @@ def main():
                         row_styles[-1] = ANSI_HIGHLIGHT_CANDIDATE
 
                 for identifier in sorted(data.get("intersection", [])):
-                    parsed = _parse_identifier(identifier)
-                    if parsed is None:
+                    match_row = _match_row(identifier, 0.0, dates, include_metric_column, "intersection")
+                    if match_row is None:
                         continue
-                    relative_path, match_name = parsed
-                    model_id = Path(relative_path).parts[0] if Path(relative_path).parts else "?"
-                    match_release = dates.get(model_id, "unknown release date")
-                    display_path, _ = _build_display_path(MODELS_ROOT, relative_path, match_name)
-
-                    if include_metric_column:
-                        row = ("", "intersection", display_path, "--", match_release)
-                    else:
-                        row = ("", display_path, "--", match_release)
+                    row, relative_path, _, match_release = match_row
+                    row = tuple("--" if cell == f"{0.0:.4f}" else cell for cell in row)
 
                     table_rows.append(row)
                     row_styles.append(ANSI_ROW)

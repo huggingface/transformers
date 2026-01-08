@@ -14,6 +14,8 @@ type DetectorMatch = {
   class_name: string | null;
   method_name: string | null;
   score: number;
+  embedding_score?: number | null;
+  jaccard_score?: number | null;
   release_date: string;
   full_path: string;
   line: number | null;
