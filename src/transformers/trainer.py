@@ -1986,11 +1986,11 @@ class Trainer:
                 )
             fsdp_kwargs = self.args.xla_fsdp_config
             if self.args.fsdp_config["xla_fsdp_grad_ckpt"]:
-                if model.generation_config.use_cache:
+                if model.config.use_cache:
                     logger.warning_once(
                         "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
                     )
-                    model.generation_config.use_cache = False
+                    model.config.use_cache = False
 
                 # Apply gradient checkpointing to auto-wrapped sub-modules if specified
                 def auto_wrapper_callable(m, *args, **kwargs):
