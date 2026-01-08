@@ -1389,12 +1389,16 @@ class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel, GenerationMixin):
         inputs_embeds=None,
         use_cache=None,
         cache_position=None,
+        is_first_iteration=False,
         **model_kwargs,
     ):
         # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
 
-        # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
-        if cache_position[0] != 0:
+        # Pixel values are used only in the first iteration if available
+        # In subsquent iterations, they are already merged with text and cached
+        # NOTE: first iteration doesn't have to be prefill, it can be the first
+        # iteration with a question and cached system prompt (continue generate from cache)
+        if not is_first_iteration and use_cache:
             image_embeds = None
             image_embeds_position_mask = None
 
@@ -1419,6 +1423,7 @@ class Kosmos2TextForCausalLM(Kosmos2PreTrainedModel, GenerationMixin):
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             cache_position=cache_position,
+            is_first_iteration=is_first_iteration,
             **model_kwargs,
         )
         # Kosmos2 has offset for position ids, so we need to create them correctly in PositionEmbedding layer

@@ -477,7 +477,7 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
         self, audio_features, num_audio_tokens, inputs_embeds, input_ids, attention_mask, labels
     ):
         """
-        Merge input_ids with with audio features into final embeddings
+        Merge input_ids with audio features into final embeddings
 
         Args:
             audio_features (`torch.Tensor` of shape `(num_audios, max_audio_tokens, embed_dim)`):
@@ -848,11 +848,11 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
         # Overwritten -- we should not pass input_features when we are in cached decoding stage
 
         input_features = kwargs.pop("input_features", None)
-        cache_position = kwargs.get("cache_position")
+        is_first_iteration = kwargs.get("is_first_iteration", False)
 
         model_inputs = super().prepare_inputs_for_generation(*args, **kwargs)
 
-        if cache_position is not None and cache_position[0] == 0:
+        if is_first_iteration or not kwargs.get("use_cache", True):
             # input_features should only be passed when we are not in cached decoding stage
             model_inputs["input_features"] = input_features
 

@@ -19,6 +19,7 @@ import inspect
 import os
 import warnings
 from collections.abc import Callable
+from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Optional, Union
 
@@ -596,6 +597,7 @@ class GenerationMixin(ContinuousMixin):
         attention_mask: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         cache_position: torch.LongTensor | None = None,
+        is_first_iteration: bool | None = False,
         **kwargs,
     ):
         """
@@ -631,7 +633,7 @@ class GenerationMixin(ContinuousMixin):
         input_ids_key = "decoder_input_ids" if self.config.is_encoder_decoder else "input_ids"
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step for every prompt.
         if not self.config.is_encoder_decoder:
-            if inputs_embeds is not None and len(cache_position) == inputs_embeds.shape[1]:
+            if inputs_embeds is not None and is_first_iteration:
                 model_inputs[input_ids_key] = None
                 model_inputs["inputs_embeds"] = inputs_embeds
             else:
@@ -711,6 +713,7 @@ class GenerationMixin(ContinuousMixin):
                     past_key_values=past_key_values,
                     position_ids=position_ids,
                     token_type_ids=token_type_ids,
+                    is_first_iteration=is_first_iteration,
                 )
             else:
                 attention_mask = causal_mask_creation_function(
@@ -1303,7 +1306,7 @@ class GenerationMixin(ContinuousMixin):
         if generation_config.do_sample:
             # In beam methods, we need to keep at least one non-eos token to explore continuations that might have a
             # better score (i.e. keep len(list(generation_config._eos_token_tensor)) + 1)
-            if generation_config.num_beams > 1:
+            if generation_config.num_beams is not None and generation_config.num_beams > 1:
                 if isinstance(generation_config._eos_token_tensor, list):
                     min_tokens_to_keep = len(generation_config._eos_token_tensor) + 1
                 elif isinstance(generation_config._eos_token_tensor, torch.Tensor):
@@ -2176,8 +2179,10 @@ class GenerationMixin(ContinuousMixin):
                 "will be skipped."
             )
 
-            # Finally: if we can compile, disable tokenizers parallelism and check for FA2 + static cache
+        if can_compile:
+            # Finally: if we can compile, disable tokenizers parallelism
             os.environ["TOKENIZERS_PARALLELISM"] = "0"
+
             # If we use FA2 and a static cache, we cannot compile with fullgraph
             if self.config._attn_implementation == "flash_attention_2":
                 # only raise warning if the user passed an explicit compile-config
@@ -2189,6 +2194,22 @@ class GenerationMixin(ContinuousMixin):
                     generation_config.compile_config.fullgraph = False
 
         return can_compile
+
+    @contextmanager
+    def _optimize_model_for_decode(self):
+        original_experts_implementation = self.config._experts_implementation
+        if original_experts_implementation == "grouped_mm":
+            logger.info_once(
+                "We will be switching to 'batched_mm' for the decoding stage as it is much more performant than 'grouped_mm' on smaller inputs. "
+                "If you experience any issues with this, please open an issue on the Hugging Face Transformers GitHub repository.",
+            )
+            self.set_experts_implementation("batched_mm")
+
+        try:
+            yield
+        finally:
+            if original_experts_implementation == "grouped_mm":
+                self.set_experts_implementation(original_experts_implementation)
 
     def _get_deprecated_gen_repo(
         self,
@@ -2835,13 +2856,20 @@ class GenerationMixin(ContinuousMixin):
             else self.__call__
         )
 
-        prefill_consumed = False
-        outputs = self._prefill(input_ids, generation_config, model_kwargs)
+        # Assisted generation completes the prefill stage in candidate generator so that
+        # we don't have several `prefill` calls in one generation loop. Skip `_prefill` for assistants
+        if not generation_config.is_assistant:
+            outputs = self._prefill(input_ids, generation_config, model_kwargs)
+            prefill_consumed = False
+        else:
+            model_kwargs = self._get_initial_cache_position(input_ids.shape[1], input_ids.device, model_kwargs)
+            prefill_consumed = True
 
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             if prefill_consumed:
                 model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
-                outputs = model_forward(**model_inputs, return_dict=True)
+                with self._optimize_model_for_decode():
+                    outputs = model_forward(**model_inputs, return_dict=True)
             prefill_consumed = True
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs,
@@ -3313,9 +3341,15 @@ class GenerationMixin(ContinuousMixin):
         )
         beam_indices = running_beam_indices.detach().clone()
 
-        prefill_consumed = False
         flat_running_sequences = input_ids
-        model_outputs = self._prefill(input_ids, generation_config, model_kwargs)
+        # Assisted generation completes the prefill stage in candidate generator so that
+        # we don't have several `prefill` calls in one generation loop. Skip `_prefill` for assistants
+        if not generation_config.is_assistant:
+            model_outputs = self._prefill(input_ids, generation_config, model_kwargs)
+            prefill_consumed = False
+        else:
+            model_kwargs = self._get_initial_cache_position(input_ids.shape[1], input_ids.device, model_kwargs)
+            prefill_consumed = True
 
         # 4. run the generation loop
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
@@ -3621,7 +3655,7 @@ class GenerationMixin(ContinuousMixin):
             cur_len = input_ids.shape[1]
 
             #  1. Fetch candidate sequences from a `CandidateGenerator` and move to the correct device
-            candidate_input_ids, candidate_logits = candidate_generator.get_candidates(input_ids)
+            candidate_input_ids, candidate_logits = candidate_generator.get_candidates(input_ids, is_first_iteration)
             candidate_input_ids = candidate_input_ids.to(self.device)
             if candidate_logits is not None:
                 candidate_logits = candidate_logits.to(self.device)
@@ -3648,7 +3682,9 @@ class GenerationMixin(ContinuousMixin):
                     dim=0,
                 )
 
-            model_inputs = self.prepare_inputs_for_generation(candidate_input_ids, **candidate_kwargs)
+            model_inputs = self.prepare_inputs_for_generation(
+                candidate_input_ids, is_first_iteration=is_first_iteration, **candidate_kwargs
+            )
             if "logits_to_keep" in model_inputs:
                 model_inputs["logits_to_keep"] = candidate_length + 1
 
@@ -3811,7 +3847,7 @@ class GenerationMixin(ContinuousMixin):
     def _prefill(self, input_ids: torch.LongTensor, generation_config: GenerationConfig, model_kwargs):
         if generation_config.prefill_chunk_size is None:
             model_kwargs = self._get_initial_cache_position(input_ids.shape[1], input_ids.device, model_kwargs)
-            model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
+            model_inputs = self.prepare_inputs_for_generation(input_ids, is_first_iteration=True, **model_kwargs)
             return self(**model_inputs, return_dict=True)
         else:  # Chunked prefill
             # Even if we are not compiling the forward, flex is always compiled when used. With chunked prefill, we may
