@@ -204,12 +204,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
 
     def get_state_dict_and_metadata(self, model):
         from ..integrations import Mxfp4GptOssExperts
-
         state_dict = model.state_dict()
-
-        # Get num_local_experts from model config
-        num_local_experts = getattr(model.config, "num_local_experts", 32)
-        hidden_size = getattr(model.config, "hidden_size", 2880)
 
         for name, module in model.named_modules():
             if (
@@ -217,26 +212,9 @@ class Mxfp4HfQuantizer(HfQuantizer):
                 and hasattr(module, "gate_up_proj")
                 and hasattr(module, "down_proj")
             ):
-                state_dict[f"{name}.gate_up_proj_blocks"] = (
-                    module.gate_up_proj.storage.layout.unswizzle_data(module.gate_up_proj.storage.data)
-                    .transpose(-1, -2)
-                    .reshape(num_local_experts, -1, 90, 16)
-                )
-                state_dict[f"{name}.gate_up_proj_scales"] = (
-                    module.gate_up_proj_precision_config.weight_scale.storage.layout.unswizzle_data(
-                        module.gate_up_proj_precision_config.weight_scale.storage.data
-                    ).transpose(-1, -2)
-                )
-                state_dict[f"{name}.down_proj_blocks"] = (
-                    module.down_proj.storage.layout.unswizzle_data(module.down_proj.storage.data)
-                    .transpose(-1, -2)
-                    .reshape(num_local_experts, hidden_size, 90, -1)
-                )
-                state_dict[f"{name}.down_proj_scales"] = (
-                    module.down_proj_precision_config.weight_scale.storage.layout.unswizzle_data(
-                        module.down_proj_precision_config.weight_scale.storage.data
-                    ).transpose(-1, -2)
-                )
+                state_dict[f"{name}.gate_up_proj"] = module.gate_up_proj
+                state_dict[f"{name}.down_proj"] = module.down_proj
+
 
         metadata = {}
         return state_dict, metadata
@@ -272,12 +250,12 @@ class Mxfp4HfQuantizer(HfQuantizer):
                 return [
                     WeightConverter(
                         source_patterns=["gate_up_proj_blocks", "gate_up_proj_scales"],
-                        target_patterns="gate_up_proj",
+                        target_patterns=r"gate_up_proj$",
                         operations=[Mxfp4Deserialize(self)],
                     ),
                     WeightConverter(
                         source_patterns=["down_proj_blocks", "down_proj_scales"],
-                        target_patterns="down_proj",
+                        target_patterns=r"down_proj$",
                         operations=[Mxfp4Deserialize(self)],
                     )
                 ]
