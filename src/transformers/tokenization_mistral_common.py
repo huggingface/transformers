@@ -198,33 +198,12 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
     For more info on `mistral-common`, see [mistral-common](https://github.com/mistralai/mistral-common).
 
     This class is a wrapper around a `mistral_common.tokens.tokenizers.mistral.MistralTokenizer`.
-    It provides a Hugging Face compatible interface to tokenize using the official mistral-common tokenizer.
+    It provides a Hugging Face compatible interface to tokenize using the official mistral-common tokenizer and inherits from the `PreTrainedTokenizerBase` class.
 
-    Supports the following methods from the `PreTrainedTokenizerBase` class:
-
-    - [`~MistralCommonBackend.get_vocab`]: Returns the vocabulary as a dictionary of token to index.
-        This is a lossy conversion for Tekkenizer as some decoding errors are collapsed into the same token.
-    - [`~MistralCommonBackend.encode`]: Encode a string to a list of integers.
-    - [`~MistralCommonBackend.decode`]: Decode a list of integers to a string.
-    - [`~MistralCommonBackend.batch_decode`]: Decode a batch of list of integers to a list of strings.
-    - [`~MistralCommonBackend.convert_tokens_to_ids`]: Convert a list of tokens to a list of integers.
-    - [`~MistralCommonBackend.convert_ids_to_tokens`]: Convert a list of integers to a list of tokens.
-    - [`~MistralCommonBackend.tokenize`]: Tokenize a string.
-    - [`~MistralCommonBackend.get_special_tokens_mask`]: Get the special tokens mask for a list of tokens.
-    - [`~MistralCommonBackend.prepare_for_model`]: Prepare a list of inputs for the model.
-    - [`~MistralCommonBackend.pad`]: Pad a list of inputs to the same length.
-    - [`~MistralCommonBackend.truncate_sequences`]: Truncate a list of sequences to the same length.
-    - [`~MistralCommonBackend.apply_chat_template`]: Apply a chat template to a list of messages.
-    - [`~MistralCommonBackend.__call__`]: Tokenize a string or a list of strings.
-    - [`~MistralCommonBackend.from_pretrained`]: Download and cache a pretrained tokenizer from the Hugging Face model hub or local directory.
-    - [`~MistralCommonBackend.save_pretrained`]: Save a tokenizer to a directory, so it can be reloaded using the `from_pretrained` class method.
-    - [`~MistralCommonBackend.push_to_hub`]: Upload tokenizer to the Hugging Face model hub.
-
-    Here are the key differences with the `PreTrainedTokenizerBase` class:
+    Here are the key behavior differences with the `PythonBackend` class:
 
     - Pair of sequences are not supported. The signature has been kept for compatibility but all arguments related to pair of sequences are ignored. The return values for pairs are returned as `None`.
     - The `is_split_into_words` argument is not supported.
-    - The `return_token_type_ids` argument is not supported.
     - It is not possible to add new tokens to the tokenizer. Special tokens are handled differently from Transformers. In `mistral-common`, special tokens are never encoded directly. This means that: `tokenizer.encode("<s>")` will not return the ID of the `<s>` token. Instead, it will return a list of IDs corresponding to the tokenization of the string `"<s>"`. For more information, see the [mistral-common documentation](https://mistralai.github.io/mistral-common/usage/tokenizers/#special-tokens).
 
     If you have suggestions to improve this class, please open an issue on the [mistral-common GitHub repository](https://github.com/mistralai/mistral-common/issues) if it is related to the tokenizer or on the [Transformers GitHub repository](https://github.com/huggingface/transformers/issues) if it is related to the Hugging Face interface.
@@ -1602,7 +1581,10 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
         special_tokens_dict: dict[str, Union[str, AddedToken, Sequence[Union[str, AddedToken]]]],
         replace_extra_special_tokens: bool = True,
     ):
-        r"""`MistralCommonBackend` does not implement `add_special_tokens`."""
+        r"""`MistralCommonBackend` does not implement `add_special_tokens` by design.
+
+        If you would like this behaviour to be implemented, please open an issue in the `Transformers` or `mistral-common` repositories to request it.
+        """
 
         raise NotImplementedError("`MistralCommonBackend` does not implement `add_special_tokens`.")
 
@@ -1611,17 +1593,26 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
         special_tokens_dict: dict[str, Union[str, AddedToken, Sequence[Union[str, AddedToken]]]],
         replace_extra_special_tokens: bool = True,
     ):
-        r"""`MistralCommonBackend` does not implement `add_special_tokens`."""
+        """
+        `MistralCommonBackend` does not implement `add_special_tokens` by design.
+
+        If you would like this behaviour to be implemented, please open an issue in the `Transformers` or `mistral-common` repositories to request it.
+        """
 
         raise NotImplementedError("`MistralCommonBackend` does not implement `add_tokens`.")
 
     def convert_added_tokens(cls, obj: Union[AddedToken, Any], save: bool = False, add_type_field: bool = True):  # type: ignore[override]
-        r"""`MistralCommonBackend` does not implement `convert_added_tokens`."""
+        """
+        `MistralCommonBackend` does not implement `convert_added_tokens` by design.
+
+        If you would like this behaviour to be implemented, please open an issue in the `Transformers` or `mistral-common` repositories to request it.
+        """
 
         raise NotImplementedError("`MistralCommonBackend` does not implement `convert_added_tokens`.")
 
     def get_chat_template(self, chat_template: str | None = None, tools: list[dict] | None = None) -> str:
-        r"""`MistralCommonBackend` does not implement `get_chat_template`."""
+        """`MistralCommonBackend` does not implement `get_chat_template` by design as `mistral-common` does not use chat templates.
+        """
 
         raise NotImplementedError("`MistralCommonBackend` does not implement `get_chat_template`.")
 
@@ -1632,12 +1623,16 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
         filename_prefix: str | None,
         save_jinja_files: bool,
     ):
-        r"""`MistralCommonBackend` does not implement `save_chat_templates`."""
+        """`MistralCommonBackend` does not implement `save_chat_templates` by design as `mistral-common` does not use chat templates."""
 
         raise NotImplementedError("`MistralCommonBackend` does not implement `save_chat_templates`.")
 
     def save_vocabulary(self, save_directory: str, filename_prefix: str | None = None) -> tuple[str, ...]:
-        r"""`MistralCommonBackend` does not implement `save_vocabulary`."""
+        """
+        `MistralCommonBackend` does not implement `save_vocabulary` by design.
+
+        This is because `mistral-common` is configured by one tokenizer file. If you'd like to save the vocabulary, please consider using the `save_pretrained` method instead.
+        """
 
         raise NotImplementedError("`MistralCommonBackend` does not implement `save_vocabulary`.")
 
