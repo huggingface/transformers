@@ -1416,7 +1416,7 @@ class GroundingDinoPreTrainedModel(PreTrainedModel):
         elif isinstance(module, GroundingDinoFusionLayer):
             init.constant_(module.vision_param, 1e-4)
             init.constant_(module.text_param, 1e-4)
-        elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
+        elif isinstance(module, (nn.Linear, nn.Conv2d)):
             init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
                 init.zeros_(module.bias)
@@ -1512,7 +1512,7 @@ class GroundingDinoEncoder(GroundingDinoPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
         **kwargs,
-    ):
+    ) -> Union[tuple, GroundingDinoEncoderOutput]:
         r"""
         Args:
             vision_features (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -1667,7 +1667,7 @@ class GroundingDinoDecoder(GroundingDinoPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
         **kwargs,
-    ):
+    ) -> Union[tuple, GroundingDinoDecoderOutput]:
         r"""
         Args:
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
@@ -2060,7 +2060,7 @@ class GroundingDinoModel(GroundingDinoPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
         **kwargs,
-    ):
+    ) -> Union[tuple, GroundingDinoModelOutput]:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, text_sequence_length)`):
             Indices of input sequence tokens in the vocabulary. Padding will be ignored by default should you provide

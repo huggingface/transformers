@@ -553,6 +553,11 @@ def is_torch_flex_attn_available() -> bool:
 
 
 @lru_cache
+def is_grouped_mm_available() -> bool:
+    return is_torch_available() and version.parse(get_torch_version()) >= version.parse("2.9.0")
+
+
+@lru_cache
 def is_kenlm_available() -> bool:
     return _is_package_available("kenlm")
 
@@ -1104,6 +1109,16 @@ def is_natten_available() -> bool:
 @lru_cache
 def is_nltk_available() -> bool:
     return _is_package_available("nltk")
+
+
+@lru_cache
+def is_numba_available() -> bool:
+    is_available = _is_package_available("numba")
+    if not is_available:
+        return False
+
+    numpy_available, numpy_version = _is_package_available("numpy", return_version=True)
+    return not numpy_available or version.parse(numpy_version) < version.parse("2.2.0")
 
 
 @lru_cache
