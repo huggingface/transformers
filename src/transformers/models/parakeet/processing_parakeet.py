@@ -16,7 +16,7 @@ from typing import Optional, Union
 from ...audio_utils import AudioInput, make_list_of_audio
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import logging
+from ...utils import auto_docstring, logging
 
 
 logger = logging.get_logger(__name__)
@@ -38,10 +38,12 @@ class ParakeetProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@auto_docstring
 class ParakeetProcessor(ProcessorMixin):
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
 
+    @auto_docstring
     def __call__(
         self,
         audio: AudioInput,
@@ -49,6 +51,13 @@ class ParakeetProcessor(ProcessorMixin):
         sampling_rate: Optional[int] = None,
         **kwargs: Unpack[ParakeetProcessorKwargs],
     ):
+        r"""
+        sampling_rate (`int`, *optional*):
+            The sampling rate of the input audio in Hz. This should match the sampling rate expected by the feature
+            extractor (defaults to 16000 Hz). If provided, it will be validated against the processor's expected
+            sampling rate, and an error will be raised if they don't match. If not provided, a warning will be
+            issued and the default sampling rate will be assumed.
+        """
         audio = make_list_of_audio(audio)
 
         output_kwargs = self._merge_kwargs(

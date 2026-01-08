@@ -22,7 +22,7 @@ from ...image_transforms import center_to_corners_format
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
-from ...utils import TensorType, is_torch_available
+from ...utils import TensorType, auto_docstring, is_torch_available
 
 
 if is_torch_available():
@@ -113,47 +113,20 @@ class GroundingDinoProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@auto_docstring
 class GroundingDinoProcessor(ProcessorMixin):
-    r"""
-    Constructs a Grounding DINO processor which wraps a Deformable DETR image processor and a BERT tokenizer into a
-    single processor.
-
-    [`GroundingDinoProcessor`] offers all the functionalities of [`GroundingDinoImageProcessor`] and
-    [`AutoTokenizer`]. See the docstring of [`~GroundingDinoProcessor.__call__`] and [`~GroundingDinoProcessor.decode`]
-    for more information.
-
-    Args:
-        image_processor (`GroundingDinoImageProcessor`):
-            An instance of [`GroundingDinoImageProcessor`]. The image processor is a required input.
-        tokenizer (`AutoTokenizer`):
-            An instance of ['PreTrainedTokenizer`]. The tokenizer is a required input.
-    """
-
     valid_processor_kwargs = GroundingDinoProcessorKwargs
 
     def __init__(self, image_processor, tokenizer):
         super().__init__(image_processor, tokenizer)
 
+    @auto_docstring
     def __call__(
         self,
         images: Optional[ImageInput] = None,
         text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
         **kwargs: Unpack[GroundingDinoProcessorKwargs],
     ) -> BatchEncoding:
-        """
-        This method uses [`GroundingDinoImageProcessor.__call__`] method to prepare image(s) for the model, and
-        [`BertTokenizerFast.__call__`] to prepare text for the model.
-
-        Args:
-            images (`ImageInput`, `list[ImageInput]`, *optional*):
-                The image or batch of images to be processed. The image might be either PIL image, numpy array or a torch tensor.
-            text (`TextInput`, `PreTokenizedInput`, `list[TextInput]`, `list[PreTokenizedInput]`, *optional*):
-                Candidate labels to be detected on the image. The text might be one of the following:
-                - A list of candidate labels (strings) to be detected on the image (e.g. ["a cat", "a dog"]).
-                - A batch of candidate labels to be detected on the batch of images (e.g. [["a cat", "a dog"], ["a car", "a person"]]).
-                - A merged candidate labels string to be detected on the image, separated by "." (e.g. "a cat. a dog.").
-                - A batch of merged candidate labels text to be detected on the batch of images (e.g. ["a cat. a dog.", "a car. a person."]).
-        """
         if text is not None:
             text = self._preprocess_input_text(text)
         return super().__call__(images=images, text=text, **kwargs)

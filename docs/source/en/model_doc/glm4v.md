@@ -196,6 +196,7 @@ print(output_text)
 ## Glm4vProcessor
 
 [[autodoc]] Glm4vProcessor
+    - __call__
 
 ## Glm4vVisionModel
 

@@ -39,6 +39,7 @@ rendered properly in your Markdown viewer.
 ## Glm46VProcessor
 
 [[autodoc]] Glm46VProcessor
+    - __call__
 
 ## Glm46VModel
 

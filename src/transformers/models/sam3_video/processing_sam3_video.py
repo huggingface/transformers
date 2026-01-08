@@ -19,32 +19,15 @@ from torchvision.ops import masks_to_boxes
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
-from ...utils import TensorType
+from ...utils import TensorType, auto_docstring
 from ...utils.import_utils import requires
 from ...video_utils import VideoInput
 from .modeling_sam3_video import Sam3VideoInferenceSession
 
 
 @requires(backends=("torch",))
+@auto_docstring
 class Sam3VideoProcessor(ProcessorMixin):
-    r"""
-    Constructs a SAM3 processor which wraps a SAM3 image processor and an 2D points & Bounding boxes processor into a
-    single processor.
-
-    [`Sam3Processor`] offers all the functionalities of [`Sam3ImageProcessor`] and [`Sam3VideoProcessor`]. See the docstring of
-    [`~Sam3ImageProcessor.__call__`] and [`~Sam3VideoProcessor.__call__`] for more information.
-
-    Args:
-        image_processor (`Sam3ImageProcessorFast`):
-            An instance of [`Sam3ImageProcessorFast`].
-        video_processor (`Sam2VideoVideoProcessor`):
-            An instance of [`Sam2VideoVideoProcessor`].
-        tokenizer ([`CLIPTokenizer`, `CLIPTokenizerFast`]):
-            An instance of [`PreTrainedTokenizer`, `PreTrainedTokenizerFast`]. The tokenizer is a required input.
-        target_size (`int`, *optional*):
-            The target size (target_size, target_size) to which the image will be resized.
-    """
-
     def __init__(
         self,
         image_processor,
@@ -53,9 +36,14 @@ class Sam3VideoProcessor(ProcessorMixin):
         target_size: Optional[int] = None,
         **kwargs,
     ):
+        r"""
+        target_size (`int`, *optional*):
+            The target size (target_size, target_size) to which the image will be resized.
+        """
         super().__init__(image_processor, video_processor, tokenizer, **kwargs)
         self.target_size = target_size if target_size is not None else self.image_processor.size["height"]
 
+    @auto_docstring
     def __call__(
         self,
         images: Optional[ImageInput] = None,
@@ -65,19 +53,12 @@ class Sam3VideoProcessor(ProcessorMixin):
         **kwargs,
     ) -> BatchEncoding:
         r"""
-        This method uses [`Sam3VideoImageProcessorFast.__call__`] method to prepare image(s) for the model.
-
-        Args:
-            images (`ImageInput`, *optional*):
-                The image(s) to process.
-            segmentation_maps (`ImageInput`, *optional*):
-                The segmentation maps to process (optional, for image processor).
-            original_sizes (`list[list[float]]`, `torch.Tensor`, *optional*):
-                The original sizes of the images. Only used when images is not provided.
-            return_tensors (`str` or `TensorType`, *optional*):
-                The type of tensors to return.
-            **kwargs:
-                Additional keyword arguments to pass to the image processor.
+        images (`ImageInput`, *optional*):
+            The image(s) to process.
+        segmentation_maps (`ImageInput`, *optional*):
+            The segmentation maps to process (optional, for image processor).
+        original_sizes (`list[list[float]]`, `torch.Tensor`, *optional*):
+            The original sizes of the images. Only used when images is not provided.
 
         Returns:
             A [`BatchEncoding`] with the following fields:

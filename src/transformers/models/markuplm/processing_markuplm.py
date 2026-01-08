@@ -20,33 +20,17 @@ from typing import Optional, Union
 from ...file_utils import TensorType
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, TruncationStrategy
+from ...utils import auto_docstring
 
 
+@auto_docstring
 class MarkupLMProcessor(ProcessorMixin):
-    r"""
-    Constructs a MarkupLM processor which combines a MarkupLM feature extractor and a MarkupLM tokenizer into a single
-    processor.
-
-    [`MarkupLMProcessor`] offers all the functionalities you need to prepare data for the model.
-
-    It first uses [`MarkupLMFeatureExtractor`] to extract nodes and corresponding xpaths from one or more HTML strings.
-    Next, these are provided to [`MarkupLMTokenizer`] or [`MarkupLMTokenizerFast`], which turns them into token-level
-    `input_ids`, `attention_mask`, `token_type_ids`, `xpath_tags_seq` and `xpath_subs_seq`.
-
-    Args:
-        feature_extractor (`MarkupLMFeatureExtractor`):
-            An instance of [`MarkupLMFeatureExtractor`]. The feature extractor is a required input.
-        tokenizer (`MarkupLMTokenizer` or `MarkupLMTokenizerFast`):
-            An instance of [`MarkupLMTokenizer`] or [`MarkupLMTokenizerFast`]. The tokenizer is a required input.
-        parse_html (`bool`, *optional*, defaults to `True`):
-            Whether or not to use `MarkupLMFeatureExtractor` to parse HTML strings into nodes and corresponding xpaths.
-    """
-
     parse_html = True
 
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
 
+    @auto_docstring
     def __call__(
         self,
         html_strings=None,
@@ -70,16 +54,28 @@ class MarkupLMProcessor(ProcessorMixin):
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs,
     ) -> BatchEncoding:
-        """
-        This method first forwards the `html_strings` argument to [`~MarkupLMFeatureExtractor.__call__`]. Next, it
-        passes the `nodes` and `xpaths` along with the additional arguments to [`~MarkupLMTokenizer.__call__`] and
-        returns the output.
-
-        Optionally, one can also provide a `text` argument which is passed along as first sequence.
-
-        Please refer to the docstring of the above two methods for more information.
-        """
         # first, create nodes and xpaths
+        r"""
+        html_strings (`str` or `list[str]`, *optional*):
+            Raw HTML strings to parse and process. When `parse_html=True` (default), these strings are parsed
+            to extract nodes and xpaths automatically. If provided, `nodes`, `xpaths`, and `node_labels` should
+            not be provided. Required when `parse_html=True`.
+        nodes (`list[list[str]]`, *optional*):
+            Pre-extracted HTML nodes as a list of lists, where each inner list contains the text content of nodes
+            for a single document. Required when `parse_html=False`. Should not be provided when `parse_html=True`.
+        xpaths (`list[list[str]]`, *optional*):
+            Pre-extracted XPath expressions corresponding to the nodes. Should be a list of lists with the same
+            structure as `nodes`, where each XPath identifies the location of the corresponding node in the HTML
+            tree. Required when `parse_html=False`. Should not be provided when `parse_html=True`.
+        node_labels (`list[list[int]]`, *optional*):
+            Labels for the nodes, typically used for training or fine-tuning tasks. Should be a list of lists
+            with the same structure as `nodes`, where each label corresponds to a node. Optional and only used
+            when `parse_html=False`.
+        questions (`str` or `list[str]`, *optional*):
+            Question strings for question-answering tasks. When provided, the tokenizer processes questions
+            as the first sequence and nodes as the second sequence (text_pair). If a single string is provided,
+            it is converted to a list to match the batch dimension of the parsed HTML.
+        """
         if self.parse_html:
             if html_strings is None:
                 raise ValueError("Make sure to pass HTML strings in case `parse_html` is set to `True`")

@@ -26,33 +26,22 @@ from ...tokenization_utils_base import (
     TextInput,
     TruncationStrategy,
 )
-from ...utils import TensorType, logging
+from ...utils import TensorType, auto_docstring, logging
 from ...video_utils import VideoInput
 
 
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring
 class InstructBlipVideoProcessor(ProcessorMixin):
-    r"""
-    Constructs an InstructBLIPVideo processor which wraps a InstructBLIP image processor and a LLaMa/T5 tokenizer into a single
-    processor.
-
-    [`InstructBlipVideoProcessor`] offers all the functionalities of [`InstructBlipVideoVideoProcessor`] and [`AutoTokenizer`]. See the
-    docstring of [`~InstructBlipVideoProcessor.__call__`] and [`~InstructBlipVideoProcessor.decode`] for more information.
-
-    Args:
-        video_processor (`InstructBlipVideoVideoProcessor`):
-            An instance of [`InstructBlipVideoVideoProcessor`]. The video processor is a required input.
-        tokenizer (`AutoTokenizer`):
-            An instance of ['PreTrainedTokenizer`]. The tokenizer is a required input.
+    def __init__(self, video_processor, tokenizer, qformer_tokenizer, num_query_tokens=None, **kwargs):
+        r"""
         qformer_tokenizer (`AutoTokenizer`):
             An instance of ['PreTrainedTokenizer`]. The Q-Former tokenizer is a required input.
         num_query_tokens (`int`, *optional*):
             Number of tokens used by the Qformer as queries, should be same as in model's config.
-    """
-
-    def __init__(self, video_processor, tokenizer, qformer_tokenizer, num_query_tokens=None, **kwargs):
+        """
         if not hasattr(tokenizer, "video_token"):
             self.video_token = AddedToken("<video>", normalized=False, special=True)
             tokenizer.add_tokens([self.video_token], special_tokens=True)
@@ -61,6 +50,7 @@ class InstructBlipVideoProcessor(ProcessorMixin):
         self.num_query_tokens = num_query_tokens
         super().__init__(video_processor, tokenizer, qformer_tokenizer)
 
+    @auto_docstring
     def __call__(
         self,
         images: Optional[VideoInput] = None,
@@ -81,12 +71,6 @@ class InstructBlipVideoProcessor(ProcessorMixin):
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs,
     ) -> BatchFeature:
-        """
-        This method uses [`InstructBlipVideoVideoProcessor.__call__`] method to prepare image(s) or video(s) for the model, and
-        [`BertTokenizerFast.__call__`] to prepare text for the model.
-
-        Please refer to the docstring of the above two methods for more information.
-        """
         if images is None and text is None:
             raise ValueError("You have to specify at least one of images or text.")
 

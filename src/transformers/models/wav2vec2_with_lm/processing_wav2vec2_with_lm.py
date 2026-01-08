@@ -26,7 +26,7 @@ from typing import TYPE_CHECKING, Optional, Union
 import numpy as np
 
 from ...processing_utils import ProcessorMixin
-from ...utils import ModelOutput, logging, requires_backends
+from ...utils import ModelOutput, auto_docstring, logging, requires_backends
 
 
 logger = logging.get_logger(__name__)
@@ -65,26 +65,18 @@ class Wav2Vec2DecoderWithLMOutput(ModelOutput):
     word_offsets: Union[list[list[ListOfDict]], list[ListOfDict], ListOfDict] = None
 
 
+@auto_docstring
 class Wav2Vec2ProcessorWithLM(ProcessorMixin):
-    r"""
-    Constructs a Wav2Vec2 processor which wraps a Wav2Vec2 feature extractor, a Wav2Vec2 CTC tokenizer and a decoder
-    with language model support into a single processor for language model boosted speech recognition decoding.
-
-    Args:
-        feature_extractor ([`Wav2Vec2FeatureExtractor`] or [`SeamlessM4TFeatureExtractor`]):
-            An instance of [`Wav2Vec2FeatureExtractor`] or [`SeamlessM4TFeatureExtractor`]. The feature extractor is a required input.
-        tokenizer ([`Wav2Vec2CTCTokenizer`]):
-            An instance of [`Wav2Vec2CTCTokenizer`]. The tokenizer is a required input.
-        decoder (`pyctcdecode.BeamSearchDecoderCTC`):
-            An instance of [`pyctcdecode.BeamSearchDecoderCTC`]. The decoder is a required input.
-    """
-
     def __init__(
         self,
         feature_extractor: "FeatureExtractionMixin",
         tokenizer: "PreTrainedTokenizerBase",
         decoder: "BeamSearchDecoderCTC",
     ):
+        r"""
+        decoder (`pyctcdecode.BeamSearchDecoderCTC`):
+            An instance of [`pyctcdecode.BeamSearchDecoderCTC`]. The decoder is a required input.
+        """
         from pyctcdecode import BeamSearchDecoderCTC
 
         super().__init__(feature_extractor, tokenizer)
@@ -213,14 +205,8 @@ class Wav2Vec2ProcessorWithLM(ProcessorMixin):
 
         return missing_tokens
 
+    @auto_docstring
     def __call__(self, *args, **kwargs):
-        """
-        When used in normal mode, this method forwards all its arguments to the feature extractor's
-        [`~FeatureExtractionMixin.__call__`] and returns its output. If used in the context
-        [`~Wav2Vec2ProcessorWithLM.as_target_processor`] this method forwards all its arguments to
-        Wav2Vec2CTCTokenizer's [`~Wav2Vec2CTCTokenizer.__call__`]. Please refer to the docstring of the above two
-        methods for more information.
-        """
         if "raw_speech" in kwargs:
             warnings.warn("Using `raw_speech` as a keyword argument is deprecated. Use `audio` instead.")
             audio = kwargs.pop("raw_speech")

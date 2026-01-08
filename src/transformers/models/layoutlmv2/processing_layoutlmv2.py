@@ -19,32 +19,15 @@ from typing import Optional, Union
 
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding, PaddingStrategy, PreTokenizedInput, TextInput, TruncationStrategy
-from ...utils import TensorType
+from ...utils import TensorType, auto_docstring
 
 
+@auto_docstring
 class LayoutLMv2Processor(ProcessorMixin):
-    r"""
-    Constructs a LayoutLMv2 processor which combines a LayoutLMv2 image processor and a LayoutLMv2 tokenizer into a
-    single processor.
-
-    [`LayoutLMv2Processor`] offers all the functionalities you need to prepare data for the model.
-
-    It first uses [`LayoutLMv2ImageProcessor`] to resize document images to a fixed size, and optionally applies OCR to
-    get words and normalized bounding boxes. These are then provided to [`LayoutLMv2Tokenizer`] or
-    [`LayoutLMv2TokenizerFast`], which turns the words and bounding boxes into token-level `input_ids`,
-    `attention_mask`, `token_type_ids`, `bbox`. Optionally, one can provide integer `word_labels`, which are turned
-    into token-level `labels` for token classification tasks (such as FUNSD, CORD).
-
-    Args:
-        image_processor (`LayoutLMv2ImageProcessor`, *optional*):
-            An instance of [`LayoutLMv2ImageProcessor`]. The image processor is a required input.
-        tokenizer (`LayoutLMv2Tokenizer` or `LayoutLMv2TokenizerFast`, *optional*):
-            An instance of [`LayoutLMv2Tokenizer`] or [`LayoutLMv2TokenizerFast`]. The tokenizer is a required input.
-    """
-
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
         super().__init__(image_processor, tokenizer)
 
+    @auto_docstring
     def __call__(
         self,
         images,
@@ -68,16 +51,6 @@ class LayoutLMv2Processor(ProcessorMixin):
         return_tensors: Optional[Union[str, TensorType]] = None,
         **kwargs,
     ) -> BatchEncoding:
-        """
-        This method first forwards the `images` argument to [`~LayoutLMv2ImageProcessor.__call__`]. In case
-        [`LayoutLMv2ImageProcessor`] was initialized with `apply_ocr` set to `True`, it passes the obtained words and
-        bounding boxes along with the additional arguments to [`~LayoutLMv2Tokenizer.__call__`] and returns the output,
-        together with resized `images`. In case [`LayoutLMv2ImageProcessor`] was initialized with `apply_ocr` set to
-        `False`, it passes the words (`text`/``text_pair`) and `boxes` specified by the user along with the additional
-        arguments to [`~LayoutLMv2Tokenizer.__call__`] and returns the output, together with resized `images``.
-
-        Please refer to the docstring of the above two methods for more information.
-        """
         # verify input
         if self.image_processor.apply_ocr and (boxes is not None):
             raise ValueError(

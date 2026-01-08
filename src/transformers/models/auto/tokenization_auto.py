@@ -265,6 +265,8 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("roc_bert", "RoCBertTokenizer"),
         ("roformer", "RoFormerTokenizer" if is_tokenizers_available() else None),
         ("rwkv", "GPTNeoXTokenizer" if is_tokenizers_available() else None),
+        ("sam3", "CLIPTokenizer" if is_tokenizers_available() else None),
+        ("sam3_video", "CLIPTokenizer" if is_tokenizers_available() else None),
         ("seamless_m4t", "SeamlessM4TTokenizer" if is_tokenizers_available() else None),
         ("seamless_m4t_v2", "SeamlessM4TTokenizer" if is_tokenizers_available() else None),
         ("shieldgemma2", "GemmaTokenizer" if is_tokenizers_available() else None),
