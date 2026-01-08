@@ -4008,8 +4008,12 @@ class ModelTesterMixin:
             # (needs pytree registration for each class)
             inputs_dict.pop("use_cache", None)
 
+            # set experts implementation to batched_mm for export
+            if model._can_set_experts_implementation():
+                model.set_experts_implementation("batched_mm")
+
             for module in model.modules():
-                # disable cache usage for now
+                # disable cache usage for every submodel
                 if hasattr(module, "config") and hasattr(module.config, "use_cache"):
                     module.config.use_cache = False
                 # disable classifier cast for nllb-moe
