@@ -373,10 +373,6 @@ class XGLMPreTrainedModel(PreTrainedModel):
 @auto_docstring
 class XGLMModel(XGLMPreTrainedModel):
     def __init__(self, config: XGLMConfig):
-        r"""
-        embed_tokens (`nn.Embedding`, *optional*):
-            output embeddings
-        """
         super().__init__(config)
         self.dropout = config.dropout
         self.layerdrop = config.layerdrop

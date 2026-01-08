@@ -22,6 +22,7 @@ from ...image_processing_utils_fast import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...utils import auto_docstring
 
 
 class DeepseekVLHybridProcessorKwargs(ProcessingKwargs, total=False):
@@ -31,25 +32,8 @@ class DeepseekVLHybridProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@auto_docstring
 class DeepseekVLHybridProcessor(ProcessorMixin):
-    r"""
-    Constructs a DeepseekVLHybrid processor which wraps a DeepseekVLHybrid Image Processor and a Llama tokenizer into a single processor.
-
-    [`DeepseekVLHybridProcessor`] offers all the functionalities of [`DeepseekVLHybridImageProcessor`] and [`LlamaTokenizerFast`]. See the
-    [`~DeepseekVLHybridProcessor.__call__`] and [`~DeepseekVLHybridProcessor.decode`] for more information.
-
-    Args:
-        image_processor ([`DeepseekVLHybridImageProcessor`]):
-            The image processor is a required input.
-        tokenizer ([`LlamaTokenizerFast`]):
-            The tokenizer is a required input.
-        chat_template (`str`, *optional*):
-            A Jinja template which will be used to convert lists of messages
-            in a chat into a tokenizable string.
-        num_image_tokens (`int`, *optional*, defaults to 576):
-            The number of special image tokens used as placeholders for visual content in text sequences.
-    """
-
     def __init__(
         self,
         image_processor,
@@ -57,44 +41,30 @@ class DeepseekVLHybridProcessor(ProcessorMixin):
         chat_template=None,
         num_image_tokens=576,
     ):
+        r"""
+        num_image_tokens (`int`, *optional*, defaults to 576):
+            The number of special image tokens used as placeholders for visual content in text sequences.
+        """
         self.image_token = tokenizer.image_token
         self.num_image_tokens = num_image_tokens
 
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
+    @auto_docstring
     def __call__(
         self,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         images: ImageInput | None = None,
         **kwargs: Unpack[DeepseekVLHybridProcessorKwargs],
     ) -> BatchFeature:
-        """
-        Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
-        and `kwargs` arguments to LlamaTokenizerFast's [`~LlamaTokenizerFast.__call__`] if `text` is not `None` to encode
-        the text. To prepare the image(s), this method forwards the `images` and `kwargs` arguments to
-        DeepseekVLHybridImageProcessor's [`~DeepseekVLHybridImageProcessor.__call__`] if `images` is not `None`. Please refer to the doctsring
-        of the above two methods for more information.
-
-        Args:
-            text (`str`, `List[str]`, `List[List[str]]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. Both channels-first and channels-last formats are supported.
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
-
+        r"""
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 
             - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
             - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
-            `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
-            `None`).
+                `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
+                `None`).
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
         output_kwargs = self._merge_kwargs(
