@@ -894,7 +894,7 @@ class BartModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_inference_no_head(self):
-        model = BartModel.from_pretrained("facebook/bart-large").to(torch_device)
+        model = BartModel.from_pretrained("facebook/bart-large", dtype=torch.float32).to(torch_device)
         input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         attention_mask = input_ids.ne(model.config.pad_token_id)
         with torch.no_grad():
