@@ -116,6 +116,7 @@ class Mxfp4Quantize(ConversionOps):
 
                 return {}
 
+
 class Mxfp4Dequantize(ConversionOps):
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer
@@ -146,6 +147,7 @@ class Mxfp4Dequantize(ConversionOps):
 
     def reverse_op(self) -> ConversionOps:
         return Mxfp4Quantize(self.hf_quantizer)
+
 
 class Mxfp4Deserialize(ConversionOps):
     def __init__(self, hf_quantizer):
@@ -195,7 +197,6 @@ class Mxfp4Deserialize(ConversionOps):
         return Mxfp4ReverseDeserialize(self.hf_quantizer)
 
 
-
 class Mxfp4ReverseDeserialize(ConversionOps):
     def __init__(self, hf_quantizer):
         self.hf_quantizer = hf_quantizer
@@ -215,7 +216,7 @@ class Mxfp4ReverseDeserialize(ConversionOps):
         module, _ = get_module_from_name(model, full_layer_name)
         hidden_size = getattr(model.config, "hidden_size", 2880)
         state_dict = {}
-        if isinstance(module, Mxfp4GptOssExperts) :
+        if isinstance(module, Mxfp4GptOssExperts):
             if "bias" in full_layer_name:
                 name = full_layer_name.replace("_blocks", "")
                 state_dict[name] = getattr(module, proj + "_bias")
@@ -231,7 +232,7 @@ class Mxfp4ReverseDeserialize(ConversionOps):
                         module.gate_up_proj_precision_config.weight_scale.storage.data
                     ).transpose(-1, -2)
                 )
-            else : 
+            else:
                 state_dict[f"{name}_blocks"] = (
                     module.down_proj.storage.layout.unswizzle_data(module.down_proj.storage.data)
                     .transpose(-1, -2)
@@ -244,7 +245,8 @@ class Mxfp4ReverseDeserialize(ConversionOps):
                 )
 
         return state_dict
-        
+
+
 # Copied from GPT_OSS repo and vllm
 def quantize_to_mxfp4(w, triton_kernels_hub):
     downcast_to_mxfp_torch = triton_kernels_hub.numerics_details.mxfp.downcast_to_mxfp_torch
