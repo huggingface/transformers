@@ -20,7 +20,7 @@ Use from the root of the repo with:
 python utils/check_docstrings.py
 ```
 
-for a check that will error in case of inconsistencies (used by `make repo-consistency`).
+for a check that will error in case of inconsistencies (used by `make check-repo`).
 
 To auto-fix issues run:
 
@@ -28,7 +28,7 @@ To auto-fix issues run:
 python utils/check_docstrings.py --fix_and_overwrite
 ```
 
-which is used by `make fix-copies` (note that this fills what it cans, you might have to manually fill information
+which is used by `make fix-repo` (note that this fills what it cans, you might have to manually fill information
 like argument descriptions).
 """
 
@@ -1890,7 +1890,7 @@ def check_auto_docstrings(overwrite: bool = False, check_all: bool = False):
             has_errors = True
             if not overwrite:
                 print(
-                    "Some docstrings are missing. Run `make fix-copies` or `python utils/check_docstrings.py --fix_and_overwrite` to generate the docstring templates where needed."
+                    "Some docstrings are missing. Run `make fix-repo` or `python utils/check_docstrings.py --fix_and_overwrite` to generate the docstring templates where needed."
                 )
             print(f"[ERROR] Missing docstring for the following arguments in {candidate_file}:")
             for warning in missing_docstring_args_warnings:
@@ -1899,7 +1899,7 @@ def check_auto_docstrings(overwrite: bool = False, check_all: bool = False):
             has_errors = True
             if not overwrite:
                 print(
-                    "Some docstrings are redundant with the ones in `auto_docstring.py` and will be removed. Run `make fix-copies` or `python utils/check_docstrings.py --fix_and_overwrite` to remove the redundant docstrings."
+                    "Some docstrings are redundant with the ones in `auto_docstring.py` and will be removed. Run `make fix-repo` or `python utils/check_docstrings.py --fix_and_overwrite` to remove the redundant docstrings."
                 )
             print(f"[ERROR] Redundant docstring for the following arguments in {candidate_file}:")
             for warning in docstring_args_ro_remove_warnings:
@@ -2000,7 +2000,7 @@ def check_docstrings(overwrite: bool = False, check_all: bool = False):
         error_message += "\n" + "\n".join([f"- {name}" for name in hard_failures])
     if len(failures) > 0:
         error_message += (
-            "The following objects docstrings do not match their signature. Run `make fix-copies` to fix this. "
+            "The following objects docstrings do not match their signature. Run `make fix-repo` to fix this. "
             "In some cases, this error may be raised incorrectly by the docstring checker. If you think this is the "
             "case, you can manually check the docstrings and then add the object name to `OBJECTS_TO_IGNORE` in "
             "`utils/check_docstrings.py`."
