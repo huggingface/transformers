@@ -1409,7 +1409,7 @@ def check_with(error_type: type[Exception], cond: Any, msg: Callable[[], str]) -
     Raises:
         error_type: If the condition is not met.
     """
-    if os.getenv("TRANSFORMERS_DISABLE_TORCH_CHECKS", "0") == "1":
+    if os.getenv("TRANSFORMERS_DISABLE_TORCH_CHECK", "0") == "1":
         return
 
     import torch
@@ -1419,6 +1419,9 @@ def check_with(error_type: type[Exception], cond: Any, msg: Callable[[], str]) -
 
     if isinstance(cond, torch.Tensor):
         cond = cond.item()
+
+    if os.getenv("TRANSFORMERS_USE_ASSERT_ASYNC", "0") == "1":
+        torch._assert_async(cond, msg())
 
     torch._check_with(error_type, cond, msg)
 
