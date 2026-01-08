@@ -141,12 +141,14 @@ EMBEDDINGS_INT8_PATH = "embeddings_int8.safetensors"
 EMBEDDINGS_BINARY_PATH = "embeddings_binary.safetensors"
 INDEX_MAP_PATH = "code_index_map.json"
 TOKENS_PATH = "code_index_tokens.json"
+INDEX_MAP_METHODS_PATH = "code_index_map_methods.json"
+TOKENS_METHODS_PATH = "code_index_tokens_methods.json"
 HUB_DATASET_DEFAULT = "hf-internal-testing/transformers_code_embeddings"
 
-EMBEDDING_MODEL = "Qwen/Qwen3-Embedding-4B"
+EMBEDDING_MODEL = "Qwen/Qwen3-Embedding-8B"
 BATCH_SIZE = 16
 MAX_LENGTH = 4096
-_POPCOUNT_TABLE = np.array([bin(i).count("1") for i in range(256)], dtype=np.uint8)
+_POPCOUNT_TABLE = np.array([(i).bit_count() for i in range(256)], dtype=np.uint8)
 
 
 def _normalize(string: str | None) -> str:
@@ -246,7 +248,7 @@ class CodeSimilarityAnalyzer:
         hub_dataset (`str`): The Hub dataset repository ID containing the code embeddings index.
     """
 
-    def __init__(self, hub_dataset: str, precision: str = "float32"):
+    def __init__(self, hub_dataset: str, precision: str = "float32", granularity: str = "definition"):
         for name in ("huggingface_hub", "httpx", "urllib3", "transformers"):
             logging.getLogger(name).setLevel(logging.ERROR)
         huggingface_hub_logging.set_verbosity_error()
@@ -257,6 +259,7 @@ class CodeSimilarityAnalyzer:
         self.models_root = MODELS_ROOT
         self.hub_dataset = hub_dataset
         self.precision = precision
+        self.granularity = granularity
         self.tokenizer = AutoTokenizer.from_pretrained(EMBEDDING_MODEL)
         self.model = AutoModel.from_pretrained(EMBEDDING_MODEL, torch_dtype="auto", device_map="auto").eval()
 
@@ -266,17 +269,35 @@ class CodeSimilarityAnalyzer:
 
     # ---------- HUB IO ----------
 
+    def _embedding_filename(self) -> str:
+        suffix = ""
+        if self.granularity == "method":
+            suffix += "_methods"
+        if self.precision == "int8":
+            suffix += "_int8"
+        elif self.precision == "binary":
+            suffix += "_binary"
+        if not suffix:
+            return EMBEDDINGS_PATH
+        return f"embeddings{suffix}.safetensors"
+
+    def _index_map_filename(self) -> str:
+        if self.granularity == "method":
+            return INDEX_MAP_METHODS_PATH
+        return INDEX_MAP_PATH
+
+    def _tokens_filename(self) -> str:
+        if self.granularity == "method":
+            return TOKENS_METHODS_PATH
+        return TOKENS_PATH
+
     def _resolve_index_path(self, filename: str) -> Path:
         if self.index_dir is None:
             return Path(filename)
         return self.index_dir / filename
 
     def _required_index_files(self) -> tuple[str, ...]:
-        if self.precision == "int8":
-            return (EMBEDDINGS_INT8_PATH, INDEX_MAP_PATH, TOKENS_PATH)
-        if self.precision == "binary":
-            return (EMBEDDINGS_BINARY_PATH, INDEX_MAP_PATH, TOKENS_PATH)
-        return (EMBEDDINGS_PATH, INDEX_MAP_PATH, TOKENS_PATH)
+        return (self._embedding_filename(), self._index_map_filename(), self._tokens_filename())
 
     def ensure_local_index(self) -> None:
         """Ensure index files are available locally, preferring Hub cache snapshots."""
@@ -313,7 +334,11 @@ class CodeSimilarityAnalyzer:
     # ---------- parsing & encoding ----------
 
     def _extract_definitions(
-        self, file_path: Path, relative_to: Path | None = None, model_hint: str | None = None
+        self,
+        file_path: Path,
+        relative_to: Path | None = None,
+        model_hint: str | None = None,
+        granularity: str = "definition",
     ) -> tuple[dict[str, str], dict[str, str], dict[str, list[str]], dict[str, str]]:
         """
         Extract class and function definitions from a Python file.
@@ -338,26 +363,78 @@ class CodeSimilarityAnalyzer:
         lines = source.splitlines()
         tree = ast.parse(source)
         for node in ast.iter_child_nodes(tree):
-            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and granularity in ("definition", "method"):
                 segment = ast.get_source_segment(source, node)
                 if segment is None and hasattr(node, "lineno") and hasattr(node, "end_lineno"):
                     start = max(0, node.lineno - 1)
                     end = node.end_lineno
                     segment = "\n".join(lines[start:end])
-                if segment:
+                if not segment:
+                    continue
+                identifier = (
+                    f"{file_path.relative_to(relative_to)}:{node.name}"
+                    if relative_to
+                    else f"{file_path.name}:{node.name}"
+                )
+                definitions_raw[identifier] = segment
+                sanitized = _sanitize_for_embedding(segment, model_hint, node.name)
+                definitions_sanitized[identifier] = sanitized
+                definitions_tokens[identifier] = sorted(_tokenize(sanitized))
+                definitions_kind[identifier] = "function"
+                continue
+
+            if isinstance(node, ast.ClassDef):
+                class_segment = ast.get_source_segment(source, node)
+                if class_segment is None and hasattr(node, "lineno") and hasattr(node, "end_lineno"):
+                    start = max(0, node.lineno - 1)
+                    end = node.end_lineno
+                    class_segment = "\n".join(lines[start:end])
+                class_header = ""
+                if class_segment:
+                    class_header = class_segment.splitlines()[0].strip()
+                class_docstring = ast.get_docstring(node)
+                class_context = class_header
+                if class_docstring:
+                    first_line = class_docstring.strip().splitlines()[0]
+                    class_context = f'{class_header}\n"""{first_line}"""' if class_header else first_line
+
+                if granularity == "definition":
+                    if not class_segment:
+                        continue
                     identifier = (
                         f"{file_path.relative_to(relative_to)}:{node.name}"
                         if relative_to
                         else f"{file_path.name}:{node.name}"
                     )
-                    definitions_raw[identifier] = segment
-                    sanitized = _sanitize_for_embedding(segment, model_hint, node.name)
+                    definitions_raw[identifier] = class_segment
+                    sanitized = _sanitize_for_embedding(class_segment, model_hint, node.name)
                     definitions_sanitized[identifier] = sanitized
                     definitions_tokens[identifier] = sorted(_tokenize(sanitized))
-                    if isinstance(node, ast.ClassDef):
-                        definitions_kind[identifier] = "class"
-                    else:
-                        definitions_kind[identifier] = "function"
+                    definitions_kind[identifier] = "class"
+                    continue
+
+                for child in node.body:
+                    if not isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                        continue
+                    segment = ast.get_source_segment(source, child)
+                    if segment is None and hasattr(child, "lineno") and hasattr(child, "end_lineno"):
+                        start = max(0, child.lineno - 1)
+                        end = child.end_lineno
+                        segment = "\n".join(lines[start:end])
+                    if not segment:
+                        continue
+                    method_name = child.name
+                    combined = f"{class_context}\n{segment}" if class_context else segment
+                    identifier = (
+                        f"{file_path.relative_to(relative_to)}:{node.name}.{method_name}"
+                        if relative_to
+                        else f"{file_path.name}:{node.name}.{method_name}"
+                    )
+                    definitions_raw[identifier] = segment
+                    sanitized = _sanitize_for_embedding(combined, model_hint, node.name)
+                    definitions_sanitized[identifier] = sanitized
+                    definitions_tokens[identifier] = sorted(_tokenize(sanitized))
+                    definitions_kind[identifier] = "method"
         return definitions_raw, definitions_sanitized, definitions_tokens, definitions_kind
 
     def _infer_model_from_relative_path(self, relative_path: Path) -> str | None:
@@ -422,7 +499,9 @@ class CodeSimilarityAnalyzer:
                 torch.cuda.empty_cache()
         return np.vstack(output) if output else np.zeros((0, 0), dtype="float32")
 
-    def _quantize_int8(self, embeddings: np.ndarray, scales: np.ndarray | None = None) -> tuple[np.ndarray, np.ndarray]:
+    def _quantize_int8(
+        self, embeddings: np.ndarray, scales: np.ndarray | None = None
+    ) -> tuple[np.ndarray, np.ndarray]:
         if scales is None:
             max_abs = np.max(np.abs(embeddings), axis=0)
             max_abs = np.maximum(max_abs, 1e-8)
@@ -453,7 +532,7 @@ class CodeSimilarityAnalyzer:
                 definitions_sanitized,
                 definitions_tokens,
                 _,
-            ) = self._extract_definitions(file_path, self.models_root, model_hint)
+            ) = self._extract_definitions(file_path, self.models_root, model_hint, self.granularity)
             for identifier in definitions_sanitized.keys():
                 identifiers.append(identifier)
                 sanitized_sources.append(definitions_sanitized[identifier])
@@ -463,18 +542,19 @@ class CodeSimilarityAnalyzer:
             f"encoding {len(sanitized_sources)} definitions with {EMBEDDING_MODEL} (device={self.device.type}, batch={BATCH_SIZE}, max_length={MAX_LENGTH})"
         )
         embeddings = self.encode(sanitized_sources)
+        embedding_path = self._embedding_filename()
         if self.precision == "int8":
             quantized, scales = self._quantize_int8(embeddings)
-            safetensors_save({"embeddings": quantized, "scale": scales}, EMBEDDINGS_INT8_PATH)
+            safetensors_save({"embeddings": quantized, "scale": scales}, embedding_path)
         elif self.precision == "binary":
             packed = self._quantize_binary(embeddings)
             dim = np.array([embeddings.shape[1]], dtype="int32")
-            safetensors_save({"embeddings": packed, "dim": dim}, EMBEDDINGS_BINARY_PATH)
+            safetensors_save({"embeddings": packed, "dim": dim}, embedding_path)
         else:
-            safetensors_save({"embeddings": embeddings}, EMBEDDINGS_PATH)
-        with open(INDEX_MAP_PATH, "w", encoding="utf-8") as file:
+            safetensors_save({"embeddings": embeddings}, embedding_path)
+        with open(self._index_map_filename(), "w", encoding="utf-8") as file:
             json.dump({int(i): identifiers[i] for i in range(len(identifiers))}, file)
-        with open(TOKENS_PATH, "w", encoding="utf-8") as file:
+        with open(self._tokens_filename(), "w", encoding="utf-8") as file:
             json.dump(tokens_map, file)
 
         self.index_dir = Path.cwd()
@@ -624,26 +704,27 @@ class CodeSimilarityAnalyzer:
         base_embeddings = None
         scales = None
         total_bits = None
+        embedding_path = self._resolve_index_path(self._embedding_filename())
         if self.precision == "int8":
-            base = safetensors_load(str(self._resolve_index_path(EMBEDDINGS_INT8_PATH)))
+            base = safetensors_load(str(embedding_path))
             base_embeddings = base["embeddings"]
             scales = base["scale"]
         elif self.precision == "binary":
-            base = safetensors_load(str(self._resolve_index_path(EMBEDDINGS_BINARY_PATH)))
+            base = safetensors_load(str(embedding_path))
             base_embeddings = base["embeddings"]
             total_bits = int(base["dim"][0])
         else:
-            base = safetensors_load(str(self._resolve_index_path(EMBEDDINGS_PATH)))
+            base = safetensors_load(str(embedding_path))
             base_embeddings = base["embeddings"]
-        with open(self._resolve_index_path(INDEX_MAP_PATH), "r", encoding="utf-8") as file:
+        with open(self._resolve_index_path(self._index_map_filename()), "r", encoding="utf-8") as file:
             identifier_map = {int(key): value for key, value in json.load(file).items()}
         identifiers = [identifier_map[i] for i in range(len(identifier_map))]
-        with open(self._resolve_index_path(TOKENS_PATH), "r", encoding="utf-8") as file:
+        with open(self._resolve_index_path(self._tokens_filename()), "r", encoding="utf-8") as file:
             tokens_map = json.load(file)
 
         self_model = self._infer_query_model_name(modeling_file)
         definitions_raw, definitions_sanitized, _, definitions_kind = self._extract_definitions(
-            modeling_file, None, self_model
+            modeling_file, None, self_model, self.granularity
         )
         query_identifiers = list(definitions_raw.keys())
         query_sources_sanitized = [definitions_sanitized[key] for key in query_identifiers]
@@ -798,6 +879,11 @@ def _load_definition_line_map(relative_path: str) -> dict[str, int]:
     for node in ast.iter_child_nodes(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
             line_map[node.name] = getattr(node, "lineno", None) or 1
+            if isinstance(node, ast.ClassDef):
+                for child in node.body:
+                    if isinstance(child, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                        key = f"{node.name}.{child.name}"
+                        line_map[key] = getattr(child, "lineno", None) or 1
         elif isinstance(node, ast.Assign):
             continue
     return line_map
@@ -835,10 +921,18 @@ def main():
         default="float32",
         help="Embedding precision for building/loading the index.",
     )
+    parser.add_argument(
+        "--granularity",
+        choices=["definition", "method"],
+        default="definition",
+        help="Index granularity: definitions (classes/functions) or class methods.",
+    )
     parser.add_argument("--output-json", type=str, default=None, help="Write results to JSON for tooling.")
     args = parser.parse_args()
 
-    analyzer = CodeSimilarityAnalyzer(hub_dataset=args.hub_dataset, precision=args.precision)
+    analyzer = CodeSimilarityAnalyzer(
+        hub_dataset=args.hub_dataset, precision=args.precision, granularity=args.granularity
+    )
 
     if args.build:
         analyzer.build_index()
@@ -884,6 +978,7 @@ def main():
         payload = {
             "modeling_file": str(Path(modeling_file)),
             "precision": args.precision,
+            "granularity": args.granularity,
             "release_date": release_date,
             "best_candidate": None,
             "results": {},
@@ -897,12 +992,25 @@ def main():
                 "score": aggregate_scores.get(best_candidate_path, 0.0),
             }
         for query_name, data in results.items():
-            entry = {"kind": data.get("kind", "function"), "embedding": []}
+            class_name = None
+            method_name = None
+            if "." in query_name:
+                class_name, method_name = query_name.split(".", 1)
+            entry = {
+                "kind": data.get("kind", "function"),
+                "class_name": class_name,
+                "method_name": method_name,
+                "embedding": [],
+            }
             for identifier, score in data.get("embedding", []):
                 try:
                     relative_path, match_name = identifier.split(":", 1)
                 except ValueError:
                     continue
+                match_class = None
+                match_method = None
+                if "." in match_name:
+                    match_class, match_method = match_name.split(".", 1)
                 model_id = Path(relative_path).parts[0] if Path(relative_path).parts else "?"
                 full_path, line = _resolve_definition_location(relative_path, match_name)
                 entry["embedding"].append(
@@ -910,6 +1018,8 @@ def main():
                         "identifier": identifier,
                         "relative_path": relative_path,
                         "match_name": match_name,
+                        "class_name": match_class,
+                        "method_name": match_method,
                         "score": score,
                         "release_date": dates.get(model_id, "unknown release date"),
                         "full_path": full_path,
@@ -923,6 +1033,10 @@ def main():
                         relative_path, match_name = identifier.split(":", 1)
                     except ValueError:
                         continue
+                    match_class = None
+                    match_method = None
+                    if "." in match_name:
+                        match_class, match_method = match_name.split(".", 1)
                     model_id = Path(relative_path).parts[0] if Path(relative_path).parts else "?"
                     full_path, line = _resolve_definition_location(relative_path, match_name)
                     entry["jaccard"].append(
@@ -930,6 +1044,8 @@ def main():
                             "identifier": identifier,
                             "relative_path": relative_path,
                             "match_name": match_name,
+                            "class_name": match_class,
+                            "method_name": match_method,
                             "score": score,
                             "release_date": dates.get(model_id, "unknown release date"),
                             "full_path": full_path,
@@ -945,7 +1061,7 @@ def main():
         kind = data.get("kind", "function")
         grouped.setdefault(kind, []).append((query_name, data))
 
-    section_titles = [("class", "Classes"), ("function", "Functions")]
+    section_titles = [("class", "Classes"), ("method", "Methods"), ("function", "Functions")]
     legend_shown = False
     for kind, title in section_titles:
         entries = grouped.get(kind, [])

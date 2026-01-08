@@ -1,0 +1,117 @@
+{
+  "name": "modular-model-detector",
+  "displayName": "Modular Model Detector",
+  "description": "Run the Transformers modular model detector and browse similar classes/functions.",
+  "version": "0.0.1",
+  "publisher": "hf-internal",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/huggingface/transformers.git"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "activationEvents": [
+    "onCommand:modularModelDetector.analyzeFile",
+    "onCommand:modularModelDetector.openMatch",
+    "onCommand:modularModelDetector.showSuggestion"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "modularModelDetector.analyzeFile",
+        "title": "Transformers: Analyze File for Modular Suggestions"
+      },
+      {
+        "command": "modularModelDetector.openMatch",
+        "title": "Transformers: Open Similar Match"
+      },
+      {
+        "command": "modularModelDetector.showSuggestion",
+        "title": "Transformers: Show Modular Suggestion"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "modularModelDetector.analyzeFile",
+          "when": "resourceExtname == .py",
+          "group": "navigation"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Modular Model Detector",
+      "properties": {
+        "modularModelDetector.pythonPath": {
+          "type": "string",
+          "default": "python",
+          "description": "Python executable to run the detector."
+        },
+        "modularModelDetector.scriptPath": {
+          "type": "string",
+          "default": "",
+          "description": "Override path to utils/modular_model_detector.py. Defaults to workspace utils/modular_model_detector.py."
+        },
+        "modularModelDetector.precision": {
+          "type": "string",
+          "enum": [
+            "float32",
+            "int8",
+            "binary"
+          ],
+          "default": "float32",
+          "description": "Embedding precision for the index."
+        },
+        "modularModelDetector.granularity": {
+          "type": "string",
+          "enum": [
+            "definition",
+            "method"
+          ],
+          "default": "method",
+          "description": "Index granularity to use for analysis."
+        },
+        "modularModelDetector.topK": {
+          "type": "number",
+          "default": 5,
+          "description": "Number of matches per symbol."
+        },
+        "modularModelDetector.useJaccard": {
+          "type": "boolean",
+          "default": false,
+          "description": "Also compute Jaccard overlaps."
+        },
+        "modularModelDetector.aiCommand": {
+          "type": "string",
+          "default": "",
+          "description": "Optional command to post-process detector output (input JSON path + output JSON path)."
+        },
+        "modularModelDetector.aiArgs": {
+          "type": "array",
+          "default": [],
+          "items": {
+            "type": "string"
+          },
+          "description": "Extra arguments for the AI command (before input/output paths)."
+        }
+      }
+    }
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "vscode:prepublish": "npm run compile",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.17",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.4.2",
+    "vsce": "^2.26.1"
+  }
+}
