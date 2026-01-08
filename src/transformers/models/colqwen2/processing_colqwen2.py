@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_colqwen2.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -52,8 +51,8 @@ class ColQwen2Processor(ProcessorMixin):
         image_processor=None,
         tokenizer=None,
         chat_template=None,
-        visual_prompt_prefix: Optional[str] = None,
-        query_prefix: Optional[str] = None,
+        visual_prompt_prefix: str | None = None,
+        query_prefix: str | None = None,
         **kwargs,
     ):
         r"""
@@ -77,8 +76,8 @@ class ColQwen2Processor(ProcessorMixin):
     @auto_docstring
     def __call__(
         self,
-        images: Optional[ImageInput] = None,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         **kwargs: Unpack[ColQwen2ProcessorKwargs],
     ) -> BatchFeature:
         r"""
@@ -228,7 +227,7 @@ class ColQwen2Processor(ProcessorMixin):
 
     def process_images(
         self,
-        images: Optional[ImageInput] = None,
+        images: ImageInput | None = None,
         **kwargs: Unpack[ColQwen2ProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -261,7 +260,7 @@ class ColQwen2Processor(ProcessorMixin):
 
     def process_queries(
         self,
-        text: Union[TextInput, list[TextInput]],
+        text: TextInput | list[TextInput],
         **kwargs: Unpack[ColQwen2ProcessorKwargs],
     ) -> BatchFeature:
         """

@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_florence2.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 Microsoft and the HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,7 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import re
-from typing import Any, Optional, Union
+from typing import Any
 
 import numpy as np
 
@@ -49,7 +48,7 @@ class Florence2Processor(ProcessorMixin):
         image_processor=None,
         tokenizer=None,
         num_additional_image_tokens: int = 0,
-        post_processor_config: Optional[dict] = None,
+        post_processor_config: dict | None = None,
         **kwargs,
     ):
         r"""
@@ -108,7 +107,7 @@ class Florence2Processor(ProcessorMixin):
 
         super().__init__(image_processor, tokenizer, **kwargs)
 
-    def _construct_prompts(self, text: Union[str, list[str]]) -> list[str]:
+    def _construct_prompts(self, text: str | list[str]) -> list[str]:
         """
         Construct prompts by replacing task tokens with corresponding prompt strings.
         """
@@ -136,8 +135,8 @@ class Florence2Processor(ProcessorMixin):
     @auto_docstring
     def __call__(
         self,
-        images: Optional[ImageInput] = None,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         **kwargs: Unpack[Florence2ProcessorKwargs],
     ) -> BatchFeature:
         r"""
@@ -460,7 +459,7 @@ class Florence2PostProcessor:
         return text, spans
 
     def parse_ocr_from_text_and_spans(
-        self, text: str, pattern: Optional[str], image_size: tuple[int, int], area_threshold: float = 0.0
+        self, text: str, pattern: str | None, image_size: tuple[int, int], area_threshold: float = 0.0
     ) -> list[dict[str, Any]]:
         """
         Parse OCR results with quadrilateral boxes.

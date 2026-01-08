@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_aria.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2024 The Rhymes-AI Teams Authors and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,7 +17,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Optional, Union
 
 import numpy as np
 
@@ -72,9 +70,9 @@ class AriaProcessor(ProcessorMixin):
     def __init__(
         self,
         image_processor=None,
-        tokenizer: Union[AutoTokenizer, str] = None,
-        chat_template: Optional[str] = None,
-        size_conversion: Optional[dict[Union[float, int], int]] = None,
+        tokenizer: AutoTokenizer | str = None,
+        chat_template: str | None = None,
+        size_conversion: dict[float | int, int] | None = None,
     ):
         r"""
         size_conversion (`Dict`, *optional*):
@@ -94,8 +92,8 @@ class AriaProcessor(ProcessorMixin):
     @auto_docstring
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]],
-        images: Optional[ImageInput] = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput],
+        images: ImageInput | None = None,
         **kwargs: Unpack[AriaProcessorKwargs],
     ) -> BatchFeature:
         r"""

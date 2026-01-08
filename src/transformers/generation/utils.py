@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The Google AI Language Team Authors, Facebook AI Research authors and The HuggingFace Inc. team.
 # Copyright (c) 2020, NVIDIA CORPORATION.  All rights reserved.
 #
@@ -21,7 +20,7 @@ import warnings
 from collections.abc import Callable
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Optional, Union
+from typing import TYPE_CHECKING, Any, Optional
 
 import torch
 import torch.distributed as dist
@@ -332,9 +331,9 @@ class GenerateBeamEncoderDecoderOutput(ModelOutput):
 
 
 # Typing shortcuts
-GenerateNonBeamOutput = Union[GenerateDecoderOnlyOutput, GenerateEncoderDecoderOutput]
-GenerateBeamOutput = Union[GenerateBeamDecoderOnlyOutput, GenerateBeamEncoderDecoderOutput]
-GenerateOutput = Union[GenerateNonBeamOutput, GenerateBeamOutput]
+GenerateNonBeamOutput = GenerateDecoderOnlyOutput | GenerateEncoderDecoderOutput
+GenerateBeamOutput = GenerateBeamDecoderOnlyOutput | GenerateBeamEncoderDecoderOutput
+GenerateOutput = GenerateNonBeamOutput | GenerateBeamOutput
 
 
 class GenerationMixin(ContinuousMixin):
@@ -1797,20 +1796,6 @@ class GenerationMixin(ContinuousMixin):
         global_defaults = self.generation_config._get_default_generation_params()
         generation_config.update(**self.generation_config.to_dict(), defaults_only=True)
         generation_config.update(**global_defaults, defaults_only=True)
-
-        # Due to some values being boolean and not `None`, we need additional logic to overwrite
-        # them explicitly (`defaults_only=False`) on the condition that it's only a previous
-        # default value
-        default_generation_config = GenerationConfig()
-        generation_config.update(
-            **{
-                k: v
-                for k, v in self.generation_config.to_dict().items()
-                if isinstance(v, bool)
-                and hasattr(default_generation_config, k)
-                and getattr(generation_config, k, None) == getattr(default_generation_config, k)
-            }
-        )
 
         # Finally, if there are any kwargs, update config with it -> highest priority at the end
         model_kwargs = generation_config.update(**kwargs)

@@ -76,7 +76,7 @@ def generate_attention_matrix_from_mask(
         f"{YELLOW}{BLACK_SQUARE}{RESET}"
         if mask[0, j]
         else f"{GREEN}{BLACK_SQUARE}{RESET}"
-        if 0 == j
+        if j == 0
         else BLACK_SQUARE
         if mask[0, j]
         else WHITE_SQUARE
