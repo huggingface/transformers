@@ -244,10 +244,22 @@ class QAPipelineTests(unittest.TestCase):
 
         # Wrong answer, the whole text is identified as one "word" since the tokenizer does not include
         # a pretokenizer
-        EXPECTED_OUTPUT = Expectations({
-            ("cuda",8): {"score": 1.0, "start": 0, "end": 30, "answer": "全学年にわたって小学校の国語の教科書に挿し絵が用いられている"},
-            ("rocm", (9,4)): {"score": 0.921, "start": 0, "end": 30, "answer": "全学年にわたって小学校の国語の教科書に挿し絵が用いられている"},
-        })
+        EXPECTED_OUTPUT = Expectations(
+            {
+                ("cuda", 8): {
+                    "score": 1.0,
+                    "start": 0,
+                    "end": 30,
+                    "answer": "全学年にわたって小学校の国語の教科書に挿し絵が用いられている",
+                },
+                ("rocm", (9, 4)): {
+                    "score": 0.921,
+                    "start": 0,
+                    "end": 30,
+                    "answer": "全学年にわたって小学校の国語の教科書に挿し絵が用いられている",
+                },
+            }
+        )
         EXPECTED_OUTPUT = EXPECTED_OUTPUT.get_expectation()
 
         self.assertEqual(nested_simplify(output), EXPECTED_OUTPUT)  # fmt: skip
@@ -255,10 +267,12 @@ class QAPipelineTests(unittest.TestCase):
         # Disable word alignment
         output = question_answerer(question="国語", context="全学年にわたって小学校の国語の教科書に挿し絵が用いられている", align_to_words=False)  # fmt: skip
 
-        EXPECTED_OUTPUT = Expectations({
-            ("cuda",8): {"score": 1.0, "start": 15, "end": 18, "answer": "教科書"},
-            ("rocm", (9,4)): {"score": 0.868, "start": 15, "end": 18, "answer": "教科書"},
-        })
+        EXPECTED_OUTPUT = Expectations(
+            {
+                ("cuda", 8): {"score": 1.0, "start": 15, "end": 18, "answer": "教科書"},
+                ("rocm", (9, 4)): {"score": 0.868, "start": 15, "end": 18, "answer": "教科書"},
+            }
+        )
         EXPECTED_OUTPUT = EXPECTED_OUTPUT.get_expectation()
         self.assertEqual(nested_simplify(output), EXPECTED_OUTPUT)  # fmt: skip
 

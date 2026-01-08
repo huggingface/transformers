@@ -531,44 +531,49 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                     generate_kwargs["return_segments"] = True
 
             # User-defined `generation_config` passed to the pipeline call take precedence
-            if "generation_config" not in generate_kwargs:
-                generation_config = self.generation_config
-            else:
-                generation_config = generate_kwargs["generation_config"]
-            
+            generation_config = generate_kwargs.get("generation_config", self.generation_config)
+
             # For Whisper models, ensure the generation config has all required attributes
             if self.type == "seq2seq_whisper":
                 # Try to get attributes from model's generation_config first
                 model_gen_config = None
                 if hasattr(self.model, "generation_config") and self.model.generation_config is not None:
                     model_gen_config = self.model.generation_config
-                elif hasattr(self.model.config, "generation_config") and self.model.config.generation_config is not None:
+                elif (
+                    hasattr(self.model.config, "generation_config") and self.model.config.generation_config is not None
+                ):
                     model_gen_config = self.model.config.generation_config
-                
+
                 # Copy missing attributes from model's generation config
                 if model_gen_config is not None:
                     if hasattr(model_gen_config, "lang_to_id") and not hasattr(generation_config, "lang_to_id"):
                         generation_config.lang_to_id = model_gen_config.lang_to_id
                     if hasattr(model_gen_config, "task_to_id") and not hasattr(generation_config, "task_to_id"):
                         generation_config.task_to_id = model_gen_config.task_to_id
-                    if hasattr(model_gen_config, "no_timestamps_token_id") and not hasattr(generation_config, "no_timestamps_token_id"):
+                    if hasattr(model_gen_config, "no_timestamps_token_id") and not hasattr(
+                        generation_config, "no_timestamps_token_id"
+                    ):
                         generation_config.no_timestamps_token_id = model_gen_config.no_timestamps_token_id
-                    if hasattr(model_gen_config, "is_multilingual") and not hasattr(generation_config, "is_multilingual"):
+                    if hasattr(model_gen_config, "is_multilingual") and not hasattr(
+                        generation_config, "is_multilingual"
+                    ):
                         generation_config.is_multilingual = model_gen_config.is_multilingual
-                
+
                 # If still missing, try to get from tokenizer
                 if self.tokenizer is not None:
                     if not hasattr(generation_config, "lang_to_id") and hasattr(self.tokenizer, "lang_to_id"):
                         generation_config.lang_to_id = self.tokenizer.lang_to_id
                     if not hasattr(generation_config, "task_to_id") and hasattr(self.tokenizer, "task_to_id"):
                         generation_config.task_to_id = self.tokenizer.task_to_id
-                    if not hasattr(generation_config, "no_timestamps_token_id") and hasattr(self.tokenizer, "no_timestamps_token_id"):
+                    if not hasattr(generation_config, "no_timestamps_token_id") and hasattr(
+                        self.tokenizer, "no_timestamps_token_id"
+                    ):
                         generation_config.no_timestamps_token_id = self.tokenizer.no_timestamps_token_id
-                
+
                 # Get is_multilingual from model config if available
                 if not hasattr(generation_config, "is_multilingual") and hasattr(self.model.config, "is_multilingual"):
                     generation_config.is_multilingual = self.model.config.is_multilingual
-                
+
                 # For return_timestamps, ensure no_timestamps_token_id is set
                 if return_timestamps and not hasattr(generation_config, "no_timestamps_token_id"):
                     # Try to get it from tokenizer's special tokens
@@ -585,7 +590,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
                         # Fallback: use vocab_size + 1 as a safe default (will be ignored in decoding)
                         if not hasattr(generation_config, "no_timestamps_token_id"):
                             generation_config.no_timestamps_token_id = self.model.config.vocab_size + 1
-            
+
             generate_kwargs["generation_config"] = generation_config
 
             main_input_name = self.model.main_input_name if hasattr(self.model, "main_input_name") else "inputs"

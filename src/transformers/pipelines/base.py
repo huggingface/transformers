@@ -237,7 +237,7 @@ def load_model(
                 # is not supported on the execution device (e.g. bf16 on a consumer GPU). We capture those so
                 # we can transparently retry the load in float32 before surfacing an error to the user.
                 fallback_tried = False
-                
+
                 # Check if it's a safetensors-related error and retry without safetensors
                 error_msg = str(e).lower()
                 if isinstance(e, OSError) and "safetensors" in error_msg:
@@ -254,7 +254,7 @@ def load_model(
                         # If it still fails, capture the traceback and continue to the next class.
                         all_traceback[model_class.__name__] = traceback.format_exc()
                         continue
-                
+
                 # Check if it's a dtype-related error and retry with float32
                 if "dtype" in kwargs:
                     import torch
