@@ -390,10 +390,20 @@ class FP8QuantizerTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained("MiniMaxAI/MiniMax-M2")
         messages = [
             {"role": "user", "content": [{"type": "text", "text": "What is your favourite condiment?"}]},
-            {"role": "assistant", "content": [{"type": "text", "text": "Well, I'm quite partial to a good squeeze of fresh lemon juice. It adds just the right amount of zesty flavour to whatever I'm cooking up in the kitchen!"}]},
-            {"role": "user", "content": [{"type": "text", "text": "Do you have mayonnaise recipes?"}]}
+            {
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "Well, I'm quite partial to a good squeeze of fresh lemon juice. It adds just the right amount of zesty flavour to whatever I'm cooking up in the kitchen!",
+                    }
+                ],
+            },
+            {"role": "user", "content": [{"type": "text", "text": "Do you have mayonnaise recipes?"}]},
         ]
-        model_inputs = tokenizer.apply_chat_template(messages, return_tensors="pt", add_generation_prompt=True).to(self.device_map)
+        model_inputs = tokenizer.apply_chat_template(messages, return_tensors="pt", add_generation_prompt=True).to(
+            self.device_map
+        )
 
         # Only caring about this not crashing
         _ = model.generate(**model_inputs, max_new_tokens=24)
