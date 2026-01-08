@@ -16,26 +16,32 @@ limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
-*This model was released on {release_date} and added to Hugging Face Transformers on 2026-01-05.*
-
+*This model was released on {release_date} and added to Hugging Face Transformers on 2026-01-10.*
 
 # GlmImage
 
 ## Overview
 
-The GlmImage model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
-<INSERT SHORT SUMMARY HERE>
+GLM-Image is an image generation model adopts a hybrid autoregressive + diffusion decoder architecture, effectively pushing the upper bound of visual fidelity and fine-grained details. In general image generation quality, it aligns with industry-standard LDM-based approaches, while demonstrating significant advantages in knowledge-intensive image generation scenarios.
 
-The abstract from the paper is the following:
+Model architecture: a hybrid autoregressive + diffusion decoder design、
 
-<INSERT PAPER ABSTRACT HERE>
++ Autoregressive generator: a 9B-parameter model initialized from [GLM-4-9B-0414](https://huggingface.co/zai-org/GLM-4-9B-0414), with an expanded vocabulary to incorporate visual tokens. The model first generates a compact encoding of approximately 256 tokens, then expands to 1K–4K tokens, corresponding to 1K–2K high-resolution image outputs.
++ Diffusion Decoder: a 7B-parameter decoder based on a single-stream DiT architecture for latent-space image decoding. It is equipped with a Glyph Encoder text module, significantly improving accurate text rendering within images.
 
-Tips:
+Post-training with decoupled reinforcement learning: the model introduces a fine-grained, modular feedback strategy using the GRPO algorithm, substantially enhancing both semantic understanding and visual detail quality.
 
-<INSERT TIPS ABOUT MODEL HERE>
++ Autoregressive module: provides low-frequency feedback signals focused on aesthetics and semantic alignment, improving instruction following and artistic expressiveness.
++ Decoder module: delivers high-frequency feedback targeting detail fidelity and text accuracy, resulting in highly realistic textures, lighting, and color reproduction, as well as more precise text rendering.
 
-This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
-The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
+GLM-Image supports both text-to-image and image-to-image generation within a single model
+
++ Text-to-image: generates high-detail images from textual descriptions, with particularly strong performance in information-dense scenarios.
++ Image-to-image: supports a wide range of tasks, including image editing, style transfer, multi-subject consistency, and identity-preserving generation for people and objects.
+
++ `GlmImageForConditionalGeneration` is the AR part of GLM-Image model, and for full image generation pipeline, please refer to [here](https://github.com/huggingface/diffusers/tree/main/src/diffusers/pipelines/glm_image).
+
+This model was contributed by [Raushan Turganbay](https://huggingface.co/RaushanTurganbay) and [Yuxuan Zhang](https://huggingface.co/ZHANGYUXUAN-zR).
 
 ## Usage examples
 
@@ -57,6 +63,7 @@ model = GlmImageForConditionalGeneration.from_pretrained(
     device_map="auto"
 )
 processor = AutoProcessor.from_pretrained(model_id, use_fast=True)
+
 
 def parse_shape_info(prompt: str) -> tuple[str, int, int, int, int]:
     """Parse image dimensions and expand shape tokens for two-stage generation."""
@@ -121,7 +128,8 @@ print(f"Large image tokens: {len(large_image_tokens_ids)}")
 
 ### Image-to-Image Generation
 
-A portion of the Text-to-Image script can be modified—specifically the prompt and input sections—to implement Image-to-Image generation:
+A portion of the Text-to-Image script can be modified—specifically the prompt and input sections—to implement
+Image-to-Image generation:
 
 ```python
 # Image-to-Image Generation
