@@ -1578,7 +1578,7 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
 
     def add_special_tokens(
         self,
-        special_tokens_dict: dict[str, Union[str, AddedToken, Sequence[Union[str, AddedToken]]]],
+        special_tokens_dict: dict[str, str | AddedToken | Sequence[str| AddedToken]],
         replace_extra_special_tokens: bool = True,
     ):
         r"""`MistralCommonBackend` does not implement `add_special_tokens` by design.
@@ -1590,7 +1590,7 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
 
     def add_tokens(  # type: ignore[override]
         self,
-        special_tokens_dict: dict[str, Union[str, AddedToken, Sequence[Union[str, AddedToken]]]],
+        special_tokens_dict: dict[str, str | AddedToken | Sequence[str | AddedToken]],
         replace_extra_special_tokens: bool = True,
     ):
         """
@@ -1601,7 +1601,7 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
 
         raise NotImplementedError("`MistralCommonBackend` does not implement `add_tokens`.")
 
-    def convert_added_tokens(cls, obj: Union[AddedToken, Any], save: bool = False, add_type_field: bool = True):  # type: ignore[override]
+    def convert_added_tokens(cls, obj: AddedToken | Any, save: bool = False, add_type_field: bool = True):  # type: ignore[override]
         """
         `MistralCommonBackend` does not implement `convert_added_tokens` by design.
 
@@ -1617,7 +1617,7 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
 
     def save_chat_templates(
         self,
-        save_directory: Union[str, os.PathLike],
+        save_directory: str | os.PathLike,
         tokenizer_config: dict,
         filename_prefix: str | None,
         save_jinja_files: bool,
