@@ -933,6 +933,23 @@ class ModelTesterMixin:
                     )
                     self.assertTrue(len(load_result.unexpected_keys) == 0)
 
+    def test_load_contiguous_weights(self):
+        """
+        Checks whether the loaded weights are contiguous or not; inherently checking whether a conversion
+        operation from `core_model_loading` may have affected the original weights.
+        """
+        for model_class in self.all_model_classes:
+            config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+
+            model = model_class(config)
+            self.assertTrue(all(param.is_contiguous() for param in list(model.parameters())))
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                model = model_class.from_pretrained(tmpdirname)
+                self.assertTrue(all(param.is_contiguous() for param in list(model.parameters())))
+
     def test_gradient_checkpointing_backward_compatibility(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -1140,13 +1157,12 @@ class ModelTesterMixin:
         addition_year = 0  # if we cannot find it, set it to 0 (i.e. oldest)
         if match_object := re.search(r"^# Copyright (\d{4})", source_code, re.MULTILINE | re.IGNORECASE):
             addition_year = int(match_object.group(1))
+        # For now, skip everything older than 2023 and "important models" (too many models to patch otherwise)
+        # TODO: relax this as we patch more and more models
+        if addition_year < 2023:
+            self.skipTest(reason="Not a prioritized model for now.")
 
         for model_class in self.all_model_classes:
-            # For now, skip everything older than 2023 and "important models" (too much models to patch otherwise)
-            # TODO: relax this as we patch more and more models
-            if addition_year < 2023:
-                self.skipTest(reason=f"{model_class} is not a prioritized model for now.")
-
             # This context manager makes sure that we get the same results deterministically for random new weights
             with seeded_weight_init():
                 # First, initialize the model from __init__ -> this ensure everything is correctly initialized, even if
@@ -1265,14 +1281,6 @@ class ModelTesterMixin:
                 buf_name, immediate_parent_class, pretrained_parent_class = find_parent_traceback(
                     buffer, model_from_init
                 )
-
-                # We cannot control timm model weights initialization, so skip in this case
-                if (pretrained_parent_class == "TimmWrapperPreTrainedModel" and "timm_model." in buffer) or (
-                    pretrained_parent_class == "TimmBackbone" and "_backbone." in buffer
-                ):
-                    different_buffers.discard(buffer)
-                    continue
-
                 # Add it to the traceback
                 traceback = (
                     f"`{buf_name}` in module `{immediate_parent_class}` called from `{pretrained_parent_class}`\n"
@@ -1286,10 +1294,11 @@ class ModelTesterMixin:
                 f"them correctly if the model is on meta device):\n{unique_bad_module_traceback}",
             )
 
-    def test_all_tensors_are_parameter_or_buffer(self):
+    def test_all_tensors_are_parameter_or_buffer(self) -> None:
         """Check that all tensors are registered as Parameter or Buffer, i.e. we don't have simple assignments such
-        as `self.x = torch.tensor(...)` in a Module (as we cannot correctly recover from meta device if it's not registered as
-        parameter/buffer)"""
+        as `self.x = torch.tensor(...)` in a Module (as we cannot correctly recover from meta device if it's not
+        registered as parameter/buffer). To test this, we initialize the model on a meta device and then move it onto
+        the torch_device and perform a forward pass."""
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -1297,19 +1306,16 @@ class ModelTesterMixin:
             if "modeling_perceiver.py" in inspect.getfile(model_class):
                 _, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
 
-            # Initialize the model fully on meta device, then move everything to cpu and run `init_weights`
+            # Initialize the model fully on meta device, then move everything to torch_device and run `init_weights`
             with torch.device("meta"):
                 model = model_class(copy.deepcopy(config)).eval()
-            # Move everything randomly to cpu
-            model.to_empty(device="cpu")
+            # Move everything randomly to torch_device
+            model.to_empty(device=torch_device)
             # Now, run all the inits
             model.init_weights()
 
             # Prepare inputs
             inputs = self._prepare_for_class(inputs_dict, model_class)
-            # Inputs may be on cuda -> move to cpu, we don't care about accelerator for this test
-            inputs = {k: v.to("cpu") if isinstance(v, torch.Tensor) else v for k, v in inputs.items()}
-
             # Try running a forward, to see if a tensor stayed on meta somewhere
             try:
                 _ = model(**inputs)
@@ -1437,7 +1443,7 @@ class ModelTesterMixin:
             else:
                 # indexing the first element does not always work
                 # e.g. models that output similarity scores of size (N, M) would need to index [0, 0]
-                slice_ids = [slice(0, index) for index in single_row_object.shape]
+                slice_ids = tuple(slice(0, index) for index in single_row_object.shape)
                 batched_row = batched_object[slice_ids]
                 self.assertFalse(
                     torch.isnan(batched_row).any(), f"Batched output has `nan` in {model_name} for key={key}"
@@ -3568,7 +3574,7 @@ class ModelTesterMixin:
 
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
-                model = model_class.from_pretrained(tmpdirname, dtype=torch.float16, attn_implementation="sdpa")
+                model = model_class.from_pretrained(tmpdirname, dtype=torch.bfloat16, attn_implementation="sdpa")
                 model.to(torch_device)
 
                 # For PyTorch 2.1 - 2.3.0 set `dynamic=True`. In the future setting `dynamic=None` and using `torch._dynamo.mark_dynamic()`
@@ -3579,7 +3585,7 @@ class ModelTesterMixin:
                 inputs_dict.pop("decoder_attention_mask", None)
                 for name, inp in inputs_dict.items():
                     if isinstance(inp, torch.Tensor) and inp.dtype in [torch.float32, torch.float16]:
-                        inputs_dict[name] = inp.to(torch.float16)
+                        inputs_dict[name] = inp.to(torch.bfloat16)
 
                 # use no_grad to save some memory
                 with torch.no_grad():
@@ -3916,7 +3922,12 @@ class ModelTesterMixin:
         if attn_implementation is not None:
             config._attn_implementation = attn_implementation
 
-        model = cls(config).to(torch_device)
+        model = cls(config).to(device=torch_device)
+
+        # torch._grouped_mm still only supports bfloat16 when used with torch.compile
+        # bfloat16 is problematic with precisions so we keep an implementation with full precision
+        if model.config._experts_implementation == "grouped_mm":
+            model.set_experts_implementation("batched_mm")
 
         inputs = {
             "input_ids": torch.randint(low=1, high=model.config.vocab_size, size=(2, 10), device=torch_device),

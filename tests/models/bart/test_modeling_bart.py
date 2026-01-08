@@ -622,7 +622,7 @@ class FastIntegrationTests(unittest.TestCase):
         dct = tok(ARTICLE, return_tensors="pt")
         generated_ids = hf.generate(**dct, num_beams=4)
         result = tok.batch_decode(generated_ids)[0]
-        assert EXPECTED == result
+        assert result == EXPECTED
 
     def test_xsum_1_1_batch_generation(self):
         # test batch
@@ -987,7 +987,7 @@ class BartModelIntegrationTests(unittest.TestCase):
 
     def test_xsum_config_generation_params(self):
         model = BartForConditionalGeneration.from_pretrained("facebook/bart-large-xsum")
-        expected_params = {"num_beams": 6, "do_sample": False, "early_stopping": True, "length_penalty": None}
+        expected_params = {"num_beams": 6, "do_sample": None, "early_stopping": True, "length_penalty": None}
         config_params = {k: getattr(model.generation_config, k, "MISSING") for k, v in expected_params.items()}
         self.assertDictEqual(expected_params, config_params)
 

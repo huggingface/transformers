@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Microsoft and the HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +15,7 @@ import math
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Optional, Union
+from typing import Any
 
 import numpy as np
 import torch.nn as nn
@@ -262,7 +261,7 @@ class Florence2Processor(ProcessorMixin):
         image_processor=None,
         tokenizer=None,
         num_additional_image_tokens: int = 0,
-        post_processor_config: Optional[dict] = None,
+        post_processor_config: dict | None = None,
         **kwargs,
     ):
         self.tasks_answer_post_processing_type = {
@@ -313,7 +312,7 @@ class Florence2Processor(ProcessorMixin):
 
         super().__init__(image_processor, tokenizer, **kwargs)
 
-    def _construct_prompts(self, text: Union[str, list[str]]) -> list[str]:
+    def _construct_prompts(self, text: str | list[str]) -> list[str]:
         """
         Construct prompts by replacing task tokens with corresponding prompt strings.
         """
@@ -340,8 +339,8 @@ class Florence2Processor(ProcessorMixin):
 
     def __call__(
         self,
-        images: Optional[ImageInput] = None,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         **kwargs: Unpack[Florence2ProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -683,7 +682,7 @@ class Florence2PostProcessor:
         return text, spans
 
     def parse_ocr_from_text_and_spans(
-        self, text: str, pattern: Optional[str], image_size: tuple[int, int], area_threshold: float = 0.0
+        self, text: str, pattern: str | None, image_size: tuple[int, int], area_threshold: float = 0.0
     ) -> list[dict[str, Any]]:
         """
         Parse OCR results with quadrilateral boxes.
@@ -1470,7 +1469,7 @@ class Florence2Seq2SeqModelOutput(Seq2SeqModelOutput):
         image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
-    image_hidden_states: Optional[torch.FloatTensor] = None
+    image_hidden_states: torch.FloatTensor | None = None
 
 
 @dataclass
@@ -1491,7 +1490,7 @@ class Florence2Seq2SeqLMOutput(Seq2SeqLMOutput):
         image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
-    image_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    image_hidden_states: tuple[torch.FloatTensor, ...] | None = None
 
 
 @auto_docstring
@@ -1550,22 +1549,22 @@ class Florence2Model(LlavaModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.LongTensor] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
-        encoder_outputs: Optional[list[torch.FloatTensor]] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.LongTensor | None = None,
+        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        encoder_outputs: list[torch.FloatTensor] | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
         **kwargs,
-    ) -> Union[tuple, Florence2Seq2SeqModelOutput]:
+    ) -> tuple | Florence2Seq2SeqModelOutput:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1645,24 +1644,24 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.LongTensor] = None,
-        encoder_outputs: Optional[list[torch.FloatTensor]] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.LongTensor | None = None,
+        encoder_outputs: list[torch.FloatTensor] | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, Florence2Seq2SeqLMOutput]:
+    ) -> tuple | Florence2Seq2SeqLMOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
@@ -1758,7 +1757,7 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
         self,
         inputs_tensor: torch.Tensor,
         model_kwargs,
-        model_input_name: Optional[str],
+        model_input_name: str | None,
         generation_config,
     ) -> dict[str, Any]:
         # override to handle merging image and text embeddings before passing to language encoder
