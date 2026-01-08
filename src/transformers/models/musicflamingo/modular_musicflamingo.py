@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2025 NVIDIA CORPORATION and the HuggingFace Inc. team. All rights
+# Copyright 2026 NVIDIA CORPORATION and the HuggingFace Inc. team. All rights
 # reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,6 +14,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from math import pi
 from typing import Optional, Union
 
 import numpy as np
@@ -39,7 +40,47 @@ logger = logging.get_logger(__name__)
 
 
 class MusicFlamingoPreTrainedModel(AudioFlamingo3PreTrainedModel):
-    pass
+    @torch.no_grad()
+    def _init_weights(self, module):
+        """Initialize the weights for MusicFlamingo-specific modules."""
+        if isinstance(module, RotaryEmbedding):
+            # Reinitialize freqs parameter
+            dim = module.dim
+            freqs_for = module.freqs_for
+            max_time = module.max_time
+            theta_rescale_factor = module.theta_rescale_factor
+            custom_freqs = None
+
+            # Adjust theta
+            if max_time is not None and freqs_for == "lang":
+                theta = max_time / (2 * pi)
+            else:
+                theta = 50000  # default value
+
+            theta *= theta_rescale_factor ** (dim / (dim - 2))
+
+            # Generate freqs
+            if custom_freqs is not None:
+                freqs = custom_freqs
+            elif freqs_for == "lang":
+                freqs = 1.0 / (theta ** (torch.arange(0, dim, 2)[: (dim // 2)].float() / dim))
+            elif freqs_for == "pixel":
+                freqs = torch.linspace(1.0, module.max_freq / 2, dim // 2) * pi
+            elif freqs_for == "constant":
+                freqs = torch.ones(module.num_freqs).float()
+
+            module.freqs.data = freqs
+
+            # Reinitialize dummy buffer
+            module.dummy.data = torch.tensor(0)
+
+            # Reinitialize scale if using xpos
+            if module.use_xpos and module.scale is not None:
+                scale = (torch.arange(0, dim, 2) + 0.4 * dim) / (1.4 * dim)
+                module.scale.data = scale
+        else:
+            # Delegate to parent class for other modules
+            super()._init_weights(module)
 
 
 @auto_docstring(
