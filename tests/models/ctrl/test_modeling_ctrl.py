@@ -274,5 +274,6 @@ class CTRLModelLanguageGenerationTest(unittest.TestCase):
             5,
         ]  # Legal the president is a good guy and I don't want to lose my job. \n \n I have a
 
-        output_ids = model.generate(input_ids, do_sample=False)
+        output_ids = model.generate(input_ids, do_sample=False, max_length=20)
+        breakpoint()
         self.assertListEqual(output_ids[0].tolist(), expected_output_ids)
