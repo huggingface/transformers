@@ -309,6 +309,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("xlstm", "GPTNeoXTokenizer" if is_tokenizers_available() else None),
         ("xmod", "XLMRobertaTokenizer" if is_tokenizers_available() else None),
         ("yoso", "AlbertTokenizer" if is_tokenizers_available() else None),
+        ("youtu_llm", "TokenizersBackend" if is_tokenizers_available() else None),
     ]
 )
 
