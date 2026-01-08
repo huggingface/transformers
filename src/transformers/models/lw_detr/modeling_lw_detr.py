@@ -9,7 +9,7 @@ import math
 import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 import torch
 import torch.nn.functional as F  # noqa: F401
@@ -50,12 +50,12 @@ class LwDetrDecoderOutput(ModelOutput):
         used to compute the weighted average in the cross-attention heads.
     """
 
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    intermediate_hidden_states: Optional[torch.FloatTensor] = None
-    intermediate_reference_points: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
-    cross_attentions: Optional[tuple[torch.FloatTensor]] = None
+    last_hidden_state: torch.FloatTensor | None = None
+    intermediate_hidden_states: torch.FloatTensor | None = None
+    intermediate_reference_points: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
+    cross_attentions: tuple[torch.FloatTensor] | None = None
 
 
 @dataclass
@@ -82,12 +82,12 @@ class LwDetrModelOutput(ModelOutput):
         Logits of predicted bounding boxes coordinates in the first stage.
     """
 
-    init_reference_points: Optional[torch.FloatTensor] = None
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    intermediate_hidden_states: Optional[torch.FloatTensor] = None
-    intermediate_reference_points: Optional[torch.FloatTensor] = None
-    enc_outputs_class: Optional[torch.FloatTensor] = None
-    enc_outputs_coord_logits: Optional[torch.FloatTensor] = None
+    init_reference_points: torch.FloatTensor | None = None
+    last_hidden_state: torch.FloatTensor | None = None
+    intermediate_hidden_states: torch.FloatTensor | None = None
+    intermediate_reference_points: torch.FloatTensor | None = None
+    enc_outputs_class: torch.FloatTensor | None = None
+    enc_outputs_coord_logits: torch.FloatTensor | None = None
 
 
 @dataclass
@@ -131,17 +131,17 @@ class LwDetrObjectDetectionOutput(ModelOutput):
         Logits of predicted bounding boxes coordinates in the first stage.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    loss_dict: Optional[dict] = None
-    logits: Optional[torch.FloatTensor] = None
-    pred_boxes: Optional[torch.FloatTensor] = None
-    auxiliary_outputs: Optional[list[dict]] = None
-    init_reference_points: Optional[torch.FloatTensor] = None
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    intermediate_hidden_states: Optional[torch.FloatTensor] = None
-    intermediate_reference_points: Optional[torch.FloatTensor] = None
+    loss: torch.FloatTensor | None = None
+    loss_dict: dict | None = None
+    logits: torch.FloatTensor | None = None
+    pred_boxes: torch.FloatTensor | None = None
+    auxiliary_outputs: list[dict] | None = None
+    init_reference_points: torch.FloatTensor | None = None
+    last_hidden_state: torch.FloatTensor | None = None
+    intermediate_hidden_states: torch.FloatTensor | None = None
+    intermediate_reference_points: torch.FloatTensor | None = None
     enc_outputs_class: Any = None
-    enc_outputs_coord_logits: Optional[torch.FloatTensor] = None
+    enc_outputs_coord_logits: torch.FloatTensor | None = None
 
 
 class LwDetrConvNormLayer(nn.Module):
@@ -152,7 +152,7 @@ class LwDetrConvNormLayer(nn.Module):
         out_channels: int,
         kernel_size: int,
         stride: int,
-        activation: Optional[str] = None,
+        activation: str | None = None,
     ):
         super().__init__()
         self.conv = nn.Conv2d(
@@ -355,7 +355,7 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
+    attention_mask: torch.Tensor | None,
     scaling: float,
     dropout: float = 0.0,
     **kwargs: Unpack[TransformersKwargs],
@@ -377,17 +377,15 @@ def eager_attention_forward(
 
 
 class LwDetrAttention(nn.Module):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
-
     def __init__(self, config: LwDetrConfig, layer_idx: int):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.d_model // config.decoder_self_attention_heads)
-        self.num_key_value_groups = 1
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
         self.is_causal = False
+
         self.q_proj = nn.Linear(
             config.d_model, config.decoder_self_attention_heads * self.head_dim, bias=config.attention_bias
         )
@@ -404,7 +402,7 @@ class LwDetrAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Optional[torch.Tensor] = None,
+        position_embeddings: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size, seq_len, _ = hidden_states.shape
@@ -542,16 +540,16 @@ class LwDetrMultiscaleDeformableAttention(nn.Module):
 
         self.disable_custom_kernels = config.disable_custom_kernels
 
-    def with_pos_embed(self, tensor: torch.Tensor, position_embeddings: Optional[Tensor]):
+    def with_pos_embed(self, tensor: torch.Tensor, position_embeddings: Tensor | None):
         return tensor if position_embeddings is None else tensor + position_embeddings
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
-        position_embeddings: Optional[torch.Tensor] = None,
+        position_embeddings: torch.Tensor | None = None,
         reference_points=None,
         spatial_shapes=None,
         spatial_shapes_list=None,
@@ -660,13 +658,13 @@ class LwDetrDecoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Optional[torch.Tensor] = None,
+        position_embeddings: torch.Tensor | None = None,
         reference_points=None,
         spatial_shapes=None,
         spatial_shapes_list=None,
         level_start_index=None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
         self_attention_output, self_attn_weights = self.self_attn(
@@ -834,14 +832,14 @@ class LwDetrDecoder(LwDetrPreTrainedModel):
 
     def forward(
         self,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        reference_points: Optional[torch.Tensor] = None,
-        spatial_shapes: Optional[torch.Tensor] = None,
-        spatial_shapes_list: Optional[torch.Tensor] = None,
-        level_start_index: Optional[torch.Tensor] = None,
-        valid_ratios: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: torch.Tensor | None = None,
+        reference_points: torch.Tensor | None = None,
+        spatial_shapes: torch.Tensor | None = None,
+        spatial_shapes_list: torch.Tensor | None = None,
+        level_start_index: torch.Tensor | None = None,
+        valid_ratios: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
         intermediate = ()
@@ -1018,7 +1016,7 @@ class LwDetrModel(LwDetrPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor = None,
-        pixel_mask: Optional[torch.LongTensor] = None,
+        pixel_mask: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> LwDetrModelOutput:
         r"""
@@ -1203,8 +1201,8 @@ class LwDetrForObjectDetection(LwDetrPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor = None,
-        pixel_mask: Optional[torch.LongTensor] = None,
-        labels: Optional[list[dict]] = None,
+        pixel_mask: torch.LongTensor | None = None,
+        labels: list[dict] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> LwDetrObjectDetectionOutput:
         r"""
