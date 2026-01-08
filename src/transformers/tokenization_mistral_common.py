@@ -1611,8 +1611,7 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
         raise NotImplementedError("`MistralCommonBackend` does not implement `convert_added_tokens`.")
 
     def get_chat_template(self, chat_template: str | None = None, tools: list[dict] | None = None) -> str:
-        """`MistralCommonBackend` does not implement `get_chat_template` by design as `mistral-common` does not use chat templates.
-        """
+        """`MistralCommonBackend` does not implement `get_chat_template` by design as `mistral-common` does not use chat templates."""
 
         raise NotImplementedError("`MistralCommonBackend` does not implement `get_chat_template`.")
 
