@@ -17,6 +17,7 @@ import argparse
 import gc
 import json
 import os
+import re
 
 import torch
 from safetensors.torch import load_file
@@ -62,12 +63,24 @@ def update_state_dict_for_hf_model(state_dict):
                 new_key = new_key.replace(".conv.conv.", ".conv.")
         if "acoustic_tokenizer.decoder" in key:
             if "upsample_layers.0.0.conv.conv." in key:
-                new_key = new_key.replace("upsample_layers.0.0.conv.conv.", "upsample_layers.0.conv.")
-            elif "0.convtr.convtr." in key:
-                new_key = new_key.replace("0.convtr.convtr.", "convtr.")
-            elif "head.conv." in key:
+                new_key = new_key.replace("acoustic_tokenizer.decoder.upsample_layers.0.0.conv.conv.", "acoustic_tokenizer.decoder.stem.conv.conv.")
+            elif "stages.0." in key:
+                new_key = new_key.replace("stages.0.", "stem.stage.")
+            elif "upsample_layers." in key and not "upsample_layers.0" in key:
+                match = re.search(r'upsample_layers\.(\d+)', key)
+                if match:
+                    old_idx = int(match.group(1))
+                    new_idx = old_idx - 1  # Shift down by 1 since upsample_layers[0] became conv0
+                    new_key = re.sub(r'upsample_layers\.\d+\.0\.convtr\.convtr\.', f'layers.{new_idx}.convtr.convtr.', new_key)
+            elif "stages." in key and not "stages.0." in key:
+                match = re.search(r'stages\.(\d+)', key)
+                if match:
+                    old_idx = int(match.group(1))
+                    new_idx = old_idx - 1  # Shift down by 1 since stages[0] became stage0
+                    new_key = re.sub(r'stages\.\d+\.', f'layers.{new_idx}.stage.', new_key)
+            if "head.conv." in key:
                 new_key = new_key.replace("head.conv.", "head.")
-            elif "stages." in key and "mixer.conv.conv.conv." in key:
+            if "mixer.conv.conv.conv." in key:
                 new_key = new_key.replace("mixer.conv.conv.conv.", "mixer.conv.")
 
         # Handle main model
@@ -102,7 +115,7 @@ def update_state_dict_for_hf_model(state_dict):
 
 
 def convert_checkpoint(
-    checkpoint, output_dir, config_path, push_to_hub, bfloat16, processor_config=None, push_tokenizers=False
+    checkpoint, output_dir, config_path, push_to_hub, bfloat16, processor_config=None, push_tokenizer=False
 ):
     if bfloat16:
         dtype = torch.bfloat16
@@ -283,28 +296,9 @@ def convert_checkpoint(
     # 4) Update state dict to match HF model structure
     updated_state_dict = update_state_dict_for_hf_model(original_state_dict)
 
-    # 5) Create and save semantic tokenizer
+    # 5) Create semantic tokenizer config
     print("\n=== Creating semantic tokenizer ===")
     semantic_config = VibeVoiceSemanticTokenizerConfig(**model_config["semantic_tokenizer_config"])
-    semantic_model = VibeVoiceSemanticTokenizerModel(semantic_config).to(dtype)
-    # -- filter for semantic tokenizer weights
-    prefix = "model.semantic_tokenizer"
-    semantic_state_dict = {
-        k[len(prefix) + 1 :]: v  # +1 to remove the dot after the prefix
-        for k, v in updated_state_dict.items()
-        if k.startswith(prefix)
-    }
-    # -- load into HF model
-    missing, unexpected = semantic_model.load_state_dict(semantic_state_dict, strict=False)
-    if len(unexpected) != 0:
-        raise ValueError(f"Unexpected keys: {unexpected}")
-    if len(missing) != 0:
-        raise ValueError(f"missing keys found: {missing}")
-    if push_to_hub is not None and push_tokenizers:
-        hub_repo = push_to_hub.split("/")[0] + "/VibeVoice-SemanticTokenizer"
-        print(f"------ Pushing to hub as {hub_repo} ------")
-        feature_extractor.push_to_hub(hub_repo)
-        semantic_model.push_to_hub(hub_repo)
 
     # 6) Create and save acoustic tokenizer
     print("\n=== Creating acoustic tokenizer ===")
@@ -323,7 +317,7 @@ def convert_checkpoint(
         raise ValueError(f"Unexpected keys: {unexpected}")
     if len(missing) != 0:
         raise ValueError(f"missing keys found: {missing}")
-    if push_to_hub is not None and push_tokenizers:
+    if push_to_hub is not None and push_tokenizer:
         hub_repo = push_to_hub.split("/")[0] + "/VibeVoice-AcousticTokenizer"
         print(f"------ Pushing to hub as {hub_repo} ------")
         feature_extractor.push_to_hub(hub_repo)
@@ -473,7 +467,6 @@ def convert_checkpoint(
 Conversion script to convert original VibeVoice model into three HF checkpoints for:
 - VibeVoiceForConditionalGeneration
 - VibeVoiceAcousticTokenizerModel
-- VibeVoiceSemanticTokenizerModel
 
 # 1.5 Model: https://huggingface.co/microsoft/VibeVoice-1.5B
 
@@ -490,12 +483,11 @@ python src/transformers/models/vibevoice/convert_vibevoice_to_hf.py \
     --output_dir /raid/eric/vibevoice/hf_vibevoice \
     --config_path /raid/eric/vibevoice/config.json \
     --processor_config /raid/eric/vibevoice/preprocessor_config.json \
-    --push_to_hub bezzam/VibeVoice-1.5B --push_tokenizers
+    --push_to_hub bezzam/VibeVoice-1.5B --push_tokenizer
 ```
 Models will be pushed to:
 - bezzam/VibeVoice-1.5B
 - bezzam/VibeVoice-AcousticTokenizer
-- bezzam/VibeVoice-SemanticTokenizer
 
 
 # 7B Model: https://huggingface.co/aoi-ot/VibeVoice-Large
@@ -535,7 +527,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--float32", action="store_true", help="Whether to use float32 precision. Default is bfloat16."
     )
-    parser.add_argument("--push_tokenizers", action="store_true", help="Whether to push the tokenizers to the hub.")
+    parser.add_argument("--push_tokenizer", action="store_true", help="Whether to push the acoustic tokenizer to the hub.")
 
     args = parser.parse_args()
     convert_checkpoint(
@@ -545,5 +537,5 @@ if __name__ == "__main__":
         args.push_to_hub,
         bfloat16=not args.float32,
         processor_config=args.processor_config,
-        push_tokenizers=args.push_tokenizers,
+        push_tokenizer=args.push_tokenizer,
     )
