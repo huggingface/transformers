@@ -85,9 +85,11 @@ def get_modified_cards() -> list[str]:
         if line:
             # Check if the file is in the model_doc directory
             if line.startswith("docs/source/en/model_doc/") and line.endswith(".md"):
-                model_name = os.path.splitext(os.path.basename(line))[0]
-                if model_name not in ["auto", "timm_wrapper"]:
-                    model_names.append(model_name)
+                file_path = os.path.join(ROOT, line)
+                if os.path.exists(file_path):
+                    model_name = os.path.splitext(os.path.basename(line))[0]
+                    if model_name not in ["auto", "timm_wrapper"]:
+                        model_names.append(model_name)
 
     return model_names
 
