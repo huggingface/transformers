@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 Intel Labs and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +15,6 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -47,11 +45,11 @@ class ZoeDepthDepthEstimatorOutput(ModelOutput):
         Logits for each domain (e.g. NYU and KITTI) in case multiple metric heads are used.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    predicted_depth: Optional[torch.FloatTensor] = None
-    domain_logits: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    loss: torch.FloatTensor | None = None
+    predicted_depth: torch.FloatTensor | None = None
+    domain_logits: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 class ZoeDepthReassembleStage(nn.Module):
@@ -260,7 +258,7 @@ class ZoeDepthFeatureFusionLayer(nn.Module):
         self.residual_layer1 = ZoeDepthPreActResidualLayer(config)
         self.residual_layer2 = ZoeDepthPreActResidualLayer(config)
 
-    def forward(self, hidden_state: torch.Tensor, residual: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward(self, hidden_state: torch.Tensor, residual: torch.Tensor | None = None) -> torch.Tensor:
         if residual is not None:
             if hidden_state.shape != residual.shape:
                 residual = nn.functional.interpolate(
@@ -804,8 +802,8 @@ class ZoeDepthMultiheadAttention(nn.Module):
         queries: torch.Tensor,
         keys: torch.Tensor,
         values: torch.Tensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = False,
+        attention_mask: torch.FloatTensor | None = None,
+        output_attentions: bool | None = False,
     ) -> tuple[torch.Tensor]:
         batch_size, seq_length, _ = queries.shape
         query_layer = (
@@ -872,7 +870,7 @@ class ZoeDepthTransformerEncoderLayer(nn.Module):
     def forward(
         self,
         src,
-        src_mask: Optional[torch.Tensor] = None,
+        src_mask: torch.Tensor | None = None,
     ):
         queries = keys = src
         src2 = self.self_attn(queries=queries, keys=keys, values=src, attention_mask=src_mask)[0]
@@ -1254,12 +1252,12 @@ class ZoeDepthForDepthEstimation(ZoeDepthPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        labels: torch.LongTensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple[torch.Tensor], DepthEstimatorOutput]:
+    ) -> tuple[torch.Tensor] | DepthEstimatorOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
             Ground truth depth estimation maps for computing the loss.

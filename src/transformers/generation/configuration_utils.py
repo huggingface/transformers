@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -1261,8 +1260,7 @@ class BaseWatermarkingConfig(ABC):
         return output
 
     def __iter__(self):
-        for attr, value in copy.deepcopy(self.__dict__).items():
-            yield attr, value
+        yield from copy.deepcopy(self.__dict__).items()
 
     def __repr__(self):
         return f"{self.__class__.__name__} {self.to_json_string()}"

@@ -387,16 +387,14 @@ print(tokenizer.decode(output[0], skip_special_tokens=True))
 <hfoption id="int4-weight-only">
 
 > [!TIP]
-> Run the quantized model on a CPU by changing `device_map` to `"cpu"` and `layout` to `Int4CPULayout()`.
+> CPU int4 weight-only quantization requires torchao version 0.15.0 or later.
 
 ```py
 import torch
 from transformers import TorchAoConfig, AutoModelForCausalLM, AutoTokenizer
-from torchao.quantization import Int4WeightOnlyConfig
-from torchao.dtypes import Int4CPULayout
+from torchao.prototype.int4_opaque_tensor import Int4WeightOnlyOpaqueTensorConfig
 
-quant_config = Int4WeightOnlyConfig(group_size=128, layout=Int4CPULayout(), int4_packing_format="opaque")
-quantization_config = TorchAoConfig(quant_type=quant_config)
+quantization_config = TorchAoConfig(Int4WeightOnlyOpaqueTensorConfig(group_size=128))
 
 # Load and quantize the model
 quantized_model = AutoModelForCausalLM.from_pretrained(
