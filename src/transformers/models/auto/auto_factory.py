@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,7 +19,7 @@ import json
 import os
 from collections import OrderedDict
 from collections.abc import Iterator
-from typing import Any, TypeVar, Union
+from typing import Any, TypeVar
 
 from ...configuration_utils import PreTrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
@@ -46,7 +45,7 @@ logger = logging.get_logger(__name__)
 
 _T = TypeVar("_T")
 # Tokenizers will depend on packages installed, too much variance and there are no common base or Protocol
-_LazyAutoMappingValue = tuple[Union[type[Any], None], Union[type[Any], None]]
+_LazyAutoMappingValue = tuple[type[Any] | None, type[Any] | None]
 
 CLASS_DOCSTRING = """
     This is a generic model class that will be instantiated as one of the model classes of the library when created
@@ -247,7 +246,7 @@ class _BaseAutoModelClass:
         return config
 
     @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike[str]], *model_args, **kwargs):
+    def from_pretrained(cls, pretrained_model_name_or_path: str | os.PathLike[str], *model_args, **kwargs):
         config = kwargs.pop("config", None)
         trust_remote_code = kwargs.get("trust_remote_code")
         kwargs["_from_auto"] = True
@@ -592,7 +591,7 @@ class _LazyAutoMapping(OrderedDict[type[PreTrainedConfig], _LazyAutoMappingValue
         ]
         return mapping_keys + list(self._extra_content.keys())
 
-    def get(self, key: type[PreTrainedConfig], default: _T) -> Union[_LazyAutoMappingValue, _T]:
+    def get(self, key: type[PreTrainedConfig], default: _T) -> _LazyAutoMappingValue | _T:
         try:
             return self.__getitem__(key)
         except KeyError:

@@ -19,6 +19,8 @@
       title: Customizing model components
     - local: model_sharing
       title: Sharing
+    - local: serialization
+      title: Exporting to production
     - local: modular_transformers
       title: Contributing a new model to Transformers
     - local: add_new_model
@@ -125,8 +127,6 @@
     title: Agents
   - local: tools
     title: Tools
-  - local: transformers_as_backend
-    title: Transformers as modeling backend
   title: Inference
 - isExpanded: false
   sections:
@@ -228,11 +228,13 @@
   title: Quantization
 - isExpanded: false
   sections:
-  - local: serialization
-    title: ONNX
-  - local: executorch
-    title: ExecuTorch
-  title: Export to production
+  - local: community_integrations/vllm
+    title: vLLM
+  - local: community_integrations/sglang
+    title: SGLang
+  - local: community_integrations/transformers_as_backend
+    title: Building a compatible model backend for inference
+  title: Community integrations
 - isExpanded: false
   sections:
   - sections:

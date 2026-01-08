@@ -142,7 +142,7 @@ class VideoLlama3ImageProcessorFast(BaseImageProcessorFast):
         images: ImageInput,
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
-        device: Optional[Union[str, "torch.device"]] = None,
+        device: Union[str, "torch.device"] | None = None,
         **kwargs: Unpack[VideoLlama3ImageProcessorKwargs],
     ) -> BatchFeature:
         """

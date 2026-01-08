@@ -182,6 +182,7 @@ model = ChameleonForConditionalGeneration.from_pretrained(
 ## ChameleonProcessor
 
 [[autodoc]] ChameleonProcessor
+    - __call__
 
 ## ChameleonImageProcessor
 

@@ -16,7 +16,7 @@ import os
 import warnings
 from pathlib import Path
 from shutil import copyfile
-from typing import Any, Optional, Union
+from typing import Any
 
 import sentencepiece
 
@@ -116,7 +116,7 @@ class MarianTokenizer(PreTrainedTokenizer):
         eos_token="</s>",
         pad_token="<pad>",
         model_max_length=512,
-        sp_model_kwargs: Optional[dict[str, Any]] = None,
+        sp_model_kwargs: dict[str, Any] | None = None,
         separate_vocabs=False,
         **kwargs,
     ) -> None:
@@ -262,7 +262,7 @@ class MarianTokenizer(PreTrainedTokenizer):
         self,
         token_ids,
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: Optional[bool] = None,
+        clean_up_tokenization_spaces: bool | None = None,
         **kwargs,
     ) -> str:
         """Internal decode method that handles use_source_tokenizer parameter."""
@@ -311,7 +311,7 @@ class MarianTokenizer(PreTrainedTokenizer):
     def vocab_size(self) -> int:
         return len(self.encoder)
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: str | None = None) -> tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
@@ -395,7 +395,7 @@ class MarianTokenizer(PreTrainedTokenizer):
         return [1 if x in all_special_ids else 0 for x in seq]
 
     def get_special_tokens_mask(
-        self, token_ids_0: list, token_ids_1: Optional[list] = None, already_has_special_tokens: bool = False
+        self, token_ids_0: list, token_ids_1: list | None = None, already_has_special_tokens: bool = False
     ) -> list[int]:
         """Get list where entries are [1] if a token is [eos] or [pad] else 0."""
         if already_has_special_tokens:
@@ -417,7 +417,7 @@ def save_json(data, path: str) -> None:
         json.dump(data, f, indent=2)
 
 
-def load_json(path: str) -> Union[dict, list]:
+def load_json(path: str) -> dict | list:
     with open(path, "r") as f:
         return json.load(f)
 

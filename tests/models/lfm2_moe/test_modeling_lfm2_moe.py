@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 the HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -164,7 +163,10 @@ class Lfm2MoeIntegrationTest(unittest.TestCase):
     def get_model(cls):
         if cls.model is None:
             cls.model = Lfm2MoeForCausalLM.from_pretrained(
-                "LiquidAI/LFM2-8B-A1B", device_map="auto", dtype=torch.bfloat16
+                "LiquidAI/LFM2-8B-A1B",
+                device_map="auto",
+                dtype=torch.bfloat16,
+                experts_implementation="eager",
             )
         return cls.model
 

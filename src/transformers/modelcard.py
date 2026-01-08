@@ -19,7 +19,7 @@ import os
 import warnings
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any
 
 import httpx
 import yaml
@@ -352,19 +352,19 @@ def _get_mapping_values(mapping):
 @dataclass
 class TrainingSummary:
     model_name: str
-    language: Optional[Union[str, list[str]]] = None
-    license: Optional[str] = None
-    tags: Optional[Union[str, list[str]]] = None
-    finetuned_from: Optional[str] = None
-    tasks: Optional[Union[str, list[str]]] = None
-    dataset: Optional[Union[str, list[str]]] = None
-    dataset_tags: Optional[Union[str, list[str]]] = None
-    dataset_args: Optional[Union[str, list[str]]] = None
-    dataset_metadata: Optional[dict[str, Any]] = None
-    eval_results: Optional[dict[str, float]] = None
-    eval_lines: Optional[list[str]] = None
-    hyperparameters: Optional[dict[str, Any]] = None
-    source: Optional[str] = "trainer"
+    language: str | list[str] | None = None
+    license: str | None = None
+    tags: str | list[str] | None = None
+    finetuned_from: str | None = None
+    tasks: str | list[str] | None = None
+    dataset: str | list[str] | None = None
+    dataset_tags: str | list[str] | None = None
+    dataset_args: str | list[str] | None = None
+    dataset_metadata: dict[str, Any] | None = None
+    eval_results: dict[str, float] | None = None
+    eval_lines: list[str] | None = None
+    hyperparameters: dict[str, Any] | None = None
+    source: str | None = "trainer"
 
     def __post_init__(self):
         # Infer default license from the checkpoint used, if possible.
