@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_pe_audio.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -166,8 +165,8 @@ class PeAudioEncoderEmbedder(nn.Module):
     def forward(
         self,
         input_values: torch.Tensor,
-        padding_mask: Optional[torch.Tensor] = None,
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+        padding_mask: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         with torch.no_grad(), torch.backends.cudnn.flags(enabled=False):
             hidden_states = self.dac_encoder(input_values)
             hidden_states = self.bottleneck(hidden_states)
@@ -304,7 +303,7 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
+    attention_mask: torch.Tensor | None,
     scaling: float,
     dropout: float = 0.0,
     **kwargs: Unpack[TransformersKwargs],
@@ -399,8 +398,8 @@ class PeAudioEncoderAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -463,12 +462,12 @@ class PeAudioEncoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        use_cache: Optional[bool] = False,
-        cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        use_cache: bool | None = False,
+        cache_position: torch.LongTensor | None = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
@@ -543,8 +542,8 @@ class PeAudioPreTrainedModel(PreTrainedModel):
     """
 )
 class PeAudioEncoderOutput(BaseModelOutputWithPooling):
-    codec_features: Optional[torch.FloatTensor] = None
-    output_mask: Optional[tuple[torch.FloatTensor]] = None
+    codec_features: torch.FloatTensor | None = None
+    output_mask: tuple[torch.FloatTensor] | None = None
 
 
 class PeAudioEncoderRotaryEmbedding(nn.Module):
@@ -568,9 +567,9 @@ class PeAudioEncoderRotaryEmbedding(nn.Module):
 
     @staticmethod
     def compute_default_rope_parameters(
-        config: Optional[PeAudioEncoderConfig] = None,
+        config: PeAudioEncoderConfig | None = None,
         device: Optional["torch.device"] = None,
-        seq_len: Optional[int] = None,
+        seq_len: int | None = None,
     ) -> tuple["torch.Tensor", float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
@@ -641,7 +640,7 @@ class PeAudioEncoder(PeAudioPreTrainedModel):
     def forward(
         self,
         input_values: torch.Tensor,
-        padding_mask: Optional[torch.Tensor] = None,
+        padding_mask: torch.Tensor | None = None,
         **kwargs,
     ) -> BaseModelOutputWithPooling:
         inputs_embeds, padding_mask = self.embedder(input_values, padding_mask=padding_mask)
@@ -676,10 +675,10 @@ class PeAudioEncoder(PeAudioPreTrainedModel):
 @dataclass
 # @auto_docstring
 class PeAudioOutput(ModelOutput):
-    loss: Optional[torch.FloatTensor] = None
-    logits_audio_text: Optional[torch.FloatTensor] = None
-    text_audio_embeds: Optional[torch.FloatTensor] = None
-    audio_embeds: Optional[torch.FloatTensor] = None
+    loss: torch.FloatTensor | None = None
+    logits_audio_text: torch.FloatTensor | None = None
+    text_audio_embeds: torch.FloatTensor | None = None
+    audio_embeds: torch.FloatTensor | None = None
     text_outputs: BaseModelOutputWithPooling = None
     audio_outputs: BaseModelOutputWithPooling = None
 
@@ -727,9 +726,9 @@ class PeAudioModel(PeAudioPreTrainedModel):
         self,
         input_ids: torch.Tensor,
         input_values: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        padding_mask: Optional[torch.Tensor] = None,
-        return_loss: Optional[bool] = None,
+        attention_mask: torch.Tensor | None = None,
+        padding_mask: torch.Tensor | None = None,
+        return_loss: bool | None = None,
         **kwargs,
     ) -> PeAudioOutput:
         audio_outputs: BaseModelOutputWithPooling = self.audio_encoder(
@@ -782,9 +781,9 @@ class PeAudioFrameLevelModel(PeAudioModel):
         self,
         input_ids: torch.Tensor,
         input_values: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        padding_mask: Optional[torch.Tensor] = None,
-        return_loss: Optional[bool] = None,
+        attention_mask: torch.Tensor | None = None,
+        padding_mask: torch.Tensor | None = None,
+        return_loss: bool | None = None,
         **kwargs,
     ) -> PeAudioOutput:
         audio_outputs: BaseModelOutputWithPooling = self.audio_encoder(

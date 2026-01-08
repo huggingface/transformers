@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_colpali.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -126,8 +125,8 @@ class ColPaliProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        images: Optional[ImageInput] = None,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         **kwargs: Unpack[ColPaliProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -274,7 +273,7 @@ class ColPaliProcessor(ProcessorMixin):
 
     def process_images(
         self,
-        images: Optional[ImageInput] = None,
+        images: ImageInput | None = None,
         **kwargs: Unpack[ColPaliProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -307,7 +306,7 @@ class ColPaliProcessor(ProcessorMixin):
 
     def process_queries(
         self,
-        text: Union[TextInput, list[TextInput]],
+        text: TextInput | list[TextInput],
         **kwargs: Unpack[ColPaliProcessorKwargs],
     ) -> BatchFeature:
         """

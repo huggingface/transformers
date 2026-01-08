@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_sam3_tracker_video.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 the HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,6 +17,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 
 from copy import deepcopy
 from typing import Optional, Union
@@ -55,7 +55,7 @@ class Sam3TrackerVideoProcessor(ProcessorMixin):
     """
 
     def __init__(
-        self, image_processor, video_processor, target_size: Optional[int] = None, point_pad_value: int = -10, **kwargs
+        self, image_processor, video_processor, target_size: int | None = None, point_pad_value: int = -10, **kwargs
     ):
         super().__init__(image_processor, video_processor, **kwargs)
         self.point_pad_value = point_pad_value
@@ -529,11 +529,11 @@ class Sam3TrackerVideoProcessor(ProcessorMixin):
 
     def init_video_session(
         self,
-        video: Optional[VideoInput] = None,
+        video: VideoInput | None = None,
         inference_device: Union[str, "torch.device"] = "cpu",
-        inference_state_device: Optional[Union[str, "torch.device"]] = None,
-        processing_device: Optional[Union[str, "torch.device"]] = None,
-        video_storage_device: Optional[Union[str, "torch.device"]] = None,
+        inference_state_device: Union[str, "torch.device"] | None = None,
+        processing_device: Union[str, "torch.device"] | None = None,
+        video_storage_device: Union[str, "torch.device"] | None = None,
         max_vision_features_cache_size: int = 1,
         dtype: torch.dtype = torch.float32,
     ):
@@ -584,12 +584,12 @@ class Sam3TrackerVideoProcessor(ProcessorMixin):
         self,
         inference_session: Sam3TrackerVideoInferenceSession,
         frame_idx: int,
-        obj_ids: Union[list[int], int],
-        input_points: Optional[Union[list[list[list[list[float]]]], torch.Tensor]] = None,
-        input_labels: Optional[Union[list[list[list[int]]], torch.Tensor]] = None,
-        input_boxes: Optional[Union[list[list[list[float]]], torch.Tensor]] = None,
-        input_masks: Optional[Union[np.ndarray, torch.Tensor, list[np.ndarray], list[torch.Tensor]]] = None,
-        original_size: Optional[tuple[int, int]] = None,
+        obj_ids: list[int] | int,
+        input_points: list[list[list[list[float]]]] | torch.Tensor | None = None,
+        input_labels: list[list[list[int]]] | torch.Tensor | None = None,
+        input_boxes: list[list[list[float]]] | torch.Tensor | None = None,
+        input_masks: np.ndarray | torch.Tensor | list[np.ndarray] | list[torch.Tensor] | None = None,
+        original_size: tuple[int, int] | None = None,
         clear_old_inputs: bool = True,
     ) -> Sam3TrackerVideoInferenceSession:
         """
@@ -647,10 +647,10 @@ class Sam3TrackerVideoProcessor(ProcessorMixin):
         inference_session: Sam3TrackerVideoInferenceSession,
         frame_idx: int,
         obj_ids: list[int],
-        input_points: Optional[Union[list[list[list[list[float]]]], torch.Tensor]] = None,
-        input_labels: Optional[Union[list[list[list[int]]], torch.Tensor]] = None,
-        input_boxes: Optional[Union[list[list[list[float]]], torch.Tensor]] = None,
-        original_size: Optional[tuple[int, int]] = None,
+        input_points: list[list[list[list[float]]]] | torch.Tensor | None = None,
+        input_labels: list[list[list[int]]] | torch.Tensor | None = None,
+        input_boxes: list[list[list[float]]] | torch.Tensor | None = None,
+        original_size: tuple[int, int] | None = None,
         clear_old_inputs: bool = True,
     ) -> Sam3TrackerVideoInferenceSession:
         """
@@ -756,7 +756,7 @@ class Sam3TrackerVideoProcessor(ProcessorMixin):
         inference_session: Sam3TrackerVideoInferenceSession,
         frame_idx: int,
         obj_ids: list[int],
-        input_masks: Union[np.ndarray, torch.Tensor, list[np.ndarray], list[torch.Tensor]],
+        input_masks: np.ndarray | torch.Tensor | list[np.ndarray] | list[torch.Tensor],
     ):
         """
         Add new mask to a frame and add them to the inference session.

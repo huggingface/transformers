@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The Google AI Language Team Authors, Facebook AI Research authors and The HuggingFace Inc. team.
 # Copyright (c) 2020, NVIDIA CORPORATION.  All rights reserved.
 #
@@ -19,8 +18,9 @@ import inspect
 import os
 import warnings
 from collections.abc import Callable
+from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Optional, Union
+from typing import TYPE_CHECKING, Any, Optional
 
 import torch
 import torch.distributed as dist
@@ -331,9 +331,9 @@ class GenerateBeamEncoderDecoderOutput(ModelOutput):
 
 
 # Typing shortcuts
-GenerateNonBeamOutput = Union[GenerateDecoderOnlyOutput, GenerateEncoderDecoderOutput]
-GenerateBeamOutput = Union[GenerateBeamDecoderOnlyOutput, GenerateBeamEncoderDecoderOutput]
-GenerateOutput = Union[GenerateNonBeamOutput, GenerateBeamOutput]
+GenerateNonBeamOutput = GenerateDecoderOnlyOutput | GenerateEncoderDecoderOutput
+GenerateBeamOutput = GenerateBeamDecoderOnlyOutput | GenerateBeamEncoderDecoderOutput
+GenerateOutput = GenerateNonBeamOutput | GenerateBeamOutput
 
 
 class GenerationMixin(ContinuousMixin):
@@ -1305,7 +1305,7 @@ class GenerationMixin(ContinuousMixin):
         if generation_config.do_sample:
             # In beam methods, we need to keep at least one non-eos token to explore continuations that might have a
             # better score (i.e. keep len(list(generation_config._eos_token_tensor)) + 1)
-            if generation_config.num_beams > 1:
+            if generation_config.num_beams is not None and generation_config.num_beams > 1:
                 if isinstance(generation_config._eos_token_tensor, list):
                     min_tokens_to_keep = len(generation_config._eos_token_tensor) + 1
                 elif isinstance(generation_config._eos_token_tensor, torch.Tensor):
@@ -2178,8 +2178,10 @@ class GenerationMixin(ContinuousMixin):
                 "will be skipped."
             )
 
-            # Finally: if we can compile, disable tokenizers parallelism and check for FA2 + static cache
+        if can_compile:
+            # Finally: if we can compile, disable tokenizers parallelism
             os.environ["TOKENIZERS_PARALLELISM"] = "0"
+
             # If we use FA2 and a static cache, we cannot compile with fullgraph
             if self.config._attn_implementation == "flash_attention_2":
                 # only raise warning if the user passed an explicit compile-config
@@ -2191,6 +2193,22 @@ class GenerationMixin(ContinuousMixin):
                     generation_config.compile_config.fullgraph = False
 
         return can_compile
+
+    @contextmanager
+    def _optimize_model_for_decode(self):
+        original_experts_implementation = self.config._experts_implementation
+        if original_experts_implementation == "grouped_mm":
+            logger.info_once(
+                "We will be switching to 'batched_mm' for the decoding stage as it is much more performant than 'grouped_mm' on smaller inputs. "
+                "If you experience any issues with this, please open an issue on the Hugging Face Transformers GitHub repository.",
+            )
+            self.set_experts_implementation("batched_mm")
+
+        try:
+            yield
+        finally:
+            if original_experts_implementation == "grouped_mm":
+                self.set_experts_implementation(original_experts_implementation)
 
     def _get_deprecated_gen_repo(
         self,
@@ -2849,7 +2867,8 @@ class GenerationMixin(ContinuousMixin):
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             if prefill_consumed:
                 model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
-                outputs = model_forward(**model_inputs, return_dict=True)
+                with self._optimize_model_for_decode():
+                    outputs = model_forward(**model_inputs, return_dict=True)
             prefill_consumed = True
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs,

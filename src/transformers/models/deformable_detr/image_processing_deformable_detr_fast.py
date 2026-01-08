@@ -604,7 +604,7 @@ class DeformableDetrImageProcessorFast(BaseImageProcessorFast):
         return encoded_inputs
 
     def post_process_object_detection(
-        self, outputs, threshold: float = 0.5, target_sizes: Union[TensorType, list[tuple]] = None, top_k: int = 100
+        self, outputs, threshold: float = 0.5, target_sizes: TensorType | list[tuple] = None, top_k: int = 100
     ):
         """
         Converts the raw output of [`DeformableDetrForObjectDetection`] into final bounding boxes in (top_left_x,

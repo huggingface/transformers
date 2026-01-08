@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -30,7 +29,7 @@ from transformers import (
     ParakeetFeatureExtractor,
     ParakeetForCTC,
     ParakeetProcessor,
-    ParakeetTokenizerFast,
+    ParakeetTokenizer,
 )
 from transformers.convert_slow_tokenizer import ParakeetConverter
 from transformers.utils.hub import cached_file
@@ -151,7 +150,7 @@ def extract_nemo_archive(nemo_file_path: str, extract_dir: str) -> dict[str, str
 
 def write_processor(nemo_config: dict, model_files, output_dir, push_to_repo_id=None):
     tokenizer_converted = ParakeetConverter(model_files["tokenizer_model_file"]).converted()
-    tokenizer_converted_fast = ParakeetTokenizerFast(
+    tokenizer_converted_fast = ParakeetTokenizer(
         tokenizer_object=tokenizer_converted,
         clean_up_tokenization_spaces=False,
     )
