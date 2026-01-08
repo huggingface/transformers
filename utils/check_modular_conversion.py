@@ -7,12 +7,11 @@ import os
 import shutil
 import subprocess
 from functools import partial
-from io import StringIO
 
 from create_dependency_mapping import find_priority_list
 
 # Console for rich printing
-from modular_model_converter import convert_modular_file
+from modular_model_converter import convert_modular_file, run_ruff
 from rich.console import Console
 from rich.syntax import Syntax
 
@@ -36,11 +35,8 @@ def process_file(
     # Read the actual modeling file
     with open(file_path, "r", encoding="utf-8") as modeling_file:
         content = modeling_file.read()
-    output_buffer = StringIO(generated_modeling_content[file_type])
-    output_buffer.seek(0)
-    output_content = output_buffer.read()
     diff = difflib.unified_diff(
-        output_content.splitlines(),
+        generated_modeling_content[file_type].splitlines(),
         content.splitlines(),
         fromfile=f"{file_path}_generated",
         tofile=f"{file_path}",
@@ -50,8 +46,7 @@ def process_file(
     # Check for differences
     if diff_list:
         # first save the copy of the original file, to be able to restore it later
-        if os.path.exists(file_path):
-            shutil.copy(file_path, file_path + BACKUP_EXT)
+        shutil.copy(file_path, file_path + BACKUP_EXT)
         # we always save the generated content, to be able to update dependant files
         with open(file_path, "w", encoding="utf-8", newline="\n") as modeling_file:
             modeling_file.write(generated_modeling_content[file_type])
@@ -67,9 +62,35 @@ def process_file(
         return 0
 
 
-def compare_files(modular_file_path, show_diff=True):
+def convert_and_run_ruff(modular_file_path: str) -> dict[str, str]:
+    """From a modular file, convert it and return all the contents of the file as string.
+    We need this function, because `ruff` needs the final filename to apply all rules correctly, so to get the
+    output as a string, we need to save a temporary file with similar name, run ruff, and re-read the temporary file"""
     # Generate the expected modeling content
     generated_modeling_content = convert_modular_file(modular_file_path)
+    # Temporary save the files with similar names to run `ruff` correctly, then re-read the result after linting/formatting
+    for file_type in generated_modeling_content:
+        file_name_prefix = file_type.split(".*")[0]
+        file_name_suffix = file_type.split(".*")[-1] if ".*" in file_type else ""
+        temp_file_name = modular_file_path.replace("modular_", f"{file_name_prefix}_").replace(
+            ".py", f"_temp_pattern__{file_name_suffix}.py"
+        )
+        # Write the file only temporarily
+        with open(temp_file_name, "w") as f:
+            f.write(generated_modeling_content[file_type])
+        # Run ruff on the new file (with similar name pattern as the original one)
+        run_ruff(temp_file_name)
+        with open(temp_file_name, "r") as f:
+            generated_modeling_content[file_type] = f.read()
+        # delete file
+        os.remove(temp_file_name)
+
+    return generated_modeling_content
+
+
+def compare_files(modular_file_path, show_diff=True):
+    # Generate the expected modeling content
+    generated_modeling_content = convert_and_run_ruff(modular_file_path)
     diff = 0
     for file_type in generated_modeling_content:
         diff += process_file(modular_file_path, generated_modeling_content, file_type, show_diff)

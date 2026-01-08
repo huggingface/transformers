@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The Qwen team, Alibaba Group and the HuggingFace Inc. team. All rights reserved.
 #
 #
@@ -18,7 +17,6 @@
 import math
 import re
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -116,23 +114,23 @@ def _get_feat_extract_output_lengths(input_lengths):
 class Qwen3OmniMoeAudioEncoderConfig(Qwen2_5OmniAudioEncoderConfig):
     def __init__(
         self,
-        num_mel_bins: Optional[int] = 128,
-        encoder_layers: Optional[int] = 32,
-        encoder_attention_heads: Optional[int] = 20,
-        encoder_ffn_dim: Optional[int] = 5120,
-        d_model: Optional[int] = 1280,
-        dropout: Optional[int] = 0,
-        attention_dropout: Optional[int] = 0,
-        activation_function: Optional[int] = "gelu",
-        activation_dropout: Optional[int] = 0,
-        scale_embedding: Optional[int] = False,
-        initializer_range: Optional[int] = 0.02,
-        max_source_positions: Optional[int] = 1500,
-        n_window: Optional[int] = 100,
-        output_dim: Optional[int] = 3584,
-        n_window_infer: Optional[int] = 400,
-        conv_chunksize: Optional[int] = 500,
-        downsample_hidden_size: Optional[int] = 480,
+        num_mel_bins: int | None = 128,
+        encoder_layers: int | None = 32,
+        encoder_attention_heads: int | None = 20,
+        encoder_ffn_dim: int | None = 5120,
+        d_model: int | None = 1280,
+        dropout: int | None = 0,
+        attention_dropout: int | None = 0,
+        activation_function: int | None = "gelu",
+        activation_dropout: int | None = 0,
+        scale_embedding: int | None = False,
+        initializer_range: int | None = 0.02,
+        max_source_positions: int | None = 1500,
+        n_window: int | None = 100,
+        output_dim: int | None = 3584,
+        n_window_infer: int | None = 400,
+        conv_chunksize: int | None = 500,
+        downsample_hidden_size: int | None = 480,
         **kwargs,
     ):
         super().__init__(
@@ -274,30 +272,30 @@ class Qwen3OmniMoeTextConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 3584,
-        hidden_size: Optional[int] = 2048,
-        intermediate_size: Optional[int] = 18944,
-        num_hidden_layers: Optional[int] = 28,
-        num_attention_heads: Optional[int] = 28,
-        num_key_value_heads: Optional[int] = 4,
-        hidden_act: Optional[str] = "silu",
-        max_position_embeddings: Optional[int] = 32768,
-        initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[float] = 1e-6,
-        use_cache: Optional[bool] = True,
-        tie_word_embeddings: Optional[bool] = False,
-        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        attention_bias: Optional[bool] = False,
-        sliding_window: Optional[int] = None,
-        attention_dropout: Optional[int] = 0,
-        decoder_sparse_step: Optional[int] = 1,
-        moe_intermediate_size: Optional[int] = 768,
-        num_experts_per_tok: Optional[int] = 8,
-        num_experts: Optional[int] = 128,
-        norm_topk_prob: Optional[bool] = True,
-        output_router_logits: Optional[bool] = False,
-        router_aux_loss_coef: Optional[float] = 0.001,
-        mlp_only_layers: Optional[list[int]] = None,
+        vocab_size: int | None = 3584,
+        hidden_size: int | None = 2048,
+        intermediate_size: int | None = 18944,
+        num_hidden_layers: int | None = 28,
+        num_attention_heads: int | None = 28,
+        num_key_value_heads: int | None = 4,
+        hidden_act: str | None = "silu",
+        max_position_embeddings: int | None = 32768,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: float | None = 1e-6,
+        use_cache: bool | None = True,
+        tie_word_embeddings: bool | None = False,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        attention_bias: bool | None = False,
+        sliding_window: int | None = None,
+        attention_dropout: int | None = 0,
+        decoder_sparse_step: int | None = 1,
+        moe_intermediate_size: int | None = 768,
+        num_experts_per_tok: int | None = 8,
+        num_experts: int | None = 128,
+        norm_topk_prob: bool | None = True,
+        output_router_logits: bool | None = False,
+        router_aux_loss_coef: float | None = 0.001,
+        mlp_only_layers: list[int] | None = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -429,25 +427,25 @@ class Qwen3OmniMoeThinkerConfig(Qwen2_5OmniThinkerConfig):
 class Qwen3OmniMoeTalkerCodePredictorConfig(Qwen3Config):
     def __init__(
         self,
-        vocab_size: Optional[int] = 2048,
-        hidden_size: Optional[int] = 1024,
-        intermediate_size: Optional[int] = 3072,
-        num_hidden_layers: Optional[int] = 5,
-        num_attention_heads: Optional[int] = 16,
-        num_key_value_heads: Optional[int] = 8,
-        head_dim: Optional[int] = 128,
-        hidden_act: Optional[str] = "silu",
-        max_position_embeddings: Optional[int] = 32768,
-        initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[float] = 0.000001,
-        use_cache: Optional[bool] = True,
-        tie_word_embeddings: Optional[bool] = False,
-        rope_parameters: Optional[int] = None,
-        attention_bias: Optional[bool] = False,
-        sliding_window: Optional[int] = None,
-        layer_types: Optional[list[str]] = None,
-        attention_dropout: Optional[int] = 0,
-        num_code_groups: Optional[int] = 32,
+        vocab_size: int | None = 2048,
+        hidden_size: int | None = 1024,
+        intermediate_size: int | None = 3072,
+        num_hidden_layers: int | None = 5,
+        num_attention_heads: int | None = 16,
+        num_key_value_heads: int | None = 8,
+        head_dim: int | None = 128,
+        hidden_act: str | None = "silu",
+        max_position_embeddings: int | None = 32768,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: float | None = 0.000001,
+        use_cache: bool | None = True,
+        tie_word_embeddings: bool | None = False,
+        rope_parameters: int | None = None,
+        attention_bias: bool | None = False,
+        sliding_window: int | None = None,
+        layer_types: list[str] | None = None,
+        attention_dropout: int | None = 0,
+        num_code_groups: int | None = 32,
         **kwargs,
     ):
         super().__init__(
@@ -482,30 +480,30 @@ class Qwen3OmniMoeTalkerCodePredictorConfig(Qwen3Config):
 class Qwen3OmniMoeTalkerTextConfig(Qwen3MoeConfig):
     def __init__(
         self,
-        vocab_size: Optional[int] = 3072,
-        hidden_size: Optional[int] = 1024,
-        intermediate_size: Optional[int] = 2048,
-        num_hidden_layers: Optional[int] = 20,
-        num_attention_heads: Optional[int] = 16,
-        num_key_value_heads: Optional[int] = 2,
-        hidden_act: Optional[str] = "silu",
-        max_position_embeddings: Optional[int] = 32768,
-        initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[float] = 0.000001,
-        use_cache: Optional[int] = True,
-        tie_word_embeddings: Optional[bool] = False,
-        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        attention_bias: Optional[bool] = False,
-        sliding_window: Optional[int] = None,
-        attention_dropout: Optional[int] = 0,
-        decoder_sparse_step: Optional[int] = 1,
-        moe_intermediate_size: Optional[int] = 384,
-        num_experts_per_tok: Optional[int] = 8,
-        num_experts: Optional[int] = 128,
-        norm_topk_prob: Optional[bool] = False,
-        output_router_logits: Optional[bool] = False,
-        router_aux_loss_coef: Optional[float] = 0.001,
-        mlp_only_layers: Optional[list[int]] = None,
+        vocab_size: int | None = 3072,
+        hidden_size: int | None = 1024,
+        intermediate_size: int | None = 2048,
+        num_hidden_layers: int | None = 20,
+        num_attention_heads: int | None = 16,
+        num_key_value_heads: int | None = 2,
+        hidden_act: str | None = "silu",
+        max_position_embeddings: int | None = 32768,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: float | None = 0.000001,
+        use_cache: int | None = True,
+        tie_word_embeddings: bool | None = False,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        attention_bias: bool | None = False,
+        sliding_window: int | None = None,
+        attention_dropout: int | None = 0,
+        decoder_sparse_step: int | None = 1,
+        moe_intermediate_size: int | None = 384,
+        num_experts_per_tok: int | None = 8,
+        num_experts: int | None = 128,
+        norm_topk_prob: bool | None = False,
+        output_router_logits: bool | None = False,
+        router_aux_loss_coef: float | None = 0.001,
+        mlp_only_layers: list[int] | None = None,
         **kwargs,
     ):
         super().__init__(
@@ -749,7 +747,7 @@ class Qwen3OmniMoeCode2WavConfig(PreTrainedConfig):
         codebook_size=2048,
         hidden_size=1024,
         max_position_embeddings=8000,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: RopeParameters | dict[RopeParameters] | None = None,
         num_attention_heads=16,
         num_key_value_heads=16,
         attention_bias=False,
@@ -947,13 +945,13 @@ class Qwen3OmniMoePreTrainedModelForConditionalGeneration(Qwen2_5OmniPreTrainedM
 
     def get_rope_index(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        image_grid_thw: Optional[torch.LongTensor] = None,
-        video_grid_thw: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        image_grid_thw: torch.LongTensor | None = None,
+        video_grid_thw: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         use_audio_in_video: bool = False,
-        audio_seqlens: Optional[torch.LongTensor] = None,
-        second_per_grids: Optional[torch.Tensor] = None,
+        audio_seqlens: torch.LongTensor | None = None,
+        second_per_grids: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Calculate the 3D rope index based on image and video's temporal, height and width in LLM.
@@ -1404,7 +1402,7 @@ class Qwen3OmniMoeThinkerCausalLMOutputWithPast(MoeCausalLMOutputWithPast):
             The rope index difference between sequence length and multimodal rope.
     """
 
-    rope_deltas: Optional[torch.LongTensor] = None
+    rope_deltas: torch.LongTensor | None = None
 
 
 class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForConditionalGeneration):
@@ -1427,8 +1425,8 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
     def get_audio_features(
         self,
         input_features: torch.FloatTensor,
-        feature_attention_mask: Optional[torch.LongTensor] = None,
-        audio_feature_lengths: Optional[torch.LongTensor] = None,
+        feature_attention_mask: torch.LongTensor | None = None,
+        audio_feature_lengths: torch.LongTensor | None = None,
     ):
         """
         Encodes audios into continuous embeddings that can be forwarded to the language model.
@@ -1475,12 +1473,12 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
         rope_deltas=None,
         labels=None,
         use_cache=None,
-        output_router_logits: Optional[bool] = None,
+        output_router_logits: bool | None = None,
         use_audio_in_video=None,
         cache_position=None,
         video_second_per_grid=None,
         **kwargs,
-    ) -> Union[tuple, Qwen3OmniMoeThinkerCausalLMOutputWithPast]:
+    ) -> tuple | Qwen3OmniMoeThinkerCausalLMOutputWithPast:
         output_router_logits = (
             output_router_logits if output_router_logits is not None else self.config.text_config.output_router_logits
         )
@@ -1632,7 +1630,7 @@ class Qwen3OmniMoeTalkerCodePredictorOutputWithPast(CausalLMOutputWithPast):
         Current generation step of code predictor model.
     """
 
-    generation_steps: Optional[int] = None
+    generation_steps: int | None = None
 
 
 class Qwen3OmniMoeTalkerCodePredictorAttention(Qwen3Attention):
@@ -1677,13 +1675,13 @@ class Qwen3OmniMoeTalkerCodePredictorModel(Qwen3Model):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
         if input_ids is not None:
@@ -1827,7 +1825,7 @@ class Qwen3OmniMoeTalkerOutputWithPast(MoeCausalLMOutputWithPast):
         Current generation step, used to track which `trailing_text_hidden` should be used.
     """
 
-    generation_step: Optional[int] = None
+    generation_step: int | None = None
 
 
 class Qwen3OmniMoeTalkerRotaryEmbedding(Qwen3OmniMoeThinkerTextRotaryEmbedding):
@@ -1904,13 +1902,13 @@ class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3MoeForCausalLM):
     # Should inherit from PretrainedModel, but cannot inherit multiple classes in modular
     def get_rope_index(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        image_grid_thw: Optional[torch.LongTensor] = None,
-        video_grid_thw: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        image_grid_thw: torch.LongTensor | None = None,
+        video_grid_thw: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         use_audio_in_video: bool = False,
-        audio_seqlens: Optional[torch.LongTensor] = None,
-        second_per_grids: Optional[torch.Tensor] = None,
+        audio_seqlens: torch.LongTensor | None = None,
+        second_per_grids: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         return Qwen3OmniMoePreTrainedModelForConditionalGeneration.get_rope_index(
             self,
@@ -2247,13 +2245,13 @@ class Qwen3OmniMoeCode2WavTransformerLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        use_cache: Optional[bool] = False,
-        cache_position: Optional[torch.LongTensor] = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        use_cache: bool | None = False,
+        cache_position: torch.LongTensor | None = None,
         **kwargs,
-    ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
+    ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -2555,10 +2553,10 @@ class Qwen3OmniMoeForConditionalGeneration(Qwen3OmniMoePreTrainedModel, Generati
     @torch.no_grad()
     def generate(
         self,
-        input_ids: Optional[torch.Tensor] = None,
+        input_ids: torch.Tensor | None = None,
         speaker: str = "Ethan",
         use_audio_in_video: bool = False,
-        return_audio: Optional[bool] = None,
+        return_audio: bool | None = None,
         thinker_max_new_tokens: int = 1024,
         thinker_eos_token_id: int = 151645,
         talker_max_new_tokens: int = 4096,
@@ -2844,9 +2842,9 @@ class Qwen3OmniMoeProcessor(Qwen2_5OmniProcessor, ProcessorMixin):
     def __call__(
         self,
         text: TextInput = None,
-        images: Optional[ImageInput] = None,
-        videos: Optional[VideoInput] = None,
-        audio: Optional[AudioInput] = None,
+        images: ImageInput | None = None,
+        videos: VideoInput | None = None,
+        audio: AudioInput | None = None,
         **kwargs,
     ):
         """

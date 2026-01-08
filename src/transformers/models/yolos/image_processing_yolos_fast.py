@@ -237,7 +237,7 @@ def prepare_coco_panoptic_annotation(
 
 
 def get_size_with_aspect_ratio(
-    image_size: tuple[int, int], size: int, max_size: Optional[int] = None, mod_size: int = 16
+    image_size: tuple[int, int], size: int, max_size: int | None = None, mod_size: int = 16
 ) -> tuple[int, int]:
     """
     Computes the output image size given the input image size and the desired output size with multiple of divisible_size.
@@ -653,7 +653,7 @@ class YolosImageProcessorFast(BaseImageProcessorFast):
         return encoded_inputs
 
     def post_process_object_detection(
-        self, outputs, threshold: float = 0.5, target_sizes: Union[TensorType, list[tuple]] = None, top_k: int = 100
+        self, outputs, threshold: float = 0.5, target_sizes: TensorType | list[tuple] = None, top_k: int = 100
     ):
         """
         Converts the raw output of [`YolosForObjectDetection`] into final bounding boxes in (top_left_x,
