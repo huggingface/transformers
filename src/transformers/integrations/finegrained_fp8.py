@@ -528,6 +528,9 @@ class FP8Expert(nn.Module):
         # Keep a handle here; actual usage happens in forward of your MoE block
         self.act_fn = ACT2FN[config.hidden_act]
 
+    # We follow the mixtral "eager" moe implementation at
+    # https://github.com/huggingface/transformers/blob/457048fbfdba9a7dee8bd03328c62f49e57b95f9/src/transformers/models/mixtral/modular_mixtral.py#L148
+    # The core changes in this FP8 version should only relate to how we call the linear projections
     def forward(
         self,
         hidden_states: torch.Tensor,
