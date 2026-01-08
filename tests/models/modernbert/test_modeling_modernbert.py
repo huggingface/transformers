@@ -159,14 +159,15 @@ class ModernBertModelTester:
                 config.reference_compile = False
             # Some tests require attentions to be outputted, in that case we'll set the attention implementation to eager
             # as the others don't support outputted attentions.
-            # test_all_tensors_are_parameter_or_buffer runs on CPU but ModernBERT defaults to flash_attention_2 (GPU only).
             if test_name in (
                 "test_attention_outputs",
                 "test_hidden_states_output",
                 "test_retain_grad_hidden_states_attentions",
-                "test_all_tensors_are_parameter_or_buffer",
             ):
                 config._attn_implementation = "eager"
+            # Some tests runs on CPU but ModernBERT defaults to flash_attention_2 (GPU only).
+            elif test_name in ("test_all_tensors_are_parameter_or_buffer"):
+                config._attn_implementation = "sdpa"
         return config
 
     def create_and_check_model(self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels):

@@ -119,6 +119,25 @@ def sliding_window_causal_mask_function(sliding_window: int) -> Callable:
     return and_masks(sliding_window_overlay(sliding_window), causal_mask_function)
 
 
+def sliding_window_bidirectional_overlay(sliding_window: int) -> Callable:
+    """
+    This is an overlay depicting a bidirectional sliding window pattern.
+    Tokens can attend to other tokens within `sliding_window` positions in both directions.
+    """
+
+    def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
+        return (q_idx - sliding_window < kv_idx) & (kv_idx < q_idx + sliding_window + 1)
+
+    return inner_mask
+
+
+def sliding_window_bidirectional_mask_function(sliding_window: int) -> Callable:
+    """
+    This return the mask_function function to create a bidirectional sliding window mask.
+    """
+    return and_masks(sliding_window_bidirectional_overlay(sliding_window), bidirectional_mask_function)
+
+
 def chunked_causal_mask_function(chunk_size: int, left_padding: torch.Tensor) -> Callable:
     """
     This return the mask_function function to create a chunked attention mask.
@@ -1060,6 +1079,81 @@ def create_sliding_window_causal_mask(
         use_vmap=use_vmap,  # Short-circuit to non-vmap expansions for the mask
     )
     return causal_mask
+
+
+def create_bidirectional_sliding_window_mask(
+    config: PreTrainedConfig,
+    input_embeds: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    or_mask_function: Optional[Callable] = None,
+    and_mask_function: Optional[Callable] = None,
+) -> Optional[Union[torch.Tensor, BlockMask]]:
+    """
+    Create a bidirectional sliding window mask based on the attention implementation used (stored in the config).
+    This type of attention pattern is used by encoder models like ModernBERT where tokens can attend to other tokens
+    within a fixed window in both directions.
+
+    Args:
+        config (`PreTrainedConfig`):
+            The model config.
+        input_embeds (`torch.Tensor`):
+            The input embeddings of shape (batch_size, query_length, hidden_dim). This is used only to infer the
+            batch size, query length and dtype.
+        attention_mask (`torch.Tensor`, optional):
+            The 2D attention mask corresponding to padded tokens of shape (batch_size, kv_length).
+            It can also be an already prepared 4D mask, in which case it is returned as-is.
+        or_mask_function (`Callable`, optional):
+            An optional mask function to combine with the sliding window mask function (by doing the union of both).
+        and_mask_function (`Callable`, optional):
+            An optional mask function to combine with the sliding window mask function (by doing the intersection of both).
+    """
+    cache_position = torch.arange(input_embeds.shape[1], device=input_embeds.device, dtype=torch.long)
+
+    early_exit, attention_mask, _, kv_length, kv_offset = _preprocess_mask_arguments(
+        config, input_embeds, attention_mask, cache_position, None, None, 0
+    )
+    if early_exit:
+        return attention_mask
+
+    sliding_window = getattr(config, "sliding_window", None)
+    if sliding_window is None:
+        raise ValueError("Could not find a `sliding_window` argument in the config, or it is not set")
+
+    batch_size, dtype = input_embeds.shape[0], input_embeds.dtype
+    mask_factory_function = sliding_window_bidirectional_mask_function(sliding_window)
+    mask_interface = ALL_MASK_ATTENTION_FUNCTIONS[config._attn_implementation]
+
+    use_vmap = False
+    allow_is_bidirectional_skip = True
+
+    if or_mask_function is not None:
+        if not _is_torch_greater_or_equal_than_2_6:
+            raise ValueError("Using `or_mask_function` or `and_mask_function` arguments require torch>=2.6")
+        mask_factory_function = or_masks(mask_factory_function, or_mask_function)
+        allow_is_bidirectional_skip = False
+        use_vmap = True
+    if and_mask_function is not None:
+        if not _is_torch_greater_or_equal_than_2_6:
+            raise ValueError("Using `or_mask_function` or `and_mask_function` arguments require torch>=2.6")
+        mask_factory_function = and_masks(mask_factory_function, and_mask_function)
+        allow_is_bidirectional_skip = False
+        use_vmap = True
+
+    attention_mask = mask_interface(
+        batch_size=batch_size,
+        cache_position=cache_position,
+        kv_length=kv_length,
+        kv_offset=kv_offset,
+        mask_function=mask_factory_function,
+        attention_mask=attention_mask,
+        allow_is_causal_skip=False,
+        allow_is_bidirectional_skip=allow_is_bidirectional_skip,
+        local_size=sliding_window,
+        dtype=dtype,
+        config=config,
+        use_vmap=use_vmap,
+    )
+    return attention_mask
 
 
 def create_chunked_causal_mask(

@@ -80,8 +80,8 @@ class ModernBertConfig(PreTrainedConfig):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
-        local_attention (`int`, *optional*, defaults to 128):
-            The window size for local attention.
+        sliding_window (`int`, *optional*, defaults to 128):
+            The window size for sliding window attention.
         embedding_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the embeddings.
         mlp_bias (`bool`, *optional*, defaults to `False`):
@@ -99,8 +99,6 @@ class ModernBertConfig(PreTrainedConfig):
             Whether to use bias in the classifier.
         classifier_activation (`str`, *optional*, defaults to `"gelu"`):
             The activation function for the classifier.
-        deterministic_flash_attn (`bool`, *optional*, defaults to `False`):
-            Whether to use deterministic flash attention. If `False`, inference will be faster but not deterministic.
         sparse_prediction (`bool`, *optional*, defaults to `False`):
             Whether to use sparse prediction for the masked language model instead of returning the full dense logits.
         sparse_pred_ignore_index (`int`, *optional*, defaults to -100):
@@ -152,7 +150,7 @@ class ModernBertConfig(PreTrainedConfig):
         attention_dropout: Optional[float] = 0.0,
         layer_types: Optional[list[str]] = None,
         rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        local_attention: Optional[int] = 128,
+        sliding_window: Optional[int] = 128,
         embedding_dropout: Optional[float] = 0.0,
         mlp_bias: Optional[bool] = False,
         mlp_dropout: Optional[float] = 0.0,
@@ -161,7 +159,6 @@ class ModernBertConfig(PreTrainedConfig):
         classifier_dropout: Optional[float] = 0.0,
         classifier_bias: Optional[bool] = False,
         classifier_activation: Optional[str] = "gelu",
-        deterministic_flash_attn: Optional[bool] = False,
         sparse_prediction: Optional[bool] = False,
         sparse_pred_ignore_index: Optional[int] = -100,
         reference_compile: Optional[bool] = None,
@@ -180,7 +177,7 @@ class ModernBertConfig(PreTrainedConfig):
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.hidden_activation = hidden_activation
-        self.local_attention = local_attention
+        self.sliding_window = sliding_window
         self.embedding_dropout = embedding_dropout
         self.mlp_bias = mlp_bias
         self.mlp_dropout = mlp_dropout
@@ -189,7 +186,6 @@ class ModernBertConfig(PreTrainedConfig):
         self.classifier_dropout = classifier_dropout
         self.classifier_bias = classifier_bias
         self.classifier_activation = classifier_activation
-        self.deterministic_flash_attn = deterministic_flash_attn
         self.sparse_prediction = sparse_prediction
         self.sparse_pred_ignore_index = sparse_pred_ignore_index
         self.reference_compile = reference_compile

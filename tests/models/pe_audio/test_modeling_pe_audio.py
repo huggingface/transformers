@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import os
 import unittest
 
 from transformers import PeAudioConfig, PeAudioEncoderConfig
@@ -248,17 +247,11 @@ class PeAudioModelTester:
     def get_config(self):
         text_config = self.text_model_tester.get_config()
         audio_config = self.audio_model_tester.get_config()
-        config = PeAudioConfig(
+        return PeAudioConfig(
             text_config=text_config.to_dict(),
             audio_config=audio_config.to_dict(),
             projection_dim=32,
         )
-        if test := os.environ.get("PYTEST_CURRENT_TEST", None):
-            test_name = test.split(":")[-1].split(" ")[0]
-            # This test runs on CPU, but flash_attention_2 only supports GPU.
-            if test_name in ("test_all_tensors_are_parameter_or_buffer",):
-                config._attn_implementation = "eager"
-        return config
 
     def create_and_check_model(self, config, input_ids, attention_mask, input_values, padding_mask):
         model = PeAudioModel(config).to(torch_device).eval()

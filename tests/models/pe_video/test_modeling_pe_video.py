@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import os
 import unittest
 
 from transformers import PeVideoConfig, PeVideoEncoderConfig
@@ -284,18 +283,11 @@ class PeVideoModelTester:
     def get_config(self):
         text_config = self.text_model_tester.get_config()
         video_config = self.video_model_tester.get_config()
-        config = PeVideoConfig(
+        return PeVideoConfig(
             text_config=text_config.to_dict(),
             video_config=video_config.to_dict(),
             projection_dim=32,
         )
-
-        if test := os.environ.get("PYTEST_CURRENT_TEST", None):
-            test_name = test.split(":")[-1].split(" ")[0]
-            # This test runs on CPU, but flash_attention_2 only supports GPU.
-            if test_name in ("test_all_tensors_are_parameter_or_buffer",):
-                config._attn_implementation = "eager"
-        return config
 
     def create_and_check_model(self, config, input_ids, attention_mask, pixel_values_videos, padding_mask_videos):
         model = PeVideoModel(config).to(torch_device).eval()
@@ -368,12 +360,6 @@ class PeVideoModelTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="@eustlb this is not really expected")
     def test_can_init_all_missing_weights(self):
-        pass
-
-    @unittest.skip(
-        reason="TimmWrapperForImageClassification does not support an attention implementation through torch.nn.functional.scaled_dot_product_attention yet."
-    )
-    def test_can_set_attention_dynamically_composite_model(self):
         pass
 
 

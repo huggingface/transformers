@@ -30,7 +30,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...integrations import use_kernel_func_from_hub
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
+from ...masking_utils import create_bidirectional_mask, create_bidirectional_sliding_window_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
@@ -42,8 +42,9 @@ from ...modeling_outputs import (
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...utils import auto_docstring, logging
-from ...utils.generic import maybe_autocast
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils.generic import check_model_inputs, maybe_autocast
 from ...utils.import_utils import is_triton_available
 from .configuration_modernbert import ModernBertConfig
 
@@ -218,26 +219,31 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
 
 
 def eager_attention_forward(
-    module: "ModernBertAttention",
+    module: nn.Module,
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
     attention_mask: Optional[torch.Tensor],
-    scaling: float,
+    scaling: Optional[float] = None,
     dropout: float = 0.0,
-    **kwargs,
-) -> tuple[torch.Tensor, torch.Tensor]:
+    **kwargs: Unpack[TransformersKwargs],
+):
+    if scaling is None:
+        scaling = query.size(-1) ** -0.5
+
+    # Take the dot product between "query" and "key" to get the raw attention scores.
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 
     if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+        attention_mask = attention_mask[:, :, :, : key.shape[-2]]
+        attn_weights = attn_weights + attention_mask
 
-    # upcast attention to fp32
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
     attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
     attn_output = torch.matmul(attn_weights, value)
     attn_output = attn_output.transpose(1, 2).contiguous()
+
     return attn_output, attn_weights
 
 
@@ -262,15 +268,11 @@ class ModernBertAttention(nn.Module):
             )
 
         self.attention_dropout = config.attention_dropout
-        self.deterministic_flash_attn = config.deterministic_flash_attn
-        self.num_heads = config.num_attention_heads
         self.head_dim = config.hidden_size // config.num_attention_heads
-        self.all_head_size = self.head_dim * self.num_heads
-        self.scaling = self.head_dim**-0.5
-        self.Wqkv = nn.Linear(config.hidden_size, 3 * self.all_head_size, bias=config.attention_bias)
+        self.Wqkv = nn.Linear(config.hidden_size, 3 * config.hidden_size, bias=config.attention_bias)
 
         if layer_idx % config.global_attn_every_n_layers != 0:
-            self.sliding_window = config.local_attention
+            self.sliding_window = config.sliding_window + 1
         else:
             self.sliding_window = None
 
@@ -283,19 +285,15 @@ class ModernBertAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        sliding_window_mask: Optional[torch.Tensor] = None,
         position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-        output_attentions: Optional[bool] = False,
         **kwargs,
-    ) -> tuple[torch.Tensor, ...]:
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         input_shape = hidden_states.shape[:-1]
-        original_dtype = hidden_states.dtype
 
         qkv = self.Wqkv(hidden_states)
-        qkv = qkv.view(*input_shape, 3, self.num_heads, self.head_dim)
+        qkv = qkv.view(*input_shape, 3, -1, self.head_dim)
         query_states, key_states, value_states = qkv.unbind(dim=-3)
 
-        # Transpose to (batch, num_heads, seq_len, head_dim) for attention interface
         query_states = query_states.transpose(1, 2)
         key_states = key_states.transpose(1, 2)
         value_states = value_states.transpose(1, 2)
@@ -303,39 +301,25 @@ class ModernBertAttention(nn.Module):
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, unsqueeze_dim=1)
 
-        effective_attention_mask = sliding_window_mask if self.sliding_window is not None else attention_mask
-
-        attention_interface: Callable = eager_attention_forward
+        attention_interface = eager_attention_forward
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
-
-        # Flash Attention 2 only supports fp16 and bf16 - convert if needed
-        if "flash" in self.config._attn_implementation and query_states.dtype not in (
-            torch.float16,
-            torch.bfloat16,
-        ):
-            query_states = query_states.to(torch.bfloat16)
-            key_states = key_states.to(torch.bfloat16)
-            value_states = value_states.to(torch.bfloat16)
 
         attn_output, attn_weights = attention_interface(
             self,
             query_states,
             key_states,
             value_states,
-            effective_attention_mask,
+            attention_mask,
             dropout=self.attention_dropout if self.training else 0.0,
-            scaling=self.scaling,
+            scaling=self.head_dim**-0.5,
             sliding_window=self.sliding_window,
-            is_causal=self.is_causal,
             **kwargs,
         )
 
-        attn_output = attn_output.to(original_dtype)
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
-        hidden_states = self.out_drop(self.Wo(attn_output))
-
-        return (hidden_states, attn_weights) if output_attentions else (hidden_states,)
+        attn_output = self.out_drop(self.Wo(attn_output))
+        return attn_output, attn_weights
 
 
 class ModernBertEncoderLayer(GradientCheckpointingLayer):
@@ -360,18 +344,16 @@ class ModernBertEncoderLayer(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        sliding_window_mask: Optional[torch.Tensor] = None,
         position_embeddings: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
-    ) -> torch.Tensor:
-        attn_outputs = self.attn(
+        **kwargs,
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+        attn_output, attn_weights = self.attn(
             self.attn_norm(hidden_states),
             attention_mask=attention_mask,
-            sliding_window_mask=sliding_window_mask,
             position_embeddings=position_embeddings,
-            output_attentions=output_attentions,
+            **kwargs,
         )
-        hidden_states = hidden_states + attn_outputs[0]
+        hidden_states = hidden_states + attn_output
         mlp_output = (
             self.compiled_mlp(hidden_states)
             if self.config.reference_compile
@@ -379,7 +361,7 @@ class ModernBertEncoderLayer(GradientCheckpointingLayer):
         )
         hidden_states = hidden_states + mlp_output
 
-        return (hidden_states,) + attn_outputs[1:]  # add attentions if outputted
+        return hidden_states, attn_weights
 
 
 @auto_docstring
@@ -391,6 +373,12 @@ class ModernBertPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = False
+    _supports_attention_backend = True
+
+    _can_record_outputs = {
+        "hidden_states": ModernBertEncoderLayer,
+        "attentions": ModernBertAttention,
+    }
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
@@ -461,8 +449,6 @@ class ModernBertPreTrainedModel(PreTrainedModel):
         """
         # If the user didn't specify anything, try to use flash_attention_2 if available.
         # Otherwise we fall back to the default SDPA -> Eager from the super() method.
-        # ModernBert's FA2 implementation correctly handles non-fp16/bf16 dtypes, we don't
-        # need the FA2 warning for non-fp16/bf16 dtypes so we set fp16 for the FA2 check.
 
         try:
             attn_implementation = (
@@ -540,36 +526,18 @@ class ModernBertModel(ModernBertPreTrainedModel):
     def set_input_embeddings(self, value):
         self.embeddings.tok_embeddings = value
 
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        sliding_window_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.LongTensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         **kwargs,
-    ) -> Union[tuple[torch.Tensor, ...], BaseModelOutput]:
-        r"""
-        sliding_window_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding or far-away tokens. In ModernBert, only every few layers
-            perform global attention, while the rest perform local attention. This mask is used to avoid attending to
-            far-away tokens in the local attention layers when not using Flash Attention.
-        """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
+    ) -> BaseModelOutput:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attentions = () if output_attentions else None
 
         self._maybe_set_compile()
 
@@ -586,76 +554,47 @@ class ModernBertModel(ModernBertPreTrainedModel):
             attention_mask = torch.ones((batch_size, seq_len), device=device, dtype=torch.bool)
 
         if position_ids is None:
-            position_ids = torch.arange(seq_len, device=device).unsqueeze(0).expand(batch_size, -1)
-
-        if "flash" not in self.config._attn_implementation:
-            attention_mask, sliding_window_mask = self._update_attention_mask(
-                attention_mask, output_attentions=output_attentions
-            )
+            position_ids = torch.arange(seq_len, device=device).unsqueeze(0)
 
         hidden_states = self.embeddings(input_ids=input_ids, inputs_embeds=inputs_embeds)
+
+        if not isinstance(attention_mask_mapping := attention_mask, dict):
+            attention_mask_mapping = self._update_attention_mask(hidden_states, attention_mask)
+
         position_embeddings = {}
         for layer_type in self.config.layer_types:
             position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
 
         for encoder_layer in self.layers:
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
-            layer_outputs = encoder_layer(
+            hidden_states, _ = encoder_layer(
                 hidden_states,
-                attention_mask=attention_mask,
-                sliding_window_mask=sliding_window_mask,
+                attention_mask=attention_mask_mapping[encoder_layer.attention_type],
                 position_embeddings=position_embeddings[encoder_layer.attention_type],
-                output_attentions=output_attentions,
+                **kwargs,
             )
-            hidden_states = layer_outputs[0]
-            if output_attentions and len(layer_outputs) > 1:
-                all_self_attentions = all_self_attentions + (layer_outputs[1],)
-
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
 
         hidden_states = self.final_norm(hidden_states)
 
-        if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
-        return BaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
-        )
+        return BaseModelOutput(last_hidden_state=hidden_states)
 
-    def _update_attention_mask(self, attention_mask: torch.Tensor, output_attentions: bool) -> torch.Tensor:
-        if output_attentions:
-            if self.config._attn_implementation == "sdpa":
-                logger.warning_once(
-                    "Outputting attentions is only supported with the 'eager' attention implementation, "
-                    'not with "sdpa". Falling back to `attn_implementation="eager"`.'
-                )
-                self.config._attn_implementation = "eager"
-            elif self.config._attn_implementation != "eager":
-                logger.warning_once(
-                    "Outputting attentions is only supported with the eager attention implementation, "
-                    f'not with {self.config._attn_implementation}. Consider setting `attn_implementation="eager"`.'
-                    " Setting `output_attentions=False`."
-                )
+    def _update_attention_mask(
+        self, hidden_states: torch.Tensor, attention_mask: torch.Tensor
+    ) -> dict[str, torch.Tensor]:
+        """
+        Creates attention masks for different attention types (full_attention and sliding_attention).
+        """
+        mask_kwargs = {
+            "config": self.config,
+            "input_embeds": hidden_states,
+            "attention_mask": attention_mask,
+        }
 
-        global_attention_mask = _prepare_4d_attention_mask(attention_mask, self.dtype)
+        attention_mask_mapping = {
+            "full_attention": create_bidirectional_mask(**mask_kwargs),
+            "sliding_attention": create_bidirectional_sliding_window_mask(**mask_kwargs),
+        }
 
-        # Create position indices
-        rows = torch.arange(global_attention_mask.shape[2]).unsqueeze(0)
-        # Calculate distance between positions
-        distance = torch.abs(rows - rows.T)
-
-        # Create sliding window mask (1 for positions within window, 0 outside)
-        window_mask = (
-            (distance <= self.config.local_attention // 2).unsqueeze(0).unsqueeze(0).to(attention_mask.device)
-        )
-        # Combine with existing mask
-        sliding_window_mask = global_attention_mask.masked_fill(window_mask.logical_not(), torch.finfo(self.dtype).min)
-
-        return global_attention_mask, sliding_window_mask
+        return attention_mask_mapping
 
 
 class ModernBertPredictionHead(nn.Module):
@@ -706,33 +645,22 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
         self,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        sliding_window_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[tuple[torch.Tensor], MaskedLMOutput]:
-        r"""
-        sliding_window_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding or far-away tokens. In ModernBert, only every few layers
-            perform global attention, while the rest perform local attention. This mask is used to avoid attending to
-            far-away tokens in the local attention layers when not using Flash Attention.
-        """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         self._maybe_set_compile()
 
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            sliding_window_mask=sliding_window_mask,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            **kwargs,
         )
         last_hidden_state = outputs[0]
 
@@ -792,20 +720,13 @@ class ModernBertForSequenceClassification(ModernBertPreTrainedModel):
         self,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        sliding_window_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[tuple[torch.Tensor], SequenceClassifierOutput]:
         r"""
-        sliding_window_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding or far-away tokens. In ModernBert, only every few layers
-            perform global attention, while the rest perform local attention. This mask is used to avoid attending to
-            far-away tokens in the local attention layers when not using Flash Attention.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
@@ -829,12 +750,10 @@ class ModernBertForSequenceClassification(ModernBertPreTrainedModel):
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            sliding_window_mask=sliding_window_mask,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            **kwargs,
         )
         last_hidden_state = outputs[0]
 
@@ -907,20 +826,13 @@ class ModernBertForTokenClassification(ModernBertPreTrainedModel):
         self,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        sliding_window_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[tuple[torch.Tensor], TokenClassifierOutput]:
         r"""
-        sliding_window_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding or far-away tokens. In ModernBert, only every few layers
-            perform global attention, while the rest perform local attention. This mask is used to avoid attending to
-            far-away tokens in the local attention layers when not using Flash Attention.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
         """
@@ -930,12 +842,10 @@ class ModernBertForTokenClassification(ModernBertPreTrainedModel):
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            sliding_window_mask=sliding_window_mask,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            **kwargs,
         )
         last_hidden_state = outputs[0]
 
@@ -978,32 +888,21 @@ class ModernBertForQuestionAnswering(ModernBertPreTrainedModel):
         self,
         input_ids: Optional[torch.Tensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        sliding_window_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         start_positions: Optional[torch.Tensor] = None,
         end_positions: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[tuple[torch.Tensor], QuestionAnsweringModelOutput]:
-        r"""
-        sliding_window_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding or far-away tokens. In ModernBert, only every few layers
-            perform global attention, while the rest perform local attention. This mask is used to avoid attending to
-            far-away tokens in the local attention layers when not using Flash Attention.
-        """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         self._maybe_set_compile()
 
         outputs = self.model(
             input_ids,
             attention_mask=attention_mask,
-            sliding_window_mask=sliding_window_mask,
             position_ids=position_ids,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            **kwargs,
         )
         last_hidden_state = outputs[0]
 
@@ -1055,20 +954,13 @@ class ModernBertForMultipleChoice(ModernBertPreTrainedModel):
         self,
         input_ids: Optional[torch.LongTensor] = None,
         attention_mask: Optional[torch.Tensor] = None,
-        sliding_window_mask: Optional[torch.Tensor] = None,
         position_ids: Optional[torch.Tensor] = None,
         inputs_embeds: Optional[torch.Tensor] = None,
         labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[tuple[torch.Tensor], MultipleChoiceModelOutput]:
         r"""
-        sliding_window_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-            Mask to avoid performing attention on padding or far-away tokens. In ModernBert, only every few layers
-            perform global attention, while the rest perform local attention. This mask is used to avoid attending to
-            far-away tokens in the local attention layers when not using Flash Attention.
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
             num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors.
@@ -1090,12 +982,10 @@ class ModernBertForMultipleChoice(ModernBertPreTrainedModel):
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
-            sliding_window_mask=sliding_window_mask,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             return_dict=return_dict,
+            **kwargs,
         )
         last_hidden_state = outputs[0]  # shape (num_choices, seq_len, hidden_size)
 
