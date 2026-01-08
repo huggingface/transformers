@@ -1,4 +1,19 @@
 # src/transformers/integrations/sinq.py
+# coding=utf-8
+# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 from __future__ import annotations
 
 from typing import Optional, Dict, Any
@@ -51,25 +66,9 @@ class SinqQuantize(ConversionOps):
         missing_keys=None,
         **kwargs,
     ) -> Dict[str, "torch.Tensor"]:
-        if model is None or full_layer_name is None:
-            logger.warning_once(
-                "SinqQuantize.convert called without `model` or `full_layer_name`; "
-                "skipping SINQ quantization for this parameter."
-            )
-            key, values = next(iter(input_dict.items()))
-            val = values[0] if isinstance(values, list) else values
-            return {full_layer_name or key: val}
 
         _, values = next(iter(input_dict.items()))
         weight_tensor = values[0] if isinstance(values, list) else values
-
-        module, tensor_name = get_module_from_name(model, full_layer_name)
-        if tensor_name != "weight":
-            logger.warning_once(
-                f"SinqQuantize.convert called for non-weight parameter: {full_layer_name}; "
-                "treating as normal param."
-            )
-            return {full_layer_name: weight_tensor}
 
         module_path, _, _ = full_layer_name.rpartition(".") 
         parent_path, _, child_name = module_path.rpartition(".")
@@ -78,9 +77,10 @@ class SinqQuantize(ConversionOps):
         from sinq.sinqlinear import SINQLinear
         from sinq.sinqlinear import sinq_base_quant_config as sinq_base_quant_config_fn
 
-        device_str = self._get_runtime_device_str()
-        device = torch.device(device_str)
-        compute_dtype = self.hf_quantizer.update_torch_dtype(None)
+        #device_str = self._get_runtime_device_str()
+        #device = torch.device(device_str)
+        device = weight_tensor.device
+        compute_dtype = self.hf_quantizer.dtype or weight_tensor.dtype
 
         in_features = weight_tensor.shape[1]
         out_features = weight_tensor.shape[0]
@@ -93,10 +93,11 @@ class SinqQuantize(ConversionOps):
             dtype=weight_tensor.dtype,
         )
         with torch.no_grad():
-            dense.weight.copy_(weight_tensor.to(device=device, dtype=weight_tensor.dtype))
+            dense.weight.copy_(weight_tensor)#.to(device=device, dtype=weight_tensor.dtype))
 
         cfg = self.hf_quantizer.quantization_config
         sinq_quant_dict = self.hf_quantizer._build_sinq_quant_dict(cfg)
+        device_str = self._get_runtime_device_str()
 
         sinq_layer = SINQLinear(
             linear_layer=dense,
@@ -158,16 +159,6 @@ class SinqDeserialize(ConversionOps):
     ) -> Dict[str, "torch.Tensor"]:
         from sinq.sinqlinear import SINQLinear 
 
-        if model is None or full_layer_name is None:
-            logger.warning_once(
-                "SinqDeserialize.convert called without `model` or `full_layer_name`; "
-                "returning raw tensors (no SINQ module reconstruction)."
-            )
-            out: Dict[str, "torch.Tensor"] = {}
-            for k, v in input_dict.items():
-                out[k] = v[0] if isinstance(v, list) else v
-            return out
-
         for k, v in list(input_dict.items()):
             if isinstance(v, list):
                 input_dict[k] = v[0]
@@ -177,30 +168,19 @@ class SinqDeserialize(ConversionOps):
         bias = input_dict.get(".bias", None)
 
         if W_q is None or meta is None:
-            logger.warning_once(
-                "SinqDeserialize.convert did not find '.W_q' and '.meta' entries; "
-                "treating as normal (non-SINQ) parameter."
-            )
             v = next(iter(input_dict.values()))
             if isinstance(v, list):
                 v = v[0]
             return {full_layer_name: v}
 
-        device_str = self._get_runtime_device_str()
-        device = torch.device(device_str)
-        compute_dtype = self.hf_quantizer.update_torch_dtype(None)
-
-        module, tensor_name = get_module_from_name(model, full_layer_name)
-        if tensor_name != "weight":
-            logger.warning_once(
-                f"SinqDeserialize called for non-weight parameter: {full_layer_name}. "
-                "Skipping SINQ reconstruction."
-            )
-            return {full_layer_name: W_q}
+        #device_str = self._get_runtime_device_str()
+        #device = torch.device(device_str)
+        compute_dtype = self.hf_quantizer.dtype or W_q.dtype
 
         module_path, _, _ = full_layer_name.rpartition(".") 
         parent_path, _, child_name = module_path.rpartition(".")
         parent = model.get_submodule(parent_path) if parent_path else model
+        device_str = self._get_runtime_device_str()
 
         sinq_layer = SINQLinear(
             linear_layer=None,
@@ -213,11 +193,11 @@ class SinqDeserialize(ConversionOps):
         )
 
         state = {
-            "W_q": W_q.to(device),
+            "W_q": W_q,
             "meta": meta,
         }
         if bias is not None:
-            state["bias"] = bias.to(device)
+            state["bias"] = bias
 
         sinq_layer.load_state_dict(state)
 

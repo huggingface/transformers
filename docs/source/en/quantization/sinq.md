@@ -54,7 +54,6 @@ First, create a [`SinqConfig`] and specify the following parameters:
 | `--tiling_mode` | Weight matrix tiling strategy | str | 1D, 2D | 1D |
 | `--group_size` | Weights per quantization group | int | 64, 128 | 64 |
 | `--method` | Quantization method | str | sinq, asinq | sinq |
-| `--dtype` | Data type of the original model | str | auto, float16, float32 | auto (bfloat16) |
 | `--modules_to_not_convert` | List of the layers that are NOT quantize | List of str | [lm_head, ...] | [lm_head] |
 | `--device` | Device on which the model is loaded | str | cpu, cuda:0, cuda:1, etc | cuda:0 |
 
@@ -80,7 +79,7 @@ tok = AutoTokenizer.from_pretrained(model_name)
 qmodel = AutoModelForCausalLM.from_pretrained(
     model_name,
     quantization_config=cfg,
-    torch_dtype=torch.bfloat16
+    dtype=torch.bfloat16
 )
 
 ```
@@ -100,7 +99,7 @@ from sinq.hf_io import patch_hf_pretrained_io
 patch_hf_pretrained_io()
 # Save sinq quantized model
 model.save_pretrained("/path/to/save/qwen3-1.7B-sinq-4bit")
-model.push_to_hub("HF_Hub_username/qwen3-1.7B-sinq-4bit", safe_serialization=True, private=True)
+model.push_to_hub("HF_Hub_username/qwen3-1.7B-sinq-4bit")
 tokenizer.push_to_hub("HF_Hub_username/qwen3-1.7B-sinq-4bit")
 # Reload a sinq quantized model
 hf_hub_model = "HF_Hub_username/qwen3-1.7B-sinq-4bit"
@@ -116,7 +115,7 @@ Otherwise, if you installed SINQ through pip, you can simply use HF built-in fun
 # Locally save
 qmodel.save_pretrained("/path/to/save/qwen3-1.7B-sinq-4bit")
 # Push to the Hub
-qmodel.push_to_hub("HF_Hub_username/qwen3-1.7B-sinq-4bit", safe_serialization=True)
+qmodel.push_to_hub("HF_Hub_username/qwen3-1.7B-sinq-4bit")
 tok.push_to_hub("HF_Hub_username/qwen3-1.7B-sinq-4bit")
 
 # --- Reload later--

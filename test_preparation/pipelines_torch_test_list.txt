@@ -1,4 +1,3 @@
-tests/models/aimv2/test_modeling_aimv2.py
 tests/models/albert/test_modeling_albert.py
 tests/models/align/test_modeling_align.py
 tests/models/altclip/test_modeling_altclip.py

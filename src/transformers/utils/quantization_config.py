@@ -2122,11 +2122,6 @@ class SinqConfig(QuantizationConfigMixin):
             Reserved flag; kept for API symmetry.
         modules_to_not_convert (`list[str]`, *optional*):
             List of module names/prefixes to keep in full precision.
-        dtype (`str`, default "auto"):
-            "auto" | "bfloat16" | "float16" | "float32".
-            "auto" = bf16 if available, else fp16.
-        device (`str` or `int`, default "cpu"):
-            Target device: "auto", "cuda", "cuda:0", "cpu" or an integer index.
 
         **kwargs:
             Extra user arguments (kept in `_extra_kwargs` for round-tripping).
@@ -2142,54 +2137,57 @@ class SinqConfig(QuantizationConfigMixin):
         symmetric: bool = True,
         use_nf4: bool = False,
         modules_to_not_convert: Optional[List[str]] = None,
-        dtype: Optional[str] = "auto",  # "auto" | "bfloat16" | "float16" | "float32"
         device: Optional[Union[str, int]] = "cpu",
         **kwargs: Any,
     ):
         self.quant_method = QuantizationMethod.SINQ
 
-        self.nbits = int(nbits)
-        self.group_size = int(group_size)
-        self.tiling_mode = str(tiling_mode)
-        self.method = str(method).lower()
+        self.nbits = nbits
+        self.group_size = group_size
+        self.tiling_mode = tiling_mode
+        self.method = method
 
-        self.per_channel = bool(per_channel)
-        self.symmetric = bool(symmetric)
-        self.use_nf4 = bool(use_nf4)
+        self.per_channel = per_channel
+        self.symmetric = symmetric
+        self.use_nf4 = use_nf4
 
-        self.modules_to_not_convert = list(modules_to_not_convert) if modules_to_not_convert is not None else []
+        self.modules_to_not_convert = modules_to_not_convert
 
-        self.dtype = dtype or "auto"
         self.device = device
 
         self._extra_kwargs: Dict[str, Any] = dict(kwargs)
 
         self.post_init()
 
-    # ---- Optional validation, like BitsAndBytesConfig.post_init ----
+    # ---- Optional validation ----
     def post_init(self):
-        # Basic type checks
+        
+        self.nbits = int(self.nbits)
+        self.group_size = int(self.group_size)
+        self.tiling_mode = str(self.tiling_mode)
+        self.method = str(self.method).lower()
+        
+        self.per_channel = bool(self.per_channel)
+        self.symmetric = bool(self.symmetric)
+        self.use_nf4 = bool(self.use_nf4)
+        
+        if self.modules_to_not_convert is not None:
+            self.modules_to_not_convert = list(self.modules_to_not_convert)
+        
+        # Validation
         if not isinstance(self.nbits, int):
-            raise TypeError("`nbits` must be an int")
+            raise TypeError("`nbits` must be convertible to an int")
         if not isinstance(self.group_size, int):
-            raise TypeError("`group_size` must be an int")
+            raise TypeError("`group_size` must be convertible to an int")
         if not isinstance(self.tiling_mode, str):
-            raise TypeError("`tiling_mode` must be a string")
+            raise TypeError("`tiling_mode` must be convertible to a string")
         if self.method not in {"sinq", "asinq"}:
-            raise ValueError("`method` must be either 'sinq' or 'asinq'")
+            raise ValueError(f"`method` must be either 'sinq' or 'asinq', got {self.method}")
         if self.group_size is not None and self.group_size % 8 != 0:
             logger.warning(
                 f"SINQ: group_size={self.group_size} is not a multiple of 8; "
                 "this may be rejected by the backend."
             )
-
-    @property
-    def is_trainable(self) -> bool:
-        return True
-
-    @property
-    def is_serializable(self) -> bool:
-        return True
 
     def to_dict(self) -> dict[str, Any]:
         """
@@ -2198,37 +2196,4 @@ class SinqConfig(QuantizationConfigMixin):
         """
         base = super().to_dict()
 
-        base.update(
-            {
-                "nbits": self.nbits,
-                "group_size": self.group_size,
-                "tiling_mode": self.tiling_mode,
-                "method": self.method,
-                "per_channel": self.per_channel,
-                "symmetric": self.symmetric,
-                "use_nf4": self.use_nf4,
-                "modules_to_not_convert": list(self.modules_to_not_convert or []),
-                "dtype": self.dtype,
-                "device": self.device,
-            }
-        )
-
-        base.update(self._extra_kwargs)
-
         return base
-
-    @classmethod
-    def from_dict(cls, config_dict: Dict[str, Any], return_unused_kwargs: bool = False, **kwargs):
-        """
-        Recreate SinqConfig from a dictionary (e.g. loaded from config.json).
-        """
-        cfg = dict(config_dict)
-
-        cfg.pop("quant_method", None)
-
-        cfg.update(kwargs)
-
-        if return_unused_kwargs:
-            return cls(**cfg), {}
-
-        return cls(**cfg)

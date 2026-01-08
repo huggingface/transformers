@@ -1030,6 +1030,9 @@ def is_qutlass_available():
 def is_compressed_tensors_available() -> bool:
     return _is_package_available("compressed_tensors")
 
+@lru_cache
+def is_sinq_available() -> bool:
+    return _is_package_available("sinq")
 
 @lru_cache
 def is_auto_gptq_available() -> bool:
