@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_minimax_m2.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 the MiniMax AI Team and HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
@@ -134,29 +132,29 @@ class MiniMaxM2Config(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 200064,
-        hidden_size: Optional[int] = 3072,
-        intermediate_size: Optional[int] = 1536,
-        num_hidden_layers: Optional[int] = 62,
-        num_attention_heads: Optional[int] = 48,
-        num_key_value_heads: Optional[int] = 8,
-        head_dim: Optional[int] = 128,
-        hidden_act: Optional[str] = "silu",
-        max_position_embeddings: Optional[int] = 196608,
-        initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[int] = 1e-06,
-        use_cache: Optional[bool] = True,
-        pad_token_id: Optional[int] = None,
-        bos_token_id: Optional[int] = 200034,
-        eos_token_id: Optional[int] = 200020,
-        tie_word_embeddings: Optional[bool] = False,
-        attention_dropout: Optional[float] = 0.0,
-        num_experts_per_tok: Optional[int] = 8,
-        num_local_experts: Optional[int] = 256,
-        output_router_logits: Optional[bool] = False,
-        router_aux_loss_coef: Optional[float] = 0.001,
-        router_jitter_noise: Optional[float] = 0.0,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        vocab_size: int | None = 200064,
+        hidden_size: int | None = 3072,
+        intermediate_size: int | None = 1536,
+        num_hidden_layers: int | None = 62,
+        num_attention_heads: int | None = 48,
+        num_key_value_heads: int | None = 8,
+        head_dim: int | None = 128,
+        hidden_act: str | None = "silu",
+        max_position_embeddings: int | None = 196608,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: int | None = 1e-06,
+        use_cache: bool | None = True,
+        pad_token_id: int | None = None,
+        bos_token_id: int | None = 200034,
+        eos_token_id: int | None = 200020,
+        tie_word_embeddings: bool | None = False,
+        attention_dropout: float | None = 0.0,
+        num_experts_per_tok: int | None = 8,
+        num_local_experts: int | None = 256,
+        output_router_logits: bool | None = False,
+        router_aux_loss_coef: float | None = 0.001,
+        router_jitter_noise: float | None = 0.0,
+        rope_parameters: RopeParameters | dict[RopeParameters] | None = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
