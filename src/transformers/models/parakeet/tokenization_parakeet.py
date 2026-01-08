@@ -16,10 +16,10 @@
 import itertools
 from typing import Optional, Union
 
-from ...tokenization_utils_tokenizers import PreTrainedTokenizerFast
+from ...tokenization_utils_tokenizers import TokenizersBackend
 
 
-class ParakeetTokenizerFast(PreTrainedTokenizerFast):
+class ParakeetTokenizer(TokenizersBackend):
     """
     Inherits all methods from [`PreTrainedTokenizerFast`]. Users should refer to this superclass for more information regarding those methods,
     except for `_decode` which is overridden to adapt it to CTC decoding:
@@ -51,4 +51,4 @@ class ParakeetTokenizerFast(PreTrainedTokenizerFast):
         )
 
 
-__all__ = ["ParakeetTokenizerFast"]
+__all__ = ["ParakeetTokenizer"]
