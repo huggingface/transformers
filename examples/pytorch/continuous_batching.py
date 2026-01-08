@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,7 +17,6 @@ import json
 import os
 import time
 from itertools import cycle
-from typing import Optional
 
 import datasets
 import torch
@@ -89,8 +87,8 @@ def batch_generate(
     generation_config: GenerationConfig,
     tokenizer: AutoTokenizer,
     displayed_samples: int = 0,  # -1: no display, 0: display stats, >0: display inputs and some outputs
-    output_file: Optional[str] = None,
-    expected_outputs: Optional[list[str]] = None,
+    output_file: str | None = None,
+    expected_outputs: list[str] | None = None,
 ) -> tuple[float, float]:
     # Actual batch generation
     if displayed_samples >= 0:

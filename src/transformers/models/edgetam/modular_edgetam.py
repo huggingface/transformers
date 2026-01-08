@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The Meta AI Authors and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """PyTorch SAM 2 model."""
-
-from typing import Optional, Union
 
 import torch
 import torch.utils.checkpoint
@@ -200,9 +197,9 @@ class EdgeTamVisionModel(Sam2VisionModel):
     @check_model_inputs
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_values: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, EdgeTamVisionEncoderOutput]:
+    ) -> tuple | EdgeTamVisionEncoderOutput:
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
