@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,12 +13,11 @@
 # limitations under the License.
 
 import itertools
-from typing import Optional, Union
 
-from ...tokenization_utils_tokenizers import PreTrainedTokenizerFast
+from ...tokenization_utils_tokenizers import TokenizersBackend
 
 
-class ParakeetTokenizerFast(PreTrainedTokenizerFast):
+class ParakeetTokenizer(TokenizersBackend):
     """
     Inherits all methods from [`PreTrainedTokenizerFast`]. Users should refer to this superclass for more information regarding those methods,
     except for `_decode` which is overridden to adapt it to CTC decoding:
@@ -29,9 +27,9 @@ class ParakeetTokenizerFast(PreTrainedTokenizerFast):
 
     def _decode(
         self,
-        token_ids: Union[int, list[int]],
+        token_ids: int | list[int],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: Optional[bool] = None,
+        clean_up_tokenization_spaces: bool | None = None,
         group_tokens: bool = True,
         **kwargs,
     ) -> str:
@@ -51,4 +49,4 @@ class ParakeetTokenizerFast(PreTrainedTokenizerFast):
         )
 
 
-__all__ = ["ParakeetTokenizerFast"]
+__all__ = ["ParakeetTokenizer"]

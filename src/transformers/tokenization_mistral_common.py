@@ -484,7 +484,7 @@ class MistralCommonBackend(PushToHubMixin):
         skip_special_tokens: bool = False,
         clean_up_tokenization_spaces: bool | None = None,
         **kwargs,
-    ) -> Union[str, list[str]]:
+    ) -> str | list[str]:
         """
         Converts a sequence of ids in a string, using the tokenizer and vocabulary with options to remove special
         tokens and clean up tokenization spaces.
@@ -1114,7 +1114,7 @@ class MistralCommonBackend(PushToHubMixin):
                     max_length = self.model_max_length
 
         # Test if we have a padding token
-        if padding_strategy != PaddingStrategy.DO_NOT_PAD and (self.pad_token is None or self.pad_token_id < 0):
+        if padding_strategy != PaddingStrategy.DO_NOT_PAD and (self.pad_token_id is None or self.pad_token_id < 0):
             raise ValueError(
                 "Asking to pad but the tokenizer does not have a padding token. "
                 "Please select a token to use as `pad_token` `(tokenizer.pad_token = tokenizer.eos_token e.g.)` "
@@ -1781,7 +1781,7 @@ class MistralCommonBackend(PushToHubMixin):
         cls,
         pretrained_model_name_or_path: str | os.PathLike,
         *init_inputs,
-        mode: Union[str, ValidationMode] = ValidationMode.test,
+        mode: str | ValidationMode = ValidationMode.test,
         cache_dir: str | os.PathLike | None = None,
         force_download: bool = False,
         local_files_only: bool = False,
@@ -1851,8 +1851,9 @@ class MistralCommonBackend(PushToHubMixin):
             raise ValueError("`init_inputs` are not supported by `MistralCommonBackend.from_pretrained`.")
 
         # Handle kwargs and AutoTokenizer/AutoProcessor case
+        # These kwargs are passed by AutoTokenizer/AutoProcessor but are not used by MistralCommonBackend
         if kwargs and not set(kwargs.keys()).issubset(
-            {"trust_remote_code", "_from_pipeline", "_commit_hash", "dtype", "_from_auto"}
+            {"trust_remote_code", "_from_pipeline", "_commit_hash", "dtype", "_from_auto", "subfolder"}
         ):
             raise ValueError(f"Some kwargs in {kwargs} are not supported by `MistralCommonBackend.from_pretrained`.")
 
@@ -1970,7 +1971,7 @@ class MistralCommonBackend(PushToHubMixin):
         return (str(save_directory / self._tokenizer_path.name),)
 
     @staticmethod
-    def _get_validation_mode(mode: Union[str, ValidationMode]) -> ValidationMode:
+    def _get_validation_mode(mode: str | ValidationMode) -> ValidationMode:
         """Get the validation mode from a string or a ValidationMode."""
         _invalid_mode_msg = (
             f"Invalid `mistral-common` tokenizer mode: {mode}. Possible values are 'finetuning' or 'test'."

@@ -185,6 +185,7 @@ from .import_utils import (
     is_pyctcdecode_available,
     is_pytesseract_available,
     is_pytest_available,
+    is_pytest_order_available,
     is_pytorch_quantization_available,
     is_quanto_greater,
     is_quark_available,

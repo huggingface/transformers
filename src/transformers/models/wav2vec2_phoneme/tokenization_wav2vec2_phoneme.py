@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The Facebook Inc. and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,7 +17,7 @@ import json
 import os
 from dataclasses import dataclass
 from itertools import groupby
-from typing import TYPE_CHECKING, Any, Optional, Union
+from typing import TYPE_CHECKING, Any, Union
 
 import numpy as np
 
@@ -48,7 +47,7 @@ VOCAB_FILES_NAMES = {
 # Wav2Vec2Phoneme has no max input length
 
 
-ListOfDict = list[dict[str, Union[int, str]]]
+ListOfDict = list[dict[str, int | str]]
 
 
 @dataclass
@@ -65,8 +64,8 @@ class Wav2Vec2PhonemeCTCTokenizerOutput(ModelOutput):
             produced text.
     """
 
-    text: Union[list[str], str]
-    char_offsets: Union[list[ListOfDict], ListOfDict] = None
+    text: list[str] | str
+    char_offsets: list[ListOfDict] | ListOfDict = None
 
 
 class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
@@ -153,7 +152,7 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         vocab.update(self.added_tokens_encoder)
         return vocab
 
-    def _add_tokens(self, new_tokens: Union[list[str], list[AddedToken]], special_tokens: bool = False) -> int:
+    def _add_tokens(self, new_tokens: list[str] | list[AddedToken], special_tokens: bool = False) -> int:
         # Overwritten to never strip!
         to_add = []
         for token in new_tokens:
@@ -180,8 +179,8 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         self,
         text: str,
         is_split_into_words: bool = False,
-        phonemizer_lang: Optional[str] = None,
-        do_phonemize: Optional[bool] = None,
+        phonemizer_lang: str | None = None,
+        do_phonemize: bool | None = None,
     ) -> tuple[str, dict[str, Any]]:
         """
         Performs any necessary transformations before tokenization.
@@ -241,7 +240,7 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         tokens = list(filter(lambda p: p.strip() != "", tokens))
         return tokens
 
-    def phonemize(self, text: str, phonemizer_lang: Optional[str] = None) -> str:
+    def phonemize(self, text: str, phonemizer_lang: str | None = None) -> str:
         from phonemizer.separator import Separator
 
         word_delimiter = self.word_delimiter_token + " " if self.word_delimiter_token is not None else ""
@@ -271,7 +270,7 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         return str(self._word_delimiter_token)
 
     @property
-    def word_delimiter_token_id(self) -> Optional[int]:
+    def word_delimiter_token_id(self) -> int | None:
         """
         `Optional[int]`: Id of the word_delimiter_token in the vocabulary. Returns `None` if the token has not been
         set.
@@ -300,7 +299,7 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         return str(self._phone_delimiter_token)
 
     @property
-    def phone_delimiter_token_id(self) -> Optional[int]:
+    def phone_delimiter_token_id(self) -> int | None:
         """
         `Optional[int]`: Id of the phone_delimiter_token in the vocabulary. Returns `None` if the token has not been
         set.
@@ -378,8 +377,8 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
 
     @staticmethod
     def _compute_offsets(
-        char_repetitions: list[int], chars: list[str], ctc_token: int, word_delimiter_token: Optional[int] = None
-    ) -> list[dict[str, Union[str, int]]]:
+        char_repetitions: list[int], chars: list[str], ctc_token: int, word_delimiter_token: int | None = None
+    ) -> list[dict[str, str | int]]:
         end_indices = np.asarray(char_repetitions).cumsum()
         start_indices = np.concatenate(([0], end_indices[:-1]))
 
@@ -400,7 +399,7 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         self,
         token_ids: list[int],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: Optional[bool] = None,
+        clean_up_tokenization_spaces: bool | None = None,
         group_tokens: bool = True,
         filter_word_delimiter_token: bool = True,
         spaces_between_special_tokens: bool = False,
@@ -447,7 +446,7 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         self,
         token_ids: Union[int, list[int], np.ndarray, "torch.Tensor"],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: Optional[bool] = None,
+        clean_up_tokenization_spaces: bool | None = None,
         output_char_offsets: bool = False,
         **kwargs,
     ) -> str:
@@ -503,7 +502,7 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
         self,
         sequences: Union[list[int], list[list[int]], np.ndarray, "torch.Tensor"],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: Optional[bool] = None,
+        clean_up_tokenization_spaces: bool | None = None,
         output_char_offsets: bool = False,
         **kwargs,
     ) -> list[str]:
@@ -555,7 +554,7 @@ class Wav2Vec2PhonemeCTCTokenizer(PreTrainedTokenizer):
 
         return batch_decoded
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: str | None = None) -> tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
