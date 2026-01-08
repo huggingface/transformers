@@ -101,6 +101,10 @@ class GenerationConfig(PushToHubMixin):
 
     </Tip>
 
+    Note: the configuration field that are still `None` will be overriden by `GenerationConfig._get_default_generation_params()`
+    during the generation loop. If you want to use different values for these fiels, make sure to expllicitly set then in the
+    generation config.
+
     Arg:
         > Parameters that control the length of the output
 
@@ -129,14 +133,14 @@ class GenerationConfig(PushToHubMixin):
 
         > Parameters that control the generation strategy used
 
-        do_sample (`bool`, defaults to `False`):
+        do_sample (`bool`):
             Whether or not to use sampling ; use greedy decoding otherwise.
         num_beams (`int`, *optional*):
             Number of beams for beam search. 1 means no beam search.
 
         > Parameters that control the cache
 
-        use_cache (`bool`, defaults to `True`):
+        use_cache (`bool`):
             Whether or not the model should use the past last key/values attentions (if applicable to the model) to
             speed up decoding.
         cache_implementation (`str`, *optional*):
@@ -206,7 +210,7 @@ class GenerationConfig(PushToHubMixin):
         bad_words_ids (`list[list[int]]`, *optional*):
             List of list of token ids that are not allowed to be generated. Check
             [`~generation.NoBadWordsLogitsProcessor`] for further documentation and examples.
-        renormalize_logits (`bool`, defaults to `False`):
+        renormalize_logits (`bool`):
             Whether to renormalize the logits after applying all the logits processors (including the custom
             ones). It's highly recommended to set this flag to `True` as the search algorithms suppose the score logits
             are normalized but some logit processors break the normalization.
@@ -217,7 +221,7 @@ class GenerationConfig(PushToHubMixin):
         forced_eos_token_id (`int` or list[int]`, *optional*, defaults to `model.config.forced_eos_token_id`):
             The id of the token to force as the last generated token when `max_length` is reached. Optionally, use a
             list to set multiple *end-of-sequence* tokens.
-        remove_invalid_values (`bool`, defaults to `model.config.remove_invalid_values`):
+        remove_invalid_values (`bool`):
             Whether to remove possible *nan* and *inf* outputs of the model to prevent the generation method to crash.
             Note that using `remove_invalid_values` can slow down generation.
         exponential_decay_length_penalty (`tuple(int, float)`, *optional*):
@@ -234,7 +238,7 @@ class GenerationConfig(PushToHubMixin):
             Dictionary that maps a sequence of tokens to its bias term. Positive biases increase the odds of the
             sequence being selected, while negative biases do the opposite. Check
             [`~generation.SequenceBiasLogitsProcessor`] for further documentation and examples.
-        token_healing (`bool`, defaults to `False`):
+        token_healing (`bool`):
             Heal tail tokens of prompts by replacing them with their appropriate extensions.
             This enhances the quality of completions for prompts affected by greedy tokenization bias.
         guidance_scale (`float`, *optional*):
@@ -248,20 +252,20 @@ class GenerationConfig(PushToHubMixin):
 
         > Parameters that define the output variables of generate
 
-        num_return_sequences (`int`, *optional*, defaults to 1):
+        num_return_sequences (`int`, *optional*):
             The number of independently computed returned sequences for each element in the batch.
-        output_attentions (`bool`, defaults to `False`):
+        output_attentions (`bool`):
             Whether or not to return the attentions tensors of all attention layers. See `attentions` under returned
             tensors for more details.
-        output_hidden_states (`bool`, defaults to `False`):
+        output_hidden_states (`bool`):
             Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors for
             more details.
-        output_scores (`bool`, defaults to `False`):
+        output_scores (`bool`):
             Whether or not to return the prediction scores. See `scores` under returned tensors for more details.
-        output_logits (`bool`, defaults to `False`):
+        output_logits (`bool`):
             Whether or not to return the unprocessed prediction logit scores. See `logits` under returned tensors for
             more details.
-        return_dict_in_generate (`bool`, defaults to `False`):
+        return_dict_in_generate (`bool`):
             Whether or not to return a [`~utils.ModelOutput`], as opposed to returning exclusively the generated
             sequence. This flag must be set to `True` to return the generation cache (when `use_cache` is `True`)
             or optional outputs (see flags starting with `output_`)
@@ -286,7 +290,7 @@ class GenerationConfig(PushToHubMixin):
             (e.g. multilingual models with different target languages in one batch)
 
         > Generation parameters exclusive to assistant generation
-        is_assistant (`bool`, defaults to `False`):
+        is_assistant (`bool`):
             Whether the model is an assistant (draft) model.
         num_assistant_tokens (`int`, *optional*):
             Defines the number of _speculative tokens_ that shall be generated by the assistant model before being
@@ -327,7 +331,7 @@ class GenerationConfig(PushToHubMixin):
         compile_config (CompileConfig, *optional*):
             If using a compilable cache, this controls how `generate` will `compile` the forward pass for faster
             inference.
-        disable_compile (`bool`, defaults to `False`):
+        disable_compile (`bool`):
             Whether to disable the automatic compilation of the forward pass. Automatic compilation happens when
             specific criteria are met, including using a compilable cache. Please open an issue if you find the
             need to use this flag.
