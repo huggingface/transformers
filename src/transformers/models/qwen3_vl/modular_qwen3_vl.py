@@ -245,8 +245,6 @@ class Qwen3VLConfig(PreTrainedConfig):
             The token id that marks the start of a vision segment (image or video).
         vision_end_token_id (`int`, *optional*, defaults to 151653):
             The token id that marks the end of a vision segment (image or video).
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether to tie the word embeddings.
 
     ```python
     >>> from transformers import Qwen3VLForConditionalGeneration, Qwen3VLConfig

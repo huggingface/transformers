@@ -125,7 +125,7 @@ class LEDConfig(PreTrainedConfig):
         bos_token_id=0,
         eos_token_id=2,
         attention_window: list[int] | int = 512,
-        tie_word_embeddings: bool | None = True
+        tie_word_embeddings: bool | None = True,
         **kwargs,
     ):
         self.vocab_size = vocab_size
