@@ -91,5 +91,5 @@ deps = {
     "libcst": "libcst",
     "rich": "rich",
     "opentelemetry-api": "opentelemetry-api",
-    "mistral-common[opencv]": "mistral-common[opencv]>=1.6.3",
+    "mistral-common[image]": "mistral-common[image]>=1.8.8",
 }

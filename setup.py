@@ -156,7 +156,7 @@ _deps = [
     "libcst",
     "rich",
     "opentelemetry-api",
-    "mistral-common[opencv]>=1.6.3",
+    "mistral-common[image]>=1.8.8",
 ]
 
 
@@ -266,7 +266,7 @@ extras["video"] = deps_list("av")
 extras["num2words"] = deps_list("num2words")
 extras["sentencepiece"] = deps_list("sentencepiece", "protobuf")
 extras["tiktoken"] = deps_list("tiktoken", "blobfile")
-extras["mistral-common"] = deps_list("mistral-common[opencv]")
+extras["mistral-common"] = deps_list("mistral-common[image]")
 extras["chat_template"] = deps_list("jinja2", "jmespath")
 extras["testing"] = (
     deps_list(
