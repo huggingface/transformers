@@ -4036,6 +4036,8 @@ class ModelTesterMixin:
                 # disable mamba mask update for ssms
                 if hasattr(module, "_update_mamba_mask"):
                     module._update_mamba_mask = lambda attention_mask, *args, **kwargs: attention_mask
+                if hasattr(module, "_update_linear_attn_mask"):
+                    module._update_linear_attn_mask = lambda attention_mask, *args, **kwargs: attention_mask
 
             return model, inputs_dict
 
@@ -4062,11 +4064,8 @@ class ModelTesterMixin:
 
                 try:
                     exported_program = torch.export.export(model, args=(), kwargs=copy.deepcopy(inputs_dict))
-                except torch.fx.experimental.symbolic_shapes.GuardOnDataDependentSymNode as e:
-                    warnings.warn(
-                        f"Skipping torch export test for {model_class.__name__} because of data-dependent symbolic shape: {e}"
-                    )
-                    continue
+                except Exception as e:
+                    raise e
 
                 with torch.no_grad():
                     set_seed(1234)
