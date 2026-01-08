@@ -393,11 +393,13 @@ async def main():
         max_tokens=128,
         temperature=0.7,
         top_p=0.95,
-        generation_config=json.dumps({
-            "max_new_tokens": 128,
-            "temperature": 0.7,
-            "top_p": 0.95,
-        }),
+        extra_body={
+            "generation_config": json.dumps({
+                "max_new_tokens": 128,
+                "temperature": 0.7,
+                "top_p": 0.95,
+            }),
+        },
     )
     async for chunk in stream:
         delta = chunk.choices[0].delta.content
