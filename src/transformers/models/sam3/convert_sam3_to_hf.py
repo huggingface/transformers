@@ -21,7 +21,6 @@ Original repository: https://github.com/facebookresearch/segment-anything-3
 import argparse
 import gc
 import os
-from typing import Optional
 
 import regex as re
 import torch
@@ -266,8 +265,8 @@ def load_original_state_dict(checkpoint_path: str) -> dict[str, torch.Tensor]:
 
 
 def get_sam3_config(
-    vision_config: Optional[dict] = None,
-    text_config: Optional[dict] = None,
+    vision_config: dict | None = None,
+    text_config: dict | None = None,
 ) -> Sam3Config:
     """
     Create SAM3 configuration.
@@ -297,9 +296,9 @@ def get_sam3_config(
 def convert_sam3_checkpoint(
     checkpoint_path: str,
     output_path: str,
-    config: Optional[Sam3Config] = None,
+    config: Sam3Config | None = None,
     push_to_hub: bool = False,
-    repo_id: Optional[str] = None,
+    repo_id: str | None = None,
 ):
     """
     Convert SAM3 checkpoint from original format to HuggingFace format.
