@@ -1056,7 +1056,7 @@ class SamHQModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = model(**inputs)
         scores_single = outputs.iou_scores.squeeze()
-        torch.testing.assert_close(scores_batched[1, :], scores_single, atol=1e-4)
+        torch.testing.assert_close(scores_batched[1, :], scores_single, atol=1e-4, rtol=1e-4)
 
     def test_inference_mask_generation_two_points_point_batch(self):
         model = SamHQModel.from_pretrained("syscv-community/sam-hq-vit-base")
