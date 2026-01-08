@@ -346,10 +346,10 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         EXPECTED_DECODED_TEXTS = Expectations(
             {
-                ("xpu", 3): 'USER: \nWhat are the things I should be cautious about when I visit this place? ASSISTANT: When visiting this place, which is a pier or dock extending over a body of water, there are a few things to be cautious about. First, be aware of the weather conditions, as sudden changes in weather can make the pier unsafe to walk on. Second, be mindful of the water depth and any potential hazards, such as submerged rocks or debris, that could cause accidents or injuries. Additionally, be cautious of the presence of marine life, such as fish or jellyfish, that could pose a risk to swimmers or those who come into contact with the water. Lastly, be aware of any posted signs or rules, as they may provide important information about the area or restrictions in place.',
-                ("cuda", 7): 'USER: \nWhat are the things I should be cautious about when I visit this place? ASSISTANT: When visiting this place, which is a pier or dock extending over a body of water, there are a few things to be cautious about. First, be aware of the weather conditions, as sudden changes in weather can make the pier unsafe to walk on. Second, be mindful of the water depth and any potential hazards, such as submerged rocks or debris, that could cause accidents or injuries. Additionally, be cautious of the tides and currents, as they can change rapidly and pose a risk to swimmers or those who venture too close to the edge of the pier. Lastly, be respectful of the environment and other visitors, as the pier is a shared space where people can enjoy the view, relax, or engage in recreational activities.',
-                ("cuda", 8): 'USER: \nWhat are the things I should be cautious about when I visit this place? ASSISTANT: When visiting this place, which is a pier or dock extending over a body of water, there are a few things to be cautious about. First, be aware of the weather conditions, as sudden changes in weather can make the pier unsafe to walk on. Second, be mindful of the water depth and any potential hazards, such as submerged rocks or debris, that could cause accidents or injuries. Additionally, be cautious of the tides and currents, as they can change rapidly and pose a risk to swimmers or those who venture too close to the edge of the pier. Lastly, be respectful of the environment and other visitors, as the pier is a shared space where people can enjoy the view, relax, or engage in recreational activities.',
-                ("rocm", (9, 5)): 'USER: \nWhat are the things I should be cautious about when I visit this place? ASSISTANT: When visiting this place, which is a pier or dock overlooking a lake, you should be cautious about the following:\n\n1. Safety: Ensure that the pier or dock is stable and secure before stepping onto it. Avoid walking on the edge of the pier or dock, as it could be unstable or unsafe.\n\n2. Weather conditions: Be aware of the weather forecast before visiting the area. Strong winds, heavy rain, or storms can make the pier or dock unsafe to use.\n\n3. Wildlife: Be mindful of the wildlife in the area, such as birds or aquatic animals. Avoid disturbing their natural habitat or causing harm to the local ecosystem.\n\n4. Water safety: If you plan to go swimming or engage in water activities, be aware of the water conditions, such as currents, tides, or potential hazards like submerged objects.\n\n5. Personal belongings: Keep an eye on your personal belongings, such as bags or backpacks, to prevent theft or loss.\n\n6. Leave no trace: When visiting the area, make sure to clean up after yourself and leave no trace of your presence to preserve the natural environment.',
+                ("xpu", 3): 'USER:  \nWhat are the things I should be cautious about when I visit this place? ASSISTANT: When visiting this place, which is a pier or dock extending over a body of water, there are a few things to be cautious about. First, be aware of the weather conditions, as sudden changes in weather can make the pier unsafe to walk on. Second, be mindful of the water depth and any potential hazards, such as submerged rocks or debris, that could cause accidents or injuries. Additionally, be cautious of the presence of boats or other watercraft in the area, as they may be moving at high speeds or making sudden turns, which could pose a risk to pedestrians. Lastly, be aware of any posted signs or warnings, as they may provide important information about the pier\'s conditions or potential dangers.',
+                ("cuda", 7): 'USER:  \nWhat are the things I should be cautious about when I visit this place? ASSISTANT: When visiting this place, which is a pier or dock extending over a body of water, there are a few things to be cautious about. First, be aware of the weather conditions, as sudden changes in weather can make the pier unsafe to walk on. Second, be mindful of the water depth and any potential hazards, such as submerged rocks or debris, that could cause accidents or injuries. Additionally, be cautious of the tides and currents, as they can change rapidly and pose a risk to swimmers or those who venture too close to the edge of the pier. Lastly, be respectful of the environment and other visitors, as the pier is a shared space where people can enjoy the view, relax, or engage in recreational activities.',
+                ("cuda", 8): 'USER:  \nWhat are the things I should be cautious about when I visit this place? ASSISTANT: When visiting this place, which is a pier or dock extending over a body of water, there are a few things to be cautious about. First, be aware of the weather conditions, as sudden changes in weather can make the pier unsafe to walk on. Second, be mindful of the water depth and any potential hazards, such as submerged rocks or debris, that could cause accidents or injuries. Additionally, be cautious of the tides and currents, as they can change rapidly and pose a risk to swimmers or those who venture too close to the edge of the pier. Lastly, be respectful of the environment and other visitors, as the pier is a shared space where people can enjoy the view, relax, or engage in recreational activities.',
+                ("rocm", (9, 5)): 'USER:  \nWhat are the things I should be cautious about when I visit this place? ASSISTANT: When visiting this place, which is a pier or dock overlooking a lake, you should be cautious about the following:\n\n1. Safety: Ensure that the pier or dock is stable and secure before stepping onto it. Avoid walking on the edge of the pier or dock, as it could be unstable or unsafe.\n\n2. Weather conditions: Be aware of the weather forecast before visiting the area. Strong winds, heavy rain, or storms can make the pier or dock unsafe to use.\n\n3. Wildlife: Be mindful of the wildlife in the area, such as birds or aquatic animals. Avoid disturbing their natural habitat or causing harm to the local ecosystem.\n\n4. Water safety: If you plan to go swimming or engage in water activities, be aware of the water conditions, such as currents, tides, or potential hazards like submerged objects.\n\n5. Personal belongings: Keep an eye on your personal belongings, such as bags or backpacks, to prevent theft or loss.\n\n6. Leave no trace: When visiting the area, make sure to clean up after yourself and leave no trace of your presence to preserve the natural environment.',
             }
         )  # fmt: skip
         EXPECTED_DECODED_TEXT = EXPECTED_DECODED_TEXTS.get_expectation()
@@ -380,24 +380,24 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         expected_decoded_texts = Expectations(
             {
                 ("xpu", 3): [
-                    "USER: \nWhat are the things I should be cautious about when I visit this place? What should I bring "
+                    "USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring "
                     "with me? ASSISTANT: When visiting this place, which is a pier or dock extending over a body of water, "
                     "you",
-                    "USER: \nWhat is this? ASSISTANT: The image features two cats lying down on a pink couch. One cat "
+                    "USER:  \nWhat is this? ASSISTANT: The image features two cats lying down on a pink couch. One cat "
                     "is located on",
                 ],
                 ("cuda", None): [
-                    "USER: \nWhat are the things I should be cautious about when I visit this place? What should I bring "
+                    "USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring "
                     "with me? ASSISTANT: When visiting this place, which is a pier or dock extending over a body of water, "
                     "you",
-                    "USER: \nWhat is this? ASSISTANT: The image features two cats lying down on a pink couch. One cat "
+                    "USER:  \nWhat is this? ASSISTANT: The image features two cats lying down on a pink couch. One cat "
                     "is located on",
                 ],
                 ("rocm", (9, 5)): [
-                    "USER: \nWhat are the things I should be cautious about when I visit this place? What should I bring "
+                    "USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring "
                     "with me? ASSISTANT: When visiting this serene location, which features a wooden pier overlooking a "
                     "lake, you should",
-                    "USER: \nWhat is this? ASSISTANT: The image features two cats lying down on a pink couch. One cat "
+                    "USER:  \nWhat is this? ASSISTANT: The image features two cats lying down on a pink couch. One cat "
                     "is located on",
                 ],
             }
@@ -486,24 +486,24 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         expected_decoded_texts = Expectations(
             {
                 ("xpu", 3): [
-                    "USER: \nWhat are the things I should be cautious about when I visit this place? What should I bring "
+                    "USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring "
                     "with me?\nASSISTANT: When visiting this place, which appears to be a dock or pier extending over a "
                     "body of water",
-                    "USER: \nWhat is this?\nASSISTANT: Two cats lying on a bed!\nUSER: \nAnd this?\nASSISTANT: A cat "
+                    "USER:  \nWhat is this?\nASSISTANT: Two cats lying on a bed!\nUSER:  \nAnd this?\nASSISTANT: A cat "
                     "sleeping on a bed.",
                 ],
                 ("cuda", None): [
-                    "USER: \nWhat are the things I should be cautious about when I visit this place? What should I bring "
+                    "USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring "
                     "with me?\nASSISTANT: When visiting this place, which appears to be a dock or pier extending over a "
                     "body of water",
-                    "USER: \nWhat is this?\nASSISTANT: Two cats lying on a bed!\nUSER: \nAnd this?\nASSISTANT: A cat "
+                    "USER:  \nWhat is this?\nASSISTANT: Two cats lying on a bed!\nUSER:  \nAnd this?\nASSISTANT: A cat "
                     "sleeping on a bed.",
                 ],
                 ("rocm", (9, 5)): [
-                    "USER: \nWhat are the things I should be cautious about when I visit this place? What should I bring "
+                    "USER:  \nWhat are the things I should be cautious about when I visit this place? What should I bring "
                     "with me?\nASSISTANT: When visiting this place, which is a pier or dock overlooking a lake, you should "
                     "be",
-                    "USER: \nWhat is this?\nASSISTANT: Two cats lying on a bed!\nUSER: \nAnd this?\nASSISTANT: A cat "
+                    "USER:  \nWhat is this?\nASSISTANT: Two cats lying on a bed!\nUSER:  \nAnd this?\nASSISTANT: A cat "
                     "sleeping on a bed.",
                 ],
             }
@@ -516,6 +516,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_torch
     @require_vision
     @require_bitsandbytes
+    @require_deterministic_for_xpu
     def test_batched_generation(self):
         model = LlavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf", device_map="auto")
 
@@ -541,17 +542,17 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         EXPECTED_OUTPUTS = Expectations(
             {
                 ("xpu", 3): [
-                    "\n\nUSER: What's the difference of two images?\nASSISTANT: In the first image, a dog is holding a green leaf in its mouth. In the second image",
+                    "\n \nUSER: What's the difference of two images?\nASSISTANT: In the two images, the primary difference is the presence of a green plant in one image and a",
                     "\nUSER: Describe the image.\nASSISTANT: The image features a small, fluffy dog sitting on a sidewalk. The dog is holding",
                     "\nUSER: Describe the image.\nASSISTANT: The image features a lone, adult llama standing on a grassy hill. The llama",
                 ],
                 ("cuda", 7): [
-                    "\n\nUSER: What's the difference of two images?\nASSISTANT: In the first image, a dog is holding a green leaf in its mouth. In the second image",
+                    "\n \nUSER: What's the difference of two images?\nASSISTANT: In the first image, a dog is holding a green leaf in its mouth. In the second image",
                     "\nUSER: Describe the image.\nASSISTANT: The image features a small, fluffy dog sitting on a sidewalk. The dog is holding",
                     "\nUSER: Describe the image.\nASSISTANT: The image features a lone, adult llama standing on a grassy hill. The llama",
                 ],
                 ("cuda", 8): [
-                     "\n\nUSER: What's the difference of two images?\nASSISTANT: In the first image, a dog is holding a green leaf in its mouth. In the second image",
+                     "\n \nUSER: What's the difference of two images?\nASSISTANT: In the first image, a dog is holding a green leaf in its mouth. In the second image",
                     "\nUSER: Describe the image.\nASSISTANT: The image features a small, fluffy dog sitting on a sidewalk. The dog is holding",
                     "\nUSER: Describe the image.\nASSISTANT: The image features a lone, adult llama standing on a grassy hill. The llama",
                 ],
@@ -569,7 +570,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs, EXPECTED_OUTPUT)
 
     def test_tokenizer_integration(self):
-        slow_tokenizer = AutoTokenizer.from_pretrained("liuhaotian/llava-v1.6-34b", use_fast=False, legacy=False)
+        slow_tokenizer = AutoTokenizer.from_pretrained("liuhaotian/llava-v1.6-34b", use_fast=False)
         slow_tokenizer.add_tokens("<image>", True)
 
         fast_tokenizer = AutoTokenizer.from_pretrained(
