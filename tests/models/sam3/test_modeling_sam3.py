@@ -341,7 +341,7 @@ class Sam3ModelTester:
             "hidden_size": 32,
             "intermediate_size": 64,
             "projection_dim": 32,
-            "num_hidden_layers": 1,
+            "num_hidden_layers": self.num_hidden_layers,
             "num_attention_heads": 4,
             "max_position_embeddings": 32,  # Keep at 32 for stability
             "hidden_act": "gelu",

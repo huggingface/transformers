@@ -1260,6 +1260,7 @@ class GroupViTModel(GroupViTPreTrainedModel):
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
+            **kwargs,
         )
         pooled_output = text_outputs.pooler_output
         text_outputs.pooler_output = self.text_projection(pooled_output)
