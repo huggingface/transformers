@@ -250,6 +250,17 @@ def get_balanced_memory(
     buffer = int(1.25 * max(buffer, mean_leaves))
     per_gpu += buffer
 
+    # Compute max_layer_size: the largest layer that cannot be split, which `infer_auto_device_map` needs to reserve
+    # space for on main devices. We need to ensure per_gpu is at least this size.
+    modules_to_treat = (
+        list(model.named_parameters(recurse=False))
+        + list(model.named_children())
+        + list(model.named_buffers(recurse=False))
+    )
+    max_layer_size, _ = get_max_layer_size(modules_to_treat, module_sizes, no_split_module_classes)
+    # Ensure per_gpu can accommodate at least max_layer_size (which will be reserved by infer_auto_device_map)
+    per_gpu = max(per_gpu, max_layer_size + buffer)
+
     # Sorted list of GPUs id (we may have some gpu ids not included in the our max_memory list - let's ignore them)
     gpus_idx_list = sorted(
         device_id for device_id, device_mem in max_memory.items() if isinstance(device_id, int) and device_mem > 0
