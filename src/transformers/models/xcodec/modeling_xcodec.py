@@ -519,7 +519,7 @@ class XcodecModel(XcodecPreTrainedModel):
         e_semantic = self.encoder_semantic(e_semantic_input.transpose(1, 2))
 
         # orignal codebase infer to get the output length, but we can directly infer it
-        # from the model and know wether we should pad
+        # from the model and know whether we should pad
         if self._get_conv1d_output_lengths(input_values.shape[2], self.acoustic_encoder) != e_semantic.shape[2]:
             e_acoustic = self.acoustic_encoder(F.pad(input_values, (self.pad, self.pad)))
         else:

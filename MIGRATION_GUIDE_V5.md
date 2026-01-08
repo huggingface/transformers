@@ -197,7 +197,7 @@ This tokenizer will behave as a Llama-like tokenizer, with an updated vocabulary
 
 **Simplified file loading:** Support is added for passing`vocab` and `merges` as file paths directly to tokenizer initialization. The tokenizer will automatically detect the format (SentencePiece `.model`, Tekken `tekken.json`, or plain vocab/merges files) for loading. For BPE tokenizers, if a vocab is provided but no merges, merges will be automatically generated (excluding special tokens).
 
-Note: Loading from file paths with `vocab="<path_to_a_file>"`'s primary goal is to allow you to do some quick testing, but for `BPE` models for example we don't check wether you properly passed the merges or not. 
+Note: Loading from file paths with `vocab="<path_to_a_file>"`'s primary goal is to allow you to do some quick testing, but for `BPE` models for example we don't check whether you properly passed the merges or not. 
 
 #### 2. Simplified decoding API
 
@@ -524,7 +524,7 @@ Linked PRs:
 - Old, deprecated output type aliases were removed (e.g. `GreedySearchEncoderDecoderOutput`). We now only have 4 output classes built from the following matrix: decoder-only vs encoder-decoder, uses beams vs doesn't use beams (https://github.com/huggingface/transformers/pull/40998)
 - Removed deprecated classes regarding decoding methods that were moved to the Hub due to low usage (constraints and beam scores) (https://github.com/huggingface/transformers/pull/41223)
 - If `generate` doesn't receive any KV Cache argument, the default cache class used is now defined by the model (as opposed to always being `DynamicCache`) (https://github.com/huggingface/transformers/pull/41505)
-- Generation parameters are no longer accessible via model's config. If generation paramaters are serialized in `config.json` for any old model, it will be loaded back into model's generation config. Users are expected to access or modify generation parameters only with `model.generation_config.do_sample = True`. 
+- Generation parameters are no longer accessible via model's config. If generation parameters are serialized in `config.json` for any old model, it will be loaded back into model's generation config. Users are expected to access or modify generation parameters only with `model.generation_config.do_sample = True`. 
 
 ## Trainer
 
