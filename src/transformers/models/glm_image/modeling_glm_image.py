@@ -38,7 +38,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import check_model_inputs, maybe_autocast
 from .configuration_glm_image import GlmImageConfig, GlmImageTextConfig, GlmImageVisionConfig, GlmImageVQVAEConfig
 
@@ -931,7 +931,6 @@ class GlmImageModel(GlmImagePreTrainedModel):
         self,
         input_ids: Optional[torch.LongTensor] = None,
         image_grid_thw: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Calculate the 3D rope index for image generation task.
@@ -1093,13 +1092,6 @@ class GlmImageModel(GlmImagePreTrainedModel):
                         current_pos = img_start_pos + 1 + max(h, w)
                         image_idx += 1
 
-                elif token_id == image_end_token_id:
-                    temporal_ids[b, token_idx] = current_pos
-                    height_ids[b, token_idx] = current_pos
-                    width_ids[b, token_idx] = current_pos
-                    current_pos += 1
-                    token_idx += 1
-
                 else:
                     temporal_ids[b, token_idx] = current_pos
                     height_ids[b, token_idx] = current_pos
@@ -1108,21 +1100,16 @@ class GlmImageModel(GlmImagePreTrainedModel):
                     token_idx += 1
 
         position_ids = torch.stack([temporal_ids, height_ids, width_ids], dim=0)
-
-        self._gen_st_idx = current_pos
         self._prefill_len = seq_len
 
         if image_grid_thw is not None and len(image_grid_thw) > 0:
             num_decode_grids = len(image_grid_thw) - num_complete_images
-
-            if num_decode_grids <= 0:
-                num_decode_grids = 1
+            num_decode_grids = max(1, num_decode_grids)
+            decode_pos = current_pos
 
             decode_temporal_list = []
             decode_height_list = []
             decode_width_list = []
-
-            decode_pos = self._gen_st_idx
 
             for i in range(1, num_decode_grids + 1):
                 grid_idx = -i
@@ -1254,22 +1241,15 @@ class GlmImageModel(GlmImagePreTrainedModel):
                     attention_mask_tensor = (1.0 - attention_mask_tensor).int()
 
             # Calculate RoPE index once per generation in the pre-fill stage only.
-            # When compiling, we can't check tensor values thus we check only input length
-            # It is safe to assume that `length!=1` means we're in pre-fill because compiled
-            # models currently cannot do asssisted decoding
-            prefill_compiled_stage = is_torchdynamo_compiling() and (
-                (input_ids is not None and input_ids.shape[1] != 1)
-                or (inputs_embeds is not None and inputs_embeds.shape[1] != 1)
+            # It is safe to assume that `length!=1` means we're in pre-fill because the
+            # model is used only by DiT pipeline without assisted decoding, etc. techniques
+            is_prefill_stage = (input_ids is not None and input_ids.shape[1] != 1) or (
+                inputs_embeds is not None and inputs_embeds.shape[1] != 1
             )
-            prefill_noncompiled_stage = not is_torchdynamo_compiling() and (
-                (cache_position is not None and cache_position[0] == 0)
-                or (past_key_values is None or past_key_values.get_seq_length() == 0)
-            )
-            if (prefill_compiled_stage or prefill_noncompiled_stage) or self.rope_deltas is None:
+            if is_prefill_stage or self.rope_deltas is None:
                 position_ids, rope_deltas = self.get_rope_index(
                     input_ids,
                     image_grid_thw,
-                    attention_mask=attention_mask_tensor,
                 )
                 self.rope_deltas = rope_deltas
             # then use the prev pre-calculated rope-deltas to get the correct position ids

@@ -271,6 +271,10 @@ class GlmImageModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
     def test_assisted_decoding_sample(self):
         pass
 
+    @unittest.skip(reason="GLM-Image can't do and does not need assisted generation. Not worth fixing!")
+    def test_prompt_lookup_decoding_matches_greedy_searc(self):
+        pass
+
     @parameterized.expand([("random",), ("same",)])
     @unittest.skip(reason="GLM-Image can't do and does not need assisted generation. Not worth fixing!")
     def test_assisted_decoding_matches_greedy_search(self, assistant_type):
