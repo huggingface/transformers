@@ -1157,6 +1157,7 @@ class OneFormerPixelDecoderEncoderOnly(nn.Module):
             ref_y, ref_x = torch.meshgrid(
                 torch.linspace(0.5, height - 0.5, height, dtype=valid_ratios.dtype, device=device),
                 torch.linspace(0.5, width - 0.5, width, dtype=valid_ratios.dtype, device=device),
+                indexing="ij",
             )
             ref_y = ref_y.reshape(-1)[None] / (valid_ratios[:, None, lvl, 1] * height)
             ref_x = ref_x.reshape(-1)[None] / (valid_ratios[:, None, lvl, 0] * width)
