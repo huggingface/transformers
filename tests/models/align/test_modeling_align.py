@@ -14,6 +14,7 @@
 """Testing suite for the PyTorch ALIGN model."""
 
 import inspect
+import math
 import tempfile
 import unittest
 
@@ -59,6 +60,7 @@ class AlignVisionModelTester:
         batch_size=12,
         image_size=32,
         num_channels=3,
+        depth_coefficient=3.1,
         kernel_sizes=[3, 3, 5],
         in_channels=[32, 16, 24],
         out_channels=[16, 24, 30],
@@ -73,6 +75,7 @@ class AlignVisionModelTester:
         self.batch_size = batch_size
         self.image_size = image_size
         self.num_channels = num_channels
+        self.depth_coefficient = depth_coefficient
         self.kernel_sizes = kernel_sizes
         self.in_channels = in_channels
         self.out_channels = out_channels
@@ -83,6 +86,8 @@ class AlignVisionModelTester:
         self.is_training = is_training
         self.hidden_act = hidden_act
 
+        self.num_hidden_layers = sum(math.ceil(self.depth_coefficient * repeat) for repeat in self.num_block_repeats)
+
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
         config = self.get_config()
@@ -92,6 +97,7 @@ class AlignVisionModelTester:
     def get_config(self):
         return AlignVisionConfig(
             num_channels=self.num_channels,
+            depth_coefficient=self.depth_coefficient,
             kernel_sizes=self.kernel_sizes,
             in_channels=self.in_channels,
             out_channels=self.out_channels,
@@ -438,6 +444,7 @@ class AlignModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     test_resize_embeddings = False
     test_attention_outputs = False
+    has_attentions = False
 
     def setUp(self):
         self.model_tester = AlignModelTester(self)

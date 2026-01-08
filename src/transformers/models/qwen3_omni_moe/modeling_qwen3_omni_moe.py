@@ -1009,6 +1009,25 @@ class Qwen3OmniMoeVisionRotaryEmbedding(nn.Module):
         return freqs
 
 
+class Qwen3OmniMoeTextTopKRouter(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.top_k = config.num_experts_per_tok
+        self.num_experts = config.num_experts
+        self.hidden_dim = config.hidden_size
+        self.weight = nn.Parameter(torch.zeros(self.num_experts, self.hidden_dim))
+
+    def forward(self, hidden_states):
+        hidden_states = hidden_states.reshape(-1, self.hidden_dim)
+        router_logits = F.linear(hidden_states, self.weight)  # (seq_len, num_experts)
+        router_logits = torch.nn.functional.softmax(router_logits, dtype=torch.float, dim=-1)
+        router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=-1)  # (seq_len, top_k)
+        router_top_value /= router_top_value.sum(dim=-1, keepdim=True)
+        router_top_value = router_top_value.to(router_logits.dtype)
+        router_scores = router_top_value
+        return router_logits, router_scores, router_indices
+
+
 class Qwen3OmniMoeVisionMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -1020,26 +1039,6 @@ class Qwen3OmniMoeVisionMLP(nn.Module):
 
     def forward(self, hidden_state):
         return self.linear_fc2(self.act_fn(self.linear_fc1(hidden_state)))
-
-
-class Qwen3OmniMoeVisionPatchEmbed(nn.Module):
-    def __init__(self, config) -> None:
-        super().__init__()
-        self.patch_size = config.patch_size
-        self.temporal_patch_size = config.temporal_patch_size
-        self.in_channels = config.in_channels
-        self.embed_dim = config.hidden_size
-
-        kernel_size = [self.temporal_patch_size, self.patch_size, self.patch_size]
-        self.proj = nn.Conv3d(self.in_channels, self.embed_dim, kernel_size=kernel_size, stride=kernel_size, bias=True)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        target_dtype = self.proj.weight.dtype
-        hidden_states = hidden_states.view(
-            -1, self.in_channels, self.temporal_patch_size, self.patch_size, self.patch_size
-        )
-        hidden_states = self.proj(hidden_states.to(dtype=target_dtype)).view(-1, self.embed_dim)
-        return hidden_states
 
 
 class Qwen3OmniMoeVisionBlock(GradientCheckpointingLayer):
@@ -1069,9 +1068,34 @@ class Qwen3OmniMoeVisionBlock(GradientCheckpointingLayer):
         return hidden_states
 
 
+class Qwen3OmniMoeVisionPatchEmbed(nn.Module):
+    def __init__(self, config) -> None:
+        super().__init__()
+        self.patch_size = config.patch_size
+        self.temporal_patch_size = config.temporal_patch_size
+        self.in_channels = config.in_channels
+        self.embed_dim = config.hidden_size
+
+        kernel_size = [self.temporal_patch_size, self.patch_size, self.patch_size]
+        self.proj = nn.Conv3d(self.in_channels, self.embed_dim, kernel_size=kernel_size, stride=kernel_size, bias=True)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        target_dtype = self.proj.weight.dtype
+        hidden_states = hidden_states.view(
+            -1, self.in_channels, self.temporal_patch_size, self.patch_size, self.patch_size
+        )
+        hidden_states = self.proj(hidden_states.to(dtype=target_dtype)).view(-1, self.embed_dim)
+        return hidden_states
+
+
 class Qwen3OmniMoeVisionEncoder(Qwen3OmniMoePreTrainedModel):
     config: Qwen3OmniMoeVisionEncoderConfig
     _no_split_modules = ["Qwen3OmniMoeVisionBlock"]
+    _can_record_outputs = {
+        "router_logits": OutputRecorder(Qwen3OmniMoeTextTopKRouter, layer_name="mlp.gate", index=0),
+        "hidden_states": Qwen3OmniMoeVisionBlock,
+        "attentions": Qwen3OmniMoeVisionAttention,
+    }
 
     def __init__(self, config, *inputs, **kwargs) -> None:
         super().__init__(config, *inputs, **kwargs)

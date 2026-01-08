@@ -4647,9 +4647,10 @@ class ModelTesterMixin:
                 hasattr(outputs, "hidden_states"),
                 "get_text_features() must return a BaseModelOutput with hidden_states",
             )
-            self.assertTrue(
-                hasattr(outputs, "attentions"), "get_text_features() must return a BaseModelOutput with attentions"
-            )
+            if self.has_attentions:
+                self.assertTrue(
+                    hasattr(outputs, "attentions"), "get_text_features() must return a BaseModelOutput with attentions"
+                )
 
             last_hidden_state = outputs.last_hidden_state
             if hasattr(self.model_tester, "text_model_tester"):
@@ -4675,6 +4676,128 @@ class ModelTesterMixin:
                 continue
 
             config, inputs_dict = prepare_config_and_inputs_for_text_features()
+            # force eager attention to support output attentions
+            config._attn_implementation = "eager"
+            inputs_dict["output_hidden_states"] = False
+            inputs_dict["output_attentions"] = True
+            check_attentions_output(inputs_dict, config, model_class)
+
+            # check that output_attentions also work using config
+            del inputs_dict["output_attentions"]
+            config.output_attentions = True
+            for k in config.sub_configs:
+                if getattr(config, k) is not None:
+                    getattr(config, k).output_attentions = True
+
+            check_attentions_output(inputs_dict, config, model_class)
+
+    def test_get_image_features(self):
+        def prepare_config_and_inputs_for_image_features():
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            if hasattr(self.model_tester, "vision_model_tester"):
+                _, inputs_dict = self.model_tester.vision_model_tester.prepare_config_and_inputs_for_common()
+            else:
+                inputs_dict = {
+                    key: value
+                    for key, value in inputs_dict.items()
+                    if ("pixel" in key or "image" in key)
+                    and "video" not in key
+                    or key in ["spatial_shapes", "qformer_input_ids"]
+                }
+            return config, inputs_dict
+
+        def check_hidden_states_output(inputs_dict, config, model_class):
+            model = model_class(copy.deepcopy(config))
+            model.to(torch_device)
+            model.eval()
+
+            with torch.no_grad():
+                outputs = model.get_image_features(**inputs_dict)
+            # hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
+            hidden_states = outputs.hidden_states
+            # breakpoint()
+            if hasattr(self.model_tester, "vision_model_tester"):
+                expected_num_layers = self.model_tester.vision_model_tester.num_hidden_layers + 1
+            else:
+                expected_num_layers = self.model_tester.num_hidden_layers + 1
+            self.assertIsNotNone(hidden_states, "hidden_states should not be None")
+            self.assertEqual(len(hidden_states), expected_num_layers, "Number of hidden states layers mismatch")
+
+        def check_attentions_output(inputs_dict, config, model_class):
+            model = model_class(copy.deepcopy(config))
+            model.to(torch_device)
+            model.eval()
+
+            with torch.no_grad():
+                outputs = model.get_image_features(**inputs_dict)
+            attentions = outputs.attentions
+            # model.text_model(**inputs_dict) also no attentions for aimv2
+            if hasattr(self.model_tester, "vision_model_tester"):
+                expected_num_layers = self.model_tester.vision_model_tester.num_hidden_layers
+            else:
+                expected_num_layers = self.model_tester.num_hidden_layers
+            self.assertIsNotNone(attentions, "attentions should not be None")
+            self.assertEqual(len(attentions), expected_num_layers, "Number of attention layers mismatch")
+
+        for model_class in self.all_model_classes:
+            if not hasattr(model_class, "get_image_features"):
+                continue
+
+            config, inputs_dict = prepare_config_and_inputs_for_image_features()
+
+            model = model_class(config).eval()
+            model = model.to(torch_device)
+
+            torch.manual_seed(0)
+            outputs = model.get_image_features(**inputs_dict)
+            self.assertTrue(isinstance(outputs, ModelOutput), "get_image_features() must return a BaseModelOutput")
+            self.assertTrue(
+                hasattr(outputs, "last_hidden_state"),
+                "get_image_features() must return a BaseModelOutput with last_hidden_state",
+            )
+            self.assertTrue(
+                hasattr(outputs, "pooler_output"),
+                "get_image_features() must return a BaseModelOutput with pooler_output",
+            )
+            self.assertTrue(
+                hasattr(outputs, "hidden_states"),
+                "get_image_features() must return a BaseModelOutput with hidden_states",
+            )
+            if self.has_attentions:
+                self.assertTrue(
+                    hasattr(outputs, "attentions"),
+                    "get_image_features() must return a BaseModelOutput with attentions",
+                )
+
+            # TODO: @Tom let's re-enable shape tests supporting the common formats
+            """
+            last_hidden_state = outputs.last_hidden_state
+            # We're expecting (batch_size, hidden_dim, height, width)
+            if hasattr(self.model_tester, "vision_model_tester"):
+                hidden_dim = self.model_tester.vision_model_tester.hidden_dim
+            else:
+                hidden_dim = self.model_tester.hidden_size
+            expected_shape = (inputs_dict["pixel_values"].shape[0], hidden_dim)
+            self.assertEqual(len(last_hidden_state.shape), 4, "last_hidden_state should be a 4D tensor")
+            self.assertEqual(last_hidden_state.shape[:2], expected_shape, "last_hidden_state shape mismatch")
+            """
+
+            inputs_dict["output_hidden_states"] = True
+            check_hidden_states_output(inputs_dict, config, model_class)
+
+            # check that output_hidden_states also work using config
+            del inputs_dict["output_hidden_states"]
+            config.output_hidden_states = True
+            for k in config.sub_configs:
+                if getattr(config, k) is not None:
+                    getattr(config, k).output_hidden_states = True
+
+            check_hidden_states_output(inputs_dict, config, model_class)
+
+            if not self.has_attentions:
+                continue
+
+            config, inputs_dict = prepare_config_and_inputs_for_image_features()
             # force eager attention to support output attentions
             config._attn_implementation = "eager"
             inputs_dict["output_hidden_states"] = False

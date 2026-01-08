@@ -616,6 +616,10 @@ class Qwen3VLPreTrainedModel(PreTrainedModel):
 class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
     config: Qwen3VLVisionConfig
     _no_split_modules = ["Qwen3VLVisionBlock"]
+    _can_record_outputs = {
+        "hidden_states": Qwen3VLVisionBlock,
+        "attentions": Qwen3VLVisionAttention,
+    }
 
     def __init__(self, config, *inputs, **kwargs) -> None:
         super().__init__(config, *inputs, **kwargs)

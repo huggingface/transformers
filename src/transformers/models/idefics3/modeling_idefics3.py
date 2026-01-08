@@ -756,9 +756,14 @@ class Idefics3ForConditionalGeneration(Idefics3PreTrainedModel, GenerationMixin)
         self.model.text_model.set_input_embeddings(value)
 
     def get_image_features(
-        self, pixel_values: torch.FloatTensor, pixel_attention_mask: Optional[torch.LongTensor] = None
+        self,
+        pixel_values: torch.FloatTensor,
+        pixel_attention_mask: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, BaseModelOutputWithPooling]:
-        return self.model.get_image_features(pixel_values=pixel_values, pixel_attention_mask=pixel_attention_mask)
+        return self.model.get_image_features(
+            pixel_values=pixel_values, pixel_attention_mask=pixel_attention_mask, **kwargs
+        )
 
     @can_return_tuple
     @auto_docstring

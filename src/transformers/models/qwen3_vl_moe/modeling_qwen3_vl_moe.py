@@ -412,66 +412,6 @@ class Qwen3VLMoeVisionRotaryEmbedding(nn.Module):
         return freqs
 
 
-@dataclass
-@auto_docstring
-class BaseModelOutputWithDeepstackFeatures(BaseModelOutputWithPooling):
-    """
-    deepstack_features (`List[torch.FloatTensor]`, *optional*):
-        List of hidden-states (feature maps) from deepstack layers.
-    """
-
-    deepstack_features: Optional[list[torch.FloatTensor]] = None
-
-
-class Qwen3VLMoeVisionMLP(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size
-        self.linear_fc1 = nn.Linear(self.hidden_size, self.intermediate_size, bias=True)
-        self.linear_fc2 = nn.Linear(self.intermediate_size, self.hidden_size, bias=True)
-        self.act_fn = ACT2FN[config.hidden_act]
-
-    def forward(self, hidden_state):
-        return self.linear_fc2(self.act_fn(self.linear_fc1(hidden_state)))
-
-
-class Qwen3VLMoeVisionPatchEmbed(nn.Module):
-    def __init__(self, config) -> None:
-        super().__init__()
-        self.patch_size = config.patch_size
-        self.temporal_patch_size = config.temporal_patch_size
-        self.in_channels = config.in_channels
-        self.embed_dim = config.hidden_size
-
-        kernel_size = [self.temporal_patch_size, self.patch_size, self.patch_size]
-        self.proj = nn.Conv3d(self.in_channels, self.embed_dim, kernel_size=kernel_size, stride=kernel_size, bias=True)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        target_dtype = self.proj.weight.dtype
-        hidden_states = hidden_states.view(
-            -1, self.in_channels, self.temporal_patch_size, self.patch_size, self.patch_size
-        )
-        hidden_states = self.proj(hidden_states.to(dtype=target_dtype)).view(-1, self.embed_dim)
-        return hidden_states
-
-
-class Qwen3VLMoeVisionPatchMerger(nn.Module):
-    def __init__(self, config: Qwen3VLMoeVisionConfig, use_postshuffle_norm=False) -> None:
-        super().__init__()
-        self.hidden_size = config.hidden_size * (config.spatial_merge_size**2)
-        self.use_postshuffle_norm = use_postshuffle_norm
-        self.norm = nn.LayerNorm(self.hidden_size if use_postshuffle_norm else config.hidden_size, eps=1e-6)
-        self.linear_fc1 = nn.Linear(self.hidden_size, self.hidden_size)
-        self.act_fn = nn.GELU()
-        self.linear_fc2 = nn.Linear(self.hidden_size, config.out_hidden_size)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.norm(x.view(-1, self.hidden_size) if self.use_postshuffle_norm else x).view(-1, self.hidden_size)
-        x = self.linear_fc2(self.act_fn(self.linear_fc1(x)))
-        return x
-
-
 def apply_rotary_pos_emb_vision(
     q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor
 ) -> tuple[torch.Tensor, torch.Tensor]:
@@ -569,6 +509,19 @@ class Qwen3VLMoeVisionAttention(nn.Module):
         return attn_output
 
 
+class Qwen3VLMoeVisionMLP(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size
+        self.linear_fc1 = nn.Linear(self.hidden_size, self.intermediate_size, bias=True)
+        self.linear_fc2 = nn.Linear(self.intermediate_size, self.hidden_size, bias=True)
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def forward(self, hidden_state):
+        return self.linear_fc2(self.act_fn(self.linear_fc1(hidden_state)))
+
+
 class Qwen3VLMoeVisionBlock(GradientCheckpointingLayer):
     def __init__(self, config, attn_implementation: str = "sdpa") -> None:
         super().__init__()
@@ -596,9 +549,61 @@ class Qwen3VLMoeVisionBlock(GradientCheckpointingLayer):
         return hidden_states
 
 
+@dataclass
+@auto_docstring
+class BaseModelOutputWithDeepstackFeatures(BaseModelOutputWithPooling):
+    """
+    deepstack_features (`List[torch.FloatTensor]`, *optional*):
+        List of hidden-states (feature maps) from deepstack layers.
+    """
+
+    deepstack_features: Optional[list[torch.FloatTensor]] = None
+
+
+class Qwen3VLMoeVisionPatchEmbed(nn.Module):
+    def __init__(self, config) -> None:
+        super().__init__()
+        self.patch_size = config.patch_size
+        self.temporal_patch_size = config.temporal_patch_size
+        self.in_channels = config.in_channels
+        self.embed_dim = config.hidden_size
+
+        kernel_size = [self.temporal_patch_size, self.patch_size, self.patch_size]
+        self.proj = nn.Conv3d(self.in_channels, self.embed_dim, kernel_size=kernel_size, stride=kernel_size, bias=True)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        target_dtype = self.proj.weight.dtype
+        hidden_states = hidden_states.view(
+            -1, self.in_channels, self.temporal_patch_size, self.patch_size, self.patch_size
+        )
+        hidden_states = self.proj(hidden_states.to(dtype=target_dtype)).view(-1, self.embed_dim)
+        return hidden_states
+
+
+class Qwen3VLMoeVisionPatchMerger(nn.Module):
+    def __init__(self, config: Qwen3VLMoeVisionConfig, use_postshuffle_norm=False) -> None:
+        super().__init__()
+        self.hidden_size = config.hidden_size * (config.spatial_merge_size**2)
+        self.use_postshuffle_norm = use_postshuffle_norm
+        self.norm = nn.LayerNorm(self.hidden_size if use_postshuffle_norm else config.hidden_size, eps=1e-6)
+        self.linear_fc1 = nn.Linear(self.hidden_size, self.hidden_size)
+        self.act_fn = nn.GELU()
+        self.linear_fc2 = nn.Linear(self.hidden_size, config.out_hidden_size)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.norm(x.view(-1, self.hidden_size) if self.use_postshuffle_norm else x).view(-1, self.hidden_size)
+        x = self.linear_fc2(self.act_fn(self.linear_fc1(x)))
+        return x
+
+
 class Qwen3VLMoeVisionModel(Qwen3VLMoePreTrainedModel):
     config: Qwen3VLMoeVisionConfig
     _no_split_modules = ["Qwen3VLMoeVisionBlock"]
+    _can_record_outputs = {
+        "router_logits": OutputRecorder(Qwen3VLMoeTextTopKRouter, layer_name="mlp.gate", index=0),
+        "hidden_states": Qwen3VLMoeVisionBlock,
+        "attentions": Qwen3VLMoeVisionAttention,
+    }
 
     def __init__(self, config, *inputs, **kwargs) -> None:
         super().__init__(config, *inputs, **kwargs)
