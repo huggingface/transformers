@@ -1784,33 +1784,42 @@ def generate_masks_with_special_tokens_and_transfer_map(input_ids: torch.LongTen
         - **attention_mask** (`torch.BoolTensor` of shape `(batch_size, sequence_length, sequence_length)`)
         - **position_ids** (`torch.LongTensor` of shape `(batch_size, sequence_length)`)
     """
-    batch_size, num_token = input_ids.shape
-    # special_tokens_mask: batch_size, num_token. 1 for special tokens. 0 for normal tokens
-    special_tokens_mask = torch.zeros((batch_size, num_token), device=input_ids.device).bool()
-    for special_token in SPECIAL_TOKENS:
-        special_tokens_mask = torch.logical_or(special_tokens_mask, input_ids == special_token)
+    batch_size, seq_len = input_ids.shape
+    device = input_ids.device
 
-    # idxs: each row is a list of indices of special tokens
-    idxs = torch.nonzero(special_tokens_mask)
+    # Identify special token positions
+    special_mask = torch.isin(input_ids, torch.tensor(SPECIAL_TOKENS, device=device))
 
-    # generate attention mask and positional ids
-    attention_mask = torch.eye(num_token, device=input_ids.device).bool().unsqueeze(0).repeat(batch_size, 1, 1)
-    position_ids = torch.zeros((batch_size, num_token), device=input_ids.device)
-    previous_col = 0
-    for i in range(idxs.shape[0]):
-        row, col = idxs[i]
-        if (col == 0) or (col == num_token - 1):
-            attention_mask[row, col, col] = True
-            position_ids[row, col] = 0
-        else:
-            attention_mask[row, previous_col + 1 : col + 1, previous_col + 1 : col + 1] = True
-            position_ids[row, previous_col + 1 : col + 1] = torch.arange(
-                0, col - previous_col, device=input_ids.device
-            )
+    # For each position, find the previous and next special token indices
+    indices = torch.arange(seq_len, device=device).unsqueeze(0).expand(batch_size, -1)
 
-        previous_col = col
+    # Previous special token: cummax of special token indices
+    prev_special = torch.where(special_mask, indices, torch.tensor(-1, device=device))
+    prev_special = torch.cummax(prev_special, dim=1)[0]
 
-    return attention_mask, position_ids.to(torch.long)
+    # Next special token: flip, cummin, flip back
+    next_special = torch.where(special_mask, indices, torch.tensor(seq_len, device=device))
+    next_special = torch.flip(torch.cummin(torch.flip(next_special, dims=[1]), dim=1)[0], dims=[1])
+
+    # Tokens with the same next_special belong to the same block
+    # Exclude blocks whose closing delimiter is at position 0 or seq_len-1
+    valid_block = (next_special != 0) & (next_special != seq_len - 1) & (next_special != seq_len)
+
+    # Build attention mask: tokens attend to each other if they share the same next_special
+    next_i = next_special.unsqueeze(2)  # (B, N, 1)
+    next_j = next_special.unsqueeze(1)  # (B, 1, N)
+    attention_mask = (next_i == next_j) & valid_block.unsqueeze(1)
+
+    # Always allow self-attention
+    identity = torch.eye(seq_len, device=device, dtype=torch.bool).unsqueeze(0).expand(batch_size, -1, -1)
+    attention_mask = identity | attention_mask
+
+    # Position IDs: distance from previous special token
+    position_ids = indices - prev_special - 1
+    position_ids = torch.where(valid_block, position_ids, torch.zeros_like(position_ids))
+    position_ids = torch.clamp(position_ids, min=0).to(torch.long)
+
+    return attention_mask, position_ids
 
 
 @auto_docstring(
@@ -1889,13 +1898,13 @@ class MMGroundingDinoModel(MMGroundingDinoPreTrainedModel):
         valid_ratio = torch.stack([valid_ratio_width, valid_ratio_height], -1)
         return valid_ratio
 
-    def generate_encoder_output_proposals(self, enc_output, padding_mask, spatial_shapes):
+    def generate_encoder_output_proposals(self, enc_output, padding_mask, spatial_shapes_list):
         """Generate the encoder output proposals from encoded enc_output.
 
         Args:
             enc_output (`torch.Tensor[batch_size, sequence_length, hidden_size]`): Output of the encoder.
             padding_mask (`torch.Tensor[batch_size, sequence_length]`): Padding mask for `enc_output`.
-            spatial_shapes (`torch.Tensor[num_feature_levels, 2]`): Spatial shapes of the feature maps.
+            spatial_shapes_list (`list[tuple[int, int]]`): Spatial shapes of each feature map.
 
         Returns:
             `tuple(torch.FloatTensor)`: A tuple of feature map and bbox prediction.
@@ -1907,7 +1916,7 @@ class MMGroundingDinoModel(MMGroundingDinoPreTrainedModel):
         batch_size = enc_output.shape[0]
         proposals = []
         current_position = 0
-        for level, (height, width) in enumerate(spatial_shapes):
+        for level, (height, width) in enumerate(spatial_shapes_list):
             mask_flatten_ = padding_mask[:, current_position : (current_position + height * width)]
             mask_flatten_ = mask_flatten_.view(batch_size, height, width, 1)
             valid_height = torch.sum(~mask_flatten_[:, :, 0, 0], 1)
@@ -2122,7 +2131,7 @@ class MMGroundingDinoModel(MMGroundingDinoPreTrainedModel):
         encoder_pred_boxes = None
         if self.config.two_stage:
             object_query_embedding, output_proposals = self.generate_encoder_output_proposals(
-                encoder_outputs[0], ~mask_flatten, spatial_shapes
+                encoder_outputs[0], ~mask_flatten, spatial_shapes_list
             )
 
             # hack implementation as in two-stage Deformable DETR

@@ -3981,9 +3981,6 @@ class ModelTesterMixin:
             # Skip model if it uses a chunked attention implementation which is not torch exportable
             if "for q, k, v in zip(*splits)" in source_code:
                 self.skipTest(reason="Model architecture uses chunked attention which is not torch exportable")
-            # Skip model if it uses rope index calculation which is not torch exportable
-            if "get_rope_index" in source_code:
-                self.skipTest(reason="Model architecture uses `get_rope_index` which is not torch exportable")
 
         def _is_pure_python_object(obj) -> bool:
             if isinstance(obj, (int, float, bool, str)) or obj is None:
@@ -4014,7 +4011,6 @@ class ModelTesterMixin:
 
         def _prepare_for_export(model, inputs_dict):
             # we don't test outputing a cache class for now
-            # (needs pytree registration for each class)
             inputs_dict.pop("use_cache", None)
             # we don't test loss computation for now
             inputs_dict.pop("return_loss", None)
@@ -4024,12 +4020,13 @@ class ModelTesterMixin:
                 model.set_experts_implementation("batched_mm")
 
             for module in model.modules():
-                # disable cache usage for every submodel
-                if hasattr(module, "config") and hasattr(module.config, "use_cache"):
-                    module.config.use_cache = False
-                # disable returning loss for every submodel
-                if hasattr(module, "config") and hasattr(module.config, "return_loss"):
-                    module.config.return_loss = False
+                if hasattr(module, "config"):
+                    # disable cache usage for every submodel
+                    if hasattr(module.config, "use_cache"):
+                        module.config.use_cache = False
+                    # disable returning loss for every submodel
+                    if hasattr(module.config, "return_loss"):
+                        module.config.return_loss = False
                 # disable classifier cast for nllb-moe
                 if hasattr(module, "_cast_classifier"):
                     module._cast_classifier = lambda *args, **kwargs: None
@@ -4066,6 +4063,11 @@ class ModelTesterMixin:
                     exported_program = torch.export.export(model, args=(), kwargs=copy.deepcopy(inputs_dict))
                 except Exception as e:
                     raise e
+                # except torch.fx.experimental.symbolic_shapes.GuardOnDataDependentSymNode as e:
+                #     warnings.warn(
+                #         f"Skipping torch export test for {model_class.__name__} because of data-dependent symbolic shape: {e}"
+                #     )
+                #     continue
 
                 with torch.no_grad():
                     set_seed(1234)
