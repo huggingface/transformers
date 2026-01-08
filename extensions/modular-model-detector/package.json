@@ -61,8 +61,7 @@
           "type": "string",
           "enum": [
             "float32",
-            "int8",
-            "binary"
+            "int8"
           ],
           "default": "float32",
           "description": "Embedding precision for the index."

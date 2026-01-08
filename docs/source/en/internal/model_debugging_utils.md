@@ -366,7 +366,7 @@ When adding a new model to transformers, many components (attention layers, MLPs
 The tool computes two similarity scores:
 
 - **Embedding score**: Uses semantic code embeddings (via `Qwen/Qwen3-Embedding-4B`) to detect functionally similar code even with different naming
-- **Jaccard score**: Measures token set overlap to identify structurally similar code patterns
+- **Jaccard score**: Uses an IDF-weighted token overlap to identify structurally similar code patterns
 
 A score of 1.00 means the code is identical.
 
@@ -444,7 +444,7 @@ python utils/modular_model_detector.py --build --push-new-index --hub-dataset yo
 - `--push-new-index`: After building, push the index to a Hub dataset (requires `--build`)
 - `--hub-dataset`: Hub dataset repository ID to pull/push the index (default: `hf-internal-testing/transformers_code_embeddings`)
 - `--top-k`: Number of matches per symbol (default: 5)
-- `--precision`: Embedding precision for building/loading the index (`float32`, `int8`, `binary`)
+- `--precision`: Embedding precision for building/loading the index (`float32`, `int8`)
 - `--granularity`: Index granularity (`definition` or `method`)
 - `--output-json`: Write results to a JSON file (useful for tooling)
 

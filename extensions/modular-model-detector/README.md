@@ -12,7 +12,7 @@ Run `utils/modular_model_detector.py` from VSCode/Cursor, then use contextual ac
 
 - `modularModelDetector.pythonPath`: Python executable to run the detector.
 - `modularModelDetector.scriptPath`: Override script path (defaults to `utils/modular_model_detector.py` in the workspace).
-- `modularModelDetector.precision`: Embedding precision (`float32`, `int8`, `binary`).
+- `modularModelDetector.precision`: Embedding precision (`float32`, `int8`).
 - `modularModelDetector.granularity`: Index granularity (`definition`, `method`).
 - `modularModelDetector.topK`: Number of matches per symbol.
 - `modularModelDetector.useJaccard`: Include Jaccard results in detector output (currently only embedding matches are shown).
