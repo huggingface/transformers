@@ -37,7 +37,6 @@ import packaging.version
 from packaging import version
 
 from . import logging
-from .generic import strtobool
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
@@ -1410,7 +1409,7 @@ def check_with(error_type: type[Exception], cond: Any, msg: Callable[[], str]) -
     Raises:
         error_type: If the condition is not met.
     """
-    if strtobool(os.getenv("TRANSFORMERS_DISABLE_TORCH_CHECKS", "false")):
+    if os.getenv("TRANSFORMERS_DISABLE_TORCH_CHECKS", "0") == "1":
         return
 
     import torch
