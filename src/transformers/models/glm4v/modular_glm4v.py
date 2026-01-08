@@ -490,21 +490,44 @@ class Glm4vVisionBlock(Qwen2_5_VLVisionBlock):
 
 
 class Glm4vTextRotaryEmbedding(Glm4RotaryEmbedding):
-    # Ignore copy
+    def __init__(self, config: Glm4vTextConfig, device=None):
+        super().__init__()
+        self.mrope_section = config.rope_parameters.get("mrope_section", [8, 12, 12])
+
     def forward(self, x, position_ids):
-        # In contrast to other models, GLM4V different position ids for the grids
+        # In contrast to other models, Qwen3VL has different position ids for the grids
         # So we expand the inv_freq to shape (3, ...)
+        if position_ids.ndim == 2:
+            position_ids = position_ids[None, ...].expand(3, position_ids.shape[0], -1)
         inv_freq_expanded = self.inv_freq[None, None, :, None].float().expand(3, position_ids.shape[1], -1, 1)
         position_ids_expanded = position_ids[:, :, None, :].float()  # shape (3, bs, 1, positions)
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
         with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(2, 3)
+            freqs = self.apply_interleaved_mrope(freqs, self.mrope_section)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos() * self.attention_scaling
             sin = emb.sin() * self.attention_scaling
 
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+
+    def apply_interleaved_mrope(self, freqs, mrope_section):
+        """Apply interleaved MRoPE to 3D rotary embeddings.
+        Reorganizes frequency layout from chunked [TTT...HHH...WWW] to
+        interleaved [THWTHWTHW...TT], preserving frequency continuity.
+        args:
+            x: (3, bs, seq_len, head_dim // 2)
+            mrope_section: (3,)
+        returns:
+            x_t: (bs, seq_len, head_dim // 2)
+        """
+        freqs_t = freqs[0]  # just overwrite the first dimension T
+        for dim, offset in enumerate((1, 2), start=1):  # H, W
+            length = mrope_section[dim] * 3
+            idx = slice(offset, length, 3)
+            freqs_t[..., idx] = freqs[dim, ..., idx]
+        return freqs_t
 
 
 def rotate_half_llm(x):
@@ -514,25 +537,16 @@ def rotate_half_llm(x):
     return torch.stack((-x2, x1), dim=-1).flatten(-2)
 
 
-def apply_multimodal_rotary_pos_emb(q, k, cos, sin, mrope_section, unsqueeze_dim=1):
-    """Applies Rotary Position Embedding with Multimodal Sections to the query and key tensors (https://qwenlm.github.io/blog/qwen2-vl/).
-
-    Explanation:
-        Multimodal 3D rotary position embedding is an extension to 1D rotary position embedding. The input embedding
-        sequence contains vision (images / videos) embedding and text embedding or just contains text embedding. For
-        vision embedding part, we apply rotary position embedding on temporal, height and width dimension separately.
-        Here we split the channel dimension to 3 chunks for the temporal, height and width rotary position embedding.
-        For text embedding part, we just apply 1D rotary position embedding. The three rotary position index (temporal,
-        height and width) of text embedding is always the same, so the text embedding rotary position embedding has no
-        difference with modern LLMs.
+def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+    """Applies Rotary Position Embedding to the query and key tensors.
 
     Args:
         q (`torch.Tensor`): The query tensor.
         k (`torch.Tensor`): The key tensor.
         cos (`torch.Tensor`): The cosine part of the rotary embedding.
         sin (`torch.Tensor`): The sine part of the rotary embedding.
-        mrope_section(`List(int)`):
-            Multimodal rope section is for channel dimension of temporal, height and width in rope calculation.
+        position_ids (`torch.Tensor`, *optional*):
+            Deprecated and unused.
         unsqueeze_dim (`int`, *optional*, defaults to 1):
             The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
             sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
@@ -543,13 +557,8 @@ def apply_multimodal_rotary_pos_emb(q, k, cos, sin, mrope_section, unsqueeze_dim
     Returns:
         `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
     """
-    mrope_section = mrope_section * 2
-    cos = torch.cat([m[i % 3] for i, m in enumerate(cos.split(mrope_section, dim=-1))], dim=-1).unsqueeze(
-        unsqueeze_dim
-    )
-    sin = torch.cat([m[i % 3] for i, m in enumerate(sin.split(mrope_section, dim=-1))], dim=-1).unsqueeze(
-        unsqueeze_dim
-    )
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
 
     # Interleave them instead of usual shape
     cos = cos[..., : cos.shape[-1] // 2].repeat_interleave(2, dim=-1)
@@ -567,7 +576,6 @@ def apply_multimodal_rotary_pos_emb(q, k, cos, sin, mrope_section, unsqueeze_dim
     # Concatenate back to full shape
     q_embed = torch.cat([q_embed, q_pass], dim=-1)
     k_embed = torch.cat([k_embed, k_pass], dim=-1)
-
     return q_embed, k_embed
 
 
@@ -617,9 +625,7 @@ class Glm4vTextAttention(nn.Module):
         value_states = value_states.view(bsz, q_len, -1, self.head_dim).transpose(1, 2)
 
         cos, sin = position_embeddings
-        query_states, key_states = apply_multimodal_rotary_pos_emb(  # diff with Llama
-            query_states, key_states, cos, sin, self.rope_parameters["mrope_section"]
-        )
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
             cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}  # Specific to RoPE models

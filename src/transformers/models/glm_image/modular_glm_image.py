@@ -43,22 +43,27 @@ from ..glm4v.modeling_glm4v import (
     Glm4vModelOutputWithPast,
     Glm4vPreTrainedModel,
     Glm4vTextModel,
-    Glm4vTextRotaryEmbedding,
     Glm4vVisionAttention,
     Glm4vVisionBlock,
     Glm4vVisionEmbeddings,
     Glm4vVisionModel,
     Glm4vVisionPatchEmbed,
 )
-from ..glm4v_moe.modeling_glm4v_moe import eager_attention_forward, rotate_half
+from ..glm4v_moe.modeling_glm4v_moe import eager_attention_forward
 from ..qwen2_vl.image_processing_qwen2_vl import Qwen2VLImageProcessor
 from ..qwen2_vl.image_processing_qwen2_vl_fast import Qwen2VLImageProcessorFast
 from ..qwen2_vl.processing_qwen2_vl import Qwen2VLProcessorKwargs
 from ..siglip.modeling_siglip import SiglipMLP
 
-
 logger = logging.get_logger(__name__)
 
+
+
+def rotate_half_llm(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
 
 class GlmImageVQVAEConfig(PreTrainedConfig):
     r"""
@@ -414,7 +419,8 @@ class GlmImageVisionPatchEmbed(Glm4vVisionPatchEmbed):
 class GlmImageVisionEmbeddings(Glm4vVisionEmbeddings):
     def __init__(self, config: GlmImageVisionConfig) -> None:
         super().__init__(config)
-        self.interpolated_method ="bilinear"
+        self.interpolated_method = "bilinear"
+
 
 class GlmImageVisionBlock(Glm4vVisionBlock):
     def __init__(self, config: GlmImageVisionConfig):
@@ -437,63 +443,6 @@ class GlmImageVisionBlock(Glm4vVisionBlock):
         )
         hidden_states = hidden_states + self.mlp(self.norm2(hidden_states))
         return hidden_states
-
-
-def apply_multimodal_rotary_pos_emb(q, k, cos, sin, mrope_section, unsqueeze_dim=1):
-    """Applies Rotary Position Embedding with Multimodal Sections to the query and key tensors (https://qwenlm.github.io/blog/qwen2-vl/).
-
-    Explanation:
-        Multimodal 3D rotary position embedding is an extension to 1D rotary position embedding. The input embedding
-        sequence contains vision (images / videos) embedding and text embedding or just contains text embedding. For
-        vision embedding part, we apply rotary position embedding on temporal, height and width dimension separately.
-        Here we split the channel dimension to 3 chunks for the temporal, height and width rotary position embedding.
-        For text embedding part, we just apply 1D rotary position embedding. The three rotary position index (temporal,
-        height and width) of text embedding is always the same, so the text embedding rotary position embedding has no
-        difference with modern LLMs.
-
-    Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        mrope_section(`List(int)`):
-            Multimodal rope section is for channel dimension of temporal, height and width in rope calculation.
-        unsqueeze_dim (`int`, *optional*, defaults to 1):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
-            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
-    Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
-    """
-    mrope_section = mrope_section * 2
-    cos = torch.cat([m[i % 3] for i, m in enumerate(cos.split(mrope_section, dim=-1))], dim=-1).unsqueeze(
-        unsqueeze_dim
-    )
-    sin = torch.cat([m[i % 3] for i, m in enumerate(sin.split(mrope_section, dim=-1))], dim=-1).unsqueeze(
-        unsqueeze_dim
-    )
-
-    # Keep half or full tensor for later concatenation
-    rotary_dim = cos.shape[-1]
-    q_rot, q_pass = q[..., :rotary_dim], q[..., rotary_dim:]
-    k_rot, k_pass = k[..., :rotary_dim], k[..., rotary_dim:]
-
-    # Apply rotary embeddings on the first half or full tensor
-    q_embed = (q_rot * cos) + (rotate_half(q_rot) * sin)
-    k_embed = (k_rot * cos) + (rotate_half(k_rot) * sin)
-
-    # Concatenate back to full shape
-    q_embed = torch.cat([q_embed, q_pass], dim=-1)
-    k_embed = torch.cat([k_embed, k_pass], dim=-1)
-
-    return q_embed, k_embed
-
-
-class GlmImageTextRotaryEmbedding(Glm4vTextRotaryEmbedding):
-    pass
 
 
 class GlmImagePreTrainedModel(Glm4vPreTrainedModel):
