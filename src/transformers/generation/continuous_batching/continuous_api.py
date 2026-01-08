@@ -428,9 +428,12 @@ class ContinuousBatchProcessor:
         self.output_queue.put(state.to_generation_output())
 
     def soft_reset_one_request(self) -> None:
-        """Soft resets the oldest request (or shortest if block_new_requests is True) by removing it from the active
-        requests, and adding a new waiting request with the generated tokens as addition to the initial prompt. Also
-        turns the block_new_requests state to True to avoid infinite loops when offloading requests with this method."""
+        """Soft resets one active request by removing it from active requests and re-adding it to the waiting queue.
+
+        The generated tokens are kept as part of the new request's initial prompt. When `block_new_requests` is False,
+        the oldest request is offloaded; when True, the newest request is offloaded. This method also sets
+        `block_new_requests` to True to prevent infinite loops of offloading and re-scheduling requests.
+        """
         # The offloaded request is the newest (resp. oldest) if block_new_requests is True (resp. False)
         if self.scheduler.block_new_requests:
             request_id, state = self.scheduler.active_requests.popitem()

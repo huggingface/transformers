@@ -259,9 +259,9 @@ class RequestState:
         return new_request
 
     def create_equivalent_initial_request(self) -> "RequestState":
-        """Creates an equivalent initial request by removing the initial tokens and adding the generated tokens as
-        addition to the initial prompt. The created request has THE SAME request_id. Notably, we can retrieve the
-        original request from the created one by the _true_initial_tokens attribute."""
+        """Creates an equivalent new request by removing the generated tokens and adding them to the initial prompt. The
+        created request has THE SAME request_id. Notably, we can retrieve the original request from the created one with
+        the _true_initial_tokens attribute."""
         new_state = RequestState(
             request_id=self.request_id,
             initial_tokens=self.initial_tokens + self.generated_tokens,
