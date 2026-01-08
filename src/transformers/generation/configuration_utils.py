@@ -102,7 +102,7 @@ class GenerationConfig(PushToHubMixin):
     </Tip>
 
     Note: the configuration field that are still `None` will be overriden by `GenerationConfig._get_default_generation_params()`
-    during the generation loop. If you want to use different values for these fiels, make sure to expllicitly set then in the
+    during the generation loop. If you want to use different values for these fields, make sure to explicitly set them in the
     generation config.
 
     Arg:
