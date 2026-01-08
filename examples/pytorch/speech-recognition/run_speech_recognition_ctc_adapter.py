@@ -35,7 +35,6 @@ import re
 import sys
 import warnings
 from dataclasses import dataclass, field
-from typing import Optional, Union
 
 import datasets
 import evaluate
@@ -88,11 +87,11 @@ class ModelArguments:
     model_name_or_path: str = field(
         metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models"}
     )
-    tokenizer_name_or_path: Optional[str] = field(
+    tokenizer_name_or_path: str | None = field(
         default=None,
         metadata={"help": "Path to pretrained tokenizer or tokenizer identifier from huggingface.co/models"},
     )
-    cache_dir: Optional[str] = field(
+    cache_dir: str | None = field(
         default=None,
         metadata={"help": "Where do you want to store the pretrained models downloaded from huggingface.co"},
     )
@@ -129,7 +128,7 @@ class ModelArguments:
         metadata={"help": "Length of vector span to mask along the feature axis."},
     )
     layerdrop: float = field(default=0.0, metadata={"help": "The LayerDrop probability."})
-    ctc_loss_reduction: Optional[str] = field(
+    ctc_loss_reduction: str | None = field(
         default="mean",
         metadata={"help": "The way the ctc loss should be reduced. Should be one of 'mean' or 'sum'."},
     )
@@ -198,11 +197,11 @@ class DataTrainingArguments:
         default=False,
         metadata={"help": "Overwrite the cached preprocessed datasets or not."},
     )
-    preprocessing_num_workers: Optional[int] = field(
+    preprocessing_num_workers: int | None = field(
         default=None,
         metadata={"help": "The number of processes to use for the preprocessing."},
     )
-    max_train_samples: Optional[int] = field(
+    max_train_samples: int | None = field(
         default=None,
         metadata={
             "help": (
@@ -211,7 +210,7 @@ class DataTrainingArguments:
             )
         },
     )
-    max_eval_samples: Optional[int] = field(
+    max_eval_samples: int | None = field(
         default=None,
         metadata={
             "help": (
@@ -220,7 +219,7 @@ class DataTrainingArguments:
             )
         },
     )
-    chars_to_ignore: Optional[list[str]] = list_field(
+    chars_to_ignore: list[str] | None = list_field(
         default=None,
         metadata={"help": "A list of characters to remove from the transcripts."},
     )
@@ -316,11 +315,11 @@ class DataCollatorCTCWithPadding:
     """
 
     processor: AutoProcessor
-    padding: Union[bool, str] = "longest"
-    pad_to_multiple_of: Optional[int] = None
-    pad_to_multiple_of_labels: Optional[int] = None
+    padding: bool | str = "longest"
+    pad_to_multiple_of: int | None = None
+    pad_to_multiple_of_labels: int | None = None
 
-    def __call__(self, features: list[dict[str, Union[list[int], torch.Tensor]]]) -> dict[str, torch.Tensor]:
+    def __call__(self, features: list[dict[str, list[int] | torch.Tensor]]) -> dict[str, torch.Tensor]:
         # split inputs and labels since they have to be of different lengths and need
         # different padding methods
         input_features = [{"input_values": feature["input_values"]} for feature in features]
@@ -352,9 +351,9 @@ class DataCollatorCTCWithPadding:
 
 def create_vocabulary_from_data(
     datasets: DatasetDict,
-    word_delimiter_token: Optional[str] = None,
-    unk_token: Optional[str] = None,
-    pad_token: Optional[str] = None,
+    word_delimiter_token: str | None = None,
+    unk_token: str | None = None,
+    pad_token: str | None = None,
 ):
     # Given training and test labels create vocabulary
     def extract_all_chars(batch):

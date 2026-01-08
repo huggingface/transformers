@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,8 +14,6 @@
 """
 Feature extractor class for Speech2Text
 """
-
-from typing import Optional, Union
 
 import numpy as np
 
@@ -145,8 +142,8 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
     def utterance_cmvn(
         x: np.ndarray,
         input_length: int,
-        normalize_means: Optional[bool] = True,
-        normalize_vars: Optional[bool] = True,
+        normalize_means: bool | None = True,
+        normalize_vars: bool | None = True,
         padding_value: float = 0.0,
     ) -> np.ndarray:
         # make sure we normalize float32 arrays
@@ -166,7 +163,7 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
         return x
 
     def normalize(
-        self, input_features: list[np.ndarray], attention_mask: Optional[np.ndarray] = None
+        self, input_features: list[np.ndarray], attention_mask: np.ndarray | None = None
     ) -> list[np.ndarray]:
         lengths = attention_mask.sum(-1) if attention_mask is not None else [x.shape[0] for x in input_features]
         return [
@@ -176,14 +173,14 @@ class Speech2TextFeatureExtractor(SequenceFeatureExtractor):
 
     def __call__(
         self,
-        raw_speech: Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]],
-        padding: Union[bool, str, PaddingStrategy] = False,
-        max_length: Optional[int] = None,
+        raw_speech: np.ndarray | list[float] | list[np.ndarray] | list[list[float]],
+        padding: bool | str | PaddingStrategy = False,
+        max_length: int | None = None,
         truncation: bool = False,
-        pad_to_multiple_of: Optional[int] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        sampling_rate: Optional[int] = None,
-        return_attention_mask: Optional[bool] = None,
+        pad_to_multiple_of: int | None = None,
+        return_tensors: str | TensorType | None = None,
+        sampling_rate: int | None = None,
+        return_attention_mask: bool | None = None,
         **kwargs,
     ) -> BatchFeature:
         """

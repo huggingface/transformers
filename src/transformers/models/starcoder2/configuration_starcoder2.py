@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 BigCode and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Starcoder2 model configuration"""
-
-from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
@@ -118,25 +115,25 @@ class Starcoder2Config(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 49152,
-        hidden_size: Optional[int] = 3072,
-        intermediate_size: Optional[int] = 12288,
-        num_hidden_layers: Optional[int] = 30,
-        num_attention_heads: Optional[int] = 24,
-        num_key_value_heads: Optional[int] = 2,
-        hidden_act: Optional[str] = "gelu_pytorch_tanh",
-        max_position_embeddings: Optional[int] = 4096,
-        initializer_range: Optional[float] = 0.018042,
-        norm_epsilon: Optional[int] = 1e-5,
-        use_cache: Optional[bool] = True,
-        bos_token_id: Optional[int] = 50256,
-        eos_token_id: Optional[int] = 50256,
-        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        sliding_window: Optional[int] = None,
-        attention_dropout: Optional[float] = 0.0,
-        residual_dropout: Optional[float] = 0.0,
-        embedding_dropout: Optional[float] = 0.0,
-        use_bias: Optional[bool] = True,
+        vocab_size: int | None = 49152,
+        hidden_size: int | None = 3072,
+        intermediate_size: int | None = 12288,
+        num_hidden_layers: int | None = 30,
+        num_attention_heads: int | None = 24,
+        num_key_value_heads: int | None = 2,
+        hidden_act: str | None = "gelu_pytorch_tanh",
+        max_position_embeddings: int | None = 4096,
+        initializer_range: float | None = 0.018042,
+        norm_epsilon: int | None = 1e-5,
+        use_cache: bool | None = True,
+        bos_token_id: int | None = 50256,
+        eos_token_id: int | None = 50256,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        sliding_window: int | None = None,
+        attention_dropout: float | None = 0.0,
+        residual_dropout: float | None = 0.0,
+        embedding_dropout: float | None = 0.0,
+        use_bias: bool | None = True,
         **kwargs,
     ):
         self.vocab_size = vocab_size

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +14,7 @@
 """Feature extractor class for SpeechT5."""
 
 import warnings
-from typing import Any, Optional, Union
+from typing import Any
 
 import numpy as np
 
@@ -179,15 +178,15 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
 
     def __call__(
         self,
-        audio: Optional[Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]]] = None,
-        audio_target: Optional[Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]]] = None,
-        padding: Union[bool, str, PaddingStrategy] = False,
-        max_length: Optional[int] = None,
+        audio: np.ndarray | list[float] | list[np.ndarray] | list[list[float]] | None = None,
+        audio_target: np.ndarray | list[float] | list[np.ndarray] | list[list[float]] | None = None,
+        padding: bool | str | PaddingStrategy = False,
+        max_length: int | None = None,
         truncation: bool = False,
-        pad_to_multiple_of: Optional[int] = None,
-        return_attention_mask: Optional[bool] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        sampling_rate: Optional[int] = None,
+        pad_to_multiple_of: int | None = None,
+        return_attention_mask: bool | None = None,
+        return_tensors: str | TensorType | None = None,
+        sampling_rate: int | None = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -295,14 +294,14 @@ class SpeechT5FeatureExtractor(SequenceFeatureExtractor):
 
     def _process_audio(
         self,
-        speech: Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]],
+        speech: np.ndarray | list[float] | list[np.ndarray] | list[list[float]],
         is_target: bool = False,
-        padding: Union[bool, str, PaddingStrategy] = False,
-        max_length: Optional[int] = None,
+        padding: bool | str | PaddingStrategy = False,
+        max_length: int | None = None,
         truncation: bool = False,
-        pad_to_multiple_of: Optional[int] = None,
-        return_attention_mask: Optional[bool] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        pad_to_multiple_of: int | None = None,
+        return_attention_mask: bool | None = None,
+        return_tensors: str | TensorType | None = None,
         **kwargs,
     ) -> BatchFeature:
         is_batched_numpy = isinstance(speech, np.ndarray) and len(speech.shape) > 1

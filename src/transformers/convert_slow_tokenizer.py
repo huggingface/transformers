@@ -21,7 +21,6 @@ allow to make our dependency on SentencePiece optional.
 import warnings
 from collections.abc import Collection
 from functools import lru_cache
-from typing import Optional
 
 from packaging import version
 from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
@@ -120,7 +119,7 @@ def _get_prepend_scheme(add_prefix_space: bool, original_tokenizer) -> str:
     return prepend_scheme
 
 
-def generate_merges(vocab, vocab_scores, skip_tokens: Optional[Collection[str]] = None):
+def generate_merges(vocab, vocab_scores, skip_tokens: Collection[str] | None = None):
     skip_tokens = set(skip_tokens) if skip_tokens is not None else set()
     reverse = vocab_scores is not None
     vocab_scores = dict(vocab_scores) if reverse else vocab
@@ -420,9 +419,7 @@ class OpenAIGPTConverter(Converter):
 
 
 class GPT2Converter(Converter):
-    def converted(
-        self, vocab: Optional[dict[str, int]] = None, merges: Optional[list[tuple[str, str]]] = None
-    ) -> Tokenizer:
+    def converted(self, vocab: dict[str, int] | None = None, merges: list[tuple[str, str]] | None = None) -> Tokenizer:
         if not vocab:
             vocab = self.original_tokenizer.encoder
         if not merges:
@@ -491,9 +488,7 @@ class HerbertConverter(Converter):
 
 
 class Qwen2Converter(Converter):
-    def converted(
-        self, vocab: Optional[dict[str, int]] = None, merges: Optional[list[tuple[str, str]]] = None
-    ) -> Tokenizer:
+    def converted(self, vocab: dict[str, int] | None = None, merges: list[tuple[str, str]] | None = None) -> Tokenizer:
         if not vocab:
             vocab = self.original_tokenizer.encoder
         if not merges:
