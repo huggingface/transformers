@@ -109,7 +109,6 @@ from functools import cache
 from pathlib import Path
 
 import numpy as np
-import torch
 from huggingface_hub import HfApi, snapshot_download
 from huggingface_hub import logging as huggingface_hub_logging
 from safetensors.numpy import load_file as safetensors_load
@@ -117,8 +116,7 @@ from safetensors.numpy import save_file as safetensors_save
 from tqdm import tqdm
 
 import transformers
-from transformers import AutoModel, AutoTokenizer
-from transformers.utils import enable_tf32
+from sentence_transformers import SentenceTransformer
 from transformers.utils import logging as transformers_logging
 
 # ANSI color codes for CLI output styling
@@ -143,7 +141,7 @@ INDEX_MAP_METHODS_PATH = "code_index_map_methods.json"
 TOKENS_METHODS_PATH = "code_index_tokens_methods.json"
 HUB_DATASET_DEFAULT = "hf-internal-testing/transformers_code_embeddings"
 
-EMBEDDING_MODEL = "Qwen/Qwen3-Embedding-8B"
+EMBEDDING_MODEL = "nomic-ai/CodeRankEmbed"
 BATCH_SIZE = 16
 MAX_LENGTH = 4096
 HYBRID_ALPHA = 0.7
@@ -337,18 +335,14 @@ class CodeSimilarityAnalyzer:
             logging.getLogger(name).setLevel(logging.ERROR)
         huggingface_hub_logging.set_verbosity_error()
         transformers_logging.set_verbosity_error()
-        enable_tf32(True)
-        torch.set_grad_enabled(False)
 
         self.models_root = MODELS_ROOT
         self.hub_dataset = hub_dataset
         self.precision = precision
         self.granularity = granularity
-        self.tokenizer = AutoTokenizer.from_pretrained(EMBEDDING_MODEL)
-        self.model = AutoModel.from_pretrained(EMBEDDING_MODEL, torch_dtype="auto", device_map="auto").eval()
-
+        self.model = SentenceTransformer(EMBEDDING_MODEL, trust_remote_code=True)
+        self.model.max_seq_length = MAX_LENGTH
         self.device = self.model.device
-        self.dtype = self.model.dtype
         self.index_dir: Path | None = None
 
     # ---------- HUB IO ----------
@@ -562,51 +556,16 @@ class CodeSimilarityAnalyzer:
             return stem[len("modeling_") :]
         return None
 
-    def _encode_batch(self, texts: list[str]) -> np.ndarray:
-        """
-        Encode a batch of texts into normalized embeddings.
-
-        Args:
-            texts (`list[str]`): List of text strings to encode.
-
-        Returns:
-            `np.ndarray`: Normalized embeddings as a float32 numpy array.
-        """
-        encoded = self.tokenizer(texts, padding=True, truncation=True, max_length=MAX_LENGTH, return_tensors="pt")
-        encoded = {key: value.to(self.device) for key, value in encoded.items()}
-        with (
-            torch.autocast(device_type=self.device.type, dtype=self.dtype)
-            if self.device.type == "cuda"
-            else torch.no_grad()
-        ):
-            output = self.model(**encoded)
-            if hasattr(output, "last_hidden_state"):
-                embeddings = output.last_hidden_state
-                mask = encoded["attention_mask"].unsqueeze(-1)
-                embeddings = (embeddings * mask).sum(dim=1) / mask.sum(dim=1).clamp_min(1e-9)
-            elif hasattr(output, "pooler_output"):
-                embeddings = output.pooler_output
-            else:
-                embeddings = output[0].mean(dim=1)
-        embeddings = torch.nn.functional.normalize(embeddings.float(), p=2, dim=1)
-        return embeddings.cpu().numpy().astype("float32")
-
     def encode(self, texts: list[str]) -> np.ndarray:
-        """
-        Encode a list of texts into embeddings, processing in batches.
-
-        Args:
-            texts (`list[str]`): List of text strings to encode.
-
-        Returns:
-            `np.ndarray`: Stacked embeddings for all texts.
-        """
-        output = []
-        for i in tqdm(range(0, len(texts), BATCH_SIZE), desc="encode", leave=False):
-            output.append(self._encode_batch(texts[i : i + BATCH_SIZE]))
-            if self.device.type == "cuda":
-                torch.cuda.empty_cache()
-        return np.vstack(output) if output else np.zeros((0, 0), dtype="float32")
+        if not texts:
+            return np.zeros((0, 0), dtype="float32")
+        return self.model.encode(
+            texts,
+            batch_size=BATCH_SIZE,
+            show_progress_bar=False,
+            convert_to_numpy=True,
+            normalize_embeddings=True,
+        ).astype("float32")
 
     def _quantize_int8(
         self, embeddings: np.ndarray, scales: np.ndarray | None = None
