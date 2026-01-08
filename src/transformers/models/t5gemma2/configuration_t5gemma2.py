@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_t5gemma2.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 Google Inc. HuggingFace Inc. team. All rights reserved.
 #
 #
@@ -19,7 +18,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Any, Optional, Union
+from typing import Any
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...modeling_rope_utils import RopeParameters
@@ -32,9 +31,9 @@ logger = logging.get_logger(__name__)
 
 class T5Gemma2TextConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`T5Gemma2TextModel`]. It is used to instantiate an T5Gemma2Text
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the T5Gemma2Text-7B.
+    This is the configuration class to store the configuration of a [`T5Gemma2TextModel`]. It is used to instantiate the encoder's
+    text model portion of the T5Gemma2 Model according to the specified arguments, defining the model architecture. Instantiating
+    a configuration with the defaults will yield a similar configuration to that of the T5Gemma2Text-7B.
     e.g. [google/t5gemma2_text-7b](https://huggingface.co/google/t5gemma2_text-7b)
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
@@ -99,19 +98,6 @@ class T5Gemma2TextConfig(PreTrainedConfig):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
-        use_bidirectional_attention (`bool`, *optional*, defaults to `False`):
-            If True, the model will attend to all text tokens instead of using a causal mask. This does not change
-            behavior for vision tokens.
-
-    ```python
-    >>> from transformers import T5Gemma2TextModel, T5Gemma2TextConfig
-    >>> # Initializing a T5Gemma2Text t5gemma2_text-7b style configuration
-    >>> configuration = T5Gemma2TextConfig()
-    >>> # Initializing a model from the t5gemma2_text-7b style configuration
-    >>> model = T5Gemma2TextModel(configuration)
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```
     """
 
     model_type = "t5gemma2_text"
@@ -134,31 +120,30 @@ class T5Gemma2TextConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 262_208,
-        hidden_size: Optional[int] = 2304,
-        intermediate_size: Optional[int] = 9216,
-        num_hidden_layers: Optional[int] = 26,
-        num_attention_heads: Optional[int] = 8,
-        num_key_value_heads: Optional[int] = 4,
-        head_dim: Optional[int] = 256,
-        hidden_activation: Optional[str] = "gelu_pytorch_tanh",
-        max_position_embeddings: Optional[int] = 131_072,
-        initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[int] = 1e-6,
-        use_cache: Optional[bool] = True,
-        pad_token_id: Optional[int] = 0,
-        eos_token_id: Optional[int] = 1,
-        bos_token_id: Optional[int] = 2,
-        tie_word_embeddings: Optional[bool] = True,
-        attention_bias: Optional[bool] = False,
-        attention_dropout: Optional[float] = 0.0,
-        query_pre_attn_scalar: Optional[int] = 256,
-        sliding_window: Optional[int] = 4096,
-        layer_types: Optional[list[str]] = None,
-        final_logit_softcapping: Optional[float] = None,
-        attn_logit_softcapping: Optional[float] = None,
-        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        use_bidirectional_attention: Optional[bool] = False,
+        vocab_size: int | None = 262_208,
+        hidden_size: int | None = 2304,
+        intermediate_size: int | None = 9216,
+        num_hidden_layers: int | None = 26,
+        num_attention_heads: int | None = 8,
+        num_key_value_heads: int | None = 4,
+        head_dim: int | None = 256,
+        hidden_activation: str | None = "gelu_pytorch_tanh",
+        max_position_embeddings: int | None = 131_072,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: int | None = 1e-6,
+        use_cache: bool | None = True,
+        pad_token_id: int | None = 0,
+        eos_token_id: int | None = 1,
+        bos_token_id: int | None = 2,
+        tie_word_embeddings: bool | None = True,
+        attention_bias: bool | None = False,
+        attention_dropout: float | None = 0.0,
+        query_pre_attn_scalar: int | None = 256,
+        sliding_window: int | None = 4096,
+        layer_types: list[str] | None = None,
+        final_logit_softcapping: float | None = None,
+        attn_logit_softcapping: float | None = None,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -180,10 +165,6 @@ class T5Gemma2TextConfig(PreTrainedConfig):
         self.final_logit_softcapping = final_logit_softcapping
         self.attn_logit_softcapping = attn_logit_softcapping
         self.layer_types = layer_types
-
-        self.use_bidirectional_attention = use_bidirectional_attention
-        if use_bidirectional_attention:
-            self.sliding_window = (self.sliding_window // 2) + 1  # due to fa we set exclusive bounds
 
         # BC -> the pattern used to be a simple int, and it's still present in configs on the Hub
         self._sliding_window_pattern = kwargs.get("sliding_window_pattern", 6)
@@ -292,8 +273,8 @@ class T5Gemma2EncoderConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        text_config: Optional[Union[T5Gemma2TextConfig, dict[str, Any]]] = None,
-        vision_config: Optional[Union[SiglipVisionConfig, dict[str, Any]]] = None,
+        text_config: T5Gemma2TextConfig | dict[str, Any] | None = None,
+        vision_config: SiglipVisionConfig | dict[str, Any] | None = None,
         mm_tokens_per_image: int = 256,
         boi_token_index: int = 255_999,
         eoi_token_index: int = 256_000,
@@ -326,9 +307,9 @@ class T5Gemma2EncoderConfig(PreTrainedConfig):
 
 class T5Gemma2DecoderConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`T5Gemma2DecoderModel`]. It is used to instantiate an T5Gemma2Decoder
-    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the T5Gemma2Decoder-7B.
+    This is the configuration class to store the configuration of a [`T5Gemma2DecoderModel`]. It is used to instantiate the decoder
+    text model portion of the T5Gemma2 Model according to the specified arguments, defining the model architecture. Instantiating
+    a configuration with the defaults will yield a similar configuration to that of the T5Gemma2Decoder-7B.
     e.g. [google/t5gemma2_text-7b](https://huggingface.co/google/t5gemma2_text-7b)
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
@@ -393,19 +374,6 @@ class T5Gemma2DecoderConfig(PreTrainedConfig):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
-        use_bidirectional_attention (`bool`, *optional*, defaults to `False`):
-            If True, the model will attend to all text tokens instead of using a causal mask. This does not change
-            behavior for vision tokens.
-
-    ```python
-    >>> from transformers import T5Gemma2DecoderModel, T5Gemma2DecoderConfig
-    >>> # Initializing a T5Gemma2Decoder t5gemma2_text-7b style configuration
-    >>> configuration = T5Gemma2DecoderConfig()
-    >>> # Initializing a model from the t5gemma2_text-7b style configuration
-    >>> model = T5Gemma2DecoderModel(configuration)
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```
     """
 
     model_type = "t5gemma2_decoder"
@@ -428,31 +396,30 @@ class T5Gemma2DecoderConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 262_208,
-        hidden_size: Optional[int] = 2304,
-        intermediate_size: Optional[int] = 9216,
-        num_hidden_layers: Optional[int] = 26,
-        num_attention_heads: Optional[int] = 8,
-        num_key_value_heads: Optional[int] = 4,
-        head_dim: Optional[int] = 256,
-        hidden_activation: Optional[str] = "gelu_pytorch_tanh",
-        max_position_embeddings: Optional[int] = 131_072,
-        initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[int] = 1e-6,
-        use_cache: Optional[bool] = True,
-        pad_token_id: Optional[int] = 0,
-        eos_token_id: Optional[int] = 1,
-        bos_token_id: Optional[int] = 2,
-        tie_word_embeddings: Optional[bool] = True,
-        attention_bias: Optional[bool] = False,
-        attention_dropout: Optional[float] = 0.0,
-        query_pre_attn_scalar: Optional[int] = 256,
-        sliding_window: Optional[int] = 4096,
-        layer_types: Optional[list[str]] = None,
-        final_logit_softcapping: Optional[float] = None,
-        attn_logit_softcapping: Optional[float] = None,
-        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        use_bidirectional_attention: Optional[bool] = False,
+        vocab_size: int | None = 262_208,
+        hidden_size: int | None = 2304,
+        intermediate_size: int | None = 9216,
+        num_hidden_layers: int | None = 26,
+        num_attention_heads: int | None = 8,
+        num_key_value_heads: int | None = 4,
+        head_dim: int | None = 256,
+        hidden_activation: str | None = "gelu_pytorch_tanh",
+        max_position_embeddings: int | None = 131_072,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: int | None = 1e-6,
+        use_cache: bool | None = True,
+        pad_token_id: int | None = 0,
+        eos_token_id: int | None = 1,
+        bos_token_id: int | None = 2,
+        tie_word_embeddings: bool | None = True,
+        attention_bias: bool | None = False,
+        attention_dropout: float | None = 0.0,
+        query_pre_attn_scalar: int | None = 256,
+        sliding_window: int | None = 4096,
+        layer_types: list[str] | None = None,
+        final_logit_softcapping: float | None = None,
+        attn_logit_softcapping: float | None = None,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -474,10 +441,6 @@ class T5Gemma2DecoderConfig(PreTrainedConfig):
         self.final_logit_softcapping = final_logit_softcapping
         self.attn_logit_softcapping = attn_logit_softcapping
         self.layer_types = layer_types
-
-        self.use_bidirectional_attention = use_bidirectional_attention
-        if use_bidirectional_attention:
-            self.sliding_window = (self.sliding_window // 2) + 1  # due to fa we set exclusive bounds
 
         # BC -> the pattern used to be a simple int, and it's still present in configs on the Hub
         self._sliding_window_pattern = kwargs.get("sliding_window_pattern", 6)
@@ -572,8 +535,8 @@ class T5Gemma2Config(PreTrainedConfig):
 
     def __init__(
         self,
-        encoder: Optional[Union[T5Gemma2EncoderConfig, dict[str, Any]]] = None,
-        decoder: Optional[Union[T5Gemma2DecoderConfig, dict[str, Any]]] = None,
+        encoder: T5Gemma2EncoderConfig | dict[str, Any] | None = None,
+        decoder: T5Gemma2DecoderConfig | dict[str, Any] | None = None,
         is_encoder_decoder: bool = True,
         dropout_rate: float = 0.0,
         attention_dropout: float = 0.0,

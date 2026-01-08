@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -1100,6 +1099,7 @@ JOB_TO_TEST_FILE = {
     "pipelines_torch": r"tests/models/.*/test_modeling_.*",
     "tests_hub": r"tests/.*",
     "tests_non_model": r"tests/[^/]*?/test_.*\.py",
+    "tests_training_ci": r"tests/models/.*/test_modeling_.*",
 }
 
 

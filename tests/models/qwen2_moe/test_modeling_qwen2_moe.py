@@ -23,7 +23,7 @@ from transformers.testing_utils import (
     is_flaky,
     require_flash_attn,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     run_first,
     run_test_using_subprocess,
     slow,
@@ -67,7 +67,7 @@ class Qwen2MoeModelTest(CausalLMModelTest, unittest.TestCase):
         return True
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @pytest.mark.flash_attn_test
     @slow
     def test_flash_attn_2_inference_equivalence_right_padding(self):
@@ -119,7 +119,7 @@ class Qwen2MoeIntegrationTest(unittest.TestCase):
     def get_model(cls):
         if cls.model is None:
             cls.model = Qwen2MoeForCausalLM.from_pretrained(
-                "Qwen/Qwen1.5-MoE-A2.7B", device_map="auto", dtype=torch.float16
+                "Qwen/Qwen1.5-MoE-A2.7B", device_map="auto", dtype=torch.float16, experts_implementation="eager"
             )
         return cls.model
 

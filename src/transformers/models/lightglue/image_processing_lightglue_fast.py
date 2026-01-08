@@ -174,14 +174,13 @@ class LightGlueImageProcessorFast(BaseImageProcessorFast):
         stacked_pairs = [torch.stack(pair, dim=0) for pair in image_pairs]
 
         # Return in same format as slow processor
-        image_pairs = torch.stack(stacked_pairs, dim=0) if return_tensors else stacked_pairs
 
-        return BatchFeature(data={"pixel_values": image_pairs})
+        return BatchFeature(data={"pixel_values": stacked_pairs}, tensor_type=return_tensors)
 
     def post_process_keypoint_matching(
         self,
         outputs: "LightGlueKeypointMatchingOutput",
-        target_sizes: Union[TensorType, list[tuple]],
+        target_sizes: TensorType | list[tuple],
         threshold: float = 0.0,
     ) -> list[dict[str, torch.Tensor]]:
         """

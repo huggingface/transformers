@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -419,10 +418,9 @@ class Llama4ImageProcessorFast(BaseImageProcessorFast):
                 )
                 grouped_processed_images[shape] = torch.cat([processed_images, global_tiles.unsqueeze(1)], dim=1)
         processed_images = reorder_images(grouped_processed_images, grouped_images_index)
-        aspect_ratios_list = reorder_images(grouped_aspect_ratios, grouped_images_index)
+        aspect_ratios = reorder_images(grouped_aspect_ratios, grouped_images_index)
 
         processed_images = torch.cat(processed_images, dim=0) if return_tensors else processed_images
-        aspect_ratios = torch.stack(aspect_ratios_list, dim=0) if return_tensors else aspect_ratios_list
         return BatchFeature(
             data={"pixel_values": processed_images, "aspect_ratios": aspect_ratios}, tensor_type=return_tensors
         )

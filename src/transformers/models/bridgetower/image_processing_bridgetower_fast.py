@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The Intel Labs Team Authors, The Microsoft Research Team Authors and HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -251,10 +250,8 @@ class BridgeTowerImageProcessorFast(BaseImageProcessorFast):
             processed_images, processed_masks = self.pad(
                 processed_images, return_mask=True, disable_grouping=disable_grouping
             )
-            processed_masks = torch.stack(processed_masks, dim=0) if return_tensors else processed_masks
             data["pixel_mask"] = processed_masks
 
-        processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
         data["pixel_values"] = processed_images
 
         return BatchFeature(data=data, tensor_type=return_tensors)

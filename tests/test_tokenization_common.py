@@ -25,7 +25,7 @@ import unittest
 from collections import OrderedDict
 from itertools import takewhile
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Optional, Union
+from typing import TYPE_CHECKING, Any, Union
 
 from parameterized import parameterized
 
@@ -160,7 +160,7 @@ def merge_model_tokenizer_mappings(
 
 def check_subword_sampling(
     tokenizer: PreTrainedTokenizer,
-    text: Optional[str] = None,
+    text: str | None = None,
     test_sentencepiece_ignore_case: bool = True,
 ) -> None:
     """
@@ -440,29 +440,29 @@ Hey how are you doing"""  # noqa: W293
         if reference_tokenizer is None:
             reference_tokenizer = self.get_tokenizer()
 
-        try:
-            tokenizer_json_path = os.path.join(self.tmpdirname, "tokenizer.json")
-            if not os.path.exists(tokenizer_json_path):
-                return None
+        tokenizer_json_path = os.path.join(self.tmpdirname, "tokenizer.json")
+        if not os.path.exists(tokenizer_json_path):
+            return None
 
-            extractor = TokenizersExtractor(tokenizer_json_path)
-            vocab_ids, vocab_scores, merges, added_tokens_decoder = extractor.extract()
+        extractor = TokenizersExtractor(tokenizer_json_path)
+        vocab_ids, vocab_scores, merges, added_tokens_decoder = extractor.extract()
+        vocab = vocab_scores
+        if _type := getattr(self.tokenizer_class, "model", None):
+            if _type.__name__ == "BPE" or _type.__name__ == "WordPiece":
+                vocab = vocab_ids
 
-            # Convert added_tokens list to added_tokens_decoder dict format
-            # This matches the format used by from_pretrained() from tokenizer_config.json
-            tokenizer_from_extractor = self.tokenizer_class(
-                vocab=vocab_scores,
-                merges=merges,
-                do_lower_case=False,
-                keep_accents=True,
-                added_tokens_decoder=added_tokens_decoder,
-                **(self.from_pretrained_kwargs if self.from_pretrained_kwargs is not None else {}),
-            )
+        # Convert added_tokens list to added_tokens_decoder dict format
+        # This matches the format used by from_pretrained() from tokenizer_config.jso
+        tokenizer_from_extractor = self.tokenizer_class(
+            vocab=vocab,
+            merges=merges,
+            do_lower_case=False,
+            keep_accents=True,
+            added_tokens_decoder=added_tokens_decoder,
+            **(self.from_pretrained_kwargs if self.from_pretrained_kwargs is not None else {}),
+        )
 
-            return tokenizer_from_extractor
-        except (TypeError, Exception):
-            # fail and raise the error
-            raise
+        return tokenizer_from_extractor
 
     def get_extracted_tokenizer_from_sentencepiece(self, reference_tokenizer=None):
         """
@@ -488,9 +488,9 @@ Hey how are you doing"""  # noqa: W293
         self,
         expected_encoding: dict,
         model_name: str,
-        revision: Optional[str] = None,
-        sequences: Optional[list[str]] = None,
-        decode_kwargs: Optional[dict[str, Any]] = None,
+        revision: str | None = None,
+        sequences: list[str] | None = None,
+        decode_kwargs: dict[str, Any] | None = None,
         padding: bool = True,
     ):
         """
@@ -799,7 +799,8 @@ Hey how are you doing"""  # noqa: W293
     def _run_integration_checks(self, tokenizer, tokenizer_type):
         # Test 1: Tokens match expected
         tokens = tokenizer.tokenize(self.integration_test_input_string)
-        self.assertEqual(
+        self.maxDiff = None
+        self.assertListEqual(
             tokens,
             self.integration_expected_tokens,
             f"Tokenized tokens don't match expected for {tokenizer.__class__.__name__} ({tokenizer_type})",
@@ -950,7 +951,9 @@ Hey how are you doing"""  # noqa: W293
             dummy_conversation, chat_template=dummy_template, tokenize=True, return_dict=False
         )
         dict_output = tokenizer.apply_chat_template(
-            dummy_conversation, chat_template=dummy_template, tokenize=True, return_dict=True
+            dummy_conversation,
+            chat_template=dummy_template,
+            tokenize=True,  # This also checks return_dict=True is the default
         )
         self.assertEqual(dict_output["input_ids"], output)  # Test return_dict behaviour matches
 
@@ -2300,7 +2303,9 @@ Hey how are you doing"""  # noqa: W293
 
         encoded_sequences = [tokenizer(sequence) for sequence in sequences]
         encoded_sequences_batch = tokenizer(sequences, padding=False)
-        self.assertListEqual(encoded_sequences, self.convert_batch_to_list_format(encoded_sequences_batch))
+        self.assertListEqual(
+            encoded_sequences, TokenizerTesterMixin.convert_batch_to_list_format(encoded_sequences_batch)
+        )
 
         maximum_length = len(max([encoded_sequence["input_ids"] for encoded_sequence in encoded_sequences], key=len))
 
@@ -2314,7 +2319,7 @@ Hey how are you doing"""  # noqa: W293
         encoded_sequences_batch_padded = tokenizer(sequences, padding=True)
         self.assertListEqual(
             encoded_sequences_padded,
-            self.convert_batch_to_list_format(encoded_sequences_batch_padded),
+            TokenizerTesterMixin.convert_batch_to_list_format(encoded_sequences_batch_padded),
         )
 
         # check 'longest' is unsensitive to a max length
@@ -2355,7 +2360,9 @@ Hey how are you doing"""  # noqa: W293
             tokenizer(sequence, max_length=max_length, padding="max_length") for sequence in sequences
         ]
         encoded_sequences_batch = tokenizer(sequences, max_length=max_length, padding="max_length")
-        self.assertListEqual(encoded_sequences, self.convert_batch_to_list_format(encoded_sequences_batch))
+        self.assertListEqual(
+            encoded_sequences, TokenizerTesterMixin.convert_batch_to_list_format(encoded_sequences_batch)
+        )
 
         # Left padding tests
         tokenizer = self.get_tokenizer(do_lower_case=False)
@@ -2375,7 +2382,9 @@ Hey how are you doing"""  # noqa: W293
             tokenizer(sequence, max_length=max_length, padding="max_length") for sequence in sequences
         ]
         encoded_sequences_batch = tokenizer(sequences, max_length=max_length, padding="max_length")
-        self.assertListEqual(encoded_sequences, self.convert_batch_to_list_format(encoded_sequences_batch))
+        self.assertListEqual(
+            encoded_sequences, TokenizerTesterMixin.convert_batch_to_list_format(encoded_sequences_batch)
+        )
 
     def test_pretokenized_inputs(self):
         # Test when inputs are pretokenized

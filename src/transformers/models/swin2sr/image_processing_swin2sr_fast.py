@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -97,7 +96,6 @@ class Swin2SRImageProcessorFast(BaseImageProcessorFast):
                 stacked_images = self.pad(stacked_images, size_divisor=size_divisor)
             processed_image_grouped[shape] = stacked_images
         processed_images = reorder_images(processed_image_grouped, grouped_images_index)
-        processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
 
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 

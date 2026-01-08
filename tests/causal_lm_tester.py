@@ -38,6 +38,7 @@ from .test_modeling_common import (
     torch_device,
 )
 from .test_pipeline_mixin import PipelineTesterMixin
+from .test_training_mixin import TrainingTesterMixin
 
 
 if is_torch_available():
@@ -175,7 +176,7 @@ class CausalLMModelTester:
         num_hidden_layers=2,
         num_attention_heads=2,
         num_key_value_heads=2,
-        intermediate_size=37,
+        intermediate_size=32,
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
@@ -192,7 +193,7 @@ class CausalLMModelTester:
         scope=None,
         expert_interval=1,
         moe_layer_start_index=0,
-        moe_intermediate_size=12,
+        moe_intermediate_size=16,
         shared_expert_intermediate_size=36,
         shared_expert_gate=True,
         moe_num_shared_experts=2,
@@ -304,7 +305,7 @@ class CausalLMModelTester:
 
 
 @require_torch
-class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin):
+class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, TrainingTesterMixin):
     model_tester_class = None
     all_model_classes = None
     pipeline_model_mapping = None

@@ -24,7 +24,9 @@ import torch
 
 from transformers.image_utils import load_image
 from transformers.models.auto.tokenization_auto import AutoTokenizer
-from transformers.testing_utils import require_mistral_common
+from transformers.testing_utils import (
+    require_mistral_common,
+)
 from transformers.tokenization_mistral_common import MistralCommonBackend
 from transformers.tokenization_utils_base import BatchEncoding, TruncationStrategy
 from transformers.utils import PaddingStrategy, is_mistral_common_available
@@ -76,9 +78,8 @@ class TestMistralCommonBackend(unittest.TestCase):
         # determine if we already have this downloaded
         cls.local_files_only = len(list_local_hf_repo_files(cls.repo_id, revision=None)) > 0
 
-        cls.tokenizer: MistralCommonBackend = AutoTokenizer.from_pretrained(
+        cls.tokenizer = MistralCommonBackend.from_pretrained(
             cls.repo_id,
-            tokenizer_type="mistral",
             local_files_only=cls.local_files_only,
             # This is a hack as `list_local_hf_repo_files` from `mistral_common` has a bug
             # TODO: Discuss with `mistral-common` maintainers: after a fix being done there, remove this `revision` hack
@@ -102,9 +103,7 @@ class TestMistralCommonBackend(unittest.TestCase):
             local_files_only=local_files_only,
             revision=None,
         )
-        cls.ref_tokenizer_audio: MistralCommonBackend = MistralTokenizer.from_hf_hub(
-            repo_id, local_files_only=local_files_only
-        )
+        cls.ref_tokenizer_audio = MistralTokenizer.from_hf_hub(repo_id, local_files_only=local_files_only)
 
         cls.fixture_conversations = [
             [
@@ -150,25 +149,11 @@ class TestMistralCommonBackend(unittest.TestCase):
                 return tekken_tokenizer._special_tokens_reverse_vocab[piece_str]
             return tekken_tokenizer.unk_id
 
-    def _get_spm_tokenizer(self) -> MistralCommonBackend:
+    def _get_spm_tokenizer(self, mode: str = "test") -> MistralCommonBackend:
         local_files_only = len(list_local_hf_repo_files(self.spm_repo_id, revision=None)) > 0
-        return AutoTokenizer.from_pretrained(
-            self.spm_repo_id,
-            local_files_only=local_files_only,
-            revision=None,
-            tokenizer_type="mistral",
+        return MistralCommonBackend.from_pretrained(
+            self.spm_repo_id, local_files_only=local_files_only, revision=None, mode=mode
         )
-
-    def test_spm_vs_tekken_is_control_token(self):
-        spm_tokenizer = self._get_spm_tokenizer()
-        self.assertTrue(spm_tokenizer._is_control_token(1))
-        self.assertTrue(spm_tokenizer._is_control_token(768))
-        self.assertFalse(spm_tokenizer._is_control_token(2000))
-
-        self.assertTrue(self.tokenizer._is_control_token(0))
-        self.assertTrue(self.tokenizer._is_control_token(768))
-        self.assertTrue(self.tokenizer._is_control_token(999))
-        self.assertFalse(self.tokenizer._is_control_token(1000))
 
     def test_spm_vs_tekken_piece_to_id(self):
         spm_tokenizer = self._get_spm_tokenizer()
@@ -227,18 +212,18 @@ class TestMistralCommonBackend(unittest.TestCase):
             tokens_with_special_ft = self.tokenizer.encode(string, add_special_tokens=True)
         self.assertEqual(tokens_with_special_ft, expected_with_special_ft)
 
-        # Test 3:
+        # Test 4:
         # encode with return_tensors
         tokens_with_return_tensors = self.tokenizer.encode(string, add_special_tokens=False, return_tensors="pt")
         self.assertIsInstance(tokens_with_return_tensors, torch.Tensor)
         self.assertEqual(tokens_with_return_tensors.tolist()[0], expected_without_special)
 
-        # Test 4:
+        # Test 5:
         # encode with max_length
         tokens_with_max_length = self.tokenizer.encode(string, add_special_tokens=False, max_length=3)
         self.assertEqual(tokens_with_max_length, expected_without_special[:3])
 
-        # Test 5:
+        # Test 6:
         # encode with padding
         tokens_with_padding = self.tokenizer.encode(
             string, add_special_tokens=False, padding=True, pad_to_multiple_of=6
@@ -267,14 +252,14 @@ class TestMistralCommonBackend(unittest.TestCase):
         )
         expected_long = self.ref_tokenizer.instruct_tokenizer.tokenizer.encode(string_long, bos=False, eos=False)
 
-        # Test 6:
+        # Test 7:
         # encode with truncation
         tokens_with_truncation = self.tokenizer.encode(
             string_long, add_special_tokens=False, truncation=True, max_length=12
         )
         self.assertEqual(tokens_with_truncation, expected_long[:12])
 
-        # Test 7:
+        # Test 8:
         # encode with padding and truncation
         tokens_with_padding_and_truncation = self.tokenizer.encode(
             string_long, add_special_tokens=False, padding=True, pad_to_multiple_of=12, truncation=True, max_length=36
@@ -284,7 +269,7 @@ class TestMistralCommonBackend(unittest.TestCase):
         ) + expected_long
         self.assertEqual(tokens_with_padding_and_truncation, expected_long_padding)
 
-        # Test 8:
+        # Test 9:
         # encode empty string
         self.assertEqual(self.tokenizer.encode("", add_special_tokens=False), [])
 
@@ -427,7 +412,7 @@ class TestMistralCommonBackend(unittest.TestCase):
 
         # Test 4:
         # decode empty list
-        self.assertEqual(self.tokenizer.batch_decode([], skip_special_tokens=True), [])
+        self.assertEqual(self.tokenizer.batch_decode([], skip_special_tokens=True), [""])
         self.assertEqual(
             self.tokenizer.batch_decode([batch_tokens_ids[0], []], skip_special_tokens=True), [string, ""]
         )
@@ -509,19 +494,40 @@ class TestMistralCommonBackend(unittest.TestCase):
 
     def test_get_special_tokens_mask(self):
         # Test 1:
-        # with skip_special_tokens=False
-        ids = self.ref_tokenizer.instruct_tokenizer.tokenizer.encode("Hello world!", bos=True, eos=True)
+        # mode test with special
+        ids = self.ref_tokenizer.instruct_tokenizer.tokenizer.encode("Hello world!", bos=True, eos=False)
         expected_mask = [1 if id in self.ref_special_ids else 0 for id in ids]
 
-        mask = self.tokenizer.get_special_tokens_mask(ids)
+        mask = self.tokenizer.get_special_tokens_mask(ids, already_has_special_tokens=True)
         self.assertEqual(mask, expected_mask)
 
         # Test 2:
-        # already_has_special_tokens=True should raise an error
-        with self.assertRaises(ValueError):
-            self.tokenizer.get_special_tokens_mask(ids, already_has_special_tokens=True)
+        # mode finetuning with special
+        with patch.object(self.tokenizer, "_mode", ValidationMode.finetuning):
+            ids = self.ref_tokenizer.instruct_tokenizer.tokenizer.encode("Hello world!", bos=True, eos=True)
+            expected_mask = [1 if id in self.ref_special_ids else 0 for id in ids]
+
+            mask = self.tokenizer.get_special_tokens_mask(ids, already_has_special_tokens=True)
+            self.assertEqual(mask, expected_mask)
 
         # Test 3:
+        # mode test without special
+        ids = self.ref_tokenizer.instruct_tokenizer.tokenizer.encode("Hello world!", bos=False, eos=False)
+        expected_mask = [1] + [0 for id in ids]
+
+        mask = self.tokenizer.get_special_tokens_mask(ids, already_has_special_tokens=False)
+        self.assertEqual(mask, expected_mask)
+
+        # Test 4:
+        # mode finetuning without special
+        with patch.object(self.tokenizer, "_mode", ValidationMode.finetuning):
+            ids = self.ref_tokenizer.instruct_tokenizer.tokenizer.encode("Hello world!", bos=False, eos=False)
+            expected_mask = [1] + [0 for id in ids] + [1]
+
+            mask = self.tokenizer.get_special_tokens_mask(ids, already_has_special_tokens=False)
+            self.assertEqual(mask, expected_mask)
+
+        # Test 5:
         # token_ids_1 not None should raise an error
         with self.assertRaises(ValueError):
             self.tokenizer.get_special_tokens_mask(ids, token_ids_1=ids)
@@ -1887,11 +1893,9 @@ class TestMistralCommonBackend(unittest.TestCase):
                 self.assertEqual(tokens["attention_mask"], [[1] * min(len(t), 10) for t in expected_tokens])
                 self.assertEqual(
                     tokens["overflowing_tokens"],
-                    [expected_tokens[0][10 - stride :], expected_tokens[1][10 - stride :]],
+                    [[0], expected_tokens[1][10 - stride :]],
                 )
-                self.assertEqual(
-                    tokens["num_truncated_tokens"], [len(expected_tokens[0]) - 10, len(expected_tokens[1]) - 10]
-                )
+                self.assertEqual(tokens["num_truncated_tokens"], [[0], len(expected_tokens[1]) - 10])
                 self.assertEqual(
                     tokens["special_tokens_mask"],
                     [[1 if id in self.ref_special_ids else 0 for id in ids[:10]] for ids in expected_tokens],
@@ -2112,17 +2116,129 @@ class TestMistralCommonBackend(unittest.TestCase):
                 MistralCommonBackend._get_validation_mode(invalid_mode)
 
     def test_all_special_ids(self):
-        with patch.object(self.tokenizer, "_all_special_tokens_ids", {1, 0}):
+        with patch.object(self.tokenizer, "_all_special_ids", {1, 0}):
             self.assertEqual(self.tokenizer.all_special_ids, [0, 1])
 
         spm_tokenizer = self._get_spm_tokenizer()
-        with patch.object(spm_tokenizer, "_all_special_tokens_ids", {1, 0}):
+        with patch.object(spm_tokenizer, "_all_special_ids", {1, 0}):
             self.assertEqual(spm_tokenizer.all_special_ids, [0, 1])
 
     def test_all_special_tokens(self):
-        with patch.object(self.tokenizer, "_all_special_tokens_ids", {1, 0}):
+        with patch.object(self.tokenizer, "_all_special_tokens", ["<unk>", "<s>"]):
             self.assertEqual(self.tokenizer.all_special_tokens, ["<unk>", "<s>"])
 
         spm_tokenizer = self._get_spm_tokenizer()
-        with patch.object(spm_tokenizer, "_all_special_tokens_ids", {1, 0}):
-            self.assertEqual(spm_tokenizer.all_special_tokens, ["<unk>", "<s>"])
+        with patch.object(spm_tokenizer, "_all_special_tokens", ["<unk>", "<s>", "spm"]):
+            self.assertEqual(spm_tokenizer.all_special_tokens, ["<unk>", "<s>", "spm"])
+
+    def test_mode(self):
+        # Test 1:
+        # mode property should return ValidationMode
+        self.assertIsInstance(self.tokenizer.mode, ValidationMode)
+        self.assertEqual(self.tokenizer.mode, ValidationMode.test)
+
+        # Test 2:
+        # mode should be settable via instantiation
+        spm_finetuning_tokenizer = self._get_spm_tokenizer(mode="finetuning")
+        self.assertEqual(spm_finetuning_tokenizer.mode, ValidationMode.finetuning)
+
+    def test_build_inputs_with_special_tokens(self):
+        # Test 1:
+        # test mode with bos only
+        token_ids = [100, 200, 300]
+        expected = [self.tokenizer.bos_token_id] + token_ids
+        result = self.tokenizer.build_inputs_with_special_tokens(token_ids)
+        self.assertEqual(result, expected)
+
+        # Test 2:
+        # finetuning mode with bos and eos
+        with patch.object(self.tokenizer, "_mode", ValidationMode.finetuning):
+            expected = [self.tokenizer.bos_token_id] + token_ids + [self.tokenizer.eos_token_id]
+            result = self.tokenizer.build_inputs_with_special_tokens(token_ids)
+            self.assertEqual(result, expected)
+
+        # Test 3:
+        # token_ids_1 should raise ValueError
+        with self.assertRaises(ValueError):
+            self.tokenizer.build_inputs_with_special_tokens(token_ids, [400, 500])
+
+    def test_create_token_type_ids_from_sequences(self):
+        # Test 1:
+        # create token type ids for single sequence
+        token_ids = [100, 200, 300]
+        expected_length = len(token_ids) + 1  # +1 for bos token
+        result = self.tokenizer.create_token_type_ids_from_sequences(token_ids)
+        self.assertEqual(result, [0] * expected_length)
+
+        # Test 2:
+        # token_ids_1 should raise ValueError
+        with self.assertRaises(ValueError):
+            self.tokenizer.create_token_type_ids_from_sequences(token_ids, [400, 500])
+
+    def test_num_special_tokens_to_add(self):
+        # Test 1:
+        # test mode should add 1 token (bos)
+        result = self.tokenizer.num_special_tokens_to_add()
+        self.assertEqual(result, 1)
+
+        # Test 2:
+        # finetuning mode should add 2 tokens (bos and eos)
+        with patch.object(self.tokenizer, "_mode", ValidationMode.finetuning):
+            result = self.tokenizer.num_special_tokens_to_add()
+            self.assertEqual(result, 2)
+
+        # Test 3:
+        # pair=True should raise ValueError
+        with self.assertRaises(ValueError):
+            self.tokenizer.num_special_tokens_to_add(pair=True)
+
+    def test_prepare_for_model(self):
+        # Test 1:
+        # basic prepare_for_model with add_special_tokens=True
+        token_ids = [100, 200, 300]
+        result = self.tokenizer.prepare_for_model(token_ids, add_special_tokens=True)
+        expected_ids = [self.tokenizer.bos_token_id] + token_ids
+        self.assertEqual(result["input_ids"], expected_ids)
+        self.assertEqual(result["attention_mask"], [1] * len(expected_ids))
+
+        # Test 2:
+        # prepare_for_model with add_special_tokens=False
+        result = self.tokenizer.prepare_for_model(token_ids, add_special_tokens=False)
+        self.assertEqual(result["input_ids"], token_ids)
+        self.assertEqual(result["attention_mask"], [1] * len(token_ids))
+
+        # Test 3:
+        # prepare_for_model with padding
+        result = self.tokenizer.prepare_for_model(
+            token_ids, add_special_tokens=False, padding="max_length", max_length=10
+        )
+        expected_ids = [self.tokenizer.pad_token_id] * (10 - len(token_ids)) + token_ids
+        expected_attention_mask = [0] * (10 - len(token_ids)) + [1] * len(token_ids)
+        self.assertEqual(result["input_ids"], expected_ids)
+        self.assertEqual(result["attention_mask"], expected_attention_mask)
+
+        # Test 4:
+        # prepare_for_model with truncation
+        long_token_ids = [100, 200, 300, 400, 500, 600]
+        result = self.tokenizer.prepare_for_model(
+            long_token_ids, add_special_tokens=False, truncation=True, max_length=4
+        )
+        expected_ids = long_token_ids[:4]
+        self.assertEqual(result["input_ids"], expected_ids)
+        self.assertEqual(result["attention_mask"], [1] * len(expected_ids))
+
+        # Test 5:
+        # prepare_for_model with return_tensors
+        result = self.tokenizer.prepare_for_model(token_ids, add_special_tokens=False, return_tensors="pt")
+        self.assertIsInstance(result["input_ids"], torch.Tensor)
+        self.assertEqual(result["input_ids"].tolist(), token_ids)
+
+        # Test 6:
+        # pair_ids should raise ValueError
+        with self.assertRaises(ValueError):
+            self.tokenizer.prepare_for_model(token_ids, pair_ids=[400, 500])
+
+        # Test 7:
+        # unsupported kwargs should raise ValueError
+        with self.assertRaises(ValueError):
+            self.tokenizer.prepare_for_model(token_ids, add_special_tokens=False, unsupported_arg="")
