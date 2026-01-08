@@ -33,7 +33,8 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 
 if is_torch_available():
     import torch
-    torch.set_float32_matmul_precision('high')
+
+    torch.set_float32_matmul_precision("high")
 
     from transformers import (
         Cache,
@@ -329,7 +330,9 @@ class YoutuIntegrationTest(unittest.TestCase):
             "My favorite all time favorite condiment is ketchup.",
         ]
         tokenizer = AutoTokenizer.from_pretrained("tencent/Youtu-LLM-2B-Base")
-        model = YoutuForCausalLM.from_pretrained("tencent/Youtu-LLM-2B-Base", device_map=torch_device, dtype=torch.float16)
+        model = YoutuForCausalLM.from_pretrained(
+            "tencent/Youtu-LLM-2B-Base", device_map=torch_device, dtype=torch.float16
+        )
         if model.config.tie_word_embeddings:
             # Youtu-LLM-2B-Base contains extra repeated weights for the tied embeddings, we can tie weights here according to its config
             model.tie_weights()

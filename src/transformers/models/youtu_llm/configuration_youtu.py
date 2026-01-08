@@ -158,11 +158,15 @@ class YoutuConfig(PreTrainedConfig):
         self.hidden_act = hidden_act
         # if initializer_range is None, set it to 2.0 / (5.0 * self.hidden_size) ** 0.5
         if self.hidden_size != 0:
-            self.initializer_range = (2.0 / (5.0 * self.hidden_size)) ** 0.5 if initializer_range is None else initializer_range
+            self.initializer_range = (
+                (2.0 / (5.0 * self.hidden_size)) ** 0.5 if initializer_range is None else initializer_range
+            )
         else:
             self.initializer_range = 0.02
         # if embedding_initializer_range is None, set it to 2.0 * self.initializer_range
-        self.embedding_initializer_range = self.initializer_range * 2.0 if embedding_initializer_range is None else embedding_initializer_range
+        self.embedding_initializer_range = (
+            self.initializer_range * 2.0 if embedding_initializer_range is None else embedding_initializer_range
+        )
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
         self.attention_bias = attention_bias

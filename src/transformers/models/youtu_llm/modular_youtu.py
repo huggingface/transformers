@@ -1,30 +1,18 @@
-import math
-from collections.abc import Callable
-from typing import Optional
-
 import torch
-import torch.nn.functional as F
 from torch import nn
 
 from ... import initialization as init
-from ...cache_utils import Cache
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...processing_utils import Unpack
-from ...utils import is_grouped_mm_available, logging
+from ...utils import logging
+from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3Attention
 from ..llama.modeling_llama import (
     LlamaDecoderLayer,
     LlamaForCausalLM,
-    LlamaModel,
     LlamaMLP,
+    LlamaModel,
     LlamaPreTrainedModel,
     LlamaRMSNorm,
     LlamaRotaryEmbedding,
-    apply_rotary_pos_emb,
-    eager_attention_forward,
-    rotate_half,
 )
-from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3Attention
 from .configuration_youtu import YoutuConfig
 
 

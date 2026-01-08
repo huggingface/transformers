@@ -941,7 +941,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("xmod", "X-MOD"),
         ("yolos", "YOLOS"),
         ("yoso", "YOSO"),
-        ("youtu_llm", "Youtu-LLM"),
+        ("youtu_llm", "Youtu"),
         ("zamba", "Zamba"),
         ("zamba2", "Zamba2"),
         ("zoedepth", "ZoeDepth"),
