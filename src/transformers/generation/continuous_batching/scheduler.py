@@ -41,7 +41,6 @@ class Scheduler(ABC):
         # This is to compute the cache used by a new request being scheduled
         self.cache_budget_module = None if cache.num_full_attention_groups else cache.config.sliding_window
 
-
     @traced
     def add_waiting_request(self, state: RequestState):
         """Adds a request to the waiting list."""
@@ -237,7 +236,9 @@ class FIFOScheduler(Scheduler):
 
             # Check cache budget
             cache_needed = state.current_len()
-            cache_needed = cache_needed if self.cache_budget_module is None else cache_needed % self.cache_budget_module
+            cache_needed = (
+                cache_needed if self.cache_budget_module is None else cache_needed % self.cache_budget_module
+            )
             if cache_budget < cache_needed:
                 continue
 

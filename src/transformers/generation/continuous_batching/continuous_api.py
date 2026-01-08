@@ -706,9 +706,7 @@ class ContinuousBatchProcessor:
             padded_q = pad_by_intervals(self.actual_query_length, self.max_batch_tokens, self.q_padding_intervals)
             max_read_index_size = max(self.actual_index_sizes[i][0] for i in range(self.cache.num_groups))
             # The space planned for query tokens will be added later, so we remove it from the space planned for KV
-            padded_read_index_size = pad_by_intervals(
-                max_read_index_size, self.num_pages, self.kv_padding_intervals
-            )
+            padded_read_index_size = pad_by_intervals(max_read_index_size, self.num_pages, self.kv_padding_intervals)
         else:
             padded_q, padded_read_index_size = 0, 0
         # Retrieve the model kwargs with or without padding

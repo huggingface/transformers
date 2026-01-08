@@ -418,14 +418,14 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
     @require_torch_accelerator
     def test_continuous_batching_few_blocks(self) -> None:
         """This test verifies that generation works with a very small number of blocks, ie. small enough that we need to
-        offload a request at some point. To add more complexity, we repeat the same prompt 4 times and enable prefix 
+        offload a request at some point. To add more complexity, we repeat the same prompt 4 times and enable prefix
         sharing."""
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
 
         # Patch soft_reset_one_request to verify it's called at least once
         original_soft_reset = ContinuousBatchProcessor.soft_reset_one_request
         with patch.object(
-            ContinuousBatchProcessor, "soft_reset_one_request", autospec=True, side_effect=original_soft_reset,
+            ContinuousBatchProcessor, "soft_reset_one_request", autospec=True, side_effect=original_soft_reset
         ) as mock_soft_reset:
             self._test_continuous_batching_parity(
                 model_id, True, "sdpa", True, False, num_blocks=4, num_repeat_prompts=4
