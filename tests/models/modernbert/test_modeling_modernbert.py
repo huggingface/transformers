@@ -25,10 +25,12 @@ from transformers.modeling_utils import FLASH_ATTN_KERNEL_FALLBACK
 from transformers.models.auto import get_values
 from transformers.testing_utils import (
     CaptureLogger,
+    require_accelerate,
     require_flash_attn,
+    require_non_hpu,
     require_torch,
     require_torch_accelerator,
-    require_torch_gpu,
+    require_torch_multi_accelerator,
     slow,
     torch_device,
 )
@@ -166,9 +168,6 @@ class ModernBertModelTester:
                 "test_retain_grad_hidden_states_attentions",
             ):
                 config._attn_implementation = "eager"
-            # Some tests runs on CPU but ModernBERT defaults to flash_attention_2 (GPU only).
-            elif test_name in ("test_all_tensors_are_parameter_or_buffer"):
-                config._attn_implementation = "sdpa"
         return config
 
     def create_and_check_model(self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels):
@@ -268,6 +267,19 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
     model_split_percents = [0.5, 0.8, 0.9]
 
+    @classmethod
+    def setUpClass(cls):
+        # Flash Attention requires bf16/fp16, set default dtype to bfloat16 for all tests
+        if is_torch_available():
+            cls._original_dtype = torch.get_default_dtype()
+            torch.set_default_dtype(torch.bfloat16)
+
+    @classmethod
+    def tearDownClass(cls):
+        # Restore original default dtype
+        if is_torch_available() and hasattr(cls, "_original_dtype"):
+            torch.set_default_dtype(cls._original_dtype)
+
     # special case for ForPreTraining model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
@@ -336,6 +348,125 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             model.eval()
             model(input_ids, attention_mask=None)
         self.assertIn("We strongly recommend passing in an `attention_mask`", cl.out)
+
+    def test_can_init_all_missing_weights(self):
+        # Override to temporarily restore float32 default dtype for this test
+        # The bfloat16 default dtype affects initialization determinism
+        original_dtype = torch.get_default_dtype()
+        try:
+            torch.set_default_dtype(torch.float32)
+            super().test_can_init_all_missing_weights()
+        finally:
+            torch.set_default_dtype(original_dtype)
+
+    def test_problem_types(self):
+        # Override to use bfloat16 labels to match model dtype (FlashAttention requires bf16/fp16)
+        import warnings
+
+        from transformers.models.auto.modeling_auto import (
+            MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES,
+            MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES,
+        )
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        problem_types = [
+            {"title": "multi_label_classification", "num_labels": 2, "dtype": torch.bfloat16},
+            {"title": "single_label_classification", "num_labels": 1, "dtype": torch.long},
+            {"title": "regression", "num_labels": 1, "dtype": torch.bfloat16},
+        ]
+
+        for model_class in self.all_model_classes:
+            if model_class.__name__ not in [
+                *get_values(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES),
+                *get_values(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES),
+            ]:
+                continue
+
+            for problem_type in problem_types:
+                with self.subTest(msg=f"Testing {model_class} with {problem_type['title']}"):
+                    config.problem_type = problem_type["title"]
+                    config.num_labels = problem_type["num_labels"]
+
+                    model = model_class(config)
+                    model.to(torch_device)
+                    model.train()
+
+                    inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
+
+                    if problem_type["num_labels"] > 1:
+                        inputs["labels"] = inputs["labels"].unsqueeze(1).repeat(1, problem_type["num_labels"])
+
+                    inputs["labels"] = inputs["labels"].to(problem_type["dtype"])
+
+                    with warnings.catch_warnings(record=True) as warning_list:
+                        loss = model(**inputs).loss
+                    for w in warning_list:
+                        if "Using a target size that is different to the input size" in str(w.message):
+                            raise ValueError(
+                                f"Something is going wrong in the regression problem: intercepted {w.message}"
+                            )
+
+                    loss.backward()
+
+    def test_determinism(self):
+        # Override to handle bfloat16 -> numpy conversion (numpy doesn't support bf16)
+        import numpy as np
+
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        def check_determinism(first, second):
+            if torch.all(torch.isnan(first)) and torch.all(torch.isnan(second)):
+                return
+            # Convert to float32 before numpy conversion since numpy doesn't support bfloat16
+            out_1 = first.float().cpu().numpy()
+            out_2 = second.float().cpu().numpy()
+            out_1 = out_1[~np.isnan(out_1)]
+            out_2 = out_2[~np.isnan(out_2)]
+            out_1 = out_1[~np.isneginf(out_1)]
+            out_2 = out_2[~np.isneginf(out_2)]
+            max_diff = np.amax(np.abs(out_1 - out_2))
+            self.assertLessEqual(max_diff, 1e-5)
+
+        for model_class in self.all_model_classes:
+            model = model_class(copy.deepcopy(config))
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                first = model(**self._prepare_for_class(inputs_dict, model_class))[0]
+                second = model(**self._prepare_for_class(inputs_dict, model_class))[0]
+
+            if isinstance(first, tuple) and isinstance(second, tuple):
+                for tensor1, tensor2 in zip(first, second):
+                    check_determinism(tensor1, tensor2)
+            else:
+                check_determinism(first, second)
+
+    # bf16 ↓
+    @require_accelerate
+    @pytest.mark.accelerate_tests
+    @require_torch_accelerator
+    def test_cpu_offload(self, rtol=2e-3, atol=2e-3):
+        super().test_cpu_offload(rtol=rtol, atol=atol)
+
+    @require_accelerate
+    @pytest.mark.accelerate_tests
+    @require_torch_accelerator
+    def test_disk_offload_bin(self, rtol=2e-3, atol=2e-3):
+        super().test_disk_offload_bin(rtol=rtol, atol=atol)
+
+    @require_accelerate
+    @pytest.mark.accelerate_tests
+    @require_torch_accelerator
+    def test_disk_offload_safetensors(self, rtol=2e-3, atol=2e-3):
+        super().test_disk_offload_safetensors(rtol=rtol, atol=atol)
+
+    @require_non_hpu
+    @require_accelerate
+    @pytest.mark.accelerate_tests
+    @require_torch_multi_accelerator
+    def test_model_parallelism(self, rtol=2e-3, atol=2e-3):
+        super().test_model_parallelism(rtol=rtol, atol=atol)
 
     @unittest.skip("ModernBert doesn't use separate classes for SDPA, but a function instead.")
     def test_sdpa_can_dispatch_non_composite_models(self):
@@ -513,7 +644,7 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
                 f"Model architecture does not support {attn_implementation}, or setting its attention dynamically"
             )
 
-    @require_torch_gpu  # modernbert contains triton code which cannot run on CPU, so we only test on GPU
+    @require_torch_accelerator  # modernbert contains triton code which cannot run on CPU, so we only test on GPU
     def test_all_tensors_are_parameter_or_buffer(self):
         super().test_all_tensors_are_parameter_or_buffer()
 
