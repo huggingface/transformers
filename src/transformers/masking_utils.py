@@ -1080,10 +1080,10 @@ def create_sliding_window_causal_mask(
 def create_bidirectional_sliding_window_mask(
     config: PreTrainedConfig,
     input_embeds: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
-    or_mask_function: Optional[Callable] = None,
-    and_mask_function: Optional[Callable] = None,
-) -> Optional[Union[torch.Tensor, BlockMask]]:
+    attention_mask: torch.Tensor | None,
+    or_mask_function: Callable | None = None,
+    and_mask_function: Callable | None = None,
+) -> torch.Tensor | BlockMask | None:
     """
     Create a bidirectional sliding window mask based on the attention implementation used (stored in the config).
     This type of attention pattern is used by encoder models like ModernBERT where tokens can attend to other tokens
