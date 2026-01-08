@@ -1207,7 +1207,7 @@ class GenerationTesterMixin:
 
             input_ids = inputs_dict.pop("input_ids")
 
-            model.config.use_cache = True
+            model.generation_config.use_cache = True
             model.config.is_decoder = True
             batch_size = input_ids.shape[0]
             max_new_tokens = 10
@@ -1676,10 +1676,10 @@ class GenerationTesterMixin:
                 self.skipTest(reason="This model does not support `logits_to_keep` argument.")
 
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
-            config.use_cache = True
             config.is_decoder = True
 
             model = model_class(config).to(torch_device).eval()
+            model.generation_config.use_cache = True
             # All generation methods (except assisted decoding) rely on always extracting the last token logits of the
             # full logits matrix, so testing out only greedy search and assisted decoding is enough (if it works,
             # other methods will work as well)

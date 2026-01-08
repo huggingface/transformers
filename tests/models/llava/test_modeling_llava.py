@@ -33,6 +33,7 @@ from transformers.testing_utils import (
     Expectations,
     cleanup,
     require_bitsandbytes,
+    require_deterministic_for_xpu,
     require_torch,
     require_vision,
     slow,
@@ -298,16 +299,20 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         cleanup(torch_device, gc_collect=True)
 
     @require_bitsandbytes
+    @require_deterministic_for_xpu
     def test_small_model_integration_test(self):
         # Let's make sure we test the preprocessing to replace what is used
         model = LlavaForConditionalGeneration.from_pretrained(
-            "llava-hf/bakLlava-v1-hf", quantization_config=BitsAndBytesConfig(load_in_4bit=True)
+            "llava-hf/bakLlava-v1-hf",
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
+            dtype="float16",
+            device_map=torch_device,
         )
 
         prompt = "<image>\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT:"
         image_file = "https://llava-vl.github.io/static/images/view.jpg"
         raw_image = Image.open(requests.get(image_file, stream=True).raw)
-        inputs = self.processor(images=raw_image, text=prompt, return_tensors="pt").to(torch_device)
+        inputs = self.processor(images=raw_image, text=prompt, return_tensors="pt").to(torch_device, torch.float16)
 
         output = model.generate(**inputs, max_new_tokens=20)
         expected_decoded_texts = Expectations({
@@ -323,6 +328,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         )
 
     @require_bitsandbytes
+    @require_deterministic_for_xpu
     def test_small_model_integration_test_llama_single(self):
         # Let's make sure we test the preprocessing to replace what is used
         model_id = "llava-hf/llava-1.5-7b-hf"
@@ -341,7 +347,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         EXPECTED_DECODED_TEXTS = Expectations(
             {
-                ("xpu", 3): 'USER:  \nWhat are the things I should be cautious about when I visit this place? ASSISTANT: When visiting this place, which is a pier or dock extending over a body of water, there are a few things to be cautious about. First, be aware of the weather conditions, as sudden changes in weather can make the pier unsafe to walk on. Second, be mindful of the water depth and any potential hazards, such as submerged rocks or debris, that could cause accidents or injuries. Additionally, be cautious of the tides and currents, as they can change rapidly and pose a risk to swimmers or those who venture too close to the edge of the pier. Lastly, be respectful of the environment and other visitors, as the pier is a shared space where people can enjoy the view, relax, or engage in recreational activities.',
+                ("xpu", 3): 'USER:  \nWhat are the things I should be cautious about when I visit this place? ASSISTANT: When visiting this place, which is a pier or dock extending over a body of water, there are a few things to be cautious about. First, be aware of the weather conditions, as sudden changes in weather can make the pier unsafe to walk on. Second, be mindful of the water depth and any potential hazards, such as submerged rocks or debris, that could cause accidents or injuries. Additionally, be cautious of the presence of boats or other watercraft in the area, as they may be moving at high speeds or making sudden turns, which could pose a risk to pedestrians. Lastly, be aware of any posted signs or warnings, as they may provide important information about the pier\'s conditions or potential dangers.',
                 ("cuda", 7): 'USER:  \nWhat are the things I should be cautious about when I visit this place? ASSISTANT: When visiting this place, which is a pier or dock extending over a body of water, there are a few things to be cautious about. First, be aware of the weather conditions, as sudden changes in weather can make the pier unsafe to walk on. Second, be mindful of the water depth and any potential hazards, such as submerged rocks or debris, that could cause accidents or injuries. Additionally, be cautious of the tides and currents, as they can change rapidly and pose a risk to swimmers or those who venture too close to the edge of the pier. Lastly, be respectful of the environment and other visitors, as the pier is a shared space where people can enjoy the view, relax, or engage in recreational activities.',
                 ("cuda", 8): 'USER:  \nWhat are the things I should be cautious about when I visit this place? ASSISTANT: When visiting this place, which is a pier or dock extending over a body of water, there are a few things to be cautious about. First, be aware of the weather conditions, as sudden changes in weather can make the pier unsafe to walk on. Second, be mindful of the water depth and any potential hazards, such as submerged rocks or debris, that could cause accidents or injuries. Additionally, be cautious of the tides and currents, as they can change rapidly and pose a risk to swimmers or those who venture too close to the edge of the pier. Lastly, be respectful of the environment and other visitors, as the pier is a shared space where people can enjoy the view, relax, or engage in recreational activities.',
                 ("rocm", (9, 5)): 'USER:  \nWhat are the things I should be cautious about when I visit this place? ASSISTANT: When visiting this place, which is a pier or dock overlooking a lake, you should be cautious about the following:\n\n1. Safety: Ensure that the pier or dock is stable and secure before stepping onto it. Avoid walking on the edge of the pier or dock, as it could be unstable or unsafe.\n\n2. Weather conditions: Be aware of the weather forecast before visiting the area. Strong winds, heavy rain, or storms can make the pier or dock unsafe to use.\n\n3. Wildlife: Be mindful of the wildlife in the area, such as birds or aquatic animals. Avoid disturbing their natural habitat or causing harm to the local ecosystem.\n\n4. Water safety: If you plan to go swimming or engage in water activities, be aware of the water conditions, such as currents, tides, or potential hazards like submerged objects.\n\n5. Personal belongings: Keep an eye on your personal belongings, such as bags or backpacks, to prevent theft or loss.\n\n6. Leave no trace: When visiting the area, make sure to clean up after yourself and leave no trace of your presence to preserve the natural environment.',
@@ -407,7 +413,10 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     def test_small_model_integration_test_batch(self):
         # Let's make sure we test the preprocessing to replace what is used
         model = LlavaForConditionalGeneration.from_pretrained(
-            "llava-hf/bakLlava-v1-hf", quantization_config=BitsAndBytesConfig(load_in_4bit=True)
+            "llava-hf/bakLlava-v1-hf",
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
+            dtype="float16",
+            device_map=torch_device,
         )
         # The first batch is longer in terms of text, but only has 1 image. The second batch will be padded in text, but the first will be padded because images take more space!.
         prompts = [
@@ -418,7 +427,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         image2 = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
 
         inputs = self.processor(images=[image1, image2], text=prompts, return_tensors="pt", padding=True).to(
-            torch_device
+            torch_device, torch.float16
         )
 
         output = model.generate(**inputs, max_new_tokens=20)
@@ -509,6 +518,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
     @require_torch
     @require_vision
     @require_bitsandbytes
+    @require_deterministic_for_xpu
     def test_batched_generation(self):
         model = LlavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf", device_map="auto")
 
@@ -534,24 +544,24 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         EXPECTED_OUTPUTS = Expectations(
             {
                 ("xpu", 3): [
-                    "\n \nUSER: What's the difference of two images?\nASSISTANT: The difference between the two images is that one shows a dog standing on a grassy field, while",
-                    '\nUSER: Describe the image.\nASSISTANT: The image features a brown and white dog sitting on a sidewalk. The dog is holding a small',
-                    '\nUSER: Describe the image.\nASSISTANT: The image features a lone llama standing on a grassy hill. The llama is the'
+                    "\n \nUSER: What's the difference of two images?\nASSISTANT: In the two images, the primary difference is the presence of a green plant in one image and a",
+                    "\nUSER: Describe the image.\nASSISTANT: The image features a small, fluffy dog sitting on a sidewalk. The dog is holding",
+                    "\nUSER: Describe the image.\nASSISTANT: The image features a lone, adult llama standing on a grassy hill. The llama",
                 ],
                 ("cuda", 7): [
-                    "\n \nUSER: What's the difference of two images?\nASSISTANT: The difference between the two images is that one of them has a dog standing on a field, while",
-                    "\nUSER: Describe the image.\nASSISTANT: The image features a brown and white dog sitting on a sidewalk. The dog is holding a small",
-                    "\nUSER: Describe the image.\nASSISTANT: The image features a lone llama standing on a grassy hill. The llama is the",
+                    "\n \nUSER: What's the difference of two images?\nASSISTANT:  In the two images, the primary difference is the presence of a green plant in one and a yellow",
+                    "\nUSER: Describe the image.\nASSISTANT: The image features a small, fluffy dog sitting on a sidewalk. The dog is holding",
+                    "\nUSER: Describe the image.\nASSISTANT: The image features a lone, adult llama standing on a grassy hill. The llama",
                 ],
                 ("cuda", 8): [
-                    "\n \nUSER: What's the difference of two images?\nASSISTANT: The difference between the two images is that one of them has a dog standing on a field, while",
-                    '\nUSER: Describe the image.\nASSISTANT: The image features a beautiful blonde dog sitting on a sidewalk. The dog is holding a small',
-                    '\nUSER: Describe the image.\nASSISTANT: The image features a lone llama standing on a grassy hill. The llama is the',
+                    "\n \nUSER: What's the difference of two images?\nASSISTANT: In the two images, the primary difference is the presence of a green plant in one and a yellow",
+                    "\nUSER: Describe the image.\nASSISTANT: The image features a small, fluffy dog sitting on a sidewalk. The dog is holding",
+                    "\nUSER: Describe the image.\nASSISTANT: The image features a lone, adult llama standing on a grassy hill. The llama",
                 ],
                 ("rocm", (9, 5)): [
-                    "\n \nUSER: What's the difference of two images?\nASSISTANT: The difference between the two images is that one of them is a black and white photo, while the",
-                    '\nUSER: Describe the image.\nASSISTANT: The image features a brown dog sitting on a sidewalk, holding a green rose in its mouth.',
-                    '\nUSER: Describe the image.\nASSISTANT: The image features a lone, adult llama standing on a grassy hill. The llama',
+                    "\n\nUSER: What's the difference of two images?\nASSISTANT: In the two images, the primary difference is the presence of a green plant in one and a yellow",
+                    "\nUSER: Describe the image.\nASSISTANT: The image features a small, fluffy dog sitting on a sidewalk. The dog is holding",
+                    "\nUSER: Describe the image.\nASSISTANT: The image features a lone, adult llama standing on a grassy hill. The llama",
                 ],
             }
         )  # fmt: skip
@@ -612,18 +622,18 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         EXPECTED_DECODED_TEXTS = Expectations(
             {
-                ("xpu", 3): "user\n\nWhat are these?\nassistant These are two cats, one with a green collar and the other with a black collar. They are lying on a pink blanket and appear to be sleeping",
+                ("xpu", 3): "user\n\nWhat are these?\nassistant The image shows two cats, one on the left and one on the right. They appear to be resting or sleeping on a pink blanket. The cat",
                 ("cuda", None): "user\n\nWhat are these?\nassistant The image shows two cats, one on the left and one on the right. They appear to be resting or sleeping on a pink blanket. The cat",
             }
         )  # fmt: skip
         EXPECTED_DECODED_TEXT = EXPECTED_DECODED_TEXTS.get_expectation()
-
         decoded_text = processor.batch_decode(output, skip_special_tokens=True)[0]
         self.assertEqual(decoded_text, EXPECTED_DECODED_TEXT)
 
+    @require_deterministic_for_xpu
     def test_pixtral(self):
         model_id = "mistral-community/pixtral-12b"
-        model = LlavaForConditionalGeneration.from_pretrained(model_id)
+        model = LlavaForConditionalGeneration.from_pretrained(model_id, dtype="float16", device_map=torch_device)
         processor = AutoProcessor.from_pretrained(model_id)
 
         IMG_URLS = [
@@ -633,7 +643,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         PROMPT = "<s>[INST]Describe the images.\n[IMG][IMG][/INST]"
 
         # image = Image.open(requests.get(url, stream=True).raw)
-        inputs = processor(text=PROMPT, images=IMG_URLS, return_tensors="pt").to(model.device)
+        inputs = processor(text=PROMPT, images=IMG_URLS, return_tensors="pt").to(torch_device, torch.float16)
         generate_ids = model.generate(**inputs, max_new_tokens=100)
         output = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
 
@@ -651,10 +661,14 @@ The second image depicts a scenic mountain landscape. The mountains are rugged a
         self.assertEqual(output, EXPECTED_GENERATION)
 
     @require_bitsandbytes
+    @require_deterministic_for_xpu
     def test_pixtral_4bit(self):
         model_id = "mistral-community/pixtral-12b"
         model = LlavaForConditionalGeneration.from_pretrained(
-            model_id, quantization_config=BitsAndBytesConfig(load_in_4bit=True)
+            model_id,
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
+            dtype="float16",
+            device_map=torch_device,
         )
         processor = AutoProcessor.from_pretrained(model_id)
 
@@ -679,10 +693,14 @@ The second image depicts a scenic mountain landscape. The mountains are rugged a
         self.assertTrue(output in EXPECTED_GENERATION)
 
     @require_bitsandbytes
+    @require_deterministic_for_xpu
     def test_pixtral_batched(self):
         model_id = "mistral-community/pixtral-12b"
         model = LlavaForConditionalGeneration.from_pretrained(
-            model_id, quantization_config=BitsAndBytesConfig(load_in_4bit=True)
+            model_id,
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
+            dtype="float16",
+            device_map=torch_device,
         )
         processor = AutoProcessor.from_pretrained(model_id)
         processor.tokenizer.pad_token_id = processor.tokenizer.eos_token_id
