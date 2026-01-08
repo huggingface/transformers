@@ -56,8 +56,8 @@ class GlmImageVisionText2TextModelTester:
         num_channels=3,
         ignore_index=-100,
         image_size=128,
-        image_start_token_id=5,
-        image_end_token_id=6,
+        image_start_token_id=85,
+        image_end_token_id=86,
         image_token_id=7,
         is_training=True,
         text_config={
