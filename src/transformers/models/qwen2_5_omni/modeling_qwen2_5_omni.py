@@ -3676,14 +3676,23 @@ class Qwen2_5OmniToken2WavDiTModel(Qwen2_5OmniPreTrainedModel):
         guidance_scale=0.5,
         sway_coefficient=-1.0,
     ):
-        noise_initialization = torch.randn([1, 30000, self.mel_dim], dtype=reference_mel_spectrogram.dtype)
         maximum_duration = quantized_code.shape[1] * self.repeats
-        initial_state = noise_initialization[:, :maximum_duration].to(quantized_code.device)
         batch_size = reference_mel_spectrogram.shape[0]
-        conditioning_vector = conditioning_vector.unsqueeze(1).repeat(1, maximum_duration, 1)
-
         if batch_size != 1:
             raise ValueError("Only batch size = 1 is currently supported")
+
+        if maximum_duration > self.config.max_position_embeddings:
+            raise ValueError(
+                f"Requested mel length ({maximum_duration}) exceeds `dit_config.max_position_embeddings` "
+                f"({self.config.max_position_embeddings}). Provide shorter `quantized_code`."
+            )
+
+        initial_state = torch.randn(
+            [batch_size, maximum_duration, self.mel_dim],
+            dtype=reference_mel_spectrogram.dtype,
+            device=quantized_code.device,
+        )
+        conditioning_vector = conditioning_vector.unsqueeze(1).repeat(1, maximum_duration, 1)
 
         def ode_function(time_step, hidden_states):
             if guidance_scale < 1e-5:
@@ -3695,6 +3704,7 @@ class Qwen2_5OmniToken2WavDiTModel(Qwen2_5OmniPreTrainedModel):
                     time_step=time_step,
                     drop_audio_conditioning=False,
                     drop_code=False,
+                    apply_cfg=False,
                 )
                 return prediction
 
