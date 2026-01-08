@@ -17,36 +17,38 @@ style:
 
 
 # Check that the repo is in a good state
+# Note: each line is run in its own shell, and doing `-` before the command ignores the errors if any, continuing with next command
 check-repo:
 	ruff check $(check_dirs) setup.py conftest.py
 	ruff format --check $(check_dirs) setup.py conftest.py
-	@python -c "from transformers import *" || (echo '🚨 import failed, this means you introduced unprotected imports! 🚨'; exit 1)
-	python utils/sort_auto_mappings.py --check_only
-	python utils/check_doc_toc.py
-	python utils/check_copies.py
-	python utils/check_modular_conversion.py
-	python utils/check_dummies.py
-	python utils/check_repo.py
-	python utils/check_modeling_structure.py
-	python utils/check_inits.py
-	python utils/check_pipeline_typing.py
-	python utils/check_config_docstrings.py
-	python utils/check_config_attributes.py
-	python utils/check_doctest_list.py
-	python utils/update_metadata.py --check-only
-	python utils/check_docstrings.py
-	python utils/add_dates.py --check-only
+	python -c "from transformers import *" || (echo '🚨 import failed, this means you introduced unprotected imports! 🚨'; exit 1)
+	-python utils/sort_auto_mappings.py --check_only
+	-python utils/check_doc_toc.py
+	-python utils/check_copies.py
+	-python utils/check_modular_conversion.py
+	-python utils/check_dummies.py
+	-python utils/check_repo.py
+	-python utils/check_modeling_structure.py
+	-python utils/check_inits.py
+	-python utils/check_pipeline_typing.py
+	-python utils/check_config_docstrings.py
+	-python utils/check_config_attributes.py
+	-python utils/check_doctest_list.py
+	-python utils/update_metadata.py --check-only 
+	-python utils/check_docstrings.py 
+	-python utils/add_dates.py --check-only 
 
 
 # Run all repo checks for which there is an automatic fix, most notably modular conversions
+# Note: each line is run in its own shell, and doing `-` before the command ignores the errors if any, continuing with next command
 fix-repo: style
-	python utils/check_copies.py --fix_and_overwrite
-	python utils/check_modular_conversion.py --fix_and_overwrite
-	python utils/check_dummies.py --fix_and_overwrite
-	python utils/check_pipeline_typing.py --fix_and_overwrite
-	python utils/check_doctest_list.py --fix_and_overwrite
-	python utils/check_docstrings.py --fix_and_overwrite
-	python utils/add_dates.py
+	-python utils/check_copies.py --fix_and_overwrite
+	-python utils/check_modular_conversion.py --fix_and_overwrite
+	-python utils/check_dummies.py --fix_and_overwrite
+	-python utils/check_pipeline_typing.py --fix_and_overwrite
+	-python utils/check_doctest_list.py --fix_and_overwrite
+	-python utils/check_docstrings.py --fix_and_overwrite
+	-python utils/add_dates.py
 
 
 # Run tests for the library
