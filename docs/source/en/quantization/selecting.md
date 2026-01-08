@@ -30,6 +30,7 @@ Consider the quantization methods below for inference.
 | compressed-tensors | loading specific quantized formats (FP8, Sparse) |
 | GPTQModel or AWQ | good 4-bit accuracy with upfront calibration |
 | HQQ | fast on the fly quantization without calibration |
+| SINQ | super-fast but high-quality on the fly quantization without calibration |
 | torchao | flexibility and fast inference with torch.compile |
 
 ### No Calibration Required (On-the-fly Quantization)
@@ -55,6 +56,16 @@ See the [bitsandbytes documentation](./bitsandbytes) for more details.
 | Supports wide range of bit depths (8, 4, 3, 2, 1-bit).              |                                                                            |
 
 See the [HQQ documentation](./hqq) for more details.
+
+#### SINQ
+
+| Pros                                                                 | Cons                                                                       |
+|----------------------------------------------------------------------|----------------------------------------------------------------------------|
+| Super-fast but high-quality quantization process, no calibration data needed.              | Accuracy can degrade significantly at bit depths <=2-bit.                     |
+| GemLite backend for faster inference.                                  | Slower inference for 3-bit models (no gemlite kernel)
+| Supports wide range of bit depths (8, 4, 3, 2 bit).              |                                                                            |
+
+See the [SINQ documentation](./sinq) for more details.
 
 #### torchao
 

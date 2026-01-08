@@ -23,7 +23,7 @@ import os
 from dataclasses import dataclass, is_dataclass
 from enum import Enum
 from inspect import Parameter, signature
-from typing import Any, Optional, Union
+from typing import Any, Optional, Union, List, Dict
 
 from packaging import version
 
@@ -63,6 +63,7 @@ class QuantizationMethod(str, Enum):
     FPQUANT = "fp_quant"
     AUTOROUND = "auto-round"
     MXFP4 = "mxfp4"
+    SINQ = "sinq"
 
 
 class AwqFormat(str, Enum):
@@ -1925,3 +1926,142 @@ class Mxfp4Config(QuantizationConfigMixin):
             `dict[str, Any]`: Dictionary of all the attributes that make up this configuration instance.
         """
         return {"quant_method": self.quant_method, "modules_to_not_convert": self.modules_to_not_convert}
+
+
+@dataclass
+class SinqConfig(QuantizationConfigMixin):
+    """
+    Quantization config for SINQ / A-SINQ.
+
+    Pass this to:
+
+        AutoModel.from_pretrained(..., quantization_config=SinqConfig(...))
+
+    Args:
+        nbits (`int`, default 4):
+            Quantization bits for weights.
+        group_size (`int`, default 64):
+            Group size used in SINQ weight quantization (must be multiple of 8).
+        tiling_mode (`str`, default "1D"):
+            Tiling mode for SINQ (typically "1D"; "2D" if supported in your backend).
+        method (`str`, default "sinq"):
+            "sinq"  – calibration-free weight-only SINQ  
+            "asinq" – A-SINQ (activation-aware), uses post-load calibration.
+        per_channel (`bool`, default True):
+            Reserved flag for future per-channel options (not used directly here).
+        symmetric (`bool`, default True):
+            Reserved flag; kept for API symmetry.
+        use_nf4 (`bool`, default False):
+            Reserved flag; kept for API symmetry.
+        modules_to_not_convert (`list[str]`, *optional*):
+            List of module names/prefixes to keep in full precision.
+        dtype (`str`, default "auto"):
+            "auto" | "bfloat16" | "float16" | "float32".
+            "auto" = bf16 if available, else fp16.
+        device (`str` or `int`, default "cpu"):
+            Target device: "auto", "cuda", "cuda:0", "cpu" or an integer index.
+
+        **kwargs:
+            Extra user arguments (kept in `_extra_kwargs` for round-tripping).
+    """
+
+    def __init__(
+        self,
+        nbits: int = 4,
+        group_size: int = 64,
+        tiling_mode: str = "1D",
+        method: str = "sinq",  # "sinq" | "asinq"
+        per_channel: bool = True,
+        symmetric: bool = True,
+        use_nf4: bool = False,
+        modules_to_not_convert: Optional[List[str]] = None,
+        dtype: Optional[str] = "auto",  # "auto" | "bfloat16" | "float16" | "float32"
+        device: Optional[Union[str, int]] = "cpu",
+        **kwargs: Any,
+    ):
+        self.quant_method = QuantizationMethod.SINQ
+
+        self.nbits = int(nbits)
+        self.group_size = int(group_size)
+        self.tiling_mode = str(tiling_mode)
+        self.method = str(method).lower()
+
+        self.per_channel = bool(per_channel)
+        self.symmetric = bool(symmetric)
+        self.use_nf4 = bool(use_nf4)
+
+        self.modules_to_not_convert = list(modules_to_not_convert) if modules_to_not_convert is not None else []
+
+        self.dtype = dtype or "auto"
+        self.device = device
+
+        self._extra_kwargs: Dict[str, Any] = dict(kwargs)
+
+        self.post_init()
+
+    # ---- Optional validation, like BitsAndBytesConfig.post_init ----
+    def post_init(self):
+        # Basic type checks
+        if not isinstance(self.nbits, int):
+            raise TypeError("`nbits` must be an int")
+        if not isinstance(self.group_size, int):
+            raise TypeError("`group_size` must be an int")
+        if not isinstance(self.tiling_mode, str):
+            raise TypeError("`tiling_mode` must be a string")
+        if self.method not in {"sinq", "asinq"}:
+            raise ValueError("`method` must be either 'sinq' or 'asinq'")
+        if self.group_size is not None and self.group_size % 8 != 0:
+            logger.warning(
+                f"SINQ: group_size={self.group_size} is not a multiple of 8; "
+                "this may be rejected by the backend."
+            )
+
+    @property
+    def is_trainable(self) -> bool:
+        return True
+
+    @property
+    def is_serializable(self) -> bool:
+        return True
+
+    def to_dict(self) -> dict[str, Any]:
+        """
+        Convert configuration to a plain dict that will be stored in `config.json`
+        under `quantization_config`.
+        """
+        base = super().to_dict()
+
+        base.update(
+            {
+                "nbits": self.nbits,
+                "group_size": self.group_size,
+                "tiling_mode": self.tiling_mode,
+                "method": self.method,
+                "per_channel": self.per_channel,
+                "symmetric": self.symmetric,
+                "use_nf4": self.use_nf4,
+                "modules_to_not_convert": list(self.modules_to_not_convert or []),
+                "dtype": self.dtype,
+                "device": self.device,
+            }
+        )
+
+        base.update(self._extra_kwargs)
+
+        return base
+
+    @classmethod
+    def from_dict(cls, config_dict: Dict[str, Any], return_unused_kwargs: bool = False, **kwargs):
+        """
+        Recreate SinqConfig from a dictionary (e.g. loaded from config.json).
+        """
+        cfg = dict(config_dict)
+
+        cfg.pop("quant_method", None)
+
+        cfg.update(kwargs)
+
+        if return_unused_kwargs:
+            return cls(**cfg), {}
+
+        return cls(**cfg)
