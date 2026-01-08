@@ -29,13 +29,15 @@ For more details refer to the [release blog post](https://www.minimax.io/news/mi
 ## Usage examples
 
 ```python
-from transformers import AutoTokenizer, AutoModelForCausalLM, GenerationConfig
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
-model = AutoModelForCausalLM.from_pretrained("MiniMaxAI/MiniMax-M2", device_map="auto")
+model = AutoModelForCausalLM.from_pretrained(
+    "MiniMaxAI/MiniMax-M2",
+    device_map="auto",
+    revision="refs/pr/52",
+)
 
-tokenizer = AutoTokenizer.from_pretrained("MiniMaxAI/MiniMax-M2")
-
-generation_config = GenerationConfig.from_pretrained("MiniMaxAI/MiniMax-M2")
+tokenizer = AutoTokenizer.from_pretrained("MiniMaxAI/MiniMax-M2", revision="refs/pr/52")
 
 messages = [
     {"role": "user", "content": "What is your favourite condiment?"},
@@ -45,7 +47,7 @@ messages = [
 
 model_inputs = tokenizer.apply_chat_template(messages, return_tensors="pt", add_generation_prompt=True).to("cuda")
 
-generated_ids = model.generate(model_inputs, max_new_tokens=100, generation_config=generation_config)
+generated_ids = model.generate(**model_inputs, max_new_tokens=100)
 
 response = tokenizer.batch_decode(generated_ids)[0]
 
