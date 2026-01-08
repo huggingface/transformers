@@ -607,24 +607,6 @@ class Sam2VideoInferenceSession:
 
 
 class Sam2VideoProcessor(Sam2Processor):
-    r"""
-    Constructs a SAM2 processor which wraps a SAM2 image processor and an 2D points & Bounding boxes processor into a
-    single processor.
-
-    [`Sam2VideoProcessor`] offers all the functionalities of [`Sam2ImageProcessorFast`] and [`Sam2VideoProcessor`]. See the docstring of
-    [`~Sam2ImageProcessorFast.__call__`] and [`~Sam2VideoProcessor.__call__`] for more information.
-
-    Args:
-        image_processor (`Sam2ImageProcessorFast`):
-            An instance of [`Sam2ImageProcessorFast`].
-        video_processor (`Sam2VideoVideoProcessor`):
-            An instance of [`Sam2VideoVideoProcessor`].
-        target_size (`int`, *optional*):
-            The target size (target_size, target_size) to which the image will be resized.
-        point_pad_value (`int`, *optional*, defaults to -10):
-            The value used for padding input points.
-    """
-
     def __init__(
         self, image_processor, video_processor, target_size: int | None = None, point_pad_value: int = -10, **kwargs
     ):

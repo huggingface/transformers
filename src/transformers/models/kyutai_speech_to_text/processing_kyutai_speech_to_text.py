@@ -14,6 +14,7 @@
 
 
 from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...utils import auto_docstring
 
 
 class KyutaiSpeechToTextProcessorKwargs(ProcessingKwargs, total=False):
@@ -25,14 +26,8 @@ class KyutaiSpeechToTextProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@auto_docstring
 class KyutaiSpeechToTextProcessor(ProcessorMixin):
-    r"""
-    Constructs a Moshi ASR processor which wraps [`EncodecFeatureExtractor`] and
-    [`PreTrainedTokenizerFast`] into a single processor that inherits both the audio feature extraction and
-    tokenizer functionalities. See the [`~KyutaiSpeechToTextProcessor.__call__`] for more
-    information.
-    """
-
     valid_processor_kwargs = KyutaiSpeechToTextProcessorKwargs
 
     def __init__(self, feature_extractor, tokenizer):
