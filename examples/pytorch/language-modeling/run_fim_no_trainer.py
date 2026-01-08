@@ -814,6 +814,7 @@ def main():
         model.train()
         if args.with_tracking:
             total_loss = 0
+            total_samples = 0
         if args.resume_from_checkpoint and epoch == starting_epoch and resume_step is not None:
             # We skip the first `n` batches in the dataloader when resuming from a checkpoint
             active_dataloader = accelerator.skip_first_batches(train_dataloader, resume_step)
@@ -825,7 +826,9 @@ def main():
                 loss = outputs.loss
                 # We keep track of the loss at each epoch
                 if args.with_tracking:
-                    total_loss += loss.detach().float()
+                    batch_size = batch["input_ids"].shape[0]
+                    total_loss += loss.detach().float() * batch_size
+                    total_samples += batch_size
                 accelerator.backward(loss)
                 optimizer.step()
                 lr_scheduler.step()
@@ -852,7 +855,8 @@ def main():
                 outputs = model(**batch)
 
             loss = outputs.loss
-            losses.append(accelerator.gather_for_metrics(loss.repeat(args.per_device_eval_batch_size)))
+            batch_size = batch["input_ids"].shape[0]
+            losses.append(accelerator.gather_for_metrics(loss.repeat(batch_size)))
 
         losses = torch.cat(losses)
         try:
@@ -868,7 +872,7 @@ def main():
                 {
                     "perplexity": perplexity,
                     "eval_loss": eval_loss,
-                    "train_loss": total_loss.item() / len(train_dataloader),
+                    "train_loss": total_loss.item() / total_samples,
                     "epoch": epoch,
                     "step": completed_steps,
                 },
