@@ -186,10 +186,12 @@ class ImageToTextPipelineTests(unittest.TestCase):
         image = Image.open(io.BytesIO(httpx.get(url, follow_redirects=True).content))
 
         outputs = pipe(image)
-        EXPECTED_OUTPUT = Expectations({
-            ("cuda",8): [{"generated_text": "a cartoon of a purple character."}],
-            ("rocm", (9,4)): [{"generated_text": "a cartoon of a purple monster"}],
-        })
+        EXPECTED_OUTPUT = Expectations(
+            {
+                ("cuda", 8): [{"generated_text": "a cartoon of a purple character."}],
+                ("rocm", (9, 4)): [{"generated_text": "a cartoon of a purple monster"}],
+            }
+        )
         EXPECTED_OUTPUT = EXPECTED_OUTPUT.get_expectation()
         self.assertEqual(outputs, EXPECTED_OUTPUT)
 
@@ -219,10 +221,12 @@ class ImageToTextPipelineTests(unittest.TestCase):
 
         outputs = pipe(image, prompt=prompt)
 
-        EXPECTED_OUTPUT = Expectations({
-            ("cuda",8): [{"generated_text": "a photo of a tent with a tent and a tent in the background."}],
-            ("rocm", (9,4)): [{"generated_text": "a photo of a tent with a tent and a large umbrella."}],
-        })
+        EXPECTED_OUTPUT = Expectations(
+            {
+                ("cuda", 8): [{"generated_text": "a photo of a tent with a tent and a tent in the background."}],
+                ("rocm", (9, 4)): [{"generated_text": "a photo of a tent with a tent and a large umbrella."}],
+            }
+        )
         EXPECTED_OUTPUT = EXPECTED_OUTPUT.get_expectation()
         self.assertEqual(outputs, EXPECTED_OUTPUT)
 
