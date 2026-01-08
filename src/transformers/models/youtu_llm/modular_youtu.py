@@ -1,0 +1,95 @@
+import math
+from collections.abc import Callable
+from typing import Optional
+
+import torch
+import torch.nn.functional as F
+from torch import nn
+
+from ... import initialization as init
+from ...cache_utils import Cache
+from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
+from ...utils import is_grouped_mm_available, logging
+from ..llama.modeling_llama import (
+    LlamaDecoderLayer,
+    LlamaForCausalLM,
+    LlamaModel,
+    LlamaMLP,
+    LlamaPreTrainedModel,
+    LlamaRMSNorm,
+    LlamaRotaryEmbedding,
+    apply_rotary_pos_emb,
+    eager_attention_forward,
+    rotate_half,
+)
+from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3Attention
+from .configuration_youtu import YoutuConfig
+
+
+logger = logging.get_logger(__name__)
+
+
+class YoutuRMSNorm(LlamaRMSNorm):
+    pass
+
+
+class YoutuRotaryEmbedding(LlamaRotaryEmbedding):
+    pass
+
+
+class YoutuMLP(LlamaMLP):
+    def __init__(self, config):
+        super().__init__(config)
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+
+
+class YoutuMLAttention(DeepseekV3Attention):
+    pass
+
+
+class YoutuDecoderLayer(LlamaDecoderLayer):
+    def __init__(self, config: YoutuConfig, layer_idx: int):
+        nn.Module.__init__(self)
+        self.hidden_size = config.hidden_size
+
+        self.self_attn = YoutuMLAttention(config=config, layer_idx=layer_idx)
+
+        self.mlp = YoutuMLP(config)
+
+        self.input_layernorm = YoutuRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.post_attention_layernorm = YoutuRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
+
+class YoutuPreTrainedModel(LlamaPreTrainedModel):
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        std = getattr(self.config, "initializer_range", 0.02)
+        embed_std = getattr(self.config, "embedding_initializer_range", 2 * std)
+        if isinstance(module, nn.Linear):
+            init.normal_(module.weight, mean=0.0, std=std)
+            if module.bias is not None:
+                init.zeros_(module.bias)
+        elif isinstance(module, nn.Embedding):
+            init.normal_(module.weight, mean=0.0, std=embed_std)
+            if module.padding_idx is not None:
+                init.zeros_(module.weight.data[module.padding_idx])
+
+
+class YoutuModel(LlamaModel):
+    _keys_to_ignore_on_load_unexpected = [""]
+
+
+class YoutuForCausalLM(LlamaForCausalLM):
+    pass
+
+
+__all__ = [
+    "YoutuPreTrainedModel",
+    "YoutuModel",
+    "YoutuForCausalLM",
+]
