@@ -20,6 +20,7 @@ import numpy as np
 from transformers import MODEL_FOR_MULTIMODAL_LM_MAPPING, is_vision_available
 from transformers.pipelines import AnyToAnyPipeline, pipeline
 from transformers.testing_utils import (
+    Expectations,
     is_pipeline_test,
     require_librosa,
     require_torch,
@@ -179,15 +180,21 @@ class AnyToAnyPipelineTests(unittest.TestCase):
         text = "What is the capital of France? Assistant:"
 
         outputs = pipe(text=text, generate_kwargs={"do_sample": False})
-        self.assertEqual(
-            outputs,
-            [
+        EXPECTED_OUTPUT = Expectations({
+            ("cuda", 8): [
                 {
                     "input_text": "What is the capital of France? Assistant:",
                     "generated_text": "What is the capital of France? Assistant: The capital of France is Paris.",
                 }
             ],
-        )
+            ("rocm", (9,4)): [
+                {
+                    "input_text": "What is the capital of France? Assistant:",
+                    "generated_text": "What is the capital of France? Assistant: The capital of France is Paris.\n",
+                }
+            ],
+        }).get_expectation() 
+        self.assertEqual(outputs, EXPECTED_OUTPUT)
 
         messages = [
             [
@@ -208,9 +215,8 @@ class AnyToAnyPipelineTests(unittest.TestCase):
             ],
         ]
         outputs = pipe(text=messages, generate_kwargs={"do_sample": False})
-        self.assertEqual(
-            outputs,
-            [
+        EXPECTED_OUTPUT = Expectations({
+            ("cuda", 8): [
                 [
                     {
                         "input_text": [
@@ -243,7 +249,41 @@ class AnyToAnyPipelineTests(unittest.TestCase):
                     }
                 ],
             ],
-        )
+            ("rocm", (9,4)): [
+                [
+                    {
+                        "input_text": [
+                            {
+                                "role": "user",
+                                "content": [{"type": "text", "text": "Write a poem on Hugging Face, the company"}],
+                            }
+                        ],
+                        "generated_text": [
+                            {
+                                "role": "user",
+                                "content": [{"type": "text", "text": "Write a poem on Hugging Face, the company"}],
+                            },
+                            {
+                                "role": "assistant",
+                                "content": "A digital embrace, a friendly face,\nHugging Face, a vibrant space.\nWhere models bloom and knowledge flows,\nAnd AI's potential brightly glows.\n\nFrom transformers deep, a powerful core,\nTo datasets vast, and so much more.\nA community thrives, a helping hand,\nSharing insights across the land.\n\nPipelines built with elegant ease,\nFor NLP tasks, designed to please.\nFine-tuning models, a joyful art,\nTo tailor AI to play its part.\n\nSpaces open wide, for demos bright,\nShowcasing wonders, day and night.\nFrom text to image, code to sound,\nInnovation's fertile ground.\n\nA platform built on open grace,\nDemocratizing AI's embrace.\nFor researchers, builders, and all who seek,\nTo unlock the future, bold and sleek.\n\nSo raise a glass to the Face so kind,\nHugging Face, expanding the mind.\nConnecting minds, with code and care,\nA future of AI, beyond compare.\n\n\n\n"
+                            },
+                        ],
+                    }
+                ],
+                [
+                    {
+                        "input_text": [
+                            {"role": "user", "content": [{"type": "text", "text": "What is the capital of France?"}]}
+                        ],
+                        "generated_text": [
+                            {"role": "user", "content": [{"type": "text", "text": "What is the capital of France?"}]},
+                            {"role": "assistant", "content": "The capital of France is **Paris**. \n"},
+                        ],
+                    }
+                ],
+            ]
+        }).get_expectation()
+        self.assertEqual(outputs, EXPECTED_OUTPUT)
 
     @slow
     def test_small_model_pt_token_audio_input(self):
