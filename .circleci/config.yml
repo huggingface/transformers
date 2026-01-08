@@ -189,7 +189,11 @@ jobs:
             - run: python utils/check_config_docstrings.py
             - run: python utils/check_config_attributes.py
             - run: python utils/check_doctest_list.py
-            - run: make deps_table_check_updated
+            - run: > 
+                md5sum src/transformers/dependency_versions_table.py > md5sum.saved;
+                python setup.py deps_table_update;
+                md5sum -c --quiet md5sum.saved || (printf "\nError: the version dependency table is outdated.\nPlease run 'make style' and commit the changes.\n\n" && exit 1);
+                rm md5sum.saved
             - run: python utils/update_metadata.py --check-only
             - run: python utils/check_docstrings.py
 

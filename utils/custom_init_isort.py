@@ -27,7 +27,7 @@ python utils/custom_init_isort.py
 
 which will auto-sort the imports (used in `make style`).
 
-For a check only (as used in `make quality`) run:
+For a check only (as used in `make check-repo`) run:
 
 ```bash
 python utils/custom_init_isort.py --check_only
