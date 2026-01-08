@@ -39,8 +39,7 @@ check-repo:
 
 
 # Run all repo checks for which there is an automatic fix, most notably modular conversions
-fix-repo:
-	$(MAKE) style
+fix-repo: style
 	python utils/check_copies.py --fix_and_overwrite
 	python utils/check_modular_conversion.py --fix_and_overwrite
 	python utils/check_dummies.py --fix_and_overwrite
