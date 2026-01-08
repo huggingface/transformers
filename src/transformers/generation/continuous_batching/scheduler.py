@@ -36,7 +36,11 @@ class Scheduler(ABC):
         self._cancellation_lock = threading.Lock()
         self._requests_to_cancel: set[str] = set()
         self._requests_to_fork: list[RequestState] = []
-        self.block_new_requests = False  # this state is used to avoid infinite loops when offloading requests
+        # This state is used to avoid infinite loops when offloading requests
+        self.block_new_requests = False
+        # This is to compute the cache used by a new request being scheduled
+        self.cache_budget_module = None if cache.num_full_attention_groups else cache.config.sliding_window
+
 
     @traced
     def add_waiting_request(self, state: RequestState):
@@ -199,7 +203,7 @@ class FIFOScheduler(Scheduler):
         self.safety_margin = safety_margin
 
     @traced
-    def schedule_batch(self, token_budget: int) -> list[RequestState] | None:
+    def schedule_batch(self, token_budget: int, cache_budget: int) -> list[RequestState] | None:
         priority_states: list[RequestState] = []
         second_priority_states: list[RequestState] = []
         scheduled_requests = []
@@ -219,6 +223,8 @@ class FIFOScheduler(Scheduler):
         request_ids_to_remove_from_waiting = set()
         safety_margins = self.safety_margin * self.cache.num_blocks
 
+        one_allocation_failed = False
+
         for state in candidates:
             # If we are out the safety margin, we only accept decoding requests or the first prefill request
             num_free_blocks = self.cache.get_num_free_blocks()
@@ -229,13 +235,26 @@ class FIFOScheduler(Scheduler):
                 )
                 break
 
-            # Before changing the status of the request and scheduling it, we check if there is enough cache
+            # Check cache budget
+            cache_needed = state.current_len()
+            cache_needed = cache_needed if self.cache_budget_module is None else cache_needed % self.cache_budget_module
+            if cache_budget < cache_needed:
+                continue
+
+            # Infer the tokens that will be present in the batch if token budget is enough
             request_tokens = self._infer_request_tokens(state, request_ids_to_remove_from_waiting)
+            # Account for token budget
             request_len = min(len(request_tokens), token_budget)
-            if not self._allocate_blocks_if_needed(state, request_len):
-                # If the request was waiting, all requests afterwards will need allocation, so we break if the cache is full
-                logger.info(f"--- Breaking mid-loop for request {state.request_id} because the cache is full")
-                if state.request_id in self.waiting_requests and num_free_blocks == 0:
+            # Check there will be enough cache for the new tokens
+            allocation_successful = self._allocate_blocks_if_needed(state, request_len)
+
+            # If the allocation would not be successful, we move on to the next request
+            if not allocation_successful:
+                one_allocation_failed = True
+                # If we have reached a request that was waiting, all subsequent requests are also waiting, and will need
+                # allocation as well. So if there is no more free blocks, we can safely break out of the loop.
+                if num_free_blocks == 0 and state.request_id in self.waiting_requests:
+                    logger.info(f"Breaking mid-loop for request {state.request_id} because the cache is full")
                     break
                 continue
 
@@ -244,8 +263,10 @@ class FIFOScheduler(Scheduler):
             request_len = len(state.tokens_to_process)  # it may change after scheduling
             scheduled_requests.append(state)
 
-            # Update the token budget
+            # Update the token and cache budgets
             token_budget -= request_len
+            cache_budget -= cache_needed
+
             # If using prefix sharing, we make note of the blocks that will be computed in the forward pass
             if self.cache.allow_block_sharing:
                 tokens_in_current_block = state.current_len() % self.cache.block_size
@@ -259,8 +280,8 @@ class FIFOScheduler(Scheduler):
             if was_waiting:
                 request_ids_to_remove_from_waiting.add(req_id)
 
-            # Early exit of the loop if we have no token budget left
-            if token_budget == 0:
+            # Early exit of the loop if we have no budget left
+            if token_budget == 0 or cache_budget == 0:
                 break
 
         # We remove waiting requests before checking requests were scheduled, because there might have been prefill matches
@@ -269,7 +290,7 @@ class FIFOScheduler(Scheduler):
         )
 
         # If no requests were scheduled and the cache is full, we signal it by returning None
-        if not scheduled_requests and self.cache.get_num_free_blocks() == 0:
+        if not scheduled_requests and one_allocation_failed:
             return None
 
         return scheduled_requests

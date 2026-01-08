@@ -249,7 +249,7 @@ class ContinuousBatchProcessor:
     def setup_static_tensors(self, num_groups: int) -> None:
         """Setup the static tensors that are used for storage during the generation step. No other tensor will be
         allowed for the inputs or the outputs of the generation step."""
-        num_pages = self.cache.num_blocks * self.cache.block_size
+        self.num_pages = self.cache.num_blocks * self.cache.block_size
         self.tensor_metadata = {"dtype": torch.int32, "device": self.model_device}
 
         # Some tensors always have the same shape regardless of the model
@@ -274,7 +274,7 @@ class ContinuousBatchProcessor:
 
         if attn_mask_is_needed(self.config):
             attn_mask_kwargs = {
-                "size": (1, 1, self.max_batch_tokens, num_pages + self.max_batch_tokens),
+                "size": (1, 1, self.max_batch_tokens, self.num_pages + self.max_batch_tokens),
                 "dtype": self.model_dtype,
                 "device": self.model_device,
             }
@@ -287,7 +287,7 @@ class ContinuousBatchProcessor:
             torch.empty((self.max_batch_tokens,), **self.tensor_metadata) for _ in range(num_groups)
         ]
         self.read_index_storage = [
-            torch.empty((num_pages + self.max_batch_tokens), **self.tensor_metadata) for _ in range(num_groups)
+            torch.empty((self.num_pages + self.max_batch_tokens), **self.tensor_metadata) for _ in range(num_groups)
         ]
         # For read index, the +T is because there are -1 for seqlen_q when model uses a sliding window
 
@@ -460,7 +460,7 @@ class ContinuousBatchProcessor:
         self.metrics.record_queue_metrics(len(self.scheduler.active_requests), len(self.scheduler.waiting_requests))
 
         # Schedule the next batch of requests, stop if there are no requests in the batch
-        self.requests_in_batch = self.scheduler.schedule_batch(self.max_batch_tokens)
+        self.requests_in_batch = self.scheduler.schedule_batch(self.max_batch_tokens, self.num_pages)
 
         # If requests_in_batch is None, it means we need to offload some requests if possible
         if self.requests_in_batch is None:
@@ -707,7 +707,7 @@ class ContinuousBatchProcessor:
             max_read_index_size = max(self.actual_index_sizes[i][0] for i in range(self.cache.num_groups))
             # The space planned for query tokens will be added later, so we remove it from the space planned for KV
             padded_read_index_size = pad_by_intervals(
-                max_read_index_size, self.cache.num_blocks * self.cache.block_size, self.kv_padding_intervals
+                max_read_index_size, self.num_pages, self.kv_padding_intervals
             )
         else:
             padded_q, padded_read_index_size = 0, 0

@@ -206,6 +206,20 @@ class BlockManager:
         else:
             self._uninit_block_ids.extend(blocks)
 
+    def uninitialize_redundant_block(self, block_id: int) -> None:
+        """Marks a block as uninitialized, whether it is complete or not. Raises an error if the block has more than one
+        reference."""
+        # Make sure the block has only one reference
+        block = self._id_to_block.pop(block_id)
+        if block.ref_count > 1:
+            raise RuntimeError(f"Block {block_id} has more than one reference")
+        # Make sure the block is really redundant
+        first_block_id = self._hash_to_id[block.hash]
+        if block.id == first_block_id:
+            raise RuntimeError(f"Block {block_id} was marked as redundant with itself")
+        # Add the block to the uninitialized blocks queue
+        self._uninit_block_ids.append(block_id)
+
     def mark_shareable_blocks_as_complete(
         self, num_complete_blocks: int, allocated_blocks: list[int], prompt_ids: list[int]
     ) -> None:
@@ -245,9 +259,9 @@ class BlockManager:
             if existing_block_id is not None:
                 logger.debug(f"Found existing block {existing_block_id} for block {block.id}")
                 allocated_blocks[i] = existing_block_id
-                self._id_to_block[existing_block_id].ref_count += 1
                 new_parent_id = existing_block_id
-                self.free_blocks([block.id], shareable=True)
+                self.increase_ref_count(existing_block_id)
+                self.uninitialize_redundant_block(block.id)
 
             # Otherwise, we add the completed block to the hash table
             else:
