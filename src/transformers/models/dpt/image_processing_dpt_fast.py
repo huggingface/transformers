@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_dpt.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 HuggingFace Inc. team. All rights reserved.
 #
 #
@@ -50,7 +49,7 @@ if TYPE_CHECKING:
 
 def get_resize_output_image_size(
     input_image: "torch.Tensor",
-    output_size: Union[int, Iterable[int]],
+    output_size: int | Iterable[int],
     keep_aspect_ratio: bool,
     multiple: int,
 ) -> SizeDict:
@@ -181,14 +180,14 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
         keep_aspect_ratio: bool,
-        ensure_multiple_of: Optional[int],
+        ensure_multiple_of: int | None,
         do_pad: bool,
-        size_divisor: Optional[int],
-        disable_grouping: Optional[bool],
-        return_tensors: Optional[Union[str, TensorType]],
+        size_divisor: int | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         if do_reduce_labels:
@@ -275,7 +274,7 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
         size: SizeDict,
         interpolation: Optional["F.InterpolationMode"] = None,
         antialias: bool = True,
-        ensure_multiple_of: Optional[int] = 1,
+        ensure_multiple_of: int | None = 1,
         keep_aspect_ratio: bool = False,
     ) -> "torch.Tensor":
         """
@@ -340,7 +339,7 @@ class DPTImageProcessorFast(BaseImageProcessorFast):
     def post_process_depth_estimation(
         self,
         outputs: "DepthEstimatorOutput",
-        target_sizes: Optional[Union[TensorType, list[tuple[int, int]], None]] = None,
+        target_sizes: TensorType | list[tuple[int, int]] | None | None = None,
     ) -> list[dict[str, TensorType]]:
         """
         Converts the raw output of [`DepthEstimatorOutput`] into final depth predictions and depth PIL images.

@@ -3386,7 +3386,7 @@ def _get_test_info():
         ):
             to_capture = True
         # TODO: check simply with the name is not robust.
-        elif "patched" == frame.frame.f_code.co_name:
+        elif frame.frame.f_code.co_name == "patched":
             frame_of_patched_obj = frame
             to_capture = False
             break

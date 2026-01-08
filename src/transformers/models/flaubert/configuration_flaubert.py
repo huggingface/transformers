@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2019-present CNRS, Facebook Inc. and the HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");

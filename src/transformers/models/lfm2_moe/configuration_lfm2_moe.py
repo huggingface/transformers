@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
@@ -133,7 +132,7 @@ class Lfm2MoeConfig(PreTrainedConfig):
         use_expert_bias: bool = True,
         routed_scaling_factor: float = 1.0,
         norm_topk_prob: bool = True,
-        layer_types: Optional[list[str]] = None,
+        layer_types: list[str] | None = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size

@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_sam2_video.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 The Meta AI Authors and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,7 +22,7 @@ import math
 from collections import OrderedDict
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
-from typing import Any, Optional, Union
+from typing import Any
 
 import numpy as np
 import torch
@@ -51,8 +50,8 @@ class Sam2VideoInferenceCache:
 
     def __init__(
         self,
-        inference_device: Union[torch.device, str] = "cpu",
-        inference_state_device: Union[torch.device, str] = "cpu",
+        inference_device: torch.device | str = "cpu",
+        inference_state_device: torch.device | str = "cpu",
         max_vision_features_cache_size: int = 1,
     ):
         self.inference_device = inference_device
@@ -77,7 +76,7 @@ class Sam2VideoInferenceCache:
                 cached[key] = value
         self._vision_features[frame_idx] = cached
 
-    def get_vision_features(self, frame_idx: int) -> Optional[dict]:
+    def get_vision_features(self, frame_idx: int) -> dict | None:
         """Get cached vision features, automatically moved to inference device."""
         if frame_idx not in self._vision_features:
             return None
@@ -123,13 +122,13 @@ class Sam2VideoInferenceSession:
 
     def __init__(
         self,
-        video: Optional[torch.FloatTensor] = None,
-        video_height: Optional[int] = None,
-        video_width: Optional[int] = None,
-        inference_device: Union[torch.device, str] = "cpu",
-        inference_state_device: Union[torch.device, str] = "cpu",
-        video_storage_device: Union[torch.device, str] = "cpu",
-        dtype: Union[torch.dtype, str] = "float32",
+        video: torch.FloatTensor | None = None,
+        video_height: int | None = None,
+        video_width: int | None = None,
+        inference_device: torch.device | str = "cpu",
+        inference_state_device: torch.device | str = "cpu",
+        video_storage_device: torch.device | str = "cpu",
+        dtype: torch.dtype | str = "float32",
         max_vision_features_cache_size: int = 1,
     ):
         # store as a dictionary to avoid double memory allocation with torch.cat when adding new frames
@@ -169,7 +168,7 @@ class Sam2VideoInferenceSession:
         self.obj_with_new_inputs = []
 
     @property
-    def num_frames(self) -> Optional[int]:
+    def num_frames(self) -> int | None:
         return len(self.processed_frames) if self.processed_frames is not None else None
 
     # Object management
@@ -233,8 +232,8 @@ class Sam2VideoInferenceSession:
         self,
         obj_idx: int,
         frame_idx: int,
-        output_key: Optional[str] = None,
-        output_value: Optional[Union[torch.Tensor, dict]] = None,
+        output_key: str | None = None,
+        output_value: torch.Tensor | dict | None = None,
         is_conditioning_frame: bool = True,
     ):
         """
@@ -293,7 +292,7 @@ class Sam2VideoInferenceSession:
         return value
 
     # Video frame management
-    def add_new_frame(self, pixel_values: torch.Tensor, frame_idx: Optional[int] = None) -> int:
+    def add_new_frame(self, pixel_values: torch.Tensor, frame_idx: int | None = None) -> int:
         """Add new frame with automatic device placement."""
         pixel_values = pixel_values.to(self.video_storage_device, dtype=self.dtype, non_blocking=True)
         if pixel_values.dim() == 4:
@@ -372,7 +371,7 @@ class Sam2VideoPositionEmbeddingSine(nn.Module):
     """
 
     def __init__(
-        self, num_pos_feats: int = 64, temperature: int = 10000, normalize: bool = False, scale: Optional[float] = None
+        self, num_pos_feats: int = 64, temperature: int = 10000, normalize: bool = False, scale: float | None = None
     ):
         super().__init__()
         if scale is not None and normalize is False:
@@ -386,9 +385,9 @@ class Sam2VideoPositionEmbeddingSine(nn.Module):
     def forward(
         self,
         shape: torch.Size,
-        device: Union[torch.device, str],
+        device: torch.device | str,
         dtype: torch.dtype,
-        mask: Optional[Tensor] = None,
+        mask: Tensor | None = None,
     ) -> Tensor:
         if mask is None:
             mask = torch.zeros((shape[0], shape[2], shape[3]), device=device, dtype=torch.bool)
@@ -416,7 +415,7 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
+    attention_mask: torch.Tensor | None,
     scaling: float,
     dropout: float = 0.0,
     **kwargs,
@@ -460,7 +459,7 @@ class Sam2VideoAttention(nn.Module):
         query: torch.Tensor,
         key: torch.Tensor,
         value: torch.Tensor,
-        attention_similarity: Optional[torch.Tensor] = None,
+        attention_similarity: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         # Input projections
@@ -631,16 +630,16 @@ class Sam2VideoImageSegmentationOutput(ModelOutput):
         A tensor representing the object pointer, used for tracking in videos. Only used for Sam2VideoModel.
     """
 
-    iou_scores: Optional[torch.FloatTensor] = None
-    pred_masks: Optional[torch.FloatTensor] = None
-    object_score_logits: Optional[torch.FloatTensor] = None
+    iou_scores: torch.FloatTensor | None = None
+    pred_masks: torch.FloatTensor | None = None
+    object_score_logits: torch.FloatTensor | None = None
     image_embeddings: tuple[torch.FloatTensor, ...] = None
-    vision_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    vision_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
-    mask_decoder_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    vision_hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    vision_attentions: tuple[torch.FloatTensor, ...] | None = None
+    mask_decoder_attentions: tuple[torch.FloatTensor, ...] | None = None
 
-    high_res_masks: Optional[torch.FloatTensor] = None
-    object_pointer: Optional[torch.FloatTensor] = None
+    high_res_masks: torch.FloatTensor | None = None
+    object_pointer: torch.FloatTensor | None = None
 
 
 @dataclass
@@ -657,10 +656,10 @@ class Sam2VideoSegmentationOutput(ModelOutput):
         The frame index of the video.
     """
 
-    object_ids: Optional[list[int]] = None
-    pred_masks: Optional[torch.FloatTensor] = None
-    object_score_logits: Optional[torch.FloatTensor] = None
-    frame_idx: Optional[int] = None
+    object_ids: list[int] | None = None
+    pred_masks: torch.FloatTensor | None = None
+    object_score_logits: torch.FloatTensor | None = None
+    frame_idx: int | None = None
 
 
 @auto_docstring
@@ -810,7 +809,7 @@ class Sam2VideoRoPEAttention(nn.Module):
     def __init__(
         self,
         config: Sam2VideoConfig,
-        kv_in_dim: Optional[int] = None,
+        kv_in_dim: int | None = None,
         rope_k_repeat=False,
     ):
         super().__init__()
@@ -941,8 +940,8 @@ class Sam2VideoMemoryAttention(nn.Module):
         self,
         current_vision_features: torch.Tensor,
         memory: torch.Tensor,
-        current_vision_position_embeddings: Optional[Tensor] = None,
-        memory_posision_embeddings: Optional[Tensor] = None,
+        current_vision_position_embeddings: Tensor | None = None,
+        memory_posision_embeddings: Tensor | None = None,
         num_object_pointer_tokens: int = 0,
     ):
         """
@@ -1161,11 +1160,11 @@ class Sam2VideoVisionEncoderOutput(ModelOutput):
         the self-attention heads.
     """
 
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    fpn_hidden_states: Optional[torch.FloatTensor] = None
-    fpn_position_encoding: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    last_hidden_state: torch.FloatTensor | None = None
+    fpn_hidden_states: torch.FloatTensor | None = None
+    fpn_position_encoding: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 class Sam2VideoMaskEmbedding(nn.Module):
@@ -1249,10 +1248,10 @@ class Sam2VideoPromptEncoder(nn.Module):
 
     def forward(
         self,
-        input_points: Optional[tuple[torch.Tensor, torch.Tensor]],
-        input_labels: Optional[torch.Tensor],
-        input_boxes: Optional[torch.Tensor],
-        input_masks: Optional[torch.Tensor],
+        input_points: tuple[torch.Tensor, torch.Tensor] | None,
+        input_labels: torch.Tensor | None,
+        input_boxes: torch.Tensor | None,
+        input_masks: torch.Tensor | None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Embeds different types of prompts, returning both sparse and dense embeddings.
@@ -1312,7 +1311,7 @@ class Sam2VideoTwoWayTransformer(nn.Module):
         attention_similarity: Tensor,
         target_embedding=None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, BaseModelOutput]:
+    ) -> tuple | BaseModelOutput:
         if image_embeddings is None:
             raise ValueError("You have to specify an image_embedding")
 
@@ -1397,8 +1396,8 @@ class Sam2VideoMaskDecoder(nn.Module):
         dense_prompt_embeddings: torch.Tensor,
         multimask_output: bool,
         high_resolution_features: list[torch.Tensor],
-        attention_similarity: Optional[torch.Tensor] = None,
-        target_embedding: Optional[torch.Tensor] = None,
+        attention_similarity: torch.Tensor | None = None,
+        target_embedding: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """
@@ -1669,10 +1668,10 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
     @torch.no_grad()
     def get_prompt_embeddings(
         self,
-        input_points: Optional[torch.FloatTensor] = None,
-        input_labels: Optional[torch.LongTensor] = None,
-        input_boxes: Optional[torch.FloatTensor] = None,
-        input_masks: Optional[torch.LongTensor] = None,
+        input_points: torch.FloatTensor | None = None,
+        input_labels: torch.LongTensor | None = None,
+        input_boxes: torch.FloatTensor | None = None,
+        input_masks: torch.LongTensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         r"""
         Returns the prompt embeddings by passing the input points, labels, boxes and masks through the prompt encoder.
@@ -1704,8 +1703,8 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
     def forward(
         self,
         inference_session: Sam2VideoInferenceSession,
-        frame_idx: Optional[int] = None,
-        frame: Optional[torch.Tensor] = None,
+        frame_idx: int | None = None,
+        frame: torch.Tensor | None = None,
         reverse: bool = False,
         run_mem_encoder: bool = True,
         **kwargs,
@@ -1831,8 +1830,8 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
     ) -> tuple[
         list[torch.Tensor],
         list[torch.Tensor],
-        Optional[tuple[torch.FloatTensor, ...]],
-        Optional[tuple[torch.FloatTensor, ...]],
+        tuple[torch.FloatTensor, ...] | None,
+        tuple[torch.FloatTensor, ...] | None,
     ]:
         r"""
         Extract and preprocess image features using the vision encoder.
@@ -1901,15 +1900,15 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
 
     def _single_frame_forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        input_points: Optional[torch.FloatTensor] = None,
-        input_labels: Optional[torch.LongTensor] = None,
-        input_boxes: Optional[torch.FloatTensor] = None,
-        input_masks: Optional[torch.LongTensor] = None,
-        image_embeddings: Optional[torch.FloatTensor] = None,
+        pixel_values: torch.FloatTensor | None = None,
+        input_points: torch.FloatTensor | None = None,
+        input_labels: torch.LongTensor | None = None,
+        input_boxes: torch.FloatTensor | None = None,
+        input_masks: torch.LongTensor | None = None,
+        image_embeddings: torch.FloatTensor | None = None,
         multimask_output: bool = True,
-        attention_similarity: Optional[torch.FloatTensor] = None,
-        target_embedding: Optional[torch.FloatTensor] = None,
+        attention_similarity: torch.FloatTensor | None = None,
+        target_embedding: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Sam2VideoImageSegmentationOutput:
         """
@@ -2502,7 +2501,7 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
         )
         return conditioned_feature_map
 
-    def _use_multimask(self, is_init_cond_frame: bool, point_inputs: Optional[dict]) -> bool:
+    def _use_multimask(self, is_init_cond_frame: bool, point_inputs: dict | None) -> bool:
         """Whether to use multimask output in the SAM head."""
         num_pts = 0 if point_inputs is None else point_inputs["point_labels"].size(2)
         multimask_output = (
@@ -2519,10 +2518,10 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
         obj_idx: int,
         batch_size: int,
         is_init_cond_frame: bool,
-        point_inputs: Optional[torch.Tensor],
-        mask_inputs: Optional[torch.Tensor],
+        point_inputs: torch.Tensor | None,
+        mask_inputs: torch.Tensor | None,
         reverse: bool,
-        prev_sam_mask_logits: Optional[torch.Tensor] = None,
+        prev_sam_mask_logits: torch.Tensor | None = None,
         streaming: bool = False,
     ) -> dict[str, Any]:
         """
@@ -2741,8 +2740,8 @@ class Sam2VideoModel(Sam2VideoPreTrainedModel):
     def propagate_in_video_iterator(
         self,
         inference_session: Sam2VideoInferenceSession,
-        start_frame_idx: Optional[int] = None,
-        max_frame_num_to_track: Optional[int] = None,
+        start_frame_idx: int | None = None,
+        max_frame_num_to_track: int | None = None,
         reverse: bool = False,
         show_progress_bar: bool = False,
     ) -> Iterator[Sam2VideoSegmentationOutput]:

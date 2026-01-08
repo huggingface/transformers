@@ -2403,9 +2403,9 @@ def get_reporting_integration_callbacks(report_to):
         return []
 
     if isinstance(report_to, str):
-        if "none" == report_to:
+        if report_to == "none":
             return []
-        elif "all" == report_to:
+        elif report_to == "all":
             report_to = get_available_reporting_integrations()
         else:
             report_to = [report_to]

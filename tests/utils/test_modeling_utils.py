@@ -1780,7 +1780,7 @@ class ModelUtilsTest(TestCasePlus):
 
         with CaptureLogger(logger) as cl:
             can_generate = DummyBertWithMixin.can_generate()
-        self.assertTrue("" == cl.out)
+        self.assertTrue(cl.out == "")
         self.assertTrue(can_generate)
 
         # 3 - Finally, it can inherit from a model that can generate
@@ -1789,7 +1789,7 @@ class ModelUtilsTest(TestCasePlus):
 
         with CaptureLogger(logger) as cl:
             can_generate = DummyBertWithParent.can_generate()
-        self.assertTrue("" == cl.out)
+        self.assertTrue(cl.out == "")
         self.assertTrue(can_generate)
 
         # 4 - Legacy: models with a custom `prepare_inputs_for_generation` can generate (it was assumed

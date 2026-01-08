@@ -19,7 +19,6 @@ if is_torch_available():
     import torch
     from torch import nn
 from contextlib import contextmanager
-from typing import Optional
 
 from ..core_model_loading import ConversionOps
 from ..quantizers.quantizers_utils import get_module_from_name, should_convert_module
@@ -76,8 +75,8 @@ class Mxfp4Quantize(ConversionOps):
     def convert(
         self,
         input_dict: dict[str, torch.Tensor],
-        model: Optional[torch.nn.Module] = None,
-        missing_keys: Optional[list[str]] = None,
+        model: torch.nn.Module | None = None,
+        missing_keys: list[str] | None = None,
         full_layer_name: str | None = None,
         **kwargs,
     ) -> dict[str, torch.Tensor]:
@@ -124,7 +123,7 @@ class Mxfp4Dequantize(ConversionOps):
     def convert(
         self,
         input_dict: dict[str, torch.Tensor],
-        model: Optional[torch.nn.Module] = None,
+        model: torch.nn.Module | None = None,
         full_layer_name: str | None = None,
         missing_keys=None,
         **kwargs,
@@ -153,9 +152,9 @@ class Mxfp4Deserialize(ConversionOps):
     def convert(
         self,
         input_dict: dict[str, torch.Tensor],
-        model: Optional[torch.nn.Module] = None,
+        model: torch.nn.Module | None = None,
         full_layer_name: str | None = None,
-        missing_keys: Optional[list[str]] = None,
+        missing_keys: list[str] | None = None,
         **kwargs,
     ) -> dict[str, torch.Tensor]:
         param_data = {}

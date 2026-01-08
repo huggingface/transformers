@@ -34,7 +34,6 @@ import logging
 import os
 import sys
 from dataclasses import dataclass, field
-from typing import Optional
 
 import datasets
 import evaluate
@@ -74,13 +73,13 @@ class ModelArguments:
     model_name_or_path: str = field(
         metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models"}
     )
-    config_name: Optional[str] = field(
+    config_name: str | None = field(
         default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
     )
-    tokenizer_name: Optional[str] = field(
+    tokenizer_name: str | None = field(
         default=None, metadata={"help": "Pretrained tokenizer name or path if not the same as model_name"}
     )
-    cache_dir: Optional[str] = field(
+    cache_dir: str | None = field(
         default=None,
         metadata={"help": "Where do you want to store the pretrained models downloaded from huggingface.co"},
     )
@@ -119,34 +118,34 @@ class DataTrainingArguments:
     Arguments pertaining to what data we are going to input our model for training and eval.
     """
 
-    task_name: Optional[str] = field(default="ner", metadata={"help": "The name of the task (ner, pos...)."})
-    dataset_name: Optional[str] = field(
+    task_name: str | None = field(default="ner", metadata={"help": "The name of the task (ner, pos...)."})
+    dataset_name: str | None = field(
         default=None, metadata={"help": "The name of the dataset to use (via the datasets library)."}
     )
-    dataset_config_name: Optional[str] = field(
+    dataset_config_name: str | None = field(
         default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
     )
-    train_file: Optional[str] = field(
+    train_file: str | None = field(
         default=None, metadata={"help": "The input training data file (a csv or JSON file)."}
     )
-    validation_file: Optional[str] = field(
+    validation_file: str | None = field(
         default=None,
         metadata={"help": "An optional input evaluation data file to evaluate on (a csv or JSON file)."},
     )
-    test_file: Optional[str] = field(
+    test_file: str | None = field(
         default=None,
         metadata={"help": "An optional input test data file to predict on (a csv or JSON file)."},
     )
-    text_column_name: Optional[str] = field(
+    text_column_name: str | None = field(
         default=None, metadata={"help": "The column name of text to input in the file (a csv or JSON file)."}
     )
-    label_column_name: Optional[str] = field(
+    label_column_name: str | None = field(
         default=None, metadata={"help": "The column name of label to input in the file (a csv or JSON file)."}
     )
     overwrite_cache: bool = field(
         default=False, metadata={"help": "Overwrite the cached training and evaluation sets"}
     )
-    preprocessing_num_workers: Optional[int] = field(
+    preprocessing_num_workers: int | None = field(
         default=None,
         metadata={"help": "The number of processes to use for the preprocessing."},
     )
@@ -169,7 +168,7 @@ class DataTrainingArguments:
             )
         },
     )
-    max_train_samples: Optional[int] = field(
+    max_train_samples: int | None = field(
         default=None,
         metadata={
             "help": (
@@ -178,7 +177,7 @@ class DataTrainingArguments:
             )
         },
     )
-    max_eval_samples: Optional[int] = field(
+    max_eval_samples: int | None = field(
         default=None,
         metadata={
             "help": (
@@ -187,7 +186,7 @@ class DataTrainingArguments:
             )
         },
     )
-    max_predict_samples: Optional[int] = field(
+    max_predict_samples: int | None = field(
         default=None,
         metadata={
             "help": (

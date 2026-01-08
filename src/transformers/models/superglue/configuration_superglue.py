@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
@@ -74,8 +74,8 @@ class SuperGlueConfig(PreTrainedConfig):
         self,
         keypoint_detector_config: "SuperPointConfig" = None,
         hidden_size: int = 256,
-        keypoint_encoder_sizes: Optional[list[int]] = None,
-        gnn_layers_types: Optional[list[str]] = None,
+        keypoint_encoder_sizes: list[int] | None = None,
+        gnn_layers_types: list[str] | None = None,
         num_attention_heads: int = 4,
         sinkhorn_iterations: int = 100,
         matching_threshold: float = 0.0,

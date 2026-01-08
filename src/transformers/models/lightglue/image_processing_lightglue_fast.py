@@ -180,7 +180,7 @@ class LightGlueImageProcessorFast(BaseImageProcessorFast):
     def post_process_keypoint_matching(
         self,
         outputs: "LightGlueKeypointMatchingOutput",
-        target_sizes: Union[TensorType, list[tuple]],
+        target_sizes: TensorType | list[tuple],
         threshold: float = 0.0,
     ) -> list[dict[str, torch.Tensor]]:
         """

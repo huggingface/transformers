@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 HuggingFace Inc. team. All rights reserved.
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,8 +11,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Mllama model configuration"""
-
-from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
@@ -102,8 +99,8 @@ class MllamaVisionConfig(PreTrainedConfig):
         patch_size: int = 14,
         norm_eps: float = 1e-5,
         max_num_tiles: int = 4,
-        intermediate_layers_indices: Optional[list[int]] = None,
-        supported_aspect_ratios: Optional[list[list[int]]] = None,
+        intermediate_layers_indices: list[int] | None = None,
+        supported_aspect_ratios: list[list[int]] | None = None,
         initializer_range: float = 0.02,
         **kwargs,
     ):
@@ -218,17 +215,17 @@ class MllamaTextConfig(PreTrainedConfig):
         num_attention_heads: int = 32,
         num_key_value_heads: int = 8,
         intermediate_size: int = 14_336,
-        rope_parameters: Optional[dict] = None,
+        rope_parameters: dict | None = None,
         rms_norm_eps: float = 1e-5,
         max_position_embeddings: int = 131_072,
         initializer_range: float = 0.02,
         use_cache: bool = True,
         tie_word_embeddings: bool = False,
-        cross_attention_layers: Optional[list[int]] = None,
+        cross_attention_layers: list[int] | None = None,
         dropout: float = 0,
         bos_token_id: int = 128000,
         eos_token_id: int = 128001,
-        pad_token_id: Optional[int] = 128004,
+        pad_token_id: int | None = 128004,
         **kwargs,
     ):
         if cross_attention_layers is None:

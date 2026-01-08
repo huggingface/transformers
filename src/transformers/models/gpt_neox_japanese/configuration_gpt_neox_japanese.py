@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 ABEJA, Inc. and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """GPTNeoX Japanese model configuration"""
-
-from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
@@ -85,21 +82,21 @@ class GPTNeoXJapaneseConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 32000,
-        hidden_size: Optional[int] = 2560,
-        num_hidden_layers: Optional[int] = 32,
-        num_attention_heads: Optional[int] = 32,
-        intermediate_multiple_size: Optional[int] = 4,
-        hidden_act: Optional[str] = "gelu",
-        max_position_embeddings: Optional[int] = 2048,
-        initializer_range: Optional[float] = 0.02,
-        layer_norm_eps: Optional[int] = 1e-5,
-        use_cache: Optional[bool] = True,
-        bos_token_id: Optional[int] = 31996,
-        eos_token_id: Optional[int] = 31999,
-        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        attention_dropout: Optional[float] = 0.1,
-        hidden_dropout: Optional[float] = 0.0,
+        vocab_size: int | None = 32000,
+        hidden_size: int | None = 2560,
+        num_hidden_layers: int | None = 32,
+        num_attention_heads: int | None = 32,
+        intermediate_multiple_size: int | None = 4,
+        hidden_act: str | None = "gelu",
+        max_position_embeddings: int | None = 2048,
+        initializer_range: float | None = 0.02,
+        layer_norm_eps: int | None = 1e-5,
+        use_cache: bool | None = True,
+        bos_token_id: int | None = 31996,
+        eos_token_id: int | None = 31999,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        attention_dropout: float | None = 0.1,
+        hidden_dropout: float | None = 0.0,
         **kwargs,
     ):
         self.vocab_size = vocab_size

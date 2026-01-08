@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Apple Inc. and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +15,6 @@
 """Pytorch implementation of AIMv2 Model"""
 
 import math
-from typing import Optional
 
 import torch
 import torch.nn.functional as F
@@ -198,8 +196,8 @@ class Aimv2TextConfig(SiglipTextConfig):
         qkv_bias: bool = False,
         mlp_bias: bool = False,
         hidden_act: str = "silu",
-        pad_token_id: Optional[int] = None,
-        bos_token_id: Optional[int] = None,
+        pad_token_id: int | None = None,
+        bos_token_id: int | None = None,
         eos_token_id: int = 49407,
         max_position_embeddings: int = 77,
         initializer_range: bool = 0.02,
@@ -376,7 +374,7 @@ class Aimv2EncoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         norm_hidden_states = self.rms_norm1(hidden_states)
@@ -573,7 +571,7 @@ class Aimv2TextModel(Aimv2PreTrainedModel):
     def forward(
         self,
         input_ids,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         hidden_states = self.embeddings(input_ids)
@@ -638,9 +636,9 @@ class Aimv2Model(CLIPModel):
     @can_return_tuple
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Aimv2Output:
         r"""

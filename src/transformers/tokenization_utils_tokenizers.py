@@ -22,7 +22,7 @@ import os
 from collections import defaultdict
 from collections.abc import Iterable
 from shutil import copyfile
-from typing import Any, Optional, Union
+from typing import Any
 
 import tokenizers.pre_tokenizers as pre_tokenizers_fast
 from huggingface_hub import is_offline_mode
@@ -402,7 +402,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         else:
             return True
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: str | None = None) -> tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
@@ -750,8 +750,8 @@ class TokenizersBackend(PreTrainedTokenizerBase):
 
     def _encode_plus(
         self,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]],
-        text_pair: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput],
+        text_pair: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
@@ -768,7 +768,7 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
-        split_special_tokens: Optional[bool] = None,
+        split_special_tokens: bool | None = None,
         **kwargs,
     ) -> BatchEncoding:
         # Input validation (from _call_one)

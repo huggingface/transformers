@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from collections.abc import Iterable
-from typing import Any, Optional
+from typing import Any
 
 import torch
 
@@ -29,8 +29,8 @@ class CacheLayerMixin(ABC):
     is_compileable = False
 
     def __init__(self):
-        self.keys: Optional[torch.Tensor] = None
-        self.values: Optional[torch.Tensor] = None
+        self.keys: torch.Tensor | None = None
+        self.values: torch.Tensor | None = None
         self.is_initialized = False
 
     def __repr__(self):
@@ -41,7 +41,7 @@ class CacheLayerMixin(ABC):
 
     @abstractmethod
     def update(
-        self, key_states: torch.Tensor, value_states: torch.Tensor, cache_kwargs: Optional[dict[str, Any]] = None
+        self, key_states: torch.Tensor, value_states: torch.Tensor, cache_kwargs: dict[str, Any] | None = None
     ) -> tuple[torch.Tensor, torch.Tensor]: ...
 
     @abstractmethod
@@ -99,7 +99,7 @@ class DynamicLayer(CacheLayerMixin):
         self,
         key_states: torch.Tensor,
         value_states: torch.Tensor,
-        cache_kwargs: Optional[dict[str, Any]] = None,
+        cache_kwargs: dict[str, Any] | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Update the key and value caches in-place, and return the necessary keys and value states.
@@ -186,7 +186,7 @@ class DynamicSlidingWindowLayer(DynamicLayer):
         self,
         key_states: torch.Tensor,
         value_states: torch.Tensor,
-        cache_kwargs: Optional[dict[str, Any]] = None,
+        cache_kwargs: dict[str, Any] | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Update the key and value caches in-place, and return the necessary keys and value states.
@@ -310,7 +310,7 @@ class StaticLayer(CacheLayerMixin):
         self,
         key_states: torch.Tensor,
         value_states: torch.Tensor,
-        cache_kwargs: Optional[dict[str, Any]] = None,
+        cache_kwargs: dict[str, Any] | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Update the key and value caches in-place, and return the necessary keys and value states.
@@ -385,7 +385,7 @@ class StaticSlidingWindowLayer(StaticLayer):
         self,
         key_states: torch.Tensor,
         value_states: torch.Tensor,
-        cache_kwargs: Optional[dict[str, Any]] = None,
+        cache_kwargs: dict[str, Any] | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Update the key and value caches in-place, and return the necessary keys and value states.
@@ -518,7 +518,7 @@ class QuantizedLayer(DynamicLayer):
         self,
         key_states: torch.Tensor,
         value_states: torch.Tensor,
-        cache_kwargs: Optional[dict[str, Any]] = None,
+        cache_kwargs: dict[str, Any] | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Update the key and value caches in-place, and return the necessary keys and value states.
@@ -692,8 +692,8 @@ class Cache:
 
     def __init__(
         self,
-        layers: Optional[list[CacheLayerMixin]] = None,
-        layer_class_to_replicate: Optional[type[CacheLayerMixin]] = None,
+        layers: list[CacheLayerMixin] | None = None,
+        layer_class_to_replicate: type[CacheLayerMixin] | None = None,
         offloading: bool = False,
         offload_only_non_sliding: bool = True,
     ):
@@ -751,7 +751,7 @@ class Cache:
         key_states: torch.Tensor,
         value_states: torch.Tensor,
         layer_idx: int,
-        cache_kwargs: Optional[dict[str, Any]] = None,
+        cache_kwargs: dict[str, Any] | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Updates the cache with the new `key_states` and `value_states` for the layer `layer_idx`.
@@ -939,8 +939,8 @@ class DynamicCache(Cache):
 
     def __init__(
         self,
-        ddp_cache_data: Optional[Iterable[tuple[Optional[torch.Tensor], ...]]] = None,
-        config: Optional[PreTrainedConfig] = None,
+        ddp_cache_data: Iterable[tuple[torch.Tensor | None, ...]] | None = None,
+        config: PreTrainedConfig | None = None,
         offloading: bool = False,
         offload_only_non_sliding: bool = False,
     ):

@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_glm4v_moe.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 The ZhipuAI Inc. team and HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,8 +17,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Optional
-
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 
@@ -225,31 +222,31 @@ class Glm4vMoeTextConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 151424,
-        hidden_size: Optional[int] = 4096,
-        intermediate_size: Optional[int] = 10944,
-        num_hidden_layers: Optional[int] = 46,
-        num_attention_heads: Optional[int] = 96,
-        num_key_value_heads: Optional[int] = 8,
-        hidden_act: Optional[str] = "silu",
-        max_position_embeddings: Optional[int] = 65536,
-        initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[int] = 1e-5,
-        use_cache: Optional[bool] = True,
-        tie_word_embeddings: Optional[bool] = False,
-        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        attention_bias: Optional[bool] = True,
-        attention_dropout: Optional[float] = 0.0,
-        moe_intermediate_size: Optional[int] = 1408,
-        num_experts_per_tok: Optional[int] = 8,
-        n_shared_experts: Optional[int] = 1,
-        n_routed_experts: Optional[int] = 128,
-        routed_scaling_factor: Optional[float] = 1.0,
-        n_group: Optional[int] = 1,
-        topk_group: Optional[int] = 1,
-        first_k_dense_replace: Optional[int] = 1,
-        norm_topk_prob: Optional[bool] = True,
-        router_aux_loss_coef: Optional[float] = 0.0001,
+        vocab_size: int | None = 151424,
+        hidden_size: int | None = 4096,
+        intermediate_size: int | None = 10944,
+        num_hidden_layers: int | None = 46,
+        num_attention_heads: int | None = 96,
+        num_key_value_heads: int | None = 8,
+        hidden_act: str | None = "silu",
+        max_position_embeddings: int | None = 65536,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: int | None = 1e-5,
+        use_cache: bool | None = True,
+        tie_word_embeddings: bool | None = False,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        attention_bias: bool | None = True,
+        attention_dropout: float | None = 0.0,
+        moe_intermediate_size: int | None = 1408,
+        num_experts_per_tok: int | None = 8,
+        n_shared_experts: int | None = 1,
+        n_routed_experts: int | None = 128,
+        routed_scaling_factor: float | None = 1.0,
+        n_group: int | None = 1,
+        topk_group: int | None = 1,
+        first_k_dense_replace: int | None = 1,
+        norm_topk_prob: bool | None = True,
+        router_aux_loss_coef: float | None = 0.0001,
         **kwargs,
     ):
         self.vocab_size = vocab_size

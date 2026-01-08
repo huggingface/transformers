@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,7 +17,7 @@ import importlib
 import json
 import os
 from collections import OrderedDict
-from typing import Any, Optional, Union
+from typing import Any
 
 from transformers.utils.import_utils import is_mistral_common_available
 
@@ -61,7 +60,7 @@ logger = logging.get_logger(__name__)
 REGISTERED_TOKENIZER_CLASSES: dict[str, type[Any]] = {}
 REGISTERED_FAST_ALIASES: dict[str, type[Any]] = {}
 
-TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
+TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
     [
         ("aimv2", "CLIPTokenizer" if is_tokenizers_available() else None),
         ("albert", "AlbertTokenizer" if is_tokenizers_available() else None),
@@ -335,7 +334,7 @@ def load_merges(merges_file):
     return merges
 
 
-def tokenizer_class_from_name(class_name: str) -> Union[type[Any], None]:
+def tokenizer_class_from_name(class_name: str) -> type[Any] | None:
     # Bloom tokenizer classes were removed but should map to the fast backend for BC
     if class_name in {"BloomTokenizer", "BloomTokenizerFast"}:
         return TokenizersBackend
@@ -380,12 +379,12 @@ def tokenizer_class_from_name(class_name: str) -> Union[type[Any], None]:
 
 
 def get_tokenizer_config(
-    pretrained_model_name_or_path: Union[str, os.PathLike[str]],
-    cache_dir: Optional[Union[str, os.PathLike[str]]] = None,
+    pretrained_model_name_or_path: str | os.PathLike[str],
+    cache_dir: str | os.PathLike[str] | None = None,
     force_download: bool = False,
-    proxies: Optional[dict[str, str]] = None,
-    token: Optional[Union[bool, str]] = None,
-    revision: Optional[str] = None,
+    proxies: dict[str, str] | None = None,
+    token: bool | str | None = None,
+    revision: str | None = None,
     local_files_only: bool = False,
     subfolder: str = "",
     **kwargs,
@@ -493,7 +492,7 @@ class AutoTokenizer:
     @replace_list_option_in_docstrings(TOKENIZER_MAPPING_NAMES)
     def from_pretrained(
         cls, pretrained_model_name_or_path, *inputs, **kwargs
-    ) -> Union[TokenizersBackend, SentencePieceBackend]:
+    ) -> TokenizersBackend | SentencePieceBackend:
         r"""
         Instantiate one of the tokenizer classes of the library from a pretrained model vocabulary.
 

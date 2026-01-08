@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 the HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +14,7 @@
 
 import math
 from collections.abc import Callable
-from typing import Any, Optional
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -374,7 +373,7 @@ class EdgeTamVideoVisionEncoderOutput(Sam2VideoVisionEncoderOutput):
 
 
 class EdgeTamVideoVisionRotaryEmbedding(Sam2VideoVisionRotaryEmbedding):
-    def __init__(self, config: EdgeTamVideoConfig, end_x: Optional[int] = None, end_y: Optional[int] = None):
+    def __init__(self, config: EdgeTamVideoConfig, end_x: int | None = None, end_y: int | None = None):
         nn.Module.__init__()
         self.dim = config.memory_attention_hidden_size // (
             config.memory_attention_downsample_rate * config.memory_attention_num_attention_heads
@@ -706,7 +705,7 @@ class EdgeTamVideoMemoryAttentionLayer(nn.Module):
         keys: Tensor,
         key_point_embedding: Tensor,
         rope_position_embeddings: tuple[Tensor, Tensor],
-        rope_position_embeddings_k: Optional[tuple[Tensor, Tensor]] = None,
+        rope_position_embeddings_k: tuple[Tensor, Tensor] | None = None,
         num_k_exclude_rope: int = 0,
         rope_k_repeat: int = 0,
     ) -> torch.Tensor:
@@ -745,8 +744,8 @@ class EdgeTamVideoMemoryAttention(Sam2VideoMemoryAttention):
         self,
         current_vision_features: torch.Tensor,
         memory: torch.Tensor,
-        current_vision_position_embeddings: Optional[Tensor] = None,
-        memory_posision_embeddings: Optional[Tensor] = None,
+        current_vision_position_embeddings: Tensor | None = None,
+        memory_posision_embeddings: Tensor | None = None,
         num_object_pointer_tokens: int = 0,
         num_spatial_memory_tokens: int = -1,
     ):
@@ -832,7 +831,7 @@ class EdgeTamVideoPerceiverAttention(nn.Module):
         query: torch.Tensor,
         key: torch.Tensor,
         value: torch.Tensor,
-        positional_encoding: Optional[torch.Tensor] = None,
+        positional_encoding: torch.Tensor | None = None,
         **kwargs,
     ) -> torch.Tensor:
         # Project queries, keys, and values
@@ -897,7 +896,7 @@ class EdgeTamVideoPerceiverEncoderLayer(nn.Module):
         self,
         latents: torch.Tensor,
         input_features: torch.Tensor,
-        positional_encoding: Optional[torch.Tensor] = None,
+        positional_encoding: torch.Tensor | None = None,
     ) -> torch.Tensor:
         # Cross attention with layer norms
         normalized_latents = self.layer_norm_latents(latents)
@@ -951,8 +950,8 @@ class EdgeTamVideoPerceiverResampler(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        positional_encoding: Optional[torch.Tensor] = None,
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+        positional_encoding: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         output_latents = []
         output_positional_encodings = []
 
@@ -977,8 +976,8 @@ class EdgeTamVideoPerceiverResampler(nn.Module):
     def _forward_1d(
         self,
         hidden_states: torch.Tensor,
-        positional_encoding: Optional[torch.Tensor] = None,
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+        positional_encoding: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         batch_size = hidden_states.shape[0]
 
         latents = self.latents_1d.unsqueeze(0).expand(batch_size, -1, -1)
@@ -1247,8 +1246,8 @@ class EdgeTamVideoModel(Sam2VideoModel):
     def forward(
         self,
         inference_session: EdgeTamVideoInferenceSession,
-        frame_idx: Optional[int] = None,
-        frame: Optional[torch.Tensor] = None,
+        frame_idx: int | None = None,
+        frame: torch.Tensor | None = None,
         reverse: bool = False,
         **kwargs,
     ) -> EdgeTamVideoSegmentationOutput:
@@ -1394,11 +1393,11 @@ class EdgeTamVideoModel(Sam2VideoModel):
         obj_idx: int,
         batch_size: int,
         is_init_cond_frame: bool,
-        point_inputs: Optional[torch.Tensor],
-        mask_inputs: Optional[torch.Tensor],
+        point_inputs: torch.Tensor | None,
+        mask_inputs: torch.Tensor | None,
         reverse: bool,
         run_mem_encoder: bool,
-        prev_sam_mask_logits: Optional[torch.Tensor] = None,
+        prev_sam_mask_logits: torch.Tensor | None = None,
         streaming: bool = False,
     ) -> dict[str, Any]:
         """

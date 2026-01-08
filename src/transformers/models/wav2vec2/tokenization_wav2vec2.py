@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The Facebook Inc. and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,7 +18,7 @@ import os
 import warnings
 from dataclasses import dataclass
 from itertools import groupby
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING, Union
 
 import numpy as np
 
@@ -78,7 +77,7 @@ WAV2VEC2_KWARGS_DOCSTRING = r"""
                 Whether or not to print more information and warnings.
 """
 
-ListOfDict = list[dict[str, Union[int, str]]]
+ListOfDict = list[dict[str, int | str]]
 
 
 @dataclass
@@ -98,9 +97,9 @@ class Wav2Vec2CTCTokenizerOutput(ModelOutput):
             can be used to compute time stamps for each word.
     """
 
-    text: Union[list[str], str]
-    char_offsets: Union[list[ListOfDict], ListOfDict] = None
-    word_offsets: Union[list[ListOfDict], ListOfDict] = None
+    text: list[str] | str
+    char_offsets: list[ListOfDict] | ListOfDict = None
+    word_offsets: list[ListOfDict] | ListOfDict = None
 
 
 class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
@@ -223,7 +222,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         return str(self._word_delimiter_token)
 
     @property
-    def word_delimiter_token_id(self) -> Optional[int]:
+    def word_delimiter_token_id(self) -> int | None:
         """
         `Optional[int]`: Id of the word_delimiter_token in the vocabulary. Returns `None` if the token has not been
         set.
@@ -249,7 +248,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         vocab.update(self.added_tokens_encoder)
         return vocab
 
-    def _add_tokens(self, new_tokens: Union[list[str], list[AddedToken]], special_tokens: bool = False) -> int:
+    def _add_tokens(self, new_tokens: list[str] | list[AddedToken], special_tokens: bool = False) -> int:
         # Overwritten to never strip!
         to_add = []
         for token in new_tokens:
@@ -278,9 +277,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         result = self.decoder.get(index, self.unk_token)
         return result
 
-    def convert_ids_to_tokens(
-        self, ids: Union[int, list[int]], skip_special_tokens: bool = False
-    ) -> Union[str, list[str]]:
+    def convert_ids_to_tokens(self, ids: int | list[int], skip_special_tokens: bool = False) -> str | list[str]:
         """Overridden to prioritize vocabulary tokens over added tokens for nested vocabularies."""
         if isinstance(ids, int):
             if ids in self.decoder:
@@ -307,7 +304,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         spaces_between_special_tokens: bool = False,
         output_char_offsets: bool = False,
         output_word_offsets: bool = False,
-    ) -> dict[str, Union[str, float]]:
+    ) -> dict[str, str | float]:
         """
         Converts a connectionist-temporal-classification (CTC) output tokens into a single string.
         """
@@ -389,9 +386,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         return out_string
 
     @staticmethod
-    def _compute_offsets(
-        char_repetitions: list[int], chars: list[str], ctc_token: int
-    ) -> list[dict[str, Union[str, int]]]:
+    def _compute_offsets(char_repetitions: list[int], chars: list[str], ctc_token: int) -> list[dict[str, str | int]]:
         end_indices = np.asarray(char_repetitions).cumsum()
         start_indices = np.concatenate(([0], end_indices[:-1]))
 
@@ -404,9 +399,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         return offsets
 
     @staticmethod
-    def _get_word_offsets(
-        offsets: dict[str, Union[str, float]], word_delimiter_char: str = " "
-    ) -> dict[str, Union[str, float]]:
+    def _get_word_offsets(offsets: dict[str, str | float], word_delimiter_char: str = " ") -> dict[str, str | float]:
         word_offsets = []
 
         last_state = "SPACE"
@@ -447,11 +440,11 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         self,
         token_ids: list[int],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: Optional[bool] = None,
+        clean_up_tokenization_spaces: bool | None = None,
         group_tokens: bool = True,
         spaces_between_special_tokens: bool = False,
-        output_word_offsets: Optional[bool] = False,
-        output_char_offsets: Optional[bool] = False,
+        output_word_offsets: bool | None = False,
+        output_char_offsets: bool | None = False,
     ) -> str:
         """
         special _decode function is needed for Wav2Vec2Tokenizer because added tokens should be treated exactly the
@@ -501,7 +494,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         self,
         sequences: Union[list[int], list[list[int]], np.ndarray, "torch.Tensor"],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: Optional[bool] = None,
+        clean_up_tokenization_spaces: bool | None = None,
         output_char_offsets: bool = False,
         output_word_offsets: bool = False,
         **kwargs,
@@ -571,7 +564,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
         self,
         token_ids: Union[int, list[int], np.ndarray, "torch.Tensor"],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: Optional[bool] = None,
+        clean_up_tokenization_spaces: bool | None = None,
         output_char_offsets: bool = False,
         output_word_offsets: bool = False,
         **kwargs,
@@ -672,7 +665,7 @@ class Wav2Vec2CTCTokenizer(PreTrainedTokenizer):
             **kwargs,
         )
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: str | None = None) -> tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
@@ -799,7 +792,7 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
         return str(self._word_delimiter_token)
 
     @property
-    def word_delimiter_token_id(self) -> Optional[int]:
+    def word_delimiter_token_id(self) -> int | None:
         """
         `Optional[int]`: Id of the word_delimiter_token in the vocabulary. Returns `None` if the token has not been
         set.
@@ -819,12 +812,12 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
     @add_end_docstrings(WAV2VEC2_KWARGS_DOCSTRING)
     def __call__(
         self,
-        raw_speech: Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]],
-        padding: Union[bool, str, PaddingStrategy] = False,
-        max_length: Optional[int] = None,
-        pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        raw_speech: np.ndarray | list[float] | list[np.ndarray] | list[list[float]],
+        padding: bool | str | PaddingStrategy = False,
+        max_length: int | None = None,
+        pad_to_multiple_of: int | None = None,
+        padding_side: str | None = None,
+        return_tensors: str | TensorType | None = None,
         verbose: bool = True,
         **kwargs,
     ) -> BatchEncoding:
@@ -943,7 +936,7 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
         self,
         token_ids: list[int],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: Optional[bool] = None,
+        clean_up_tokenization_spaces: bool | None = None,
         **kwargs,
     ) -> str:
         """
@@ -973,7 +966,7 @@ class Wav2Vec2Tokenizer(PreTrainedTokenizer):
         else:
             return text
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: str | None = None) -> tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return

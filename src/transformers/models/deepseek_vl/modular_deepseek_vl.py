@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, Union
 
 import torch
 import torch.nn as nn
@@ -77,8 +76,8 @@ class DeepseekVLConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        text_config: Optional[AutoConfig] = None,
-        vision_config: Optional[AutoConfig] = None,
+        text_config: AutoConfig | None = None,
+        vision_config: AutoConfig | None = None,
         image_token_id: int = 100015,
         **kwargs,
     ):
@@ -231,8 +230,8 @@ class DeepseekVLProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        images: Optional[ImageInput] = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
+        images: ImageInput | None = None,
         **kwargs: Unpack[DeepseekVLProcessorKwargs],
     ) -> BatchFeature:
         """

@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_sam3.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 The Meta AI Authors and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -420,12 +419,12 @@ class Sam3ImageProcessorFast(BaseImageProcessorFast):
 
     def _further_process_kwargs(
         self,
-        size: Optional[SizeDict] = None,
-        mask_size: Optional[SizeDict] = None,
-        default_to_square: Optional[bool] = None,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
-        data_format: Optional[ChannelDimension] = None,
+        size: SizeDict | None = None,
+        mask_size: SizeDict | None = None,
+        default_to_square: bool | None = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        data_format: ChannelDimension | None = None,
         **kwargs,
     ) -> dict:
         """
@@ -466,7 +465,7 @@ class Sam3ImageProcessorFast(BaseImageProcessorFast):
     def preprocess(
         self,
         images: ImageInput,
-        segmentation_maps: Optional[ImageInput] = None,
+        segmentation_maps: ImageInput | None = None,
         **kwargs: Unpack[Sam3FastImageProcessorKwargs],
     ) -> BatchFeature:
         r"""
@@ -478,10 +477,10 @@ class Sam3ImageProcessorFast(BaseImageProcessorFast):
     def _preprocess_image_like_inputs(
         self,
         images: ImageInput,
-        segmentation_maps: Optional[ImageInput],
+        segmentation_maps: ImageInput | None,
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
-        device: Optional[Union[str, "torch.device"]] = None,
+        device: Union[str, "torch.device"] | None = None,
         **kwargs: Unpack[Sam3FastImageProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -525,7 +524,7 @@ class Sam3ImageProcessorFast(BaseImageProcessorFast):
     def _preprocess(
         self,
         images: list["torch.Tensor"],
-        return_tensors: Optional[Union[str, TensorType]],
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> "torch.Tensor":
         return super()._preprocess(images, return_tensors=return_tensors, **kwargs).pixel_values
@@ -752,7 +751,7 @@ class Sam3ImageProcessorFast(BaseImageProcessorFast):
         return pred_masks
 
     def post_process_semantic_segmentation(
-        self, outputs, target_sizes: Optional[list[tuple]] = None, threshold: float = 0.5
+        self, outputs, target_sizes: list[tuple] | None = None, threshold: float = 0.5
     ):
         """
         Converts the output of [`Sam3Model`] into semantic segmentation maps.
@@ -810,9 +809,7 @@ class Sam3ImageProcessorFast(BaseImageProcessorFast):
 
         return semantic_segmentation
 
-    def post_process_object_detection(
-        self, outputs, threshold: float = 0.3, target_sizes: Optional[list[tuple]] = None
-    ):
+    def post_process_object_detection(self, outputs, threshold: float = 0.3, target_sizes: list[tuple] | None = None):
         """
         Converts the raw output of [`Sam3Model`] into final bounding boxes in (top_left_x, top_left_y,
         bottom_right_x, bottom_right_y) format.
@@ -868,7 +865,7 @@ class Sam3ImageProcessorFast(BaseImageProcessorFast):
         outputs,
         threshold: float = 0.3,
         mask_threshold: float = 0.5,
-        target_sizes: Optional[list[tuple]] = None,
+        target_sizes: list[tuple] | None = None,
     ):
         """
         Converts the raw output of [`Sam3Model`] into instance segmentation predictions with bounding boxes and masks.

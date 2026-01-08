@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 Adept AI and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Fuyu model configuration"""
-
-from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
@@ -102,29 +99,29 @@ class FuyuConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 262144,
-        hidden_size: Optional[int] = 4096,
-        intermediate_size: Optional[int] = 16384,
-        num_hidden_layers: Optional[int] = 36,
-        num_attention_heads: Optional[int] = 64,
-        hidden_act: Optional[str] = "relu2",
-        max_position_embeddings: Optional[int] = 16384,
-        image_size: Optional[int] = 300,
-        patch_size: Optional[int] = 30,
-        num_channels: Optional[int] = 3,
-        initializer_range: Optional[float] = 0.02,
-        layer_norm_eps: Optional[int] = 1e-5,
-        use_cache: Optional[bool] = True,
-        tie_word_embeddings: Optional[bool] = False,
-        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        qk_layernorm: Optional[bool] = True,
-        hidden_dropout: Optional[float] = 0.0,
-        attention_dropout: Optional[float] = 0.0,
-        pad_token_id: Optional[int] = None,
-        bos_token_id: Optional[int] = 1,
-        eos_token_id: Optional[int] = 2,
-        image_token_id: Optional[int] = 71011,
-        text_config: Optional[dict] = None,
+        vocab_size: int | None = 262144,
+        hidden_size: int | None = 4096,
+        intermediate_size: int | None = 16384,
+        num_hidden_layers: int | None = 36,
+        num_attention_heads: int | None = 64,
+        hidden_act: str | None = "relu2",
+        max_position_embeddings: int | None = 16384,
+        image_size: int | None = 300,
+        patch_size: int | None = 30,
+        num_channels: int | None = 3,
+        initializer_range: float | None = 0.02,
+        layer_norm_eps: int | None = 1e-5,
+        use_cache: bool | None = True,
+        tie_word_embeddings: bool | None = False,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        qk_layernorm: bool | None = True,
+        hidden_dropout: float | None = 0.0,
+        attention_dropout: float | None = 0.0,
+        pad_token_id: int | None = None,
+        bos_token_id: int | None = 1,
+        eos_token_id: int | None = 2,
+        image_token_id: int | None = 71011,
+        text_config: dict | None = None,
         **kwargs,
     ):
         if text_config is None:

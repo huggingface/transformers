@@ -142,14 +142,14 @@ class Phi4MultimodalImageProcessorFast(BaseImageProcessorFast):
         images: B x 3 x H x W, B<=max_crops
         """
         B, _, H, W = images.shape
-        if B < max_crops:
+        if max_crops > B:
             pad = torch.zeros(max_crops - B, 3, H, W, dtype=images.dtype, device=images.device)
             images = torch.cat([images, pad], dim=0)
         return images
 
     def pad_mask_to_max_num_crops(self, masks, max_crops=5):
         B, H, W = masks.shape
-        if B < max_crops:
+        if max_crops > B:
             pad = torch.ones(max_crops - B, H, W, dtype=masks.dtype, device=masks.device)
             masks = torch.cat([masks, pad], dim=0)
         return masks

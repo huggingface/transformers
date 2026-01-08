@@ -1,5 +1,3 @@
-from typing import Union
-
 import torch
 
 from transformers.models.detr.image_processing_detr_fast import DetrImageProcessorFast
@@ -18,7 +16,7 @@ logger = logging.get_logger(__name__)
 
 class ConditionalDetrImageProcessorFast(DetrImageProcessorFast):
     def post_process_object_detection(
-        self, outputs, threshold: float = 0.5, target_sizes: Union[TensorType, list[tuple]] = None, top_k: int = 100
+        self, outputs, threshold: float = 0.5, target_sizes: TensorType | list[tuple] = None, top_k: int = 100
     ):
         """
         Converts the raw output of [`ConditionalDetrForObjectDetection`] into final bounding boxes in (top_left_x,

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Parakeet model configuration."""
-
-from typing import Union
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
@@ -201,7 +198,7 @@ class ParakeetCTCConfig(PreTrainedConfig):
         vocab_size=1025,
         ctc_loss_reduction="mean",
         ctc_zero_infinity=True,
-        encoder_config: Union[dict, ParakeetEncoderConfig] = None,
+        encoder_config: dict | ParakeetEncoderConfig = None,
         pad_token_id=1024,
         **kwargs,
     ):

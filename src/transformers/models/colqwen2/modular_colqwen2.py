@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,7 +13,6 @@
 # limitations under the License.
 
 from dataclasses import dataclass
-from typing import Optional, Union
 
 from ...cache_utils import Cache
 from ...feature_extraction_utils import BatchFeature
@@ -70,8 +68,8 @@ class ColQwen2Processor(ColPaliProcessor):
         image_processor=None,
         tokenizer=None,
         chat_template=None,
-        visual_prompt_prefix: Optional[str] = None,
-        query_prefix: Optional[str] = None,
+        visual_prompt_prefix: str | None = None,
+        query_prefix: str | None = None,
         **kwargs,
     ):
         ProcessorMixin.__init__(self, image_processor, tokenizer, chat_template=chat_template)
@@ -88,8 +86,8 @@ class ColQwen2Processor(ColPaliProcessor):
 
     def __call__(
         self,
-        images: Optional[ImageInput] = None,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         **kwargs: Unpack[ColQwen2ProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -277,11 +275,11 @@ class ColQwen2ForRetrievalOutput(ModelOutput):
         `past_key_values` input) to speed up sequential decoding.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    embeddings: Optional[torch.Tensor] = None
-    past_key_values: Optional[Cache] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
+    loss: torch.FloatTensor | None = None
+    embeddings: torch.Tensor | None = None
+    past_key_values: Cache | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
 
 
 @auto_docstring(
@@ -309,19 +307,19 @@ class ColQwen2ForRetrieval(ColPaliForRetrieval):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        labels: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        pixel_values: Optional[torch.Tensor] = None,
-        image_grid_thw: Optional[torch.LongTensor] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        labels: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        pixel_values: torch.Tensor | None = None,
+        image_grid_thw: torch.LongTensor | None = None,
+        cache_position: torch.LongTensor | None = None,
         **kwargs,
     ) -> ColQwen2ForRetrievalOutput:
         r"""

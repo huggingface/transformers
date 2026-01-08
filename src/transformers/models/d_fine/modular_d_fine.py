@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Baidu Inc and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import math
-from typing import Any, Optional
+from typing import Any
 
 import torch
 import torch.nn.functional as F
@@ -450,7 +449,7 @@ class DFineMultiscaleDeformableAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
         reference_points=None,
         encoder_hidden_states=None,
         spatial_shapes=None,
@@ -537,13 +536,13 @@ class DFineDecoderLayer(RTDetrDecoderLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Optional[torch.Tensor] = None,
+        position_embeddings: torch.Tensor | None = None,
         reference_points=None,
         spatial_shapes=None,
         spatial_shapes_list=None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
+        output_attentions: bool | None = False,
     ) -> tuple[torch.Tensor, Any, Any]:
         # Self Attention
         hidden_states_2, self_attn_weights = self.self_attn(
@@ -1068,8 +1067,8 @@ class DFineConvNormLayer(RTDetrConvNormLayer):
         kernel_size: int,
         stride: int,
         groups: int = 1,
-        padding: Optional[int] = None,
-        activation: Optional[str] = None,
+        padding: int | None = None,
+        activation: str | None = None,
     ):
         super().__init__(config, in_channels, out_channels, kernel_size, stride, padding=None, activation=activation)
         self.conv = nn.Conv2d(
