@@ -915,7 +915,7 @@ class Glm4vTextModel(Glm4vPreTrainedModel):
             layer_outputs = decoder_layer(
                 hidden_states,
                 attention_mask=causal_mask,
-                position_ids=position_ids,
+                position_ids=text_position_ids,
                 past_key_values=past_key_values,
                 cache_position=cache_position,
                 position_embeddings=position_embeddings,
