@@ -621,6 +621,9 @@ class GenerationConfig(PushToHubMixin):
 
         # 2. Validation of attribute combinations
         # 2.1. detect sampling-only parameterization when not in sampling mode
+
+        # Note that we check `is not True` in purpose. Boolean fields can also be `None` so we
+        # have to be explicit. Value of `None` is same as having `False`, i.e. the default value
         if self.do_sample is not True:
             greedy_wrong_parameter_msg = (
                 "`do_sample` is set not to set `True`. However, `{flag_name}` is set to `{flag_value}` -- this flag is only "
