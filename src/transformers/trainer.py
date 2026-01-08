@@ -2145,10 +2145,15 @@ class Trainer:
             if not is_sagemaker_mp_enabled() and not self.is_deepspeed_enabled and not self.is_fsdp_enabled:
                 self._load_from_checkpoint(resume_from_checkpoint)
             # In case of repeating the find_executable_batch_size, set `self._train_batch_size` properly
-            state = TrainerState.load_from_json(os.path.join(resume_from_checkpoint, TRAINER_STATE_NAME))
-            if state.train_batch_size is not None:
-                self._train_batch_size = state.train_batch_size
-
+            if os.path.isfile(os.path.join(resume_from_checkpoint, TRAINER_STATE_NAME)):
+                state = TrainerState.load_from_json(os.path.join(resume_from_checkpoint, TRAINER_STATE_NAME))
+                if state.train_batch_size is not None:
+                    self._train_batch_size = state.train_batch_size
+            else:
+                logger.warning(
+                    f"TrainerState file not found at {os.path.join(resume_from_checkpoint, TRAINER_STATE_NAME)}. "
+                    "Training will continue, but batch size recovery is skipped. "
+                )
         # If model was re-initialized, put it on the right device and update self.model_wrapped
         if model_reloaded:
             if self.place_model_on_device:
