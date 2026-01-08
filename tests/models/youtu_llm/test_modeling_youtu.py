@@ -15,6 +15,7 @@
 
 import unittest
 
+import pytest
 from packaging import version
 from parameterized import parameterized
 
@@ -312,6 +313,7 @@ class YoutuModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                     res_sdpa,
                     msg=f"\n{tokenizer.batch_decode(res_eager)} \nvs\n{tokenizer.batch_decode(res_sdpa)}",
                 )
+
 
 @require_torch_accelerator
 class YoutuIntegrationTest(unittest.TestCase):

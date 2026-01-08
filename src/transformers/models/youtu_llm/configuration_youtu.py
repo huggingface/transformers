@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Tencent Youtu Lab and the HuggingFace Inc. team. All rights reserved.
 
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Optional
+"""Youtu-LLM model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
@@ -107,31 +106,31 @@ class YoutuConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size=128256,
-        hidden_size=2048,
-        intermediate_size=6144,
-        num_hidden_layers=32,
-        num_attention_heads=16,
-        num_key_value_heads=16,
-        kv_lora_rank=512,
-        q_lora_rank=1536,
-        qk_rope_head_dim=64,
-        v_head_dim=128,
-        qk_nope_head_dim=128,
-        hidden_act="silu",
-        max_position_embeddings=131072,
-        initializer_range=None,
-        embedding_initializer_range=None,
-        rms_norm_eps=1e-6,
-        use_cache=True,
-        pad_token_id=None,
-        bos_token_id=128000,
-        eos_token_id=128001,
-        tie_word_embeddings=True,
-        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        rope_interleave=True,
-        attention_bias=False,
-        attention_dropout=0.0,
+        vocab_size: int | None = 128256,
+        hidden_size: int | None = 2048,
+        intermediate_size: int | None = 6144,
+        num_hidden_layers: int | None = 32,
+        num_attention_heads: int | None = 16,
+        num_key_value_heads: int | None = 16,
+        kv_lora_rank: int | None = 512,
+        q_lora_rank: int | None = 1536,
+        qk_rope_head_dim: int | None = 64,
+        v_head_dim: int | None = 128,
+        qk_nope_head_dim: int | None = 128,
+        hidden_act: str | None = "silu",
+        max_position_embeddings: int | None = 131072,
+        initializer_range: float | None = None,
+        embedding_initializer_range: float | None = None,
+        rms_norm_eps: int | None = 1e-6,
+        use_cache: bool | None = True,
+        pad_token_id: int | None = None,
+        bos_token_id: int | None = 128000,
+        eos_token_id: int | None = 128001,
+        tie_word_embeddings: bool | None = True,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] = None,
+        rope_interleave: bool | None = True,
+        attention_bias: bool | None = False,
+        attention_dropout: float | None = 0.0,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -181,7 +180,7 @@ class YoutuConfig(PreTrainedConfig):
             **kwargs,
         )
 
-    def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation: Optional[set] = None, **kwargs):
+    def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation: set | None = None, **kwargs):
         rope_scaling = kwargs.pop("rope_scaling", None)
         self.rope_parameters = rope_scaling or self.rope_parameters
         self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else {}
