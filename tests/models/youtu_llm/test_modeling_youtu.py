@@ -331,7 +331,7 @@ class YoutuIntegrationTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained("tencent/Youtu-LLM-2B-Base")
         model = YoutuForCausalLM.from_pretrained("tencent/Youtu-LLM-2B-Base", device_map=torch_device, dtype=torch.float16)
         if model.config.tie_word_embeddings:
-            # Youtu-LLM-2B-Base contains extra repeated weights for its tied embeddings, we can tie weights here according to its config
+            # Youtu-LLM-2B-Base contains extra repeated weights for the tied embeddings, we can tie weights here according to its config
             model.tie_weights()
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 
