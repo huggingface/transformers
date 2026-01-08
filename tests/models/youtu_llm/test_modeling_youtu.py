@@ -21,7 +21,11 @@ from parameterized import parameterized
 from transformers import AutoTokenizer, YoutuConfig, is_torch_available
 from transformers.testing_utils import (
     cleanup,
+    require_read_token,
     require_torch,
+    require_torch_accelerator,
+    require_torch_large_accelerator,
+    slow,
     torch_device,
 )
 
@@ -266,6 +270,8 @@ class YoutuModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
+    @require_torch_large_accelerator
+    @slow
     def test_eager_matches_sdpa_generate(self):
         max_new_tokens = 30
 
@@ -307,12 +313,16 @@ class YoutuModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                     msg=f"\n{tokenizer.batch_decode(res_eager)} \nvs\n{tokenizer.batch_decode(res_sdpa)}",
                 )
 
-
+@require_torch_accelerator
 class YoutuIntegrationTest(unittest.TestCase):
     def tearDown(self):
         # See LlamaIntegrationTest.tearDown(). Can be removed once LlamaIntegrationTest.tearDown() is removed.
         cleanup(torch_device, gc_collect=False)
 
+    @slow
+    @require_torch_accelerator
+    @pytest.mark.torch_compile_test
+    @require_read_token
     def test_compile_static_cache(self):
         # `torch==2.2` will throw an error on this test (as in other compilation tests), but torch==2.1.2 and torch>2.2
         # work as intended. See https://github.com/pytorch/pytorch/issues/121943
