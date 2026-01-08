@@ -11,7 +11,7 @@ exclude_folders :=  ""
 style:
 	ruff check $(check_dirs) setup.py conftest.py --fix --exclude $(exclude_folders)
 	ruff format $(check_dirs) setup.py conftest.py --exclude $(exclude_folders)
-	@python setup.py deps_table_update
+	python setup.py deps_table_update
 	python utils/sort_auto_mappings.py
 	python utils/check_doc_toc.py --fix_and_overwrite
 
