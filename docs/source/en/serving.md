@@ -373,9 +373,41 @@ The `transformers serve` server is also an MCP client, so it can interact with M
 
 ### Minimal Python Clients
 
-Below are minimal, dependency-light Python examples that interact directly with the server using HTTP.
+Below are minimal, practical Python examples. We recommend using `huggingface_hub.AsyncInferenceClient`; a raw HTTP reference is provided for advanced users.
 
-#### Chat Completions (streaming) with generation_config
+#### Chat Completions (streaming) using AsyncInferenceClient with generation_config
+
+```python
+import json
+import asyncio
+from huggingface_hub import AsyncInferenceClient
+
+client = AsyncInferenceClient("http://localhost:8000")
+messages = [{"role": "user", "content": "Say hello in one short sentence."}]
+
+async def main():
+    stream = await client.chat_completion(
+        messages,
+        model="Qwen/Qwen2.5-0.5B-Instruct",
+        stream=True,
+        max_tokens=128,
+        temperature=0.7,
+        top_p=0.95,
+        generation_config=json.dumps({
+            "max_new_tokens": 128,
+            "temperature": 0.7,
+            "top_p": 0.95,
+        }),
+    )
+    async for chunk in stream:
+        delta = chunk.choices[0].delta.content
+        if delta:
+            print(delta, end="")
+
+asyncio.run(main())
+```
+
+#### Chat Completions (streaming) raw HTTP with generation_config
 
 ```python
 import json
@@ -393,8 +425,8 @@ payload = {
     "generation_config": json.dumps({
         "max_new_tokens": 128,
         "temperature": 0.7,
-        "top_p": 0.95
-    })
+        "top_p": 0.95,
+    }),
 }
 
 with httpx.Client(timeout=None) as client:
