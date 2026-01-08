@@ -204,6 +204,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
 
     def get_state_dict_and_metadata(self, model):
         from ..integrations import Mxfp4GptOssExperts
+
         state_dict = model.state_dict()
 
         for name, module in model.named_modules():
@@ -214,7 +215,6 @@ class Mxfp4HfQuantizer(HfQuantizer):
             ):
                 state_dict[f"{name}.gate_up_proj"] = module.gate_up_proj
                 state_dict[f"{name}.down_proj"] = module.down_proj
-
 
         metadata = {}
         return state_dict, metadata
@@ -241,10 +241,15 @@ class Mxfp4HfQuantizer(HfQuantizer):
             if self.quantization_config.dequantize:
                 return [
                     WeightConverter(
-                        source_patterns=["_blocks", "_scales"],
-                        target_patterns="",
+                        source_patterns=["down_proj_blocks", "down_proj_scales"],
+                        target_patterns=r"down_proj$",
                         operations=[Mxfp4Dequantize(self)],
-                    )
+                    ),
+                    WeightConverter(
+                        source_patterns=["gate_up_proj_blocks", "gate_up_proj_scales"],
+                        target_patterns=["gate_up_proj$"],
+                        operations=[Mxfp4Dequantize(self)],
+                    ),
                 ]
             else:
                 return [
@@ -257,6 +262,6 @@ class Mxfp4HfQuantizer(HfQuantizer):
                         source_patterns=["down_proj_blocks", "down_proj_scales"],
                         target_patterns=r"down_proj$",
                         operations=[Mxfp4Deserialize(self)],
-                    )
+                    ),
                 ]
         return []
