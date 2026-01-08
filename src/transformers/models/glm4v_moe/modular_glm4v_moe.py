@@ -548,6 +548,7 @@ class Glm4vMoeForConditionalGeneration(Glm4vForConditionalGeneration):
 
 __all__ = [
     "Glm4vMoeConfig",
+    "Glm4vMoeVisionConfig",  # noqa: F822
     "Glm4vMoeTextConfig",
     "Glm4vMoeForConditionalGeneration",
     "Glm4vMoeModel",  # noqa: F822
