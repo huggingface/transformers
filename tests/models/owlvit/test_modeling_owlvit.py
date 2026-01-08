@@ -726,7 +726,7 @@ class OwlViTModelIntegrationTest(unittest.TestCase):
                 [-2.3968, -3.1332, -3.1332, -3.1332],
                 [-1.9452, -3.1332, -3.1332, -3.1332],
             ]
-        )
+        ).to(torch_device)
         torch.testing.assert_close(model.box_bias[:3, :4], expected_default_box_bias, rtol=1e-4, atol=1e-4)
 
         # Interpolate with any resolution size.
