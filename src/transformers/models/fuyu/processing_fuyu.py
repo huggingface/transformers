@@ -625,7 +625,7 @@ class FuyuProcessor(ProcessorMixin):
                 optimal_scale_factor = min(height_scale_factor, width_scale_factor)
 
                 image_unpadded_h = min(int(image_size[0] * optimal_scale_factor), image_size[0])
-                image_unpadded_w = min(int(image_size[0] * optimal_scale_factor), image_size[0])
+                image_unpadded_w = min(int(image_size[1] * optimal_scale_factor), image_size[1])
 
                 # We can use torch here because Fuyu processor has hard dependency on torch. NOTE: Fuyu can't do multi-image
                 # thus the below (1, 1, 1) is hardcoded. Same as when calling the processor
