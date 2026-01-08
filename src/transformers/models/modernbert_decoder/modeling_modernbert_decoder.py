@@ -390,12 +390,12 @@ class ModernBertDecoderPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _skip_keys_device_placement = ["past_key_values"]
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": ModernBertDecoderLayer,
         "attentions": ModernBertDecoderAttention,
     }
+    _skip_keys_device_placement = ["past_key_values"]
 
     @torch.no_grad()
     def _init_weights(self, module: nn.Module):
