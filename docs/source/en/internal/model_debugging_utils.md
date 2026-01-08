@@ -384,6 +384,12 @@ To use a quantized index (must be built with the same precision):
 python utils/modular_model_detector.py --modeling-file path/to/modeling_file.py --precision int8
 ```
 
+To analyze methods instead of top-level definitions:
+
+```bash
+python utils/modular_model_detector.py --modeling-file path/to/modeling_file.py --granularity method
+```
+
 The tool will automatically download the pre-built index from the Hub (requires RAM/VRAM for the embedding model).
 
 **Example output:**
@@ -439,6 +445,7 @@ python utils/modular_model_detector.py --build --push-new-index --hub-dataset yo
 - `--hub-dataset`: Hub dataset repository ID to pull/push the index (default: `hf-internal-testing/transformers_code_embeddings`)
 - `--top-k`: Number of matches per symbol (default: 5)
 - `--precision`: Embedding precision for building/loading the index (`float32`, `int8`, `binary`)
+- `--granularity`: Index granularity (`definition` or `method`)
 - `--output-json`: Write results to a JSON file (useful for tooling)
 
 ### Limitations
