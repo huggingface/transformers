@@ -2141,6 +2141,16 @@ class Trainer:
             if resume_from_checkpoint is None:
                 raise ValueError(f"No valid checkpoint found in output directory ({args.output_dir})")
 
+        # Resolve resume_from_checkpoint to an absolute path (assuming args.output_dir is absolute)
+        if resume_from_checkpoint is not None and not os.path.isabs(resume_from_checkpoint):
+            # Look inside self.output_dir
+            candidate = os.path.join(args.output_dir, resume_from_checkpoint)
+            if os.path.isdir(candidate):
+                print(
+                    f"Resolved resume_from_checkpoint {resume_from_checkpoint} to {candidate}. If this was not intended, consider specifying a full path to the checkpoint."
+                )
+                resume_from_checkpoint = candidate
+
         if resume_from_checkpoint is not None:
             if not is_sagemaker_mp_enabled() and not self.is_deepspeed_enabled and not self.is_fsdp_enabled:
                 self._load_from_checkpoint(resume_from_checkpoint)
