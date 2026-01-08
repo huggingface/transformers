@@ -1127,6 +1127,9 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
     def get_image_features(self, pixel_values: torch.FloatTensor, image_grid_thw: Optional[torch.LongTensor] = None):
         return self.model.get_image_features(pixel_values, image_grid_thw)
 
+    def get_image_tokens(self, hidden_states: torch.FloatTensor, image_grid_thw: Optional[torch.LongTensor] = None):
+        return self.model.get_image_tokens(hidden_states, image_grid_thw)
+
     def forward(
         self,
         input_ids: Optional[torch.LongTensor] = None,
