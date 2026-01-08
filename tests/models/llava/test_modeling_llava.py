@@ -321,6 +321,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
             ("rocm", (9, 5)): "\nUSER: What are the things I should be cautious about when I visit this place?\nASSISTANT: When visiting this place, there are a few things one should be cautious about. First, the",
         })  # fmt: skip
         EXPECTED_DECODED_TEXT = expected_decoded_texts.get_expectation()
+
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
@@ -354,6 +355,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         )  # fmt: skip
         EXPECTED_DECODED_TEXT = EXPECTED_DECODED_TEXTS.get_expectation()
         decoded_text = processor.decode(output[0], skip_special_tokens=True)
+
         self.assertEqual(decoded_text, EXPECTED_DECODED_TEXT)
 
     @require_bitsandbytes
@@ -547,17 +549,17 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
                     "\nUSER: Describe the image.\nASSISTANT: The image features a lone, adult llama standing on a grassy hill. The llama",
                 ],
                 ("cuda", 7): [
-                    "\n \nUSER: What's the difference of two images?\nASSISTANT: In the first image, a dog is holding a green leaf in its mouth. In the second image",
+                    "\n \nUSER: What's the difference of two images?\nASSISTANT:  In the two images, the primary difference is the presence of a green plant in one and a yellow",
                     "\nUSER: Describe the image.\nASSISTANT: The image features a small, fluffy dog sitting on a sidewalk. The dog is holding",
                     "\nUSER: Describe the image.\nASSISTANT: The image features a lone, adult llama standing on a grassy hill. The llama",
                 ],
                 ("cuda", 8): [
-                     "\n \nUSER: What's the difference of two images?\nASSISTANT: In the first image, a dog is holding a green leaf in its mouth. In the second image",
+                    "\n \nUSER: What's the difference of two images?\nASSISTANT: In the two images, the primary difference is the presence of a green plant in one and a yellow",
                     "\nUSER: Describe the image.\nASSISTANT: The image features a small, fluffy dog sitting on a sidewalk. The dog is holding",
                     "\nUSER: Describe the image.\nASSISTANT: The image features a lone, adult llama standing on a grassy hill. The llama",
                 ],
                 ("rocm", (9, 5)): [
-                    "\n\nUSER: What's the difference of two images?\nASSISTANT: In the first image, a dog is holding a green leaf in its mouth. In the second image",
+                    "\n\nUSER: What's the difference of two images?\nASSISTANT: In the two images, the primary difference is the presence of a green plant in one and a yellow",
                     "\nUSER: Describe the image.\nASSISTANT: The image features a small, fluffy dog sitting on a sidewalk. The dog is holding",
                     "\nUSER: Describe the image.\nASSISTANT: The image features a lone, adult llama standing on a grassy hill. The llama",
                 ],
