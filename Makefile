@@ -1,12 +1,13 @@
 # make sure to test the local checkout in scripts and not the pre-installed one (don't use quotes!)
 export PYTHONPATH = src
 
-.PHONY: quality style fixup fix-copies test test-examples benchmark
+.PHONY: style check-repo fix-repo test test-examples benchmark
 
 check_dirs := examples tests src utils scripts benchmark benchmark_v2
 exclude_folders :=  ""
 
-# this runs all linting/formatting scripts
+
+# this runs all linting/formatting scripts, most notably ruff
 style:
 	ruff check $(check_dirs) setup.py conftest.py --fix --exclude $(exclude_folders)
 	ruff format $(check_dirs) setup.py conftest.py --exclude $(exclude_folders)
@@ -39,7 +40,7 @@ check-repo:
 
 # Run all repo checks for which there is an automatic fix, most notably modular conversions
 fix-repo:
-	style
+	$(MAKE) style
 	python utils/check_copies.py --fix_and_overwrite
 	python utils/check_modular_conversion.py --fix_and_overwrite
 	python utils/check_dummies.py --fix_and_overwrite
@@ -47,6 +48,7 @@ fix-repo:
 	python utils/check_doctest_list.py --fix_and_overwrite
 	python utils/check_docstrings.py --fix_and_overwrite
 	python utils/add_dates.py
+
 
 # Run tests for the library
 test:
