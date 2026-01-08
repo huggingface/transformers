@@ -3976,6 +3976,15 @@ class ModelTesterMixin:
         if not self.test_torch_exportable:
             self.skipTest(reason="Model architecture is not torch exportable")
 
+        with open(inspect.getfile(self.all_model_classes[0]), "r") as f:
+            source_code = f.read()
+            # Skip model if it uses a chunked attention implementation which is not torch exportable
+            if "for q, k, v in zip(*splits)" in source_code:
+                self.skipTest(reason="Model architecture uses chunked attention which is not torch exportable")
+            # Skip model if it uses rope index calculation which is not torch exportable
+            if "get_rope_index" in source_code:
+                self.skipTest(reason="Model architecture uses `get_rope_index` which is not torch exportable")
+
         def _is_pure_python_object(obj) -> bool:
             if isinstance(obj, (int, float, bool, str)) or obj is None:
                 return True
@@ -4007,6 +4016,8 @@ class ModelTesterMixin:
             # we don't test outputing a cache class for now
             # (needs pytree registration for each class)
             inputs_dict.pop("use_cache", None)
+            # we don't test loss computation for now
+            inputs_dict.pop("return_loss", None)
 
             # set experts implementation to batched_mm for export
             if model._can_set_experts_implementation():
@@ -4016,6 +4027,9 @@ class ModelTesterMixin:
                 # disable cache usage for every submodel
                 if hasattr(module, "config") and hasattr(module.config, "use_cache"):
                     module.config.use_cache = False
+                # disable returning loss for every submodel
+                if hasattr(module, "config") and hasattr(module.config, "return_loss"):
+                    module.config.return_loss = False
                 # disable classifier cast for nllb-moe
                 if hasattr(module, "_cast_classifier"):
                     module._cast_classifier = lambda *args, **kwargs: None
