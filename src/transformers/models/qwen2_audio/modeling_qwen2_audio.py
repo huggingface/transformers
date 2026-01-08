@@ -477,7 +477,7 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
         self, audio_features, num_audio_tokens, inputs_embeds, input_ids, attention_mask, labels
     ):
         """
-        Merge input_ids with with audio features into final embeddings
+        Merge input_ids with audio features into final embeddings
 
         Args:
             audio_features (`torch.Tensor` of shape `(num_audios, max_audio_tokens, embed_dim)`):

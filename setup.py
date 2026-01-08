@@ -140,7 +140,7 @@ _deps = [
     "tensorboard",
     "timeout-decorator",
     "tiktoken",
-    "timm>=1.0.20",
+    "timm>=1.0.23",
     "tokenizers>=0.22.0,<=0.23.0",
     "torch>=2.2",
     "torchaudio",
