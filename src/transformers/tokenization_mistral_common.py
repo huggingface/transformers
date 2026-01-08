@@ -1468,9 +1468,13 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
             raise ValueError("`init_inputs` are not supported by `MistralCommonBackend.from_pretrained`.")
 
         # Handle kwargs and AutoTokenizer/AutoProcessor case
-        valid_kwargs = _VALID_INIT_KWARGS.union({"trust_remote_code", "_from_pipeline", "_commit_hash", "dtype", "subfolder"})
+        valid_kwargs = _VALID_INIT_KWARGS.union(
+            {"trust_remote_code", "_from_pipeline", "_commit_hash", "dtype", "subfolder"}
+        )
         if kwargs and not set(kwargs.keys()).issubset(valid_kwargs):
-            raise ValueError(f"Some kwargs in {list(kwargs.keys())} are not supported by `MistralCommonBackend.from_pretrained`.")
+            raise ValueError(
+                f"Some kwargs in {list(kwargs.keys())} are not supported by `MistralCommonBackend.from_pretrained`."
+            )
 
         mode = cls._get_validation_mode(mode)
 
@@ -1578,7 +1582,7 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
 
     def add_special_tokens(
         self,
-        special_tokens_dict: dict[str, str | AddedToken | Sequence[str| AddedToken]],
+        special_tokens_dict: dict[str, str | AddedToken | Sequence[str | AddedToken]],
         replace_extra_special_tokens: bool = True,
     ):
         r"""`MistralCommonBackend` does not implement `add_special_tokens` by design.
