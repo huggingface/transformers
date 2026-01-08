@@ -504,6 +504,8 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
 
         return self._test_block_sharing(model_id, num_layer_groups, input_msg, expected_generated_tokens)
 
+    # The test always passes on H100 with torch 2.9, but only passed case 0 on A100 with torch 2.6 and fails on A100
+    # with torch 2.9. This might be due to a GPU diff, so test might be flaky on the CI which runs on A10.
     @parameterized.expand([True, False])
     @require_torch_accelerator
     def test_num_return_sequences(self, allow_block_sharing: bool) -> None:

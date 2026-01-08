@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,7 +26,7 @@ from contextlib import contextmanager
 from copy import deepcopy
 from dataclasses import dataclass, field
 from itertools import chain
-from typing import TYPE_CHECKING, Any, Optional, Union
+from typing import TYPE_CHECKING, Any
 
 import torch
 
@@ -51,7 +50,7 @@ logger = logging.get_logger(__name__)
 
 
 def build_glob_alternation(
-    globs: list[Union[WeightRenaming, WeightConverter, str]],
+    globs: list[WeightRenaming | WeightConverter | str],
 ) -> tuple[re.Pattern, dict[str, str], dict[str, str]]:
     """
     Build a single alternation regex with one named group per glob.
@@ -442,12 +441,12 @@ class Transpose(ConversionOps):
 
 @dataclass(slots=True)
 class WeightTransform:
-    source_patterns: Union[str, list[str]] = field(init=True)
-    target_patterns: Union[str, list[str]] = field(init=True)
+    source_patterns: str | list[str] = field(init=True)
+    target_patterns: str | list[str] = field(init=True)
     compiled_sources: re.Pattern = field(init=False)
 
-    distributed_operation: Optional[TensorParallelLayer] = None
-    quantization_operation: Optional[ConversionOps] = None
+    distributed_operation: TensorParallelLayer | None = None
+    quantization_operation: ConversionOps | None = None
 
     collected_tensors: dict[str, list[Future]] = field(default_factory=lambda: defaultdict(list), init=False)
     layer_targets: dict[str, set[str]] = field(default_factory=lambda: defaultdict(set), init=False)
@@ -573,8 +572,8 @@ class WeightRenaming(WeightTransform):
         model=None,
         config=None,
         hf_quantizer=None,
-        missing_keys: Optional[MutableSet[str]] = None,
-        conversion_errors: Optional[MutableMapping[str, str]] = None,
+        missing_keys: MutableSet[str] | None = None,
+        conversion_errors: MutableMapping[str, str] | None = None,
     ):
         # Collect the tensors here - we use a new dictionary to avoid keeping them in memory in the internal
         # attribute during the whole process
@@ -630,8 +629,8 @@ class WeightConverter(WeightTransform):
         model=None,
         config=None,
         hf_quantizer=None,
-        missing_keys: Optional[MutableSet[str]] = None,
-        conversion_errors: Optional[MutableMapping[str, str]] = None,
+        missing_keys: MutableSet[str] | None = None,
+        conversion_errors: MutableMapping[str, str] | None = None,
     ):
         # Collect the tensors here - we use a new dictionary to avoid keeping them in memory in the internal
         # attribute during the whole process
@@ -742,7 +741,7 @@ def log_conversion_errors(
     first_target_key: str,
     conversion_errors: MutableMapping[str, str],
     extras: Any = None,
-    op: Union[list[ConversionOps], ConversionOps, None] = None,
+    op: list[ConversionOps] | ConversionOps | None = None,
 ):
     """Catch all exceptions during `convert` calls, and log the errors for later. Re-raise a `SkipParameters` exception
     that will be catched later to skip the parameters that raised the original Exception."""
@@ -750,7 +749,7 @@ def log_conversion_errors(
         yield
     except Exception as e:
 
-        def _format_op_name(curr_op: Union[list[ConversionOps], ConversionOps, None]) -> Optional[str]:
+        def _format_op_name(curr_op: list[ConversionOps] | ConversionOps | None) -> str | None:
             if curr_op is None:
                 return None
             if isinstance(curr_op, (list, tuple, set)):
@@ -786,7 +785,7 @@ def set_param_for_module(
     mismatch_keys: MutableSet[tuple[str, torch.Size, torch.Size]],
     missing_keys: MutableSet[str],
     unexpected_keys: MutableSet[str],
-    distributed_operation: Optional[TensorParallelLayer],
+    distributed_operation: TensorParallelLayer | None,
     hf_quantizer: HfQuantizer,
 ):
     module_path, _, param_name = target_name.rpartition(".")

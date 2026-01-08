@@ -17,7 +17,6 @@ SentencePiece-based tokenization class for loading from sentencepiece.model file
 
 import os
 from shutil import copyfile
-from typing import Optional, Union
 
 
 try:
@@ -108,7 +107,7 @@ class SentencePieceBackend(PreTrainedTokenizer):
         vocab.update(self.added_tokens_encoder)
         return vocab
 
-    def _add_tokens(self, new_tokens: Union[list[str], list[AddedToken]], special_tokens: bool = False) -> int:
+    def _add_tokens(self, new_tokens: list[str] | list[AddedToken], special_tokens: bool = False) -> int:
         """
         Add a list of new tokens to the tokenizer class. If the new tokens are not in the vocabulary, they are added to
         it with indices starting from length of the current vocabulary. Special tokens are sometimes already in the
@@ -188,7 +187,7 @@ class SentencePieceBackend(PreTrainedTokenizer):
         self._update_total_vocab_size()
         return num_added
 
-    def _update_trie(self, unique_no_split_tokens: Optional[list[str]] = None):
+    def _update_trie(self, unique_no_split_tokens: list[str] | None = None):
         # Add all added tokens
         for token in self._added_tokens_decoder.values():
             if token.content not in self.tokens_trie._tokens:
@@ -235,7 +234,7 @@ class SentencePieceBackend(PreTrainedTokenizer):
         out_string = "".join(tokens).replace(SPIECE_UNDERLINE, " ").strip()
         return out_string
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: str | None = None) -> tuple[str]:
         """
         Save the sentencepiece vocabulary (copy original file) to a directory.
 
@@ -266,9 +265,9 @@ class SentencePieceBackend(PreTrainedTokenizer):
 
     def _decode(
         self,
-        token_ids: Union[int, list[int]],
+        token_ids: int | list[int],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: Optional[bool] = None,
+        clean_up_tokenization_spaces: bool | None = None,
         spaces_between_special_tokens: bool = False,
         **kwargs,
     ) -> str:
