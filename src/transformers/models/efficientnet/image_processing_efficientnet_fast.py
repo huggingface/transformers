@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -33,7 +32,7 @@ from .image_processing_efficientnet import EfficientNetImageProcessorKwargs
 
 @auto_docstring
 class EfficientNetImageProcessorFast(BaseImageProcessorFast):
-    resample = PILImageResampling.NEAREST
+    resample = PILImageResampling.BICUBIC
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
     size = {"height": 346, "width": 346}

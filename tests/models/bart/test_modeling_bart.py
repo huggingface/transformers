@@ -622,7 +622,7 @@ class FastIntegrationTests(unittest.TestCase):
         dct = tok(ARTICLE, return_tensors="pt")
         generated_ids = hf.generate(**dct, num_beams=4)
         result = tok.batch_decode(generated_ids)[0]
-        assert EXPECTED == result
+        assert result == EXPECTED
 
     def test_xsum_1_1_batch_generation(self):
         # test batch

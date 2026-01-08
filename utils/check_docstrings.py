@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -99,6 +98,8 @@ ALWAYS_OVERRIDE = ["labels"]
 # docstrings instead. If formatting should be ignored for the docstring, you can put a comment # no-format on the
 # line before the docstring.
 OBJECTS_TO_IGNORE = {
+    "GlmAsrProcessor",
+    "AudioFlamingo3Processor",
     "ApertusConfig",
     "Mxfp4Config",
     "Qwen3OmniMoeConfig",

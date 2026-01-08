@@ -19,7 +19,7 @@ import json
 import math
 import os
 import warnings
-from typing import TYPE_CHECKING, Any, Optional, TypeVar, Union
+from typing import TYPE_CHECKING, Any, TypeVar, Union
 
 from huggingface_hub import create_repo
 from packaging import version
@@ -149,10 +149,10 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
     sub_configs: dict[str, type["PreTrainedConfig"]] = {}
     has_no_defaults_at_init: bool = False
     attribute_map: dict[str, str] = {}
-    base_model_tp_plan: Optional[dict[str, Any]] = None
-    base_model_pp_plan: Optional[dict[str, tuple[list[str]]]] = None
-    base_model_ep_plan: Optional[dict[str, tuple[list[str]]]] = None
-    _auto_class: Optional[str] = None
+    base_model_tp_plan: dict[str, Any] | None = None
+    base_model_pp_plan: dict[str, tuple[list[str]]] | None = None
+    base_model_ep_plan: dict[str, tuple[list[str]]] | None = None
+    _auto_class: str | None = None
 
     def __setattr__(self, key, value):
         if key in super().__getattribute__("attribute_map"):
@@ -171,16 +171,16 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         output_hidden_states: bool = False,
         output_attentions: bool = False,
         return_dict: bool = True,
-        dtype: Optional[Union[str, "torch.dtype"]] = None,
+        dtype: Union[str, "torch.dtype"] | None = None,
         # Common arguments
         chunk_size_feed_forward: int = 0,
         is_encoder_decoder: bool = False,
         # Fine-tuning task arguments
-        architectures: Optional[list[str]] = None,
-        id2label: Optional[dict[int, str]] = None,
-        label2id: Optional[dict[str, int]] = None,
-        num_labels: Optional[int] = None,
-        problem_type: Optional[str] = None,
+        architectures: list[str] | None = None,
+        id2label: dict[int, str] | None = None,
+        label2id: dict[str, int] | None = None,
+        num_labels: int | None = None,
+        problem_type: str | None = None,
         **kwargs,
     ):
         # Validation for some arguments
@@ -256,6 +256,9 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         # Attention implementation to use, if relevant (it sets it recursively on sub-configs)
         self._attn_implementation = kwargs.pop("attn_implementation", None)
 
+        # Experts implementation to use, if relevant (it sets it recursively on sub-configs)
+        self._experts_implementation = kwargs.pop("experts_implementation", None)
+
         # Drop the transformers version info
         self.transformers_version = kwargs.pop("transformers_version", None)
 
@@ -280,7 +283,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         self.label2id = dict(zip(self.id2label.values(), self.id2label.keys()))
 
     @property
-    def name_or_path(self) -> Optional[str]:
+    def name_or_path(self) -> str | None:
         return getattr(self, "_name_or_path", None)
 
     @name_or_path.setter
@@ -348,6 +351,28 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
                     value if not isinstance(value, dict) else value.get(subconfig_key, current_subconfig_attn)
                 )
                 subconfig._attn_implementation = sub_implementation
+
+    @property
+    def _experts_implementation(self):
+        return self._experts_implementation_internal
+
+    @_experts_implementation.setter
+    def _experts_implementation(self, value: str | dict | None):
+        """We set it recursively on the sub-configs as well"""
+        # Set if for current config
+        current_moe = getattr(self, "_experts_implementation", None)
+        experts_implementation = value if not isinstance(value, dict) else value.get("", current_moe)
+        self._experts_implementation_internal = experts_implementation
+
+        # Set it recursively on the subconfigs
+        for subconfig_key in self.sub_configs:
+            subconfig = getattr(self, subconfig_key, None)
+            if subconfig is not None:
+                current_subconfig_moe = getattr(subconfig, "_experts_implementation", None)
+                sub_implementation = (
+                    value if not isinstance(value, dict) else value.get(subconfig_key, current_subconfig_moe)
+                )
+                subconfig._experts_implementation = sub_implementation
 
     @property
     def torch_dtype(self):
@@ -688,8 +713,9 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
             # If both are present, use `dtype`
             kwargs["dtype"] = kwargs.get("dtype", torch_dtype)
 
-        # We remove it from kwargs so that it does not appear in `return_unused_kwargs`.
+        # We remove them from kwargs so that they do not appear in `return_unused_kwargs`.
         config_dict["attn_implementation"] = kwargs.pop("attn_implementation", None)
+        config_dict["experts_implementation"] = kwargs.pop("experts_implementation", None)
 
         config = cls(**config_dict)
 
@@ -1014,6 +1040,8 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
             del d["_commit_hash"]
         if "_attn_implementation_internal" in d:
             del d["_attn_implementation_internal"]
+        if "_experts_implementation_internal" in d:
+            del d["_experts_implementation_internal"]
         # Do not serialize `base_model_tp_plan` for now
         if "base_model_tp_plan" in d:
             del d["base_model_tp_plan"]
@@ -1210,7 +1238,7 @@ ALLOWED_MLP_LAYER_TYPES = (
 )
 
 
-def layer_type_validation(layer_types: list[str], num_hidden_layers: Optional[int] = None, attention: bool = True):
+def layer_type_validation(layer_types: list[str], num_hidden_layers: int | None = None, attention: bool = True):
     """Check that `layer_types` is correctly defined."""
     allowed_layer_types = ALLOWED_ATTENTION_LAYER_TYPES if attention else ALLOWED_MLP_LAYER_TYPES
     if not all(layer_type in allowed_layer_types for layer_type in layer_types):
