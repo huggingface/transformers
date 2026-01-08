@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The Meta AI Authors and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +15,7 @@
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Optional, Union
+from typing import Union
 
 import numpy as np
 import torch
@@ -106,7 +105,7 @@ class Sam2ImageProcessorFast(SamImageProcessorFast):
     def _preprocess(
         self,
         images: list["torch.Tensor"],
-        return_tensors: Optional[Union[str, TensorType]],
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> "torch.Tensor":
         return BaseImageProcessorFast._preprocess(self, images, return_tensors=return_tensors, **kwargs).pixel_values
@@ -115,7 +114,7 @@ class Sam2ImageProcessorFast(SamImageProcessorFast):
     def preprocess(
         self,
         images: ImageInput,
-        segmentation_maps: Optional[ImageInput] = None,
+        segmentation_maps: ImageInput | None = None,
         **kwargs: Unpack[Sam2FastImageProcessorKwargs],
     ) -> BatchFeature:
         r"""
@@ -127,10 +126,10 @@ class Sam2ImageProcessorFast(SamImageProcessorFast):
     def _preprocess_image_like_inputs(
         self,
         images: ImageInput,
-        segmentation_maps: Optional[ImageInput],
+        segmentation_maps: ImageInput | None,
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
-        device: Optional[Union[str, "torch.device"]] = None,
+        device: Union[str, "torch.device"] | None = None,
         **kwargs: Unpack[Sam2FastImageProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -173,12 +172,12 @@ class Sam2ImageProcessorFast(SamImageProcessorFast):
 
     def _further_process_kwargs(
         self,
-        size: Optional[SizeDict] = None,
-        mask_size: Optional[SizeDict] = None,
-        default_to_square: Optional[bool] = None,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
-        data_format: Optional[ChannelDimension] = None,
+        size: SizeDict | None = None,
+        mask_size: SizeDict | None = None,
+        default_to_square: bool | None = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        data_format: ChannelDimension | None = None,
         **kwargs,
     ) -> dict:
         """
@@ -317,11 +316,11 @@ class Sam2VisionEncoderOutput(ModelOutput):
         the self-attention heads.
     """
 
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    fpn_hidden_states: Optional[torch.FloatTensor] = None
-    fpn_position_encoding: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    last_hidden_state: torch.FloatTensor | None = None
+    fpn_hidden_states: torch.FloatTensor | None = None
+    fpn_position_encoding: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 @dataclass
@@ -349,13 +348,13 @@ class Sam2ImageSegmentationOutput(ModelOutput):
         Attentions weights of the mask decoder.
     """
 
-    iou_scores: Optional[torch.FloatTensor] = None
-    pred_masks: Optional[torch.FloatTensor] = None
-    object_score_logits: Optional[torch.FloatTensor] = None
+    iou_scores: torch.FloatTensor | None = None
+    pred_masks: torch.FloatTensor | None = None
+    object_score_logits: torch.FloatTensor | None = None
     image_embeddings: tuple[torch.FloatTensor, ...] = None
-    vision_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    vision_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
-    mask_decoder_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    vision_hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    vision_attentions: tuple[torch.FloatTensor, ...] | None = None
+    mask_decoder_attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 class Sam2PatchEmbeddings(nn.Module):
@@ -445,7 +444,7 @@ class Sam2VisionNeck(nn.Module):
         return fpn_hidden_states, fpn_position_encoding
 
 
-def do_pool(x: torch.Tensor, query_stride: Optional[int] = None) -> torch.Tensor:
+def do_pool(x: torch.Tensor, query_stride: int | None = None) -> torch.Tensor:
     if query_stride is None:
         return x
     # (B, H, W, C) -> (B, C, H, W)
@@ -463,7 +462,7 @@ class Sam2MultiScaleAttention(nn.Module):
         dim: int,
         dim_out: int,
         num_attention_heads: int,
-        query_stride: Optional[tuple[int, int]] = None,
+        query_stride: tuple[int, int] | None = None,
     ):
         super().__init__()
 
@@ -659,8 +658,8 @@ class Sam2HieraDetModelOutput(ModelOutput):
         Sequence of hidden-states at the output of the intermediate layers of the model.
     """
 
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    intermediate_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    last_hidden_state: torch.FloatTensor | None = None
+    intermediate_hidden_states: tuple[torch.FloatTensor, ...] | None = None
 
 
 @auto_docstring
@@ -734,9 +733,9 @@ class Sam2HieraDetModel(Sam2PreTrainedModel):
     @check_model_inputs
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_values: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, Sam2HieraDetModelOutput]:
+    ) -> tuple | Sam2HieraDetModelOutput:
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
@@ -786,9 +785,9 @@ class Sam2VisionModel(Sam2PreTrainedModel):
     @check_model_inputs
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_values: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, Sam2VisionEncoderOutput]:
+    ) -> tuple | Sam2VisionEncoderOutput:
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
@@ -918,7 +917,7 @@ class Sam2Attention(nn.Module):
         query: torch.Tensor,
         key: torch.Tensor,
         value: torch.Tensor,
-        attention_similarity: Optional[torch.Tensor] = None,
+        attention_similarity: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         # Input projections
@@ -1060,8 +1059,8 @@ class Sam2MaskDecoder(SamMaskDecoder):
         dense_prompt_embeddings: torch.Tensor,
         multimask_output: bool,
         high_resolution_features: list[torch.Tensor],
-        attention_similarity: Optional[torch.Tensor] = None,
-        target_embedding: Optional[torch.Tensor] = None,
+        attention_similarity: torch.Tensor | None = None,
+        target_embedding: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """
@@ -1245,8 +1244,8 @@ class Sam2Model(SamModel):
     ) -> tuple[
         list[torch.Tensor],
         list[torch.Tensor],
-        Optional[tuple[torch.FloatTensor, ...]],
-        Optional[tuple[torch.FloatTensor, ...]],
+        tuple[torch.FloatTensor, ...] | None,
+        tuple[torch.FloatTensor, ...] | None,
     ]:
         r"""
         Extract and preprocess image features using the vision encoder.
@@ -1289,15 +1288,15 @@ class Sam2Model(SamModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        input_points: Optional[torch.FloatTensor] = None,
-        input_labels: Optional[torch.LongTensor] = None,
-        input_boxes: Optional[torch.FloatTensor] = None,
-        input_masks: Optional[torch.LongTensor] = None,
-        image_embeddings: Optional[torch.FloatTensor] = None,
+        pixel_values: torch.FloatTensor | None = None,
+        input_points: torch.FloatTensor | None = None,
+        input_labels: torch.LongTensor | None = None,
+        input_boxes: torch.FloatTensor | None = None,
+        input_masks: torch.LongTensor | None = None,
+        image_embeddings: torch.FloatTensor | None = None,
         multimask_output: bool = True,
-        attention_similarity: Optional[torch.FloatTensor] = None,
-        target_embedding: Optional[torch.FloatTensor] = None,
+        attention_similarity: torch.FloatTensor | None = None,
+        target_embedding: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Sam2ImageSegmentationOutput:
         r"""

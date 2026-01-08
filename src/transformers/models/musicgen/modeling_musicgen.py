@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 Meta AI and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,7 +19,7 @@ import math
 import random
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Optional, Union
+from typing import TYPE_CHECKING, Any, Optional
 
 import torch
 import torch.nn as nn
@@ -86,9 +85,9 @@ class MusicgenUnconditionalInput(ModelOutput):
         from the prompts) and the unconditional logits (predicted without prompts).
     """
 
-    encoder_outputs: Optional[tuple[torch.FloatTensor]] = None
-    attention_mask: Optional[torch.LongTensor] = None
-    guidance_scale: Optional[float] = None
+    encoder_outputs: tuple[torch.FloatTensor] | None = None
+    attention_mask: torch.LongTensor | None = None
+    guidance_scale: float | None = None
 
 
 def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start_token_id: int):
@@ -161,8 +160,8 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
-    scaling: Optional[float] = None,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
     dropout: float = 0.0,
     **kwargs: Unpack[TransformersKwargs],
 ):
@@ -192,12 +191,12 @@ class MusicgenAttention(nn.Module):
         self,
         embed_dim: int,
         num_heads: int,
-        dropout: Optional[float] = 0.0,
-        is_decoder: Optional[bool] = False,
-        bias: Optional[bool] = True,
-        is_causal: Optional[bool] = False,
-        config: Optional[MusicgenConfig] = None,
-        layer_idx: Optional[int] = None,
+        dropout: float | None = 0.0,
+        is_decoder: bool | None = False,
+        bias: bool | None = True,
+        is_causal: bool | None = False,
+        config: MusicgenConfig | None = None,
+        layer_idx: int | None = None,
     ):
         super().__init__()
         self.embed_dim = embed_dim
@@ -224,15 +223,15 @@ class MusicgenAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        key_value_states: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Cache] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
-        cache_position: Optional[torch.Tensor] = None,
+        key_value_states: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        attention_mask: torch.Tensor | None = None,
+        output_attentions: bool | None = False,
+        cache_position: torch.Tensor | None = None,
         # TODO: we need a refactor so that the different attention modules can get their specific kwargs
         # ATM, we have mixed things encoder, decoder, and encoder-decoder attn
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         """Input shape: Batch x Time x Channel"""
 
         # if key_value_states are provided this layer is used as a cross-attention layer
@@ -339,13 +338,13 @@ class MusicgenDecoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Cache] = None,
-        output_attentions: Optional[bool] = False,
-        use_cache: Optional[bool] = True,
-        cache_position: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        output_attentions: bool | None = False,
+        use_cache: bool | None = True,
+        cache_position: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """
         Args:
@@ -475,19 +474,19 @@ class MusicgenDecoder(MusicgenPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.Tensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        encoder_hidden_states: torch.FloatTensor | None = None,
+        encoder_attention_mask: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        cache_position: torch.Tensor | None = None,
         **kwargs,
-    ) -> Union[tuple, BaseModelOutputWithPastAndCrossAttentions]:
+    ) -> tuple | BaseModelOutputWithPastAndCrossAttentions:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size * num_codebooks, sequence_length)`):
             Indices of input sequence tokens in the vocabulary, corresponding to the sequence of audio codes.
@@ -625,7 +624,7 @@ class MusicgenDecoder(MusicgenPreTrainedModel):
 
     def _update_causal_mask(
         self,
-        attention_mask: Union[torch.Tensor, None],
+        attention_mask: torch.Tensor | None,
         input_shape: torch.Size,
         inputs_embeds: torch.Tensor,
         past_key_values_length: int,
@@ -662,8 +661,8 @@ class MusicgenDecoder(MusicgenPreTrainedModel):
 
     def _update_cross_attn_mask(
         self,
-        encoder_hidden_states: Union[torch.Tensor, None],
-        encoder_attention_mask: Union[torch.Tensor, None],
+        encoder_hidden_states: torch.Tensor | None,
+        encoder_attention_mask: torch.Tensor | None,
         input_shape: torch.Size,
         inputs_embeds: torch.Tensor,
     ):
@@ -710,19 +709,19 @@ class MusicgenModel(MusicgenPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.Tensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        encoder_hidden_states: torch.FloatTensor | None = None,
+        encoder_attention_mask: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        cache_position: torch.Tensor | None = None,
         **kwargs,
-    ) -> Union[tuple, BaseModelOutputWithPastAndCrossAttentions]:
+    ) -> tuple | BaseModelOutputWithPastAndCrossAttentions:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size * num_codebooks, sequence_length)`):
             Indices of input sequence tokens in the vocabulary, corresponding to the sequence of audio codes.
@@ -824,20 +823,20 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel, GenerationMixin):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.Tensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        encoder_hidden_states: torch.FloatTensor | None = None,
+        encoder_attention_mask: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        cache_position: torch.Tensor | None = None,
         **kwargs,
-    ) -> Union[tuple, CausalLMOutputWithCrossAttentions]:
+    ) -> tuple | CausalLMOutputWithCrossAttentions:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size * num_codebooks, sequence_length)`):
             Indices of input sequence tokens in the vocabulary, corresponding to the sequence of audio codes.
@@ -977,9 +976,7 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel, GenerationMixin):
             "use_cache": use_cache,
         }
 
-    def build_delay_pattern_mask(
-        self, input_ids: torch.LongTensor, pad_token_id: int, max_length: Optional[int] = None
-    ):
+    def build_delay_pattern_mask(self, input_ids: torch.LongTensor, pad_token_id: int, max_length: int | None = None):
         """Build a delayed pattern mask to the input_ids. Each codebook is offset by the previous codebook by
         one, giving a delayed pattern mask at the start of sequence and end of sequence. Take the example where there
         are 4 codebooks and a max sequence length of 8, we have the delayed pattern mask of shape `(codebooks,
@@ -1064,11 +1061,11 @@ class MusicgenForCausalLM(MusicgenPreTrainedModel, GenerationMixin):
     @torch.no_grad()
     def generate(
         self,
-        inputs: Optional[torch.Tensor] = None,
-        generation_config: Optional[GenerationConfig] = None,
-        logits_processor: Optional[LogitsProcessorList] = None,
-        stopping_criteria: Optional[StoppingCriteriaList] = None,
-        synced_gpus: Optional[bool] = None,
+        inputs: torch.Tensor | None = None,
+        generation_config: GenerationConfig | None = None,
+        logits_processor: LogitsProcessorList | None = None,
+        stopping_criteria: StoppingCriteriaList | None = None,
+        synced_gpus: bool | None = None,
         streamer: Optional["BaseStreamer"] = None,
         **kwargs,
     ):
@@ -1297,10 +1294,10 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel, GenerationMixin)
 
     def __init__(
         self,
-        config: Optional[MusicgenConfig] = None,
-        text_encoder: Optional[PreTrainedModel] = None,
-        audio_encoder: Optional[PreTrainedModel] = None,
-        decoder: Optional[MusicgenForCausalLM] = None,
+        config: MusicgenConfig | None = None,
+        text_encoder: PreTrainedModel | None = None,
+        audio_encoder: PreTrainedModel | None = None,
+        decoder: MusicgenForCausalLM | None = None,
     ):
         r"""
         text_encoder (`PreTrainedModel`, *optional*):
@@ -1410,9 +1407,9 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel, GenerationMixin)
     @classmethod
     def from_sub_models_pretrained(
         cls,
-        text_encoder_pretrained_model_name_or_path: Optional[str] = None,
-        audio_encoder_pretrained_model_name_or_path: Optional[str] = None,
-        decoder_pretrained_model_name_or_path: Optional[str] = None,
+        text_encoder_pretrained_model_name_or_path: str | None = None,
+        audio_encoder_pretrained_model_name_or_path: str | None = None,
+        decoder_pretrained_model_name_or_path: str | None = None,
         *model_args,
         **kwargs,
     ) -> PreTrainedModel:
@@ -1607,23 +1604,23 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel, GenerationMixin)
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.BoolTensor] = None,
-        input_values: Optional[torch.FloatTensor] = None,
-        padding_mask: Optional[torch.BoolTensor] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.BoolTensor] = None,
-        encoder_outputs: Optional[tuple[torch.FloatTensor]] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.BoolTensor | None = None,
+        input_values: torch.FloatTensor | None = None,
+        padding_mask: torch.BoolTensor | None = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.BoolTensor | None = None,
+        encoder_outputs: tuple[torch.FloatTensor] | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, Seq2SeqLMOutput]:
+    ) -> tuple | Seq2SeqLMOutput:
         r"""
         padding_mask (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
@@ -1838,9 +1835,9 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel, GenerationMixin)
         batch_size: int,
         model_input_name: str,
         model_kwargs: dict[str, torch.Tensor],
-        decoder_start_token_id: Optional[int] = None,
-        bos_token_id: Optional[int] = None,
-        device: Optional[torch.device] = None,
+        decoder_start_token_id: int | None = None,
+        bos_token_id: int | None = None,
+        device: torch.device | None = None,
     ) -> tuple[torch.LongTensor, dict[str, torch.Tensor]]:
         """Prepares `decoder_input_ids` for generation with encoder-decoder models"""
 
@@ -1884,7 +1881,7 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel, GenerationMixin)
         self,
         inputs_tensor: torch.Tensor,
         model_kwargs,
-        model_input_name: Optional[str],
+        model_input_name: str | None,
         generation_config: GenerationConfig,
     ) -> dict[str, Any]:
         # 1. get text encoder
@@ -1930,7 +1927,7 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel, GenerationMixin)
         return model_kwargs
 
     def _prepare_audio_encoder_kwargs_for_generation(
-        self, input_values, model_kwargs, model_input_name: Optional[str] = None
+        self, input_values, model_kwargs, model_input_name: str | None = None
     ):
         # 1. get audio encoder
         encoder = self.get_encoder(modality="audio")
@@ -2033,9 +2030,9 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel, GenerationMixin)
 
     def _maybe_initialize_input_ids_for_generation(
         self,
-        inputs: Optional[torch.Tensor] = None,
-        bos_token_id: Optional[int] = None,
-        model_kwargs: Optional[dict[str, torch.Tensor]] = None,
+        inputs: torch.Tensor | None = None,
+        bos_token_id: int | None = None,
+        model_kwargs: dict[str, torch.Tensor] | None = None,
     ) -> torch.LongTensor:
         """Initializes input ids for generation, if necessary."""
         if inputs is not None:
@@ -2060,7 +2057,7 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel, GenerationMixin)
         return torch.ones((batch_size, 1), dtype=torch.long, device=self.device) * bos_token_id
 
     def _get_decoder_start_token_id(
-        self, decoder_start_token_id: Optional[Union[int, list[int]]] = None, bos_token_id: Optional[int] = None
+        self, decoder_start_token_id: int | list[int] | None = None, bos_token_id: int | None = None
     ) -> int:
         decoder_start_token_id = (
             decoder_start_token_id
@@ -2080,11 +2077,11 @@ class MusicgenForConditionalGeneration(MusicgenPreTrainedModel, GenerationMixin)
     @torch.no_grad()
     def generate(
         self,
-        inputs: Optional[torch.Tensor] = None,
-        generation_config: Optional[GenerationConfig] = None,
-        logits_processor: Optional[LogitsProcessorList] = None,
-        stopping_criteria: Optional[StoppingCriteriaList] = None,
-        synced_gpus: Optional[bool] = None,
+        inputs: torch.Tensor | None = None,
+        generation_config: GenerationConfig | None = None,
+        logits_processor: LogitsProcessorList | None = None,
+        stopping_criteria: StoppingCriteriaList | None = None,
+        synced_gpus: bool | None = None,
         streamer: Optional["BaseStreamer"] = None,
         **kwargs,
     ):

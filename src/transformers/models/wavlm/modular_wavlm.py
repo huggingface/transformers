@@ -1,5 +1,4 @@
 import math
-from typing import Optional, Union
 
 import torch
 import torch.nn as nn
@@ -79,11 +78,11 @@ class WavLMAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_bias: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
+        position_bias: torch.Tensor | None = None,
         output_attentions: bool = False,
         index=0,
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         """Attention layer with relative attention"""
         bsz, tgt_len, _ = hidden_states.size()
 
@@ -120,7 +119,7 @@ class WavLMAttention(nn.Module):
     def torch_multi_head_self_attention(
         self,
         hidden_states: torch.FloatTensor,
-        attention_mask: Union[torch.LongTensor, torch.BoolTensor],
+        attention_mask: torch.LongTensor | torch.BoolTensor,
         gated_position_bias: torch.FloatTensor,
         output_attentions: bool,
     ) -> tuple[torch.FloatTensor, torch.FloatTensor]:

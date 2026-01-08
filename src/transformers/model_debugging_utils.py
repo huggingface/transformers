@@ -19,7 +19,6 @@ import os
 import re
 from contextlib import contextmanager, redirect_stdout
 from io import StringIO
-from typing import Optional
 
 from .utils import logging
 from .utils.import_utils import is_torch_available, requires
@@ -68,7 +67,7 @@ def _dtensor_repr(x):
 
 
 def _serialize_tensor_like_io(
-    value, debug_path: Optional[str] = None, use_repr: bool = True, path_to_value: Optional[str] = None
+    value, debug_path: str | None = None, use_repr: bool = True, path_to_value: str | None = None
 ):
     """
     Converts Tensors and DTensors to a JSON-serializable dictionary representation.
@@ -116,7 +115,7 @@ def _serialize_tensor_like_io(
     return out
 
 
-def _serialize_io(value, debug_path: Optional[str] = None, use_repr: bool = True, path_to_value: Optional[str] = None):
+def _serialize_io(value, debug_path: str | None = None, use_repr: bool = True, path_to_value: str | None = None):
     """
     Recursively build a JSON-serializable Python structure from `value`.
     Tensors and DTensors become either sanitized repr strings, or are saved to disk as SafeTensors files and their
@@ -225,7 +224,7 @@ def prune_intermediate_layers(node):
         prune_intermediate_layers(child)
 
 
-def log_model_debug_trace(debug_path: Optional[str], model):
+def log_model_debug_trace(debug_path: str | None, model):
     if debug_path:
         try:
             os.makedirs(debug_path, exist_ok=True)
@@ -399,7 +398,7 @@ def _attach_debugger_logic(
 @contextmanager
 def model_addition_debugger_context(
     model,
-    debug_path: Optional[str] = None,
+    debug_path: str | None = None,
     do_prune_layers: bool = True,
     use_repr: bool = True,
 ):
