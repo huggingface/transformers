@@ -287,7 +287,7 @@ class GlmImageVisionBlock(GradientCheckpointingLayer):
         residual = hidden_states
 
         hidden_states = self.norm1(hidden_states)
-        hidden_states, _ = self.self_attn(
+        hidden_states = self.attn(
             hidden_states,
             cu_seqlens=cu_seqlens,
             **kwargs,
@@ -1115,6 +1115,7 @@ class GlmImageModel(GlmImagePreTrainedModel):
                     token_idx += 1
 
         position_ids = torch.stack([temporal_ids, height_ids, width_ids], dim=0)
+        print(current_pos, position_ids)
 
         self._gen_st_idx = current_pos
         self._prefill_len = seq_len
