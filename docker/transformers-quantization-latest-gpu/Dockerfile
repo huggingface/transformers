@@ -67,8 +67,8 @@ RUN python3 -m pip install --no-cache-dir torchao
 # Add transformers in editable mode
 RUN python3 -m pip install --no-cache-dir -e ./transformers[dev-torch]
 
-# `kernels` may give different outputs (within 1e-5 range) even with the same model (weights) and the same inputs
-RUN python3 -m pip uninstall -y kernels
+# install kernels for some qunatization methods like eetq, mxfp4
+RUN python3 -m pip install --no-cache-dir kernels
 
 # Uninstall flash-attn installed by autoawq, it causes issues here : https://github.com/huggingface/transformers/actions/runs/15915442841/job/44892146131
 RUN python3 -m pip uninstall -y flash-attn
