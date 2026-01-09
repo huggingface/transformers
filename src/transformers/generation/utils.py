@@ -1791,16 +1791,14 @@ class GenerationMixin(ContinuousMixin):
         generation_config = copy.deepcopy(generation_config)
 
         # First set values from the loaded `self.generation_config`, then set default values (BC)
-        # Do not update any values that aren't `None`, i.e. if set by users explicitly and passed
-        # to `generate()`. Thus the `defaults_only=True` is used
+        #
+        # Only update values that are `None`, i.e. these values were not explicitly set by by users to `generate()`,
+        # or values that are not present in the current config, i.e. custom entries that were set via `**kwargs`.
+        # Thus we use the specific kwargs `defaults_only=True` (`None` values only) and `allow_custom_entries=True`
+        # (custom entries are carried over).
         global_defaults = self.generation_config._get_default_generation_params()
-        generation_config.update(**self.generation_config.to_dict(), defaults_only=True)
+        generation_config.update(**self.generation_config.to_dict(), defaults_only=True, allow_custom_entries=True)
         generation_config.update(**global_defaults, defaults_only=True)
-
-        # Add custom keys not in global defaults, e.g. as in `VibeVoice` for `noise_scheduler_class`
-        for key, value in self.generation_config.to_dict().items():
-            if not hasattr(generation_config, key):
-                setattr(generation_config, key, value)
 
         # Finally, if there are any kwargs, update config with it -> highest priority at the end
         model_kwargs = generation_config.update(**kwargs)
