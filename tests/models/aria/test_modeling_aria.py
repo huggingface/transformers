@@ -206,13 +206,13 @@ class AriaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMi
     @unittest.skip(
         reason="This architecture seems to not compute gradients for the last vision-layernorm because the model uses hidden states pre-norm"
     )
-    def test_training_gradient_checkpointing_use_reentrant(self):
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
     @unittest.skip(
         reason="This architecture seems to not compute gradients for the last vision-layernorm because the model uses hidden states pre-norm"
     )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
 

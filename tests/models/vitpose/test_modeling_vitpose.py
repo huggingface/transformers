@@ -191,11 +191,11 @@ class VitPoseModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(reason="VitPose does not support training yet")
-    def test_training_gradient_checkpointing_use_reentrant(self):
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
     @unittest.skip(reason="VitPose does not support training yet")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     def test_forward_signature(self):

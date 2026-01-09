@@ -53,7 +53,7 @@ class RecurrentGemmaModelTest(CausalLMModelTest, unittest.TestCase):
         pass
 
     @unittest.skip(reason="SQRBound is known to have issues with gc")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     @unittest.skip(reason="Past key values are not returned")

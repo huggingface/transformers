@@ -156,11 +156,11 @@ class SuperGlueModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(reason="SuperGlueForKeypointMatching is not trainable")
-    def test_training_gradient_checkpointing_use_reentrant(self):
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
     @unittest.skip(reason="SuperGlueForKeypointMatching is not trainable")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     @unittest.skip(reason="SuperGlue does not output any loss term in the forward pass")

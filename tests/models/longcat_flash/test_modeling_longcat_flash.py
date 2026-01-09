@@ -239,11 +239,11 @@ class LongcatFlashModelTest(CausalLMModelTest, unittest.TestCase):
         pass
 
     @unittest.skip("MoE experts may not receive gradients with small test data")
-    def test_training_gradient_checkpointing_use_reentrant(self):
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
     @unittest.skip("MoE experts may not receive gradients with small test data")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     @unittest.skip("LongcatFlash router uses weight.type() directly in forward which prevents offloading")

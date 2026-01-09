@@ -369,7 +369,7 @@ class SplinterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     @unittest.skip(
         "Splinter GC with `use_reentrant` fails after #38751, FIXME raushan after deprecated args are removed"
     )
-    def test_training_gradient_checkpointing_use_reentrant(self):
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
 
