@@ -825,9 +825,9 @@ def create_causal_mask(
     # TODO: cyril -> probably revisit and remove this, but a lot of tests rely on it
     if _is_torch_xpu_available:
         # Do not allow skip if we are compiling for decoding, but for prefill, we still allow skip to optimization the perf of 1st token generation
-        allow_is_causal_skip = not (getattr(past_key_values, "is_compileable", False) and cache_position.shape[0] == 1)
+        allow_is_causal_skip = not (getattr(past_key_values, "is_compilable", False) and cache_position.shape[0] == 1)
     else:
-        allow_is_causal_skip = not getattr(past_key_values, "is_compileable", False)
+        allow_is_causal_skip = not getattr(past_key_values, "is_compilable", False)
 
     # Allow slight deviations from causal mask
     # Note that it is very important to apply this before any other deviations of the mask (such as packed sequence mask,
@@ -1018,7 +1018,7 @@ def create_sliding_window_causal_mask(
     use_vmap = False
     # Do not allow skip if we are compiling (this is to match BC)
     # TODO: cyril -> probably revisit and remove this, but a lot of tests rely on it
-    allow_is_causal_skip = not getattr(past_key_values, "is_compileable", False)
+    allow_is_causal_skip = not getattr(past_key_values, "is_compilable", False)
 
     # Allow slight deviations from causal mask
     # Note that it is very important to apply this before any other deviations of the mask (such as packed sequence mask,
@@ -1136,7 +1136,7 @@ def create_chunked_causal_mask(
     use_vmap = False
     # Do not allow skip if we are compiling (this is to match BC)
     # TODO: cyril -> probably revisit and remove this, but a lot of tests rely on it
-    allow_is_causal_skip = not getattr(past_key_values, "is_compileable", False)
+    allow_is_causal_skip = not getattr(past_key_values, "is_compilable", False)
 
     # Allow slight deviations from causal mask
     # Note that it is very important to apply this before any other deviations of the mask (such as packed sequence mask,

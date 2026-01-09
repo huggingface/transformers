@@ -676,7 +676,7 @@ class GenerationMixin(ContinuousMixin):
         # pass)
         if (
             isinstance(past_key_values, Cache)
-            and past_key_values.is_compileable
+            and past_key_values.is_compilable
             and attention_mask is not None
             and attention_mask.ndim == 2
         ):
@@ -2138,13 +2138,13 @@ class GenerationMixin(ContinuousMixin):
             generation_config.compile_config is not None and generation_config.compile_config._compile_all_devices
         )
         using_compilable_cache = (
-            isinstance(model_kwargs.get("past_key_values"), Cache) and model_kwargs["past_key_values"].is_compileable
+            isinstance(model_kwargs.get("past_key_values"), Cache) and model_kwargs["past_key_values"].is_compilable
         )
         can_compile = valid_hardware and using_compilable_cache
 
         # Exception 1: Some quantization methods do not support compilation
         if getattr(self, "hf_quantizer", None) is not None:
-            can_compile &= self.hf_quantizer.is_compileable
+            can_compile &= self.hf_quantizer.is_compilable
 
         if hasattr(self, "hf_device_map"):
             all_model_devices = set(self.hf_device_map.values())
@@ -3591,7 +3591,7 @@ class GenerationMixin(ContinuousMixin):
         if generation_config.cache_implementation in ["static", "hybrid", "sliding_window"] or (
             "past_key_values" in model_kwargs
             and hasattr(model_kwargs["past_key_values"], "layers")
-            and any(getattr(l, "is_compileable", False) for l in model_kwargs["past_key_values"].layers)
+            and any(getattr(l, "is_compilable", False) for l in model_kwargs["past_key_values"].layers)
         ):
             raise ValueError("assisted generate is not supported with Static cache classes`")
         # Get the candidate generator, given the parameterization

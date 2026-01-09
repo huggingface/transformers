@@ -87,7 +87,7 @@ class HybridMambaAttentionDynamicCache:
     and `ssm_states` represents the ssm state and has a shape of `(batch_size, d_inner, d_state)`.
     """
 
-    is_compileable = False
+    is_compilable = False
 
     def __init__(self, config: BambaConfig, batch_size, dtype=torch.float16, device=None):
         self.layers_block_type = config.layers_block_type

@@ -26,7 +26,7 @@ logger = logging.get_logger(__name__)
 class CacheLayerMixin(ABC):
     """Base, abstract class for a single layer's cache."""
 
-    is_compileable = False
+    is_compilable = False
 
     def __init__(self):
         self.keys: torch.Tensor | None = None
@@ -260,7 +260,7 @@ class StaticLayer(CacheLayerMixin):
             Maximum number of tokens that can be stored, used for tensor preallocation.
     """
 
-    is_compileable = True
+    is_compilable = True
     is_sliding = False
 
     def __init__(self, max_cache_len: int):
@@ -868,12 +868,12 @@ class Cache:
         return max(values)
 
     @property
-    def is_compileable(self) -> bool:
-        """Return whether the cache is compileable"""
+    def is_compilable(self) -> bool:
+        """Return whether the cache is compilable"""
         # For DynamicCache dispatching the layers lazily (otherwise, all([]) is True)
         if len(self.layers) == 0:
             return False
-        return all(layer.is_compileable for layer in self.layers)
+        return all(layer.is_compilable for layer in self.layers)
 
     @property
     def is_initialized(self) -> bool:
@@ -1291,8 +1291,8 @@ class EncoderDecoderCache(Cache):
         return self.self_attention_cache.is_sliding
 
     @property
-    def is_compileable(self) -> bool:
-        return self.self_attention_cache.is_compileable
+    def is_compilable(self) -> bool:
+        return self.self_attention_cache.is_compilable
 
 
 ### Deprecated classes

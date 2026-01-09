@@ -108,11 +108,11 @@ class ZambaHybridDynamicCache:
     and `ssm_states` represents the ssm state and has a shape of `(batch_size, d_inner, d_state)`.
     """
 
-    is_compileable = False
+    is_compilable = False
 
     def __init__(self, config, batch_size, dtype=torch.float16, device=None):
         self.dtype = dtype
-        self.is_compileable = False
+        self.is_compilable = False
         self.layers_block_type = config.layers_block_type
         self.has_previous_state = False  # only used by mamba
         self.intermediate_size = config.mamba_expand * config.hidden_size

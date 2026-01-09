@@ -1015,7 +1015,7 @@ class Bnb8bitCompile(unittest.TestCase):
         )
 
         with self.assertRaises(Exception):
-            object.__setattr__(self.model_8bit.hf_quantizer, "is_compileable", True)
+            object.__setattr__(self.model_8bit.hf_quantizer, "is_compilable", True)
             self.model_8bit.generate(
                 input_ids=encoded_input["input_ids"].to(self.model_8bit.device),
                 max_new_tokens=10,

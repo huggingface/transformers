@@ -238,7 +238,7 @@ class Lfm2MoeHybridConvCache:
 
     # Override @property existing in Cache
     max_batch_size = None
-    is_compileable = False
+    is_compilable = False
     key_cache = None
     value_cache = None
 

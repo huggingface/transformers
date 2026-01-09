@@ -79,7 +79,7 @@ class MambaCache:
         ```
     """
 
-    is_compileable = True
+    is_compilable = True
 
     # TODO (joao): add layer_device_map arg and update code in `generate` accordingly
     def __init__(

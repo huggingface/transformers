@@ -1554,7 +1554,7 @@ class GenerationTesterMixin:
                             else gen_out.past_key_values
                         )
                         self.assertTrue(isinstance(decoder_cache, DynamicCache))
-                        self.assertFalse(decoder_cache.is_compileable)
+                        self.assertFalse(decoder_cache.is_compilable)
                         # our auto compile should NOT have been called
                         self.assertFalse(hasattr(model_to_be_compiled, "_compiled_call"))
 
@@ -1580,7 +1580,7 @@ class GenerationTesterMixin:
                             else gen_out.past_key_values
                         )
                         self.assertFalse(isinstance(decoder_cache, DynamicCache))
-                        self.assertTrue(decoder_cache.is_compileable)
+                        self.assertTrue(decoder_cache.is_compilable)
                         # our auto compile should have been called
                         self.assertTrue(hasattr(model_to_be_compiled, "_compiled_call"))
             finally:
