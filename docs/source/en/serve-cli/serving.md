@@ -16,10 +16,10 @@ rendered properly in your Markdown viewer.
 
 # Serve CLI
 
-The `transformers serve` CLI is a lightweight option for local or self-hosted servers. It avoids the extra runtime and operational overhead of dedicated inference engines like vLLM. Use it for evaluation, experimentation, and moderate load deployments. Features like [continuous batching](./continuous_batching) increases throughput and lowers latency.
+The `transformers serve` CLI is a lightweight option for local or self-hosted servers. It avoids the extra runtime and operational overhead of dedicated inference engines like vLLM. Use it for evaluation, experimentation, and moderate load deployments. Features like [continuous batching](../continuous_batching) increases throughput and lowers latency.
 
 > [!TIP]
-> For large scale production deployments, use vLLM, SGLang or TGI with a Transformer model as the backend. Learn more in the [Inference backends](./transformers_as_backend) guide.
+> For large scale production deployments, use vLLM, SGLang or TGI with a Transformer model as the backend. Learn more in the [Inference backends](../community_integrations/transformers_as_backend) guide.
 
 The `transformers serve` command spawns a local server compatible with the [OpenAI SDK](https://platform.openai.com/docs/overview). The server works with many third-party applications and supports the REST APIs below.
 
