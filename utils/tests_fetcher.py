@@ -60,8 +60,8 @@ from pathlib import Path
 
 from git import Repo
 
+
 # List here the models not to be filtered by `filter_tests`.
-from important_files import IMPORTANT_MODELS
 
 
 PATH_TO_REPO = Path(__file__).parent.parent.resolve()
@@ -71,6 +71,15 @@ PATH_TO_TESTS = PATH_TO_REPO / "tests"
 
 # The value is just a heuristic to determine if we `guess` all models are impacted.
 NUM_MODELS_TO_TRIGGER_FULL_CI = 15
+
+# A list of very important files that should trigger all tests if modified (because they can have impact almost anywhere
+# in the library)
+CORE_FILES = (
+    "setup.py",
+    ".circleci/create_circleci_config.py",
+    "src/transformers/modeling_utils.py",
+    "src/transformers/core_model_loading.py",
+)
 
 
 @contextmanager
@@ -876,9 +885,7 @@ def create_reverse_dependency_map() -> dict[str, list[str]]:
     return reverse_map
 
 
-def create_module_to_test_map(
-    reverse_map: dict[str, list[str]] | None = None
-) -> dict[str, list[str]]:
+def create_module_to_test_map(reverse_map: dict[str, list[str]] | None = None) -> dict[str, list[str]]:
     """
     Extract the tests from the reverse_dependency_map and potentially filters the model tests.
 
@@ -914,9 +921,7 @@ def _print_list(l) -> str:
     return "\n".join([f"- {f}" for f in l])
 
 
-def infer_tests_to_run(
-    output_file: str, diff_with_last_commit: bool = False, test_all: bool = False
-):
+def infer_tests_to_run(output_file: str, diff_with_last_commit: bool = False, test_all: bool = False):
     """
     The main function called by the test fetcher. Determines the tests to run from the diff.
 
@@ -953,15 +958,7 @@ def infer_tests_to_run(
     model_impacted = {"/".join(x.split("/")[:3]) for x in impacted_files if x.startswith("tests/models/")}
     # Grab the corresponding test files:
     if (
-        any(
-            x in modified_files
-            for x in [
-                "setup.py",
-                ".circleci/create_circleci_config.py",
-                "src/transformers/modeling_utils.py",
-                "src/transformers/core_model_loading.py",
-            ]
-        )
+        any(file in CORE_FILES for file in modified_files)
         or len(model_impacted) >= NUM_MODELS_TO_TRIGGER_FULL_CI
         or commit_flags["test_all"]
     ):
