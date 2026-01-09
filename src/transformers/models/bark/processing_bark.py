@@ -17,7 +17,6 @@ Processor class for Bark
 
 import json
 import os
-from typing import Optional
 
 import numpy as np
 
@@ -167,7 +166,7 @@ class BarkProcessor(ProcessorMixin):
 
         super().save_pretrained(save_directory, push_to_hub, **kwargs)
 
-    def _load_voice_preset(self, voice_preset: Optional[str] = None, **kwargs):
+    def _load_voice_preset(self, voice_preset: str | None = None, **kwargs):
         voice_preset_paths = self.speaker_embeddings[voice_preset]
 
         voice_preset_dict = {}
@@ -203,7 +202,7 @@ class BarkProcessor(ProcessorMixin):
 
         return voice_preset_dict
 
-    def _validate_voice_preset_dict(self, voice_preset: Optional[dict] = None):
+    def _validate_voice_preset_dict(self, voice_preset: dict | None = None):
         for key in ["semantic_prompt", "coarse_prompt", "fine_prompt"]:
             if key not in voice_preset:
                 raise ValueError(f"Voice preset unrecognized, missing {key} as a key.")

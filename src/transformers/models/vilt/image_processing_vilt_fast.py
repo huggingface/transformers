@@ -13,7 +13,7 @@
 # limitations under the License.
 """Fast Image processor class for Vilt."""
 
-from typing import Optional, Union
+from typing import Optional
 
 import torch
 from torchvision.transforms.v2 import functional as F
@@ -59,15 +59,15 @@ class ViltImageProcessorFast(BaseImageProcessorFast):
         do_resize: bool,
         size: SizeDict,
         interpolation: Optional["F.InterpolationMode"],
-        size_divisor: Optional[int],
+        size_divisor: int | None,
         do_pad: bool,
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        disable_grouping: Optional[bool],
-        return_tensors: Optional[Union[str, TensorType]],
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -118,7 +118,7 @@ class ViltImageProcessorFast(BaseImageProcessorFast):
         images: "torch.Tensor",
         size: SizeDict,
         interpolation: Optional["F.InterpolationMode"] = None,
-        size_divisor: Optional[int] = None,
+        size_divisor: int | None = None,
     ) -> "torch.Tensor":
         """
         Resize an image or batch of images to specified size.
@@ -170,8 +170,8 @@ class ViltImageProcessorFast(BaseImageProcessorFast):
     def _pad_batch(
         self,
         images: list["torch.Tensor"],
-        return_tensors: Optional[Union[str, TensorType]],
-        disable_grouping: Optional[bool],
+        return_tensors: str | TensorType | None,
+        disable_grouping: bool | None,
     ) -> tuple:
         """
         Pad a batch of images to the same size based on the maximum dimensions.

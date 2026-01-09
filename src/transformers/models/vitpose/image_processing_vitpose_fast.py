@@ -14,7 +14,7 @@
 """Fast Image processor class for VitPose."""
 
 import itertools
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING
 
 import numpy as np
 import torch
@@ -95,7 +95,7 @@ class VitPoseImageProcessorFast(BaseImageProcessorFast):
     def preprocess(
         self,
         images: ImageInput,
-        boxes: Union[list[list[float]], np.ndarray],
+        boxes: list[list[float]] | np.ndarray,
         **kwargs: Unpack[VitPoseImageProcessorKwargs],
     ) -> BatchFeature:
         r"""
@@ -108,16 +108,16 @@ class VitPoseImageProcessorFast(BaseImageProcessorFast):
     def _preprocess(
         self,
         images: list[torch.Tensor],
-        boxes: Union[list, np.ndarray],
+        boxes: list | np.ndarray,
         do_affine_transform: bool,
         size: SizeDict,
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Union[float, tuple[float]],
-        image_std: Union[float, tuple[float]],
+        image_mean: float | tuple[float],
+        image_std: float | tuple[float],
         disable_grouping: bool,
-        return_tensors: Optional[Union[str, TensorType]],
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -203,10 +203,10 @@ class VitPoseImageProcessorFast(BaseImageProcessorFast):
     def post_process_pose_estimation(
         self,
         outputs: "VitPoseEstimatorOutput",
-        boxes: Union[list[list[list[float]]], np.ndarray],
+        boxes: list[list[list[float]]] | np.ndarray,
         kernel_size: int = 11,
-        threshold: Optional[float] = None,
-        target_sizes: Optional[Union[TensorType, list[tuple]]] = None,
+        threshold: float | None = None,
+        target_sizes: TensorType | list[tuple] | None = None,
     ):
         """
         Transform the heatmaps into keypoint predictions and transform them back to the image.

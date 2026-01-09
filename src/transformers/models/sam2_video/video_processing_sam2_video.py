@@ -13,8 +13,6 @@
 # limitations under the License.
 """Fast Image processor class for SAM2."""
 
-from typing import Optional, Union
-
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -40,7 +38,7 @@ class Sam2VideoVideoProcessor(BaseVideoProcessor):
         self,
         videos: list["torch.Tensor"],
         size: SizeDict,
-        return_tensors: Optional[Union[str, TensorType]],
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         original_sizes = [video.shape[-2:] for video in videos]

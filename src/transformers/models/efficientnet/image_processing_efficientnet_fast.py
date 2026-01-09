@@ -14,7 +14,7 @@
 """Fast Image processor class for EfficientNet."""
 
 from functools import lru_cache
-from typing import Optional, Union
+from typing import Optional
 
 import torch
 from torchvision.transforms.v2 import functional as F
@@ -53,7 +53,7 @@ class EfficientNetImageProcessorFast(BaseImageProcessorFast):
         self,
         image: "torch.Tensor",
         scale: float,
-        offset: Optional[bool] = True,
+        offset: bool | None = True,
         **kwargs,
     ) -> "torch.Tensor":
         """
@@ -88,13 +88,13 @@ class EfficientNetImageProcessorFast(BaseImageProcessorFast):
     @lru_cache(maxsize=10)
     def _fuse_mean_std_and_rescale_factor(
         self,
-        do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[float] = None,
+        do_normalize: bool | None = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        do_rescale: bool | None = None,
+        rescale_factor: float | None = None,
         device: Optional["torch.device"] = None,
-        rescale_offset: Optional[bool] = False,
+        rescale_offset: bool | None = False,
     ) -> tuple:
         if do_rescale and do_normalize and not rescale_offset:
             # Fused rescale and normalize
@@ -109,8 +109,8 @@ class EfficientNetImageProcessorFast(BaseImageProcessorFast):
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Union[float, list[float]],
-        image_std: Union[float, list[float]],
+        image_mean: float | list[float],
+        image_std: float | list[float],
         rescale_offset: bool = False,
     ) -> "torch.Tensor":
         """
@@ -146,10 +146,10 @@ class EfficientNetImageProcessorFast(BaseImageProcessorFast):
         rescale_offset: bool,
         do_normalize: bool,
         include_top: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        disable_grouping: Optional[bool],
-        return_tensors: Optional[Union[str, TensorType]],
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         # Group images by size for batched resizing

@@ -118,9 +118,7 @@ class VideoMetadata(Mapping):
                 setattr(self, key, value)
 
 
-VideoMetadataType = Union[
-    VideoMetadata, dict, list[Union[dict, VideoMetadata]], list[list[Union[dict, VideoMetadata]]]
-]
+VideoMetadataType = VideoMetadata | dict | list[dict | VideoMetadata] | list[list[dict | VideoMetadata]]
 
 
 def is_valid_video_frame(frame):

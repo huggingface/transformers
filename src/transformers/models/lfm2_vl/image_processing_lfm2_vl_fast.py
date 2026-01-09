@@ -13,7 +13,6 @@
 # limitations under the License.
 import math
 from functools import lru_cache
-from typing import Union
 
 import torch
 from torchvision.transforms.v2 import functional as F
@@ -450,8 +449,8 @@ class Lfm2VlImageProcessorFast(BaseImageProcessorFast):
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Union[float, list[float]],
-        image_std: Union[float, list[float]],
+        image_mean: float | list[float],
+        image_std: float | list[float],
         downsample_factor: int,
         do_image_splitting: bool,
         min_tiles: int,
@@ -462,7 +461,7 @@ class Lfm2VlImageProcessorFast(BaseImageProcessorFast):
         encoder_patch_size: int,
         tile_size: int,
         max_pixels_tolerance: float,
-        return_tensors: Union[str, TensorType],
+        return_tensors: str | TensorType,
         disable_grouping: bool,
         do_pad: bool,
         return_row_col_info: bool,

@@ -13,7 +13,7 @@
 # limitations under the License.
 """Fast Video processor class for InternVL."""
 
-from typing import Optional, Union
+from typing import Optional
 
 import torch
 from torchvision.transforms.v2 import functional as F
@@ -27,7 +27,7 @@ from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
 
 
 class InternVLVideoProcessorInitKwargs(VideosKwargs, total=False):
-    initial_shift: Union[bool, float, int]
+    initial_shift: bool | float | int
 
 
 class InternVLVideoProcessor(BaseVideoProcessor):
@@ -49,9 +49,9 @@ class InternVLVideoProcessor(BaseVideoProcessor):
     def sample_frames(
         self,
         metadata: VideoMetadata,
-        num_frames: Optional[int] = None,
-        fps: Optional[Union[int, float]] = None,
-        initial_shift: Optional[Union[bool, float, int]] = None,
+        num_frames: int | None = None,
+        fps: int | float | None = None,
+        initial_shift: bool | float | int | None = None,
         **kwargs,
     ):
         """
@@ -109,9 +109,9 @@ class InternVLVideoProcessor(BaseVideoProcessor):
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        return_tensors: str | TensorType | None = None,
         **kwargs,
     ) -> BatchFeature:
         # Group videos by size for batched resizing

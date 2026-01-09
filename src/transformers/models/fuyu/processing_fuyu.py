@@ -16,7 +16,7 @@ Image/Text processor class for GIT
 """
 
 import re
-from typing import Optional, Union
+from typing import Union
 
 import numpy as np
 
@@ -235,7 +235,7 @@ def _transform_within_tags(text: str, scale_factor: float, tokenizer) -> list[in
 def _tokenize_prompts_with_image_and_batch(
     tokenizer,
     prompts: list[list[str]],
-    scale_factors: Optional[list[list["torch.Tensor"]]],
+    scale_factors: list[list["torch.Tensor"]] | None,
     max_tokens_to_generate: int,
     max_position_embeddings: int,
     add_BOS: bool,  # Same issue with types as above
@@ -484,8 +484,8 @@ class FuyuProcessor(ProcessorMixin):
     @auto_docstring
     def __call__(
         self,
-        images: Optional[ImageInput] = None,
-        text: Optional[Union[str, list[str], TextInput, PreTokenizedInput]] = None,
+        images: ImageInput | None = None,
+        text: str | list[str] | TextInput | PreTokenizedInput | None = None,
         **kwargs: Unpack[FuyuProcessorKwargs],
     ) -> "FuyuBatchFeature":
         r"""
