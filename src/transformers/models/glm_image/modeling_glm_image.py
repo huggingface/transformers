@@ -669,7 +669,7 @@ class GlmImageVisionModel(GlmImagePreTrainedModel):
             wpos_ids = wpos_ids.permute(0, 2, 1, 3)
             wpos_ids = wpos_ids.flatten()
             pos_ids.append(torch.stack([hpos_ids, wpos_ids], dim=-1).repeat(t, 1))
-        pos_ids = torch.cat(pos_ids, dim=0).to(grid_thw[0].device)
+        pos_ids = torch.cat(pos_ids, dim=0)
         return pos_ids
 
     def forward(self, pixel_values: torch.Tensor, grid_thw: torch.Tensor, **kwargs) -> torch.Tensor:
@@ -685,6 +685,8 @@ class GlmImageVisionModel(GlmImagePreTrainedModel):
         """
 
         hidden_states = self.patch_embed(pixel_values)
+
+        grid_thw = grid_thw.to(hidden_states.device)
         image_type_ids = self.rot_pos_emb(grid_thw)
 
         cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
@@ -920,7 +922,6 @@ class GlmImageModel(GlmImagePreTrainedModel):
         self,
         input_ids: torch.LongTensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
-        attention_mask: torch.LongTensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Calculate the 3D rope index for image generation task.
@@ -1040,63 +1041,78 @@ class GlmImageModel(GlmImagePreTrainedModel):
         device = input_ids.device
         dtype = input_ids.dtype
 
+        temporal_ids = torch.zeros(batch_size, seq_len, dtype=dtype, device=device)
+        height_ids = torch.zeros(batch_size, seq_len, dtype=dtype, device=device)
+        width_ids = torch.zeros(batch_size, seq_len, dtype=dtype, device=device)
+
         image_start_token_id = self.config.image_start_token_id
         image_end_token_id = self.config.image_end_token_id
 
         num_complete_images = (input_ids == image_end_token_id).sum().item()
 
-        position_ids = torch.ones(
-            3, input_ids.shape[0], input_ids.shape[1], dtype=input_ids.dtype, device=input_ids.device
-        )
-        text_positions = torch.arange(seq_len, device=input_ids.device)[None, :].repeat(3, 1)
-        for batch_idx in range(batch_size):
-            curr_input_ids = input_ids[batch_idx]
-            if attention_mask is not None:
-                curr_input_ids = curr_input_ids[attention_mask[batch_idx] == 1]
+        for b in range(batch_size):
+            current_pos = 0
+            image_idx = 0
+            token_idx = 0
 
-            image_end = torch.where(curr_input_ids == image_end_token_id)[0] + 1
-            image_start = torch.where(curr_input_ids == image_start_token_id)[0] + 1
-            current_pos = image_start[0] if len(image_start) > 1 else 0
-            prev_image_end = 0
-            curr_position_ids = []
-            for start, end, grid in zip(image_start, image_end, image_grid_thw):
-                _, num_height_grid, num_width_grid = grid
-                llm_position_ids = text_positions[:, prev_image_end:start]
+            while token_idx < seq_len:
+                token_id = input_ids[b, token_idx].item()
 
-                image_seq_length = num_height_grid * num_width_grid
-                h_grids = image_seq_length // num_height_grid + current_pos
-                w_grids = image_seq_length // num_width_grid + current_pos
-                position_width = torch.arange(current_pos, w_grids, device=input_ids.device).repeat(num_width_grid)
-                position_height = torch.arange(current_pos, h_grids, device=input_ids.device).repeat_interleave(
-                    num_height_grid
-                )
-                position_temporal = torch.full(
-                    (image_seq_length,), current_pos, device=input_ids.device, dtype=torch.long
-                )
-                vision_position_ids = torch.stack([position_temporal, position_height, position_width], dim=0)
+                if token_id == image_start_token_id and image_idx < num_complete_images:
+                    temporal_ids[b, token_idx] = current_pos
+                    height_ids[b, token_idx] = current_pos
+                    width_ids[b, token_idx] = current_pos
 
-                current_pos += max(num_height_grid, num_width_grid)
-                prev_image_end = end
-                curr_position_ids.append(torch.cat([llm_position_ids, vision_position_ids], dim=-1))
+                    img_start_pos = current_pos
+                    current_pos += 1
+                    token_idx += 1
 
-            end_position = len(curr_input_ids) - prev_image_end + 2
-            llm_position_ids = text_positions[:, current_pos : current_pos + end_position]
-            curr_position_ids.append(llm_position_ids)
-            curr_position_ids = torch.cat(curr_position_ids, dim=-1)
-            if attention_mask is not None:
-                position_ids[:, batch_idx, attention_mask[batch_idx] == 1] = curr_position_ids.to(position_ids.device)
-            else:
-                position_ids[:, batch_idx, :] = curr_position_ids.to(position_ids.device)
+                    if image_grid_thw is not None and image_idx < len(image_grid_thw):
+                        h = image_grid_thw[image_idx, 1].item()
+                        w = image_grid_thw[image_idx, 2].item()
+                        total_image_tokens = h * w
 
+                        for img_token_idx in range(total_image_tokens):
+                            if token_idx >= seq_len:
+                                break
+                            temporal_ids[b, token_idx] = img_start_pos + 1
+                            height_ids[b, token_idx] = img_start_pos + 1 + (img_token_idx // w)
+                            width_ids[b, token_idx] = img_start_pos + 1 + (img_token_idx % w)
+                            token_idx += 1
+
+                        current_pos = img_start_pos + 1 + max(h, w)
+                        image_idx += 1
+
+                elif token_id == image_end_token_id:
+                    temporal_ids[b, token_idx] = current_pos
+                    height_ids[b, token_idx] = current_pos
+                    width_ids[b, token_idx] = current_pos
+                    current_pos += 1
+                    token_idx += 1
+
+                else:
+                    temporal_ids[b, token_idx] = current_pos
+                    height_ids[b, token_idx] = current_pos
+                    width_ids[b, token_idx] = current_pos
+                    current_pos += 1
+                    token_idx += 1
+
+        position_ids = torch.stack([temporal_ids, height_ids, width_ids], dim=0)
+
+        self._gen_st_idx = current_pos
         self._prefill_len = seq_len
+
         if image_grid_thw is not None and len(image_grid_thw) > 0:
             num_decode_grids = len(image_grid_thw) - num_complete_images
-            num_decode_grids = max(1, num_decode_grids)
-            decode_pos = current_pos
+
+            if num_decode_grids <= 0:
+                num_decode_grids = 1
 
             decode_temporal_list = []
             decode_height_list = []
             decode_width_list = []
+
+            decode_pos = self._gen_st_idx
 
             for i in range(1, num_decode_grids + 1):
                 grid_idx = -i
@@ -1235,7 +1251,6 @@ class GlmImageModel(GlmImagePreTrainedModel):
                 position_ids, rope_deltas = self.get_rope_index(
                     input_ids,
                     image_grid_thw,
-                    attention_mask=attention_mask_2d,
                 )
                 self.rope_deltas = rope_deltas
             # then use the prev pre-calculated rope-deltas to get the correct position ids
