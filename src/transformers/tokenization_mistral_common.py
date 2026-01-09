@@ -24,6 +24,7 @@ import numpy as np
 from huggingface_hub import create_repo
 
 from transformers.audio_utils import load_audio_as
+from transformers.tokenization_python import Trie
 from transformers.tokenization_utils_base import (
     LARGE_INTEGER,
     VERY_LARGE_INTEGER,
@@ -264,6 +265,11 @@ class MistralCommonBackend(PushToHubMixin):
         self.cleanup_tokenization_spaces = clean_up_tokenization_spaces
         self.deprecation_warnings = {}  # Use to store when we have already noticed a deprecation warning (avoid overlogging).
         self._all_special_tokens_ids = self._get_all_special_ids()
+
+        # Build a Trie of special tokens for pre-splitting during tokenization
+        self.tokens_trie = Trie()
+        for token_content in self.all_special_tokens:
+            self.tokens_trie.add(token_content)
 
         if model_input_names is not None:
             if (
@@ -700,13 +706,46 @@ class MistralCommonBackend(PushToHubMixin):
             return ids[0]
         return ids
 
+    def _special_token_to_id(self, token: str) -> int:
+        """
+        Convert a special token string to its ID.
+        """
+        if self._tokenizer_type == MistralTokenizerType.tekken:
+            tekken_tokenizer = self.tokenizer.instruct_tokenizer.tokenizer
+            if token in tekken_tokenizer._special_tokens_reverse_vocab:
+                return tekken_tokenizer._special_tokens_reverse_vocab[token]
+        elif self._tokenizer_type == MistralTokenizerType.spm:
+            return self.tokenizer.instruct_tokenizer.tokenizer._model.piece_to_id(token)
+
+        return self._piece_to_id(token, False)
+
     def _text_to_ids(self, text: TextInput, add_special_tokens: bool) -> list[int]:
         """
         Converts a string into a sequence of tokens ids, using the tokenizer.
+        Handles special tokens by pre-splitting to avoid tokenizing them.
         """
-        add_eos = add_special_tokens and self._mode == ValidationMode.finetuning
-        tokens_ids = self.tokenizer.instruct_tokenizer.tokenizer.encode(text, bos=add_special_tokens, eos=add_eos)
-        return tokens_ids
+        # Split text on special tokens to avoid tokenizing them
+        all_special_tokens_set = set(self.all_special_tokens)
+        segments = self.tokens_trie.split(text)
+
+        token_ids = []
+        for i, segment in enumerate(segments):
+            if not segment:
+                continue
+            if segment in all_special_tokens_set:
+                token_ids.append(self._special_token_to_id(segment))
+            else:
+                segment_ids = self.tokenizer.instruct_tokenizer.tokenizer.encode(
+                    segment, bos=False, eos=False
+                )
+                token_ids.extend(segment_ids)
+
+        if add_special_tokens:
+            token_ids = [self.bos_token_id] + token_ids
+            if self._mode == ValidationMode.finetuning:
+                token_ids = token_ids + [self.eos_token_id]
+
+        return token_ids
 
     def tokenize(self, text: TextInput, **kwargs) -> list[str]:
         """

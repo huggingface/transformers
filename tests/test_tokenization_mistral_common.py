@@ -2130,3 +2130,46 @@ class TestMistralCommonBackend(unittest.TestCase):
         spm_tokenizer = self._get_spm_tokenizer()
         with patch.object(spm_tokenizer, "_all_special_tokens_ids", {1, 0}):
             self.assertEqual(spm_tokenizer.all_special_tokens, ["<unk>", "<s>"])
+
+    def test_special_token_handling(self):
+        special_tokens_to_test = ["[IMG]", "[INST]", "[/INST]"]
+
+        vocab = self.tokenizer.get_vocab()
+        available_special_tokens = [t for t in special_tokens_to_test if t in vocab]
+
+        if not available_special_tokens:
+            available_special_tokens = ["<s>", "</s>"]
+
+        for special_token in available_special_tokens:
+            special_token_id = self.tokenizer.convert_tokens_to_ids(special_token)
+
+            # Case 1: Special token alone
+            tokens = self.tokenizer.encode(special_token, add_special_tokens=False)
+            self.assertEqual(len(tokens), 1, f"Failed: {special_token} was split into {len(tokens)} tokens: {tokens}")
+            self.assertEqual(tokens[0], special_token_id, f"Failed: Token ID mismatch. Expected {special_token_id}, got {tokens[0]}")
+
+            # Case 2: check with add_special_tokens=True
+            tokens_with_special = self.tokenizer.encode(special_token, add_special_tokens=True)
+            self.assertEqual(len(tokens_with_special), 2, "Expected exactly 2 tokens (BOS + SPECIAL)")
+            self.assertEqual(tokens_with_special[1], special_token_id)
+
+            # Case 3: Special token in sentence
+            text = f"Hello {special_token} world"
+            tokens = self.tokenizer.encode(text, add_special_tokens=False)
+            self.assertIn(special_token_id, tokens, f"Failed to find {special_token} ID in tokens")
+
+            # Decode check
+            decoded = self.tokenizer.decode(tokens)
+            self.assertIn(special_token, decoded)
+
+        # Case 4: Mixed special tokens
+        if len(available_special_tokens) >= 2:
+            t1 = available_special_tokens[0]
+            t2 = available_special_tokens[1]
+            t1_id = self.tokenizer.convert_tokens_to_ids(t1)
+            t2_id = self.tokenizer.convert_tokens_to_ids(t2)
+
+            text = f"{t1} text {t2}"
+            tokens = self.tokenizer.encode(text, add_special_tokens=False)
+            self.assertEqual(tokens[0], t1_id)
+            self.assertEqual(tokens[-1], t2_id)
