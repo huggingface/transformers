@@ -15,8 +15,8 @@ import pathlib
 import subprocess
 from typing import Any
 
+import httpx
 import numpy as np
-from huggingface_hub import get_session
 
 from ..utils import add_end_docstrings, is_torch_available, is_torchaudio_available, is_torchcodec_available, logging
 from .base import Pipeline, build_pipeline_init_args
@@ -26,7 +26,6 @@ if is_torch_available():
     from ..models.auto.modeling_auto import MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING_NAMES
 
 
-session = get_session()
 logger = logging.get_logger(__name__)
 
 
@@ -171,7 +170,7 @@ class AudioClassificationPipeline(Pipeline):
             if inputs.startswith("http://") or inputs.startswith("https://"):
                 # We need to actually check for a real protocol, otherwise it's impossible to use a local file
                 # like http_huggingface_co.png
-                inputs = session.get(inputs, follow_redirects=True).content
+                inputs = httpx.get(inputs, follow_redirects=True).content
             else:
                 inputs = pathlib.Path(inputs).read_bytes()
 

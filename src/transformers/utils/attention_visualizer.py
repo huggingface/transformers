@@ -13,7 +13,7 @@
 # limitations under the License.
 import io
 
-from huggingface_hub import get_session
+import httpx
 from PIL import Image
 
 from ..masking_utils import create_causal_mask
@@ -29,7 +29,6 @@ if is_torch_available():
     import torch
     import torch.nn as nn
 
-session = get_session()
 
 # Print the matrix with words as row labels
 GREEN = "\033[92m"
@@ -182,7 +181,7 @@ class AttentionMaskVisualizer:
         image_seq_length = None
         if self.config.model_type in PROCESSOR_MAPPING_NAMES:
             img = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/bee.jpg?download=true"
-            img = Image.open(io.BytesIO(session.get(img, follow_redirects=True).content))
+            img = Image.open(io.BytesIO(httpx.get(img, follow_redirects=True).content))
             image_seq_length = 5
             processor = AutoProcessor.from_pretrained(self.repo_id, image_seq_length=image_seq_length)
             if hasattr(processor, "image_token"):

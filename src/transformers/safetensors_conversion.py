@@ -1,12 +1,12 @@
 from typing import Optional
 
-from huggingface_hub import Discussion, HfApi, get_repo_discussions, get_session
+import httpx
+from huggingface_hub import Discussion, HfApi, get_repo_discussions
 
 from .utils import cached_file, http_user_agent, logging
 
 
 logger = logging.get_logger(__name__)
-session = get_session()
 
 
 def previous_pr(api: HfApi, model_id: str, pr_title: str, token: str) -> Optional["Discussion"]:
@@ -44,10 +44,10 @@ def spawn_conversion(token: str, private: bool, model_id: str):
 
     data = {"data": [model_id, private, token]}
 
-    result = session.post(sse_url, follow_redirects=True, json=data).json()
+    result = httpx.post(sse_url, follow_redirects=True, json=data).json()
     event_id = result["event_id"]
 
-    with session.stream("GET", f"{sse_url}/{event_id}") as sse_connection:
+    with httpx.stream("GET", f"{sse_url}/{event_id}") as sse_connection:
         try:
             logger.debug("Spawning safetensors automatic conversion.")
             start(sse_connection)

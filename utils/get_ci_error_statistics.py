@@ -8,10 +8,7 @@ import traceback
 import zipfile
 from collections import Counter
 
-from huggingface_hub import get_session
-
-
-session = get_session()
+import httpx
 
 
 def get_jobs(workflow_run_id, token=None):
@@ -22,7 +19,7 @@ def get_jobs(workflow_run_id, token=None):
         headers = {"Accept": "application/vnd.github+json", "Authorization": f"Bearer {token}"}
 
     url = f"https://api.github.com/repos/huggingface/transformers/actions/runs/{workflow_run_id}/jobs?per_page=100"
-    result = session.get(url, headers=headers).json()
+    result = httpx.get(url, headers=headers).json()
     jobs = []
 
     try:
@@ -30,7 +27,7 @@ def get_jobs(workflow_run_id, token=None):
         pages_to_iterate_over = math.ceil((result["total_count"] - 100) / 100)
 
         for i in range(pages_to_iterate_over):
-            result = session.get(url + f"&page={i + 2}", headers=headers).json()
+            result = httpx.get(url + f"&page={i + 2}", headers=headers).json()
             jobs.extend(result["jobs"])
 
         return jobs
@@ -48,7 +45,7 @@ def get_job_links(workflow_run_id, token=None):
         headers = {"Accept": "application/vnd.github+json", "Authorization": f"Bearer {token}"}
 
     url = f"https://api.github.com/repos/huggingface/transformers/actions/runs/{workflow_run_id}/jobs?per_page=100"
-    result = session.get(url, headers=headers).json()
+    result = httpx.get(url, headers=headers).json()
     job_links = {}
 
     try:
@@ -56,7 +53,7 @@ def get_job_links(workflow_run_id, token=None):
         pages_to_iterate_over = math.ceil((result["total_count"] - 100) / 100)
 
         for i in range(pages_to_iterate_over):
-            result = session.get(url + f"&page={i + 2}", headers=headers).json()
+            result = httpx.get(url + f"&page={i + 2}", headers=headers).json()
             job_links.update({job["name"]: job["html_url"] for job in result["jobs"]})
 
         return job_links
@@ -76,7 +73,7 @@ def get_artifacts_links(workflow_run_id, token=None):
     url = (
         f"https://api.github.com/repos/huggingface/transformers/actions/runs/{workflow_run_id}/artifacts?per_page=100"
     )
-    result = session.get(url, headers=headers).json()
+    result = httpx.get(url, headers=headers).json()
     artifacts = {}
 
     try:
@@ -84,7 +81,7 @@ def get_artifacts_links(workflow_run_id, token=None):
         pages_to_iterate_over = math.ceil((result["total_count"] - 100) / 100)
 
         for i in range(pages_to_iterate_over):
-            result = session.get(url + f"&page={i + 2}", headers=headers).json()
+            result = httpx.get(url + f"&page={i + 2}", headers=headers).json()
             artifacts.update({artifact["name"]: artifact["archive_download_url"] for artifact in result["artifacts"]})
 
         return artifacts
@@ -105,9 +102,9 @@ def download_artifact(artifact_name, artifact_url, output_dir, token):
     if token is not None:
         headers = {"Accept": "application/vnd.github+json", "Authorization": f"Bearer {token}"}
 
-    result = session.get(artifact_url, headers=headers, follow_redirects=False)
+    result = httpx.get(artifact_url, headers=headers, follow_redirects=False)
     download_url = result.headers["Location"]
-    response = session.get(download_url, follow_redirects=True)
+    response = httpx.get(download_url, follow_redirects=True)
     file_path = os.path.join(output_dir, f"{artifact_name}.zip")
     pathlib.Path(file_path).write_bytes(response.content)
 

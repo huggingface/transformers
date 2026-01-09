@@ -35,7 +35,6 @@ from huggingface_hub import (
     create_branch,
     create_commit,
     create_repo,
-    get_session,
     hf_hub_download,
     hf_hub_url,
     is_offline_mode,
@@ -64,8 +63,6 @@ from .import_utils import (
     is_training_run_on_sagemaker,
 )
 
-
-session = get_session()
 
 LEGACY_PROCESSOR_CHAT_TEMPLATE_FILE = "chat_template.json"
 CHAT_TEMPLATE_FILE = "chat_template.jinja"
@@ -161,7 +158,7 @@ def list_repo_templates(
 
 def define_sagemaker_information():
     try:
-        instance_data = session.get(os.environ["ECS_CONTAINER_METADATA_URI"]).json()
+        instance_data = httpx.get(os.environ["ECS_CONTAINER_METADATA_URI"]).json()
         dlc_container_used = instance_data["Image"]
         dlc_tag = instance_data["Image"].split(":")[1]
     except Exception:
@@ -582,7 +579,7 @@ def has_file(
 
     # Check if the file exists
     try:
-        response = get_session().head(
+        response = httpx.head(
             hf_hub_url(path_or_repo, filename=filename, revision=revision, repo_type=repo_type),
             headers=build_hf_headers(token=token, user_agent=http_user_agent()),
             follow_redirects=False,

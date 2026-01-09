@@ -22,7 +22,6 @@ import argparse
 import os
 import re
 from io import BytesIO
-from typing import Optional
 
 import torch
 from huggingface_hub import get_session, hf_hub_download

@@ -15,8 +15,8 @@ import pathlib
 from collections import defaultdict
 from typing import TYPE_CHECKING, Any, Union
 
+import httpx
 import numpy as np
-from huggingface_hub import get_session
 
 from ..generation import GenerationConfig
 from ..tokenization_python import PreTrainedTokenizer
@@ -31,7 +31,6 @@ if TYPE_CHECKING:
     from ..feature_extraction_sequence_utils import SequenceFeatureExtractor
     from ..modeling_utils import PreTrainedModel
 
-session = get_session()
 logger = logging.get_logger(__name__)
 
 if is_torch_available():
@@ -367,7 +366,7 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             if inputs.startswith("http://") or inputs.startswith("https://"):
                 # We need to actually check for a real protocol, otherwise it's impossible to use a local file
                 # like http_huggingface_co.png
-                inputs = session.get(inputs, follow_redirects=True).content
+                inputs = httpx.get(inputs, follow_redirects=True).content
             else:
                 inputs = pathlib.Path(inputs).read_bytes()
 

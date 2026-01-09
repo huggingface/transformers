@@ -21,8 +21,8 @@ from io import BytesIO
 from typing import NewType, Union
 from urllib.parse import urlparse
 
+import httpx
 import numpy as np
-from huggingface_hub import get_session
 
 from .image_transforms import PaddingMode, to_channel_dimension_format
 from .image_utils import ChannelDimension, infer_channel_dimension_format, is_valid_image
@@ -44,7 +44,6 @@ from .utils import (
 
 if is_vision_available():
     import PIL.Image
-    import PIL.ImageOps
 
     if is_torchvision_available():
         from torchvision import io as torchvision_io
@@ -74,7 +73,6 @@ VideoInput = Union[
     list[Path],
     list[list[Path]],
 ]
-session = get_session()
 
 
 @dataclass
@@ -443,13 +441,11 @@ def read_video_decord(
     indices = sample_indices_fn(metadata=metadata, **kwargs)
     video = vr.get_batch(indices).asnumpy()
 
-    metadata.update(
-        {
-            "frames_indices": indices,
-            "height": video.shape[1],
-            "width": video.shape[2],
-        }
-    )
+    metadata.update({
+        "frames_indices": indices,
+        "height": video.shape[1],
+        "width": video.shape[2],
+    })
     return video, metadata
 
 
@@ -556,13 +552,11 @@ def read_video_torchvision(
 
     indices = sample_indices_fn(metadata=metadata, **kwargs)
     video = video[indices].contiguous()
-    metadata.update(
-        {
-            "frames_indices": indices,
-            "height": video.shape[2],
-            "width": video.shape[3],
-        }
-    )
+    metadata.update({
+        "frames_indices": indices,
+        "height": video.shape[2],
+        "width": video.shape[3],
+    })
     return video, metadata
 
 
@@ -700,7 +694,7 @@ def load_video(
         bytes_obj = buffer.getvalue()
         file_obj = BytesIO(bytes_obj)
     elif video.startswith("http://") or video.startswith("https://"):
-        file_obj = BytesIO(session.get(video, follow_redirects=True).content)
+        file_obj = BytesIO(httpx.get(video, follow_redirects=True).content)
     elif os.path.isfile(video):
         file_obj = video
     else:

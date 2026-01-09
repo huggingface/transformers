@@ -17,16 +17,15 @@ import os
 import re
 from collections import Counter
 
-from huggingface_hub import get_session
+import httpx
 
 
-session = get_session()
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--workflow_id", type=str, required=True)
     args = parser.parse_args()
 
-    r = session.get(
+    r = httpx.get(
         f"https://circleci.com/api/v2/workflow/{args.workflow_id}/job",
         headers={"Circle-Token": os.environ.get("CIRCLE_TOKEN", "")},
     )
@@ -39,7 +38,7 @@ if __name__ == "__main__":
     for job in jobs:
         if job["name"].startswith(("tests_", "examples_", "pipelines_")):
             url = f"https://circleci.com/api/v2/project/{job['project_slug']}/{job['job_number']}/artifacts"
-            r = session.get(url, headers={"Circle-Token": os.environ.get("CIRCLE_TOKEN", "")})
+            r = httpx.get(url, headers={"Circle-Token": os.environ.get("CIRCLE_TOKEN", "")})
             job_artifacts = r.json()["items"]
 
             os.makedirs(f"outputs/{job['name']}", exist_ok=True)
@@ -50,10 +49,10 @@ if __name__ == "__main__":
             for artifact in job_artifacts:
                 url = artifact["url"]
                 if artifact["path"].endswith("/summary_short.txt"):
-                    r = session.get(url, headers={"Circle-Token": os.environ.get("CIRCLE_TOKEN", "")})
+                    r = httpx.get(url, headers={"Circle-Token": os.environ.get("CIRCLE_TOKEN", "")})
                     job_test_summaries[artifact["node_index"]] = r.text
                 elif artifact["path"].endswith("/failures_line.txt"):
-                    r = session.get(url, headers={"Circle-Token": os.environ.get("CIRCLE_TOKEN", "")})
+                    r = httpx.get(url, headers={"Circle-Token": os.environ.get("CIRCLE_TOKEN", "")})
                     job_failure_lines[artifact["node_index"]] = r.text
 
             summary = {}
@@ -89,15 +88,13 @@ if __name__ == "__main__":
                             failure_lines_list[failure_idx] if failure_idx < len(failure_lines_list) else short_error
                         )
 
-                        failure_entries.append(
-                            {
-                                "job_name": job["name"],
-                                "test_name": test_name,
-                                "short_error": short_error,
-                                "error": full_error,
-                                "model_name": model_name,
-                            }
-                        )
+                        failure_entries.append({
+                            "job_name": job["name"],
+                            "test_name": test_name,
+                            "short_error": short_error,
+                            "error": full_error,
+                            "model_name": model_name,
+                        })
                         failure_idx += 1
 
     # Build workflow summary

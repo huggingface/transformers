@@ -15,7 +15,7 @@ import warnings
 from io import BytesIO
 from typing import Any, overload
 
-from huggingface_hub import get_session
+import httpx
 
 from ..utils import (
     add_end_docstrings,
@@ -35,7 +35,6 @@ if is_av_available():
 if is_torch_available():
     from ..models.auto.modeling_auto import MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES
 
-session = get_session()
 
 logger = logging.get_logger(__name__)
 
@@ -144,7 +143,7 @@ class VideoClassificationPipeline(Pipeline):
             num_frames = self.model.config.num_frames
 
         if video.startswith("http://") or video.startswith("https://"):
-            video = BytesIO(session.get(video, follow_redirects=True).content)
+            video = BytesIO(httpx.get(video, follow_redirects=True).content)
 
         container = av.open(video)
 

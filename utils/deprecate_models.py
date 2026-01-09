@@ -10,16 +10,14 @@ import os
 from collections import defaultdict
 from pathlib import Path
 
+import httpx
 from custom_init_isort import sort_imports_in_all_inits
 from git import Repo
-from huggingface_hub import get_session
 from packaging import version
 
 from transformers import CONFIG_MAPPING, logging
 from transformers import __version__ as current_version
 
-
-session = get_session()
 
 REPO_PATH = Path(os.path.abspath(os.path.dirname(os.path.dirname(__file__))))
 repo = Repo(REPO_PATH)
@@ -30,7 +28,7 @@ logger = logging.get_logger(__name__)
 def get_last_stable_minor_release():
     # Get the last stable release of transformers
     url = "https://pypi.org/pypi/transformers/json"
-    release_data = session.get(url).json()
+    release_data = httpx.get(url).json()
 
     # Find the last stable release of transformers (version below current version)
     major_version, minor_version, patch_version, _ = current_version.split(".")
