@@ -14,8 +14,8 @@
 """PyTorch DETR model."""
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional, Union
 
 import torch
 import torch.nn as nn
@@ -331,7 +331,7 @@ class DetrSinePositionEmbedding(nn.Module):
     """
 
     def __init__(
-        self, num_pos_feats: int = 64, temperature: int = 10000, normalize: bool = False, scale: Optional[float] = None
+        self, num_pos_feats: int = 64, temperature: int = 10000, normalize: bool = False, scale: float | None = None
     ):
         super().__init__()
         if scale is not None and normalize is False:
@@ -345,9 +345,9 @@ class DetrSinePositionEmbedding(nn.Module):
     def forward(
         self,
         shape: torch.Size,
-        device: Union[torch.device, str],
+        device: torch.device | str,
         dtype: torch.dtype,
-        mask: Optional[torch.Tensor] = None,
+        mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
         if mask is None:
             mask = torch.zeros((shape[0], shape[2], shape[3]), device=device, dtype=torch.bool)
@@ -383,9 +383,9 @@ class DetrLearnedPositionEmbedding(nn.Module):
     def forward(
         self,
         shape: torch.Size,
-        device: Union[torch.device, str],
+        device: torch.device | str,
         dtype: torch.dtype,
-        mask: Optional[torch.Tensor] = None,
+        mask: torch.Tensor | None = None,
     ):
         height, width = shape[-2:]
         width_values = torch.arange(width, device=device)
@@ -404,8 +404,8 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
-    scaling: Optional[float] = None,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
     dropout: float = 0.0,
     **kwargs: Unpack[TransformersKwargs],
 ):
@@ -456,8 +456,8 @@ class DetrSelfAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_embeddings: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
+        position_embeddings: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
@@ -523,9 +523,9 @@ class DetrCrossAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         key_value_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_embeddings: Optional[torch.Tensor] = None,
-        encoder_position_embeddings: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
+        position_embeddings: torch.Tensor | None = None,
+        encoder_position_embeddings: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
@@ -607,7 +607,7 @@ class DetrEncoderLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
-        spatial_position_embeddings: Optional[torch.Tensor] = None,
+        spatial_position_embeddings: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         """
@@ -672,11 +672,11 @@ class DetrDecoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        spatial_position_embeddings: Optional[torch.Tensor] = None,
-        object_queries_position_embeddings: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
+        spatial_position_embeddings: torch.Tensor | None = None,
+        object_queries_position_embeddings: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         """
@@ -1025,14 +1025,14 @@ class DetrModel(DetrPreTrainedModel):
     @can_return_tuple
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        pixel_mask: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.FloatTensor] = None,
-        encoder_outputs: Optional[torch.FloatTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
+        pixel_values: torch.FloatTensor | None = None,
+        pixel_mask: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.FloatTensor | None = None,
+        encoder_outputs: torch.FloatTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        decoder_inputs_embeds: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple[torch.FloatTensor], DetrModelOutput]:
+    ) -> tuple[torch.FloatTensor] | DetrModelOutput:
         r"""
         decoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, num_queries)`, *optional*):
             Mask to avoid performing attention on certain object queries in the decoder. Mask values selected in `[0, 1]`:
@@ -1211,14 +1211,14 @@ class DetrForObjectDetection(DetrPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        pixel_mask: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.FloatTensor] = None,
-        encoder_outputs: Optional[torch.FloatTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[list[dict]] = None,
+        pixel_mask: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.FloatTensor | None = None,
+        encoder_outputs: torch.FloatTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        labels: list[dict] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple[torch.FloatTensor], DetrObjectDetectionOutput]:
+    ) -> tuple[torch.FloatTensor] | DetrObjectDetectionOutput:
         r"""
         decoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, num_queries)`, *optional*):
             Mask to avoid performing attention on certain object queries in the decoder. Mask values selected in `[0, 1]`:
@@ -1347,14 +1347,14 @@ class DetrForSegmentation(DetrPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        pixel_mask: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.FloatTensor] = None,
-        encoder_outputs: Optional[torch.FloatTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[list[dict]] = None,
+        pixel_mask: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.FloatTensor | None = None,
+        encoder_outputs: torch.FloatTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        labels: list[dict] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple[torch.FloatTensor], DetrSegmentationOutput]:
+    ) -> tuple[torch.FloatTensor] | DetrSegmentationOutput:
         r"""
         decoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, num_queries)`, *optional*):
             Mask to avoid performing attention on certain object queries in the decoder. Mask values selected in `[0, 1]`:
@@ -1615,7 +1615,7 @@ class DetrMHAttentionMap(nn.Module):
         self.k_proj = nn.Linear(hidden_size, hidden_size, bias=bias)
 
     def forward(
-        self, query_states: torch.Tensor, key_states: torch.Tensor, attention_mask: Optional[torch.Tensor] = None
+        self, query_states: torch.Tensor, key_states: torch.Tensor, attention_mask: torch.Tensor | None = None
     ):
         query_hidden_shape = (*query_states.shape[:-1], -1, self.head_dim)
         key_hidden_shape = (key_states.shape[0], -1, self.head_dim, *key_states.shape[-2:])
