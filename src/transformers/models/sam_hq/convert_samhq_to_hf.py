@@ -30,9 +30,6 @@ from PIL import Image
 from transformers import SamHQConfig, SamHQModel, SamHQProcessor, SamHQVisionConfig, SamImageProcessor
 
 
-session = get_session()
-
-
 def get_config(model_name):
     if "sam_hq_vit_b" in model_name:
         vision_config = SamHQVisionConfig()
@@ -176,7 +173,7 @@ def convert_sam_hq_checkpoint(model_name, checkpoint_path, pytorch_dump_folder, 
 
     # Test the model with a sample image
     url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
-    with session.stream("GET", url) as response:
+    with get_session().stream("GET", url) as response:
         raw_image = Image.open(BytesIO(response.read())).convert("RGB")
 
     input_points = [[[500, 375]]]

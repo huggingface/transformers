@@ -20,14 +20,12 @@ from pathlib import Path
 import httpx
 import numpy as np
 import torch
-from huggingface_hub import HfApi, get_session
+from huggingface_hub import HfApi
 from PIL import Image
 
 from transformers import VJEPA2Config, VJEPA2Model, VJEPA2VideoProcessor
 from transformers.models.vjepa2.modeling_vjepa2 import apply_masks
 
-
-session = get_session()
 
 HUB_REPO = "https://github.com/facebookresearch/vjepa2"
 HUB_SOURCE = "github"

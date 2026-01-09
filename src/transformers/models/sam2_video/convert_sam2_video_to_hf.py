@@ -39,9 +39,6 @@ from transformers import (
 )
 
 
-session = get_session()
-
-
 def get_config(model_name):
     if "hiera_tiny" in model_name:
         hiera_det_config = Sam2HieraDetConfig()
@@ -246,7 +243,7 @@ def convert_sam2_checkpoint(model_name, checkpoint_path, pytorch_dump_folder, pu
     print("Unexpected keys:", unexpected_keys)
 
     url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
-    with session.stream("GET", url) as response:
+    with get_session().stream("GET", url) as response:
         raw_image = Image.open(BytesIO(response.read())).convert("RGB")
 
     input_points = [[[[1000, 600]]]]

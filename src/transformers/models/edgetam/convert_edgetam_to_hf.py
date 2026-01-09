@@ -38,9 +38,6 @@ from transformers import (
 )
 
 
-session = get_session()
-
-
 def get_config(model_name):
     backbone_config = TimmWrapperConfig.from_pretrained(
         "timm/repvit_m1.dist_in1k",
@@ -215,7 +212,7 @@ def convert_edgetam_checkpoint(model_name, checkpoint_path, pytorch_dump_folder,
 
     if run_sanity_check:
         url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
-        with session.stream("GET", url) as response:
+        with get_session().stream("GET", url) as response:
             raw_image = Image.open(BytesIO(response.read())).convert("RGB")
 
         input_points = [[[[1000, 600]]]]

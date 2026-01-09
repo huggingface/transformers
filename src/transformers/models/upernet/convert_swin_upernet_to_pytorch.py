@@ -27,9 +27,6 @@ from PIL import Image
 from transformers import SegformerImageProcessor, SwinConfig, UperNetConfig, UperNetForSemanticSegmentation
 
 
-session = get_session()
-
-
 def get_upernet_config(model_name):
     auxiliary_in_channels = 384
     window_size = 7
@@ -234,7 +231,7 @@ def convert_upernet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
 
     # verify on image
     url = "https://huggingface.co/datasets/hf-internal-testing/fixtures_ade20k/resolve/main/ADE_val_00000001.jpg"
-    with session.stream("GET", url) as response:
+    with get_session().stream("GET", url) as response:
         image = Image.open(BytesIO(response.read())).convert("RGB")
 
     processor = SegformerImageProcessor()
