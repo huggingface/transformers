@@ -343,12 +343,10 @@ def main(all=False, models=None, check_only=False):
     if check_only:
         # Check all model cards for missing dates
         all_model_cards = get_all_model_cards()
-        print(f"Checking all {len(all_model_cards)} model cards for missing dates...")
         missing_dates = check_missing_dates(all_model_cards)
 
         # Check modified model cards for incorrect dates
         modified_cards = get_modified_cards()
-        print(f"Checking {len(modified_cards)} modified model cards for incorrect dates...")
         incorrect_dates = check_incorrect_dates(modified_cards)
 
         if missing_dates or incorrect_dates:
@@ -358,22 +356,17 @@ def main(all=False, models=None, check_only=False):
                 f"Missing or incorrect dates in the following model cards: {' '.join(problematic_cards)}\n"
                 f"Run `python utils/add_dates.py --models {' '.join(model_names)}` to fix them."
             )
-        print("All dates are present and correct!")
         return
 
     # Determine which model cards to process
     if all:
         model_cards = get_all_model_cards()
-        print(f"Processing all {len(model_cards)} model cards from docs directory")
     elif models:
         model_cards = models
-        print(f"Processing specified model cards: {model_cards}")
     else:
         model_cards = get_modified_cards()
         if not model_cards:
-            print("No modified model cards found.")
             return
-        print(f"Processing modified model cards: {model_cards}")
 
     insert_dates(model_cards)
 
