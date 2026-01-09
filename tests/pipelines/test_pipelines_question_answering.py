@@ -259,8 +259,7 @@ class QAPipelineTests(unittest.TestCase):
                     "answer": "全学年にわたって小学校の国語の教科書に挿し絵が用いられている",
                 },
             }
-        )
-        EXPECTED_OUTPUT = EXPECTED_OUTPUT.get_expectation()
+        ).get_expectation()
 
         self.assertEqual(nested_simplify(output), EXPECTED_OUTPUT)  # fmt: skip
 
@@ -272,8 +271,7 @@ class QAPipelineTests(unittest.TestCase):
                 ("cuda", 8): {"score": 1.0, "start": 15, "end": 18, "answer": "教科書"},
                 ("rocm", (9, 4)): {"score": 0.868, "start": 15, "end": 18, "answer": "教科書"},
             }
-        )
-        EXPECTED_OUTPUT = EXPECTED_OUTPUT.get_expectation()
+        ).get_expectation()
         self.assertEqual(nested_simplify(output), EXPECTED_OUTPUT)  # fmt: skip
 
     @slow
