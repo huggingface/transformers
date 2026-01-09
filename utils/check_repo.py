@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,7 +21,7 @@ Utility that performs several consistency checks on the repo. This includes:
 - checking all the auto mapping are properly defined (no typos, importable)
 - checking the list of deprecated models is up to date
 
-Use from the root of the repo with (as used in `make repo-consistency`):
+Use from the root of the repo with (as used in `make check-repo`):
 
 ```bash
 python utils/check_repo.py
@@ -74,6 +73,8 @@ PRIVATE_MODELS = [
     "Qwen3VLVisionModel",
     "Qwen3VLMoeVisionModel",
     "SwitchTransformersStack",
+    "SiglipTextTransformer",
+    "Siglip2TextTransformer",
     "MaskFormerSwinModel",
     "MaskFormerSwinPreTrainedModel",
     "BridgeTowerTextModel",
@@ -204,6 +205,7 @@ IGNORE_NON_TESTED = (
         "BltLocalDecoder",  # Building part of bigger (tested) model. Tested implicitly through BLTForCausalLM.
         "BltGlobalTransformer",  # Building part of bigger (tested) model. Tested implicitly through BLTForCausalLM.
         "Florence2VisionBackbone",  # Building part of bigger (tested) model. Tested implicitly through Florence2ForConditionalGeneration.
+        "Ernie4_5_VL_MoeTextModel",  # Building part of bigger (tested) model
         "PeAudioFrameLevelModel",
         "PeAudioVideoModel",
     ]
@@ -416,6 +418,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "Qwen3OmniMoeTalkerModel",  # Building part of a bigger model
     "Qwen3OmniMoeThinkerForConditionalGeneration",  # Building part of a bigger model
     "Qwen3OmniMoeThinkerTextModel",  # Building part of a bigger model
+    "Ernie4_5_VL_MoeTextModel",  # Building part of a bigger model
     "PeAudioFrameLevelModel",
 ]
 
@@ -984,7 +987,6 @@ DEPRECATED_OBJECTS = [
     "SquadV1Processor",
     "SquadV2Processor",
     "Wav2Vec2ForMaskedLM",
-    "Wav2Vec2Tokenizer",
     "glue_compute_metrics",
     "glue_convert_examples_to_features",
     "glue_output_modes",
@@ -1007,7 +1009,6 @@ UNDOCUMENTED_OBJECTS = [
     "DPRPretrainedReader",  # Like an Encoder.
     "DummyObject",  # Just picked by mistake sometimes.
     "MecabTokenizer",  # Internal, should never have been in the main init.
-    "ModelCard",  # Internal type.
     "SqueezeBertModule",  # Internal building block (should have been called SqueezeBertLayer)
     "TransfoXLCorpus",  # Internal type.
     "WordpieceTokenizer",  # Internal, should never have been in the main init.

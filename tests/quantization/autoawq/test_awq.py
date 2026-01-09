@@ -27,15 +27,12 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import is_accelerate_available, is_torch_available
+from transformers.utils import is_torch_available
 from transformers.utils.quantization_config import AwqBackend
 
 
 if is_torch_available():
     import torch
-
-if is_accelerate_available():
-    from accelerate import init_empty_weights
 
 
 @require_torch_accelerator
@@ -154,7 +151,7 @@ class AwqTest(unittest.TestCase):
         config = AutoConfig.from_pretrained(model_id, revision="cb32f77e905cccbca1d970436fb0f5e6b58ee3c5")
         quantization_config = AwqConfig(bits=4)
 
-        with init_empty_weights():
+        with torch.device("meta"):
             model = OPTForCausalLM(config)
 
         nb_linears = 0
@@ -171,7 +168,7 @@ class AwqTest(unittest.TestCase):
         self.assertEqual(nb_linears, nb_awq_linear)
 
         # Try with `modules_not_to_convert`
-        with init_empty_weights():
+        with torch.device("meta"):
             model = OPTForCausalLM(config)
 
         model, _ = replace_with_awq_linear(
@@ -281,7 +278,7 @@ class AwqTest(unittest.TestCase):
         )
 
         output = quantized_model.generate(dummy_input, max_new_tokens=10)
-        self.assertTrue((EXPECTED_OUTPUT == output).all())
+        self.assertTrue((output == EXPECTED_OUTPUT).all())
 
 
 @slow

@@ -15,11 +15,9 @@ import argparse
 import json
 import os
 import re
-from typing import Optional
 
 import requests
 import torch
-from accelerate import init_empty_weights
 from PIL import Image
 
 from transformers import (
@@ -66,7 +64,7 @@ def token_bytes_to_string(b):
 
 
 # Adapted from https://github.com/openai/tiktoken/issues/60#issuecomment-1499977960
-def bpe(mergeable_ranks: dict[bytes, int], token: bytes, max_rank: Optional[int] = None):
+def bpe(mergeable_ranks: dict[bytes, int], token: bytes, max_rank: int | None = None):
     parts = [bytes([b]) for b in token]
     while True:
         min_idx = None
@@ -288,7 +286,7 @@ def convert_model(vq_model_id, llm_model_id, output_dir, hub_model_id=None, test
     )
     config = Emu3Config(text_config=text_config, vocabulary_map=vocabulary_map)
 
-    with init_empty_weights():
+    with torch.device("meta"):
         model = Emu3ForConditionalGeneration(config=config)
         model.generation_config = GenerationConfig(
             do_sample=True,

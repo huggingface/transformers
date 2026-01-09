@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 Meta AI and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Moshi model configuration"""
-
-from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
@@ -245,24 +242,24 @@ class MoshiConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 32000,
-        hidden_size: Optional[int] = 4096,
-        num_hidden_layers: Optional[int] = 32,
-        num_attention_heads: Optional[int] = 32,
-        num_key_value_heads: Optional[int] = None,
-        audio_vocab_size: Optional[int] = None,
-        max_position_embeddings: Optional[int] = 3000,
-        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        hidden_act: Optional[str] = "silu",
-        head_dim: Optional[int] = None,
-        initializer_range: Optional[float] = 0.02,
-        use_cache: Optional[bool] = True,
-        sliding_window: Optional[int] = 3000,
-        attention_dropout: Optional[float] = 0.0,
-        ffn_dim: Optional[int] = 22528,
-        rms_norm_eps: Optional[int] = 1e-8,
-        num_codebooks: Optional[int] = 8,
-        tie_word_embeddings: Optional[bool] = False,
+        vocab_size: int | None = 32000,
+        hidden_size: int | None = 4096,
+        num_hidden_layers: int | None = 32,
+        num_attention_heads: int | None = 32,
+        num_key_value_heads: int | None = None,
+        audio_vocab_size: int | None = None,
+        max_position_embeddings: int | None = 3000,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        hidden_act: str | None = "silu",
+        head_dim: int | None = None,
+        initializer_range: float | None = 0.02,
+        use_cache: bool | None = True,
+        sliding_window: int | None = 3000,
+        attention_dropout: float | None = 0.0,
+        ffn_dim: int | None = 22528,
+        rms_norm_eps: int | None = 1e-8,
+        num_codebooks: int | None = 8,
+        tie_word_embeddings: bool | None = False,
         **kwargs,
     ):
         self.vocab_size = vocab_size

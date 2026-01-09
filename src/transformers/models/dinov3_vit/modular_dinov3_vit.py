@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Meta AI and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +15,6 @@
 
 import math
 from collections.abc import Callable
-from typing import Optional
 
 import numpy as np
 import torch
@@ -62,7 +60,7 @@ class DINOv3ViTEmbeddings(nn.Module):
             config.num_channels, config.hidden_size, kernel_size=config.patch_size, stride=config.patch_size
         )
 
-    def forward(self, pixel_values: torch.Tensor, bool_masked_pos: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward(self, pixel_values: torch.Tensor, bool_masked_pos: torch.Tensor | None = None) -> torch.Tensor:
         batch_size = pixel_values.shape[0]
         target_dtype = self.patch_embeddings.weight.dtype
 
@@ -113,9 +111,9 @@ def get_patches_center_coordinates(
 
 def augment_patches_center_coordinates(
     coords: torch.Tensor,
-    shift: Optional[float] = None,
-    jitter: Optional[float] = None,
-    rescale: Optional[float] = None,
+    shift: float | None = None,
+    jitter: float | None = None,
+    rescale: float | None = None,
 ) -> torch.Tensor:
     # Shift coords by adding a uniform value in [-shift, shift]
     if shift is not None:
@@ -235,10 +233,10 @@ class DINOv3ViTAttention(PixtralAttention):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
+        attention_mask: torch.Tensor | None = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
 
         batch_size, patches, _ = hidden_states.size()
@@ -313,8 +311,8 @@ class DINOv3ViTLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
+        attention_mask: torch.Tensor | None = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
     ) -> torch.Tensor:
         # Attention with residual connection
         residual = hidden_states
@@ -361,6 +359,9 @@ class DINOv3ViTPreTrainedModel(Dinov2PreTrainedModel):
             init.zeros_(module.mask_token)
         elif isinstance(module, DINOv3ViTLayerScale):
             init.constant_(module.lambda1, self.config.layerscale_value)
+        elif isinstance(module, DINOv3ViTRopePositionEmbedding):
+            inv_freq = 1 / module.base ** torch.arange(0, 1, 4 / module.head_dim, dtype=torch.float32)
+            init.copy_(module.inv_freq, inv_freq)
 
 
 @auto_docstring
@@ -384,7 +385,7 @@ class DINOv3ViTModel(DINOv3ViTPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.Tensor,
-        bool_masked_pos: Optional[torch.Tensor] = None,
+        bool_masked_pos: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         r"""
@@ -432,7 +433,7 @@ class DINOv3ViTBackbone(DINOv3ViTPreTrainedModel, BackboneMixin):
     def forward(
         self,
         pixel_values: torch.Tensor,
-        output_hidden_states: Optional[bool] = None,
+        output_hidden_states: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BackboneOutput:
         pixel_values = pixel_values.to(self.embeddings.patch_embeddings.weight.dtype)

@@ -118,6 +118,7 @@ from .utils import (
     is_mistral_common_available,
     is_natten_available,
     is_nltk_available,
+    is_numba_available,
     is_onnx_available,
     is_openai_available,
     is_optimum_available,
@@ -130,6 +131,7 @@ from .utils import (
     is_pyctcdecode_available,
     is_pytesseract_available,
     is_pytest_available,
+    is_pytest_order_available,
     is_pytorch_quantization_available,
     is_quark_available,
     is_qutlass_available,
@@ -1382,6 +1384,13 @@ def require_pyctcdecode(test_case):
     Decorator marking a test that requires pyctcdecode
     """
     return unittest.skipUnless(is_pyctcdecode_available(), "test requires pyctcdecode")(test_case)
+
+
+def require_numba(test_case):
+    """
+    Decorator marking a test that requires numba
+    """
+    return unittest.skipUnless(is_numba_available(), "test requires numba")(test_case)
 
 
 def require_librosa(test_case):
@@ -2662,9 +2671,13 @@ def run_first(test_case):
     single process at a time. So we make sure all tests that run in a subprocess are launched first, to avoid device
     allocation conflicts.
     """
-    import pytest
+    # Without this check, we get unwanted warnings when it's not installed
+    if is_pytest_order_available():
+        import pytest
 
-    return pytest.mark.order(1)(test_case)
+        return pytest.mark.order(1)(test_case)
+    else:
+        return test_case
 
 
 def run_test_in_subprocess(test_case, target_func, inputs=None, timeout=None):
@@ -3373,7 +3386,7 @@ def _get_test_info():
         ):
             to_capture = True
         # TODO: check simply with the name is not robust.
-        elif "patched" == frame.frame.f_code.co_name:
+        elif frame.frame.f_code.co_name == "patched":
             frame_of_patched_obj = frame
             to_capture = False
             break

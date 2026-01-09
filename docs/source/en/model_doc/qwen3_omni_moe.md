@@ -389,6 +389,7 @@ model = Qwen3OmniMoeForConditionalGeneration.from_pretrained(
 ## Qwen3OmniMoeProcessor
 
 [[autodoc]] Qwen3OmniMoeProcessor
+    - __call__
 
 ## Qwen3OmniMoeCode2Wav
 
