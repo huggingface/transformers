@@ -133,7 +133,6 @@ _import_structure = {
         "is_wandb_available",
     ],
     "loss": [],
-    "modelcard": ["ModelCard"],
     "pipelines": [
         "AnyToAnyPipeline",
         "AudioClassificationPipeline",
@@ -615,8 +614,7 @@ if TYPE_CHECKING:
     from .masking_utils import AttentionMaskInterface as AttentionMaskInterface
     from .model_debugging_utils import model_addition_debugger_context as model_addition_debugger_context
 
-    # Model Cards
-    from .modelcard import ModelCard as ModelCard
+    # Models
     from .modeling_layers import GradientCheckpointingLayer as GradientCheckpointingLayer
     from .modeling_rope_utils import ROPE_INIT_FUNCTIONS as ROPE_INIT_FUNCTIONS
     from .modeling_rope_utils import RopeParameters as RopeParameters
