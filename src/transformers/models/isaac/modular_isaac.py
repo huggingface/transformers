@@ -1255,7 +1255,7 @@ class IsaacProcessor(ProcessorMixin):
         return BatchFeature(data={"input_ids": input_ids, "packed_inputs": packed})
 
 
-class IsaacRotaryEmbedding(qwen2_5_vl_modeling.Qwen2_5_VLRotaryEmbedding):
+class IsaacRotaryEmbedding(Qwen2_5_VLRotaryEmbedding):
     def __init__(self, config: IsaacConfig, device=None):
         rope_source_cfg = config.get_text_config() if hasattr(config, "get_text_config") else config
         rope_scaling = getattr(rope_source_cfg, "rope_scaling", None) or {}
