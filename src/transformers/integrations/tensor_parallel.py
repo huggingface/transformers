@@ -11,12 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""
-Tensor Parallel v2 - DTensor-free implementation using manual collectives.
-
-This module provides tensor parallel primitives using only torch.distributed
-primitives (all_reduce, all_gather, reduce_scatter) instead of DTensor.
-"""
 from __future__ import annotations
 
 import math
@@ -747,12 +741,6 @@ def distribute_module(
         module.register_forward_hook(lambda mod, inputs, outputs: output_fn(mod, outputs, device_mesh))
     return module
 
-
-# =============================================================================
-# Tensor Parallel Layer Base Class
-# =============================================================================
-
-
 class TensorParallelLayer:
     """General tensor parallel layer for transformers (DTensor-free)."""
 
@@ -771,9 +759,6 @@ class TensorParallelLayer:
     @staticmethod
     def _prepare_output_fn(mod, outputs, device_mesh): ...
 
-    def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
-        raise NotImplementedError
-
     def shard_tensor(self, param, param_type=None, param_casting_dtype=None, to_contiguous=None,
                      rank=None, device_mesh=None, tensor_idx=None):
         raise NotImplementedError
@@ -785,10 +770,6 @@ class TensorParallelLayer:
             self._prepare_input_fn,
             self._prepare_output_fn,
         )
-
-# =============================================================================
-# ColwiseParallel - Column-wise sharding
-# =============================================================================
 
 class ColwiseParallel(TensorParallelLayer):
     """
@@ -823,16 +804,6 @@ class ColwiseParallel(TensorParallelLayer):
         parameter = parameter.to(param_casting_dtype)
         return parameter, None
 
-    def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
-        if param_type == "bias":
-            parameter = get_tensor_shard(param, empty_param, device_mesh, rank, -1)
-        else:
-            parameter = get_tensor_shard(param, empty_param, device_mesh, rank, -2)
-        parameter = parameter.to(param_casting_dtype)
-        if to_contiguous:
-            parameter = parameter.contiguous()
-        return nn.Parameter(parameter, requires_grad=parameter.is_floating_point())
-
     def prepare_module_tp(self, module: nn.Module, device_mesh) -> nn.Module:
         distribute_module(
             module,
@@ -840,11 +811,6 @@ class ColwiseParallel(TensorParallelLayer):
             self._prepare_input_fn,
             self._prepare_output_fn,
         )
-
-# =============================================================================
-# RowwiseParallel - Row-wise sharding with all-reduce on forward
-# =============================================================================
-
 
 class RowwiseParallel(TensorParallelLayer):
     """
@@ -882,151 +848,9 @@ class RowwiseParallel(TensorParallelLayer):
         parameter = parameter.to(param_casting_dtype)
         return parameter, None
 
-    def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
-        if param_type != "bias":
-            parameter = get_tensor_shard(param, empty_param, device_mesh, rank, -1)
-        else:
-            parameter = param[:]
-
-        parameter = parameter.to(param_casting_dtype)
-        if to_contiguous:
-            parameter = parameter.contiguous()
-        return nn.Parameter(parameter, requires_grad=parameter.is_floating_point())
-
     def prepare_module_tp(self, module: nn.Module, device_mesh) -> nn.Module:
         module._distribute_module_applied = True
         #TODO(3outeille): maybe handle embedding, linear, parameter
-        distribute_module(
-            module,
-            device_mesh,
-            self._prepare_input_fn,
-            self._prepare_output_fn,
-        )
-
-# =============================================================================
-# SequenceParallel
-# =============================================================================
-
-
-class SequenceParallel(TensorParallelLayer):
-    """
-    Sequence Parallel: input/output sharded on sequence dimension.
-    Weights are replicated.
-    """
-
-    def __init__(self, sequence_dim: int = 1, **kwargs):
-        super().__init__(**kwargs)
-        self.sequence_dim = sequence_dim
-
-    def _prepare_input_fn(self, mod, inputs, device_mesh):
-        input_tensor = inputs[0] if inputs else inputs
-        # For sequence parallel, input is sharded on sequence dim
-        # All-gather for the layer, then reduce-scatter after
-        return all_gather(input_tensor, device_mesh)
-
-    def _prepare_output_fn(self, mod, outputs, device_mesh):
-        return reduce_scatter(outputs, device_mesh)
-
-    def shard_tensor(self, param, param_type=None, param_casting_dtype=None, to_contiguous=None,
-                     rank=None, device_mesh=None, tensor_idx=None):
-        parameter = param[...].to(param_casting_dtype)
-        return parameter, None
-
-    def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
-        parameter = param[...].to(param_casting_dtype)
-        if to_contiguous:
-            parameter = parameter.contiguous()
-        return nn.Parameter(parameter, requires_grad=parameter.is_floating_point())
-
-    def prepare_module_tp(self, module: nn.Module, device_mesh) -> nn.Module:
-        distribute_module(
-            module,
-            device_mesh,
-            self._prepare_input_fn,
-            self._prepare_output_fn,
-        )
-
-
-# =============================================================================
-# Expert Parallelism
-# =============================================================================
-
-
-class GroupedGemmParallel(TensorParallelLayer):
-    """Expert Parallelism: each rank loads a subset of experts."""
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-
-    def shard_tensor(self, param, param_type=None, param_casting_dtype=None, to_contiguous=None,
-                     rank=None, device_mesh=None, tensor_idx=None):
-        empty_param = self.empty_param
-        ep_rank = self.rank
-        device_mesh = self.device_mesh
-
-        global_num_experts = empty_param.shape[0]
-        if global_num_experts % device_mesh.size() != 0:
-            raise ValueError(
-                f"Global number of experts must be divisible by number of devices: {global_num_experts} % {device_mesh.size()} != 0"
-            )
-        local_num_experts = global_num_experts // device_mesh.size()
-        parameter = param[ep_rank * local_num_experts : (ep_rank + 1) * local_num_experts].to(param_casting_dtype)
-        return parameter, None
-
-    def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
-        ep_rank = rank
-        global_num_experts = empty_param.shape[0]
-        if global_num_experts % device_mesh.size() != 0:
-            raise ValueError(
-                f"Global number of experts must be divisible by number of devices: {global_num_experts} % {device_mesh.size()} != 0"
-            )
-        local_num_experts = global_num_experts // device_mesh.size()
-        param = param[ep_rank * local_num_experts : (ep_rank + 1) * local_num_experts].to(param_casting_dtype)
-        if to_contiguous:
-            param = param.contiguous()
-        return param
-
-class RouterParallel(TensorParallelLayer):
-    """Router parallel for Expert Parallelism - reshapes router outputs for EP."""
-
-    def __init__(self, **kwargs):
-        super().__init__(**kwargs)
-
-    @staticmethod
-    def _prepare_input_fn(mod, inputs, device_mesh):
-        return inputs[0] if inputs else inputs
-
-    @staticmethod
-    def _prepare_output_fn(mod, outputs, device_mesh):
-        ep_rank, ep_size = device_mesh.get_local_rank(), device_mesh.size()
-        if mod.num_experts % ep_size != 0:
-            raise ValueError(
-                f"The number of experts must be divisible by number of ep_size: {mod.num_experts} % {ep_size} != 0"
-            )
-        num_local_experts = mod.num_experts // ep_size
-        router_logits, router_scores, router_indices = outputs
-        router_scores = torch.zeros_like(router_logits).scatter_(1, router_indices, router_scores)
-        router_scores = router_scores[:, ep_rank * num_local_experts : (ep_rank + 1) * num_local_experts]
-        router_indices = router_indices.masked_fill((router_indices // num_local_experts) != ep_rank, -1)
-        if num_local_experts > 1:
-            router_indices = torch.fmod(router_indices, num_local_experts)
-        else:
-            router_indices = router_indices.masked_fill(router_indices > 0, 0).masked_fill(router_indices < 0, -1)
-        router_indices = router_indices.masked_fill(router_indices == -1, num_local_experts)
-        return router_logits, router_scores, router_indices
-
-    def shard_tensor(self, param, param_type=None, param_casting_dtype=None, to_contiguous=None,
-                     rank=None, device_mesh=None, tensor_idx=None):
-        parameter = param[...].to(param_casting_dtype)
-        return parameter, None
-
-    def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
-        param = param[...].to(param_casting_dtype)
-        if to_contiguous:
-            param = param.contiguous()
-        return param
-
-    def prepare_module_tp(self, module: nn.Module, device_mesh) -> nn.Module:
         distribute_module(
             module,
             device_mesh,
@@ -1091,16 +915,6 @@ class EmbeddingParallel(TensorParallelLayer):
         parameter = parameter.to(param_casting_dtype)
         return parameter, None
 
-    def partition_tensor(self, param, empty_param, param_type, param_casting_dtype, to_contiguous, rank, device_mesh):
-        if param_type == "bias":
-            parameter = get_tensor_shard(param, empty_param, device_mesh, rank, -1)
-        else:
-            parameter = get_tensor_shard(param, empty_param, device_mesh, rank, self.embedding_dim_sharding)
-        parameter = parameter.to(param_casting_dtype)
-        if to_contiguous:
-            parameter = parameter.contiguous()
-        return nn.Parameter(parameter)
-
     def prepare_module_tp(self, module: nn.Module, device_mesh) -> nn.Module:
         module._distribute_module_applied = True
         distribute_module(
@@ -1109,10 +923,101 @@ class EmbeddingParallel(TensorParallelLayer):
             self._prepare_input_fn,
             self._prepare_output_fn,
         )
-# =============================================================================
-# ParallelInterface - Registry of all parallel styles
-# =============================================================================
 
+class SequenceParallel(TensorParallelLayer):
+    """
+    Sequence Parallel: input/output sharded on sequence dimension.
+    Weights are replicated.
+    """
+
+    def __init__(self, sequence_dim: int = 1, **kwargs):
+        super().__init__(**kwargs)
+        self.sequence_dim = sequence_dim
+
+    def _prepare_input_fn(self, mod, inputs, device_mesh):
+        input_tensor = inputs[0] if inputs else inputs
+        # For sequence parallel, input is sharded on sequence dim
+        # All-gather for the layer, then reduce-scatter after
+        return all_gather(input_tensor, device_mesh)
+
+    def _prepare_output_fn(self, mod, outputs, device_mesh):
+        return reduce_scatter(outputs, device_mesh)
+
+    def shard_tensor(self, param, param_type=None, param_casting_dtype=None, to_contiguous=None,
+                     rank=None, device_mesh=None, tensor_idx=None):
+        parameter = param[...].to(param_casting_dtype)
+        return parameter, None
+
+    def prepare_module_tp(self, module: nn.Module, device_mesh) -> nn.Module:
+        distribute_module(
+            module,
+            device_mesh,
+            self._prepare_input_fn,
+            self._prepare_output_fn,
+        )
+
+class GroupedGemmParallel(TensorParallelLayer):
+    """Expert Parallelism: each rank loads a subset of experts."""
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    def shard_tensor(self, param, param_type=None, param_casting_dtype=None, to_contiguous=None,
+                     rank=None, device_mesh=None, tensor_idx=None):
+        empty_param = self.empty_param
+        ep_rank = self.rank
+        device_mesh = self.device_mesh
+
+        global_num_experts = empty_param.shape[0]
+        if global_num_experts % device_mesh.size() != 0:
+            raise ValueError(
+                f"Global number of experts must be divisible by number of devices: {global_num_experts} % {device_mesh.size()} != 0"
+            )
+        local_num_experts = global_num_experts // device_mesh.size()
+        parameter = param[ep_rank * local_num_experts : (ep_rank + 1) * local_num_experts].to(param_casting_dtype)
+        return parameter, None
+
+class RouterParallel(TensorParallelLayer):
+    """Router parallel for Expert Parallelism - reshapes router outputs for EP."""
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    @staticmethod
+    def _prepare_input_fn(mod, inputs, device_mesh):
+        return inputs[0] if inputs else inputs
+
+    @staticmethod
+    def _prepare_output_fn(mod, outputs, device_mesh):
+        ep_rank, ep_size = device_mesh.get_local_rank(), device_mesh.size()
+        if mod.num_experts % ep_size != 0:
+            raise ValueError(
+                f"The number of experts must be divisible by number of ep_size: {mod.num_experts} % {ep_size} != 0"
+            )
+        num_local_experts = mod.num_experts // ep_size
+        router_logits, router_scores, router_indices = outputs
+        router_scores = torch.zeros_like(router_logits).scatter_(1, router_indices, router_scores)
+        router_scores = router_scores[:, ep_rank * num_local_experts : (ep_rank + 1) * num_local_experts]
+        router_indices = router_indices.masked_fill((router_indices // num_local_experts) != ep_rank, -1)
+        if num_local_experts > 1:
+            router_indices = torch.fmod(router_indices, num_local_experts)
+        else:
+            router_indices = router_indices.masked_fill(router_indices > 0, 0).masked_fill(router_indices < 0, -1)
+        router_indices = router_indices.masked_fill(router_indices == -1, num_local_experts)
+        return router_logits, router_scores, router_indices
+
+    def shard_tensor(self, param, param_type=None, param_casting_dtype=None, to_contiguous=None,
+                     rank=None, device_mesh=None, tensor_idx=None):
+        parameter = param[...].to(param_casting_dtype)
+        return parameter, None
+
+    def prepare_module_tp(self, module: nn.Module, device_mesh) -> nn.Module:
+        distribute_module(
+            module,
+            device_mesh,
+            self._prepare_input_fn,
+            self._prepare_output_fn,
+        )
 
 class ParallelInterface(GeneralInterface):
     _global_mapping = (
@@ -1265,9 +1170,11 @@ def shard_and_distribute_module(
             tp_layer.empty_param = empty_param
             tp_layer.device_mesh = device_mesh
             tp_layer.rank = rank
-            param = tp_layer.partition_tensor(
-                param, empty_param, param_type, param_casting_dtype, is_contiguous, rank, device_mesh
+            param, _ = tp_layer.shard_tensor(
+                param, param_type=param_type, param_casting_dtype=param_casting_dtype, tensor_idx=None
             )
+            if is_contiguous:
+                param = param.contiguous()
         except NotImplementedError as e:
             print(
                 f"Trying to prepare {parameter_name}, but it's not supported. Corresponding module: {module_to_tp} Fix it's TP plan, current layer: {tp_layer} : {e}"
