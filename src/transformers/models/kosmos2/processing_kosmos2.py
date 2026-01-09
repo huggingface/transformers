@@ -33,7 +33,7 @@ BboxInput = (
 )
 
 
-NestedList = list[int | None | list[int | None]]
+NestedList = list[tuple | None | list[tuple | None | list[tuple | None | list[tuple | None]]]]
 
 
 class Kosmos2ImagesKwargs(ImagesKwargs, total=False):
