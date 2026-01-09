@@ -14,7 +14,6 @@
 """Processor class for Pop2Piano."""
 
 import os
-from typing import Optional, Union
 
 import numpy as np
 
@@ -34,18 +33,18 @@ class Pop2PianoProcessor(ProcessorMixin):
     @auto_docstring
     def __call__(
         self,
-        audio: Union[np.ndarray, list[float], list[np.ndarray]] = None,
-        sampling_rate: Optional[Union[int, list[int]]] = None,
+        audio: np.ndarray | list[float] | list[np.ndarray] = None,
+        sampling_rate: int | list[int] | None = None,
         steps_per_beat: int = 2,
-        resample: Optional[bool] = True,
-        notes: Union[list, TensorType] = None,
-        padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = None,
-        max_length: Optional[int] = None,
-        pad_to_multiple_of: Optional[int] = None,
+        resample: bool | None = True,
+        notes: list | TensorType = None,
+        padding: bool | str | PaddingStrategy = False,
+        truncation: bool | str | TruncationStrategy = None,
+        max_length: int | None = None,
+        pad_to_multiple_of: int | None = None,
         verbose: bool = True,
         **kwargs,
-    ) -> Union[BatchFeature, BatchEncoding]:
+    ) -> BatchFeature | BatchEncoding:
         # Since Feature Extractor needs both audio and sampling_rate and tokenizer needs both token_ids and
         # feature_extractor_output, we must check for both.
         r"""
