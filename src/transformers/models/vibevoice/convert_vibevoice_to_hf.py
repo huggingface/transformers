@@ -31,7 +31,6 @@ from transformers import (
     VibeVoiceForConditionalGeneration,
     VibeVoiceProcessor,
     VibeVoiceSemanticTokenizerConfig,
-    VibeVoiceSemanticTokenizerModel,
 )
 
 
@@ -46,11 +45,27 @@ def update_state_dict_for_hf_model(state_dict):
 
         # Handle semantic tokenizer transformations
         if "semantic_tokenizer" in key:
-            if "downsample_layers." in key and ".0.conv." in key:
-                new_key = new_key.replace(".0.conv.", ".conv.")
+            if "downsample_layers.0.0.conv." in key:
+                new_key = new_key.replace("downsample_layers.0.0.conv.", "stem.conv.conv.")
+            elif "stages.0." in key:
+                new_key = new_key.replace("stages.0.", "stem.stage.")
+            elif "downsample_layers." in key and not "downsample_layers.0" in key:
+                match = re.search(r'downsample_layers\.(\d+)', key)
+                if match:
+                    old_idx = int(match.group(1))
+                    new_idx = old_idx - 1  # Shift down by 1 since downsample_layers[0] became stem
+                    new_key = re.sub(r'downsample_layers\.\d+\.0\.conv\.', f'layers.{new_idx}.conv.conv.', new_key)
+            elif "stages." in key and not "stages.0." in key:
+                match = re.search(r'stages\.(\d+)', key)
+                if match:
+                    old_idx = int(match.group(1))
+                    new_idx = old_idx - 1  # Shift down by 1 since stages[0] became stem
+                    new_key = re.sub(r'stages\.\d+\.', f'layers.{new_idx}.stage.', new_key)
             if "mixer.conv.conv.conv." in key:
                 new_key = new_key.replace("mixer.conv.conv.conv.", "mixer.conv.")
-            elif ".conv.conv." in key:
+            if ".conv.conv.conv." in new_key:
+                new_key = new_key.replace(".conv.conv.conv.", ".conv.conv.")
+            elif ".conv.conv." in key and "stem.conv.conv" not in new_key and "layers." not in new_key:
                 new_key = new_key.replace(".conv.conv.", ".conv.")
 
         # Handle acoustic tokenizer transformations
