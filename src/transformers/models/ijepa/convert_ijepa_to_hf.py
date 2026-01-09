@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,7 +21,6 @@ import gc
 import re
 from io import BytesIO
 from pathlib import Path
-from typing import Optional
 
 import torch
 from huggingface_hub import get_session
@@ -67,7 +65,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
 # fmt: on
 
 
-def convert_old_keys_to_new_keys(state_dict_keys: Optional[dict] = None):
+def convert_old_keys_to_new_keys(state_dict_keys: dict | None = None):
     """
     Converts old keys to new keys using the mapping and dynamically removes the 'ijepa.' prefix if necessary.
 

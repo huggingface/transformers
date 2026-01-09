@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -415,6 +414,7 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
         "initializer_range",
         "init_std",
         "initializer_factor",
+        "tie_word_embeddings",
         "bos_index",
         "eos_index",
         "pad_index",

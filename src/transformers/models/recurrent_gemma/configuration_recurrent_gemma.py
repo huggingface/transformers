@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 Google Inc. HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """RecurrentGemma model configuration"""
-
-from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
@@ -102,27 +99,27 @@ class RecurrentGemmaConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        num_hidden_layers: Optional[int] = 26,
-        vocab_size: Optional[int] = 256000,
-        hidden_size: Optional[int] = 2560,
-        intermediate_size: Optional[int] = 3 * 2560,
-        num_attention_heads: Optional[int] = 10,
-        lru_width: Optional[int] = None,
-        attention_window_size: Optional[int] = 2048,
-        conv1d_width: Optional[int] = 4,
-        logits_soft_cap: Optional[float] = 30.0,
-        rms_norm_eps: Optional[int] = 1e-6,
-        use_cache: Optional[bool] = True,
-        pad_token_id: Optional[int] = 0,
-        eos_token_id: Optional[int] = 1,
-        bos_token_id: Optional[int] = 2,
-        hidden_activation: Optional[str] = "gelu_pytorch_tanh",
-        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        block_types: Optional[list[str]] = ("recurrent", "recurrent", "attention"),
-        attention_dropout: Optional[float] = 0.0,
-        num_key_value_heads: Optional[int] = None,
-        attention_bias: Optional[str] = False,
-        w_init_variance_scale: Optional[float] = 0.01,
+        num_hidden_layers: int | None = 26,
+        vocab_size: int | None = 256000,
+        hidden_size: int | None = 2560,
+        intermediate_size: int | None = 3 * 2560,
+        num_attention_heads: int | None = 10,
+        lru_width: int | None = None,
+        attention_window_size: int | None = 2048,
+        conv1d_width: int | None = 4,
+        logits_soft_cap: float | None = 30.0,
+        rms_norm_eps: int | None = 1e-6,
+        use_cache: bool | None = True,
+        pad_token_id: int | None = 0,
+        eos_token_id: int | None = 1,
+        bos_token_id: int | None = 2,
+        hidden_activation: str | None = "gelu_pytorch_tanh",
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        block_types: list[str] | None = ("recurrent", "recurrent", "attention"),
+        attention_dropout: float | None = 0.0,
+        num_key_value_heads: int | None = None,
+        attention_bias: str | None = False,
+        w_init_variance_scale: float | None = 0.01,
         **kwargs,
     ):
         self.num_hidden_layers = num_hidden_layers

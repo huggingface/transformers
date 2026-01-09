@@ -19,7 +19,7 @@ import re
 import string
 import time
 from collections.abc import AsyncIterator
-from typing import Annotated, Any, Optional
+from typing import Annotated, Any
 from urllib.parse import urljoin, urlparse
 
 import httpx
@@ -207,7 +207,7 @@ class Chat:
         self,
         model_id: Annotated[str, typer.Argument(help="ID of the model to use (e.g. 'HuggingFaceTB/SmolLM3-3B').")],
         base_url: Annotated[
-            Optional[str], typer.Argument(help="Base url to connect to (e.g. http://localhost:8000/v1).")
+            str | None, typer.Argument(help="Base url to connect to (e.g. http://localhost:8000/v1).")
         ] = f"http://{DEFAULT_HTTP_ENDPOINT['hostname']}:{DEFAULT_HTTP_ENDPOINT['port']}",
         generate_flags: Annotated[
             list[str] | None,
@@ -375,7 +375,7 @@ class Chat:
         config = self.config
 
         async with AsyncInferenceClient(base_url=self.base_url) as client:
-            pending_user_input: Optional[str] = None
+            pending_user_input: str | None = None
             while True:
                 try:
                     if pending_user_input is not None:

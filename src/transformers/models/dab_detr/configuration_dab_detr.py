@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -255,8 +254,8 @@ class DabDetrConfig(PreTrainedConfig):
         self.temperature_height = temperature_height
         self.sine_position_embedding_scale = sine_position_embedding_scale
         self.initializer_bias_prior_prob = initializer_bias_prior_prob
+
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
-        self.tie_encoder_decoder = True  # weights have to be tied for this model
 
 
 __all__ = ["DabDetrConfig"]

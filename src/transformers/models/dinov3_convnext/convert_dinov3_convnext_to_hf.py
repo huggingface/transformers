@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -109,7 +108,7 @@ def get_image_processor(resize_size: int = 224):
     )
 
 
-def convert_old_keys_to_new_keys(state_dict_keys: Optional[dict] = None):
+def convert_old_keys_to_new_keys(state_dict_keys: dict | None = None):
     """
     This function should be applied only once, on the concatenated keys to efficiently rename using
     the key mappings.

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,22 +16,11 @@ Image/Text processor class for CLIP
 """
 
 from ...processing_utils import ProcessorMixin
+from ...utils import auto_docstring
 
 
+@auto_docstring
 class CLIPProcessor(ProcessorMixin):
-    r"""
-    Constructs a CLIP processor which wraps a CLIP image processor and a CLIP tokenizer into a single processor.
-
-    [`CLIPProcessor`] offers all the functionalities of [`CLIPImageProcessor`] and [`CLIPTokenizerFast`]. See the
-    [`~CLIPProcessor.__call__`] and [`~CLIPProcessor.decode`] for more information.
-
-    Args:
-        image_processor ([`CLIPImageProcessor`], *optional*):
-            The image processor is a required input.
-        tokenizer ([`AutoTokenizer`], *optional*):
-            The tokenizer is a required input.
-    """
-
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
         super().__init__(image_processor, tokenizer)
 
