@@ -177,7 +177,7 @@ class CacheIntegrationTest(unittest.TestCase):
         """
         _skip_on_failed_cache_prerequisites(self, cache_implementation)
         if cache_implementation == "offloaded_hybrid_chunked":
-            # TODO (joao, cyril): something is off with `offloaded_hybrid_chunked` aka `OffloadedHybridCache`: the
+            # TODO (joao, cyril): something is off with `offloaded_hybrid_chunked`: the
             # output sequence (and the corresponding beam scores, if we add `output_scores=True`) are significantly
             # different from the other caches.
             self.skipTest("`offloaded_hybrid_chunked` fails this test")
