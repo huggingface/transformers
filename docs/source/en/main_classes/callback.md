@@ -32,7 +32,8 @@ By default, `TrainingArguments.report_to` is set to `"all"`, so a [`Trainer`] wi
   it's the second one).
 - [`~integrations.TensorBoardCallback`] if tensorboard is accessible (either through PyTorch >= 1.4
   or tensorboardX).
-- [`~integrations.TrackioCallback`] if [trackio](https://github.com/gradio-app/trackio) is installed.
+- [`~integrations.TrackioCallback`] if [trackio](https://github.com/gradio-app/trackio) (>=0.14.0) is installed. GPU
+  system metrics require `trackio[gpu]`.
 - [`~integrations.WandbCallback`] if [wandb](https://www.wandb.com/) is installed.
 - [`~integrations.CometCallback`] if [comet_ml](https://www.comet.com/site/) is installed.
 - [`~integrations.MLflowCallback`] if [mlflow](https://www.mlflow.org/) is installed.
