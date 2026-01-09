@@ -46,17 +46,16 @@ class GraniteFlashAttentionKwargs(TypedDict, total=False):
     Keyword arguments for advanced Flash Attention, causal-conv1d, and mamba_ssm kernel usage.
     Use cases include padding-free training and fewer `torch.compile` graph breaks.
 
-    Attributes:
-        cu_seq_lens_q (`torch.LongTensor`)
-            Gets cumulative sequence length for query state.
-        cu_seq_lens_k (`torch.LongTensor`)
-            Gets cumulative sequence length for key state.
-        max_length_q (`int`):
-            Maximum sequence length for query state.
-        max_length_k (`int`):
-            Maximum sequence length for key state.
-        seq_idx (`torch.IntTensor):
-            Index of each packed sequence.
+    cu_seq_lens_q (`torch.LongTensor`):
+        Gets cumulative sequence length for query state.
+    cu_seq_lens_k (`torch.LongTensor`):
+        Gets cumulative sequence length for key state.
+    max_length_q (`int`):
+        Maximum sequence length for query state.
+    max_length_k (`int`):
+        Maximum sequence length for key state.
+    seq_idx (`torch.IntTensor):
+        Index of each packed sequence.
     """
 
     cu_seq_lens_q: torch.LongTensor

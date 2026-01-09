@@ -260,6 +260,7 @@ print(processor.tokenizer.decode(generated[0], skip_special_tokens=True))
 ## AyaVisionProcessor
 
 [[autodoc]] AyaVisionProcessor
+    - __call__
 
 ## AyaVisionConfig
 
