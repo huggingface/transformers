@@ -5,7 +5,7 @@
 #                          modular_conditional_detr.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 import pathlib
-from typing import Any, Optional, Union
+from typing import Any, Optional
 
 import torch
 from torch import nn
@@ -88,7 +88,7 @@ def prepare_coco_detection_annotation(
     image,
     target,
     return_segmentation_masks: bool = False,
-    input_data_format: Optional[Union[ChannelDimension, str]] = None,
+    input_data_format: ChannelDimension | str | None = None,
 ):
     """
     Convert the target in COCO format into the format expected by CONDITIONAL_DETR.
@@ -199,9 +199,9 @@ def rgb_to_id(color):
 def prepare_coco_panoptic_annotation(
     image: torch.Tensor,
     target: dict,
-    masks_path: Union[str, pathlib.Path],
+    masks_path: str | pathlib.Path,
     return_masks: bool = True,
-    input_data_format: Union[ChannelDimension, str] = None,
+    input_data_format: ChannelDimension | str = None,
 ) -> dict:
     """
     Prepare a coco panoptic annotation for CONDITIONAL_DETR.
@@ -281,10 +281,10 @@ class ConditionalDetrImageProcessorFast(BaseImageProcessorFast):
         self,
         image: torch.Tensor,
         target: dict,
-        format: Optional[AnnotationFormat] = None,
-        return_segmentation_masks: Optional[bool] = None,
-        masks_path: Optional[Union[str, pathlib.Path]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        format: AnnotationFormat | None = None,
+        return_segmentation_masks: bool | None = None,
+        masks_path: str | pathlib.Path | None = None,
+        input_data_format: str | ChannelDimension | None = None,
     ) -> dict:
         """
         Prepare an annotation for feeding into CONDITIONAL_DETR model.
@@ -470,7 +470,7 @@ class ConditionalDetrImageProcessorFast(BaseImageProcessorFast):
         self,
         image: torch.Tensor,
         padded_size: tuple[int, int],
-        annotation: Optional[dict[str, Any]] = None,
+        annotation: dict[str, Any] | None = None,
         update_bboxes: bool = True,
         fill: int = 0,
     ):
@@ -499,8 +499,8 @@ class ConditionalDetrImageProcessorFast(BaseImageProcessorFast):
     def _preprocess(
         self,
         images: list["torch.Tensor"],
-        annotations: Optional[Union[AnnotationType, list[AnnotationType]]],
-        masks_path: Optional[Union[str, pathlib.Path]],
+        annotations: AnnotationType | list[AnnotationType] | None,
+        masks_path: str | pathlib.Path | None,
         return_segmentation_masks: bool,
         do_resize: bool,
         size: SizeDict,
@@ -509,12 +509,12 @@ class ConditionalDetrImageProcessorFast(BaseImageProcessorFast):
         rescale_factor: float,
         do_normalize: bool,
         do_convert_annotations: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
         do_pad: bool,
-        pad_size: Optional[SizeDict],
-        format: Optional[Union[str, AnnotationFormat]],
-        return_tensors: Optional[Union[str, TensorType]],
+        pad_size: SizeDict | None,
+        format: str | AnnotationFormat | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -671,7 +671,7 @@ class ConditionalDetrImageProcessorFast(BaseImageProcessorFast):
 
         return results
 
-    def post_process_semantic_segmentation(self, outputs, target_sizes: Optional[list[tuple[int, int]]] = None):
+    def post_process_semantic_segmentation(self, outputs, target_sizes: list[tuple[int, int]] | None = None):
         """
         Converts the output of [`ConditionalDetrForSegmentation`] into semantic segmentation maps. Only supports PyTorch.
 
@@ -724,8 +724,8 @@ class ConditionalDetrImageProcessorFast(BaseImageProcessorFast):
         threshold: float = 0.5,
         mask_threshold: float = 0.5,
         overlap_mask_area_threshold: float = 0.8,
-        target_sizes: Optional[list[tuple[int, int]]] = None,
-        return_coco_annotation: Optional[bool] = False,
+        target_sizes: list[tuple[int, int]] | None = None,
+        return_coco_annotation: bool | None = False,
     ) -> list[dict]:
         """
         Converts the output of [`ConditionalDetrForSegmentation`] into instance segmentation predictions. Only supports PyTorch.
@@ -807,8 +807,8 @@ class ConditionalDetrImageProcessorFast(BaseImageProcessorFast):
         threshold: float = 0.5,
         mask_threshold: float = 0.5,
         overlap_mask_area_threshold: float = 0.8,
-        label_ids_to_fuse: Optional[set[int]] = None,
-        target_sizes: Optional[list[tuple[int, int]]] = None,
+        label_ids_to_fuse: set[int] | None = None,
+        target_sizes: list[tuple[int, int]] | None = None,
     ) -> list[dict]:
         """
         Converts the output of [`ConditionalDetrForSegmentation`] into image panoptic segmentation predictions. Only supports
