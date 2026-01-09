@@ -818,6 +818,10 @@ class ChameleonVQVAE(ChameleonPreTrainedModel):
         "ChameleonVQVAEEncoderAttnBlock",
         "ChameleonVQVAEEncoderResnetBlock",
     ]
+    _can_record_outputs = {
+        "hidden_states": ChameleonVQVAEEncoderResnetBlock,
+        "attentions": ChameleonAttention,
+    }
 
     def __init__(self, config: ChameleonVQVAEConfig):
         super().__init__(config)

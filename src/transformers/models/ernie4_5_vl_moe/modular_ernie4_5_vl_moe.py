@@ -81,6 +81,7 @@ from ..qwen2_5_vl.modeling_qwen2_5_vl import (
     Qwen2_5_VisionRotaryEmbedding,
     Qwen2_5_VLModel,
     Qwen2_5_VLPreTrainedModel,
+    Qwen2_5_VLVisionAttention,
     Qwen2_5_VLVisionBlock,
 )
 from ..qwen2_vl.configuration_qwen2_vl import Qwen2VLVisionConfig
@@ -526,6 +527,10 @@ class Ernie4_5_VL_MoeTextAttention(Ernie4_5_MoeAttention):
     pass
 
 
+class Ernie4_5_VL_MoeVisionAttention(Qwen2_5_VLVisionAttention):
+    pass
+
+
 class Ernie4_5_VL_MoeRMSNorm(Ernie4_5_MoeRMSNorm):
     pass
 
@@ -691,13 +696,26 @@ class Ernie4_5_VL_MoeDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
+class Ernie4_5_VL_MoeVisionBlock(Qwen2_5_VLVisionBlock):
+    def __init__(self, config) -> None:
+        super().__init__(config, None)
+
+        self.norm1 = nn.LayerNorm(config.hidden_size, config.rms_norm_eps)
+        self.norm2 = nn.LayerNorm(config.hidden_size, config.rms_norm_eps)
+        self.mlp = Ernie4_5VLVisionMLP(
+            dim=config.hidden_size,
+            hidden_dim=config.intermediate_size,
+            hidden_act=config.hidden_act,
+        )
+
+
 class Ernie4_5_VL_MoePreTrainedModel(Qwen2_5_VLPreTrainedModel):
     _can_compile_fullgraph = False
 
     _can_record_outputs = {
         "router_logits": OutputRecorder(Ernie4_5_VL_MoeMoeBlock, index=1),
-        "hidden_states": Ernie4_5_VL_MoeDecoderLayer,
-        "attentions": Ernie4_5_VL_MoeTextAttention,
+        "hidden_states": [Ernie4_5_VL_MoeDecoderLayer, Ernie4_5_VL_MoeVisionBlock],
+        "attentions": [Ernie4_5_VL_MoeTextAttention, Ernie4_5_VL_MoeVisionAttention],
     }
     _keep_in_fp32_modules_strict = ["gate.weight", "moe_statics"]
 
@@ -831,19 +849,6 @@ class Ernie4_5_VL_MoePatchEmbed(Qwen2_5_VisionPatchEmbed):
 
 class Ernie4_5_VL_MoeVisionRotaryEmbedding(Qwen2_5_VisionRotaryEmbedding):
     pass
-
-
-class Ernie4_5_VL_MoeVisionBlock(Qwen2_5_VLVisionBlock):
-    def __init__(self, config) -> None:
-        super().__init__(config, None)
-
-        self.norm1 = nn.LayerNorm(config.hidden_size, config.rms_norm_eps)
-        self.norm2 = nn.LayerNorm(config.hidden_size, config.rms_norm_eps)
-        self.mlp = Ernie4_5VLVisionMLP(
-            dim=config.hidden_size,
-            hidden_dim=config.intermediate_size,
-            hidden_act=config.hidden_act,
-        )
 
 
 class Ernie4_5_VL_MoeVisionTransformerPretrainedModel(Qwen2VisionTransformerPretrainedModel):

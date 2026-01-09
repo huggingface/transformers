@@ -240,7 +240,7 @@ class Florence2ForConditionalGenerationModelTest(
         else {}
     )
 
-    test_attention_outputs = False
+    has_attentions = False
     _is_composite = True
 
     def setUp(self):

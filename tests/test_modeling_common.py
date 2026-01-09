@@ -4633,7 +4633,8 @@ class ModelTesterMixin:
             model = model.to(torch_device)
 
             torch.manual_seed(0)
-            outputs = model.get_text_features(**inputs_dict)
+            with torch.no_grad():
+                outputs = model.get_text_features(**inputs_dict)
             self.assertTrue(isinstance(outputs, ModelOutput), "get_text_features() must return a BaseModelOutput")
             self.assertTrue(
                 hasattr(outputs, "last_hidden_state"),
@@ -4706,6 +4707,21 @@ class ModelTesterMixin:
                 }
             return config, inputs_dict
 
+        def get_expected_num_layers(model_tester):
+            if hasattr(model_tester, "vision_model_tester"):
+                return get_expected_num_layers(model_tester.vision_model_tester)
+            elif (
+                hasattr(model_tester, "vision_config")
+                and isinstance(model_tester.vision_config, dict)
+                and "num_hidden_layers" in model_tester.vision_config
+            ):
+                return model_tester.vision_config["num_hidden_layers"]
+
+            if hasattr(model_tester, "expected_num_hidden_layers"):
+                return model_tester.expected_num_hidden_layers - 1
+            elif hasattr(model_tester, "num_hidden_layers"):
+                return model_tester.num_hidden_layers
+
         def check_hidden_states_output(inputs_dict, config, model_class):
             model = model_class(copy.deepcopy(config))
             model.to(torch_device)
@@ -4715,11 +4731,7 @@ class ModelTesterMixin:
                 outputs = model.get_image_features(**inputs_dict)
             # hidden_states = outputs.encoder_hidden_states if config.is_encoder_decoder else outputs.hidden_states
             hidden_states = outputs.hidden_states
-            # breakpoint()
-            if hasattr(self.model_tester, "vision_model_tester"):
-                expected_num_layers = self.model_tester.vision_model_tester.num_hidden_layers + 1
-            else:
-                expected_num_layers = self.model_tester.num_hidden_layers + 1
+            expected_num_layers = get_expected_num_layers(self.model_tester) + 1
             self.assertIsNotNone(hidden_states, "hidden_states should not be None")
             self.assertEqual(len(hidden_states), expected_num_layers, "Number of hidden states layers mismatch")
 
@@ -4732,10 +4744,7 @@ class ModelTesterMixin:
                 outputs = model.get_image_features(**inputs_dict)
             attentions = outputs.attentions
             # model.text_model(**inputs_dict) also no attentions for aimv2
-            if hasattr(self.model_tester, "vision_model_tester"):
-                expected_num_layers = self.model_tester.vision_model_tester.num_hidden_layers
-            else:
-                expected_num_layers = self.model_tester.num_hidden_layers
+            expected_num_layers = get_expected_num_layers(self.model_tester)
             self.assertIsNotNone(attentions, "attentions should not be None")
             self.assertEqual(len(attentions), expected_num_layers, "Number of attention layers mismatch")
 
@@ -4749,7 +4758,8 @@ class ModelTesterMixin:
             model = model.to(torch_device)
 
             torch.manual_seed(0)
-            outputs = model.get_image_features(**inputs_dict)
+            with torch.no_grad():
+                outputs = model.get_image_features(**inputs_dict)
             self.assertTrue(isinstance(outputs, ModelOutput), "get_image_features() must return a BaseModelOutput")
             self.assertTrue(
                 hasattr(outputs, "last_hidden_state"),

@@ -952,6 +952,10 @@ class Emu3VQVAE(PreTrainedModel):
         "Emu3VQVAEResnetBlock",
         "Emu3VQVAEVectorQuantizer",
     ]
+    _can_record_outputs = {
+        "hidden_states": Emu3VQVAETemporalResnetBlock,
+        "attentions": Emu3VQVAEAttentionBlock,
+    }
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -1408,7 +1412,7 @@ class Emu3Model(Emu3PreTrainedModel):
             pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
                 The tensors corresponding to the input images.
         """
-        vqmodel_outputs: Emu3VQVAEModelOutput = self.vqmodel.encode(pixel_values, image_sizes, return_dict=True)
+        vqmodel_outputs: Emu3VQVAEModelOutput = self.vqmodel.encode(pixel_values, image_sizes, **kwargs)
         split_sizes = [
             (height // self.vqmodel.vision_spatial_factor) * (width // self.vqmodel.vision_spatial_factor + 1)
             for height, width in image_sizes
