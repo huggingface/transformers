@@ -533,7 +533,7 @@ class SolarOpenModel(SolarOpenPreTrainedModel):
 
 @auto_docstring
 class SolarOpenForCausalLM(SolarOpenPreTrainedModel, GenerationMixin):
-    # _tied_weights_keys = {} # main
+    # _tied_weights_keys = {} # head
     _tied_weights_keys = []  # 4.57.3
     _tp_plan = {"lm_head": "colwise_rep"}
     _pp_plan = {"lm_head": (["hidden_states"], ["logits"])}

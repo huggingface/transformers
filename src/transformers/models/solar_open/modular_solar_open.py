@@ -95,8 +95,6 @@ class SolarOpenConfig(PretrainedConfig):
             Number of groups for routed experts.
         topk_group (`int`, *optional*, defaults to 1):
             Number of selected groups for each token.
-        first_k_dense_replace (`int`, *optional*, defaults to 0):
-            Number of dense layers in shallow layers.
         norm_topk_prob (`bool`, *optional*, defaults to `True`):
             Whether to normalize the topk probabilities.
         use_qk_norm (`bool`, *optional*, defaults to `False`):
@@ -122,7 +120,14 @@ class SolarOpenConfig(PretrainedConfig):
         use_cache: bool = True,
         tie_word_embeddings: bool = False,
         rope_theta: float = 1000000.0,
-        rope_parameters: Optional[RopeParameters] = {
+        # head
+        # rope_parameters: Optional[RopeParameters] = {
+        #     "rope_type": "yarn",
+        #     "factor": 2.0,
+        #     "original_max_position_embeddings": 65536,
+        # },
+        # 4.57.3
+        rope_scaling={
             "rope_type": "yarn",
             "factor": 2.0,
             "original_max_position_embeddings": 65536,
@@ -136,7 +141,6 @@ class SolarOpenConfig(PretrainedConfig):
         routed_scaling_factor: float = 1.0,
         n_group: int = 1,
         topk_group: int = 1,
-        first_k_dense_replace: int = 0,
         norm_topk_prob: bool = True,
         use_qk_norm: bool = False,
         **kwargs,
@@ -154,7 +158,8 @@ class SolarOpenConfig(PretrainedConfig):
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
         self.rope_theta = rope_theta
-        self.rope_parameters = rope_parameters
+        self.rope_scaling = rope_scaling # 4.57.3
+        # self.rope_parameters = rope_parameters # head
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
 
@@ -174,7 +179,6 @@ class SolarOpenConfig(PretrainedConfig):
         self.n_shared_experts = n_shared_experts
         self.n_routed_experts = n_routed_experts
         self.routed_scaling_factor = routed_scaling_factor
-        self.first_k_dense_replace = first_k_dense_replace
         self.norm_topk_prob = norm_topk_prob
         self.use_qk_norm = use_qk_norm
 
@@ -219,7 +223,7 @@ class SolarOpenModel(Glm4MoeModel):
 
 
 class SolarOpenForCausalLM(Glm4MoeForCausalLM):
-    # _tied_weights_keys = {} # main
+    # _tied_weights_keys = {} # head
     _tied_weights_keys = [] # 4.57.3
     pass
 
