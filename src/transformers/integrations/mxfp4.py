@@ -125,7 +125,7 @@ class Mxfp4Dequantize(ConversionOps):
         input_dict: dict[str, torch.Tensor],
         model: torch.nn.Module | None = None,
         full_layer_name: str | None = None,
-        missing_keys=None,
+        missing_keys: list[str] | None = None,
         **kwargs,
     ) -> dict[str, torch.Tensor]:
         param_data = {}
@@ -203,9 +203,9 @@ class Mxfp4ReverseDeserialize(ConversionOps):
     def convert(
         self,
         input_dict: dict[str, torch.Tensor],
-        model: Optional[torch.nn.Module] = None,
+        model: torch.nn.Module | None = None,
         full_layer_name: str | None = None,
-        missing_keys: Optional[list[str]] = None,
+        missing_keys: list[str] | None = None,
         **kwargs,
     ) -> dict[str, torch.Tensor]:
         num_local_experts = getattr(model.config, "num_local_experts", 32)
