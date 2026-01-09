@@ -815,12 +815,18 @@ class ColwiseParallel(TensorParallelLayer):
 class RowwiseParallel(TensorParallelLayer):
     """
     Row-wise parallel: weight is sharded on dim -1 (input features).
-    Forward: input sharded on last dim -> output partial -> all-reduce to replicate.
+    Forward: input (optionally split) -> output partial -> all-reduce to replicate.
+
+    Args:
+        split_input: If True, splits replicated input before matmul. Use when input
+                     comes from a non-parallelizable operation (chunk/slice).
+                     Default False (expects pre-sharded input from colwise layer).
     """
 
-    def __init__(self, use_local_output: bool = True, **kwargs):
+    def __init__(self, use_local_output: bool = True, split_input: bool = False, **kwargs):
         super().__init__(**kwargs)
         self.use_local_output = use_local_output
+        self.split_input = split_input
 
     def _prepare_input_fn(self, mod, inputs, device_mesh):
         if hasattr(mod, "bias") and mod.bias is not None:
@@ -828,6 +834,10 @@ class RowwiseParallel(TensorParallelLayer):
             mod.bias = None
 
         input_tensor = inputs[0] if inputs else inputs
+
+        if self.split_input:
+            # Input is replicated, split it to match sharded weight
+            return split(input_tensor, device_mesh)
         return input_tensor
 
     def _prepare_output_fn(self, mod, outputs, device_mesh):
@@ -1026,6 +1036,7 @@ class ParallelInterface(GeneralInterface):
             "colwise_gather_output": ColwiseParallel(gather_output=True),
             "colwise": ColwiseParallel(),
             "rowwise": RowwiseParallel(),
+            "rowwise_split_input": RowwiseParallel(split_input=True),
             "sequence_parallel": SequenceParallel(),
             "grouped_gemm": GroupedGemmParallel(),
             "ep_router": RouterParallel(),
@@ -1096,8 +1107,8 @@ def gather_state_dict_for_save(
         "colwise": -2,
         "colwise_gather_output": -2,
         "rowwise": -1,
+        "rowwise_split_input": -1,
         "embedding_rowwise": 0,
-        "local_packed_rowwise": -2,
         "sequence_parallel": None,
     }
 
@@ -1106,8 +1117,8 @@ def gather_state_dict_for_save(
         "colwise": -1,
         "colwise_gather_output": -1,
         "rowwise": None,
+        "rowwise_split_input": None,
         "embedding_rowwise": None,
-        "local_packed_rowwise": -1,
         "sequence_parallel": None,
     }
 
