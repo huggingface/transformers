@@ -15,15 +15,15 @@
 
 import unittest
 
-from transformers.models.parakeet import ParakeetTokenizerFast
+from transformers.models.parakeet import ParakeetTokenizer
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
 
 class ParakeetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     slow_tokenizer_class = None
-    rust_tokenizer_class = ParakeetTokenizerFast
-    tokenizer_class = ParakeetTokenizerFast
+    rust_tokenizer_class = ParakeetTokenizer
+    tokenizer_class = ParakeetTokenizer
     test_slow_tokenizer = False
     test_rust_tokenizer = True
     from_pretrained_id = "nvidia/parakeet-ctc-1.1b"
@@ -31,15 +31,13 @@ class ParakeetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         super().setUpClass()
-        tokenizer = ParakeetTokenizerFast.from_pretrained("nvidia/parakeet-ctc-1.1b")
+        tokenizer = ParakeetTokenizer.from_pretrained("nvidia/parakeet-ctc-1.1b")
         tokenizer.save_pretrained(cls.tmpdirname)
 
-    @unittest.skip(
-        reason="This test does not apply to ParakeetTokenizerFast. More details in the test docstring itself."
-    )
+    @unittest.skip(reason="This test does not apply to ParakeetTokenizer. More details in the test docstring itself.")
     def test_added_tokens_do_lower_case(self):
         """
-        Precompiled normalization from sentencepiece is `nmt_nfkc_cf` that includes lowercasing. Yet, ParakeetTokenizerFast does not have a do_lower_case attribute.
+        Precompiled normalization from sentencepiece is `nmt_nfkc_cf` that includes lowercasing. Yet, ParakeetTokenizer does not have a do_lower_case attribute.
         This result in the test failing.
         """
         pass
@@ -48,6 +46,6 @@ class ParakeetTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     def test_encode_decode_with_spaces(self):
         return
 
-    @unittest.skip(reason="ParakeetTokenizerFast doesn't have tokenizer_file in its signature.")
+    @unittest.skip(reason="ParakeetTokenizer doesn't have tokenizer_file in its signature.")
     def test_rust_tokenizer_signature(self):
         pass

@@ -27,6 +27,7 @@ from ...test_modeling_common import (
     floats_tensor,
     ids_tensor,
     random_attention_mask,
+    require_torch_gpu,
 )
 
 
@@ -132,9 +133,7 @@ class PeVideoEncoderTester:
 @require_torch
 class PeVideoEncoderTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (PeVideoEncoder,)
-    test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
     _is_composite = True
 
     def setUp(self):
@@ -172,10 +171,6 @@ class PeVideoEncoderTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip("Cannot set `output_attentions` for timm models.")
     def test_retain_grad_hidden_states_attentions(self):
-        pass
-
-    @unittest.skip(reason="Timm Eva (PE) weights cannot be fully constructed in _init_weights")
-    def test_initialization(self):
         pass
 
     @unittest.skip(reason="PeVideoEncoder does not support feedforward chunking yet")
@@ -315,9 +310,7 @@ class PeVideoModelTest(ModelTesterMixin, unittest.TestCase):
     # TODO: add PipelineTesterMixin
     all_model_classes = (PeVideoModel,)
     additional_model_inputs = ["pixel_values_videos", "padding_mask_videos"]
-    test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
     has_attentions = False
     _is_composite = True
 
@@ -361,6 +354,10 @@ class PeVideoModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="@eustlb this is not really expected")
     def test_can_init_all_missing_weights(self):
         pass
+
+    @require_torch_gpu  # pe-video contains triton code which cannot run on CPU, so we only test on GPU
+    def test_all_tensors_are_parameter_or_buffer(self):
+        super().test_all_tensors_are_parameter_or_buffer()
 
 
 @require_torch

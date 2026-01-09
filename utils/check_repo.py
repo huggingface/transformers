@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,7 +21,7 @@ Utility that performs several consistency checks on the repo. This includes:
 - checking all the auto mapping are properly defined (no typos, importable)
 - checking the list of deprecated models is up to date
 
-Use from the root of the repo with (as used in `make repo-consistency`):
+Use from the root of the repo with (as used in `make check-repo`):
 
 ```bash
 python utils/check_repo.py
