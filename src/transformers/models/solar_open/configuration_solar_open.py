@@ -19,7 +19,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 from ...configuration_utils import PretrainedConfig
+from ...modeling_rope_utils import RopeParameters
 
 
 class SolarOpenConfig(PretrainedConfig):
@@ -38,16 +40,20 @@ class SolarOpenConfig(PretrainedConfig):
             Vocabulary size of the SolarOpen model.
         hidden_size (`int`, *optional*, defaults to 4096):
             Dimension of the hidden representations.
+        moe_intermediate_size (`int`, *optional*, defaults to 1280):
+            Intermediate size of the routed expert.
         num_hidden_layers (`int`, *optional*, defaults to 48):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 64):
             Number of attention heads for each attention layer.
-        head_dim (`int`, *optional*, defaults to 128):
-            Dimension of each attention head.
-        partial_rotary_factor (`float`, *optional*, defaults to 1.0):
-            The factor of the partial rotary position.
         num_key_value_heads (`int`, *optional*, defaults to 8):
             Number of key_value heads for Grouped Query Attention.
+        n_shared_experts (`int`, *optional*, defaults to 1):
+            Number of shared experts.
+        n_routed_experts (`int`, *optional*, defaults to 128):
+            Number of routed experts.
+        head_dim (`int`, *optional*, defaults to 128):
+            Dimension of each attention head.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function in the decoder.
         max_position_embeddings (`int`, *optional*, defaults to 131072):
@@ -60,22 +66,16 @@ class SolarOpenConfig(PretrainedConfig):
             Whether to return the last key/values attentions.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether the model's input and output word embeddings should be tied.
-        rope_theta (`float`, *optional*, defaults to 1000000.0):
-            The base period of the RoPE embeddings.
-        rope_scaling (`Dict`, *optional*):
-            Dictionary containing the scaling configuration for the RoPE embeddings.
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
         attention_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in the projection layers.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        moe_intermediate_size (`int`, *optional*, defaults to 1280):
-            Intermediate size of the routed expert.
         num_experts_per_tok (`int`, *optional*, defaults to 8):
             Number of experts per token.
-        n_shared_experts (`int`, *optional*, defaults to 1):
-            Number of shared experts.
-        n_routed_experts (`int`, *optional*, defaults to 128):
-            Number of routed experts.
         routed_scaling_factor (`float`, *optional*, defaults to 1.0):
             Scaling factor for routed experts.
         n_group (`int`, *optional*, defaults to 1):
@@ -91,40 +91,52 @@ class SolarOpenConfig(PretrainedConfig):
     model_type = "solar_open"
     keys_to_ignore_at_inference = ["past_key_values"]
 
+    # Default tensor parallel plan for base model `SolarOpenModel`
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.experts.gate_up_proj": "local_rowwise",
+        "layers.*.mlp.experts.down_proj": "local_rowwise",
+        "layers.*.mlp.experts": "gather",
+    }
+    base_model_pp_plan = {
+        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
+        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
+        "norm": (["hidden_states"], ["hidden_states"]),
+    }
+    attribute_map = {
+        "num_local_experts": "n_routed_experts",
+    }
+
     def __init__(
         self,
         vocab_size: int = 196608,
         hidden_size: int = 4096,
+        moe_intermediate_size: int = 1280,
         num_hidden_layers: int = 48,
         num_attention_heads: int = 64,
-        head_dim: int = 128,
-        partial_rotary_factor: float = 1.0,
         num_key_value_heads: int = 8,
+        n_shared_experts: int = 1,
+        n_routed_experts: int = 128,
+        head_dim: int = 128,
         hidden_act: str = "silu",
         max_position_embeddings: int = 131072,
         initializer_range: float = 0.02,
         rms_norm_eps: float = 1e-5,
         use_cache: bool = True,
         tie_word_embeddings: bool = False,
-        rope_theta: float = 1000000.0,
-        # head
-        # rope_parameters: Optional[RopeParameters] = {
-        #     "rope_type": "yarn",
-        #     "factor": 2.0,
-        #     "original_max_position_embeddings": 65536,
-        # },
-        # 4.57.3
-        rope_scaling={
+        rope_parameters: RopeParameters | None = {
+            "rope_theta": 1000000.0,
             "rope_type": "yarn",
+            "partial_rotary_factor": 1.0,
             "factor": 2.0,
             "original_max_position_embeddings": 65536,
         },
         attention_bias: bool = False,
         attention_dropout: float = 0.0,
-        moe_intermediate_size: int = 1280,
         num_experts_per_tok: int = 8,
-        n_shared_experts: int = 1,
-        n_routed_experts: int = 128,
         routed_scaling_factor: float = 1.0,
         n_group: int = 1,
         topk_group: int = 1,
@@ -133,29 +145,30 @@ class SolarOpenConfig(PretrainedConfig):
         **kwargs,
     ):
         self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
+        self.max_position_embeddings = max_position_embeddings
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.head_dim = head_dim
-        self.partial_rotary_factor = partial_rotary_factor
         self.num_key_value_heads = num_key_value_heads
+        self.head_dim = head_dim
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling  # 4.57.3
-        # self.rope_parameters = rope_parameters # head
+        self.rope_parameters = rope_parameters
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
 
-        # Validate the correctness of rotary position embeddings parameters
-        # BC: if there is a 'type' field, move it to 'rope_type'.
-        if self.rope_parameters is not None and "type" in self.rope_parameters:
-            self.rope_parameters["rope_type"] = self.rope_parameters["type"]
-        if self.rope_parameters is not None and "rope_theta" not in self.rope_parameters:
-            self.rope_parameters["rope_theta"] = self.rope_theta
+        # Backward compatibility: handle legacy rope-related parameter
+        if "rope_scaling" in kwargs:
+            self.rope_parameters = kwargs.pop("rope_scaling")
+        if self.rope_parameters is not None:
+            if "rope_type" not in self.rope_parameters and "type" in self.rope_parameters:
+                self.rope_parameters["rope_type"] = self.rope_parameters["type"]
+            if "rope_theta" not in self.rope_parameters and "rope_theta" in kwargs:
+                self.rope_parameters["rope_theta"] = kwargs.pop("rope_theta")
+            if "partial_rotary_factor" not in self.rope_parameters and "partial_rotary_factor" in kwargs:
+                self.rope_parameters["partial_rotary_factor"] = kwargs.pop("partial_rotary_factor")
         self.validate_rope()
 
         # MoE arguments
@@ -173,10 +186,6 @@ class SolarOpenConfig(PretrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
-
-    @property
-    def num_local_experts(self):
-        return self.n_routed_experts
 
 
 __all__ = ["SolarOpenConfig"]
