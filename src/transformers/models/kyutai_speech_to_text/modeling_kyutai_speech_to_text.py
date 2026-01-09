@@ -142,10 +142,6 @@ class KyutaiSpeechToTextConv1dPaddingCache:
             raise ValueError(
                 f"Expected `num_layers` ({num_layers}) values in `per_layer_padding`, `per_layer_padding_mode` and `per_layer_in_channels`"
             )
-        elif not all(mode in ["constant", "replicate"] for mode in per_layer_padding_mode):
-            raise NotImplementedError(
-                "`padding_cache` is not supported for convolutions using other than `constant` or `replicate` padding mode"
-            )
 
         self.per_layer_padding = per_layer_padding
         self.per_layer_padding_mode = per_layer_padding_mode
