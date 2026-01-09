@@ -13,6 +13,7 @@
 # limitations under the License.
 """PyTorch DETR model."""
 
+import contextlib
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -276,14 +277,23 @@ class DetrConvEncoder(nn.Module):
             num_channels = kwargs.pop("in_chans", config.num_channels)
             if config.dilation:
                 kwargs["output_stride"] = kwargs.get("output_stride", 16)
-            backbone = create_model(
-                config.backbone,
-                pretrained=config.use_pretrained_backbone,
-                features_only=True,
-                out_indices=out_indices,
-                in_chans=num_channels,
-                **kwargs,
+
+            # When loading pretrained weights, temporarily exit meta device to avoid warnings.
+            # If on meta device, create on CPU; otherwise use nullcontext (no-op).
+            is_meta = torch.empty(0).device.type == "meta"
+            device_ctx = (
+                torch.device("cpu") if (config.use_pretrained_backbone and is_meta) else contextlib.nullcontext()
             )
+
+            with device_ctx:
+                backbone = create_model(
+                    config.backbone,
+                    pretrained=config.use_pretrained_backbone,
+                    features_only=True,
+                    out_indices=out_indices,
+                    in_chans=num_channels,
+                    **kwargs,
+                )
         else:
             backbone = load_backbone(config)
 
@@ -748,14 +758,9 @@ class DetrPreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_attention_backend = True
     _supports_flex_attn = True
-    _checkpoint_conversion_mapping = {
-        "model.backbone.conv_encoder": "model.backbone",
-        "out_proj": "o_proj",
-        "bbox_attention.q_linear": "bbox_attention.q_proj",
-        "bbox_attention.k_linear": "bbox_attention.k_proj",
-        r"(\d+)\.fc1": r"\1.mlp.fc1",
-        r"(\d+)\.fc2": r"\1.mlp.fc2",
-    }
+    _keys_to_ignore_on_load_unexpected = [
+        r"detr\.model\.backbone\.model\.layer\d+\.0\.downsample\.1\.num_batches_tracked"
+    ]
 
     @torch.no_grad()
     def _init_weights(self, module):

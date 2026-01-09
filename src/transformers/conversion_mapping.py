@@ -163,6 +163,15 @@ def _build_checkpoint_conversion_mapping():
                 operations=[ErnieFuseAndSplitTextVisionExperts(stack_dim=0, concat_dim=1)],
             ),
         ],
+        "detr": [
+            WeightRenaming("model.backbone.conv_encoder", "model.backbone"),
+            WeightRenaming("out_proj", "o_proj"),
+            WeightRenaming("bbox_attention.q_linear", "bbox_attention.q_proj"),
+            WeightRenaming("bbox_attention.k_linear", "bbox_attention.k_proj"),
+            WeightRenaming(r"(\d+)\.fc1", r"\1.mlp.fc1"),
+            WeightRenaming(r"(\d+)\.fc2", r"\1.mlp.fc2"),
+            WeightRenaming(r"(\d+)\.fc1", r"\1.mlp.fc1"),
+        ],
         "jamba": [
             WeightConverter(
                 source_patterns=[
