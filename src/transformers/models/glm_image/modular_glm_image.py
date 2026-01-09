@@ -303,7 +303,9 @@ class GlmImageConfig(PreTrainedConfig):
         self.image_token_id = image_token_id
         self.image_start_token_id = image_start_token_id
         self.image_end_token_id = image_end_token_id
-
+        self.text_config = text_config
+        self.vision_config = vision_config
+        self.vq_config = vq_config
         super().__init__(**kwargs)
 
 
