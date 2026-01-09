@@ -1792,7 +1792,7 @@ class GenerationMixin(ContinuousMixin):
 
         # First set values from the loaded `self.generation_config`, then set default values (BC)
         #
-        # Only update values that are `None`, i.e. these values were not explicitly set by by users to `generate()`,
+        # Only update values that are `None`, i.e. these values were not explicitly set by users to `generate()`,
         # or values that are not present in the current config, i.e. custom entries that were set via `**kwargs`.
         # Thus we use the specific kwargs `defaults_only=True` (`None` values only) and `allow_custom_entries=True`
         # (custom entries are carried over).
