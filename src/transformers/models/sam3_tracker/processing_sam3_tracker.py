@@ -28,33 +28,29 @@ import torch
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
-from ...utils import TensorType
+from ...utils import TensorType, auto_docstring
 from ...utils.import_utils import requires
 
 
 @requires(backends=("torch",))
+@auto_docstring
 class Sam3TrackerProcessor(ProcessorMixin):
-    r"""
-    Constructs a SAM3_TRACKER processor which wraps a SAM3_TRACKER image processor and an 2D points & Bounding boxes processor into a
-    single processor.
-
-    [`Sam3TrackerProcessor`] offers all the functionalities of [`Sam3TrackerImageProcessorFast`] and [`Sam3TrackerVideoProcessor`]. See the docstring of
-    [`~Sam3TrackerImageProcessorFast.__call__`] and [`~Sam3TrackerVideoProcessor.__call__`] for more information.
-
-    Args:
-        image_processor (`Sam3TrackerImageProcessorFast`):
-            An instance of [`Sam3TrackerImageProcessorFast`].
-        target_size (`int`, *optional*):
-            The target size (target_size, target_size) to which the image will be resized.
-        point_pad_value (`int`, *optional*, defaults to -10):
-            The value used for padding input points.
-    """
-
     def __init__(self, image_processor, target_size: Optional[int] = None, point_pad_value: int = -10, **kwargs):
+        r"""
+        target_size (`int`, *optional*):
+            The target size (in pixels) for normalizing input points and bounding boxes. If not provided, defaults
+            to the image processor's size configuration. All input coordinates (points and boxes) are normalized
+            to this size before being passed to the model. This ensures consistent coordinate representation
+            regardless of the original image dimensions.
+        point_pad_value (`int`, *optional*, defaults to -10):
+            The value used for padding input points when batching sequences of different lengths. This value is
+            used to mark padded positions and is preserved during coordinate normalization.
+        """
         super().__init__(image_processor, **kwargs)
         self.point_pad_value = point_pad_value
         self.target_size = target_size if target_size is not None else self.image_processor.size["height"]
 
+    @auto_docstring
     def __call__(
         self,
         images: Optional[ImageInput] = None,
@@ -67,26 +63,16 @@ class Sam3TrackerProcessor(ProcessorMixin):
         **kwargs,
     ) -> BatchEncoding:
         r"""
-        This method uses [`Sam3TrackerImageProcessorFast.__call__`] method to prepare image(s) for the model. It also prepares 2D
-        points and bounding boxes for the model if they are provided.
-
-        Args:
-            images (`ImageInput`, *optional*):
-                The image(s) to process.
-            segmentation_maps (`ImageInput`, *optional*):
-                The segmentation maps to process.
-            input_points (`list[list[list[list[float]]]]`, `torch.Tensor`, *optional*):
-                The points to add to the frame.
-            input_labels (`list[list[list[int]]]`, `torch.Tensor`, *optional*):
-                The labels for the points.
-            input_boxes (`list[list[list[float]]]`, `torch.Tensor`, *optional*):
-                The bounding boxes to add to the frame.
-            original_sizes (`list[list[float]]`, `torch.Tensor`, *optional*):
-                The original sizes of the images.
-            return_tensors (`str` or `TensorType`, *optional*):
-                The type of tensors to return.
-            **kwargs:
-                Additional keyword arguments to pass to the image processor.
+        segmentation_maps (`ImageInput`, *optional*):
+            The segmentation maps to process.
+        input_points (`list[list[list[list[float]]]]`, `torch.Tensor`, *optional*):
+            The points to add to the frame.
+        input_labels (`list[list[list[int]]]`, `torch.Tensor`, *optional*):
+            The labels for the points.
+        input_boxes (`list[list[list[float]]]`, `torch.Tensor`, *optional*):
+            The bounding boxes to add to the frame.
+        original_sizes (`list[list[float]]`, `torch.Tensor`, *optional*):
+            The original sizes of the images.
 
         Returns:
             A [`BatchEncoding`] with the following fields:

@@ -209,6 +209,7 @@ model = DeepseekVLForConditionalGeneration.from_pretrained(
 ## DeepseekVLProcessor
 
 [[autodoc]] DeepseekVLProcessor
+    - __call__
 
 ## DeepseekVLImageProcessor
 

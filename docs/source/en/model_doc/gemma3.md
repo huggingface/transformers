@@ -243,6 +243,7 @@ visualizer("<img>What is shown in this image?")
 ## Gemma3Processor
 
 [[autodoc]] Gemma3Processor
+    - __call__
 
 ## Gemma3TextConfig
 
