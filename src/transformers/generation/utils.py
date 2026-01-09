@@ -1794,13 +1794,8 @@ class GenerationMixin(ContinuousMixin):
         # Do not update any values that aren't `None`, i.e. if set by users explicitly and passed
         # to `generate()`. Thus the `defaults_only=True` is used
         global_defaults = self.generation_config._get_default_generation_params()
-        generation_config.update(**self.generation_config.to_dict(), defaults_only=True)
+        generation_config.update(**self.generation_config.to_dict(), defaults_only=True, allow_custom_entries=True)
         generation_config.update(**global_defaults, defaults_only=True)
-
-        # Add custom keys not in global defaults
-        for key, value in self.generation_config.to_dict().items():
-            if not hasattr(generation_config, key):
-                setattr(generation_config, key, value)
 
         # Due to some values being boolean and not `None`, we need additional logic to overwrite
         # them explicitly (`defaults_only=False`) on the condition that it's only a previous

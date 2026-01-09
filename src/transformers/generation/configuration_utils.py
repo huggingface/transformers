@@ -1182,7 +1182,8 @@ class GenerationConfig(PushToHubMixin):
         generation_config._original_object_hash = hash(generation_config)
         return generation_config
 
-    def update(self, defaults_only=False, **kwargs):
+    # TODO (ebezzam) merge from this PR: https://github.com/huggingface/transformers/pull/43181
+    def update(self, defaults_only=False, allow_custom_entries=False, **kwargs):
         """
         Updates attributes of this class instance with attributes from `kwargs` if they match existing attributes,
         returning all the unused kwargs.
@@ -1198,7 +1199,10 @@ class GenerationConfig(PushToHubMixin):
         """
         to_remove = []
         for key, value in kwargs.items():
-            if hasattr(self, key):
+            if allow_custom_entries and not hasattr(self, key):
+                setattr(self, key, value)
+                to_remove.append(key)
+            elif hasattr(self, key):
                 if not defaults_only or getattr(self, key) is None:
                     setattr(self, key, value)
                     to_remove.append(key)
