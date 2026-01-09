@@ -424,6 +424,7 @@ if TYPE_CHECKING:
     from .zamba import *
     from .zamba2 import *
     from .zoedepth import *
+    from .solar_open import *
 else:
     import sys
 
