@@ -1073,6 +1073,8 @@ class Qwen3OmniMoeVisionEncoder(Qwen3OmniMoePreTrainedModel):
 
         self.gradient_checkpointing = False
 
+        self.post_init()
+
     def rot_pos_emb(self, grid_thw: torch.Tensor) -> torch.Tensor:
         merge_size = self.spatial_merge_size
 
@@ -3715,6 +3717,8 @@ class Qwen3OmniMoeCode2WavDecoderBlock(Qwen3OmniMoePreTrainedModel):
             block.append(Qwen3OmniMoeCode2WavDecoderResidualUnit(out_dim, dilation))
 
         self.block = nn.ModuleList(block)
+
+        self.post_init()
 
     def forward(self, hidden, **kwargs):
         for block in self.block:

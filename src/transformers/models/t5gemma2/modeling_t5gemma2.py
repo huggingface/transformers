@@ -266,7 +266,7 @@ class T5Gemma2SelfAttention(nn.Module):
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.scaling = config.query_pre_attn_scalar**-0.5
         self.attention_dropout = self.config.attention_dropout
-        self.is_causal = not self.config.use_bidirectional_attention
+        self.is_causal = False  # Only used by the encoder
 
         self.q_proj = nn.Linear(
             config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
@@ -348,7 +348,7 @@ class T5Gemma2MergedAttention(nn.Module):
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.scaling = config.query_pre_attn_scalar**-0.5
         self.attention_dropout = self.config.attention_dropout
-        self.is_causal = not self.config.use_bidirectional_attention
+        self.is_causal = False  # Fused causal and encoder mask
 
         self.q_proj = nn.Linear(
             config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
@@ -446,7 +446,6 @@ class T5Gemma2MergedAttention(nn.Module):
             merged_attention_mask,
             dropout=self.attention_dropout if self.training else 0.0,
             scaling=self.scaling,
-            is_causal=False,
             **kwargs,
         )
 

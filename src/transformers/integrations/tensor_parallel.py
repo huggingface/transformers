@@ -814,6 +814,34 @@ class ColwiseParallel(TensorParallelLayer):
             self._prepare_output_fn,
         )
 
+class LocalColwiseParallel(ColwiseParallel):
+    """
+    Colwise parallel with use_dtensor=False for local tensor operations.
+    """
+
+    def __init__(self, **kwargs):
+        super().__init__(use_dtensor=False, **kwargs)
+
+
+class LocalPackedColwiseParallel(PackedColwiseParallel):
+    """
+    Packed colwise parallel with use_dtensor=False for local tensor operations.
+    Used for packed weights like gate_up_proj in MoE models.
+    """
+
+    def __init__(self, **kwargs):
+        super().__init__(use_dtensor=False, **kwargs)
+
+
+class ColwiseParallelReplicate(ColwiseParallel):
+    """
+    Colwise parallel with output layouts replicated.
+    """
+
+    def __init__(self, **kwargs):
+        super().__init__(output_layouts=Replicate(), **kwargs)
+
+
 class RowwiseParallel(TensorParallelLayer):
     """
     Row-wise parallel: weight is sharded on dim -1 (input features).
