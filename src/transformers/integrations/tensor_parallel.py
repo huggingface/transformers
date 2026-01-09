@@ -1042,59 +1042,84 @@ ALL_PARALLEL_STYLES: ParallelInterface = ParallelInterface()
 # High-Level API Functions
 # =============================================================================
 
-#TODO(3outeille): remove it later
-def convert_local_tensor_to_dtensor(
-    parameter: torch.Tensor, parameter_name: str, device_mesh, tp_plan: dict[str, str]
-) -> torch.Tensor:
-    """No-op in v2 - tensors are already local."""
-    return parameter
+def gather_full_tensor(local_tensor: torch.Tensor, shard_dim: int, device_mesh) -> torch.Tensor:
+    """
+    All-gather a sharded tensor along the specified dimension to reconstruct the full tensor.
 
-def replace_state_dict_local_with_dtensor(
+    Args:
+        local_tensor: The local shard of the tensor on this rank
+        shard_dim: The dimension along which the tensor was sharded
+        device_mesh: The device mesh for distributed communication
+
+    Returns:
+        The full reconstructed tensor (same on all ranks)
+    """
+    world_size = device_mesh.size()
+
+    # Normalize negative dimension
+    if shard_dim < 0:
+        shard_dim = local_tensor.ndim + shard_dim
+
+    # Gather all shards
+    gathered_tensors = [torch.empty_like(local_tensor) for _ in range(world_size)]
+    dist.all_gather(gathered_tensors, local_tensor.contiguous())
+
+    # Concatenate along the shard dimension
+    return torch.cat(gathered_tensors, dim=shard_dim)
+
+
+def gather_state_dict_for_save(
     state_dict: dict[str, torch.Tensor],
     tp_plan: dict[str, str],
     device_mesh,
+    tp_size: int,
 ) -> dict[str, torch.Tensor]:
     """
-    Convert local sharded tensors to DTensors for proper gathering when saving.
-    
-    This function wraps each sharded tensor in a DTensor with the appropriate
-    Shard placement so that `full_tensor()` can be called during save to
-    reconstruct the full unsharded tensor.
+    Gather sharded tensors to reconstruct full tensors for saving.
+
+    This function all-gathers each sharded tensor along its shard dimension
+    to reconstruct the full unsharded tensor for checkpoint saving.
+
+    Args:
+        state_dict: The model state dict with local sharded tensors
+        tp_plan: The tensor parallel plan mapping layer patterns to shard styles
+        device_mesh: The device mesh for distributed communication
+        tp_size: The tensor parallel world size
+
+    Returns:
+        State dict with full (gathered) tensors
     """
-    from torch.distributed.tensor import DTensor
-    from torch.distributed.tensor.placement_types import Shard, Replicate
-    
     # Map plan names to sharding dimensions
     # For weights: colwise shards dim -2, rowwise shards dim -1
     # For embedding: rowwise shards dim 0 (vocab), colwise shards dim -2 (hidden)
     plan_to_weight_dim = {
         "colwise": -2,
-        "colwise_gather_output": -2,  # same sharding as colwise, just gathers output
+        "colwise_gather_output": -2,
         "rowwise": -1,
         "embedding_rowwise": 0,
-        "local_packed_rowwise": -2,  # packed weights shard output dim
-        "gather": None,  # no sharding
-        "sequence_parallel": None,  # handled differently
+        "local_packed_rowwise": -2,
+        "gather": None,
+        "sequence_parallel": None,
     }
-    
+
     # Bias sharding: colwise shards bias, rowwise doesn't (bias is replicated and all-reduced)
     plan_to_bias_dim = {
         "colwise": -1,
-        "colwise_gather_output": -1,  # same as colwise
-        "rowwise": None,  # replicated
+        "colwise_gather_output": -1,
+        "rowwise": None,
         "embedding_rowwise": None,
         "local_packed_rowwise": -1,
         "gather": None,
         "sequence_parallel": None,
     }
-    
+
     result = {}
     for key, tensor in state_dict.items():
         # Find the matching TP plan for this parameter
         param_name = key.rsplit(".", 1)[0] if "." in key else key
         param_type = key.rsplit(".", 1)[1] if "." in key else None
         generic_param_name = re.sub(r"\d+", "*", param_name)
-        
+
         # Check if this parameter has a TP plan
         current_plan = None
         if generic_param_name in tp_plan:
@@ -1103,32 +1128,29 @@ def replace_state_dict_local_with_dtensor(
             parent_param_name = generic_param_name.rsplit(".", 1)[0]
             if parent_param_name in tp_plan:
                 current_plan = tp_plan[parent_param_name]
-        
+
         if current_plan is None or current_plan not in plan_to_weight_dim:
             # Not sharded, keep as-is
             result[key] = tensor
             continue
-        
+
         # Determine sharding dimension based on param type
         if param_type == "bias":
             shard_dim = plan_to_bias_dim.get(current_plan)
         else:
             shard_dim = plan_to_weight_dim.get(current_plan)
-        
+
         if shard_dim is None:
             # Replicated, keep as-is
             result[key] = tensor
             continue
-        
-        # Normalize negative dimension
-        if shard_dim < 0:
-            shard_dim = tensor.ndim + shard_dim
-        
-        # Create DTensor with Shard placement
-        placement = (Shard(shard_dim),)
-        dtensor = DTensor.from_local(tensor, device_mesh, placement)
-        result[key] = dtensor
-    
+
+        # Gather full tensor and handle packed weights repacking
+        full_tensor = gather_full_tensor(tensor, shard_dim, device_mesh)
+        if current_plan == "local_packed_rowwise":
+            full_tensor = repack_weights(full_tensor, shard_dim, tp_size, 2)
+        result[key] = full_tensor.contiguous()
+
     return result
 
 

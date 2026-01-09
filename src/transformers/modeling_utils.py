@@ -76,11 +76,9 @@ from .integrations.sdpa_attention import sdpa_attention_forward
 from .integrations.sdpa_paged import sdpa_attention_paged_forward
 from .integrations.tensor_parallel import (
     ALL_PARALLEL_STYLES,
-    _get_parameter_tp_plan,
     distribute_model,
+    gather_state_dict_for_save,
     initialize_tensor_parallelism,
-    repack_weights,
-    replace_state_dict_local_with_dtensor,
     shard_and_distribute_module,
     verify_tp_plan,
 )
@@ -134,9 +132,6 @@ if is_accelerate_available():
 
 
 _torch_distributed_available = torch.distributed.is_available()
-_is_dtensor_available = _torch_distributed_available and is_torch_greater_or_equal("2.5")
-if _is_dtensor_available:
-    from torch.distributed.tensor import DTensor
 
 if is_sagemaker_mp_enabled():
     import smdistributed.modelparallel.torch as smp
@@ -3191,10 +3186,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 if ignore_key in state_dict:
                     del state_dict[ignore_key]
 
-        # If model was sharded, we cannot properly determine sizes of tensors that `local_*` strategy was used,
-        # therefore we replace them with DTensors that are equivalently sharded
+        # If model was sharded, gather all sharded tensors to reconstruct full tensors for saving
         if self._tp_size is not None:
-            state_dict = replace_state_dict_local_with_dtensor(state_dict, self._tp_plan, self._device_mesh)
+            #TODO(3outeille): when adding supports for 2D device_mesh. Use device_mesh["tp"].size() instead of self._tp_size
+            state_dict = gather_state_dict_for_save(state_dict, self._tp_plan, self._device_mesh, self._tp_size)
 
         # Safetensors does not allow tensor aliasing - we're going to remove aliases before saving
         ptrs = collections.defaultdict(list)
@@ -3312,14 +3307,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         for shard_file, tensors in filename_to_tensors:
             shard = {}
             for tensor in tensors:
-                if _is_dtensor_available and isinstance(state_dict[tensor], DTensor):
-                    full_tensor = state_dict[tensor].full_tensor()
-                    # to get the correctly ordered tensor we need to repack if packed
-                    if _get_parameter_tp_plan(tensor, self._tp_plan) == "local_packed_rowwise":
-                        full_tensor = repack_weights(full_tensor, -1, self._tp_size, 2)
-                    shard[tensor] = full_tensor.contiguous()  # only do contiguous after it's permuted correctly
-                else:
-                    shard[tensor] = state_dict[tensor].contiguous()
+                shard[tensor] = state_dict[tensor].contiguous()
                 # delete reference, see https://github.com/huggingface/transformers/pull/34890
                 del state_dict[tensor]
 
