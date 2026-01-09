@@ -486,7 +486,6 @@ class VibeVoiceAcousticTokenizerModel(VibeVoiceAcousticTokenizerPreTrainedModel)
         super().__init__(config)
         self.encoder = VibeVoiceAcousticTokenizerEncoder(config)
         self.decoder = VibeVoiceAcousticTokenizerDecoder(config)
-        self.vae_std = config.vae_std
         self.post_init()
 
     @can_return_tuple
@@ -502,7 +501,7 @@ class VibeVoiceAcousticTokenizerModel(VibeVoiceAcousticTokenizerPreTrainedModel)
         latents = self.encoder(audio)
         if sample:
             batch_size = audio.shape[0]
-            noise_std = self.vae_std * torch.randn(batch_size, device=latents.device, dtype=latents.dtype)
+            noise_std = self.config.vae_std * torch.randn(batch_size, device=latents.device, dtype=latents.dtype)
             while noise_std.dim() < latents.dim():
                 noise_std = noise_std.unsqueeze(-1)
             latents = latents + noise_std * torch.randn_like(latents)

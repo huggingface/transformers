@@ -354,7 +354,6 @@ class VibeVoiceSemanticTokenizerModel(VibeVoiceAcousticTokenizerModel):
     def __init__(self, config):
         super().__init__(config)
         del self.decoder
-        del self.vae_std
 
     @can_return_tuple
     @auto_docstring
