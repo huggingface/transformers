@@ -72,6 +72,7 @@ This model was contributed by [Raushan Turganbay](https://huggingface.co/Raushan
 ## Glm46VProcessor
 
 [[autodoc]] Glm46VProcessor
+    - __call__
 
 ## Glm46VModel
 

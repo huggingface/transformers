@@ -162,6 +162,7 @@ print(decoded_outputs)
 ## GlmAsrProcessor
 
 [[autodoc]] GlmAsrProcessor
+    - __call__
 
 ## GlmAsrEncoder
 

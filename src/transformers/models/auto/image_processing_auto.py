@@ -178,6 +178,8 @@ else:
             ("sam2", (None, "Sam2ImageProcessorFast")),
             ("sam2_video", (None, "Sam2ImageProcessorFast")),
             ("sam3", (None, "Sam3ImageProcessorFast")),
+            ("sam3_tracker", (None, "Sam3ImageProcessorFast")),
+            ("sam3_tracker_video", (None, "Sam3ImageProcessorFast")),
             ("sam3_video", (None, "Sam3ImageProcessorFast")),
             ("sam_hq", ("SamImageProcessor", "SamImageProcessorFast")),
             ("segformer", ("SegformerImageProcessor", "SegformerImageProcessorFast")),
