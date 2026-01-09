@@ -145,7 +145,7 @@ class Concatenate(ConversionOps):
     ) -> dict[str, torch.Tensor]:
         target_pattern = self.get_target_pattern(target_patterns)
         all_tensors = []
-        # Very important to keep the relative order of the source patterms here, so we iterate over them not the
+        # Very important to keep the relative order of the source patterns here, so we iterate over them not the
         # input directly as it's unordered!
         for source_pattern in source_patterns:
             tensors = input_dict[source_pattern]
