@@ -14,7 +14,7 @@
 
 import math
 from pathlib import Path
-from typing import Any, Optional, Union
+from typing import Any
 
 import numpy as np
 
@@ -42,7 +42,7 @@ class CsmAudioKwargs(AudioKwargs, total=False):
         audio input in the text sequence.
     """
 
-    encoded_length_kwargs: Optional[dict[str, Any]]
+    encoded_length_kwargs: dict[str, Any] | None
 
 
 class CsmProcessorKwargs(ProcessingKwargs, total=False):
@@ -131,7 +131,7 @@ class CsmProcessor(ProcessorMixin):
     def save_audio(
         self,
         audio: AudioInput,
-        saving_path: Union[str, Path, list[Union[str, Path]]],
+        saving_path: str | Path | list[str | Path],
         **kwargs: Unpack[CsmProcessorKwargs],
     ):
         # TODO: @eustlb, this should be in AudioProcessor
@@ -165,10 +165,10 @@ class CsmProcessor(ProcessorMixin):
     @auto_docstring
     def __call__(
         self,
-        text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]],
-        audio: Optional[AudioInput] = None,
-        output_labels: Optional[bool] = False,
-        depth_decoder_labels_ratio: Optional[float] = 1.0,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None,
+        audio: AudioInput | None = None,
+        output_labels: bool | None = False,
+        depth_decoder_labels_ratio: float | None = 1.0,
         **kwargs: Unpack[CsmProcessorKwargs],
     ):
         r"""
