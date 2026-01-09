@@ -8,6 +8,7 @@ import torch.nn.functional as F
 
 from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig
+from ...image_utils import PILImageResampling
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -134,7 +135,7 @@ class VideoPrismTokenizer(T5Tokenizer):
 
 
 class VideoPrismVideoProcessor(LlavaOnevisionVideoProcessor):
-    resample = PILImageResampling.BICUBIC  #! PILImageResampling.LANCZOS
+    resample = PILImageResampling.BICUBIC
     size = {"height": 288, "width": 288}
     do_normalize = False
 
@@ -199,7 +200,7 @@ class VideoPrismTubeletEmbeddings(VivitTubeletEmbeddings):
         self.pos_emb_shape = [self.image_size[0] // self.patch_size[1], self.image_size[1] // self.patch_size[2]]
         self.num_patches = self.pos_emb_shape[0] * self.pos_emb_shape[1]
 
-    def forward(self, pixel_values_videos, interpolate_pos_encoding: bool = False):
+    def forward(self, pixel_values_videos: torch.Tensor, interpolate_pos_encoding: bool = False) -> torch.Tensor:
         batch_size, num_frames, num_channels, height, width = pixel_values_videos.shape
         if not interpolate_pos_encoding and (height != self.image_size[0] or width != self.image_size[1]):
             raise ValueError(
@@ -267,7 +268,9 @@ class VideoPrismSpatialEmbeddings(VivitEmbeddings):
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
         return patch_pos_embed
 
-    def forward(self, pixel_values_videos: torch.Tensor, interpolate_pos_encoding: bool = False):
+    def forward(
+        self, pixel_values_videos: torch.Tensor, interpolate_pos_encoding: Optional[bool] = False
+    ) -> torch.Tensor:
         b, t, c, h, w = pixel_values_videos.shape
         assert h == w, "Input image height and width must be the same"
         embeddings = self.patch_embeddings(pixel_values_videos, interpolate_pos_encoding)
@@ -300,9 +303,6 @@ class VideoPrismTemporalEmbeddings(VivitEmbeddings):
         self.position_embeddings = nn.Parameter(torch.zeros(1, self.config.num_frames, config.hidden_size))
 
     def interpolate_pos_encoding(self, embeddings: torch.Tensor) -> torch.Tensor:
-        """
-        Interpolates the embedding to the target sequence length
-        """
         target_emb_length = embeddings.shape[1]
         source_emb_length = self.position_embeddings.shape[1]
 
@@ -322,12 +322,15 @@ class VideoPrismTemporalEmbeddings(VivitEmbeddings):
 
         return source_emb.squeeze(1)
 
-    def forward(self, pixel_values_videos: torch.Tensor, input_shape, interpolate_pos_encoding: bool = False):
+    def forward(
+        self,
+        pixel_values_videos: torch.Tensor,
+        input_shape: torch.Size,
+        interpolate_pos_encoding: Optional[bool] = False,
+    ) -> torch.Tensor:
         if input_shape is not None:
             b, t, c, h, w = input_shape
-
         _, features, dim = pixel_values_videos.shape
-
         hidden_states = pixel_values_videos.view(b, t, features, dim)
         hidden_states = hidden_states.permute(0, 2, 1, 3)
         embeddings = hidden_states.reshape(b * features, t, dim)
@@ -337,9 +340,7 @@ class VideoPrismTemporalEmbeddings(VivitEmbeddings):
             embeddings = embeddings + self.interpolate_pos_encoding(embeddings)
         else:
             embeddings = embeddings + self.position_embeddings
-
         embeddings = self.dropout(embeddings)
-
         return embeddings
 
 
@@ -352,7 +353,6 @@ def eager_attention_forward(
     scaling: float,
     dropout: float = 0.0,
     softcap: Optional[float] = None,
-    **kwargs,
 ):
     # Take the dot product between "query" and "key" to get the raw attention scores.
     attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
@@ -418,7 +418,7 @@ class VideoPrismSelfAttention(nn.Module):
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
         context_layer = context_layer.reshape(new_context_layer_shape)
 
-        return context_layer, attention_probs
+        return (context_layer, attention_probs)
 
 
 class VideoPrismAttention(VivitAttention):
@@ -429,7 +429,7 @@ class VideoPrismAttention(VivitAttention):
 
 
 class VideoPrismLayerNorm(nn.LayerNorm):
-    def forward(self, hidden_states: torch.Tensor):
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         return F.layer_norm(hidden_states, self.normalized_shape, self.weight + 1, self.bias, self.eps)
 
 
@@ -553,7 +553,7 @@ class VideoPrismVisionModel(VideoPrismPreTrainedModel):
     def forward(
         self,
         pixel_values_videos: Optional[torch.FloatTensor] = None,
-        interpolate_pos_encoding: bool = False,
+        interpolate_pos_encoding: Optional[bool] = False,
     ) -> BaseModelOutputWithSpatialAndTemporalStates:
         if pixel_values_videos is None:
             raise ValueError("You have to specify pixel_values_videos")
@@ -561,12 +561,16 @@ class VideoPrismVisionModel(VideoPrismPreTrainedModel):
         input_shape = pixel_values_videos.shape
         spatial_embeds = self.spatial_embeddings(pixel_values_videos, interpolate_pos_encoding)
         spatial_encoder_outputs: BaseModelOutput = self.spatial_encoder(hidden_states=spatial_embeds)
-        spatial_sequence_output = spatial_encoder_outputs.last_hidden_state
-        features = self.layernorm1(spatial_sequence_output)  # ? shape (B * T, 256, 768)
+        spatial_sequence_output = (
+            spatial_encoder_outputs.last_hidden_state
+        )  # shape is (B * num_frames, num_patches, dim)
+        features = self.layernorm1(spatial_sequence_output)
 
         temporal_embeds = self.temporal_embeddings(features, input_shape, interpolate_pos_encoding)
         temporal_encoder_outputs: BaseModelOutput = self.temporal_encoder(hidden_states=temporal_embeds)
-        temporal_sequence_output = temporal_encoder_outputs.last_hidden_state
+        temporal_sequence_output = (
+            temporal_encoder_outputs.last_hidden_state
+        )  # shape is (B * num_patches, num_frames, 768)
         features = self.layernorm2(temporal_sequence_output)
         _, num_frames, dim = features.shape
         features = features.view(input_shape[0], -1, num_frames, dim).permute(0, 2, 1, 3).contiguous()
@@ -607,7 +611,7 @@ class VideoPrismMultiheadAttentionPoolingHead(nn.Module):
 
     def forward(
         self,
-        hidden_states: Optional[torch.FloatTensor] = None,
+        hidden_states: torch.FloatTensor,
         attention_mask: Optional[torch.LongTensor] = None,
     ) -> tuple[torch.FloatTensor, torch.FloatTensor]:
         batch_size, seq_length, hidden_size = hidden_states.shape
@@ -670,7 +674,7 @@ class VideoPrismTextModel(VideoPrismPreTrainedModel):
 
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
+        input_ids: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
     ) -> BaseModelOutput:
         batch_size, seq_length = input_ids.shape
@@ -719,13 +723,17 @@ class VideoPrismVideoModel(VideoPrismPreTrainedModel):
         self.normalize = self.config.apply_l2_norm
         self.post_init()
 
+    def get_input_embeddings(self):
+        return self.backbone.spatial_embeddings.patch_embeddings
+
     def forward(
         self,
         pixel_values_videos: torch.FloatTensor,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-    ) -> BaseModelOutput:
-        backbone_outputs = self.backbone(pixel_values_videos=pixel_values_videos)
+        interpolate_pos_encoding: Optional[bool] = False,
+    ) -> VideoPrismVideoOutput:
+        backbone_outputs = self.backbone(
+            pixel_values_videos=pixel_values_videos, interpolate_pos_encoding=interpolate_pos_encoding
+        )
         video_features = backbone_outputs.last_hidden_state
         auxiliary_output = self.auxiliary_encoder(video_features)
         auxiliary_output_features = auxiliary_output.last_hidden_state
@@ -753,12 +761,15 @@ class VideoPrismClipModel(VideoPrismPreTrainedModel):
 
     def forward(
         self,
-        pixel_values_videos: Optional[torch.FloatTensor] = None,
-        input_ids: Optional[torch.Tensor] = None,
+        pixel_values_videos: torch.FloatTensor,
+        input_ids: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
+        interpolate_pos_encoding: Optional[bool] = False,
         temperature: Optional[float] = None,
     ) -> VideoPrismClipOutput:
-        video_model_outputs = self.video_model(pixel_values_videos=pixel_values_videos)
+        video_model_outputs = self.video_model(
+            pixel_values_videos=pixel_values_videos, interpolate_pos_encoding=interpolate_pos_encoding
+        )
         text_model_outputs = self.text_model(input_ids=input_ids, attention_mask=attention_mask)
 
         video_embeddings = video_model_outputs.video_last_hidden_state
@@ -797,13 +808,19 @@ class VideoPrismForVideoClassification(VideoPrismPreTrainedModel):
         self.classifier = nn.Linear(self.config.hidden_size, self.config.num_labels)
         self.post_init()
 
+    def get_input_embeddings(self):
+        return self.encoder.spatial_embeddings.patch_embeddings
+
     def forward(
         self,
-        pixel_values_videos: Optional[torch.FloatTensor] = None,
+        pixel_values_videos: torch.FloatTensor,
         labels: Optional[torch.LongTensor] = None,
+        interpolate_pos_encoding: Optional[bool] = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> ImageClassifierOutput:
-        encoder_outputs = self.encoder(pixel_values_videos=pixel_values_videos)
+        encoder_outputs = self.encoder(
+            pixel_values_videos=pixel_values_videos, interpolate_pos_encoding=interpolate_pos_encoding
+        )
         sequence_output = encoder_outputs.last_hidden_state
         pooled_output = self.contrastive_vision_pooler(sequence_output).pooled_output
         logits = self.classifier(pooled_output)

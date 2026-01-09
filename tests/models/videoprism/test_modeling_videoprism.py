@@ -43,7 +43,9 @@ if is_torch_available():
 
     from transformers import (
         VideoPrismClipModel,
+        VideoPrismForVideoClassification,
         VideoPrismTextModel,
+        VideoPrismVideoModel,
         VideoPrismVisionModel,
     )
 
@@ -168,8 +170,9 @@ class VideoPrismVisionModelTest(unittest.TestCase):
     attention_mask and seq_length.
     """
 
-    all_model_classes = (VideoPrismVisionModel,) if is_torch_available() else ()
-    pipeline_model_mapping = ()
+    all_model_classes = (
+        (VideoPrismVisionModel, VideoPrismVideoModel, VideoPrismForVideoClassification) if is_torch_available() else ()
+    )
 
     def setUp(self):
         self.model_tester = VideoPrismVisionModelTester(self)
@@ -316,14 +319,13 @@ class VideoPrismTextModelTester:
 class VideoPrismTextModelTest(unittest.TestCase):
     all_model_classes = (VideoPrismTextModel,) if is_torch_available() else ()
 
-
     def setUp(self):
         self.model_tester = VideoPrismTextModelTester(self)
         self.config_tester = ConfigTester(
             self,
             config_class=VideoPrismTextConfig,
             hidden_size=37,
-            common_properties=["hidden_size", "num_attention_heads"]
+            common_properties=["hidden_size", "num_attention_heads"],
         )
 
     # Copied from tests.models.clip.test_modeling_clip.CLIPTextModelTest.test_config
