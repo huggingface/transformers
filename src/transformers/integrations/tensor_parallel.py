@@ -17,7 +17,7 @@ import math
 import operator
 import os
 import re
-from functools import partial, reduce
+from functools import reduce
 
 from ..utils.import_utils import is_torch_available
 
