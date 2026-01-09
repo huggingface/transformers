@@ -495,10 +495,8 @@ class Glm4vTextRotaryEmbedding(Glm4RotaryEmbedding):
         self.mrope_section = config.rope_parameters.get("mrope_section", [8, 12, 12])
 
     def forward(self, x, position_ids):
-        # In contrast to other models, Qwen3VL has different position ids for the grids
+        # In contrast to other models, GLM-V has different position ids for the grids
         # So we expand the inv_freq to shape (3, ...)
-        if position_ids.ndim == 2:
-            position_ids = position_ids[None, ...].expand(3, position_ids.shape[0], -1)
         inv_freq_expanded = self.inv_freq[None, None, :, None].float().expand(3, position_ids.shape[1], -1, 1)
         position_ids_expanded = position_ids[:, :, None, :].float()  # shape (3, bs, 1, positions)
 

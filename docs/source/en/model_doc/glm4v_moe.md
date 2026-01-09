@@ -18,7 +18,7 @@ limitations under the License.
 -->
 *This model was released on 2025-08-12 and added to Hugging Face Transformers on 2025-08-12.*
 
-# Glm4vMoeMoe
+# Glm4vMoe
 
 ## Overview
 

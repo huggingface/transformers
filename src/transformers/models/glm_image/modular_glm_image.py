@@ -298,21 +298,6 @@ class GlmImageConfig(PreTrainedConfig):
         image_end_token_id=16385,
         **kwargs,
     ):
-        if isinstance(vq_config, dict):
-            self.vq_config = self.sub_configs["vq_config"](**vq_config)
-        elif vq_config is None:
-            self.vq_config = self.sub_configs["vq_config"]()
-
-        if isinstance(vision_config, dict):
-            self.vision_config = self.sub_configs["vision_config"](**vision_config)
-        elif vision_config is None:
-            self.vision_config = self.sub_configs["vision_config"]()
-
-        if isinstance(text_config, dict):
-            self.text_config = self.sub_configs["text_config"](**text_config)
-        elif text_config is None:
-            self.text_config = self.sub_configs["text_config"](**kwargs)
-
         self.image_token_id = image_token_id
         self.image_start_token_id = image_start_token_id
         self.image_end_token_id = image_end_token_id
