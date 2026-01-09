@@ -22,35 +22,38 @@ class VideoPrismVisionConfig(PreTrainedConfig):
     documentation from [`PreTrainedConfig`] for more information.
 
     Args:
-        image_size (`int`, *optional*, defaults to 224):
-            The size (resolution) of each image.
-        num_frames (`int`, *optional*, defaults to 32):
-            The number of frames in each video.
-        tubelet_size (`list[int]`, *optional*, defaults to `[2, 16, 16]`):
-            The size (resolution) of each tubelet.
-        num_channels (`int`, *optional*, defaults to 3):
-            The number of input channels.
-        hidden_size (`int`, *optional*, defaults to 768):
-            Dimensionality of the encoder layers and the pooler layer.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        intermediate_size (`int`, *optional*, defaults to 3072):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu_fast"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"`, `"gelu_fast"` and `"gelu_new"` are supported.
-        hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the layer normalization layers.
-        qkv_bias (`bool`, *optional*, defaults to `True`):
-            Whether to add a bias to the queries, keys and values.
+            image_size (`int`, *optional*, defaults to 288):
+                The size (resolution) of each image.
+            num_frames (`int`, *optional*, defaults to 16):
+                The number of frames in each video.
+            tubelet_size (`list[int]`, *optional*, defaults to `[1, 18, 18]`):
+                The size (resolution) of each tubelet.
+            num_channels (`int`, *optional*, defaults to 3):
+                The number of input channels.
+            hidden_size (`int`, *optional*, defaults to 768):
+                Dimensionality of the encoder layers and the pooler layer.
+            num_spatial_layers (`<fill_type>`, *optional*, defaults to 12): <fill_docstring>
+            num_temporal_layers (`<fill_type>`, *optional*, defaults to 4): <fill_docstring>
+            num_attention_heads (`int`, *optional*, defaults to 12):
+                Number of attention heads for each attention layer in the Transformer encoder.
+            intermediate_size (`int`, *optional*, defaults to 3072):
+                Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
+            hidden_act (`str` or `function`, *optional*, defaults to `"gelu_python"`):
+                The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+                `"relu"`, `"selu"`, `"gelu_fast"` and `"gelu_new"` are supported.
+            hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
+                The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
+            attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0):
+                The dropout ratio for the attention probabilities.
+            initializer_range (`float`, *optional*, defaults to 0.02):
+                The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+            layer_norm_eps (`float`, *optional*, defaults to 1e-06):
+                The epsilon used by the layer normalization layers.
+            qkv_bias (`bool`, *optional*, defaults to `True`):
+                Whether to add a bias to the queries, keys and values.
+            attn_logit_softcapping (`<fill_type>`, *optional*, defaults to 50.0): <fill_docstring>
+            num_auxiliary_layers (`<fill_type>`, *optional*, defaults to 2): <fill_docstring>
+            apply_l2_norm (`<fill_type>`, *optional*, defaults to `True`): <fill_docstring>
 
     Example:
 

@@ -25,32 +25,29 @@ class VideoPrismTokenizer(TokenizersBackend):
     refer to this superclass for more information regarding those methods.
 
     Args:
-        vocab_file (`str`, *optional*):
-            [SentencePiece](https://github.com/google/sentencepiece) file (generally has a *.spm* extension) that
-            contains the vocabulary necessary to instantiate a tokenizer.
-        eos_token (`str`, *optional*, defaults to `"</s>"`):
-            The end of sequence token.
-
-            <Tip>
-
-            When building a sequence using special tokens, this is not the token that is used for the end of sequence.
-            The token used is the `sep_token`.
-
-            </Tip>
-
-        unk_token (`str`, *optional*, defaults to `"<unk>"`):
-            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
-            token instead.
-        pad_token (`str`, *optional*, defaults to `"<pad>"`):
-            The token used for padding, for example when batching sequences of different lengths.
-        extra_ids (`int`, *optional*, defaults to 100):
-            Add a number of extra ids added to the vocabulary for use as sentinels. These tokens are accessible as
-            "<extra_id_{%d}>" where "{%d}" is a number between 0 and extra_ids-1. These tokens can be retrieved by
-            calling get_sentinel_tokens method and token ids can be by calling get_sentinel_token_ids method
-        additional_special_tokens (`list[str]`, *optional*):
-            Additional special tokens used by the tokenizer.
-        vocab (`str`, `dict` or `list`, *optional*):
-            Custom vocabulary dict. If not provided, a minimal vocabulary is created using the special tokens.
+            vocab (`str`, `dict` or `list`, *optional*):
+                Custom vocabulary dict. If not provided, a minimal vocabulary is created using the special tokens.
+            eos_token (`str`, *optional*, defaults to `"</s>"`):
+                The end of sequence token.
+    
+                <Tip>
+    
+                When building a sequence using special tokens, this is not the token that is used for the end of sequence.
+                The token used is the `sep_token`.
+    
+                </Tip>
+    
+            unk_token (`str`, *optional*, defaults to `"<unk>"`):
+                The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
+                token instead.
+            pad_token (`str`, *optional*, defaults to `"<pad>"`):
+                The token used for padding, for example when batching sequences of different lengths.
+            extra_ids (`int`, *optional*, defaults to 100):
+                Add a number of extra ids added to the vocabulary for use as sentinels. These tokens are accessible as
+                "<extra_id_{%d}>" where "{%d}" is a number between 0 and extra_ids-1. These tokens can be retrieved by
+                calling get_sentinel_tokens method and token ids can be by calling get_sentinel_token_ids method
+            additional_special_tokens (`list[str]`, *optional*):
+                Additional special tokens used by the tokenizer.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
