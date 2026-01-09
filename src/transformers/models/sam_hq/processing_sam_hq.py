@@ -16,7 +16,6 @@ Processor class for SAMHQ.
 """
 
 from copy import deepcopy
-from typing import Union
 
 import numpy as np
 
@@ -29,7 +28,7 @@ from ...utils import auto_docstring, is_torch_available
 if is_torch_available():
     import torch
 
-NestedList = list[Union[float | int | None, "NestedList"]]
+NestedList = list[float | int | None | list[float | int | None]]
 
 
 class SamHQImagesKwargs(ImagesKwargs, total=False):

@@ -20,7 +20,8 @@ import warnings
 from collections.abc import Iterable
 from contextlib import nullcontext
 from dataclasses import dataclass
-from multiprocessing import Pool, get_context, get_start_method
+from multiprocessing import get_context, get_start_method
+from multiprocessing.pool import Pool
 from typing import TYPE_CHECKING
 
 import numpy as np
