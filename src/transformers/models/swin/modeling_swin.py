@@ -15,7 +15,6 @@
 
 import collections.abc
 import math
-import warnings
 from dataclasses import dataclass
 
 import torch
@@ -110,15 +109,6 @@ class SwinMaskedImageModelingOutput(ModelOutput):
     hidden_states: tuple[torch.FloatTensor, ...] | None = None
     attentions: tuple[torch.FloatTensor, ...] | None = None
     reshaped_hidden_states: tuple[torch.FloatTensor, ...] | None = None
-
-    @property
-    def logits(self):
-        warnings.warn(
-            "logits attribute is deprecated and will be removed in version 5 of Transformers."
-            " Please use the reconstruction attribute to retrieve the final output instead.",
-            FutureWarning,
-        )
-        return self.reconstruction
 
 
 @dataclass
