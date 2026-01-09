@@ -2,7 +2,7 @@
 
 import re
 import unicodedata
-from typing import Any, Optional, Union
+from typing import Any, Union
 
 from ...tokenization_utils_sentencepiece import SentencePieceBackend
 from ...utils import is_torch_available, logging
@@ -94,7 +94,7 @@ class GPTSw3Tokenizer(SentencePieceBackend):
         unk_token=None,
         eos_token=None,
         bos_token=None,
-        sp_model_kwargs: Optional[dict[str, Any]] = None,
+        sp_model_kwargs: dict[str, Any] | None = None,
         **kwargs,
     ) -> None:
         name_or_path = kwargs.get("name_or_path")
@@ -189,7 +189,7 @@ class GPTSw3Tokenizer(SentencePieceBackend):
         return out_string
 
     def encode_fast(
-        self, text: Union[str, list[str]], return_tensors: Union[str, bool] = False
+        self, text: str | list[str], return_tensors: str | bool = False
     ) -> Union[list[int], list[list[int]], "torch.Tensor"]:
         """
         Encodes a text or batch of texts to token ids using preprocessing and the raw SP tokenizer. This has reduced
@@ -221,7 +221,7 @@ class GPTSw3Tokenizer(SentencePieceBackend):
 
         return token_ids
 
-    def decode_fast(self, token_ids: Union[int, list[int]]) -> str:
+    def decode_fast(self, token_ids: int | list[int]) -> str:
         """
         Encodes a text or batch of texts to token ids using preprocessing and the raw SP tokenizer. This has reduced
         functionality but is often much faster.

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The Google AI Language Team Authors, Facebook AI Research authors and The HuggingFace Inc. team.
 # Copyright (c) 2020, NVIDIA CORPORATION.  All rights reserved.
 #
@@ -19,8 +18,9 @@ import inspect
 import os
 import warnings
 from collections.abc import Callable
+from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Optional, Union
+from typing import TYPE_CHECKING, Any, Optional
 
 import torch
 import torch.distributed as dist
@@ -331,9 +331,9 @@ class GenerateBeamEncoderDecoderOutput(ModelOutput):
 
 
 # Typing shortcuts
-GenerateNonBeamOutput = Union[GenerateDecoderOnlyOutput, GenerateEncoderDecoderOutput]
-GenerateBeamOutput = Union[GenerateBeamDecoderOnlyOutput, GenerateBeamEncoderDecoderOutput]
-GenerateOutput = Union[GenerateNonBeamOutput, GenerateBeamOutput]
+GenerateNonBeamOutput = GenerateDecoderOnlyOutput | GenerateEncoderDecoderOutput
+GenerateBeamOutput = GenerateBeamDecoderOnlyOutput | GenerateBeamEncoderDecoderOutput
+GenerateOutput = GenerateNonBeamOutput | GenerateBeamOutput
 
 
 class GenerationMixin(ContinuousMixin):
@@ -1797,20 +1797,6 @@ class GenerationMixin(ContinuousMixin):
         generation_config.update(**self.generation_config.to_dict(), defaults_only=True)
         generation_config.update(**global_defaults, defaults_only=True)
 
-        # Due to some values being boolean and not `None`, we need additional logic to overwrite
-        # them explicitly (`defaults_only=False`) on the condition that it's only a previous
-        # default value
-        default_generation_config = GenerationConfig()
-        generation_config.update(
-            **{
-                k: v
-                for k, v in self.generation_config.to_dict().items()
-                if isinstance(v, bool)
-                and hasattr(default_generation_config, k)
-                and getattr(generation_config, k, None) == getattr(default_generation_config, k)
-            }
-        )
-
         # Finally, if there are any kwargs, update config with it -> highest priority at the end
         model_kwargs = generation_config.update(**kwargs)
 
@@ -2192,16 +2178,23 @@ class GenerationMixin(ContinuousMixin):
                     )
                     generation_config.compile_config.fullgraph = False
 
-            # If we use grouped_mm and dtype different than bfloat16, we fallback to batched_mm
-            if self.config._experts_implementation == "grouped_mm":
-                if self.dtype != torch.bfloat16:
-                    logger.warning_once(
-                        "torch._grouped_mm currently only supports bfloat16 when being compiled with torch.compile. "
-                        "Falling back to batched_mm implementation for compilation."
-                    )
-                    self.set_experts_implementation("batched_mm")
-
         return can_compile
+
+    @contextmanager
+    def _optimize_model_for_decode(self):
+        original_experts_implementation = self.config._experts_implementation
+        if original_experts_implementation == "grouped_mm":
+            logger.info_once(
+                "We will be switching to 'batched_mm' for the decoding stage as it is much more performant than 'grouped_mm' on smaller inputs. "
+                "If you experience any issues with this, please open an issue on the Hugging Face Transformers GitHub repository.",
+            )
+            self.set_experts_implementation("batched_mm")
+
+        try:
+            yield
+        finally:
+            if original_experts_implementation == "grouped_mm":
+                self.set_experts_implementation(original_experts_implementation)
 
     def _get_deprecated_gen_repo(
         self,
@@ -2860,7 +2853,8 @@ class GenerationMixin(ContinuousMixin):
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             if prefill_consumed:
                 model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
-                outputs = model_forward(**model_inputs, return_dict=True)
+                with self._optimize_model_for_decode():
+                    outputs = model_forward(**model_inputs, return_dict=True)
             prefill_consumed = True
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs,

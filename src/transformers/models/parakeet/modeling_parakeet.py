@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_parakeet.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,7 +21,6 @@
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -46,7 +44,7 @@ from .configuration_parakeet import ParakeetCTCConfig, ParakeetEncoderConfig
     """
 )
 class ParakeetEncoderModelOutput(BaseModelOutput):
-    attention_mask: Optional[torch.Tensor] = None
+    attention_mask: torch.Tensor | None = None
 
 
 class ParakeetEncoderRelPositionalEncoding(nn.Module):
@@ -238,7 +236,7 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
+    attention_mask: torch.Tensor | None,
     scaling: float,
     dropout: float = 0.0,
     **kwargs: Unpack[TransformersKwargs],
@@ -295,8 +293,8 @@ class ParakeetEncoderAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Optional[torch.Tensor],
-        attention_mask: Optional[torch.Tensor] = None,
+        position_embeddings: torch.Tensor | None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -428,7 +426,7 @@ class ParakeetEncoderSubsamplingConv2D(nn.Module):
 
 
 class ParakeetEncoderBlock(GradientCheckpointingLayer):
-    def __init__(self, config: ParakeetEncoderConfig, layer_idx: Optional[int] = None):
+    def __init__(self, config: ParakeetEncoderConfig, layer_idx: int | None = None):
         super().__init__()
         self.gradient_checkpointing = False
 
@@ -446,8 +444,8 @@ class ParakeetEncoderBlock(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_embeddings: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
+        position_embeddings: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
@@ -533,7 +531,7 @@ class ParakeetPreTrainedModel(PreTrainedModel):
 
         return lengths.to(dtype=torch.int)
 
-    def _get_output_attention_mask(self, attention_mask: torch.Tensor, target_length: Optional[int] = None):
+    def _get_output_attention_mask(self, attention_mask: torch.Tensor, target_length: int | None = None):
         """
         Convert the input attention mask to its subsampled form. `target_length` sets the desired output length, useful
         when the attention mask length differs from `sum(-1).max()` (i.e., when the longest sequence in the batch is padded)
@@ -579,8 +577,8 @@ class ParakeetEncoder(ParakeetPreTrainedModel):
     def forward(
         self,
         input_features: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        output_attention_mask: Optional[bool] = None,
+        attention_mask: torch.Tensor | None = None,
+        output_attention_mask: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         r"""
@@ -665,9 +663,9 @@ class ParakeetGenerateOutput(ModelOutput):
     """
 
     sequences: torch.LongTensor
-    logits: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[tuple[torch.FloatTensor]]] = None
-    hidden_states: Optional[tuple[tuple[torch.FloatTensor]]] = None
+    logits: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[tuple[torch.FloatTensor]] | None = None
+    hidden_states: tuple[tuple[torch.FloatTensor]] | None = None
 
 
 @auto_docstring(
@@ -691,8 +689,8 @@ class ParakeetForCTC(ParakeetPreTrainedModel):
     def forward(
         self,
         input_features: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
+        labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutput:
         r"""
@@ -763,10 +761,10 @@ class ParakeetForCTC(ParakeetPreTrainedModel):
     def generate(
         self,
         input_features: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
         return_dict_in_generate: bool = False,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[ParakeetGenerateOutput, torch.LongTensor]:
+    ) -> ParakeetGenerateOutput | torch.LongTensor:
         r"""
         Example:
 

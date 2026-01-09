@@ -392,7 +392,7 @@ class BenchmarkRunner:
         os.makedirs(model_dir, exist_ok=True)
 
         # Create filename with timestamp
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S") if not timestamp else timestamp
+        timestamp = timestamp if timestamp else datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"{model_name}_benchmark_{timestamp}.json"
         filepath = os.path.join(model_dir, filename)
 
@@ -443,7 +443,7 @@ class BenchmarkRunner:
                     f.write("\n".join(json_lines))
 
                 # NOTE: we expect the repository to already exist
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S") if not timestamp else timestamp
+                timestamp = timestamp if timestamp else datetime.now().strftime("%Y%m%d_%H%M%S")
                 file_name = file_name + "/" + f"benchmark_run_{timestamp}.jsonl"
                 api.upload_file(
                     path_or_fileobj=jsonl_path,
