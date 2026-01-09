@@ -414,14 +414,29 @@ class GlmImageVisionBlock(Glm4vVisionBlock):
         self,
         hidden_states: torch.Tensor,
         cu_seqlens: torch.Tensor,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
-        hidden_states = hidden_states + self.attn(
-            self.norm1(hidden_states),
+        r"""
+        cu_seqlens (`torch.Tensor` of shape `(num_images_or_videos + 1,)`):
+            The cumulative sequence lengths of each image or video feature.
+        position_embeddings (`tuple(torch.Tensor, torch.Tensor)` of shape `(num_patches, head_dim // 2)`):
+            The cosine and sine position embeddings for vision attention.
+        """
+        residual = hidden_states
+
+        hidden_states = self.norm1(hidden_states)
+        hidden_states, _ = self.self_attn(
+            hidden_states,
             cu_seqlens=cu_seqlens,
             **kwargs,
         )
-        hidden_states = hidden_states + self.mlp(self.norm2(hidden_states))
+        hidden_states = residual + hidden_states
+
+        residual = hidden_states
+        hidden_states = self.norm2(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = residual + hidden_states
+
         return hidden_states
 
 
