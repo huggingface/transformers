@@ -71,7 +71,7 @@ PATH_TO_TESTS = PATH_TO_REPO / "tests"
 
 # The value is just a heuristic to determine if we `guess` all models are impacted.
 # This variable has effect only if `filter_models=False`.
-NUM_MODELS_TO_TRIGGER_FULL_CI = 30
+NUM_MODELS_TO_TRIGGER_FULL_CI = 15
 
 
 @contextmanager
@@ -990,7 +990,7 @@ def infer_tests_to_run(
     model_impacted = {"/".join(x.split("/")[:3]) for x in impacted_files if x.startswith("tests/models/")}
     # Grab the corresponding test files:
     if (
-        any(x in modified_files for x in ["setup.py", ".circleci/create_circleci_config.py"])
+        any(x in modified_files for x in ["setup.py", ".circleci/create_circleci_config.py", "src/transformers/modeling_utils.py", "src/transformers/core_model_loading.py"])
         or not filter_models
         and len(model_impacted) >= NUM_MODELS_TO_TRIGGER_FULL_CI
         or commit_flags["test_all"]
