@@ -555,7 +555,7 @@ class GlmImageVQVAEVectorQuantizer(nn.Module):
     and allowing for post-hoc remapping of indices.
     """
 
-    def __init__(self, config):
+    def __init__(self, config: GlmImageVQVAEConfig):
         super().__init__()
         self.num_embeddings = config.num_embeddings
         self.embedding_dim = config.embed_dim
@@ -567,15 +567,20 @@ class GlmImageVQVAEVectorQuantizer(nn.Module):
         hidden_state = hidden_state.permute(0, 2, 3, 1).contiguous()
         hidden_state_flattened = hidden_state.view(-1, self.embedding_dim)
 
+        # L2 normalize
+        hidden_state = F.normalize(hidden_state, p=2, dim=-1)
+        hidden_state_flattened = F.normalize(hidden_state_flattened, p=2, dim=-1)
+        embedding = F.normalize(self.embedding.weight, p=2, dim=-1)
+
         # distances from z to embeddings e_j (z - e)^2 = z^2 + e^2 - 2 e * z
         distances = (
             torch.sum(hidden_state_flattened**2, dim=1, keepdim=True)
-            + torch.sum(self.embedding.weight**2, dim=1)
-            - 2 * torch.einsum("bd,dn->bn", hidden_state_flattened, self.embedding.weight.transpose(0, 1))
+            + torch.sum(embedding.weight**2, dim=1)
+            - 2 * torch.einsum("bd,dn->bn", hidden_state_flattened, embedding.weight.transpose(0, 1))
         )
 
         min_encoding_indices = torch.argmin(distances, dim=1)
-        hidden_state_quant = self.embedding(min_encoding_indices).view(hidden_state.shape)
+        hidden_state_quant = embedding[min_encoding_indices].view(hidden_state.shape)
 
         # compute loss for embedding
         loss = torch.mean((hidden_state_quant.detach() - hidden_state) ** 2) + self.beta * torch.mean(

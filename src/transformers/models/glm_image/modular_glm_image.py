@@ -30,7 +30,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
 from ...utils import TransformersKwargs, logging
-from ..chameleon.modeling_chameleon import ChameleonVQVAE
+from ..chameleon.modeling_chameleon import ChameleonVQVAE, ChameleonVQVAEVectorQuantizer
 from ..glm4v.configuration_glm4v import Glm4vTextConfig, Glm4vVisionConfig
 from ..glm4v.modeling_glm4v import (
     Glm4vCausalLMOutputWithPast,
@@ -453,6 +453,58 @@ class GlmImagePreTrainedModel(Glm4vPreTrainedModel):
 
 class GlmImageModelOutputWithPast(Glm4vModelOutputWithPast):
     pass
+
+
+class GlmImageVQVAEVectorQuantizer(ChameleonVQVAEVectorQuantizer):
+    """
+    A module for vector quantization using learned embedding vectors.
+
+    This module implements the quantization process similar to te one described in
+    the VQ-VAE (Vector Quantized Variational AutoEncoder) paper. It quantizes continuous
+    input vectors into discrete codebook vectors, which are learned during training.
+    Current implementation improves over previous ones by avoiding costly matrix multiplications
+    and allowing for post-hoc remapping of indices.
+    """
+
+    def __init__(self, config: GlmImageVQVAEConfig):
+        super().__init__(config)
+        self.num_embeddings = config.num_embeddings
+        self.embedding_dim = config.embed_dim
+        self.beta = getattr(config, "beta", 0.25)
+
+        self.embedding = nn.Embedding(self.num_embeddings, self.embedding_dim)
+
+    def forward(self, hidden_state: torch.Tensor):
+        hidden_state = hidden_state.permute(0, 2, 3, 1).contiguous()
+        hidden_state_flattened = hidden_state.view(-1, self.embedding_dim)
+
+        # L2 normalize
+        hidden_state = F.normalize(hidden_state, p=2, dim=-1)
+        hidden_state_flattened = F.normalize(hidden_state_flattened, p=2, dim=-1)
+        embedding = F.normalize(self.embedding.weight, p=2, dim=-1)
+
+        # distances from z to embeddings e_j (z - e)^2 = z^2 + e^2 - 2 e * z
+        distances = (
+            torch.sum(hidden_state_flattened**2, dim=1, keepdim=True)
+            + torch.sum(embedding.weight**2, dim=1)
+            - 2 * torch.einsum("bd,dn->bn", hidden_state_flattened, embedding.weight.transpose(0, 1))
+        )
+
+        min_encoding_indices = torch.argmin(distances, dim=1)
+        hidden_state_quant = embedding[min_encoding_indices].view(hidden_state.shape)
+
+        # compute loss for embedding
+        loss = torch.mean((hidden_state_quant.detach() - hidden_state) ** 2) + self.beta * torch.mean(
+            (hidden_state_quant - hidden_state.detach()) ** 2
+        )
+
+        # preserve gradients
+        hidden_state_quant = hidden_state + (hidden_state_quant - hidden_state).detach()
+
+        # reshape back to match original input shape
+        hidden_state_quant = hidden_state_quant.permute(0, 3, 1, 2).contiguous()
+
+        return hidden_state_quant, loss, min_encoding_indices
 
 
 class GlmImageVQVAE(ChameleonVQVAE):
