@@ -40,6 +40,8 @@ import datasets
 import evaluate
 import numpy as np
 from datasets import Value, load_dataset
+from datasets.features import Sequence as SequenceFeature
+from scipy.special import expit
 
 import transformers
 from transformers import (
@@ -413,7 +415,10 @@ def main():
     # Trying to have good defaults here, don't hesitate to tweak to your needs.
 
     is_regression = (
-        raw_datasets["train"].features["label"].dtype in ["float32", "float64"]
+        (
+            hasattr(raw_datasets["train"].features["label"], "dtype")
+            and raw_datasets["train"].features["label"].dtype in ["float32", "float64"]
+        )
         if data_args.do_regression is None
         else data_args.do_regression
     )
@@ -424,7 +429,11 @@ def main():
         num_labels = 1
         # regression requires float as label type, let's cast it if needed
         for split in raw_datasets:
-            if raw_datasets[split].features["label"].dtype not in ["float32", "float64"]:
+            # Check if dtype exists and is not float32/float64
+            if (
+                hasattr(raw_datasets[split].features["label"], "dtype")
+                and raw_datasets[split].features["label"].dtype not in ["float32", "float64"]
+            ):
                 logger.warning(
                     f"Label type for {split} set to float32, was {raw_datasets[split].features['label'].dtype}"
                 )
@@ -439,7 +448,12 @@ def main():
                     raise error
 
     else:  # classification
-        if raw_datasets["train"].features["label"].dtype == "list":  # multi-label classification
+        # Check if this is multi-label classification by checking if the feature is a Sequence/List
+        # or if the first label value is a list
+        label_feature = raw_datasets["train"].features["label"]
+        if isinstance(label_feature, SequenceFeature) or (
+            len(raw_datasets["train"]) > 0 and isinstance(raw_datasets["train"]["label"][0], list)
+        ):
             is_multi_label = True
             logger.info("Label type is list, doing multi-label classification")
         # Trying to find the number of labels in a multi-label classification task
@@ -641,7 +655,10 @@ def main():
             preds = np.squeeze(preds)
             result = metric.compute(predictions=preds, references=p.label_ids)
         elif is_multi_label:
-            preds = np.array([np.where(p > 0, 1, 0) for p in preds])  # convert logits to multi-hot encoding
+            # Convert logits to multi-hot encoding by applying sigmoid then thresholding
+            preds = expit(preds)  # Apply sigmoid to convert logits to probabilities
+            threshold = 0.5
+            preds = np.array([np.where(p > threshold, 1, 0) for p in preds])
             # Micro F1 is commonly used in multi-label classification
             result = metric.compute(predictions=preds, references=p.label_ids, average="micro")
         else:
@@ -705,10 +722,12 @@ def main():
         if is_regression:
             predictions = np.squeeze(predictions)
         elif is_multi_label:
-            # Convert logits to multi-hot encoding. We compare the logits to 0 instead of 0.5, because the sigmoid is not applied.
-            # You can also pass `preprocess_logits_for_metrics=lambda logits, labels: nn.functional.sigmoid(logits)` to the Trainer
-            # and set p > 0.5 below (less efficient in this case)
-            predictions = np.array([np.where(p > 0, 1, 0) for p in predictions])
+            # Convert logits to multi-hot encoding by first applying sigmoid and then thresholding.
+            # Apply sigmoid to convert logits to probabilities
+            predictions = expit(predictions)  # Apply sigmoid: σ(x) = 1/(1+e^(-x))
+            # Apply threshold (default 0.5) to convert probabilities to binary predictions
+            threshold = 0.5
+            predictions = np.array([np.where(p > threshold, 1, 0) for p in predictions])
         else:
             predictions = np.argmax(predictions, axis=1)
         output_predict_file = os.path.join(training_args.output_dir, "predict_results.txt")
