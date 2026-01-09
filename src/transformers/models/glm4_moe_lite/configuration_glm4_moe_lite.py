@@ -188,6 +188,7 @@ class Glm4MoeLiteConfig(PreTrainedConfig):
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
+        self.num_hidden_layers = num_hidden_layers
 
         # Default to MoE from the second layer and on
         self.mlp_layer_types = mlp_layer_types
@@ -196,7 +197,6 @@ class Glm4MoeLiteConfig(PreTrainedConfig):
         layer_type_validation(self.mlp_layer_types, self.num_hidden_layers, attention=False)
 
         self.moe_intermediate_size = moe_intermediate_size
-        self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
         self.n_shared_experts = n_shared_experts
         self.n_routed_experts = n_routed_experts
