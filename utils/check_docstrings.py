@@ -103,6 +103,7 @@ OBJECTS_TO_IGNORE = {
     "GlmAsrProcessor",
     "AudioFlamingo3Processor",
     "ApertusConfig",
+    "HrmConfig",
     "Mxfp4Config",
     "Qwen3OmniMoeConfig",
     "Exaone4Config",

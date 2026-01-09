@@ -717,6 +717,28 @@ class ModelArgs:
         "shape": None,
     }
 
+    puzzle_identifiers = {
+        "description": """
+    Puzzle identifiers for puzzle-specific embeddings (HRM model only). Each puzzle can have a unique embedding
+    to help the model adapt to different task instances. Only used when `config.puzzle_emb_ndim > 0`.
+    """,
+        "shape": "of shape `(batch_size,)`",
+    }
+
+    carry = {
+        "description": """
+    Recurrent carry state from previous computation step (HRM model only). Contains:
+    - `inner_carry`: H-level (high-level) and L-level (low-level) hidden states for hierarchical reasoning
+    - `steps`: Number of Adaptive Computation Time (ACT) steps taken
+    - `halted`: Boolean flags indicating if computation has halted
+    - `current_data`: Current input data being processed
+
+    If not provided, will be initialized automatically. This is used for iterative refinement in the HRM
+    hierarchical reasoning architecture.
+    """,
+        "shape": None,
+    }
+
     interpolate_pos_encoding = {
         "description": """
     Whether to interpolate the pre-trained position encodings.
