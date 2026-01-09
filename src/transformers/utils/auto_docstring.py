@@ -68,6 +68,7 @@ HARDCODED_CONFIG_FOR_MODELS = {
     "esmfold": "EsmConfig",
     "parakeet": "ParakeetCTCConfig",
     "lasr": "LasrCTCConfig",
+    "wav2vec2-with-lm": "Wav2Vec2Config",
     "youtu": "YoutuConfig",
 }
 
