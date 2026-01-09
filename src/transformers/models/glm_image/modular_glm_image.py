@@ -568,8 +568,6 @@ class GlmImageVisionModel(Glm4vVisionModel):
         """
 
         hidden_states = self.patch_embed(pixel_values)
-
-        grid_thw = grid_thw.to(hidden_states.device)
         image_type_ids = self.rot_pos_emb(grid_thw)
 
         cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
@@ -578,7 +576,13 @@ class GlmImageVisionModel(Glm4vVisionModel):
         )
         cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0)
         seqlens = (cu_seqlens[1:] - cu_seqlens[:-1]).tolist()
-        hidden_states = self.embeddings(hidden_states, seqlens, grid_thw, image_type_ids[:, 0], image_type_ids[:, 1])
+        hidden_states = self.embeddings(
+            hidden_states,
+            seqlens,
+            grid_thw,
+            image_type_ids[:, 0].to(hidden_states.device),
+            image_type_ids[:, 1].to(hidden_states.device),
+        )
 
         # Transformer blocks (no position_embeddings needed, already added above)
         for blk in self.blocks:
