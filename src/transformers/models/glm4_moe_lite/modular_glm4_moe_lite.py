@@ -13,6 +13,8 @@
 # limitations under the License.
 
 
+import torch.nn as nn
+
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...modeling_rope_utils import RopeParameters
 from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3Attention
@@ -272,11 +274,10 @@ class Glm4MoeLiteMoE(Glm4MoeMoE):
     pass
 
 
-class Glm4MoeLiteDecoderLayer(Glm4MoeDecoderLayer):
+class Glm4MoeLiteDecoderLayer(Glm4MoeDecoderLayer, nn.Module):
     def __init__(self, config: Glm4MoeLiteConfig, layer_idx: int):
-        super().__init__()
+        nn.Module.__init__(self)
         self.hidden_size = config.hidden_size
-
         self.self_attn = Glm4MoeLiteAttention(config, layer_idx)
 
         if config.mlp_layer_types[layer_idx] == "sparse":
