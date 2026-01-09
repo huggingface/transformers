@@ -1098,7 +1098,6 @@ def gather_state_dict_for_save(
         "rowwise": -1,
         "embedding_rowwise": 0,
         "local_packed_rowwise": -2,
-        "gather": None,
         "sequence_parallel": None,
     }
 
@@ -1109,7 +1108,6 @@ def gather_state_dict_for_save(
         "rowwise": None,
         "embedding_rowwise": None,
         "local_packed_rowwise": -1,
-        "gather": None,
         "sequence_parallel": None,
     }
 
