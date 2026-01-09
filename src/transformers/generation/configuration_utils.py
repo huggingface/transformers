@@ -687,7 +687,7 @@ class GenerationConfig(PushToHubMixin):
                 )
 
         # 2.5. check cache-related arguments
-        if self.use_cache is not True:
+        if self.use_cache is False:
             # In this case, all cache-related arguments should be unset. However, since `use_cache=False` is often used
             # passed to `generate` directly to hot-fix cache issues, let's raise a warning instead of an error
             # (otherwise a user might need to overwrite several parameters).
