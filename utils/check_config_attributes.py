@@ -73,6 +73,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "UdopConfig": ["feed_forward_proj"],
     "ZambaConfig": ["attn_layer_offset", "attn_layer_period"],
     "MllamaVisionConfig": ["supported_aspect_ratios"],
+    "LEDConfig": ["classifier_dropout"],
     "GPTNeoXConfig": ["rotary_emb_base"],
     "ShieldGemma2Config": ["mm_tokens_per_image", "vision_config"],
     "Llama4VisionConfig": ["multi_modal_projector_bias", "norm_eps"],
