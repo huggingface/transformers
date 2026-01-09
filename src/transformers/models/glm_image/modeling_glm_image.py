@@ -1062,7 +1062,7 @@ class GlmImageModel(GlmImagePreTrainedModel):
 
             image_end = torch.where(curr_input_ids == image_end_token_id)[0] + 1
             image_start = torch.where(curr_input_ids == image_start_token_id)[0] + 1
-            current_pos = image_start[0]
+            current_pos = image_start[0] if len(image_start) > 1 else 0
             prev_image_end = 0
             curr_position_ids = []
             for start, end, grid in zip(image_start, image_end, image_grid_thw):
@@ -1082,10 +1082,10 @@ class GlmImageModel(GlmImagePreTrainedModel):
                 vision_position_ids = torch.stack([position_temporal, position_height, position_width], dim=0)
 
                 current_pos += max(num_height_grid, num_width_grid)
-                prev_image_end += end
+                prev_image_end = end
                 curr_position_ids.append(torch.cat([llm_position_ids, vision_position_ids], dim=-1))
 
-            end_position = len(curr_input_ids) - prev_image_end + 1
+            end_position = len(curr_input_ids) - prev_image_end + 2
             llm_position_ids = text_positions[:, current_pos : current_pos + end_position]
             curr_position_ids.append(llm_position_ids)
             curr_position_ids = torch.cat(curr_position_ids, dim=-1)
