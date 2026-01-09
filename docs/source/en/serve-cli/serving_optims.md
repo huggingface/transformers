@@ -19,7 +19,7 @@ rendered properly in your Markdown viewer.
 
 ## Continuous batching
 
-[Continuous batching](./continuous_batching) dynamically groups and interleaves requests to share forward passes on the GPU. New requests join the batch as others progress through prefill. Completed requests drop out after decoding. This increases GPU utilization and throughput without compromising latency.
+[Continuous batching](../continuous_batching) dynamically groups and interleaves requests to share forward passes on the GPU. New requests join the batch as others progress through prefill. Completed requests drop out after decoding. This increases GPU utilization and throughput without compromising latency.
 
 Add the `--continuous-batching` argument to enable continuous batching.
 
@@ -39,7 +39,7 @@ pip install transformers[open-telemetry]
 
 ## Quantization
 
-[Quantization](./quantization/overview) reduces memory usage by mapping weights to a lower precision. `transformers serve` is compatible with all quantization methods in Transformers. It supports pre-quantized models and runtime quantization.
+[Quantization](../quantization/overview) reduces memory usage by mapping weights to a lower precision. `transformers serve` is compatible with all quantization methods in Transformers. It supports pre-quantized models and runtime quantization.
 
 Pre-quantized models don't require any changes. They generally provide the best balance between performance and accuracy. Install the appropriate quantization library. Then pass the pre-quantized model from the Hub to the `model` argument.
 
@@ -53,7 +53,7 @@ curl http://localhost:8000/v1/responses \
   }'
 ```
 
-Use the `--quantization` argument to quantize a model at runtime. This helps when experimenting with new checkpoints or finetunes that don't have quantized weights yet. Only [bitsandbytes](./quantization/bitsandbytes) 4-bit and 8-bit quantization is supported.
+Use the `--quantization` argument to quantize a model at runtime. This helps when experimenting with new checkpoints or finetunes that don't have quantized weights yet. Only [bitsandbytes](../quantization/bitsandbytes) 4-bit and 8-bit quantization is supported.
 
 ```sh
 transformers serve \
@@ -62,7 +62,7 @@ transformers serve \
 
 ## Attention backend
 
-An optimized [attention backend](./attention_interface) improves memory efficiency and speeds up inference.
+An optimized [attention backend](../attention_interface) improves memory efficiency and speeds up inference.
 
 ```sh
 transformers serve \
@@ -72,7 +72,7 @@ transformers serve \
 
 ## Data type
 
-The `"bfloat16"` or `"float16"` [data types](./models#model-data-type) save memory and increase throughput.
+The `"bfloat16"` or `"float16"` [data types](../models#model-data-type) save memory and increase throughput.
 
 ```sh
 transformers serve \
