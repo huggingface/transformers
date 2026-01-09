@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Upstage and HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,19 +13,17 @@
 # limitations under the License.
 """PyTorch SolarOpen model."""
 
-from typing import Optional
-
 from torch import nn
 
 from ...configuration_utils import PretrainedConfig
 from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 from ..glm4_moe.modeling_glm4_moe import (
+    Glm4MoeAttention,
     Glm4MoeForCausalLM,
     Glm4MoeModel,
     Glm4MoeMoE,
     Glm4MoePreTrainedModel,
-    Glm4MoeAttention,
     Glm4MoeRMSNorm,
 )
 from ..llama.modeling_llama import LlamaDecoderLayer
@@ -138,7 +135,7 @@ class SolarOpenConfig(PretrainedConfig):
         rms_norm_eps: float = 1e-5,
         use_cache: bool = True,
         tie_word_embeddings: bool = False,
-        rope_parameters: Optional[RopeParameters] = {
+        rope_parameters: RopeParameters | None = {
             "rope_theta": 1000000.0,
             "rope_type": "yarn",
             "partial_rotary_factor": 1.0,
@@ -231,7 +228,7 @@ class SolarOpenModel(Glm4MoeModel):
 
 class SolarOpenForCausalLM(Glm4MoeForCausalLM):
     # _tied_weights_keys = {} # head
-    _tied_weights_keys = [] # 4.57.3
+    _tied_weights_keys = []  # 4.57.3
     pass
 
 
