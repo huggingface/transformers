@@ -55,11 +55,27 @@ def update_state_dict_for_hf_model(state_dict):
 
         # Handle acoustic tokenizer transformations
         if "acoustic_tokenizer.encoder" in key:
-            if "downsample_layers." in key and ".0.conv." in key:
-                new_key = new_key.replace(".0.conv.", ".conv.")
+            if "downsample_layers.0.0.conv." in key:
+                new_key = new_key.replace("downsample_layers.0.0.conv.", "stem.conv.conv.")
+            elif "stages.0." in key:
+                new_key = new_key.replace("stages.0.", "stem.stage.")
+            elif "downsample_layers." in key and not "downsample_layers.0" in key:
+                match = re.search(r'downsample_layers\.(\d+)', key)
+                if match:
+                    old_idx = int(match.group(1))
+                    new_idx = old_idx - 1  # Shift down by 1 since downsample_layers[0] became stem
+                    new_key = re.sub(r'downsample_layers\.\d+\.0\.conv\.', f'layers.{new_idx}.conv.conv.', new_key)
+            elif "stages." in key and not "stages.0." in key:
+                match = re.search(r'stages\.(\d+)', key)
+                if match:
+                    old_idx = int(match.group(1))
+                    new_idx = old_idx - 1  # Shift down by 1 since stages[0] became stem
+                    new_key = re.sub(r'stages\.\d+\.', f'layers.{new_idx}.stage.', new_key)
             if "mixer.conv.conv.conv." in key:
                 new_key = new_key.replace("mixer.conv.conv.conv.", "mixer.conv.")
-            elif ".conv.conv." in key:
+            if ".conv.conv.conv." in new_key:
+                new_key = new_key.replace(".conv.conv.conv.", ".conv.conv.")
+            elif ".conv.conv." in key and "stem.conv.conv" not in new_key and "layers." not in new_key:
                 new_key = new_key.replace(".conv.conv.", ".conv.")
         if "acoustic_tokenizer.decoder" in key:
             if "upsample_layers.0.0.conv.conv." in key:
@@ -392,18 +408,12 @@ def convert_checkpoint(
     vibevoice_config = VibeVoiceConfig(**model_config)
     vibevoice_model = VibeVoiceForConditionalGeneration(vibevoice_config).to(dtype)
     # -- print dtypes of key components for verification
-    print("Acoustic connector dtype : ", vibevoice_model.acoustic_connector.fc1.weight.dtype)
-    print("Semantic connector dtype : ", vibevoice_model.semantic_connector.fc1.weight.dtype)
-    print("Language model dtype : ", vibevoice_model.language_model.embed_tokens.weight.dtype)
-    print(
-        "Acoustic tokenizer dtype : ",
-        vibevoice_model.acoustic_tokenizer.encoder.downsample_layers[0].conv.weight.dtype,
-    )
-    print(
-        "Semantic tokenizer dtype : ",
-        vibevoice_model.semantic_tokenizer.encoder.downsample_layers[0].conv.weight.dtype,
-    )
-    print("Diffusion head dtype : ", vibevoice_model.diffusion_head.noisy_images_proj.weight.dtype)
+    print("Acoustic connector dtype : ", next(vibevoice_model.acoustic_connector.parameters()).dtype)
+    print("Semantic connector dtype : ", next(vibevoice_model.semantic_connector.parameters()).dtype)
+    print("Language model dtype : ", next(vibevoice_model.language_model.parameters()).dtype)
+    print("Acoustic tokenizer dtype : ", next(vibevoice_model.acoustic_tokenizer.parameters()).dtype)
+    print("Semantic tokenizer dtype : ", next(vibevoice_model.semantic_tokenizer.parameters()).dtype)
+    print("Diffusion head dtype : ", next(vibevoice_model.diffusion_head.parameters()).dtype)
 
     # -- load into HF model
     if model_config["text_config"].get("tie_word_embeddings", False):
