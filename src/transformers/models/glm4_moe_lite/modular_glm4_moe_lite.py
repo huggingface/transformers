@@ -14,10 +14,10 @@
 
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_rope_utils import RopeParameters
 from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3Attention
 from ..glm4_moe.modeling_glm4_moe import (
+    Glm4MoeDecoderLayer,
     Glm4MoeForCausalLM,
     Glm4MoeMLP,
     Glm4MoeModel,
@@ -272,7 +272,7 @@ class Glm4MoeLiteMoE(Glm4MoeMoE):
     pass
 
 
-class Glm4MoeLiteDecoderLayer(GradientCheckpointingLayer):
+class Glm4MoeLiteDecoderLayer(Glm4MoeDecoderLayer):
     def __init__(self, config: Glm4MoeLiteConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
