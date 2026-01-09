@@ -102,6 +102,26 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
         )
 
     def update_tp_plan(self, config):
+        if "Qwen3" in config.__class__.__name__:
+            text_plan = {
+                "layers.*.self_attn.q_proj.weight": "colwise",
+                "layers.*.self_attn.q_proj.weight_scale_inv": "colwise",
+                "layers.*.self_attn.k_proj.weight": "colwise",
+                "layers.*.self_attn.k_proj.weight_scale_inv": "colwise",
+                "layers.*.self_attn.v_proj.weight": "colwise",
+                "layers.*.self_attn.v_proj.weight_scale_inv": "colwise",
+                "layers.*.self_attn.o_proj.weight": "rowwise",
+                "layers.*.self_attn.o_proj.weight_scale_inv": "rowwise",
+                "layers.*.mlp.gate_proj.weight": "colwise",
+                "layers.*.mlp.gate_proj.weight_scale_inv": "colwise",
+                "layers.*.mlp.up_proj.weight": "colwise",
+                "layers.*.mlp.up_proj.weight_scale_inv": "colwise",
+                "layers.*.mlp.down_proj.weight": "rowwise",
+                "layers.*.mlp.down_proj.weight_scale_inv": "rowwise",
+            }
+
+            config.base_model_tp_plan = text_plan
+
         return config
 
     def is_serializable(self):
