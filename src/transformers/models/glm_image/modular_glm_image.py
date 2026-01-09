@@ -25,16 +25,11 @@ from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...generation import GenerationMixin
-from ...image_utils import (
-    ImageInput,
-)
+from ...image_utils import ImageInput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import (
-    TransformersKwargs,
-    logging,
-)
+from ...utils import TransformersKwargs, logging
 from ..chameleon.modeling_chameleon import ChameleonVQVAE
 from ..glm4v.configuration_glm4v import Glm4vTextConfig, Glm4vVisionConfig
 from ..glm4v.modeling_glm4v import (
