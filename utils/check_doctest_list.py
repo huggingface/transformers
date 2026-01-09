@@ -17,13 +17,13 @@ alphabetical order.
 
 Usage (from the root of the repo):
 
-Check that the doctest list is properly sorted and all files exist (used in `make repo-consistency`):
+Check that the doctest list is properly sorted and all files exist (used in `make check-repo`):
 
 ```bash
 python utils/check_doctest_list.py
 ```
 
-Auto-sort the doctest list if it is not properly sorted (used in `make fix-copies`):
+Auto-sort the doctest list if it is not properly sorted (used in `make fix-repo`):
 
 ```bash
 python utils/check_doctest_list.py --fix_and_overwrite
@@ -68,7 +68,7 @@ def clean_doctest_list(doctest_file: str, overwrite: bool = False):
     if all_paths != sorted_paths:
         if not overwrite:
             raise ValueError(
-                f"Files in `{doctest_file}` are not in alphabetical order, run `make fix-copies` to fix "
+                f"Files in `{doctest_file}` are not in alphabetical order, run `make fix-repo` to fix "
                 "this automatically."
             )
         with open(doctest_file, "w", encoding="utf-8") as f:

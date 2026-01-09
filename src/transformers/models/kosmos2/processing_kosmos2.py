@@ -23,6 +23,7 @@ from ...image_utils import ImageInput
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
 from ...tokenization_python import AddedToken
 from ...tokenization_utils_base import BatchEncoding, TextInput
+from ...utils import auto_docstring
 
 
 BboxInput = Union[
@@ -36,12 +37,28 @@ NestedList = list[Union[Optional[int], "NestedList"]]
 
 
 class Kosmos2ImagesKwargs(ImagesKwargs, total=False):
+    """
+    bboxes (`Union[list[tuple[int]], list[tuple[float]], list[list[tuple[int]]], list[list[tuple[float]]]]`, *optional*):
+        The bounding bboxes associated to `texts`.
+    num_image_tokens (`int`, *optional* defaults to 64):
+        The number of (consecutive) places that are used to mark the placeholders to store image information.
+        This should be the same as `latent_query_num` in the instance of `Kosmos2Config` you are using.
+    first_image_token_id (`int`, *optional*):
+        The token id that will be used for the first place of the subsequence that is reserved to store image
+        information. If unset, will default to `self.tokenizer.unk_token_id + 1`.
+    """
+
     bboxes: Optional[NestedList]  # NOTE: hub validators can't accept `Sequence`
     num_image_tokens: int
     first_image_token_id: Optional[int]
 
 
 class Kosmos2TextKwargs(TextKwargs, total=False):
+    """
+    add_eos_token (`bool`, defaults to `False`):
+    Whether or not to include `EOS` token id in the encoding when `add_special_tokens=True`.
+    """
+
     add_eos_token: bool
 
 
@@ -66,25 +83,13 @@ class Kosmos2ProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@auto_docstring
 class Kosmos2Processor(ProcessorMixin):
-    r"""
-    Constructs an KOSMOS-2 processor which wraps a KOSMOS-2 image processor and a KOSMOS-2 tokenizer into a single
-    processor.
-
-    [`Kosmos2Processor`] offers all the functionalities of [`CLIPImageProcessor`] and some functionalities of
-    [`XLMRobertaTokenizerFast`]. See the docstring of [`~Kosmos2Processor.__call__`] and [`~Kosmos2Processor.decode`]
-    for more information.
-
-    Args:
-        image_processor (`CLIPImageProcessor`):
-            An instance of [`CLIPImageProcessor`]. The image processor is a required input.
-        tokenizer (`XLMRobertaTokenizerFast`):
-            An instance of ['XLMRobertaTokenizerFast`]. The tokenizer is a required input.
+    def __init__(self, image_processor, tokenizer, num_patch_index_tokens=1024, *kwargs):
+        r"""
         num_patch_index_tokens (`int`, *optional*, defaults to 1024):
             The number of tokens that represent patch indices.
-    """
-
-    def __init__(self, image_processor, tokenizer, num_patch_index_tokens=1024, *kwargs):
+        """
         tokenizer.return_token_type_ids = False
 
         self.eod_token = "</doc>"
@@ -129,32 +134,13 @@ class Kosmos2Processor(ProcessorMixin):
 
         super().__init__(image_processor, tokenizer)
 
+    @auto_docstring
     def __call__(
         self,
         images: Optional[ImageInput] = None,
         text: Union[TextInput, list[TextInput]] = None,
         **kwargs: Unpack[Kosmos2ProcessorKwargs],
     ) -> BatchFeature:
-        """
-        This method uses [`CLIPImageProcessor.__call__`] method to prepare image(s) for the model, and
-        [`XLMRobertaTokenizerFast.__call__`] to prepare text for the model.
-
-        Please refer to the docstring of the above two methods for more information.
-
-        The rest of this documentation shows the arguments specific to `Kosmos2Processor`.
-
-        Args:
-            bboxes (`Union[list[tuple[int]], list[tuple[float]], list[list[tuple[int]]], list[list[tuple[float]]]]`, *optional*):
-                The bounding bboxes associated to `texts`.
-            num_image_tokens (`int`, *optional* defaults to 64):
-                The number of (consecutive) places that are used to mark the placeholders to store image information.
-                This should be the same as `latent_query_num` in the instance of `Kosmos2Config` you are using.
-            first_image_token_id (`int`, *optional*):
-                The token id that will be used for the first place of the subsequence that is reserved to store image
-                information. If unset, will default to `self.tokenizer.unk_token_id + 1`.
-            add_eos_token (`bool`, defaults to `False`):
-                Whether or not to include `EOS` token id in the encoding when `add_special_tokens=True`.
-        """
         if images is None and text is None:
             raise ValueError("You have to specify either images or text.")
 

@@ -21,7 +21,7 @@ from typing import Optional, Union
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import logging
+from ...utils import auto_docstring, logging
 
 
 class DonutProcessorKwargs(ProcessingKwargs, total=False):
@@ -31,37 +31,18 @@ class DonutProcessorKwargs(ProcessingKwargs, total=False):
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring
 class DonutProcessor(ProcessorMixin):
-    r"""
-    Constructs a Donut processor which wraps a Donut image processor and an XLMRoBERTa tokenizer into a single
-    processor.
-
-    [`DonutProcessor`] offers all the functionalities of [`DonutImageProcessor`] and
-    [`XLMRobertaTokenizer`/`XLMRobertaTokenizerFast`]. See the [`~DonutProcessor.__call__`] and
-    [`~DonutProcessor.decode`] for more information.
-
-    Args:
-        image_processor ([`DonutImageProcessor`], *optional*):
-            An instance of [`DonutImageProcessor`]. The image processor is a required input.
-        tokenizer ([`XLMRobertaTokenizer`/`XLMRobertaTokenizerFast`], *optional*):
-            An instance of [`XLMRobertaTokenizer`/`XLMRobertaTokenizerFast`]. The tokenizer is a required input.
-    """
-
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
         super().__init__(image_processor, tokenizer)
 
+    @auto_docstring
     def __call__(
         self,
         images: Optional[ImageInput] = None,
         text: Optional[Union[str, list[str], TextInput, PreTokenizedInput]] = None,
         **kwargs: Unpack[DonutProcessorKwargs],
     ):
-        """
-        When used in normal mode, this method forwards all its arguments to AutoImageProcessor's
-        [`~AutoImageProcessor.__call__`] and returns its output. If used in the context
-        [`~DonutProcessor.as_target_processor`] this method forwards all its arguments to DonutTokenizer's
-        [`~DonutTokenizer.__call__`]. Please refer to the docstring of the above two methods for more information.
-        """
         if images is None and text is None:
             raise ValueError("You need to specify either an `images` or `text` input to process.")
 
