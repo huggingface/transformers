@@ -20,9 +20,10 @@ from io import BytesIO
 from pathlib import Path
 
 import av
+import httpx
 import numpy as np
 import torch
-from huggingface_hub import get_session, hf_hub_download
+from huggingface_hub import hf_hub_download
 from PIL import Image
 from torchvision.transforms import CenterCrop, Compose, Normalize, Resize, ToTensor
 
@@ -37,8 +38,6 @@ from transformers import (
 )
 from transformers.utils import logging
 
-
-session = get_session()
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -198,7 +197,7 @@ def prepare_img(model_name):
         image = Image.open(filepath).convert("RGB")
     else:
         url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        with session.stream("GET", url) as response:
+        with httpx.stream("GET", url) as response:
             image = Image.open(BytesIO(response.read()))
 
     return image

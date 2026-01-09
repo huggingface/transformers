@@ -17,6 +17,7 @@ import json
 import os
 from io import BytesIO
 
+import httpx
 import torch
 import yaml
 from PIL import Image
@@ -36,7 +37,6 @@ except ImportError:
         "Chameleon conversion supports only FastTokenizer and LlamaTokenizerFast can't be imported! "
         "Update your `tokenizers` library and re-run the tokenizer conversion."
     )
-from huggingface_hub import get_session
 
 
 """
@@ -59,7 +59,7 @@ tokenizer = LlamaTokenizerFast.from_pretrained("/output/path")
 Important note: you need to be able to host the whole model in RAM to execute this script (even if the biggest versions
 come in several checkpoints they each contain a part of each weight of the model, so we need to load them all in RAM).
 """
-session = get_session()
+
 NUM_SHARDS = {
     "7B": 1,
     "30B": 4,
@@ -407,7 +407,7 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1):
 
     prompt = "I'm very intrigued by this work of art:<image>Please tell me about the artist."
     url = "https://uploads4.wikiart.org/images/paul-klee/death-for-the-idea-1915.jpg!Large.jpg"
-    with session.stream("GET", url) as response:
+    with httpx.stream("GET", url) as response:
         image = Image.open(BytesIO(response.read()))
     inputs = processor(prompt, images=image, return_tensors="pt").to(model.device, torch.bfloat16)
     length = inputs.input_ids.shape[1]
@@ -421,10 +421,10 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1):
     # Multi-image example
     prompt = "I used to know a lot about constellations when I was younger, but as I grew older, I forgot most of what I knew. These are the only two constellations that I really remember now.<image><image>I would like for you to tell me about 3 more constellations and give me a little bit of history about the constellation."
     url = "https://nineplanets.org/wp-content/uploads/2020/12/the-big-dipper-1.jpg"
-    with session.stream("GET", url) as response:
+    with httpx.stream("GET", url) as response:
         image_1 = Image.open(BytesIO(response.read()))
     url = "https://www.kxan.com/wp-content/uploads/sites/40/2020/10/ORION.jpg"
-    with session.stream("GET", url) as response:
+    with httpx.stream("GET", url) as response:
         image_2 = Image.open(BytesIO(response.read()))
 
     inputs = processor(prompt, images=[image_1, image_2], return_tensors="pt").to(model.device, dtype=torch.bfloat16)

@@ -18,15 +18,14 @@ import argparse
 from io import BytesIO
 from pathlib import Path
 
+import httpx
 import torch
-from huggingface_hub import get_session, hf_hub_download
+from huggingface_hub import hf_hub_download
 from PIL import Image
 
 from transformers import DepthAnythingConfig, DepthAnythingForDepthEstimation, Dinov2Config, DPTImageProcessor
 from transformers.utils import logging
 
-
-session = get_session()
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -177,7 +176,7 @@ def rename_key(dct, old, new):
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    with session.stream("GET", url) as response:
+    with httpx.stream("GET", url) as response:
         image = Image.open(BytesIO(response.read()))
     return image
 
@@ -256,7 +255,7 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
     )
 
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    with session.stream("GET", url) as response:
+    with httpx.stream("GET", url) as response:
         image = Image.open(BytesIO(response.read()))
 
     pixel_values = processor(image, return_tensors="pt").pixel_values
@@ -282,31 +281,59 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
             )
         elif model_name == "depth-anything-large":
             expected_slice = torch.tensor(
-                [[87.9968, 87.7493, 88.2704], [87.1927, 87.6611, 87.3640], [86.7789, 86.9469, 86.7991]]
+                [
+                    [87.9968, 87.7493, 88.2704],
+                    [87.1927, 87.6611, 87.3640],
+                    [86.7789, 86.9469, 86.7991],
+                ]
             )
         elif model_name == "depth-anything-v2-small":
             expected_slice = torch.tensor(
-                [[2.6751, 2.6211, 2.6571], [2.5820, 2.6138, 2.6271], [2.6160, 2.6141, 2.6306]]
+                [
+                    [2.6751, 2.6211, 2.6571],
+                    [2.5820, 2.6138, 2.6271],
+                    [2.6160, 2.6141, 2.6306],
+                ]
             )
         elif model_name == "depth-anything-v2-base":
             expected_slice = torch.tensor(
-                [[4.3576, 4.3723, 4.3908], [4.3231, 4.3146, 4.3611], [4.3016, 4.3170, 4.3121]]
+                [
+                    [4.3576, 4.3723, 4.3908],
+                    [4.3231, 4.3146, 4.3611],
+                    [4.3016, 4.3170, 4.3121],
+                ]
             )
         elif model_name == "depth-anything-v2-large":
             expected_slice = torch.tensor(
-                [[162.2751, 161.8504, 162.8788], [160.3138, 160.8050, 161.9835], [159.3812, 159.9884, 160.0768]]
+                [
+                    [162.2751, 161.8504, 162.8788],
+                    [160.3138, 160.8050, 161.9835],
+                    [159.3812, 159.9884, 160.0768],
+                ]
             )
         elif model_name == "depth-anything-v2-metric-indoor-small":
             expected_slice = torch.tensor(
-                [[1.3349, 1.2946, 1.2801], [1.2793, 1.2337, 1.2899], [1.2629, 1.2218, 1.2476]]
+                [
+                    [1.3349, 1.2946, 1.2801],
+                    [1.2793, 1.2337, 1.2899],
+                    [1.2629, 1.2218, 1.2476],
+                ]
             )
         elif model_name == "depth-anything-v2-metric-indoor-base":
             expected_slice = torch.tensor(
-                [[1.4601, 1.3824, 1.4904], [1.5031, 1.4349, 1.4274], [1.4570, 1.4578, 1.4200]]
+                [
+                    [1.4601, 1.3824, 1.4904],
+                    [1.5031, 1.4349, 1.4274],
+                    [1.4570, 1.4578, 1.4200],
+                ]
             )
         elif model_name == "depth-anything-v2-metric-indoor-large":
             expected_slice = torch.tensor(
-                [[1.5040, 1.5019, 1.5218], [1.5087, 1.5195, 1.5149], [1.5437, 1.5128, 1.5252]]
+                [
+                    [1.5040, 1.5019, 1.5218],
+                    [1.5087, 1.5195, 1.5149],
+                    [1.5437, 1.5128, 1.5252],
+                ]
             )
         elif model_name == "depth-anything-v2-metric-outdoor-small":
             expected_slice = torch.tensor(

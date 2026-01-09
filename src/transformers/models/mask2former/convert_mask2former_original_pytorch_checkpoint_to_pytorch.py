@@ -21,12 +21,13 @@ from pathlib import Path
 from pprint import pformat
 from typing import Any
 
+import httpx
 import torch
 import torchvision.transforms as T
 from detectron2.checkpoint import DetectionCheckpointer
 from detectron2.config import get_cfg
 from detectron2.projects.deeplab import add_deeplab_config
-from huggingface_hub import get_session, hf_hub_download
+from huggingface_hub import hf_hub_download
 from PIL import Image
 from torch import Tensor, nn
 
@@ -44,7 +45,6 @@ from transformers.models.mask2former.modeling_mask2former import (
 from transformers.utils import logging
 
 
-session = get_session()
 StateDict = dict[str, Tensor]
 
 logging.set_verbosity_info()
@@ -87,7 +87,7 @@ class TrackedStateDict:
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    with session.stream("GET", url) as response:
+    with httpx.stream("GET", url) as response:
         image = Image.open(BytesIO(response.read()))
     return image
 

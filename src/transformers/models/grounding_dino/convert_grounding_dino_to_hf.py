@@ -18,8 +18,8 @@ URL: https://github.com/IDEA-Research/GroundingDINO"""
 import argparse
 from io import BytesIO
 
+import httpx
 import torch
-from huggingface_hub import get_session
 from PIL import Image
 from torchvision import transforms as T
 
@@ -32,8 +32,6 @@ from transformers import (
     SwinConfig,
 )
 
-
-session = get_session()
 
 IMAGENET_MEAN = [0.485, 0.456, 0.406]
 IMAGENET_STD = [0.229, 0.224, 0.225]
@@ -382,7 +380,7 @@ def read_in_q_k_v_decoder(state_dict, config):
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    with session.stream("GET", url) as response:
+    with httpx.stream("GET", url) as response:
         image = Image.open(BytesIO(response.read())).convert("RGB")
     return image
 

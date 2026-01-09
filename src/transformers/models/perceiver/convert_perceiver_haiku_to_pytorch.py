@@ -21,9 +21,10 @@ from io import BytesIO
 from pathlib import Path
 
 import haiku as hk
+import httpx
 import numpy as np
 import torch
-from huggingface_hub import get_session, hf_hub_download
+from huggingface_hub import hf_hub_download
 from PIL import Image
 
 from transformers import (
@@ -42,7 +43,6 @@ from transformers.utils import logging
 from ...utils import strtobool
 
 
-session = get_session()
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
 
@@ -50,7 +50,7 @@ logger = logging.get_logger(__name__)
 def prepare_img():
     # We will verify our results on an image of a dog
     url = "https://storage.googleapis.com/perceiver_io/dalmation.jpg"
-    with session.stream("GET", url) as response:
+    with httpx.stream("GET", url) as response:
         image = Image.open(BytesIO(response.read()))
     return image
 

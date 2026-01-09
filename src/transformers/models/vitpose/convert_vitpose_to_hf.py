@@ -23,14 +23,13 @@ import os
 import re
 from io import BytesIO
 
+import httpx
 import torch
-from huggingface_hub import get_session, hf_hub_download
+from huggingface_hub import hf_hub_download
 from PIL import Image
 
 from transformers import VitPoseBackboneConfig, VitPoseConfig, VitPoseForPoseEstimation, VitPoseImageProcessor
 
-
-session = get_session()
 
 ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"patch_embed.proj": "embeddings.patch_embeddings.projection",
@@ -182,7 +181,7 @@ def convert_old_keys_to_new_keys(state_dict_keys: dict | None = None):
 # We will verify our results on a COCO image
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000000139.jpg"
-    with session.stream("GET", url) as response:
+    with httpx.stream("GET", url) as response:
         image = Image.open(BytesIO(response.read()))
     return image
 

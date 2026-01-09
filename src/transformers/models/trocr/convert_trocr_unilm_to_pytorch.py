@@ -17,8 +17,8 @@ import argparse
 from io import BytesIO
 from pathlib import Path
 
+import httpx
 import torch
-from huggingface_hub import get_session
 from PIL import Image
 
 from transformers import (
@@ -33,8 +33,6 @@ from transformers import (
 )
 from transformers.utils import logging
 
-
-session = get_session()
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -138,7 +136,7 @@ def prepare_img(checkpoint_url):
         # url = "https://fki.tic.heia-fr.ch/static/img/a01-122.jpg"
     elif "printed" in checkpoint_url or "stage1" in checkpoint_url:
         url = "https://www.researchgate.net/profile/Dinh-Sang/publication/338099565/figure/fig8/AS:840413229350922@1577381536857/An-receipt-example-in-the-SROIE-2019-dataset_Q640.jpg"
-    with session.stream("GET", url) as response:
+    with httpx.stream("GET", url) as response:
         image = Image.open(BytesIO(response.read())).convert("RGB")
     return image
 

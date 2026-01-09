@@ -21,8 +21,9 @@ import pickle
 from io import BytesIO
 from pathlib import Path
 
+import httpx
 import torch
-from huggingface_hub import get_session, hf_hub_download
+from huggingface_hub import hf_hub_download
 from PIL import Image
 
 from transformers import MaskFormerConfig, MaskFormerForInstanceSegmentation, MaskFormerImageProcessor, SwinConfig
@@ -30,8 +31,6 @@ from transformers.utils import logging
 
 from ...utils import strtobool
 
-
-session = get_session()
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -226,7 +225,7 @@ def read_in_decoder_q_k_v(state_dict, config):
 # We will verify our results on an image of cute cats
 def prepare_img() -> torch.Tensor:
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    with session.stream("GET", url) as response:
+    with httpx.stream("GET", url) as response:
         image = Image.open(BytesIO(response.read()))
     return image
 

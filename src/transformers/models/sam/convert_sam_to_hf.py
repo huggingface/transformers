@@ -152,8 +152,8 @@ def convert_sam_checkpoint(model_name, checkpoint_path, pytorch_dump_folder, pus
     hf_model.load_state_dict(state_dict)
     hf_model = hf_model.to(device)
 
-    img_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
-    with session.stream("GET", img_url) as response:
+    url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
+    with session.stream("GET", url) as response:
         raw_image = Image.open(BytesIO(response.read())).convert("RGB")
 
     input_points = [[[500, 375]]]

@@ -18,8 +18,9 @@ import json
 from io import BytesIO
 from pathlib import Path
 
+import httpx
 import torch
-from huggingface_hub import get_session, hf_hub_download
+from huggingface_hub import hf_hub_download
 from PIL import Image
 
 from transformers import (
@@ -34,8 +35,6 @@ from transformers import (
 )
 from transformers.utils import logging
 
-
-session = get_session()
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -239,7 +238,7 @@ def convert_vilt_checkpoint(checkpoint_url, pytorch_dump_folder_path):
     # Forward pass on example inputs (image + text)
     if nlvr_model:
         url = "https://lil.nlp.cornell.edu/nlvr/exs/ex0_0.jpg"
-        with session.stream("GET", url) as response:
+        with httpx.stream("GET", url) as response:
             image1 = Image.open(BytesIO(response.read()))
             image2 = Image.open(BytesIO(response.read()))
         text = (
@@ -255,7 +254,7 @@ def convert_vilt_checkpoint(checkpoint_url, pytorch_dump_folder_path):
         )
     else:
         url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        with session.stream("GET", url) as response:
+        with httpx.stream("GET", url) as response:
             image = Image.open(BytesIO(response.read()))
         if mlm_model:
             text = "a bunch of [MASK] laying on a [MASK]."

@@ -16,15 +16,12 @@
 import argparse
 from io import BytesIO
 
+import httpx
 import torch
-from huggingface_hub import get_session
 from PIL import Image
 from torchvision.transforms import Compose, Normalize, Resize, ToTensor
 
 from transformers import Swin2SRConfig, Swin2SRForImageSuperResolution, Swin2SRImageProcessor
-
-
-session = get_session()
 
 
 def get_config(checkpoint_url):
@@ -179,7 +176,7 @@ def convert_swin2sr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to
 
     # verify values
     url = "https://github.com/mv-lab/swin2sr/blob/main/testsets/real-inputs/shanghai.jpg?raw=true"
-    with session.stream("GET", url) as response:
+    with httpx.stream("GET", url) as response:
         image = Image.open(BytesIO(response.read())).convert("RGB")
     processor = Swin2SRImageProcessor()
     # pixel_values = processor(image, return_tensors="pt").pixel_values

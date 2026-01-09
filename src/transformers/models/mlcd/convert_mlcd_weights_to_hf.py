@@ -22,9 +22,9 @@ import os
 import re
 from io import BytesIO
 
+import httpx
 import numpy as np
 import torch
-from huggingface_hub import get_session
 from PIL import Image
 
 from transformers import CLIPImageProcessor
@@ -33,8 +33,6 @@ from ...utils import logging
 from .configuration_mlcd import MLCDVisionConfig
 from .modeling_mlcd import MLCDVisionModel
 
-
-session = get_session()
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -283,7 +281,7 @@ def convert_mlcd_checkpoint(model_name, input_dir, output_dir, verify_hidden_sta
     if verify_hidden_state:
         print("Verifying hidden state for {model_name}...")
         url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        with session.stream("GET", url) as response:
+        with httpx.stream("GET", url) as response:
             image = Image.open(BytesIO(response.read()))
         pixel_values = image_processor(image, return_tensors="pt")["pixel_values"]
         last_hidden_state = model(pixel_values, output_hidden_states=True).last_hidden_state[0, :5, :5]

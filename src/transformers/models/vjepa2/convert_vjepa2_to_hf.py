@@ -11,13 +11,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import argparse
 import os
 import tempfile
 from io import BytesIO
 from pathlib import Path
 
+import httpx
 import numpy as np
 import torch
 from huggingface_hub import HfApi, get_session
@@ -198,7 +198,7 @@ def convert_predictor_keys(model_state_dict, og_predictor_state_dict, config):
 
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    with session.stream("GET", url) as response:
+    with httpx.stream("GET", url) as response:
         image = Image.open(BytesIO(response.read())).convert("RGB")
     return image
 

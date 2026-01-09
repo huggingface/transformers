@@ -18,10 +18,10 @@ import os
 from io import BytesIO
 
 import align
+import httpx
 import numpy as np
 import tensorflow as tf
 import torch
-from huggingface_hub import get_session
 from PIL import Image
 from tokenizer import Tokenizer
 
@@ -36,8 +36,6 @@ from transformers import (
 )
 from transformers.utils import logging
 
-
-session = get_session()
 
 logging.set_verbosity_info()
 logger = logging.get_logger(__name__)
@@ -65,7 +63,7 @@ def get_align_config():
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    with session.stream("GET", url) as response:
+    with httpx.stream("GET", url) as response:
         image = Image.open(BytesIO(response.read()))
     return image
 
@@ -107,21 +105,36 @@ def rename_keys(original_param_names):
         rename_keys.append((f"block{b}_expand_bn/gamma:0", f"encoder.blocks.{hf_b}.expansion.expand_bn.weight"))
         rename_keys.append((f"block{b}_expand_bn/beta:0", f"encoder.blocks.{hf_b}.expansion.expand_bn.bias"))
         rename_keys.append(
-            (f"block{b}_expand_bn/moving_mean:0", f"encoder.blocks.{hf_b}.expansion.expand_bn.running_mean")
+            (
+                f"block{b}_expand_bn/moving_mean:0",
+                f"encoder.blocks.{hf_b}.expansion.expand_bn.running_mean",
+            )
         )
         rename_keys.append(
-            (f"block{b}_expand_bn/moving_variance:0", f"encoder.blocks.{hf_b}.expansion.expand_bn.running_var")
+            (
+                f"block{b}_expand_bn/moving_variance:0",
+                f"encoder.blocks.{hf_b}.expansion.expand_bn.running_var",
+            )
         )
         rename_keys.append(
-            (f"block{b}_dwconv/depthwise_kernel:0", f"encoder.blocks.{hf_b}.depthwise_conv.depthwise_conv.weight")
+            (
+                f"block{b}_dwconv/depthwise_kernel:0",
+                f"encoder.blocks.{hf_b}.depthwise_conv.depthwise_conv.weight",
+            )
         )
         rename_keys.append((f"block{b}_bn/gamma:0", f"encoder.blocks.{hf_b}.depthwise_conv.depthwise_norm.weight"))
         rename_keys.append((f"block{b}_bn/beta:0", f"encoder.blocks.{hf_b}.depthwise_conv.depthwise_norm.bias"))
         rename_keys.append(
-            (f"block{b}_bn/moving_mean:0", f"encoder.blocks.{hf_b}.depthwise_conv.depthwise_norm.running_mean")
+            (
+                f"block{b}_bn/moving_mean:0",
+                f"encoder.blocks.{hf_b}.depthwise_conv.depthwise_norm.running_mean",
+            )
         )
         rename_keys.append(
-            (f"block{b}_bn/moving_variance:0", f"encoder.blocks.{hf_b}.depthwise_conv.depthwise_norm.running_var")
+            (
+                f"block{b}_bn/moving_variance:0",
+                f"encoder.blocks.{hf_b}.depthwise_conv.depthwise_norm.running_var",
+            )
         )
 
         rename_keys.append((f"block{b}_se_reduce/kernel:0", f"encoder.blocks.{hf_b}.squeeze_excite.reduce.weight"))
@@ -129,15 +142,24 @@ def rename_keys(original_param_names):
         rename_keys.append((f"block{b}_se_expand/kernel:0", f"encoder.blocks.{hf_b}.squeeze_excite.expand.weight"))
         rename_keys.append((f"block{b}_se_expand/bias:0", f"encoder.blocks.{hf_b}.squeeze_excite.expand.bias"))
         rename_keys.append(
-            (f"block{b}_project_conv/kernel:0", f"encoder.blocks.{hf_b}.projection.project_conv.weight")
+            (
+                f"block{b}_project_conv/kernel:0",
+                f"encoder.blocks.{hf_b}.projection.project_conv.weight",
+            )
         )
         rename_keys.append((f"block{b}_project_bn/gamma:0", f"encoder.blocks.{hf_b}.projection.project_bn.weight"))
         rename_keys.append((f"block{b}_project_bn/beta:0", f"encoder.blocks.{hf_b}.projection.project_bn.bias"))
         rename_keys.append(
-            (f"block{b}_project_bn/moving_mean:0", f"encoder.blocks.{hf_b}.projection.project_bn.running_mean")
+            (
+                f"block{b}_project_bn/moving_mean:0",
+                f"encoder.blocks.{hf_b}.projection.project_bn.running_mean",
+            )
         )
         rename_keys.append(
-            (f"block{b}_project_bn/moving_variance:0", f"encoder.blocks.{hf_b}.projection.project_bn.running_var")
+            (
+                f"block{b}_project_bn/moving_variance:0",
+                f"encoder.blocks.{hf_b}.projection.project_bn.running_var",
+            )
         )
 
     key_mapping = {}
@@ -223,24 +245,42 @@ def rename_keys(original_param_names):
             )
         )
         rename_keys.append(
-            (f"{old}/encoder/layer_._{i}/output/dense/kernel:0", f"{new}.encoder.layer.{i}.output.dense.weight")
+            (
+                f"{old}/encoder/layer_._{i}/output/dense/kernel:0",
+                f"{new}.encoder.layer.{i}.output.dense.weight",
+            )
         )
         rename_keys.append(
-            (f"{old}/encoder/layer_._{i}/output/dense/bias:0", f"{new}.encoder.layer.{i}.output.dense.bias")
+            (
+                f"{old}/encoder/layer_._{i}/output/dense/bias:0",
+                f"{new}.encoder.layer.{i}.output.dense.bias",
+            )
         )
         rename_keys.append(
-            (f"{old}/encoder/layer_._{i}/output/LayerNorm/gamma:0", f"{new}.encoder.layer.{i}.output.LayerNorm.weight")
+            (
+                f"{old}/encoder/layer_._{i}/output/LayerNorm/gamma:0",
+                f"{new}.encoder.layer.{i}.output.LayerNorm.weight",
+            )
         )
         rename_keys.append(
-            (f"{old}/encoder/layer_._{i}/output/LayerNorm/beta:0", f"{new}.encoder.layer.{i}.output.LayerNorm.bias")
+            (
+                f"{old}/encoder/layer_._{i}/output/LayerNorm/beta:0",
+                f"{new}.encoder.layer.{i}.output.LayerNorm.bias",
+            )
         )
 
     rename_keys.append((f"{old}/embeddings/word_embeddings/weight:0", f"{new}.embeddings.word_embeddings.weight"))
     rename_keys.append(
-        (f"{old}/embeddings/position_embeddings/embeddings:0", f"{new}.embeddings.position_embeddings.weight")
+        (
+            f"{old}/embeddings/position_embeddings/embeddings:0",
+            f"{new}.embeddings.position_embeddings.weight",
+        )
     )
     rename_keys.append(
-        (f"{old}/embeddings/token_type_embeddings/embeddings:0", f"{new}.embeddings.token_type_embeddings.weight")
+        (
+            f"{old}/embeddings/token_type_embeddings/embeddings:0",
+            f"{new}.embeddings.token_type_embeddings.weight",
+        )
     )
     rename_keys.append((f"{old}/embeddings/LayerNorm/gamma:0", f"{new}.embeddings.LayerNorm.weight"))
     rename_keys.append((f"{old}/embeddings/LayerNorm/beta:0", f"{new}.embeddings.LayerNorm.bias"))

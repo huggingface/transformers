@@ -20,8 +20,8 @@ URL: https://github.com/salesforce/LAVIS/tree/main/projects/blip2
 import argparse
 from io import BytesIO
 
+import httpx
 import torch
-from huggingface_hub import get_session
 
 # pip3 install salesforce-lavis
 # I'm actually installing a slightly modified version: pip3 install -U git+https://github.com/nielsrogge/LAVIS.git@blip2_float32
@@ -46,12 +46,9 @@ from transformers import (
 from transformers.utils.constants import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 
 
-session = get_session()
-
-
 def load_demo_image():
     url = "https://storage.googleapis.com/sfr-vision-language-research/LAVIS/assets/merlion.png"
-    with session.stream("GET", url) as response:
+    with httpx.stream("GET", url) as response:
         image = Image.open(BytesIO(response.read())).convert("RGB")
 
     return image

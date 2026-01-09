@@ -254,8 +254,8 @@ def convert_edgetam_checkpoint(model_name, checkpoint_path, pytorch_dump_folder,
     print("Unexpected keys:", unexpected_keys)
 
     if run_sanity_check:
-        img_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
-        with session.stream("GET", img_url) as response:
+        url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
+        with session.stream("GET", url) as response:
             raw_image = Image.open(BytesIO(response.read())).convert("RGB")
 
         input_points = [[[[1000, 600]]]]

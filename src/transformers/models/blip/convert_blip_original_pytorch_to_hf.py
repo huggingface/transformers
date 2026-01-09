@@ -16,8 +16,8 @@ import argparse
 import re
 from io import BytesIO
 
+import httpx
 import torch
-from huggingface_hub import get_session
 
 # git clone https://github.com/salesforce/BLIP.git
 from models.blip import blip_decoder
@@ -36,12 +36,9 @@ from transformers import (
 )
 
 
-session = get_session()
-
-
 def load_demo_image(image_size, device):
-    img_url = "https://storage.googleapis.com/sfr-vision-language-research/BLIP/demo.jpg"
-    with session.stream("GET", img_url) as response:
+    url = "https://storage.googleapis.com/sfr-vision-language-research/BLIP/demo.jpg"
+    with httpx.stream("GET", url) as response:
         raw_image = Image.open(BytesIO(response.read())).convert("RGB")
 
     transform = transforms.Compose(

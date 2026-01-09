@@ -24,6 +24,7 @@ from pathlib import Path
 from pprint import pformat
 from typing import Any
 
+import httpx
 import torch
 import torchvision.transforms as T
 from PIL import Image
@@ -37,7 +38,6 @@ try:
     from detectron2.projects.deeplab import add_deeplab_config
 except ImportError:
     pass
-from huggingface_hub import get_session
 
 from transformers import CLIPTokenizer, DinatConfig, SwinConfig
 from transformers.models.oneformer.image_processing_oneformer import OneFormerImageProcessor
@@ -52,7 +52,6 @@ from transformers.models.oneformer.processing_oneformer import OneFormerProcesso
 from transformers.utils import logging
 
 
-session = get_session()
 StateDict = dict[str, Tensor]
 
 logging.set_verbosity_info()
@@ -95,7 +94,7 @@ class TrackedStateDict:
 # Image to verify the result
 def prepare_img():
     url = "https://praeclarumjj3.github.io/files/coco.jpeg"
-    with session.stream("GET", url) as response:
+    with httpx.stream("GET", url) as response:
         image = Image.open(BytesIO(response.read()))
     return image
 

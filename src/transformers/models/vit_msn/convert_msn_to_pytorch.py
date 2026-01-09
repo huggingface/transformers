@@ -17,15 +17,14 @@ import argparse
 import json
 from io import BytesIO
 
+import httpx
 import torch
-from huggingface_hub import get_session, hf_hub_download
+from huggingface_hub import hf_hub_download
 from PIL import Image
 
 from transformers import ViTImageProcessor, ViTMSNConfig, ViTMSNModel
 from transformers.image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 
-
-session = get_session()
 
 torch.set_grad_enabled(False)
 
@@ -198,7 +197,7 @@ def convert_vit_msn_checkpoint(checkpoint_url, pytorch_dump_folder_path):
 
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 
-    with session.stream("GET", url) as response:
+    with httpx.stream("GET", url) as response:
         image = Image.open(BytesIO(response.read()))
     image_processor = ViTImageProcessor(
         size=config.image_size, image_mean=IMAGENET_DEFAULT_MEAN, image_std=IMAGENET_DEFAULT_STD

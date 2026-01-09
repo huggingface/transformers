@@ -245,8 +245,8 @@ def convert_sam2_checkpoint(model_name, checkpoint_path, pytorch_dump_folder, pu
     print("Missing keys:", missing_keys)
     print("Unexpected keys:", unexpected_keys)
 
-    img_url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
-    with session.stream("GET", img_url) as response:
+    url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
+    with session.stream("GET", url) as response:
         raw_image = Image.open(BytesIO(response.read())).convert("RGB")
 
     input_points = [[[[1000, 600]]]]

@@ -18,8 +18,8 @@ URL: https://github.com/om-ai-lab/OmDet"""
 import argparse
 from io import BytesIO
 
+import httpx
 import torch
-from huggingface_hub import get_session
 from PIL import Image
 
 from transformers import (
@@ -30,8 +30,6 @@ from transformers import (
     OmDetTurboProcessor,
 )
 
-
-session = get_session()
 
 IMAGE_MEAN = [123.675, 116.28, 103.53]
 IMAGE_STD = [58.395, 57.12, 57.375]
@@ -239,7 +237,7 @@ def read_in_q_k_v_decoder(state_dict, config):
 def run_test(model, processor):
     # We will verify our results on an image of cute cats
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    with session.stream("GET", url) as response:
+    with httpx.stream("GET", url) as response:
         image = Image.open(BytesIO(response.read())).convert("RGB")
 
     classes = ["cat", "remote"]

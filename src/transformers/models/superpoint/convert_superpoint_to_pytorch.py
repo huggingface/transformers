@@ -15,14 +15,11 @@ import argparse
 import os
 from io import BytesIO
 
+import httpx
 import torch
-from huggingface_hub import get_session
 from PIL import Image
 
 from transformers import SuperPointConfig, SuperPointForKeypointDetection, SuperPointImageProcessor
-
-
-session = get_session()
 
 
 def get_superpoint_config():
@@ -84,12 +81,12 @@ def rename_key(dct, old, new):
 
 def prepare_imgs():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    with session.stream("GET", url) as response:
-        im1 = Image.open(BytesIO(response.read()))
+    with httpx.stream("GET", url) as response:
+        image_1 = Image.open(BytesIO(response.read()))
     url = "http://images.cocodataset.org/test-stuff2017/000000004016.jpg"
-    with session.stream("GET", url) as response:
-        im2 = Image.open(BytesIO(response.read()))
-    return [im1, im2]
+    with httpx.stream("GET", url) as response:
+        image_2 = Image.open(BytesIO(response.read()))
+    return [image_1, image_2]
 
 
 @torch.no_grad()

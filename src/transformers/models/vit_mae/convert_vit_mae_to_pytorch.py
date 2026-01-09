@@ -16,14 +16,11 @@
 import argparse
 from io import BytesIO
 
+import httpx
 import torch
-from huggingface_hub import get_session
 from PIL import Image
 
 from transformers import ViTMAEConfig, ViTMAEForPreTraining, ViTMAEImageProcessor
-
-
-session = get_session()
 
 
 def rename_key(name):
@@ -132,7 +129,7 @@ def convert_vit_mae_checkpoint(checkpoint_url, pytorch_dump_folder_path):
 
     url = "https://user-images.githubusercontent.com/11435359/147738734-196fd92f-9260-48d5-ba7e-bf103d29364d.jpg"
 
-    with session.stream("GET", url) as response:
+    with httpx.stream("GET", url) as response:
         image = Image.open(BytesIO(response.read()))
     image_processor = ViTMAEImageProcessor(size=config.image_size)
     inputs = image_processor(images=image, return_tensors="pt")

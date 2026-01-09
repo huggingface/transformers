@@ -19,14 +19,13 @@ import re
 from collections import OrderedDict
 from io import BytesIO
 
+import httpx
 import torch
-from huggingface_hub import get_session, hf_hub_download
+from huggingface_hub import hf_hub_download
 from PIL import Image
 
 from transformers import TextNetBackbone, TextNetConfig, TextNetImageProcessor
 
-
-session = get_session()
 
 tiny_config_url = "https://raw.githubusercontent.com/czczup/FAST/main/config/fast/nas-configs/fast_tiny.config"
 small_config_url = "https://raw.githubusercontent.com/czczup/FAST/main/config/fast/nas-configs/fast_small.config"
@@ -42,7 +41,7 @@ rename_key_mappings = {
 
 
 def prepare_config(size_config_url, size):
-    config_dict = session.get(size_config_url).json()
+    config_dict = httpx.get(size_config_url).json()
 
     backbone_config = {}
     for stage_ix in range(1, 5):
@@ -196,7 +195,7 @@ def convert_textnet_checkpoint(checkpoint_url, checkpoint_config_filename, pytor
     model.eval()
 
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    with session.stream("GET", url) as response:
+    with httpx.stream("GET", url) as response:
         image = Image.open(BytesIO(response.read())).convert("RGB")
 
     original_pixel_values = torch.tensor(

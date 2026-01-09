@@ -17,8 +17,8 @@
 import argparse
 from io import BytesIO
 
+import httpx
 import torch
-from huggingface_hub import get_session
 from PIL import Image
 
 from transformers import (
@@ -30,9 +30,6 @@ from transformers import (
     CLIPTokenizer,
     ViTImageProcessor,
 )
-
-
-session = get_session()
 
 
 def get_clipseg_config(model_name):
@@ -163,7 +160,7 @@ def convert_state_dict(orig_state_dict, config):
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    with session.stream("GET", url) as response:
+    with httpx.stream("GET", url) as response:
         image = Image.open(BytesIO(response.read()))
     return image
 
@@ -206,15 +203,27 @@ def convert_clipseg_checkpoint(model_name, checkpoint_path, pytorch_dump_folder_
     expected_pooled_output = torch.tensor([0.2692, -0.7197, -0.1328])
     if model_name == "clipseg-rd64-refined":
         expected_masks_slice = torch.tensor(
-            [[-10.0407, -9.9431, -10.2646], [-9.9751, -9.7064, -9.9586], [-9.6891, -9.5645, -9.9618]]
+            [
+                [-10.0407, -9.9431, -10.2646],
+                [-9.9751, -9.7064, -9.9586],
+                [-9.6891, -9.5645, -9.9618],
+            ]
         )
     elif model_name == "clipseg-rd64":
         expected_masks_slice = torch.tensor(
-            [[-7.2877, -7.2711, -7.2463], [-7.2652, -7.2780, -7.2520], [-7.2239, -7.2204, -7.2001]]
+            [
+                [-7.2877, -7.2711, -7.2463],
+                [-7.2652, -7.2780, -7.2520],
+                [-7.2239, -7.2204, -7.2001],
+            ]
         )
     elif model_name == "clipseg-rd16":
         expected_masks_slice = torch.tensor(
-            [[-6.3955, -6.4055, -6.4151], [-6.3911, -6.4033, -6.4100], [-6.3474, -6.3702, -6.3762]]
+            [
+                [-6.3955, -6.4055, -6.4151],
+                [-6.3911, -6.4033, -6.4100],
+                [-6.3474, -6.3702, -6.3762],
+            ]
         )
     else:
         raise ValueError(f"Model name {model_name} not supported.")
