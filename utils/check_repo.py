@@ -986,7 +986,6 @@ DEPRECATED_OBJECTS = [
     "SquadFeatures",
     "SquadV1Processor",
     "SquadV2Processor",
-    "Wav2Vec2ForMaskedLM",
     "glue_compute_metrics",
     "glue_convert_examples_to_features",
     "glue_output_modes",
