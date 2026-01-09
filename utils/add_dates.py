@@ -68,19 +68,10 @@ def check_file_exists_on_github(file_path: str) -> bool:
         if e.code == 404:
             # File doesn't exist on GitHub
             return False
-        # Fall through to generic exception handler for other HTTP errors
-        print(
-            f"Warning: Could not verify file existence on GitHub (HTTP {e.code}): {url}\n"
-            f"Assuming file exists and continuing with local git history."
-        )
+        # HTTP error (non-404): assume file exists and continue with local git history
         return True
-    except Exception as e:
-        # Handle all other errors (network issues, timeouts, etc.)
-        print(
-            f"Warning: Could not verify file existence on GitHub: {url}\n"
-            f"Error: {e}\n"
-            f"Assuming file exists and continuing with local git history."
-        )
+    except Exception:
+        # Network/timeout error: assume file exists and continue with local git history
         return True
 
 
@@ -94,9 +85,11 @@ def get_modified_cards() -> list[str]:
         if line:
             # Check if the file is in the model_doc directory
             if line.startswith("docs/source/en/model_doc/") and line.endswith(".md"):
-                model_name = os.path.splitext(os.path.basename(line))[0]
-                if model_name not in ["auto", "timm_wrapper"]:
-                    model_names.append(model_name)
+                file_path = os.path.join(ROOT, line)
+                if os.path.exists(file_path):
+                    model_name = os.path.splitext(os.path.basename(line))[0]
+                    if model_name not in ["auto", "timm_wrapper"]:
+                        model_names.append(model_name)
 
     return model_names
 
@@ -116,26 +109,7 @@ def get_paper_link(model_card: str | None, path: str | None) -> str:
     paper_ids += re.findall(r"https://arxiv\.org/abs/\d+\.\d+", content)
     paper_ids += re.findall(r"https://arxiv\.org/pdf/\d+\.\d+", content)
 
-    # If no known paper links are found, look for other potential paper links
     if len(paper_ids) == 0:
-        # Find all https links
-        all_https_links = re.findall(r"https://[^\s\)]+", content)
-
-        # Filter out huggingface.co and github links
-        other_paper_links = []
-        for link in all_https_links:
-            link = link.rstrip(".,;!?)")
-            if "huggingface.co" not in link and "github.com" not in link:
-                other_paper_links.append(link)
-
-        # Remove duplicates while preserving order
-        other_paper_links = list(dict.fromkeys(other_paper_links))
-
-        if other_paper_links:
-            print(f"No Hugging Face or Arxiv papers found. The possible paper links found in {model_card}:")
-            for link in other_paper_links:
-                print(f"  - {link}")
-
         return "No_paper"
 
     return paper_ids[0]
@@ -161,7 +135,6 @@ def get_first_commit_date(model_name: str | None) -> str:
 
     if not file_exists_on_github:
         # File does not exist on GitHub main branch (new model), use today's date
-        print(f"Model {model_name} not found on GitHub main branch, using today's date")
         final_date = date.today().isoformat()
     else:
         # File exists on GitHub main branch, get the first commit date from local git history
@@ -178,11 +151,11 @@ def get_release_date(link: str) -> str:
         try:
             info = paper_info(link)
             return info.published_at.date().isoformat()
-        except Exception as e:
-            print(f"Error fetching release date for the paper https://huggingface.co/papers/{link}: {e}")
+        except Exception:
+            # Error fetching release date, function returns None (will use placeholder)
+            pass
 
     elif link.startswith("https://arxiv.org/abs/") or link.startswith("https://arxiv.org/pdf/"):
-        print(f"This paper {link} is not yet available in Hugging Face papers, skipping the release date attachment.")
         return r"{release_date}"
 
 
@@ -192,7 +165,6 @@ def replace_paper_links(file_path: str) -> bool:
     with open(file_path, "r", encoding="utf-8") as f:
         content = f.read()
 
-    model_card = os.path.basename(file_path)
     original_content = content
 
     # Replace hf.co with huggingface.co
@@ -212,11 +184,9 @@ def replace_paper_links(file_path: str) -> bool:
                 old_link = f"https://arxiv.org/pdf/{paper_id}"
             new_link = f"https://huggingface.co/papers/{paper_id}"
             content = content.replace(old_link, new_link)
-            print(f"Replaced {old_link} with {new_link}")
 
         except Exception:
             # Paper not available on huggingface, keep arxiv link
-            print(f"Paper {paper_id} for {model_card} is not available on huggingface, keeping the arxiv link")
             continue
 
     # Write back only if content changed
@@ -308,16 +278,14 @@ def insert_dates(model_card_list: list[str]):
         file_path = os.path.join(DOCS_PATH, model_card)
 
         # First replace arxiv paper links with hf paper link if possible
-        links_replaced = replace_paper_links(file_path)
-        if links_replaced:
-            print(f"Updated paper links in {model_card}")
+        replace_paper_links(file_path)
 
         # Read content and ensure copyright disclaimer exists
         content = _read_model_card_content(model_card)
         markers = list(re.finditer(r"-->", content))
 
         if len(markers) == 0:
-            print(f"No marker found in {model_card}. Adding copyright disclaimer to the top.")
+            # No copyright marker found, adding disclaimer to the top
             content = COPYRIGHT_DISCLAIMER + "\n\n" + content
             with open(file_path, "w", encoding="utf-8") as f:
                 f.write(content)
@@ -356,7 +324,6 @@ def insert_dates(model_card_list: list[str]):
             content = content[:insert_index] + date_info + content[insert_index:]
             with open(file_path, "w", encoding="utf-8") as f:
                 f.write(content)
-            print(f"Added {model_card} release and commit dates.")
 
 
 def get_all_model_cards():
