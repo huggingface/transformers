@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_videoprism.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
@@ -125,7 +124,7 @@ class VideoPrismTextConfig(PreTrainedConfig):
         intermediate_size=3072,
         num_attention_heads=12,
         num_text_layers=12,
-        vocabulary_size=32000,
+        vocab_size=32000,
         apply_l2_norm=True,
         hidden_act="relu",
         attention_probs_dropout_prob=0.0,
@@ -141,7 +140,7 @@ class VideoPrismTextConfig(PreTrainedConfig):
         self.intermediate_size = intermediate_size
         self.num_attention_heads = num_attention_heads
         self.num_text_layers = num_text_layers
-        self.vocabulary_size = vocabulary_size
+        self.vocab_size = vocab_size
         self.apply_l2_norm = apply_l2_norm
         self.hidden_act = hidden_act
         self.attention_probs_dropout_prob = attention_probs_dropout_prob

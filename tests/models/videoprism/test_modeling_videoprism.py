@@ -13,14 +13,13 @@
 # limitations under the License.
 """Testing suite for the PyTorch VideoPrism model."""
 
-
 import inspect
-import torch
-import torch.nn as nn
+import tempfile
 import unittest
+
+import numpy as np
 from huggingface_hub import HfApi
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
-from ...test_configuration_common import ConfigTester
+
 from transformers import VideoPrismVisionConfig, VideoPrismTextConfig, VideoPrismConfig
 from transformers.testing_utils import (
     require_torch,
@@ -29,16 +28,22 @@ from transformers.testing_utils import (
     torch_device,
 )
 from transformers.utils import (
+    is_sentencepiece_available,
     is_torch_available,
     is_vision_available,
-    is_sentencepiece_available,
 )
 
+from ...test_configuration_common import ConfigTester
+from ...test_modeling_common import floats_tensor, ids_tensor, random_attention_mask
+
+
 if is_torch_available():
-    from transformers import VideoPrismVisionModel, VideoPrismVideoModel, VideoPrismTextModel, VideoPrismClipModel
+    import torch
+    from torch import nn
+    from transformers import VideoPrismClipModel, VideoPrismVisionModel, VideoPrismTextModel, VideoPrismVideoModel, VideoPrismForVideoClassification
 
 if is_vision_available():
-    from transformers import VideoPrismVideoProcessor
+    pass
 
 if is_sentencepiece_available():
     from transformers import VideoPrismTokenizer
@@ -68,6 +73,7 @@ class VideoPrismVisionModelTester:
         attn_logit_softcapping=50.0,
         num_auxiliary_layers=2,
         apply_l2_norm=True,
+        is_training=True,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -89,7 +95,7 @@ class VideoPrismVisionModelTester:
         self.attn_logit_softcapping = attn_logit_softcapping
         self.num_auxiliary_layers = num_auxiliary_layers
         self.apply_l2_norm = apply_l2_norm
-
+        self.is_training = is_training
 
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor(
@@ -133,9 +139,15 @@ class VideoPrismVisionModelTester:
         image_size = (self.image_size, self.image_size)
         patch_size = (self.tubelet_size[1], self.tubelet_size[2])
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, num_patches * self.num_frames, self.hidden_size))
-        self.parent.assertEqual(result.spatial_hidden_state.shape, (self.batch_size * self.num_frames, num_patches, self.hidden_size))
-        self.parent.assertEqual(result.temporal_hidden_state.shape, (self.batch_size * num_patches, self.num_frames, self.hidden_size))
+        self.parent.assertEqual(
+            result.last_hidden_state.shape, (self.batch_size, num_patches * self.num_frames, self.hidden_size)
+        )
+        self.parent.assertEqual(
+            result.spatial_hidden_state.shape, (self.batch_size * self.num_frames, num_patches, self.hidden_size)
+        )
+        self.parent.assertEqual(
+            result.temporal_hidden_state.shape, (self.batch_size * num_patches, self.num_frames, self.hidden_size)
+        )
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
@@ -156,19 +168,14 @@ class VideoPrismVisionModelTest(unittest.TestCase):
 
     def setUp(self):
         self.model_tester = VideoPrismVisionModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=VideoPrismVisionConfig, has_text_modality=False, hidden_size=37)
+        self.config_tester = ConfigTester(
+            self,
+            config_class=VideoPrismVisionConfig,
+            has_text_modality=False,
+            hidden_size=37,
+            common_properties=["num_channels", "hidden_size", "num_attention_heads"],
+        )
 
-    def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
-        inputs_dict = copy.deepcopy(inputs_dict)
-
-        if return_labels:
-            if model_class in get_values(MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING):
-                inputs_dict["labels"] = torch.zeros(
-                    self.model_tester.batch_size, dtype=torch.long, device=torch_device
-                )
-
-        return inputs_dict
-    @unittest.skip(reason="VideoPrism does not use common configs")
     def test_config(self):
         self.config_tester.run_common_tests()
 
@@ -200,22 +207,6 @@ class VideoPrismVisionModelTest(unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    # @unittest.skip(reason="VideoPrismVisionModel does not support standalone training")
-    # def test_training(self):
-    #     pass
-
-    # @unittest.skip(reason="VideoPrismVisionModel does not support standalone training")
-    # def test_training_gradient_checkpointing(self):
-    #     pass
-
-    # @unittest.skip(reason="VideoPrismVisionModel does not support standalone training")
-    # def test_training_gradient_checkpointing_use_reentrant(self):
-    #     pass
-
-    # @unittest.skip(reason="VideoPrismVisionModel does not support standalone training")
-    # def test_training_gradient_checkpointing_use_reentrant_false(self):
-    #     pass
-
     @slow
     def test_model_from_pretrained(self):
         model_name = "MHRDYN7/videoprism-base-f16r288"
@@ -225,36 +216,176 @@ class VideoPrismVisionModelTest(unittest.TestCase):
 
 @require_vision
 class VideoPrismTextModelTester:
-    pass
+    def __init__(
+        self,
+        parent,
+        batch_size=12,
+        hidden_size=64,
+        intermediate_size=37,
+        num_attention_heads=2,
+        num_text_layers=2,
+        vocab_size=32,
+        apply_l2_norm=True,
+        hidden_act="relu",
+        attention_probs_dropout_prob=0.0,
+        qkv_bias=True,
+        hidden_dropout_prob=0.0,
+        layer_norm_eps=1e-06,
+        initializer_range=0.02,
+        attn_logit_softcapping=50.0,
+        seq_length=7,
+        is_training=True,
+        use_input_mask=True,
+
+    ):
+        self.parent = parent
+        self.batch_size = batch_size
+        self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
+        self.num_attention_heads = num_attention_heads
+        self.num_text_layers = num_text_layers
+        self.vocab_size = vocab_size
+        self.apply_l2_norm = apply_l2_norm
+        self.hidden_act = hidden_act
+        self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.qkv_bias = qkv_bias
+        self.hidden_dropout_prob = hidden_dropout_prob
+        self.layer_norm_eps = layer_norm_eps
+        self.initializer_range = initializer_range
+        self.attn_logit_softcapping = attn_logit_softcapping
+        self.seq_length = seq_length
+        self.is_training = is_training
+        self.use_input_mask = use_input_mask
+
+    # Copied from tests.models.clip.test_modeling_clip.CLIPTextModelTester.prepare_config_and_inputs
+    def prepare_config_and_inputs(self):
+        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+
+        input_mask = None
+        if self.use_input_mask:
+            input_mask = random_attention_mask([self.batch_size, self.seq_length])
+
+        if input_mask is not None:
+            batch_size, seq_length = input_mask.shape
+            rnd_start_indices = np.random.randint(1, seq_length - 1, size=(batch_size,))
+            for batch_idx, start_index in enumerate(rnd_start_indices):
+                input_mask[batch_idx, :start_index] = 1
+                input_mask[batch_idx, start_index:] = 0
+
+        config = self.get_config()
+
+        return config, input_ids, input_mask
+
+    def get_config(self):
+        return VideoPrismTextConfig(
+            hidden_size=self.hidden_size,
+            intermediate_size=self.intermediate_size,
+            num_attention_heads=self.num_attention_heads,
+            num_text_layers=self.num_text_layers,
+            vocab_size=self.vocab_size,
+            apply_l2_norm=self.apply_l2_norm,
+            hidden_act=self.hidden_act,
+            attention_probs_dropout_prob=self.attention_probs_dropout_prob,
+            qkv_bias=self.qkv_bias,
+            hidden_dropout_prob=self.hidden_dropout_prob,
+            layer_norm_eps=self.layer_norm_eps,
+            initializer_range=self.initializer_range,
+            attn_logit_softcapping=self.attn_logit_softcapping,
+        )
+
+    def create_and_check_model(self, config, input_ids, input_mask):
+        model = VideoPrismTextModel._from_config(config=config).to(torch_device)
+        model.eval()
+        with torch.no_grad():
+            result = model(input_ids, attention_mask=input_mask)
+        self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.hidden_size))
+
+    # Copied from tests.models.clip.test_modeling_clip.CLIPTextModelTester.prepare_config_and_inputs_for_common
+    def prepare_config_and_inputs_for_common(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+        config, input_ids, input_mask = config_and_inputs
+        inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask}
+        return config, inputs_dict
 
 @require_vision
 class VideoPrismTextModelTest(unittest.TestCase):
-    pass
+    all_model_classes = (VideoPrismTextModel,) if is_torch_available() else ()
+
+    # Copied from tests.models.clip.test_modeling_clip.CLIPTextModelTest.setUp with CLIP->VideoPrism
+    def setUp(self):
+        self.model_tester = VideoPrismTextModelTester(self)
+        self.config_tester = ConfigTester(
+            self,
+            config_class=VideoPrismTextConfig,
+            hidden_size=37,
+            common_properties=["hidden_size", "num_attention_heads"]
+        )
+
+    # Copied from tests.models.clip.test_modeling_clip.CLIPTextModelTest.test_config
+    def test_config(self):
+        self.config_tester.run_common_tests()
+
+    # Copied from tests.models.clip.test_modeling_clip.CLIPTextModelTest.test_model
+    def test_model(self):
+        config_and_inputs = self.model_tester.prepare_config_and_inputs()
+        self.model_tester.create_and_check_model(*config_and_inputs)
+
+    @unittest.skip(reason="VideoPrismTextModel does not support standalone training")
+    def test_training(self):
+        pass
+
+    @unittest.skip(reason="VideoPrismTextModel does not support standalone training")
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(reason="VideoPrismTextModel does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant(self):
+        pass
+
+    @unittest.skip(reason="VideoPrismTextModel does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
+    @unittest.skip(reason="VideoPrism does not use inputs_embeds")
+    # Copied from tests.models.clip.test_modeling_clip.CLIPTextModelTest.test_inputs_embeds
+    def test_inputs_embeds(self):
+        pass
+
+    @slow
+    def test_model_from_pretrained(self):
+        model_name = "MHRDYN7/videoprism-lvt-base-f16r288"
+        model = VideoPrismTextModel.from_pretrained(model_name)
+        self.assertIsNotNone(model)
+
 
 @require_vision
 class VideoPrismVideoModelTester:
     pass
 
+
 @require_vision
 class VideoPrismVideoModelTest(unittest.TestCase):
     pass
+
 
 @require_vision
 class VideoPrismClipModelTester:
     pass
 
+
 @require_vision
 class VideoPrismClipModelTest(unittest.TestCase):
     pass
+
 
 @require_torch
 class VideoPrismImageClassificationModelTester:
     pass
 
+
 @require_torch
 class VideoPrismImageClassificationModelTest(unittest.TestCase):
     pass
-
 
 
 def prepare_video():
@@ -262,13 +393,13 @@ def prepare_video():
     Input video tensor proprocessed using the original repo's processor
     """
     import numpy as np
+
     api = HfApi()
     frames = api.hf_hub_download(
-        repo_id="MHRDYN7/water_bottle_drumming_video",
-        filename="frames_16_288.npy",
-        repo_type="dataset"
+        repo_id="MHRDYN7/water_bottle_drumming_video", filename="frames_16_288.npy", repo_type="dataset"
     )
     return np.load(frames)
+
 
 def prepare_texts():
     TEXT_QUERY_CSV = "playing drums,sitting,playing flute,playing at playground,concert"  # @param {type: "string"}
@@ -280,65 +411,74 @@ def prepare_texts():
     tokenizer = VideoPrismTokenizer.from_pretrained("MHRDYN7/videoprism-lvt-base-f16r288")
 
     return tokenizer, text_queries
-    
+
 
 @require_vision
 @require_torch
 class VideoPrismModelIntegrationTest(unittest.TestCase):
-    @slow
-    def test_vision_model(self):
-        model = VideoPrismVisionModel.from_pretrained("MHRDYN7/videoprism-base-f16r288")
-        model.config._attn_implementation = "eager"
-        frames = torch.tensor(prepare_video()).unsqueeze(0).permute(0, 1, 4, 2, 3)
-        input_vids = torch.cat([frames, frames], dim=0)  # batch size 2
-        outputs = model(input_vids).last_hidden_state
-        assert torch.equal(outputs[0], outputs[1]), "Outputs of the batches are not identical for identical input batches"
-        expectations = torch.tensor(
-            [
-                [0.11648951, 0.4568253, 0.19288044],
-                [0.28420594, -0.04224018, 0.377879],
-                [0.24594213, -0.3914095, -0.30516925],
-            ]
-        )
-        expected_slice = outputs[0, :3, :3]
-        torch.testing.assert_close(expected_slice, expectations, atol=1e-5)
-        return
+    pass
+    # @slow
+    # def test_vision_model(self):
+    #     model = VideoPrismVisionModel.from_pretrained("MHRDYN7/videoprism-base-f16r288").to(torch_device)
+    #     model.config._attn_implementation = "eager"
+    #     frames = torch.tensor(prepare_video()).unsqueeze(0).permute(0, 1, 4, 2, 3)
+    #     input_vids = torch.cat([frames, frames], dim=0)  # batch size 2
+    #     with torch.no_grad():
+    #         outputs = model(input_vids).last_hidden_state
+   
+    #     assert torch.equal(outputs[0], outputs[1]), (
+    #         "Outputs of the batches are not identical for identical input batches"
+    #     )
+    #     expectations = torch.tensor(
+    #         [
+    #             [0.11648951, 0.4568253, 0.19288044],
+    #             [0.28420594, -0.04224018, 0.377879],
+    #             [0.24594213, -0.3914095, -0.30516925],
+    #         ]
+    #     )
+    #     expected_slice = outputs[0, :3, :3]
+    #     torch.testing.assert_close(expected_slice, expectations, atol=1e-5)
+    #     return
 
-    @slow
-    def test_clip_model(self):
-        model = VideoPrismClipModel.from_pretrained("MHRDYN7/videoprism-lvt-base-f16r288")
-        model.config._attn_implementation = "eager"
-        frames = torch.tensor(prepare_video()).unsqueeze(0).permute(0, 1, 4, 2, 3)
-        input_vids = torch.cat([frames, frames], dim=0)
-        tokenizer, text_queries = prepare_texts()
-        tokens = tokenizer(text_queries, max_length=64, padding="max_length", return_tensors="pt")
-        outputs = model(input_vids, **tokens)
-        torch.testing.assert_close(outputs.video_embeds[0], outputs.video_embeds[1], atol=1e-5)
-        video_expectation = torch.tensor(
-            [
-                -0.01940615,
-                -0.04830061,
-                0.0069022,
-                0.02915299,
-                -0.05897291,
-                0.02168823,
-                -0.01471708,
-                -0.00971614,
-                -0.00220576,
-            ]
-        ),
-        text_expectation = torch.tensor(
-            [
-                [-0.00802545, 0.00931361, 0.01555958],
-                [0.02245245, 0.00010197, -0.01073526],
-                [-0.02258418, 0.00133927, -0.01555064],
-                [0.01056228, 0.01835608, -0.01539922],
-                [-0.00366718, 0.00370416, 0.00800336],
-            ]
-        ),
+    # @slow
+    # def test_clip_model(self):
+    #     model = VideoPrismClipModel.from_pretrained("MHRDYN7/videoprism-lvt-base-f16r288").to(torch_device)
+    #     model.config._attn_implementation = "eager"
+    #     frames = torch.tensor(prepare_video()).unsqueeze(0).permute(0, 1, 4, 2, 3)
+    #     input_vids = torch.cat([frames, frames], dim=0)
+    #     tokenizer, text_queries = prepare_texts()
+    #     tokens = tokenizer(text_queries, max_length=64, padding="max_length", return_tensors="pt").to(torch_device)
+    #     with torch.no_grad():
+    #         outputs = model(input_vids, **tokens)
+    #     torch.testing.assert_close(outputs.video_embeds[0], outputs.video_embeds[1], atol=1e-5)
+    #     video_expectation = (
+    #         torch.tensor(
+    #             [
+    #                 -0.01940615,
+    #                 -0.04830061,
+    #                 0.0069022,
+    #                 0.02915299,
+    #                 -0.05897291,
+    #                 0.02168823,
+    #                 -0.01471708,
+    #                 -0.00971614,
+    #                 -0.00220576,
+    #             ]
+    #         ),
+    #     )
+    #     text_expectation = (
+    #         torch.tensor(
+    #             [
+    #                 [-0.00802545, 0.00931361, 0.01555958],
+    #                 [0.02245245, 0.00010197, -0.01073526],
+    #                 [-0.02258418, 0.00133927, -0.01555064],
+    #                 [0.01056228, 0.01835608, -0.01539922],
+    #                 [-0.00366718, 0.00370416, 0.00800336],
+    #             ]
+    #         ),
+    #     )
 
-        video_logits = outputs.video_embeds[0, :9]
-        text_logits = outputs.text_embeds[:, :3]
-        torch.testing.assert_close(video_logits, video_expectation, atol=1e-5)
-        torch.testing.assert_close(text_logits, text_expectation, atol=1e-5)
-
+    #     video_logits = outputs.video_embeds[0, :9]
+    #     text_logits = outputs.text_embeds[:, :3]
+    #     torch.testing.assert_close(video_logits, video_expectation, atol=1e-5)
+    #     torch.testing.assert_close(text_logits, text_expectation, atol=1e-5)

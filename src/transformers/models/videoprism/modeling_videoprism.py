@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_videoprism.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -669,7 +668,7 @@ class VideoPrismTextModel(VideoPrismPreTrainedModel):
         super().__init__(config)
         self.config = config
         self.text_encoder = VideoPrismTextEncoder(self.config)
-        self.token_embeddings = nn.Embedding(config.vocabulary_size, config.hidden_size)
+        self.token_embeddings = nn.Embedding(config.vocab_size, config.hidden_size)
         self.cls_emb = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
         self.layernorm = VideoPrismLayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.normalize = config.apply_l2_norm
