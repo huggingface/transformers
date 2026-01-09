@@ -78,7 +78,16 @@ def check_file_exists_on_github(file_path: str) -> bool:
 def get_modified_cards() -> list[str]:
     """Get the list of model names from modified files in docs/source/en/model_doc/"""
 
-    result = subprocess.check_output(["git", "diff", "--name-only", "upstream/main"], text=True)
+    current_branch = subprocess.check_output(["git", "branch", "--show-current"], text=True).strip()
+    if current_branch == "main":
+        print(
+            "You are on the main branch. Only uncommitted changes will be detected. "
+            "Consider working on a feature branch for better change detection."
+        )
+        result = subprocess.check_output(["git", "diff", "--name-only", "HEAD"], text=True)
+    else:
+        fork_point_sha = subprocess.check_output("git merge-base main HEAD".split()).decode("utf-8")
+        result = subprocess.check_output(f"git diff --name-only {fork_point_sha}".split()).decode("utf-8")
 
     model_names = []
     for line in result.strip().split("\n"):
