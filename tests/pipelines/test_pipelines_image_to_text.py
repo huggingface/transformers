@@ -191,8 +191,7 @@ class ImageToTextPipelineTests(unittest.TestCase):
                 ("cuda", 8): [{"generated_text": "a cartoon of a purple character."}],
                 ("rocm", (9, 4)): [{"generated_text": "a cartoon of a purple monster"}],
             }
-        )
-        EXPECTED_OUTPUT = EXPECTED_OUTPUT.get_expectation()
+        ).get_expectation()
         self.assertEqual(outputs, EXPECTED_OUTPUT)
 
     @slow
@@ -226,8 +225,7 @@ class ImageToTextPipelineTests(unittest.TestCase):
                 ("cuda", 8): [{"generated_text": "a photo of a tent with a tent and a tent in the background."}],
                 ("rocm", (9, 4)): [{"generated_text": "a photo of a tent with a tent and a large umbrella."}],
             }
-        )
-        EXPECTED_OUTPUT = EXPECTED_OUTPUT.get_expectation()
+        ).get_expectation()
         self.assertEqual(outputs, EXPECTED_OUTPUT)
 
         with self.assertRaises(ValueError):

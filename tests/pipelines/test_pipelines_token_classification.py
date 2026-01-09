@@ -366,8 +366,8 @@ class TokenClassificationPipelineTests(unittest.TestCase):
                     {"end": 79, "entity_group": "MISC", "score": 0.115, "start": 66, "word": "entrepreneurs"},
                 ],
             }
-        )
-        self.assertEqual(nested_simplify(results), expected_results.get_expectation())
+        ).get_expectation()
+        self.assertEqual(nested_simplify(results), expected_results)
 
         # This will force the tokenizer to split after "city was".
         pipe.tokenizer.model_max_length = 12
@@ -377,10 +377,10 @@ class TokenClassificationPipelineTests(unittest.TestCase):
                 # ROCm tokenizer produces different output (preserves case and includes more tokens)
                 ("rocm", (9, 4)): "[CLS] The company, based in New York City was founded [SEP]",
             }
-        )
+        ).get_expectation()
         self.assertEqual(
             pipe.tokenizer.decode(pipe.tokenizer.encode(sentence, truncation=True)),
-            expected_decode.get_expectation(),
+            expected_decode,
         )
 
         stride = 4
@@ -400,8 +400,8 @@ class TokenClassificationPipelineTests(unittest.TestCase):
                     {"end": 79, "entity_group": "MISC", "score": 0.115, "start": 66, "word": "entrepreneurs"},
                 ],
             }
-        )
-        self.assertEqual(nested_simplify(results), expected_stride_results.get_expectation())
+        ).get_expectation()
+        self.assertEqual(nested_simplify(results), expected_stride_results)
 
     @require_torch
     @slow
@@ -847,8 +847,8 @@ class TokenClassificationPipelineTests(unittest.TestCase):
                     {"entity": "I-MISC", "score": 0.115, "index": 2, "word": "is", "start": 5, "end": 7},
                 ],
             }
-        )
-        self.assertEqual(nested_simplify(outputs), expected_outputs.get_expectation())
+        ).get_expectation()
+        self.assertEqual(nested_simplify(outputs), expected_outputs)
 
     @require_torch
     def test_small_model_pt(self):
@@ -865,8 +865,8 @@ class TokenClassificationPipelineTests(unittest.TestCase):
                     {"entity": "I-MISC", "score": 0.115, "index": 2, "word": "is", "start": 5, "end": 7},
                 ],
             }
-        )
-        self.assertEqual(nested_simplify(outputs), expected_outputs.get_expectation())
+        ).get_expectation()
+        self.assertEqual(nested_simplify(outputs), expected_outputs)
 
         token_classifier = pipeline(task="token-classification", model=model_name, ignore_labels=["O", "I-MISC"])
         outputs = token_classifier("This is a test !")
@@ -890,8 +890,8 @@ class TokenClassificationPipelineTests(unittest.TestCase):
                     {"entity": "I-MISC", "score": 0.115, "index": 2, "word": "is", "start": 0, "end": 2},
                 ],
             }
-        )
-        self.assertEqual(nested_simplify(outputs), expected_offset_outputs.get_expectation())
+        ).get_expectation()
+        self.assertEqual(nested_simplify(outputs), expected_offset_outputs)
 
         # Batch size does not affect outputs (attention_mask are required)
         sentences = ["This is a test !", "Another test this is with longer sentence"]
@@ -915,8 +915,8 @@ class TokenClassificationPipelineTests(unittest.TestCase):
                     [],
                 ],
             }
-        )
-        self.assertEqual(nested_simplify(outputs_batched), expected_batched_outputs.get_expectation())
+        ).get_expectation()
+        self.assertEqual(nested_simplify(outputs_batched), expected_batched_outputs)
 
     @require_torch
     def test_small_model_pt_fp16(self):
@@ -933,8 +933,8 @@ class TokenClassificationPipelineTests(unittest.TestCase):
                     {"entity": "I-MISC", "score": 0.115, "index": 2, "word": "is", "start": 5, "end": 7},
                 ],
             }
-        )
-        self.assertEqual(nested_simplify(outputs), expected_outputs.get_expectation())
+        ).get_expectation()
+        self.assertEqual(nested_simplify(outputs), expected_outputs)
 
     @require_torch
     def test_small_model_pt_bf16(self):
@@ -951,8 +951,8 @@ class TokenClassificationPipelineTests(unittest.TestCase):
                     {"entity": "I-MISC", "score": 0.115, "index": 2, "word": "is", "start": 5, "end": 7},
                 ],
             }
-        )
-        self.assertEqual(nested_simplify(outputs), expected_outputs.get_expectation())
+        ).get_expectation()
+        self.assertEqual(nested_simplify(outputs), expected_outputs)
 
     @require_torch
     def test_pt_ignore_subwords_slow_tokenizer_raises(self):

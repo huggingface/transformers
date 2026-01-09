@@ -334,7 +334,7 @@ class AnyToAnyPipelineTests(unittest.TestCase):
                             ],
                         }
                     ],
-                    "generated_text": "userWhat do you hear in this audio?modelThe audio contains a repeated sound that resembles someone **coughing or choking**. It's a series of short, sharp, and somewhat strained sounds.",
+                    "generated_None": "user\nWhat do you hear in this audio?\n\n\n\n\nmodel\nThe audio contains the repeated sound of someone **coughing**. It's a fairly consistent, forceful cough throughout the duration.",
                 }
             ],
         )
@@ -362,6 +362,18 @@ class AnyToAnyPipelineTests(unittest.TestCase):
             load_audio_from_video=True,
             generate_kwargs={"use_audio_in_video": True, "talker_do_sample": False, "do_sample": False},
         )
+        EXPECTED_CONTENT = Expectations(
+            {
+                (
+                    "cuda",
+                    8,
+                ): "system\nYou are a helpful assistant.\nuser\nDescribe this video.\nassistant\nThe video begins with a man standing in a kitchen, wearing a black shirt. He is holding a large glass bowl filled with flour and a spoon. The man starts to mix the flour in the bowl, creating a dough. As he mixes, he continues to talk to the camera, explaining the process. The kitchen has wooden cabinets and a white refrigerator in the background. The man's movements are deliberate and focused as he works with the dough. The video ends with the man still mixing the dough in the bowl. Overall, the video provides a clear and detailed demonstration of how to make dough using flour and a spoon.",
+                (
+                    "rocm",
+                    (9, 4),
+                ): "The video begins with a man standing in a kitchen, wearing a black shirt. He is positioned in front of a refrigerator and wooden cabinets. The man is speaking and gesturing with his hands, possibly explaining something or giving instructions. The kitchen appears to be well-lit and has a clean, organized appearance.\n\nAs the video progresses, the man continues to speak and gesture, maintaining his position in the kitchen. The camera remains focused on him, capturing his upper body and face. The background remains consistent, showing the refrigerator and wooden cabinets. The lighting in the kitchen stays bright, and the overall atmosphere remains calm and focused.\n\nThroughout the video, the man's movements and expressions suggest that he is engaged in a conversation or presentation. His gestures and facial expressions indicate that he is actively communicating and possibly demonstrating something related to cooking or food preparation. The kitchen setting provides a practical and relatable backdrop for his actions and words.\n\nOverall, the video depicts a man in a kitchen, speaking and gesturing while possibly explaining or demonstrating something related to cooking or food preparation. The kitchen setting, with its well-lit and organized appearance, serves as a suitable environment for his actions and words.",
+            }
+        ).get_expectation()
         self.assertEqual(
             outputs,
             [
@@ -391,7 +403,7 @@ class AnyToAnyPipelineTests(unittest.TestCase):
                         },
                         {
                             "role": "assistant",
-                            "content": "The video begins with a man standing in a kitchen, wearing a black shirt. He is positioned in front of a refrigerator and wooden cabinets. The man is speaking and gesturing with his hands, possibly explaining something or giving instructions. The kitchen appears to be well-lit and has a clean, organized appearance.\n\nAs the video progresses, the man continues to speak and gesture, maintaining his position in the kitchen. The camera remains focused on him, capturing his upper body and face. The background remains consistent, showing the refrigerator and wooden cabinets. The lighting in the kitchen stays bright, and the overall atmosphere remains calm and focused.\n\nThroughout the video, the man's movements and expressions suggest that he is engaged in a conversation or presentation. His gestures and facial expressions indicate that he is actively communicating and possibly demonstrating something related to cooking or food preparation. The kitchen setting provides a practical and relatable backdrop for his actions and words.\n\nOverall, the video depicts a man in a kitchen, speaking and gesturing while possibly explaining or demonstrating something related to cooking or food preparation. The kitchen setting, with its well-lit and organized appearance, serves as a suitable environment for his actions and words.",
+                            "content": EXPECTED_CONTENT,
                         },
                     ],
                 }
