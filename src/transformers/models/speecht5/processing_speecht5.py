@@ -14,49 +14,16 @@
 """Speech processor class for SpeechT5."""
 
 from ...processing_utils import ProcessorMixin
+from ...utils import auto_docstring
 
 
+@auto_docstring
 class SpeechT5Processor(ProcessorMixin):
-    r"""
-    Constructs a SpeechT5 processor which wraps a feature extractor and a tokenizer into a single processor.
-
-    [`SpeechT5Processor`] offers all the functionalities of [`SpeechT5FeatureExtractor`] and [`SpeechT5Tokenizer`]. See
-    the docstring of [`~SpeechT5Processor.__call__`] and [`~SpeechT5Processor.decode`] for more information.
-
-    Args:
-        feature_extractor (`SpeechT5FeatureExtractor`):
-            An instance of [`SpeechT5FeatureExtractor`]. The feature extractor is a required input.
-        tokenizer (`SpeechT5Tokenizer`):
-            An instance of [`SpeechT5Tokenizer`]. The tokenizer is a required input.
-    """
-
     def __init__(self, feature_extractor, tokenizer):
         super().__init__(feature_extractor, tokenizer)
 
+    @auto_docstring
     def __call__(self, *args, **kwargs):
-        """
-        Processes audio and text input, as well as audio and text targets.
-
-        You can process audio by using the argument `audio`, or process audio targets by using the argument
-        `audio_target`. This forwards the arguments to SpeechT5FeatureExtractor's
-        [`~SpeechT5FeatureExtractor.__call__`].
-
-        You can process text by using the argument `text`, or process text labels by using the argument `text_target`.
-        This forwards the arguments to SpeechT5Tokenizer's [`~SpeechT5Tokenizer.__call__`].
-
-        Valid input combinations are:
-
-        - `text` only
-        - `audio` only
-        - `text_target` only
-        - `audio_target` only
-        - `text` and `audio_target`
-        - `audio` and `audio_target`
-        - `text` and `text_target`
-        - `audio` and `text_target`
-
-        Please refer to the docstring of the above two methods for more information.
-        """
         audio = kwargs.pop("audio", None)
         text = kwargs.pop("text", None)
         text_target = kwargs.pop("text_target", None)

@@ -15,7 +15,7 @@
 Image/Text processor class for OWLv2
 """
 
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -28,7 +28,7 @@ from ...processing_utils import (
     Unpack,
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import TensorType, is_torch_available
+from ...utils import TensorType, auto_docstring, is_torch_available
 
 
 if TYPE_CHECKING:
@@ -36,7 +36,14 @@ if TYPE_CHECKING:
 
 
 class Owlv2ImagesKwargs(ImagesKwargs, total=False):
-    query_images: Optional[ImageInput]
+    """
+    query_images (`ImageInput`, *optional*):
+        Query images to use for image-guided object detection. When provided, these images serve as visual queries
+        to find similar objects in the main `images`. The query images override any text prompts, and the model
+        performs image-to-image matching instead of text-to-image matching.
+    """
+
+    query_images: ImageInput | None
 
 
 class Owlv2ProcessorKwargs(ProcessingKwargs, total=False):
@@ -51,60 +58,26 @@ class Owlv2ProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@auto_docstring
 class Owlv2Processor(ProcessorMixin):
-    r"""
-    Constructs an Owlv2 processor which wraps [`Owlv2ImageProcessor`]/[`Owlv2ImageProcessorFast`] and [`CLIPTokenizer`]/[`CLIPTokenizerFast`] into
-    a single processor that inherits both the image processor and tokenizer functionalities. See the
-    [`~OwlViTProcessor.__call__`] and [`~OwlViTProcessor.decode`] for more information.
-
-    Args:
-        image_processor ([`Owlv2ImageProcessor`, `Owlv2ImageProcessorFast`]):
-            The image processor is a required input.
-        tokenizer ([`CLIPTokenizer`, `CLIPTokenizerFast`]):
-            The tokenizer is a required input.
-    """
-
     def __init__(self, image_processor, tokenizer, **kwargs):
         super().__init__(image_processor, tokenizer)
 
+    @auto_docstring
     # Copied from transformers.models.owlvit.processing_owlvit.OwlViTProcessor.__call__ with OwlViT->Owlv2
     def __call__(
         self,
-        images: Optional[ImageInput] = None,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         **kwargs: Unpack[Owlv2ProcessorKwargs],
     ) -> BatchFeature:
-        """
-        Main method to prepare for the model one or several text(s) and image(s). This method forwards the `text` and
-        `kwargs` arguments to CLIPTokenizerFast's [`~CLIPTokenizerFast.__call__`] if `text` is not `None` to encode:
-        the text. To prepare the image(s), this method forwards the `images` and `kwargs` arguments to
-        CLIPImageProcessor's [`~CLIPImageProcessor.__call__`] if `images` is not `None`. Please refer to the docstring
-        of the above two methods for more information.
-
-        Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`,
-            `list[torch.Tensor]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. Both channels-first and channels-last formats are supported.
-            text (`str`, `list[str]`, `list[list[str]]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            query_images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
-                The query image to be prepared, one query image is expected per target image to be queried. Each image
-                can be a PIL image, NumPy array or PyTorch tensor. In case of a NumPy array/PyTorch tensor, each image
-                should be of shape (C, H, W), where C is a number of channels, H and W are image height and width.
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
-
+        r"""
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
             - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
             - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
-              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
-              `None`).
+                `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
+                `None`).
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
             - **query_pixel_values** -- Pixel values of the query images to be fed to a model. Returned when `query_images` is not `None`.
         """
@@ -145,7 +118,6 @@ class Owlv2Processor(ProcessorMixin):
             if return_tensors == "np":
                 input_ids = np.concatenate([encoding["input_ids"] for encoding in encodings], axis=0)
                 attention_mask = np.concatenate([encoding["attention_mask"] for encoding in encodings], axis=0)
-
             elif return_tensors == "pt" and is_torch_available():
                 import torch
 
@@ -173,8 +145,8 @@ class Owlv2Processor(ProcessorMixin):
         self,
         outputs: "Owlv2ObjectDetectionOutput",
         threshold: float = 0.1,
-        target_sizes: Optional[Union[TensorType, list[tuple]]] = None,
-        text_labels: Optional[list[list[str]]] = None,
+        target_sizes: TensorType | list[tuple] | None = None,
+        text_labels: list[list[str]] | None = None,
     ):
         """
         Converts the raw output of [`Owlv2ForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
@@ -223,7 +195,7 @@ class Owlv2Processor(ProcessorMixin):
         outputs: "Owlv2ImageGuidedObjectDetectionOutput",
         threshold: float = 0.0,
         nms_threshold: float = 0.3,
-        target_sizes: Optional[Union[TensorType, list[tuple]]] = None,
+        target_sizes: TensorType | list[tuple] | None = None,
     ):
         """
         Converts the output of [`Owlv2ForObjectDetection.image_guided_detection`] into the format expected by the COCO

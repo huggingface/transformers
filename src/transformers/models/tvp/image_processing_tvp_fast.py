@@ -13,7 +13,7 @@
 # limitations under the License.
 """Fast Image processor class for TVP."""
 
-from typing import Optional, Union
+from typing import Optional
 
 import torch
 from torchvision.transforms.v2 import functional as F
@@ -63,7 +63,7 @@ class TvpImageProcessorFast(BaseImageProcessorFast):
     @auto_docstring
     def preprocess(
         self,
-        videos: Union[ImageInput, list[ImageInput], list[list[ImageInput]]],
+        videos: ImageInput | list[ImageInput] | list[list[ImageInput]],
         **kwargs: Unpack[TvpImageProcessorKwargs],
     ) -> BatchFeature:
         return super().preprocess(videos, **kwargs)
@@ -156,22 +156,22 @@ class TvpImageProcessorFast(BaseImageProcessorFast):
         self,
         images: list[list["torch.Tensor"]],
         do_resize: bool,
-        size: Union[SizeDict, dict],
+        size: SizeDict | dict,
         interpolation: Optional["F.InterpolationMode"],
         do_center_crop: bool,
-        crop_size: Union[SizeDict, dict],
+        crop_size: SizeDict | dict,
         do_rescale: bool,
         rescale_factor: float,
         do_pad: bool,
         pad_size: SizeDict,
-        constant_values: Union[float, list[float]],
+        constant_values: float | list[float],
         pad_mode: str,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
         do_flip_channel_order: bool,
-        return_tensors: Optional[Union[str, TensorType]],
-        disable_grouping: Optional[bool],
+        return_tensors: str | TensorType | None,
+        disable_grouping: bool | None,
         **kwargs,
     ) -> BatchFeature:
         """

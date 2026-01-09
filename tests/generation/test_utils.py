@@ -2686,6 +2686,13 @@ class GenerationIntegrationTests(unittest.TestCase):
         out = model.generate(input_ids, generation_config=generation_config)
         self.assertTrue(len(out[0]) == 20)  # generated max_length=20 tokens, not 50!
 
+        # Lastly try saving to make sure no errors are raised about
+        # "generation params in config" or during config validation (#43175)
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.generation_config.cache_implementation = "dynamic"
+            model.generation_config.use_cache = None
+            model.save_pretrained(tmpdirname)
+
     # TODO joao, manuel: remove in v4.62.0
     @slow
     def test_diverse_beam_search(self):

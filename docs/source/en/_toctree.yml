@@ -601,6 +601,8 @@
         title: MegatronGPT2
       - local: model_doc/minimax
         title: MiniMax
+      - local: model_doc/minimax_m2
+        title: MiniMax-M2
       - local: model_doc/ministral
         title: Ministral
       - local: model_doc/ministral3
