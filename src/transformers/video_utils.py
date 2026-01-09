@@ -441,11 +441,13 @@ def read_video_decord(
     indices = sample_indices_fn(metadata=metadata, **kwargs)
     video = vr.get_batch(indices).asnumpy()
 
-    metadata.update({
-        "frames_indices": indices,
-        "height": video.shape[1],
-        "width": video.shape[2],
-    })
+    metadata.update(
+        {
+            "frames_indices": indices,
+            "height": video.shape[1],
+            "width": video.shape[2],
+        }
+    )
     return video, metadata
 
 
@@ -552,11 +554,13 @@ def read_video_torchvision(
 
     indices = sample_indices_fn(metadata=metadata, **kwargs)
     video = video[indices].contiguous()
-    metadata.update({
-        "frames_indices": indices,
-        "height": video.shape[2],
-        "width": video.shape[3],
-    })
+    metadata.update(
+        {
+            "frames_indices": indices,
+            "height": video.shape[2],
+            "width": video.shape[3],
+        }
+    )
     return video, metadata
 
 

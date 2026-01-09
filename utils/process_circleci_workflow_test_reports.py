@@ -88,13 +88,15 @@ if __name__ == "__main__":
                             failure_lines_list[failure_idx] if failure_idx < len(failure_lines_list) else short_error
                         )
 
-                        failure_entries.append({
-                            "job_name": job["name"],
-                            "test_name": test_name,
-                            "short_error": short_error,
-                            "error": full_error,
-                            "model_name": model_name,
-                        })
+                        failure_entries.append(
+                            {
+                                "job_name": job["name"],
+                                "test_name": test_name,
+                                "short_error": short_error,
+                                "error": full_error,
+                                "model_name": model_name,
+                            }
+                        )
                         failure_idx += 1
 
     # Build workflow summary

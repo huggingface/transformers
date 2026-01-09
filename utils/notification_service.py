@@ -24,13 +24,14 @@ import sys
 import time
 from typing import Any
 
+import httpx
 from compare_test_runs import compare_job_sets
 from get_ci_error_statistics import get_jobs
 from get_previous_daily_ci import get_last_daily_ci_reports, get_last_daily_ci_run, get_last_daily_ci_workflow_run_id
 from huggingface_hub import HfApi
 from slack_sdk import WebClient
 
-import httpx
+
 # A map associating the job names (specified by `inputs.job` in a workflow file) with the keys of
 # `additional_files`.
 job_to_test_map = {
