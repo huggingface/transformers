@@ -316,10 +316,9 @@ class VibeVoiceEncoder(nn.Module):
 
         # Parameters for cache creation
         self.num_layers = layer_idx + 1
-        self.per_layer_padding = []
-        self.per_layer_in_channels = []
-        self.per_layer_padding.append(self.stem.conv.causal_padding)
-        self.per_layer_in_channels.append(self.stem.conv.conv.in_channels)
+        self.per_layer_padding_mode = ["constant"] * self.num_layers
+        self.per_layer_padding = [self.stem.conv.causal_padding]
+        self.per_layer_in_channels = [self.stem.conv.conv.in_channels]
         for block in self.stem.stage:
             self.per_layer_padding.append(block.mixer.causal_padding)
             self.per_layer_in_channels.append(block.mixer.conv.in_channels)
@@ -370,6 +369,7 @@ class VibeVoiceSemanticTokenizerModel(VibeVoiceAcousticTokenizerModel):
             padding_cache = VibeVoiceConv1dCache(
                 num_layers=self.encoder.num_layers,
                 per_layer_padding=self.encoder.per_layer_padding,
+                per_layer_padding_mode=self.encoder.per_layer_padding_mode,
                 per_layer_in_channels=self.encoder.per_layer_in_channels,
             )
         latents = self.encoder(audio, padding_cache=padding_cache)
