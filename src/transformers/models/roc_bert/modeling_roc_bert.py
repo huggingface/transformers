@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 WeChatAI The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,12 +14,12 @@
 """PyTorch RoCBert model."""
 
 from collections.abc import Callable
-from typing import Optional, Union
 
 import torch
 from torch import nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
@@ -180,8 +179,8 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
-    scaling: Optional[float] = None,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
     dropout: float = 0.0,
     **kwargs: Unpack[TransformersKwargs],
 ):
@@ -233,9 +232,9 @@ class RoCBertSelfAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        cache_position: Optional[torch.Tensor] = None,
+        attention_mask: torch.FloatTensor | None = None,
+        past_key_values: Cache | None = None,
+        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -306,9 +305,9 @@ class RoCBertCrossAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[EncoderDecoderCache] = None,
+        encoder_hidden_states: torch.FloatTensor | None = None,
+        attention_mask: torch.FloatTensor | None = None,
+        past_key_values: EncoderDecoderCache | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         # determine input shapes
@@ -383,11 +382,11 @@ class RoCBertAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        cache_position: Optional[torch.Tensor] = None,
+        attention_mask: torch.FloatTensor | None = None,
+        encoder_hidden_states: torch.FloatTensor | None = None,
+        encoder_attention_mask: torch.FloatTensor | None = None,
+        past_key_values: Cache | None = None,
+        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         attention_mask = attention_mask if not self.is_cross_attention else encoder_attention_mask
@@ -458,11 +457,11 @@ class RoCBertLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        cache_position: Optional[torch.Tensor] = None,
+        attention_mask: torch.FloatTensor | None = None,
+        encoder_hidden_states: torch.FloatTensor | None = None,
+        encoder_attention_mask: torch.FloatTensor | None = None,
+        past_key_values: Cache | None = None,
+        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         self_attention_output, _ = self.attention(
@@ -512,14 +511,14 @@ class RoCBertEncoder(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.Tensor] = None,
+        attention_mask: torch.FloatTensor | None = None,
+        encoder_hidden_states: torch.FloatTensor | None = None,
+        encoder_attention_mask: torch.FloatTensor | None = None,
+        past_key_values: Cache | None = None,
+        use_cache: bool | None = None,
+        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple[torch.Tensor], BaseModelOutputWithPastAndCrossAttentions]:
+    ) -> tuple[torch.Tensor] | BaseModelOutputWithPastAndCrossAttentions:
         for i, layer_module in enumerate(self.layer):
             hidden_states = layer_module(
                 hidden_states,
@@ -579,15 +578,8 @@ class RoCBertLMPredictionHead(nn.Module):
 
         # The output weights are the same as the input embeddings, but there is
         # an output-only bias for each token.
-        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
-
+        self.decoder = nn.Linear(config.hidden_size, config.vocab_size, bias=True)
         self.bias = nn.Parameter(torch.zeros(config.vocab_size))
-
-        # Need a link between the two variables so that the bias is correctly resized with `resize_token_embeddings`
-        self.decoder.bias = self.bias
-
-    def _tie_weights(self):
-        self.decoder.bias = self.bias
 
     def forward(self, hidden_states):
         hidden_states = self.transform(hidden_states)
@@ -621,21 +613,15 @@ class RoCBertPreTrainedModel(PreTrainedModel):
         "cross_attentions": RoCBertCrossAttention,
     }
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, RoCBertLMPredictionHead):
-            module.bias.data.zero_()
+        super()._init_weights(module)
+        if isinstance(module, RoCBertLMPredictionHead):
+            init.zeros_(module.bias)
+        elif isinstance(module, RoCBertEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
+            init.zeros_(module.token_type_ids)
 
 
 @auto_docstring(
@@ -689,24 +675,24 @@ class RoCBertModel(RoCBertPreTrainedModel):
     def set_shape_embeddings(self, value):
         self.embeddings.shape_embed = value
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        input_shape_ids: Optional[torch.Tensor] = None,
-        input_pronunciation_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Cache] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.Tensor] = None,
+        input_ids: torch.Tensor | None = None,
+        input_shape_ids: torch.Tensor | None = None,
+        input_pronunciation_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        token_type_ids: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        use_cache: bool | None = None,
+        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple[torch.Tensor], BaseModelOutputWithPoolingAndCrossAttentions]:
+    ) -> tuple[torch.Tensor] | BaseModelOutputWithPoolingAndCrossAttentions:
         r"""
         input_shape_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the shape vocabulary.
@@ -827,7 +813,10 @@ class RoCBertModel(RoCBertPreTrainedModel):
     """
 )
 class RoCBertForPreTraining(RoCBertPreTrainedModel):
-    _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
+    _tied_weights_keys = {
+        "cls.predictions.decoder.bias": "cls.predictions.bias",
+        "cls.predictions.decoder.weight": "roc_bert.embeddings.word_embeddings.weight",
+    }
 
     def __init__(self, config):
         super().__init__(config)
@@ -851,25 +840,25 @@ class RoCBertForPreTraining(RoCBertPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        input_shape_ids: Optional[torch.Tensor] = None,
-        input_pronunciation_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        attack_input_ids: Optional[torch.Tensor] = None,
-        attack_input_shape_ids: Optional[torch.Tensor] = None,
-        attack_input_pronunciation_ids: Optional[torch.Tensor] = None,
-        attack_attention_mask: Optional[torch.Tensor] = None,
-        attack_token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        labels_input_ids: Optional[torch.Tensor] = None,
-        labels_input_shape_ids: Optional[torch.Tensor] = None,
-        labels_input_pronunciation_ids: Optional[torch.Tensor] = None,
-        labels_attention_mask: Optional[torch.Tensor] = None,
-        labels_token_type_ids: Optional[torch.Tensor] = None,
+        input_ids: torch.Tensor | None = None,
+        input_shape_ids: torch.Tensor | None = None,
+        input_pronunciation_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        token_type_ids: torch.Tensor | None = None,
+        attack_input_ids: torch.Tensor | None = None,
+        attack_input_shape_ids: torch.Tensor | None = None,
+        attack_input_pronunciation_ids: torch.Tensor | None = None,
+        attack_attention_mask: torch.Tensor | None = None,
+        attack_token_type_ids: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        labels_input_ids: torch.Tensor | None = None,
+        labels_input_shape_ids: torch.Tensor | None = None,
+        labels_input_pronunciation_ids: torch.Tensor | None = None,
+        labels_attention_mask: torch.Tensor | None = None,
+        labels_token_type_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple[torch.Tensor], MaskedLMOutput]:
+    ) -> tuple[torch.Tensor] | MaskedLMOutput:
         r"""
         input_shape_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the shape vocabulary.
@@ -1020,7 +1009,10 @@ class RoCBertForPreTraining(RoCBertPreTrainedModel):
 
 @auto_docstring
 class RoCBertForMaskedLM(RoCBertPreTrainedModel):
-    _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
+    _tied_weights_keys = {
+        "cls.predictions.decoder.bias": "cls.predictions.bias",
+        "cls.predictions.decoder.weight": "roc_bert.embeddings.word_embeddings.weight",
+    }
 
     # Copied from transformers.models.bert.modeling_bert.BertForMaskedLM.__init__ with Bert->RoCBert,bert->roc_bert
     def __init__(self, config):
@@ -1051,18 +1043,18 @@ class RoCBertForMaskedLM(RoCBertPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        input_shape_ids: Optional[torch.Tensor] = None,
-        input_pronunciation_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
+        input_ids: torch.Tensor | None = None,
+        input_shape_ids: torch.Tensor | None = None,
+        input_pronunciation_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        token_type_ids: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
+        labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple[torch.Tensor], MaskedLMOutput]:
+    ) -> tuple[torch.Tensor] | MaskedLMOutput:
         r"""
         input_shape_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the shape vocabulary.
@@ -1175,7 +1167,10 @@ class RoCBertForMaskedLM(RoCBertPreTrainedModel):
     """
 )
 class RoCBertForCausalLM(RoCBertPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["cls.predictions.decoder.weight", "cls.predictions.decoder.bias"]
+    _tied_weights_keys = {
+        "cls.predictions.decoder.bias": "cls.predictions.bias",
+        "cls.predictions.decoder.weight": "roc_bert.embeddings.word_embeddings.weight",
+    }
 
     # Copied from transformers.models.bert.modeling_bert.BertLMHeadModel.__init__ with BertLMHeadModel->RoCBertForCausalLM,Bert->RoCBert,bert->roc_bert
     def __init__(self, config):
@@ -1203,22 +1198,22 @@ class RoCBertForCausalLM(RoCBertPreTrainedModel, GenerationMixin):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        input_shape_ids: Optional[torch.Tensor] = None,
-        input_pronunciation_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[list[torch.Tensor]] = None,
-        labels: Optional[torch.Tensor] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.Tensor] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
+        input_ids: torch.Tensor | None = None,
+        input_shape_ids: torch.Tensor | None = None,
+        input_pronunciation_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        token_type_ids: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
+        past_key_values: list[torch.Tensor] | None = None,
+        labels: torch.Tensor | None = None,
+        use_cache: bool | None = None,
+        cache_position: torch.Tensor | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple[torch.Tensor], CausalLMOutputWithCrossAttentions]:
+    ) -> tuple[torch.Tensor] | CausalLMOutputWithCrossAttentions:
         r"""
         input_shape_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the shape vocabulary.
@@ -1346,16 +1341,16 @@ class RoCBertForSequenceClassification(RoCBertPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        input_shape_ids: Optional[torch.Tensor] = None,
-        input_pronunciation_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
+        input_ids: torch.Tensor | None = None,
+        input_shape_ids: torch.Tensor | None = None,
+        input_pronunciation_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        token_type_ids: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple[torch.Tensor], SequenceClassifierOutput]:
+    ) -> tuple[torch.Tensor] | SequenceClassifierOutput:
         r"""
         input_shape_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the shape vocabulary.
@@ -1444,16 +1439,16 @@ class RoCBertForMultipleChoice(RoCBertPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        input_shape_ids: Optional[torch.Tensor] = None,
-        input_pronunciation_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
+        input_ids: torch.Tensor | None = None,
+        input_shape_ids: torch.Tensor | None = None,
+        input_pronunciation_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        token_type_ids: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple[torch.Tensor], MultipleChoiceModelOutput]:
+    ) -> tuple[torch.Tensor] | MultipleChoiceModelOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
@@ -1568,16 +1563,16 @@ class RoCBertForTokenClassification(RoCBertPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        input_shape_ids: Optional[torch.Tensor] = None,
-        input_pronunciation_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
+        input_ids: torch.Tensor | None = None,
+        input_shape_ids: torch.Tensor | None = None,
+        input_pronunciation_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        token_type_ids: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, TokenClassifierOutput]:
+    ) -> tuple | TokenClassifierOutput:
         r"""
         input_shape_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the shape vocabulary.
@@ -1643,17 +1638,17 @@ class RoCBertForQuestionAnswering(RoCBertPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        input_shape_ids: Optional[torch.Tensor] = None,
-        input_pronunciation_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        start_positions: Optional[torch.Tensor] = None,
-        end_positions: Optional[torch.Tensor] = None,
+        input_ids: torch.Tensor | None = None,
+        input_shape_ids: torch.Tensor | None = None,
+        input_pronunciation_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        token_type_ids: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        start_positions: torch.Tensor | None = None,
+        end_positions: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple[torch.Tensor], QuestionAnsweringModelOutput]:
+    ) -> tuple[torch.Tensor] | QuestionAnsweringModelOutput:
         r"""
         input_shape_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the shape vocabulary.

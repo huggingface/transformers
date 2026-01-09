@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -361,9 +360,9 @@ def convert_xclip_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
 
     if push_to_hub:
         print("Pushing model, processor and slow tokenizer files to the hub...")
-        model.push_to_hub(model_name, organization="nielsr")
-        processor.push_to_hub(model_name, organization="nielsr")
-        slow_tokenizer.push_to_hub(model_name, organization="nielsr")
+        model.push_to_hub(repo_id=f"nielsr/{model_name}")
+        processor.push_to_hub(repo_id=f"nielsr/{model_name}")
+        slow_tokenizer.push_to_hub(repo_id=f"nielsr/{model_name}")
 
 
 if __name__ == "__main__":
@@ -379,7 +378,9 @@ if __name__ == "__main__":
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
     )
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the converted model to the Hugging Face hub.",
     )
 
     args = parser.parse_args()

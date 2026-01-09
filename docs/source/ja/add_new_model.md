@@ -25,7 +25,7 @@ Hugging Faceでは、コミュニティの多くの人々に積極的にモデ�
 - オープンソースのベストプラクティスに関する洞察
 - 最も人気のある深層学習ライブラリの設計原則を理解する
 - 大規模なモデルを効率的にテストする方法を学ぶ
-- `black`、`ruff`、および`make fix-copies`などのPythonユーティリティを統合して、クリーンで読みやすいコードを確保する方法を学ぶ
+- `black`、`ruff`、および`make fix-repo`などのPythonユーティリティを統合して、クリーンで読みやすいコードを確保する方法を学ぶ
 
 Hugging Faceチームのメンバーがサポートを提供するので、一人ぼっちになることはありません。 🤗 ❤️
 
@@ -406,16 +406,16 @@ model = BrandNewBertModel(BrandNewBertConfig())
 def _init_weights(self, module):
     """Initialize the weights"""
     if isinstance(module, nn.Linear):
-        module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+        module.weight.normal_(mean=0.0, std=self.config.initializer_range)
         if module.bias is not None:
-            module.bias.data.zero_()
+            module.bias.zero_()
     elif isinstance(module, nn.Embedding):
-        module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+        module.weight.normal_(mean=0.0, std=self.config.initializer_range)
         if module.padding_idx is not None:
             module.weight.data[module.padding_idx].zero_()
     elif isinstance(module, nn.LayerNorm):
-        module.bias.data.zero_()
-        module.weight.data.fill_(1.0)
+        module.bias.zero_()
+        module.weight.fill_(1.0)
 ```
 
 特定のモジュールに特別な初期化が必要な場合、カスタムスキームをさらに持つことができます。たとえば、
@@ -431,9 +431,9 @@ def _init_weights(self, module):
         module.project_hid._is_hf_initialized = True
         module.project_q._is_hf_initialized = True
     elif isinstance(module, nn.Linear):
-        module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+        module.weight.normal_(mean=0.0, std=self.config.initializer_range)
         if module.bias is not None:
-            module.bias.data.zero_()
+            module.bias.zero_()
 ```
 
 `_is_hf_initialized`フラグは、サブモジュールを一度だけ初期化することを確実にするために内部で使用されます。
@@ -707,7 +707,7 @@ make style
 あなたのコーディングスタイルが品質チェックをパスすることを確認してください:
 
 ```bash
-make quality
+make check-repo
 ```
 
 🤗 Transformersの非常に厳格なデザインテストには、まだ合格していない可能性があるいくつかの他のテストが存在するかもしれません。

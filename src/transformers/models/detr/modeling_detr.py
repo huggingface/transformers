@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 Facebook AI Research The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,6 +20,7 @@ from typing import Callable, Optional, Union
 import torch
 import torch.nn as nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
@@ -71,7 +71,7 @@ class DetrDecoderOutput(BaseModelOutputWithCrossAttentions):
         layernorm.
     """
 
-    intermediate_hidden_states: Optional[torch.FloatTensor] = None
+    intermediate_hidden_states: torch.FloatTensor | None = None
 
 
 @dataclass
@@ -91,7 +91,7 @@ class DetrModelOutput(Seq2SeqModelOutput):
         layernorm.
     """
 
-    intermediate_hidden_states: Optional[torch.FloatTensor] = None
+    intermediate_hidden_states: torch.FloatTensor | None = None
 
 
 @dataclass
@@ -123,18 +123,18 @@ class DetrObjectDetectionOutput(ModelOutput):
         Sequence of hidden-states at the output of the last layer of the decoder of the model.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    loss_dict: Optional[dict] = None
-    logits: Optional[torch.FloatTensor] = None
-    pred_boxes: Optional[torch.FloatTensor] = None
-    auxiliary_outputs: Optional[list[dict]] = None
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    decoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    decoder_attentions: Optional[tuple[torch.FloatTensor]] = None
-    cross_attentions: Optional[tuple[torch.FloatTensor]] = None
-    encoder_last_hidden_state: Optional[torch.FloatTensor] = None
-    encoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    encoder_attentions: Optional[tuple[torch.FloatTensor]] = None
+    loss: torch.FloatTensor | None = None
+    loss_dict: dict | None = None
+    logits: torch.FloatTensor | None = None
+    pred_boxes: torch.FloatTensor | None = None
+    auxiliary_outputs: list[dict] | None = None
+    last_hidden_state: torch.FloatTensor | None = None
+    decoder_hidden_states: tuple[torch.FloatTensor] | None = None
+    decoder_attentions: tuple[torch.FloatTensor] | None = None
+    cross_attentions: tuple[torch.FloatTensor] | None = None
+    encoder_last_hidden_state: torch.FloatTensor | None = None
+    encoder_hidden_states: tuple[torch.FloatTensor] | None = None
+    encoder_attentions: tuple[torch.FloatTensor] | None = None
 
 
 @dataclass
@@ -172,19 +172,19 @@ class DetrSegmentationOutput(ModelOutput):
         Sequence of hidden-states at the output of the last layer of the decoder of the model.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    loss_dict: Optional[dict] = None
-    logits: Optional[torch.FloatTensor] = None
-    pred_boxes: Optional[torch.FloatTensor] = None
-    pred_masks: Optional[torch.FloatTensor] = None
-    auxiliary_outputs: Optional[list[dict]] = None
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    decoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    decoder_attentions: Optional[tuple[torch.FloatTensor]] = None
-    cross_attentions: Optional[tuple[torch.FloatTensor]] = None
-    encoder_last_hidden_state: Optional[torch.FloatTensor] = None
-    encoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    encoder_attentions: Optional[tuple[torch.FloatTensor]] = None
+    loss: torch.FloatTensor | None = None
+    loss_dict: dict | None = None
+    logits: torch.FloatTensor | None = None
+    pred_boxes: torch.FloatTensor | None = None
+    pred_masks: torch.FloatTensor | None = None
+    auxiliary_outputs: list[dict] | None = None
+    last_hidden_state: torch.FloatTensor | None = None
+    decoder_hidden_states: tuple[torch.FloatTensor] | None = None
+    decoder_attentions: tuple[torch.FloatTensor] | None = None
+    cross_attentions: tuple[torch.FloatTensor] | None = None
+    encoder_last_hidden_state: torch.FloatTensor | None = None
+    encoder_hidden_states: tuple[torch.FloatTensor] | None = None
+    encoder_attentions: tuple[torch.FloatTensor] | None = None
 
 
 # BELOW: utilities copied from
@@ -241,10 +241,10 @@ def replace_batch_norm(model):
             new_module = DetrFrozenBatchNorm2d(module.num_features)
 
             if module.weight.device != torch.device("meta"):
-                new_module.weight.data.copy_(module.weight)
-                new_module.bias.data.copy_(module.bias)
-                new_module.running_mean.data.copy_(module.running_mean)
-                new_module.running_var.data.copy_(module.running_var)
+                new_module.weight.copy_(module.weight)
+                new_module.bias.copy_(module.bias)
+                new_module.running_mean.copy_(module.running_mean)
+                new_module.running_var.copy_(module.running_var)
 
             model._modules[name] = new_module
 
@@ -742,7 +742,7 @@ class DetrPreTrainedModel(PreTrainedModel):
     config: DetrConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     _no_split_modules = [r"DetrConvEncoder", r"DetrEncoderLayer", r"DetrDecoderLayer"]
     _supports_sdpa = True
     _supports_flash_attn = True
@@ -757,26 +757,31 @@ class DetrPreTrainedModel(PreTrainedModel):
         r"(\d+)\.fc2": r"\1.mlp.fc2",
     }
 
+    @torch.no_grad()
     def _init_weights(self, module):
         std = self.config.init_std
         xavier_std = self.config.init_xavier_std
 
         if isinstance(module, DetrMHAttentionMap):
-            nn.init.zeros_(module.k_proj.bias)
-            nn.init.zeros_(module.q_proj.bias)
-            nn.init.xavier_uniform_(module.k_proj.weight, gain=xavier_std)
-            nn.init.xavier_uniform_(module.q_proj.weight, gain=xavier_std)
+            init.zeros_(module.k_proj.bias)
+            init.zeros_(module.q_proj.bias)
+            init.xavier_uniform_(module.k_proj.weight, gain=xavier_std)
+            init.xavier_uniform_(module.q_proj.weight, gain=xavier_std)
         elif isinstance(module, DetrLearnedPositionEmbedding):
-            nn.init.uniform_(module.row_embeddings.weight)
-            nn.init.uniform_(module.column_embeddings.weight)
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
+            init.uniform_(module.row_embeddings.weight)
+            init.uniform_(module.column_embeddings.weight)
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
+            init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+            init.normal_(module.weight, mean=0.0, std=std)
+            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
+            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
+                init.zeros_(module.weight[module.padding_idx])
+        elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
+            init.ones_(module.weight)
+            init.zeros_(module.bias)
 
 
 class DetrEncoder(DetrPreTrainedModel):
@@ -1007,9 +1012,6 @@ class DetrModel(DetrPreTrainedModel):
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_encoder(self):
-        return self.encoder
 
     def freeze_backbone(self):
         for _, param in self.backbone.model.named_parameters():
@@ -1403,8 +1405,12 @@ class DetrForSegmentation(DetrPreTrainedModel):
 
         >>> # A tensor of shape (height, width) where each value denotes a segment id, filled with -1 if no segment is found
         >>> panoptic_seg = result[0]["segmentation"]
+        >>> panoptic_seg.shape
+        torch.Size([300, 500])
         >>> # Get prediction score and segment_id to class_id mapping of each segment
         >>> panoptic_segments_info = result[0]["segments_info"]
+        >>> len(panoptic_segments_info)
+        5
         ```"""
 
         batch_size, num_channels, height, width = pixel_values.shape
@@ -1545,8 +1551,8 @@ class DetrMaskHeadSmallConv(nn.Module):
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_uniform_(m.weight, a=1)
-                nn.init.constant_(m.bias, 0)
+                init.kaiming_uniform_(m.weight, a=1)
+                init.constant_(m.bias, 0)
 
     def forward(self, x: torch.Tensor, bbox_mask: torch.Tensor, fpns: list[torch.Tensor]):
         # here we concatenate x, the projected feature map, of shape (batch_size, d_model, height/32, width/32) with

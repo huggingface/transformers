@@ -1,5 +1,3 @@
-from typing import Optional
-
 import torch
 
 from ..utils import is_torch_npu_available, is_torch_xpu_available, logging
@@ -27,7 +25,7 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-def use_gqa_in_sdpa(attention_mask: Optional[torch.Tensor], key: torch.Tensor) -> bool:
+def use_gqa_in_sdpa(attention_mask: torch.Tensor | None, key: torch.Tensor) -> bool:
     # GQA can only be used under the following conditions
     # 1.cuda or Ascend NPU
     #   - torch version >= 2.5
@@ -44,10 +42,10 @@ def sdpa_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
+    attention_mask: torch.Tensor | None,
     dropout: float = 0.0,
-    scaling: Optional[float] = None,
-    is_causal: Optional[bool] = None,
+    scaling: float | None = None,
+    is_causal: bool | None = None,
     **kwargs,
 ) -> tuple[torch.Tensor, None]:
     if kwargs.get("output_attentions", False):
@@ -62,9 +60,6 @@ def sdpa_attention_forward(
             value = repeat_kv(value, module.num_key_value_groups)
         else:
             sdpa_kwargs = {"enable_gqa": True}
-
-    if attention_mask is not None and attention_mask.ndim == 4:
-        attention_mask = attention_mask[:, :, :, : key.shape[-2]]
 
     # Instead of relying on the value set in the module directly, we use the is_causal passed in kwargs if it is presented
     is_causal = is_causal if is_causal is not None else getattr(module, "is_causal", True)

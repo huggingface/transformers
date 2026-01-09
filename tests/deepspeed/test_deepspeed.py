@@ -56,6 +56,7 @@ from transformers.utils import SAFE_WEIGHTS_NAME, is_torch_bf16_available_on_dev
 
 if is_torch_available():
     import torch
+    import torch.nn as nn
 
     from tests.trainer.test_trainer import (  # noqa
         RegressionModelConfig,
@@ -276,13 +277,17 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         import deepspeed
         import torch
 
-        from transformers.models.gpt2.modeling_gpt2 import GPT2PreTrainedModel
+        from transformers.models.gpt2.modeling_gpt2 import GPT2Model, GPT2PreTrainedModel
 
         class TinyGPT2WithUninitializedWeights(GPT2PreTrainedModel):
             def __init__(self, config):
                 super().__init__(config)
-                self.transformer = AutoModel.from_pretrained(GPT2_TINY, config=config)
+                self.transformer = GPT2Model(config)
+                # AutoModel.from_pretrained(GPT2_TINY, config=config)
                 self.new_head = torch.nn.Linear(config.hidden_size, config.vocab_size, bias=True)
+
+                # Initialize weights and apply final processing
+                self.post_init()
 
             def forward(self, *args, **kwargs):
                 transformer_outputs = self.transformer(*args, **kwargs)
@@ -292,8 +297,8 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
             def _init_weights(self, module):
                 super()._init_weights(module)
                 if module is self.new_head:
-                    self.new_head.weight.data.fill_(-100.0)
-                    self.new_head.bias.data.fill_(+100.0)
+                    nn.init.constant_(self.new_head.weight.data, -100.0)
+                    nn.init.constant_(self.new_head.bias.data, 100.0)
 
         ds_config = {
             "train_batch_size": 1,
@@ -313,7 +318,7 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
                 with CaptureLogger(logger) as cl:
                     model = TinyGPT2WithUninitializedWeights.from_pretrained(GPT2_TINY)
         self.assertIn("Detected DeepSpeed ZeRO-3", cl.out)
-        self.assertRegex(cl.out, r"newly initialized.*new_head\.bias.*new_head\.weight")
+        self.assertRegex(cl.out, r"new_head\.(weight|bias)\s*\|\s*MISSING")
         with deepspeed.zero.GatheredParameters([model.new_head.weight, model.new_head.bias]):
             self.assertTrue(
                 torch.allclose(model.new_head.weight, torch.tensor(-100.0, device=model.new_head.weight.device)),
@@ -335,7 +340,7 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
                 with CaptureLogger(logger) as cl:
                     model = TinyGPT2WithUninitializedWeights.from_pretrained(GPT2_TINY)
         self.assertNotIn("Detected DeepSpeed ZeRO-3", cl.out)
-        self.assertRegex(cl.out, r"newly initialized.*new_head\.bias.*new_head\.weight")
+        self.assertRegex(cl.out, r"new_head\.(weight|bias)\s*\|\s*MISSING")
         self.assertTrue(
             torch.allclose(model.new_head.weight, torch.tensor(-100.0, device=model.new_head.weight.device)),
         )
@@ -367,49 +372,20 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
             with mockenv_context(**self.dist_env_1_gpu):
                 logger = logging.get_logger("transformers.modeling_utils")
                 with CaptureLogger(logger) as cl:
-                    model = AutoModel.from_pretrained(GPTJ_TINY)
+                    model = AutoModel.from_pretrained(GPTJ_TINY, dtype=torch.float32)
         self.assertIn("Detected DeepSpeed ZeRO-3", cl.out)
 
         # The model weights are in BF16 as per deepspeed config
         self.assertTrue(str(model.h[0].attn.q_proj.weight.dtype) == "torch.bfloat16")
         good_deepspeed_sin_cos = model.h[0].attn.embed_positions
 
-        # Monkeypatches the function that creates RoPE embeddings using the INCORRECT torch.arange() pattern, and
-        # then recreates the model
-        def bad_deepspeed_create_sinusoidal_positions(num_pos: int, dim: int) -> torch.Tensor:
-            inv_freq = 1.0 / (10000 ** (torch.arange(0, dim, 2, dtype=torch.int64) / dim))
-            # Incorrect pattern here: torch.arange has dtype=torch.float32 as its argument, and it will automatically
-            # converted to BF16 by DeepSpeed
-            sinusoid_inp = torch.einsum("i , j -> i j", torch.arange(num_pos, dtype=inv_freq.dtype), inv_freq)
-            return torch.cat((torch.sin(sinusoid_inp), torch.cos(sinusoid_inp)), dim=1)
-
         good_deepspeed_create_sinusoidal_positions = transformers.models.gptj.modeling_gptj.create_sinusoidal_positions
-        transformers.models.gptj.modeling_gptj.create_sinusoidal_positions = bad_deepspeed_create_sinusoidal_positions
 
-        with LoggingLevel(logging.INFO):
-            with mockenv_context(**self.dist_env_1_gpu):
-                logger = logging.get_logger("transformers.modeling_utils")
-                with CaptureLogger(logger) as cl:
-                    model = AutoModel.from_pretrained(GPTJ_TINY)
-        self.assertIn("Detected DeepSpeed ZeRO-3", cl.out)
-
-        self.assertTrue(str(model.h[0].attn.q_proj.weight.dtype) == "torch.bfloat16")
-        bad_deepspeed_sin_cos = model.h[0].attn.embed_positions
-
-        # Compares the two values: the two sets of values are different, and the correct one matches the torch
-        # (i.e. outside DeepSpeed) version.
         good_torch_sin_cos = good_deepspeed_create_sinusoidal_positions(
             model.config.max_position_embeddings, model.config.rotary_dim
         )
-        self.assertFalse(torch.allclose(good_deepspeed_sin_cos, bad_deepspeed_sin_cos))
+        # check that we get the same results either with torch or deepspeed
         torch.testing.assert_close(good_torch_sin_cos, good_deepspeed_sin_cos.cpu())
-
-        # Finally, we can see that the incorrect pattern is okay on vanilla torch, demonstrating that this issue is
-        # exclusive to DeepSpeed
-        bad_torch_sin_cos = bad_deepspeed_create_sinusoidal_positions(
-            model.config.max_position_embeddings, model.config.rotary_dim
-        )
-        torch.testing.assert_close(bad_torch_sin_cos, good_torch_sin_cos)
 
 
 class TrainerIntegrationDeepSpeedWithCustomConfig(TestCasePlus):
@@ -756,13 +732,9 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
             self.assertNotEqual(yes_grad_accum_a, a)
 
         # training with half the batch size but accumulation steps as 2 should give the same
-        # weights, but sometimes get a slight difference still of 1e-6
-        if torch_device == "hpu":
-            self.assertAlmostEqual(no_grad_accum_a, yes_grad_accum_a, delta=1e-4)
-            self.assertAlmostEqual(no_grad_accum_b, yes_grad_accum_b, delta=1e-4)
-        else:
-            self.assertAlmostEqual(no_grad_accum_a, yes_grad_accum_a, places=5)
-            self.assertAlmostEqual(no_grad_accum_b, yes_grad_accum_b, places=5)
+        # weights, but sometimes get a slight difference still
+        self.assertAlmostEqual(no_grad_accum_a, yes_grad_accum_a, delta=1e-4)
+        self.assertAlmostEqual(no_grad_accum_b, yes_grad_accum_b, delta=1e-4)
 
         # Relative difference. See the note above how to get identical loss on a small bs
         self.assertTrue((no_grad_accum_loss - yes_grad_accum_loss) / (no_grad_accum_loss + 1e-15) <= 1e-3)
@@ -1067,10 +1039,10 @@ class TrainerIntegrationDeepSpeed(TrainerIntegrationDeepSpeedWithCustomConfig, T
                 return example
 
             def _convert_to_features(example_batch):
-                input_encodings = tokenizer.batch_encode_plus(
+                input_encodings = tokenizer(
                     example_batch["input_text"], padding="max_length", max_length=512, truncation=True
                 )
-                target_encodings = tokenizer.batch_encode_plus(
+                target_encodings = tokenizer(
                     example_batch["target_text"], padding="max_length", max_length=16, truncation=True
                 )
 

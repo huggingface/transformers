@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_owlv2.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -52,51 +51,6 @@ class Owlv2ImageProcessorFast(BaseImageProcessorFast):
     model_input_names = ["pixel_values"]
     rescale_factor = 1 / 255
     do_pad = True
-
-    def post_process(self, outputs, target_sizes):
-        """
-        Converts the raw output of [`Owlv2ForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
-        bottom_right_x, bottom_right_y) format.
-
-        Args:
-            outputs ([`Owlv2ObjectDetectionOutput`]):
-                Raw outputs of the model.
-            target_sizes (`torch.Tensor` of shape `(batch_size, 2)`):
-                Tensor containing the size (h, w) of each image of the batch. For evaluation, this must be the original
-                image size (before any data augmentation). For visualization, this should be the image size after data
-                augment, but before padding.
-        Returns:
-            `list[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
-            in the batch as predicted by the model.
-        """
-        warnings.warn(
-            "`post_process` is deprecated and will be removed in v5 of Transformers, please use"
-            " `post_process_object_detection` instead, with `threshold=0.` for equivalent results.",
-            FutureWarning,
-        )
-
-        logits, boxes = outputs.logits, outputs.pred_boxes
-
-        if len(logits) != len(target_sizes):
-            raise ValueError("Make sure that you pass in as many target sizes as the batch dimension of the logits")
-        if target_sizes.shape[1] != 2:
-            raise ValueError("Each element of target_sizes must contain the size (h, w) of each image of the batch")
-
-        probs = torch.max(logits, dim=-1)
-        scores = torch.sigmoid(probs.values)
-        labels = probs.indices
-
-        # Convert to [x0, y0, x1, y1] format
-        boxes = center_to_corners_format(boxes)
-
-        # Convert from relative [0, 1] to absolute [0, height] coordinates
-        img_h, img_w = target_sizes.unbind(1)
-        scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(boxes.device)
-        boxes = boxes * scale_fct[:, None, :]
-
-        results = [{"scores": s, "labels": l, "boxes": b} for s, l, b in zip(scores, labels, boxes)]
-
-        return results
 
     def post_process_object_detection(
         self,
@@ -244,7 +198,7 @@ class Owlv2ImageProcessorFast(BaseImageProcessorFast):
     def pad(
         self,
         images: list["torch.Tensor"],
-        disable_grouping: Optional[bool],
+        disable_grouping: bool | None,
         constant_value: float = 0.0,
         **kwargs,
     ) -> list["torch.Tensor"]:
@@ -331,10 +285,10 @@ class Owlv2ImageProcessorFast(BaseImageProcessorFast):
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        disable_grouping: Optional[bool],
-        return_tensors: Optional[Union[str, TensorType]],
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         # Group images by size for batched resizing
@@ -380,8 +334,6 @@ class Owlv2ImageProcessorFast(BaseImageProcessorFast):
             processed_images_grouped[shape] = stacked_images
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
-
-        processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
 
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 

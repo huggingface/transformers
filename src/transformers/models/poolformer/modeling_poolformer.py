@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 Sea AI Lab and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,11 +14,11 @@
 """PyTorch PoolFormer model."""
 
 import collections.abc
-from typing import Optional, Union
 
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_outputs import BaseModelOutputWithNoAttention, ImageClassifierOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
@@ -50,7 +49,7 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
 class PoolFormerDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
-    def __init__(self, drop_prob: Optional[float] = None) -> None:
+    def __init__(self, drop_prob: float | None = None) -> None:
         super().__init__()
         self.drop_prob = drop_prob
 
@@ -242,22 +241,17 @@ class PoolFormerPreTrainedModel(PreTrainedModel):
     config: PoolFormerConfig
     base_model_prefix = "poolformer"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     _no_split_modules = ["PoolFormerLayer"]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.GroupNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, PoolFormerLayer):
+        super()._init_weights(module)
+        if isinstance(module, PoolFormerLayer):
             if hasattr(module, "layer_scale_1"):
-                module.layer_scale_1.data.fill_(self.config.layer_scale_init_value)
-                module.layer_scale_2.data.fill_(self.config.layer_scale_init_value)
+                init.constant_(module.layer_scale_1, self.config.layer_scale_init_value)
+                init.constant_(module.layer_scale_2, self.config.layer_scale_init_value)
 
 
 @auto_docstring
@@ -272,15 +266,20 @@ class PoolFormerModel(PoolFormerPreTrainedModel):
         self.post_init()
 
     def get_input_embeddings(self):
-        return self.embeddings.patch_embeddings
+        # Input embeddings correspond to the very first patch-embedding stage.
+        return self.encoder.patch_embeddings[0]
+
+    def set_input_embeddings(self, value):
+        self.encoder.patch_embeddings[0] = value
 
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, BaseModelOutputWithNoAttention]:
+        pixel_values: torch.FloatTensor | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple | BaseModelOutputWithNoAttention:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -336,14 +335,21 @@ class PoolFormerForImageClassification(PoolFormerPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    def get_input_embeddings(self):
+        return self.poolformer.get_input_embeddings()
+
+    def set_input_embeddings(self, value):
+        self.poolformer.set_input_embeddings(value)
+
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, ImageClassifierOutputWithNoAttention]:
+        pixel_values: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple | ImageClassifierOutputWithNoAttention:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,

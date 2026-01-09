@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020, The RAG Authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +15,6 @@
 
 import os
 import warnings
-from typing import Optional
 
 from ...tokenization_utils_base import BatchEncoding
 from ...utils import logging
@@ -77,16 +75,16 @@ class RagTokenizer:
     def prepare_seq2seq_batch(
         self,
         src_texts: list[str],
-        tgt_texts: Optional[list[str]] = None,
-        max_length: Optional[int] = None,
-        max_target_length: Optional[int] = None,
+        tgt_texts: list[str] | None = None,
+        max_length: int | None = None,
+        max_target_length: int | None = None,
         padding: str = "longest",
-        return_tensors: Optional[str] = None,
+        return_tensors: str | None = None,
         truncation: bool = True,
         **kwargs,
     ) -> BatchEncoding:
         warnings.warn(
-            "`prepare_seq2seq_batch` is deprecated and will be removed in version 5 of 🤗 Transformers. Use the "
+            "`prepare_seq2seq_batch` is deprecated and will be removed in version 5 of Hugging Face Transformers. Use the "
             "regular `__call__` method to prepare your inputs and the tokenizer under the `with_target_tokenizer` "
             "context manager to prepare your targets. See the documentation of your specific tokenizer for more "
             "details",

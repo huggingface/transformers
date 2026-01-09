@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -35,7 +34,6 @@ from ...image_utils import (
 )
 from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, filter_out_non_signature_kwargs, logging
-from ...utils.deprecation import deprecate_kwarg
 
 
 logger = logging.get_logger(__name__)
@@ -96,20 +94,6 @@ class VitMatteImageProcessor(BaseImageProcessor):
         size_divisibility = kwargs.get("size_divisibility")
         self.size_divisor = size_divisibility if size_divisibility is not None else size_divisor
 
-    @property
-    def size_divisibility(self):
-        logger.warning(
-            "`self.size_divisibility` attribute is deprecated and will be removed in v5. Use `self.size_divisor` instead"
-        )
-        return self.size_divisor
-
-    @size_divisibility.setter
-    def size_divisibility(self, value):
-        logger.warning(
-            "`self.size_divisibility` attribute is deprecated and will be removed in v5. Use `self.size_divisor` instead"
-        )
-        self.size_divisor = value
-
     def pad_image(
         self,
         image: np.ndarray,
@@ -152,7 +136,6 @@ class VitMatteImageProcessor(BaseImageProcessor):
         return image
 
     @filter_out_non_signature_kwargs()
-    @deprecate_kwarg("size_divisibility", version="v5", new_name="size_divisor")
     def preprocess(
         self,
         images: ImageInput,

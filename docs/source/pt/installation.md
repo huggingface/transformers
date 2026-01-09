@@ -153,21 +153,13 @@ conda install conda-forge::transformers
 ## Configuração do Cachê
 
 Os modelos pré-treinados são baixados e armazenados no cachê local, encontrado em `~/.cache/huggingface/transformers/`.
-Este é o diretório padrão determinado pela variável `TRANSFORMERS_CACHE` dentro do shell.
+Este é o diretório padrão determinado pela variável `HF_HUB_CACHE` dentro do shell.
 No Windows, este diretório pré-definido é dado por `C:\Users\username\.cache\huggingface\transformers`.
 É possível mudar as variáveis dentro do shell em ordem de prioridade para especificar um diretório de cachê diferente:
 
-1. Variável de ambiente do shell (por padrão): `TRANSFORMERS_CACHE`.
+1. Variável de ambiente do shell (por padrão): `HF_HUB_CACHE`.
 2. Variável de ambiente do shell:`HF_HOME` + `transformers/`.
 3. Variável de ambiente do shell: `XDG_CACHE_HOME` + `/huggingface/transformers`.
-
-<Tip>
-
-    O 🤗 Transformers usará as variáveis de ambiente do shell `PYTORCH_TRANSFORMERS_CACHE` ou `PYTORCH_PRETRAINED_BERT_CACHE`
-    se estiver vindo de uma versão anterior da biblioteca que tenha configurado essas variáveis de ambiente, a menos que
-    você especifique a variável de ambiente do shell `TRANSFORMERS_CACHE`.
-
-</Tip>
 
 
 ## Modo Offline

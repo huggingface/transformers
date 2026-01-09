@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 Google AI, Ross Wightman, The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,11 +16,11 @@
 import collections.abc
 import math
 from collections.abc import Callable
-from typing import Optional, Union
 
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -100,7 +99,7 @@ class ViTEmbeddings(nn.Module):
     def forward(
         self,
         pixel_values: torch.Tensor,
-        bool_masked_pos: Optional[torch.BoolTensor] = None,
+        bool_masked_pos: torch.BoolTensor | None = None,
         interpolate_pos_encoding: bool = False,
     ) -> torch.Tensor:
         batch_size, num_channels, height, width = pixel_values.shape
@@ -173,8 +172,8 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
-    scaling: Optional[float] = None,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
     dropout: float = 0.0,
     **kwargs: Unpack[TransformersKwargs],
 ):
@@ -353,7 +352,7 @@ class ViTPreTrainedModel(PreTrainedModel):
     config: ViTConfig
     base_model_prefix = "vit"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = True
     _no_split_modules = ["ViTEmbeddings", "ViTLayer"]
     _supports_sdpa = True
@@ -365,34 +364,21 @@ class ViTPreTrainedModel(PreTrainedModel):
         "attentions": ViTSelfAttention,
     }
 
-    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]):
+    @torch.no_grad()
+    def _init_weights(self, module: nn.Linear | nn.Conv2d | nn.LayerNorm):
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
-            # `trunc_normal_cpu` not implemented in `half` issues
-            module.weight.data = nn.init.trunc_normal_(
-                module.weight.data.to(torch.float32), mean=0.0, std=self.config.initializer_range
-            ).to(module.weight.dtype)
+            init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.data.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
         elif isinstance(module, ViTEmbeddings):
-            module.position_embeddings.data = nn.init.trunc_normal_(
-                module.position_embeddings.data.to(torch.float32),
-                mean=0.0,
-                std=self.config.initializer_range,
-            ).to(module.position_embeddings.dtype)
-
-            module.cls_token.data = nn.init.trunc_normal_(
-                module.cls_token.data.to(torch.float32),
-                mean=0.0,
-                std=self.config.initializer_range,
-            ).to(module.cls_token.dtype)
-
+            init.trunc_normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
+            init.trunc_normal_(module.cls_token, mean=0.0, std=self.config.initializer_range)
             if module.mask_token is not None:
-                module.mask_token.data.zero_()
+                init.zeros_(module.mask_token)
 
 
 @auto_docstring
@@ -423,9 +409,9 @@ class ViTModel(ViTPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.Tensor] = None,
-        bool_masked_pos: Optional[torch.BoolTensor] = None,
-        interpolate_pos_encoding: Optional[bool] = None,
+        pixel_values: torch.Tensor | None = None,
+        bool_masked_pos: torch.BoolTensor | None = None,
+        interpolate_pos_encoding: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         r"""
@@ -503,9 +489,9 @@ class ViTForMaskedImageModeling(ViTPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.Tensor] = None,
-        bool_masked_pos: Optional[torch.BoolTensor] = None,
-        interpolate_pos_encoding: Optional[bool] = None,
+        pixel_values: torch.Tensor | None = None,
+        bool_masked_pos: torch.BoolTensor | None = None,
+        interpolate_pos_encoding: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MaskedImageModelingOutput:
         r"""
@@ -613,9 +599,9 @@ class ViTForImageClassification(ViTPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
-        interpolate_pos_encoding: Optional[bool] = None,
+        pixel_values: torch.Tensor | None = None,
+        labels: torch.Tensor | None = None,
+        interpolate_pos_encoding: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> ImageClassifierOutput:
         r"""

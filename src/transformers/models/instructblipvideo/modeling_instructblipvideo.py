@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_instructblipvideo.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2024 HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,14 +18,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Optional, Union
+from typing import Any
 
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -127,11 +128,61 @@ class InstructBlipVideoVisionEmbeddings(nn.Module):
         return embeddings
 
 
+class InstructBlipVideoQFormerEmbeddings(nn.Module):
+    """Construct the embeddings from word and position embeddings."""
+
+    def __init__(self, config):
+        super().__init__()
+        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
+        self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
+
+        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+
+        # position_ids (1, len position emb) is contiguous in memory and exported when serialized
+        self.register_buffer(
+            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
+        )
+
+        self.config = config
+
+    def forward(
+        self,
+        input_ids=None,
+        position_ids=None,
+        query_embeds=None,
+        past_key_values_length=0,
+    ):
+        if input_ids is not None:
+            seq_length = input_ids.size()[1]
+        else:
+            seq_length = 0
+
+        if position_ids is None:
+            position_ids = self.position_ids[:, past_key_values_length : seq_length + past_key_values_length].clone()
+
+        if input_ids is not None:
+            embeddings = self.word_embeddings(input_ids)
+
+            position_embeddings = self.position_embeddings(position_ids.to(embeddings.device))
+            embeddings = embeddings + position_embeddings
+
+            if query_embeds is not None:
+                embeddings = torch.cat((query_embeds, embeddings), dim=1)
+        else:
+            embeddings = query_embeds
+
+        embeddings = embeddings.to(self.layernorm.weight.dtype)
+        embeddings = self.layernorm(embeddings)
+        embeddings = self.dropout(embeddings)
+        return embeddings
+
+
 @auto_docstring
 class InstructBlipVideoPreTrainedModel(PreTrainedModel):
     config: InstructBlipVideoConfig
     base_model_prefix = "blip"
-    input_modalities = ["video", "text"]
+    input_modalities = ("video", "text")
     supports_gradient_checkpointing = True
     _supports_attention_backend = True
     _supports_flash_attn = True
@@ -147,24 +198,18 @@ class InstructBlipVideoPreTrainedModel(PreTrainedModel):
         "InstructBlipVideoQFormerSelfOutput",
     ]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
+        super()._init_weights(module)
         factor = self.config.initializer_range
-
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=factor)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=factor)
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, InstructBlipVideoVisionEmbeddings):
-            nn.init.trunc_normal_(module.position_embedding, mean=0.0, std=factor)
-            nn.init.trunc_normal_(module.class_embedding, mean=0.0, std=factor)
+        if isinstance(module, InstructBlipVideoVisionEmbeddings):
+            init.trunc_normal_(module.position_embedding, mean=0.0, std=factor)
+            init.trunc_normal_(module.class_embedding, mean=0.0, std=factor)
         elif isinstance(module, (InstructBlipVideoForConditionalGeneration, InstructBlipVideoModel)):
-            module.query_tokens.data.zero_()
+            init.zeros_(module.query_tokens)
+        elif isinstance(module, InstructBlipVideoQFormerEmbeddings):
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
 
 
 # Adapted from transformers.models.siglip.modeling_siglip.eager_attention_forward -> InstructBlipVideo doesn't cast attn weights to fp32
@@ -173,7 +218,7 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
+    attention_mask: torch.Tensor | None,
     scaling: float,
     dropout: float = 0.0,
     **kwargs,
@@ -232,7 +277,7 @@ class InstructBlipVideoAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         **kwargs,
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         """Input shape: Batch x Time x Channel"""
 
         bsz, tgt_len, embed_dim = hidden_states.size()
@@ -334,7 +379,7 @@ class InstructBlipVideoEncoder(nn.Module):
         self,
         inputs_embeds,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, BaseModelOutput]:
+    ) -> tuple | BaseModelOutput:
         hidden_states = inputs_embeds
         for encoder_layer in self.layers:
             hidden_states = encoder_layer(
@@ -369,10 +414,10 @@ class InstructBlipVideoVisionModel(InstructBlipVideoPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_values: torch.FloatTensor | None = None,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, BaseModelOutputWithPooling]:
+    ) -> tuple | BaseModelOutputWithPooling:
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
@@ -518,9 +563,9 @@ class InstructBlipVideoQFormerAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
+        attention_mask: torch.FloatTensor | None = None,
+        encoder_hidden_states: torch.FloatTensor | None = None,
+        encoder_attention_mask: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         attn_output, _ = self.attention(
@@ -684,56 +729,6 @@ class InstructBlipVideoQFormerEncoder(nn.Module):
         )
 
 
-class InstructBlipVideoQFormerEmbeddings(nn.Module):
-    """Construct the embeddings from word and position embeddings."""
-
-    def __init__(self, config):
-        super().__init__()
-        self.word_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
-        self.position_embeddings = nn.Embedding(config.max_position_embeddings, config.hidden_size)
-
-        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-
-        # position_ids (1, len position emb) is contiguous in memory and exported when serialized
-        self.register_buffer(
-            "position_ids", torch.arange(config.max_position_embeddings).expand((1, -1)), persistent=False
-        )
-
-        self.config = config
-
-    def forward(
-        self,
-        input_ids=None,
-        position_ids=None,
-        query_embeds=None,
-        past_key_values_length=0,
-    ):
-        if input_ids is not None:
-            seq_length = input_ids.size()[1]
-        else:
-            seq_length = 0
-
-        if position_ids is None:
-            position_ids = self.position_ids[:, past_key_values_length : seq_length + past_key_values_length].clone()
-
-        if input_ids is not None:
-            embeddings = self.word_embeddings(input_ids)
-
-            position_embeddings = self.position_embeddings(position_ids.to(embeddings.device))
-            embeddings = embeddings + position_embeddings
-
-            if query_embeds is not None:
-                embeddings = torch.cat((query_embeds, embeddings), dim=1)
-        else:
-            embeddings = query_embeds
-
-        embeddings = embeddings.to(self.layernorm.weight.dtype)
-        embeddings = self.layernorm(embeddings)
-        embeddings = self.dropout(embeddings)
-        return embeddings
-
-
 class InstructBlipVideoQFormerModel(InstructBlipVideoPreTrainedModel):
     """
     Querying Transformer (Q-Former), used in InstructBlipVideo. Slightly modified from BLIP-2 as it also takes the
@@ -814,18 +809,18 @@ class InstructBlipVideoQFormerModel(InstructBlipVideoPreTrainedModel):
         extended_attention_mask = (1.0 - extended_attention_mask) * -10000.0
         return extended_attention_mask
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
         input_ids: torch.LongTensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        query_embeds: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
+        attention_mask: torch.FloatTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        query_embeds: torch.Tensor | None = None,
+        encoder_hidden_states: torch.FloatTensor | None = None,
+        encoder_attention_mask: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple[torch.FloatTensor], BaseModelOutputWithPoolingAndCrossAttentions]:
+    ) -> tuple[torch.FloatTensor] | BaseModelOutputWithPoolingAndCrossAttentions:
         r"""
         query_embeds (`torch.FloatTensor`  of shape `(batch_size, sequence_length, hidden_size)`):
             Hidden states to be used in the attention computation. If cross-attention,
@@ -909,11 +904,11 @@ class InstructBlipVideoForConditionalGenerationModelOutput(ModelOutput):
         Outputs of the language model.
     """
 
-    loss: Optional[tuple[torch.FloatTensor]] = None
-    logits: Optional[tuple[torch.FloatTensor]] = None
-    vision_outputs: Optional[torch.FloatTensor] = None
-    qformer_outputs: Optional[tuple[torch.FloatTensor]] = None
-    language_model_outputs: Optional[tuple[torch.FloatTensor]] = None
+    loss: tuple[torch.FloatTensor] | None = None
+    logits: tuple[torch.FloatTensor] | None = None
+    vision_outputs: torch.FloatTensor | None = None
+    qformer_outputs: tuple[torch.FloatTensor] | None = None
+    language_model_outputs: tuple[torch.FloatTensor] | None = None
 
     def to_tuple(self) -> tuple[Any]:
         return tuple(
@@ -958,11 +953,6 @@ class InstructBlipVideoModel(InstructBlipVideoPreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
-    def _tie_weights(self):
-        if not self.config.use_decoder_only_language_model:
-            self.language_model.encoder.embed_tokens = self.language_model.shared
-            self.language_model.decoder.embed_tokens = self.language_model.shared
-
     def _preprocess_accelerate(self):
         r"""
         Some pre-processing hacks to make the model `accelerate` compatible. Check
@@ -1004,19 +994,19 @@ class InstructBlipVideoModel(InstructBlipVideoPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         qformer_input_ids: torch.FloatTensor,
-        qformer_attention_mask: Optional[torch.LongTensor] = None,
-        input_ids: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        qformer_attention_mask: torch.LongTensor | None = None,
+        input_ids: torch.FloatTensor | None = None,
+        attention_mask: torch.LongTensor | None = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.LongTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         interpolate_pos_encoding: bool = False,
-        use_cache: Optional[bool] = None,
+        use_cache: bool | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Union[tuple, InstructBlipVideoForConditionalGenerationModelOutput]:
+    ) -> tuple | InstructBlipVideoForConditionalGenerationModelOutput:
         r"""
         qformer_input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices of input sequence tokens in the vocabulary of the Q-Former. Input tokens can optionally be provided
@@ -1184,16 +1174,14 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipVideoPreTrainedModel
     def get_output_embeddings(self) -> nn.Module:
         return self.language_model.get_output_embeddings()
 
-    def get_encoder(self):
-        return self.language_model.get_encoder()
+    def get_encoder(self, modality=None):
+        if modality is None:
+            return self.language_model.get_encoder()
+        else:
+            return super().get_encoder(modality=modality)
 
     def get_decoder(self):
         return self.language_model.get_decoder()
-
-    def _tie_weights(self):
-        if not self.config.use_decoder_only_language_model:
-            self.language_model.encoder.embed_tokens = self.language_model.shared
-            self.language_model.decoder.embed_tokens = self.language_model.shared
 
     def _preprocess_accelerate(self):
         r"""
@@ -1219,9 +1207,9 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipVideoPreTrainedModel
         self,
         pixel_values: torch.FloatTensor,
         qformer_input_ids: torch.LongTensor,
-        qformer_attention_mask: Optional[torch.LongTensor] = None,
-        interpolate_pos_encoding: Optional[bool] = False,
-        return_dict: Optional[bool] = False,
+        qformer_attention_mask: torch.LongTensor | None = None,
+        interpolate_pos_encoding: bool | None = False,
+        return_dict: bool | None = False,
     ):
         """
         Encodes images into continuous embeddings that can be forwarded to the language model.
@@ -1253,20 +1241,20 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipVideoPreTrainedModel
         self,
         pixel_values: torch.FloatTensor,
         qformer_input_ids: torch.FloatTensor,
-        qformer_attention_mask: Optional[torch.LongTensor] = None,
-        input_ids: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        labels: Optional[torch.LongTensor] = None,
-        return_dict: Optional[bool] = None,
+        qformer_attention_mask: torch.LongTensor | None = None,
+        input_ids: torch.FloatTensor | None = None,
+        attention_mask: torch.LongTensor | None = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        labels: torch.LongTensor | None = None,
+        return_dict: bool | None = None,
         interpolate_pos_encoding: bool = False,
-        use_cache: Optional[bool] = None,
+        use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, InstructBlipVideoForConditionalGenerationModelOutput]:
+    ) -> tuple | InstructBlipVideoForConditionalGenerationModelOutput:
         r"""
         qformer_input_ids (`torch.LongTensor` of shape (batch_size, sequence_length)):
             The sequence used as a prompt to be fed to the Q-Former module.
@@ -1397,11 +1385,11 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipVideoPreTrainedModel
     def generate(
         self,
         pixel_values: torch.FloatTensor,
-        qformer_input_ids: Optional[torch.LongTensor] = None,
-        qformer_attention_mask: Optional[torch.LongTensor] = None,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
+        qformer_input_ids: torch.LongTensor | None = None,
+        qformer_attention_mask: torch.LongTensor | None = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
         interpolate_pos_encoding: bool = False,
         **generate_kwargs,
     ) -> torch.LongTensor:
@@ -1467,9 +1455,9 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipVideoPreTrainedModel
         self,
         pixel_values: torch.FloatTensor,
         qformer_input_ids: torch.LongTensor,
-        qformer_attention_mask: Optional[torch.LongTensor] = None,
-        interpolate_pos_encoding: Optional[bool] = False,
-        return_dict: Optional[bool] = False,
+        qformer_attention_mask: torch.LongTensor | None = None,
+        interpolate_pos_encoding: bool | None = False,
+        return_dict: bool | None = False,
     ):
         """
         Encodes images into continuous embeddings that can be forwarded to the language model.

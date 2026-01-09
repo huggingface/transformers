@@ -22,6 +22,7 @@ import numpy as np
 from transformers import ClvpConfig, ClvpDecoderConfig, ClvpEncoderConfig
 from transformers.testing_utils import (
     cleanup,
+    require_numba,
     require_torch,
     slow,
     torch_device,
@@ -186,6 +187,10 @@ class ClvpEncoderTest(ModelTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing(self):
         pass
 
+    @unittest.skip(reason="ClvpEncoder does not output loss")
+    def test_gradient_checkpointing_enable_disable(self):
+        pass
+
 
 class ClvpDecoderTester:
     def __init__(
@@ -311,21 +316,6 @@ class ClvpDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
         loss = model(**inputs).loss
         loss.backward()
 
-    def test_training_gradient_checkpointing(self):
-        # we will only test the ClvpForCausalLM since it outputs loss
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.use_cache = False
-        config.return_dict = True
-
-        model = ClvpForCausalLM(config)
-        model.to(torch_device)
-        model.gradient_checkpointing_enable()
-        model.train()
-        inputs = self._prepare_for_class(inputs_dict, ClvpForCausalLM, return_labels=True)
-
-        loss = model(**inputs).loss
-        loss.backward()
-
     @unittest.skip(reason="Clvp `prepare_inputs_for_generation` function doesn't have cache position.")
     def test_generate_continue_from_inputs_embeds(self):
         pass
@@ -401,6 +391,7 @@ class ClvpModelForConditionalGenerationTester:
 
 
 @require_torch
+@require_numba
 class ClvpModelForConditionalGenerationTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (ClvpModelForConditionalGeneration,) if is_torch_available() else ()
     # Doesn't run generation tests. There are interface mismatches when using `generate` -- TODO @gante
@@ -520,6 +511,7 @@ class ClvpModelForConditionalGenerationTest(ModelTesterMixin, unittest.TestCase)
 
 @slow
 @require_torch
+@require_numba
 class ClvpIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.text = "This is an example text."

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 MBZUAI and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,12 +14,13 @@
 """PyTorch SwiftFormer model."""
 
 import collections.abc
-from typing import Optional, Union
 
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2CLS
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithNoAttention, ImageClassifierOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
@@ -295,7 +295,7 @@ class SwiftFormerEncoderBlock(nn.Module):
         return x
 
 
-class SwiftFormerStage(nn.Module):
+class SwiftFormerStage(GradientCheckpointingLayer):
     """
     A Swiftformer stage consisting of a series of `SwiftFormerConvEncoder` blocks and a final
     `SwiftFormerEncoderBlock`.
@@ -355,9 +355,9 @@ class SwiftFormerEncoder(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, BaseModelOutputWithNoAttention]:
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+    ) -> tuple | BaseModelOutputWithNoAttention:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -384,27 +384,32 @@ class SwiftFormerPreTrainedModel(PreTrainedModel):
     config: SwiftFormerConfig
     base_model_prefix = "swiftformer"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = True
     _no_split_modules = ["SwiftFormerEncoderBlock"]
 
+    @torch.no_grad()
     def _init_weights(self, module: nn.Module) -> None:
         """Initialize the weights"""
         if isinstance(module, (nn.Conv2d, nn.Linear)):
-            nn.init.trunc_normal_(module.weight, std=0.02)
+            init.trunc_normal_(module.weight, std=0.02)
             if module.bias is not None:
-                nn.init.constant_(module.bias, 0)
+                init.constant_(module.bias, 0)
         elif isinstance(module, (nn.LayerNorm, nn.BatchNorm2d)):
-            nn.init.constant_(module.bias, 0)
-            nn.init.constant_(module.weight, 1.0)
+            init.constant_(module.bias, 0)
+            init.constant_(module.weight, 1.0)
+            if getattr(module, "running_mean", None) is not None:
+                init.zeros_(module.running_mean)
+                init.ones_(module.running_var)
+                init.zeros_(module.num_batches_tracked)
         elif isinstance(module, (SwiftFormerConvEncoder, SwiftFormerLocalRepresentation)):
-            module.layer_scale.data.fill_(1.0)
+            init.ones_(module.layer_scale)
         elif isinstance(module, SwiftFormerEncoderBlock):
             if self.config.use_layer_scale:
-                module.layer_scale_1.data.fill_(self.config.layer_scale_init_value)
-                module.layer_scale_2.data.fill_(self.config.layer_scale_init_value)
+                init.constant_(module.layer_scale_1, self.config.layer_scale_init_value)
+                init.constant_(module.layer_scale_2, self.config.layer_scale_init_value)
         elif isinstance(module, SwiftFormerEfficientAdditiveAttention):
-            nn.init.normal_(module.w_g)
+            init.normal_(module.w_g)
 
 
 @auto_docstring
@@ -422,10 +427,11 @@ class SwiftFormerModel(SwiftFormerPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.Tensor] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, BaseModelOutputWithNoAttention]:
+        pixel_values: torch.Tensor | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple | BaseModelOutputWithNoAttention:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -471,11 +477,12 @@ class SwiftFormerForImageClassification(SwiftFormerPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, ImageClassifierOutputWithNoAttention]:
+        pixel_values: torch.Tensor | None = None,
+        labels: torch.Tensor | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple | ImageClassifierOutputWithNoAttention:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,

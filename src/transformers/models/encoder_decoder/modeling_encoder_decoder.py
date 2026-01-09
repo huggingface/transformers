@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +15,6 @@
 
 import inspect
 import warnings
-from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -76,15 +74,14 @@ class EncoderDecoderModel(PreTrainedModel, GenerationMixin):
     base_model_prefix = "encoder_decoder"
     main_input_name = "input_ids"
     supports_gradient_checkpointing = True
-    _supports_param_buffer_assignment = False
     _supports_flash_attn = True
     _supports_sdpa = True
 
     def __init__(
         self,
-        config: Optional[PreTrainedConfig] = None,
-        encoder: Optional[PreTrainedModel] = None,
-        decoder: Optional[PreTrainedModel] = None,
+        config: PreTrainedConfig | None = None,
+        encoder: PreTrainedModel | None = None,
+        decoder: PreTrainedModel | None = None,
     ):
         r"""
         encoder (`PreTrainedModel`, *optional*):
@@ -164,34 +161,14 @@ class EncoderDecoderModel(PreTrainedModel, GenerationMixin):
             )
 
         # tie encoder, decoder weights if config set accordingly
-        self.tie_weights()
+        self.post_init()
 
-    def tie_weights(self):
-        self.encoder.tie_weights()
-        self.decoder.tie_weights()
-        # tie encoder & decoder if needed
-        if self.config.tie_encoder_decoder:
-            # tie encoder and decoder base model
-            decoder_base_model_prefix = self.decoder.base_model_prefix
-            tied_weights = self._tie_encoder_decoder_weights(
-                self.encoder,
-                self.decoder._modules[decoder_base_model_prefix],
-                self.decoder.base_model_prefix,
-                "encoder",
-            )
-            # Setting a dynamic variable instead of `_tied_weights_keys` because it's a class
-            # attributed not an instance member, therefore modifying it will modify the entire class
-            # Leading to issues on subsequent calls by different tests or subsequent calls.
-            self._dynamic_tied_weights_keys = tied_weights
-
+    @torch.no_grad()
     def _init_weights(self, module):
         if module in self.encoder.modules():
             self.encoder._init_weights(module)
         elif module in self.decoder.modules():
             self.decoder._init_weights(module)
-
-    def get_encoder(self):
-        return self.encoder
 
     def get_input_embeddings(self):
         return self.encoder.get_input_embeddings()
@@ -205,8 +182,8 @@ class EncoderDecoderModel(PreTrainedModel, GenerationMixin):
     @classmethod
     def from_encoder_decoder_pretrained(
         cls,
-        encoder_pretrained_model_name_or_path: Optional[str] = None,
-        decoder_pretrained_model_name_or_path: Optional[str] = None,
+        encoder_pretrained_model_name_or_path: str | None = None,
+        decoder_pretrained_model_name_or_path: str | None = None,
         *model_args,
         **kwargs,
     ) -> PreTrainedModel:
@@ -344,19 +321,19 @@ class EncoderDecoderModel(PreTrainedModel, GenerationMixin):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.BoolTensor] = None,
-        encoder_outputs: Optional[tuple[torch.FloatTensor]] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.Tensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.FloatTensor | None = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.BoolTensor | None = None,
+        encoder_outputs: tuple[torch.FloatTensor] | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        cache_position: torch.Tensor | None = None,
         **kwargs,
-    ) -> Union[tuple, Seq2SeqLMOutput]:
+    ) -> tuple | Seq2SeqLMOutput:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.

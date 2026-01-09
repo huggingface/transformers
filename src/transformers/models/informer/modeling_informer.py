@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_informer.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2023 Amazon and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,12 +19,12 @@
 # limitations under the License.
 
 from collections.abc import Callable
-from typing import Optional, Union
 
 import numpy as np
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...masking_utils import create_bidirectional_mask, create_causal_mask
@@ -183,7 +182,7 @@ class InformerNOPScaler(nn.Module):
         self.keepdim = config.keepdim if hasattr(config, "keepdim") else True
 
     def forward(
-        self, data: torch.Tensor, observed_indicator: Optional[torch.Tensor] = None
+        self, data: torch.Tensor, observed_indicator: torch.Tensor | None = None
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Parameters:
@@ -202,10 +201,10 @@ class InformerNOPScaler(nn.Module):
 class InformerSinusoidalPositionalEmbedding(nn.Embedding):
     """This module produces sinusoidal positional embeddings of any length."""
 
-    def __init__(self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None) -> None:
-        super().__init__(num_positions, embedding_dim)
+    def __init__(self, num_positions: int, embedding_dim: int, padding_idx: int | None = None) -> None:
+        super().__init__(num_positions, embedding_dim, _freeze=True)
 
-    def _init_weight(self):
+    def create_weight(self):
         """
         Identical to the XLM create_sinusoidal_embeddings except features are not interleaved. The cos features are in
         the 2nd half of the vector. [dim // 2:]
@@ -218,11 +217,11 @@ class InformerSinusoidalPositionalEmbedding(nn.Embedding):
         sentinel = dim // 2 if dim % 2 == 0 else (dim // 2) + 1
         out[:, 0:sentinel] = torch.FloatTensor(np.sin(position_enc[:, 0::2]))
         out[:, sentinel:] = torch.FloatTensor(np.cos(position_enc[:, 1::2]))
-        self.weight = nn.Parameter(out, requires_grad=False)
+        return out
 
     @torch.no_grad()
     def forward(
-        self, input_ids_shape: torch.Size, past_key_values_length: int = 0, position_ids: Optional[torch.Tensor] = None
+        self, input_ids_shape: torch.Size, past_key_values_length: int = 0, position_ids: torch.Tensor | None = None
     ) -> torch.Tensor:
         """`input_ids_shape` is expected to be [bsz x seqlen]."""
         if position_ids is None:
@@ -247,13 +246,14 @@ class InformerPreTrainedModel(PreTrainedModel):
     config: InformerConfig
     base_model_prefix = "model"
     main_input_name = "past_values"
-    input_modalities = "time"
+    input_modalities = ("time",)
     supports_gradient_checkpointing = True
 
+    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         super()._init_weights(module)
         if isinstance(module, InformerSinusoidalPositionalEmbedding):
-            module._init_weight()
+            init.copy_(module.weight, module.create_weight())
 
 
 def eager_attention_forward(
@@ -261,8 +261,8 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
-    scaling: Optional[float] = None,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
     dropout: float = 0.0,
     **kwargs: Unpack[TransformersKwargs],
 ):
@@ -296,8 +296,8 @@ class InformerAttention(nn.Module):
         is_decoder: bool = False,
         bias: bool = True,
         is_causal: bool = False,
-        config: Optional[InformerConfig] = None,
-        layer_idx: Optional[int] = None,
+        config: InformerConfig | None = None,
+        layer_idx: int | None = None,
     ):
         super().__init__()
         self.embed_dim = embed_dim
@@ -330,15 +330,15 @@ class InformerAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        key_value_states: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Cache] = None,
-        attention_mask: Optional[torch.Tensor] = None,
+        key_value_states: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        attention_mask: torch.Tensor | None = None,
         output_attentions: bool = False,
-        cache_position: Optional[torch.Tensor] = None,
+        cache_position: torch.Tensor | None = None,
         # TODO: we need a refactor so that the different attention modules can get their specific kwargs
         # ATM, we have mixed things encoder, decoder, and encoder-decoder attn
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         """Input shape: Batch x Time x Channel"""
 
         # if key_value_states are provided this layer is used as a cross-attention layer
@@ -423,7 +423,7 @@ class InformerProbSparseAttention(nn.Module):
         is_decoder: bool = False,
         sampling_factor: int = 5,
         bias: bool = True,
-        layer_idx: Optional[int] = None,
+        layer_idx: int | None = None,
     ):
         super().__init__()
         self.factor = sampling_factor
@@ -452,12 +452,12 @@ class InformerProbSparseAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        key_value_states: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Cache] = None,
-        attention_mask: Optional[torch.Tensor] = None,
+        key_value_states: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        attention_mask: torch.Tensor | None = None,
         output_attentions: bool = False,
-        cache_position: Optional[torch.Tensor] = None,
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+        cache_position: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         """Input shape: Batch x Time x Channel"""
 
         # if key_value_states are provided this layer is used as a cross-attention layer
@@ -675,8 +675,8 @@ class InformerEncoderLayer(GradientCheckpointingLayer):
         self,
         hidden_states: torch.FloatTensor,
         attention_mask: torch.FloatTensor,
-        output_attentions: Optional[bool] = False,
-    ) -> tuple[torch.FloatTensor, Optional[torch.FloatTensor]]:
+        output_attentions: bool | None = False,
+    ) -> tuple[torch.FloatTensor, torch.FloatTensor | None]:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -719,7 +719,7 @@ class InformerEncoderLayer(GradientCheckpointingLayer):
 
 
 class InformerDecoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: InformerConfig, layer_idx: Optional[int] = None):
+    def __init__(self, config: InformerConfig, layer_idx: int | None = None):
         super().__init__()
         self.embed_dim = config.d_model
         self.dropout = config.dropout
@@ -762,14 +762,14 @@ class InformerDecoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Cache] = None,
-        output_attentions: Optional[bool] = False,
-        use_cache: Optional[bool] = True,
-        cache_position: Optional[torch.Tensor] = None,
-    ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
+        attention_mask: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        output_attentions: bool | None = False,
+        use_cache: bool | None = True,
+        cache_position: torch.Tensor | None = None,
+    ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -872,12 +872,13 @@ class InformerEncoder(InformerPreTrainedModel):
 
     def forward(
         self,
-        attention_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, BaseModelOutput]:
+        attention_mask: torch.Tensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple | BaseModelOutput:
         r"""
         Args:
             attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -986,17 +987,18 @@ class InformerDecoder(InformerPreTrainedModel):
 
     def forward(
         self,
-        attention_mask: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-    ) -> Union[tuple, BaseModelOutputWithPastAndCrossAttentions]:
+        attention_mask: torch.Tensor | None = None,
+        encoder_hidden_states: torch.FloatTensor | None = None,
+        encoder_attention_mask: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
+        **kwargs,
+    ) -> tuple | BaseModelOutputWithPastAndCrossAttentions:
         r"""
         Args:
             attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -1202,11 +1204,11 @@ class InformerModel(InformerPreTrainedModel):
         self,
         past_values: torch.Tensor,
         past_time_features: torch.Tensor,
-        static_categorical_features: Optional[torch.Tensor] = None,
-        static_real_features: Optional[torch.Tensor] = None,
-        past_observed_mask: Optional[torch.Tensor] = None,
-        future_values: Optional[torch.Tensor] = None,
-        future_time_features: Optional[torch.Tensor] = None,
+        static_categorical_features: torch.Tensor | None = None,
+        static_real_features: torch.Tensor | None = None,
+        past_observed_mask: torch.Tensor | None = None,
+        future_values: torch.Tensor | None = None,
+        future_time_features: torch.Tensor | None = None,
     ):
         # time feature
         time_feat = (
@@ -1276,28 +1278,26 @@ class InformerModel(InformerPreTrainedModel):
 
         return transformer_inputs, loc, scale, static_feat
 
-    def get_encoder(self):
-        return self.encoder
-
     @auto_docstring
     def forward(
         self,
         past_values: torch.Tensor,
         past_time_features: torch.Tensor,
         past_observed_mask: torch.Tensor,
-        static_categorical_features: Optional[torch.Tensor] = None,
-        static_real_features: Optional[torch.Tensor] = None,
-        future_values: Optional[torch.Tensor] = None,
-        future_time_features: Optional[torch.Tensor] = None,
-        decoder_attention_mask: Optional[torch.LongTensor] = None,
-        encoder_outputs: Optional[list[torch.FloatTensor]] = None,
-        past_key_values: Optional[Cache] = None,
-        output_hidden_states: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        use_cache: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-    ) -> Union[Seq2SeqTSModelOutput, tuple]:
+        static_categorical_features: torch.Tensor | None = None,
+        static_real_features: torch.Tensor | None = None,
+        future_values: torch.Tensor | None = None,
+        future_time_features: torch.Tensor | None = None,
+        decoder_attention_mask: torch.LongTensor | None = None,
+        encoder_outputs: list[torch.FloatTensor] | None = None,
+        past_key_values: Cache | None = None,
+        output_hidden_states: bool | None = None,
+        output_attentions: bool | None = None,
+        use_cache: bool | None = None,
+        return_dict: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
+        **kwargs,
+    ) -> Seq2SeqTSModelOutput | tuple:
         r"""
         past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)` or `(batch_size, sequence_length, input_size)`):
             Past values of the time series, that serve as context in order to predict the future. The sequence size of
@@ -1488,7 +1488,7 @@ class InformerModel(InformerPreTrainedModel):
         )
 
 
-def weighted_average(input_tensor: torch.Tensor, weights: Optional[torch.Tensor] = None, dim=None) -> torch.Tensor:
+def weighted_average(input_tensor: torch.Tensor, weights: torch.Tensor | None = None, dim=None) -> torch.Tensor:
     """
     Computes the weighted average of a given tensor across a given `dim`, masking values associated with weight zero,
     meaning instead of `nan * 0 = nan` you will get `0 * 0 = 0`.
@@ -1548,12 +1548,6 @@ class InformerForPrediction(InformerPreTrainedModel):
     def output_params(self, dec_output):
         return self.parameter_projection(dec_output)
 
-    def get_encoder(self):
-        return self.model.get_encoder()
-
-    def get_decoder(self):
-        return self.model.get_decoder()
-
     @torch.jit.ignore
     def output_distribution(self, params, loc=None, scale=None, trailing_n=None) -> torch.distributions.Distribution:
         sliced_params = params
@@ -1567,20 +1561,21 @@ class InformerForPrediction(InformerPreTrainedModel):
         past_values: torch.Tensor,
         past_time_features: torch.Tensor,
         past_observed_mask: torch.Tensor,
-        static_categorical_features: Optional[torch.Tensor] = None,
-        static_real_features: Optional[torch.Tensor] = None,
-        future_values: Optional[torch.Tensor] = None,
-        future_time_features: Optional[torch.Tensor] = None,
-        future_observed_mask: Optional[torch.Tensor] = None,
-        decoder_attention_mask: Optional[torch.LongTensor] = None,
-        encoder_outputs: Optional[list[torch.FloatTensor]] = None,
-        past_key_values: Optional[Cache] = None,
-        output_hidden_states: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        use_cache: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-    ) -> Union[Seq2SeqTSModelOutput, tuple]:
+        static_categorical_features: torch.Tensor | None = None,
+        static_real_features: torch.Tensor | None = None,
+        future_values: torch.Tensor | None = None,
+        future_time_features: torch.Tensor | None = None,
+        future_observed_mask: torch.Tensor | None = None,
+        decoder_attention_mask: torch.LongTensor | None = None,
+        encoder_outputs: list[torch.FloatTensor] | None = None,
+        past_key_values: Cache | None = None,
+        output_hidden_states: bool | None = None,
+        output_attentions: bool | None = None,
+        use_cache: bool | None = None,
+        return_dict: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
+        **kwargs,
+    ) -> Seq2SeqTSModelOutput | tuple:
         r"""
         past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)` or `(batch_size, sequence_length, input_size)`):
             Past values of the time series, that serve as context in order to predict the future. The sequence size of
@@ -1790,11 +1785,11 @@ class InformerForPrediction(InformerPreTrainedModel):
         past_values: torch.Tensor,
         past_time_features: torch.Tensor,
         future_time_features: torch.Tensor,
-        past_observed_mask: Optional[torch.Tensor] = None,
-        static_categorical_features: Optional[torch.Tensor] = None,
-        static_real_features: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        past_observed_mask: torch.Tensor | None = None,
+        static_categorical_features: torch.Tensor | None = None,
+        static_real_features: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
     ) -> SampleTSPredictionOutput:
         r"""
         Greedily generate sequences of sample predictions from a model with a probability distribution head.

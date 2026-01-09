@@ -62,27 +62,33 @@ jobs:
     steps:
       - name: Echo input and matrix info
         shell: bash
+        env:
+          folder_slices: ${{ inputs.folder_slices }}
+          matrix_folders: ${{ matrix.folders }}
+          slice_data: ${{ toJson(fromJson(inputs.folder_slices)[inputs.slice_id]) }}
         run: |
-          echo "${{ inputs.folder_slices }}"
-          echo "${{ matrix.folders }}"
-          echo "${{ toJson(fromJson(inputs.folder_slices)[inputs.slice_id]) }}"
+          echo "$folder_slices"
+          echo "$matrix_folders"
+          echo "$slice_data"
 
       - name: Echo folder ${{ matrix.folders }}
         shell: bash
         # For folders like `models/bert`, set an env. var. (`matrix_folders`) to `models_bert`, which will be used to
         # set the artifact folder names (because the character `/` is not allowed).
+        env:
+          matrix_folders_raw: ${{ matrix.folders }}
         run: |
-          echo "${{ matrix.folders }}"
-          matrix_folders=${{ matrix.folders }}
-          matrix_folders=${matrix_folders/'models/'/'models_'}
+          echo "$matrix_folders_raw"
+          matrix_folders="${matrix_folders_raw/'models/'/'models_'}"
           echo "$matrix_folders"
           echo "matrix_folders=$matrix_folders" >> $GITHUB_ENV
 
       - name: Update clone
         working-directory: /transformers
+        env:
+          commit_sha: ${{ inputs.commit_sha || github.sha }}
         run: |
-          git fetch origin ${{ inputs.commit_sha || github.sha }}
-          git fetch && git checkout ${{ inputs.commit_sha || github.sha }}
+          git fetch origin "$commit_sha" && git checkout "$commit_sha"
 
       - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
         working-directory: /transformers
@@ -117,15 +123,17 @@ jobs:
         id: set_machine_type
         working-directory: /transformers
         shell: bash
+        env:
+          input_machine_type: ${{ inputs.machine_type }}
         run: |
-          echo "${{ inputs.machine_type }}"
+          echo "$input_machine_type"
 
-          if [ "${{ inputs.machine_type }}" = "aws-g5-4xlarge-cache" ]; then
+          if [ "$input_machine_type" = "aws-g5-4xlarge-cache" ]; then
             machine_type=single-gpu
-          elif [ "${{ inputs.machine_type }}" = "aws-g5-12xlarge-cache" ]; then
+          elif [ "$input_machine_type" = "aws-g5-12xlarge-cache" ]; then
             machine_type=multi-gpu
           else
-            machine_type=${{ inputs.machine_type }}
+            machine_type="$input_machine_type"
           fi
 
           echo "$machine_type"
@@ -134,15 +142,21 @@ jobs:
 
       - name: Create report directory if it doesn't exist
         shell: bash
+        env:
+          report_name_prefix: ${{ inputs.report_name_prefix }}
         run: |
-          mkdir -p /transformers/reports/${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ env.matrix_folders }}_test_reports
-          echo "dummy" > /transformers/reports/${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ env.matrix_folders }}_test_reports/dummy.txt
-          ls -la /transformers/reports/${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ env.matrix_folders }}_test_reports
+          mkdir -p "/transformers/reports/${machine_type}_${report_name_prefix}_${matrix_folders}_test_reports"
+          echo "dummy" > "/transformers/reports/${machine_type}_${report_name_prefix}_${matrix_folders}_test_reports/dummy.txt"
+          ls -la "/transformers/reports/${machine_type}_${report_name_prefix}_${matrix_folders}_test_reports"
 
       - name: Run all tests on GPU
         working-directory: /transformers
+        env:
+          report_name_prefix: ${{ inputs.report_name_prefix }}
+          pytest_marker: ${{ inputs.pytest_marker }}
+          model: ${{ matrix.folders }}
         run: |
-          script -q -c "PATCH_TESTING_METHODS_TO_COLLECT_OUTPUTS=yes _PATCHED_TESTING_METHODS_OUTPUT_DIR=/transformers/reports/${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ env.matrix_folders }}_test_reports python3 -m pytest -rsfE -v -m '${{ inputs.pytest_marker }}' --make-reports=${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ env.matrix_folders }}_test_reports tests/${{ matrix.folders }}" test_outputs.txt
+          script -q -c "PATCH_TESTING_METHODS_TO_COLLECT_OUTPUTS=yes _PATCHED_TESTING_METHODS_OUTPUT_DIR=/transformers/reports/${machine_type}_${report_name_prefix}_${matrix_folders}_test_reports python3 -m pytest -rsfE -v -m '${pytest_marker}' --make-reports=${machine_type}_${report_name_prefix}_${matrix_folders}_test_reports tests/${model}" test_outputs.txt
           ls -la
           # Extract the exit code from the output file
           EXIT_CODE=$(tail -1 test_outputs.txt | grep -o 'COMMAND_EXIT_CODE="[0-9]*"' | cut -d'"' -f2)
@@ -153,19 +167,25 @@ jobs:
         # This step is only to show information on Github Actions log.
         # Always mark this step as successful, even if the report directory or the file `failures_short.txt` in it doesn't exist
         continue-on-error: true
-        run: cat /transformers/reports/${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ env.matrix_folders }}_test_reports/failures_short.txt
+        env:
+          report_name_prefix: ${{ inputs.report_name_prefix }}
+        run: cat "/transformers/reports/${machine_type}_${report_name_prefix}_${matrix_folders}_test_reports/failures_short.txt"
 
       - name: Captured information
         if: ${{ failure() }}
         continue-on-error: true
+        env:
+          report_name_prefix: ${{ inputs.report_name_prefix }}
         run: |
-          cat /transformers/reports/${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ env.matrix_folders }}_test_reports/captured_info.txt
+          cat "/transformers/reports/${machine_type}_${report_name_prefix}_${matrix_folders}_test_reports/captured_info.txt"
 
       - name: Copy test_outputs.txt
         if: ${{ always() }}
         continue-on-error: true
+        env:
+          report_name_prefix: ${{ inputs.report_name_prefix }}
         run: |
-          cp /transformers/test_outputs.txt /transformers/reports/${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ env.matrix_folders }}_test_reports
+          cp /transformers/test_outputs.txt "/transformers/reports/${machine_type}_${report_name_prefix}_${matrix_folders}_test_reports"
 
       - name: "Test suite reports artifacts: ${{ env.machine_type }}_${{ inputs.report_name_prefix }}_${{ env.matrix_folders }}_test_reports"
         if: ${{ always() }}

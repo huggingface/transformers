@@ -1,4 +1,4 @@
-from typing import ClassVar, Optional
+from typing import ClassVar
 
 import torch
 import torch.utils.checkpoint
@@ -19,7 +19,15 @@ class NewTaskModelForNewTask(PaliGemmaForConditionalGeneration):
         self.custom_text_proj = nn.Linear(self.config.text_config.hidden_size, self.embedding_dim)
 
         if self.language_model._tied_weights_keys is not None:
-            self._tied_weights_keys = [f"model.language_model.{k}" for k in self.language_model._tied_weights_keys]
+            prefix = "model.language_model."
+            prefixed_mapping = {
+                f"{prefix}{target}": f"{prefix}{source}"
+                for target, source in self.language_model._tied_weights_keys.items()
+            }
+            if isinstance(self._tied_weights_keys, dict):
+                self._tied_weights_keys.update(prefixed_mapping)
+            else:
+                self._tied_weights_keys = prefixed_mapping
 
         self.post_init()
 
@@ -27,17 +35,17 @@ class NewTaskModelForNewTask(PaliGemmaForConditionalGeneration):
         self,
         input_ids: torch.LongTensor = None,
         pixel_values: torch.FloatTensor = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        token_type_ids: torch.LongTensor | None = None,
+        cache_position: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         num_logits_to_keep: int = 0,
     ):
         r"""
@@ -71,7 +79,7 @@ class NewTaskModelForNewTask(PaliGemmaForConditionalGeneration):
         return (embeddings,) + vlm_outputs
 
     def resize_token_embeddings(
-        self, new_num_tokens: Optional[int] = None, pad_to_multiple_of=None, mean_resizing=True
+        self, new_num_tokens: int | None = None, pad_to_multiple_of=None, mean_resizing=True
     ) -> nn.Embedding:
         model_embeds = self.language_model.resize_token_embeddings(new_num_tokens, pad_to_multiple_of, mean_resizing)
 

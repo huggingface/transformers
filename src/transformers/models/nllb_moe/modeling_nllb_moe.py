@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 NllbMoe Authors and HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,12 +14,12 @@
 
 import math
 from collections.abc import Callable
-from typing import Optional, Union
 
 import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
@@ -51,7 +50,7 @@ class NllbMoeScaledWordEmbedding(nn.Embedding):
     This module overrides nn.Embeddings' forward by multiplying with embeddings scale.
     """
 
-    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, embed_scale: Optional[float] = 1.0):
+    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, embed_scale: float | None = 1.0):
         super().__init__(num_embeddings, embedding_dim, padding_idx)
         self.embed_scale = embed_scale
 
@@ -63,14 +62,15 @@ class NllbMoeScaledWordEmbedding(nn.Embedding):
 class NllbMoeSinusoidalPositionalEmbedding(nn.Module):
     """This module produces sinusoidal positional embeddings of any length."""
 
-    def __init__(self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None):
+    def __init__(self, num_positions: int, embedding_dim: int, padding_idx: int | None = None):
         super().__init__()
         self.offset = 2
+        self.num_positions = num_positions
         self.embedding_dim = embedding_dim
         self.padding_idx = padding_idx
         self.make_weights(num_positions + self.offset, embedding_dim, padding_idx)
 
-    def make_weights(self, num_embeddings: int, embedding_dim: int, padding_idx: Optional[int] = None):
+    def make_weights(self, num_embeddings: int, embedding_dim: int, padding_idx: int | None = None):
         emb_weights = self.get_embedding(num_embeddings, embedding_dim, padding_idx)
         if hasattr(self, "weights"):
             # in forward put the weights on the correct dtype and device of the param
@@ -79,7 +79,7 @@ class NllbMoeSinusoidalPositionalEmbedding(nn.Module):
         self.register_buffer("weights", emb_weights, persistent=False)
 
     @staticmethod
-    def get_embedding(num_embeddings: int, embedding_dim: int, padding_idx: Optional[int] = None):
+    def get_embedding(num_embeddings: int, embedding_dim: int, padding_idx: int | None = None):
         """
         Build sinusoidal embeddings.
 
@@ -102,8 +102,8 @@ class NllbMoeSinusoidalPositionalEmbedding(nn.Module):
     @torch.no_grad()
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
+        input_ids: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         past_key_values_length: int = 0,
     ):
         if input_ids is not None:
@@ -206,7 +206,7 @@ class NllbMoeTop2Router(nn.Module):
         self,
         router_logits: torch.Tensor,
         input_dtype: torch.dtype = torch.float32,
-        padding_mask: Optional[torch.LongTensor] = None,
+        padding_mask: torch.LongTensor | None = None,
     ) -> tuple:
         """
         Computes the `dispatch_mask` and the `dispatch_weights` for each experts. The masks are adapted to the expert
@@ -287,7 +287,7 @@ class NllbMoeTop2Router(nn.Module):
 
         return top_1_mask, router_probs
 
-    def forward(self, hidden_states: torch.Tensor, padding_mask: Optional[torch.LongTensor] = None) -> tuple:
+    def forward(self, hidden_states: torch.Tensor, padding_mask: torch.LongTensor | None = None) -> tuple:
         r"""
         The hidden states are reshaped to simplify the computation of the router probabilities (combining weights for
         each experts.)
@@ -374,7 +374,7 @@ class NllbMoeSparseMLP(nn.Module):
         self.num_experts = config.num_experts
         self.experts = NllbMoeExperts(config, ffn_dim)
 
-    def forward(self, hidden_states: torch.Tensor, padding_mask: Optional[torch.Tensor] = None):
+    def forward(self, hidden_states: torch.Tensor, padding_mask: torch.Tensor | None = None):
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states = hidden_states.view(-1, hidden_dim)
         top_1_mask, router_probs, _ = self.router(hidden_states, padding_mask)
@@ -388,8 +388,8 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
-    scaling: Optional[float] = None,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
     dropout: float = 0.0,
     **kwargs: Unpack[TransformersKwargs],
 ):
@@ -419,12 +419,12 @@ class NllbMoeAttention(nn.Module):
         self,
         embed_dim: int,
         num_heads: int,
-        dropout: Optional[float] = 0.0,
-        is_decoder: Optional[bool] = False,
-        bias: Optional[bool] = True,
-        is_causal: Optional[bool] = False,
-        config: Optional[NllbMoeConfig] = None,
-        layer_idx: Optional[int] = None,
+        dropout: float | None = 0.0,
+        is_decoder: bool | None = False,
+        bias: bool | None = True,
+        is_causal: bool | None = False,
+        config: NllbMoeConfig | None = None,
+        layer_idx: int | None = None,
     ):
         super().__init__()
         self.embed_dim = embed_dim
@@ -451,10 +451,10 @@ class NllbMoeAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        key_value_states: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Cache] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        cache_position: Optional[torch.Tensor] = None,
+        key_value_states: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        attention_mask: torch.Tensor | None = None,
+        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         is_cross_attention = key_value_states is not None
@@ -562,7 +562,7 @@ class NllbMoeEncoderLayer(GradientCheckpointingLayer):
 
 
 class NllbMoeDecoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: NllbMoeConfig, is_sparse: bool = False, layer_idx: Optional[int] = None):
+    def __init__(self, config: NllbMoeConfig, is_sparse: bool = False, layer_idx: int | None = None):
         super().__init__()
         self.embed_dim = config.d_model
         self.is_sparse = is_sparse
@@ -598,11 +598,11 @@ class NllbMoeDecoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Cache] = None,
-        cache_position: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
@@ -665,20 +665,13 @@ class NllbMoePreTrainedModel(PreTrainedModel):
     _supports_sdpa = False
     _supports_flex_attn = False
 
-    def _init_weights(self, module: nn.Module):
-        """Initialize the weights"""
-        std = self.config.init_std
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, NllbMoeSinusoidalPositionalEmbedding):
+            emb_weights = module.get_embedding(
+                module.num_positions + module.offset, module.embedding_dim, module.padding_idx
+            )
+            init.copy_(module.weights, emb_weights)
 
 
 class NllbMoeEncoder(NllbMoePreTrainedModel):
@@ -688,7 +681,7 @@ class NllbMoeEncoder(NllbMoePreTrainedModel):
         "attentions": NllbMoeAttention,
     }
 
-    def __init__(self, config: NllbMoeConfig, embed_tokens: Optional[nn.Embedding] = None):
+    def __init__(self, config: NllbMoeConfig):
         super().__init__(config)
 
         self.dropout = config.dropout
@@ -702,9 +695,6 @@ class NllbMoeEncoder(NllbMoePreTrainedModel):
         self.embed_tokens = NllbMoeScaledWordEmbedding(
             config.vocab_size, embed_dim, self.padding_idx, embed_scale=embed_scale
         )
-
-        if embed_tokens is not None:
-            self.embed_tokens.weight = embed_tokens.weight
 
         self.embed_positions = NllbMoeSinusoidalPositionalEmbedding(
             config.max_position_embeddings,
@@ -721,13 +711,13 @@ class NllbMoeEncoder(NllbMoePreTrainedModel):
         self.gradient_checkpointing = False
         self.post_init()
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
         if inputs_embeds is None:
@@ -775,7 +765,7 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
         "cross_attentions": OutputRecorder(NllbMoeAttention, layer_name="cross_attention", index=1),
     }
 
-    def __init__(self, config: NllbMoeConfig, embed_tokens: Optional[nn.Embedding] = None):
+    def __init__(self, config: NllbMoeConfig):
         super().__init__(config)
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
@@ -786,9 +776,6 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
         self.embed_tokens = NllbMoeScaledWordEmbedding(
             config.vocab_size, config.d_model, self.padding_idx, embed_scale=embed_scale
         )
-
-        if embed_tokens is not None:
-            self.embed_tokens.weight = embed_tokens.weight
 
         self.embed_positions = NllbMoeSinusoidalPositionalEmbedding(
             config.max_position_embeddings,
@@ -809,19 +796,19 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
         self.post_init()
 
     @auto_docstring
-    @check_model_inputs()
+    @check_model_inputs
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.Tensor] = None,
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        use_cache: bool | None = None,
+        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, BaseModelOutputWithPastAndCrossAttentions]:
+    ) -> tuple | BaseModelOutputWithPastAndCrossAttentions:
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
@@ -888,7 +875,10 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
 
 @auto_docstring
 class NllbMoeModel(NllbMoePreTrainedModel):
-    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
+    _tied_weights_keys = {
+        "encoder.embed_tokens.weight": "shared.weight",
+        "decoder.embed_tokens.weight": "shared.weight",
+    }
 
     def __init__(self, config: NllbMoeConfig):
         super().__init__(config)
@@ -897,8 +887,8 @@ class NllbMoeModel(NllbMoePreTrainedModel):
         embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
         self.shared = NllbMoeScaledWordEmbedding(vocab_size, config.d_model, padding_idx, embed_scale=embed_scale)
 
-        self.encoder = NllbMoeEncoder(config, self.shared)
-        self.decoder = NllbMoeDecoder(config, self.shared)
+        self.encoder = NllbMoeEncoder(config)
+        self.decoder = NllbMoeDecoder(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -911,30 +901,22 @@ class NllbMoeModel(NllbMoePreTrainedModel):
         self.encoder.embed_tokens = self.shared
         self.decoder.embed_tokens = self.shared
 
-    def _tie_weights(self):
-        if self.config.tie_word_embeddings:
-            self._tie_embedding_weights(self.encoder.embed_tokens, self.shared)
-            self._tie_embedding_weights(self.decoder.embed_tokens, self.shared)
-
-    def get_encoder(self):
-        return self.encoder
-
     @auto_docstring
     @can_return_tuple
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.LongTensor] = None,
-        encoder_outputs: Optional[tuple[tuple[torch.FloatTensor]]] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.Tensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.LongTensor | None = None,
+        encoder_outputs: tuple[tuple[torch.FloatTensor]] | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple[torch.Tensor], Seq2SeqMoEModelOutput]:
+    ) -> tuple[torch.Tensor] | Seq2SeqMoEModelOutput:
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
                 input_ids=input_ids,
@@ -971,11 +953,11 @@ class NllbMoeModel(NllbMoePreTrainedModel):
 
 
 def load_balancing_loss_func(
-    gate_logits: Union[torch.Tensor, tuple[torch.Tensor], None],
-    num_experts: Optional[int] = None,
+    gate_logits: torch.Tensor | tuple[torch.Tensor] | None,
+    num_experts: int | None = None,
     top_k=2,
-    attention_mask: Optional[torch.Tensor] = None,
-) -> Union[torch.Tensor, int]:
+    attention_mask: torch.Tensor | None = None,
+) -> torch.Tensor | int:
     r"""
     Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
 
@@ -1075,7 +1057,9 @@ def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start
 )
 class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel, GenerationMixin):
     base_model_prefix = "model"
-    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
+    _tied_weights_keys = {
+        "lm_head.weight": "model.shared.weight",
+    }
 
     def __init__(self, config: NllbMoeConfig):
         super().__init__(config)
@@ -1087,30 +1071,24 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_encoder(self):
-        return self.model.get_encoder()
-
-    def get_decoder(self):
-        return self.model.get_decoder()
-
     @can_return_tuple
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.LongTensor] = None,
-        encoder_outputs: Optional[tuple[tuple[torch.FloatTensor]]] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_router_logits: Optional[bool] = None,
-        cache_position: Optional[torch.Tensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.LongTensor | None = None,
+        encoder_outputs: tuple[tuple[torch.FloatTensor]] | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        output_router_logits: bool | None = None,
+        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple[torch.Tensor], Seq2SeqMoEOutput]:
+    ) -> tuple[torch.Tensor] | Seq2SeqMoEOutput:
         output_router_logits = (
             output_router_logits if output_router_logits is not None else self.config.output_router_logits
         )

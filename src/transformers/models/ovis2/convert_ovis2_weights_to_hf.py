@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -358,8 +357,9 @@ def main():
 
     # Push to hub if requested
     if args.push_to_hub:
-        processor.push_to_hub(args.hub_dir, use_temp_dir=True)
-        model.push_to_hub(args.hub_dir, use_temp_dir=True)
+        model_name = args.hub_dir.split("/")[-1]
+        processor.push_to_hub(model_name)
+        model.push_to_hub(model_name)
 
     model = (
         AutoModelForImageTextToText.from_pretrained(

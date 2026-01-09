@@ -33,10 +33,13 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - name: Setup
+        env:
+          prev_workflow_run_id: ${{ inputs.prev_workflow_run_id || env.prev_workflow_run_id }}
+          other_workflow_run_id: ${{ inputs.other_workflow_run_id || env.other_workflow_run_id }}
         run: |
           mkdir "setup_values"
-          echo "${{ inputs.prev_workflow_run_id || env.prev_workflow_run_id }}" > "setup_values/prev_workflow_run_id.txt"
-          echo "${{ inputs.other_workflow_run_id || env.other_workflow_run_id }}" > "setup_values/other_workflow_run_id.txt"
+          echo "$prev_workflow_run_id" > "setup_values/prev_workflow_run_id.txt"
+          echo "$other_workflow_run_id" > "setup_values/other_workflow_run_id.txt"
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4

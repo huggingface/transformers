@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 Facebook AI and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,11 +15,11 @@
 
 import collections.abc
 from collections.abc import Callable
-from typing import Optional, Union
 
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput
@@ -95,7 +94,7 @@ class ViTMSNEmbeddings(nn.Module):
     def forward(
         self,
         pixel_values: torch.Tensor,
-        bool_masked_pos: Optional[torch.BoolTensor] = None,
+        bool_masked_pos: torch.BoolTensor | None = None,
         interpolate_pos_encoding: bool = False,
     ) -> torch.Tensor:
         batch_size, num_channels, height, width = pixel_values.shape
@@ -169,8 +168,8 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
-    scaling: Optional[float] = None,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
     dropout: float = 0.0,
     **kwargs: Unpack[TransformersKwargs],
 ):
@@ -356,7 +355,7 @@ class ViTMSNPreTrainedModel(PreTrainedModel):
     config: ViTMSNConfig
     base_model_prefix = "vit"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = True
     _no_split_modules = ["ViTMSNAttention", "ViTMSNSdpaAttention"]
     _supports_sdpa = True
@@ -370,20 +369,21 @@ class ViTMSNPreTrainedModel(PreTrainedModel):
 
     # todo: Resort to https://github.com/facebookresearch/msn/blob/main/src/deit.py#L200-#L211
     # when creating pre-training scripts.
-    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
+    @torch.no_grad()
+    def _init_weights(self, module: nn.Linear | nn.Conv2d | nn.LayerNorm) -> None:
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.data.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
         elif isinstance(module, ViTMSNEmbeddings):
-            module.cls_token.data.zero_()
-            module.position_embeddings.data.zero_()
+            init.zeros_(module.cls_token)
+            init.zeros_(module.position_embeddings)
             if module.mask_token is not None:
-                module.mask_token.data.zero_()
+                init.zeros_(module.mask_token)
 
 
 @auto_docstring
@@ -411,9 +411,9 @@ class ViTMSNModel(ViTMSNPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.Tensor] = None,
-        bool_masked_pos: Optional[torch.BoolTensor] = None,
-        interpolate_pos_encoding: Optional[bool] = None,
+        pixel_values: torch.Tensor | None = None,
+        bool_masked_pos: torch.BoolTensor | None = None,
+        interpolate_pos_encoding: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         r"""
@@ -472,9 +472,9 @@ class ViTMSNForImageClassification(ViTMSNPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
-        interpolate_pos_encoding: Optional[bool] = None,
+        pixel_values: torch.Tensor | None = None,
+        labels: torch.Tensor | None = None,
+        interpolate_pos_encoding: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> ImageClassifierOutput:
         r"""

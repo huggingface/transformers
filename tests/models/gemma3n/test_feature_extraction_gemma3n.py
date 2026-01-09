@@ -228,6 +228,13 @@ class Gemma3nAudioFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unit
             for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
                 self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=1e-3))
 
+    def test_call_unbatched(self):
+        feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
+        np_audio = floats_list((1, 800))[0]
+        input_features = feature_extractor(np_audio, return_tensors="np").input_features
+        expected_input_features = feature_extractor([np_audio], return_tensors="np").input_features
+        np.testing.assert_allclose(input_features, expected_input_features)
+
     def test_audio_features_attn_mask_consistent(self):
         # regression test for https://github.com/huggingface/transformers/issues/39911
         # Test input_features and input_features_mask have consistent shape

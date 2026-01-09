@@ -27,10 +27,8 @@
 import logging
 import os
 import sys
-import warnings
 from dataclasses import dataclass, field
 from random import randint
-from typing import Optional
 
 import datasets
 import evaluate
@@ -77,14 +75,14 @@ class DataTrainingArguments:
     the command line.
     """
 
-    dataset_name: Optional[str] = field(default=None, metadata={"help": "Name of a dataset from the datasets package"})
-    dataset_config_name: Optional[str] = field(
+    dataset_name: str | None = field(default=None, metadata={"help": "Name of a dataset from the datasets package"})
+    dataset_config_name: str | None = field(
         default=None, metadata={"help": "The configuration name of the dataset to use (via the datasets library)."}
     )
-    train_file: Optional[str] = field(
+    train_file: str | None = field(
         default=None, metadata={"help": "A file containing the training audio paths and labels."}
     )
-    eval_file: Optional[str] = field(
+    eval_file: str | None = field(
         default=None, metadata={"help": "A file containing the validation audio paths and labels."}
     )
     train_split_name: str = field(
@@ -108,7 +106,7 @@ class DataTrainingArguments:
     label_column_name: str = field(
         default="label", metadata={"help": "The name of the dataset column containing the labels. Defaults to 'label'"}
     )
-    max_train_samples: Optional[int] = field(
+    max_train_samples: int | None = field(
         default=None,
         metadata={
             "help": (
@@ -117,7 +115,7 @@ class DataTrainingArguments:
             )
         },
     )
-    max_eval_samples: Optional[int] = field(
+    max_eval_samples: int | None = field(
         default=None,
         metadata={
             "help": (
@@ -142,19 +140,17 @@ class ModelArguments:
         default="facebook/wav2vec2-base",
         metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models"},
     )
-    config_name: Optional[str] = field(
+    config_name: str | None = field(
         default=None, metadata={"help": "Pretrained config name or path if not the same as model_name"}
     )
-    cache_dir: Optional[str] = field(
+    cache_dir: str | None = field(
         default=None, metadata={"help": "Where do you want to store the pretrained models downloaded from the Hub"}
     )
     model_revision: str = field(
         default="main",
         metadata={"help": "The specific model version to use (can be a branch name, tag name or commit id)."},
     )
-    feature_extractor_name: Optional[str] = field(
-        default=None, metadata={"help": "Name or path of preprocessor config."}
-    )
+    feature_extractor_name: str | None = field(default=None, metadata={"help": "Name or path of preprocessor config."})
     freeze_feature_encoder: bool = field(
         default=True, metadata={"help": "Whether to freeze the feature encoder layers of the model."}
     )
@@ -180,28 +176,10 @@ class ModelArguments:
             )
         },
     )
-    freeze_feature_extractor: Optional[bool] = field(
-        default=None, metadata={"help": "Whether to freeze the feature extractor layers of the model."}
-    )
     ignore_mismatched_sizes: bool = field(
         default=False,
         metadata={"help": "Will enable to load a pretrained model whose head dimensions are different."},
     )
-
-    def __post_init__(self):
-        if not self.freeze_feature_extractor and self.freeze_feature_encoder:
-            warnings.warn(
-                "The argument `--freeze_feature_extractor` is deprecated and "
-                "will be removed in a future version. Use `--freeze_feature_encoder` "
-                "instead. Setting `freeze_feature_encoder==True`.",
-                FutureWarning,
-            )
-        if self.freeze_feature_extractor and not self.freeze_feature_encoder:
-            raise ValueError(
-                "The argument `--freeze_feature_extractor` is deprecated and "
-                "should not be used in combination with `--freeze_feature_encoder`. "
-                "Only make use of `--freeze_feature_encoder`."
-            )
 
 
 def main():

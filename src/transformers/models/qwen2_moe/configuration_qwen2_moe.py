@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The Qwen team, Alibaba Group and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,10 +13,8 @@
 # limitations under the License.
 """Qwen2MoE model configuration"""
 
-from typing import Optional
-
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
@@ -67,7 +64,7 @@ class Qwen2MoeConfig(PreTrainedConfig):
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether the model's input and output word embeddings should be tied.
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         use_sliding_window (`bool`, *optional*, defaults to `False`):
@@ -138,34 +135,34 @@ class Qwen2MoeConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 151936,
-        hidden_size: Optional[int] = 2048,
-        intermediate_size: Optional[int] = 5632,
-        num_hidden_layers: Optional[int] = 24,
-        num_attention_heads: Optional[int] = 16,
-        num_key_value_heads: Optional[int] = 16,
-        hidden_act: Optional[str] = "silu",
-        max_position_embeddings: Optional[int] = 32768,
-        initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[int] = 1e-6,
-        use_cache: Optional[bool] = True,
-        tie_word_embeddings: Optional[bool] = False,
-        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        use_sliding_window: Optional[bool] = False,
-        sliding_window: Optional[int] = 4096,
-        max_window_layers: Optional[int] = 28,
-        attention_dropout: Optional[float] = 0.0,
-        decoder_sparse_step: Optional[int] = 1,
-        moe_intermediate_size: Optional[int] = 1408,
-        shared_expert_intermediate_size: Optional[int] = 5632,
-        num_experts_per_tok: Optional[int] = 4,
-        num_experts: Optional[int] = 60,
-        norm_topk_prob: Optional[bool] = False,
-        output_router_logits: Optional[bool] = False,
-        router_aux_loss_coef: Optional[float] = 0.001,
-        mlp_only_layers: Optional[bool] = None,
-        qkv_bias: Optional[bool] = True,
-        layer_types: Optional[list[str]] = None,
+        vocab_size: int | None = 151936,
+        hidden_size: int | None = 2048,
+        intermediate_size: int | None = 5632,
+        num_hidden_layers: int | None = 24,
+        num_attention_heads: int | None = 16,
+        num_key_value_heads: int | None = 16,
+        hidden_act: str | None = "silu",
+        max_position_embeddings: int | None = 32768,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: int | None = 1e-6,
+        use_cache: bool | None = True,
+        tie_word_embeddings: bool | None = False,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        use_sliding_window: bool | None = False,
+        sliding_window: int | None = 4096,
+        max_window_layers: int | None = 28,
+        attention_dropout: float | None = 0.0,
+        decoder_sparse_step: int | None = 1,
+        moe_intermediate_size: int | None = 1408,
+        shared_expert_intermediate_size: int | None = 5632,
+        num_experts_per_tok: int | None = 4,
+        num_experts: int | None = 60,
+        norm_topk_prob: bool | None = False,
+        output_router_logits: bool | None = False,
+        router_aux_loss_coef: float | None = 0.001,
+        mlp_only_layers: bool | None = None,
+        qkv_bias: bool | None = True,
+        layer_types: list[str] | None = None,
         **kwargs,
     ):
         self.layer_types = layer_types
@@ -185,9 +182,6 @@ class Qwen2MoeConfig(PreTrainedConfig):
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
         self.attention_dropout = attention_dropout
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
 
         # MoE arguments
         self.decoder_sparse_step = decoder_sparse_step
@@ -209,10 +203,7 @@ class Qwen2MoeConfig(PreTrainedConfig):
             ]
         layer_type_validation(self.layer_types)
 
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 10000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
+        self.rope_parameters = rope_parameters
 
         super().__init__(
             tie_word_embeddings=tie_word_embeddings,

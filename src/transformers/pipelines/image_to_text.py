@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -157,7 +156,7 @@ class ImageToTextPipeline(Pipeline):
         if prompt is not None:
             logger.warning_once(
                 "Passing `prompt` to the `image-to-text` pipeline is deprecated and will be removed in version 4.48"
-                " of 🤗 Transformers. Use the `image-text-to-text` pipeline instead",
+                " of Hugging Face Transformers. Use the `image-text-to-text` pipeline instead",
             )
             if not isinstance(prompt, str):
                 raise ValueError(

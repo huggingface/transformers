@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The Apple Research Team Authors and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,12 +15,12 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import torch
 import torch.nn.functional as F
 from torch import nn
 
+from ... import initialization as init
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging, torch_int
 from ..auto import AutoModel
@@ -45,10 +44,10 @@ class DepthProOutput(ModelOutput):
         Features from encoders. Can be a single feature or a list of features.
     """
 
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    features: Union[torch.FloatTensor, list[torch.FloatTensor]] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    last_hidden_state: torch.FloatTensor | None = None
+    features: torch.FloatTensor | list[torch.FloatTensor] = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 @dataclass
@@ -65,11 +64,11 @@ class DepthProDepthEstimatorOutput(ModelOutput):
         Field of View Scaler.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    predicted_depth: Optional[torch.FloatTensor] = None
-    field_of_view: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    loss: torch.FloatTensor | None = None
+    predicted_depth: torch.FloatTensor | None = None
+    field_of_view: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 def split_to_patches(pixel_values: torch.Tensor, patch_size: int, overlap_ratio: float) -> torch.Tensor:
@@ -345,7 +344,7 @@ class DepthProImageEncoder(nn.Module):
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
-    ) -> Union[tuple, DepthProOutput]:
+    ) -> tuple | DepthProOutput:
         batch_size, num_channels, height, width = pixel_values.shape
 
         # scale the image for image_encoder
@@ -409,7 +408,7 @@ class DepthProEncoder(nn.Module):
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
-    ) -> Union[tuple, DepthProOutput]:
+    ) -> tuple | DepthProOutput:
         batch_size, num_channels, height, width = pixel_values.shape
 
         patch_features = self.patch_encoder(
@@ -602,25 +601,26 @@ class DepthProPreTrainedModel(PreTrainedModel):
     config: DepthProConfig
     base_model_prefix = "depth_pro"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = True
     _supports_sdpa = True
     _no_split_modules = ["DepthProPreActResidualLayer"]
     _keys_to_ignore_on_load_unexpected = ["fov_model.*"]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.data.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
         elif isinstance(module, (nn.Conv2d, nn.ConvTranspose2d)):
-            nn.init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
+            init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
             if module.bias is not None:
-                module.bias.data.zero_()
+                init.zeros_(module.bias)
 
 
 @auto_docstring
@@ -640,10 +640,11 @@ class DepthProModel(DepthProPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, DepthProOutput]:
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple | DepthProOutput:
         r"""
         Examples:
 
@@ -780,7 +781,7 @@ class DepthProFeatureFusionLayer(nn.Module):
 
         self.projection = nn.Conv2d(config.fusion_hidden_size, config.fusion_hidden_size, kernel_size=1, bias=True)
 
-    def forward(self, hidden_state: torch.Tensor, residual: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward(self, hidden_state: torch.Tensor, residual: torch.Tensor | None = None) -> torch.Tensor:
         if residual is not None:
             residual = self.residual_layer1(residual)
             hidden_state = hidden_state + residual
@@ -1021,11 +1022,12 @@ class DepthProForDepthEstimation(DepthProPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple[torch.Tensor], DepthProDepthEstimatorOutput]:
+        labels: torch.LongTensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple[torch.Tensor] | DepthProDepthEstimatorOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
             Ground truth depth estimation maps for computing the loss.

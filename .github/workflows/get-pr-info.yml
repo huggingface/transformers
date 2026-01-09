@@ -40,7 +40,7 @@ on:
         description: "The sha of the merge commit for the pull request (created by GitHub) in the base repository"
         value: ${{ jobs.get-pr-info.outputs.PR_MERGE_COMMIT_SHA }}
       PR_MERGE_COMMIT_BASE_SHA:
-        description: "The sha of the parent commit of the the merge commit on the target branch in the base repository"
+        description: "The sha of the parent commit of the merge commit on the target branch in the base repository"
         value: ${{ jobs.get-pr-info.outputs.PR_MERGE_COMMIT_BASE_SHA }}
       PR_HEAD_COMMIT_DATE:
         description: "The date of the head sha of the pull request branch in the head repository"
@@ -153,14 +153,15 @@ jobs:
 
       - name: Convert dates to timestamps
         id: get_timestamps
+        env:
+          head_commit_date: ${{ steps.pr_info.outputs.head_commit_date }}
+          merge_commit_date: ${{ steps.pr_info.outputs.merge_commit_date }}
         run: |
-          head_commit_date=${{ steps.pr_info.outputs.head_commit_date }}
-          merge_commit_date=${{ steps.pr_info.outputs.merge_commit_date }}
-          echo $head_commit_date
-          echo $merge_commit_date
+          echo "$head_commit_date"
+          echo "$merge_commit_date"
           head_commit_timestamp=$(date -d "$head_commit_date" +%s)
           merge_commit_timestamp=$(date -d "$merge_commit_date" +%s)
-          echo $head_commit_timestamp
-          echo $merge_commit_timestamp
+          echo "$head_commit_timestamp"
+          echo "$merge_commit_timestamp"
           echo "head_commit_timestamp=$head_commit_timestamp" >> $GITHUB_OUTPUT
           echo "merge_commit_timestamp=$merge_commit_timestamp" >> $GITHUB_OUTPUT
