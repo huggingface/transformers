@@ -456,15 +456,6 @@ class GlmImageModelOutputWithPast(Glm4vModelOutputWithPast):
 
 
 class GlmImageVQVAEVectorQuantizer(ChameleonVQVAEVectorQuantizer):
-    """
-    A module for vector quantization using learned embedding vectors.
-
-    This module implements the quantization process similar to te one described in
-    the VQ-VAE (Vector Quantized Variational AutoEncoder) paper. It quantizes continuous
-    input vectors into discrete codebook vectors, which are learned during training.
-    Current implementation improves over previous ones by avoiding costly matrix multiplications
-    and allowing for post-hoc remapping of indices.
-    """
 
     def __init__(self, config: GlmImageVQVAEConfig):
         super().__init__(config)
@@ -486,8 +477,8 @@ class GlmImageVQVAEVectorQuantizer(ChameleonVQVAEVectorQuantizer):
         # distances from z to embeddings e_j (z - e)^2 = z^2 + e^2 - 2 e * z
         distances = (
             torch.sum(hidden_state_flattened**2, dim=1, keepdim=True)
-            + torch.sum(embedding.weight**2, dim=1)
-            - 2 * torch.einsum("bd,dn->bn", hidden_state_flattened, embedding.weight.transpose(0, 1))
+            + torch.sum(embedding**2, dim=1)
+            - 2 * torch.einsum("bd,dn->bn", hidden_state_flattened, embedding.transpose(0, 1))
         )
 
         min_encoding_indices = torch.argmin(distances, dim=1)
