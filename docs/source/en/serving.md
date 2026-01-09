@@ -93,7 +93,7 @@ import asyncio
 from huggingface_hub import AsyncInferenceClient
 
 messages = [{"role": "user", "content": "What is the Transformers library known for?"}]
-client = AsyncInferenceClient("http://localhost:8000")
+client = AsyncInferenceClient("http://localhost:8000/v1")
 
 async def responses_api_test_async():
     async for chunk in (await client.chat_completion(messages, model="Qwen/Qwen2.5-0.5B-Instruct", max_tokens=256, stream=True)):
@@ -211,7 +211,7 @@ messages = [
         ],
     }
 ]
-client = AsyncInferenceClient("http://localhost:8000")
+client = AsyncInferenceClient("http://localhost:8000/v1")
 
 async def responses_api_test_async():
     async for chunk in (await client.chat_completion(messages, model="Qwen/Qwen2.5-VL-7B-Instruct", max_tokens=256, stream=True)):
@@ -382,7 +382,7 @@ import json
 import asyncio
 from huggingface_hub import AsyncInferenceClient
 
-client = AsyncInferenceClient("http://localhost:8000")
+client = AsyncInferenceClient("http://localhost:8000/v1")
 messages = [{"role": "user", "content": "Say hello in one short sentence."}]
 
 async def main():
@@ -390,9 +390,6 @@ async def main():
         messages,
         model="Qwen/Qwen2.5-0.5B-Instruct",
         stream=True,
-        max_tokens=128,
-        temperature=0.7,
-        top_p=0.95,
         extra_body={
             "generation_config": json.dumps({
                 "max_new_tokens": 128,
@@ -421,9 +418,6 @@ payload = {
     "model": "Qwen/Qwen2.5-0.5B-Instruct",
     "messages": [{"role": "user", "content": "Say hello in one short sentence."}],
     "stream": True,
-    "max_tokens": 128,
-    "temperature": 0.7,
-    "top_p": 0.95,
     "generation_config": json.dumps({
         "max_new_tokens": 128,
         "temperature": 0.7,
@@ -458,9 +452,6 @@ payload = {
     "model": "Qwen/Qwen2.5-0.5B-Instruct",
     "input": "Provide a one-sentence summary of Transformers.",
     "stream": False,
-    "max_output_tokens": 128,
-    "temperature": 0.7,
-    "top_p": 0.95,
     "generation_config": json.dumps({
         "max_new_tokens": 128,
         "temperature": 0.7,

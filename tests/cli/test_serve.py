@@ -327,6 +327,23 @@ class ServeCompletionsMixin:
         # sets `do_sample=True`
         self.assertEqual(output_text, '<think>\nOkay, the user just asked, "')
 
+    def test_stop_strings_in_generation_config(self):
+        """Tests that stop_strings in generation_config (which requires a tokenizer) works without crashing."""
+        generation_config = GenerationConfig(stop_strings=["4"], max_new_tokens=20)
+        request = {
+            "model": "Qwen/Qwen2.5-0.5B-Instruct",
+            "messages": [{"role": "user", "content": "Count from 1 to 10"}],
+            "stream": True,
+            "extra_body": {
+                "generation_config": generation_config.to_json_string(),
+            },
+        }
+        # This will raise an error if the server crashes (ValueError: ... tokenizer ...)
+        all_payloads = self.run_server(request)
+        contents = [payload.choices[0].delta.content for payload in all_payloads]
+        output_text = "".join([text for text in contents if text is not None])
+        self.assertGreater(len(output_text), 0)
+
     def test_early_return_due_to_length(self):
         request = {
             "model": "Qwen/Qwen2.5-0.5B-Instruct",
@@ -490,7 +507,7 @@ class ServeCompletionsGenerateIntegrationTest(ServeCompletionsMixin, unittest.Te
     def setUpClass(cls):
         """Starts a server for tests to connect to."""
         cls.port = 8001
-        cls.server = Serve(port=cls.port, non_blocking=True)
+        cls.server = Serve(port=cls.port, non_blocking=True, device="cpu")
 
     @classmethod
     def tearDownClass(cls):
@@ -629,7 +646,7 @@ class ServeCompletionsContinuousBatchingIntegrationTest(ServeCompletionsMixin, u
         """Starts a server for tests to connect to."""
         cls.port = 8002
         cls.server = Serve(
-            port=cls.port, continuous_batching=True, attn_implementation="sdpa", default_seed=42, non_blocking=True
+            port=cls.port, continuous_batching=True, attn_implementation="sdpa", default_seed=42, non_blocking=True, device="cpu"
         )
 
     @classmethod
@@ -781,7 +798,7 @@ class ServeResponsesIntegrationTest(ServeResponsesMixin, unittest.TestCase):
     def setUpClass(cls):
         """Starts a server for tests to connect to."""
         cls.port = 8003
-        cls.server = Serve(port=cls.port, default_seed=42, non_blocking=True)
+        cls.server = Serve(port=cls.port, default_seed=42, non_blocking=True, device="cpu")
 
     @classmethod
     def tearDownClass(cls):
