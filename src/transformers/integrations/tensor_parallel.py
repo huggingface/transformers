@@ -868,6 +868,46 @@ class RowwiseParallel(TensorParallelLayer):
             self._prepare_output_fn,
         )
 
+class PackedColwiseParallel(ColwiseParallel):
+    """Packed column-wise parallel for fused weights like gate_up_proj."""
+
+    def shard_tensor(self, param, param_type=None, param_casting_dtype=None, to_contiguous=None,
+                     rank=None, device_mesh=None, tensor_idx=None):
+        device_mesh = device_mesh or self.device_mesh
+        empty_param = self.empty_param
+        rank = rank if rank is not None else self.rank
+
+        if param_type == "bias":
+            parameter = get_tensor_shard(param, empty_param, device_mesh, rank, -1, tensor_idx)
+        else:
+            parameter = get_packed_weights(param, empty_param, device_mesh, rank, -2)
+
+        parameter = parameter.to(param_casting_dtype)
+        if to_contiguous:
+            parameter = parameter.contiguous()
+        return parameter, None
+
+
+class PackedRowwiseParallel(RowwiseParallel):
+    """Packed row-wise parallel for fused weights like gate_up_proj."""
+
+    def shard_tensor(self, param, param_type=None, param_casting_dtype=None, to_contiguous=None,
+                     rank=None, device_mesh=None, tensor_idx=None):
+        device_mesh = device_mesh or self.device_mesh
+        empty_param = self.empty_param
+        rank = rank if rank is not None else self.rank
+
+        if param_type == "bias":
+            parameter = param[...]
+        else:
+            parameter = get_packed_weights(param, empty_param, device_mesh, rank, -1)
+
+        parameter = parameter.to(param_casting_dtype)
+        if to_contiguous:
+            parameter = parameter.contiguous()
+        return parameter, None
+
+
 class EmbeddingParallel(TensorParallelLayer):
     """EmbeddingParallel: shards embedding table, handles masked lookups for vocab parallelism."""
 
@@ -1037,6 +1077,8 @@ class ParallelInterface(GeneralInterface):
             "colwise": ColwiseParallel(),
             "rowwise": RowwiseParallel(),
             "rowwise_split_input": RowwiseParallel(split_input=True),
+            "packed_colwise": PackedColwiseParallel(),
+            "packed_rowwise": PackedRowwiseParallel(),
             "sequence_parallel": SequenceParallel(),
             "grouped_gemm": GroupedGemmParallel(),
             "ep_router": RouterParallel(),
@@ -1106,8 +1148,10 @@ def gather_state_dict_for_save(
     plan_to_weight_dim = {
         "colwise": -2,
         "colwise_gather_output": -2,
+        "packed_colwise": -2,
         "rowwise": -1,
         "rowwise_split_input": -1,
+        "packed_rowwise": -1,
         "embedding_rowwise": 0,
         "sequence_parallel": None,
     }
@@ -1116,8 +1160,10 @@ def gather_state_dict_for_save(
     plan_to_bias_dim = {
         "colwise": -1,
         "colwise_gather_output": -1,
+        "packed_colwise": -1,
         "rowwise": None,
         "rowwise_split_input": None,
+        "packed_rowwise": None,
         "embedding_rowwise": None,
         "sequence_parallel": None,
     }
@@ -1156,7 +1202,7 @@ def gather_state_dict_for_save(
 
         # Gather full tensor and handle packed weights repacking
         full_tensor = gather_full_tensor(tensor, shard_dim, device_mesh)
-        if current_plan == "local_packed_rowwise":
+        if current_plan in ("packed_colwise", "packed_rowwise"):
             full_tensor = repack_weights(full_tensor, shard_dim, tp_size, 2)
         result[key] = full_tensor.contiguous()
 
