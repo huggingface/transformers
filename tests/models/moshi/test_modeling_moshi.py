@@ -585,18 +585,6 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     def test_generate_continue_from_past_key_values(self):
         pass
 
-    @unittest.skip(
-        "Moshi either needs default generation config or fix for fullgraph compile because it hardcodes SlidingWindowCache in custom generation loop."
-    )
-    def test_greedy_generate_dict_outputs_use_cache(self):
-        pass
-
-    @unittest.skip(
-        "Moshi either needs default generation config or fix for fullgraph compile because it hardcodes SlidingWindowCache in custom generation loop."
-    )
-    def test_beam_search_generate_dict_outputs_use_cache(self):
-        pass
-
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
     @unittest.skip(reason="Unimplemented. Relies on `test_eager_matches_sdpa_generate` to check correctness.")
     def test_eager_matches_sdpa_inference(
