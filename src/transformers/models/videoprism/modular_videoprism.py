@@ -213,7 +213,7 @@ class VideoPrismTubeletEmbeddings(VivitTubeletEmbeddings):
         hidden_states = hidden_states.flatten(3).permute(0, 2, 3, 1)
         # combine batch and time dimension
         batch_size, num_frames, num_patches, hidden_size = hidden_states.shape
-        hidden_states = hidden_states.view(batch_size * num_frames, num_patches, hidden_size)
+        hidden_states = hidden_states.reshape(batch_size * num_frames, num_patches, hidden_size)
         
         return hidden_states
 
@@ -544,6 +544,9 @@ class VideoPrismVisionModel(VideoPrismPreTrainedModel):
         self.spatial_encoder = VideoPrismSpatialEncoder(self.config)
         self.temporal_encoder = VideoPrismTemporalEncoder(self.config)
         self.post_init()
+
+    def get_input_embeddings(self):
+        return self.spatial_embeddings.patch_embeddings
 
     @auto_docstring
     def forward(
