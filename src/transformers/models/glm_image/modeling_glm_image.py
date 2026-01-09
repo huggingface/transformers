@@ -546,7 +546,7 @@ class GlmImageModelOutputWithPast(ModelOutput):
     rope_deltas: torch.LongTensor | None = None
 
 
-class GlmImageVectorQuantizer(nn.Module):
+class GlmImageVQVAEVectorQuantizer(nn.Module):
     """
     A module for vector quantization using learned embedding vectors.
 
@@ -569,20 +569,15 @@ class GlmImageVectorQuantizer(nn.Module):
         hidden_state = hidden_state.permute(0, 2, 3, 1).contiguous()
         hidden_state_flattened = hidden_state.view(-1, self.embedding_dim)
 
-        # L2 normalize
-        hidden_state = F.normalize(hidden_state, p=2, dim=-1)
-        hidden_state_flattened = F.normalize(hidden_state_flattened, p=2, dim=-1)
-        embedding = F.normalize(self.embedding.weight, p=2, dim=-1)
-
         # distances from z to embeddings e_j (z - e)^2 = z^2 + e^2 - 2 e * z
         distances = (
             torch.sum(hidden_state_flattened**2, dim=1, keepdim=True)
-            + torch.sum(embedding**2, dim=1)
-            - 2 * torch.einsum("bd,dn->bn", hidden_state_flattened, embedding.transpose(0, 1))
+            + torch.sum(self.embedding.weight**2, dim=1)
+            - 2 * torch.einsum("bd,dn->bn", hidden_state_flattened, self.embedding.weight.transpose(0, 1))
         )
 
         min_encoding_indices = torch.argmin(distances, dim=1)
-        hidden_state_quant = embedding[min_encoding_indices].view(hidden_state.shape)
+        hidden_state_quant = self.embedding(min_encoding_indices).view(hidden_state.shape)
 
         # compute loss for embedding
         loss = torch.mean((hidden_state_quant.detach() - hidden_state) ** 2) + self.beta * torch.mean(
@@ -598,20 +593,26 @@ class GlmImageVectorQuantizer(nn.Module):
         return hidden_state_quant, loss, min_encoding_indices
 
 
+@auto_docstring(
+    custom_intro="""
+    The VQ-VAE model used in GlmImage for encoding/decoding images into discrete tokens.
+    This model follows the "Make-a-scene: Scene-based text-to-image generation with human priors" paper from
+    [ Oran Gafni, Adam Polyak, Oron Ashual, Shelly Sheynin, Devi Parikh, and Yaniv
+    Taigman](https://huggingface.co/papers/2203.13131).
+    """
+)
 class GlmImageVQVAE(GlmImagePreTrainedModel):
     config: GlmImageVQVAEConfig
     _no_split_modules = [
-        "GlmImageVectorQuantizer",
+        "GlmImageVQVAEVectorQuantizer",
     ]
 
     def __init__(self, config: GlmImageVQVAEConfig):
         super().__init__(config)
-
-        self.quantize = GlmImageVectorQuantizer(config)
-        self.quant_conv = nn.Conv2d(config.latent_channels, config.embed_dim, 1)
-        self.post_quant_conv = nn.Conv2d(config.embed_dim, config.latent_channels, 1)
-
-        self.eval()  # GLM-Image's VQ model is frozen
+        self.quantize = GlmImageVQVAEVectorQuantizer(config)
+        self.quant_conv = torch.nn.Conv2d(config.latent_channels, config.embed_dim, 1)
+        self.post_quant_conv = torch.nn.Conv2d(config.embed_dim, config.latent_channels, 1)
+        self.eval()  # GlmImage's VQ model is frozen
         self.post_init()
 
     def encode(self, hidden_states):

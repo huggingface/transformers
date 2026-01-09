@@ -35,7 +35,7 @@ from ...utils import (
     TransformersKwargs,
     logging,
 )
-from ..chameleon.modeling_chameleon import ChameleonVQVAEVectorQuantizer
+from ..chameleon.modeling_chameleon import ChameleonVQVAE
 from ..glm4v.configuration_glm4v import Glm4vTextConfig, Glm4vVisionConfig
 from ..glm4v.modeling_glm4v import (
     Glm4vCausalLMOutputWithPast,
@@ -459,55 +459,14 @@ class GlmImageModelOutputWithPast(Glm4vModelOutputWithPast):
     pass
 
 
-class GlmImageVectorQuantizer(ChameleonVQVAEVectorQuantizer):
-    def forward(self, hidden_state: torch.Tensor):
-        hidden_state = hidden_state.permute(0, 2, 3, 1).contiguous()
-        hidden_state_flattened = hidden_state.view(-1, self.embedding_dim)
-
-        # L2 normalize
-        hidden_state = F.normalize(hidden_state, p=2, dim=-1)
-        hidden_state_flattened = F.normalize(hidden_state_flattened, p=2, dim=-1)
-        embedding = F.normalize(self.embedding.weight, p=2, dim=-1)
-
-        # distances from z to embeddings e_j (z - e)^2 = z^2 + e^2 - 2 e * z
-        distances = (
-            torch.sum(hidden_state_flattened**2, dim=1, keepdim=True)
-            + torch.sum(embedding**2, dim=1)
-            - 2 * torch.einsum("bd,dn->bn", hidden_state_flattened, embedding.transpose(0, 1))
-        )
-
-        min_encoding_indices = torch.argmin(distances, dim=1)
-        hidden_state_quant = embedding[min_encoding_indices].view(hidden_state.shape)
-
-        # compute loss for embedding
-        loss = torch.mean((hidden_state_quant.detach() - hidden_state) ** 2) + self.beta * torch.mean(
-            (hidden_state_quant - hidden_state.detach()) ** 2
-        )
-
-        # preserve gradients
-        hidden_state_quant = hidden_state + (hidden_state_quant - hidden_state).detach()
-
-        # reshape back to match original input shape
-        hidden_state_quant = hidden_state_quant.permute(0, 3, 1, 2).contiguous()
-
-        return hidden_state_quant, loss, min_encoding_indices
-
-
-class GlmImageVQVAE(GlmImagePreTrainedModel):
-    config: GlmImageVQVAEConfig
+class GlmImageVQVAE(ChameleonVQVAE):
     _no_split_modules = [
-        "GlmImageVectorQuantizer",
+        "GlmImageVQVAEVectorQuantizer",
     ]
 
     def __init__(self, config: GlmImageVQVAEConfig):
         super().__init__(config)
-
-        self.quantize = GlmImageVectorQuantizer(config)
-        self.quant_conv = nn.Conv2d(config.latent_channels, config.embed_dim, 1)
-        self.post_quant_conv = nn.Conv2d(config.embed_dim, config.latent_channels, 1)
-
-        self.eval()  # GLM-Image's VQ model is frozen
-        self.post_init()
+        del self.encoder
 
     def encode(self, hidden_states):
         hidden_states = self.quant_conv(hidden_states)
