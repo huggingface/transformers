@@ -16,13 +16,13 @@ limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-12-09 and added to Hugging Face Transformers on 2025-12-09.*
+*This model was released on 2025-12-09 and added to Hugging Face Transformers on 2025-11-15.*
 
 # GLM-4.6V
 
 ## Overview
 
-The GLM-V model was proposed in [GLM-4.5V and GLM-4.1V-Thinking: Towards Versatile Multimodal Reasoning with Scalable Reinforcement Learning](https://arxiv.org/abs/2507.01006v6).
+The GLM-V model was proposed in [GLM-4.5V and GLM-4.1V-Thinking: Towards Versatile Multimodal Reasoning with Scalable Reinforcement Learning](https://huggingface.co/papers/2507.01006v6).
 
 The abstract from the paper is the following:
 

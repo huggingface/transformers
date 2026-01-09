@@ -213,6 +213,8 @@ class GlmImageTextConfig(Glm4vTextConfig):
         vision_vocab_size (`int`, *optional*, defaults to 16512):
             Vision vocabulary size of the GlmImage model. Defines the number of different tokens that can be represented
             by the `inputs_ids` passed when calling [`GlmImageVisionModel`]
+        attention_bias (`bool`, *optional*, defaults to `True`):
+            Whether to add a bias to the queries, keys and values.
 
     ```python
     >>> from transformers import GlmImageTextModel, GlmImageConfig
