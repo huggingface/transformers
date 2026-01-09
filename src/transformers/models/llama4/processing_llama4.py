@@ -13,8 +13,6 @@
 # limitations under the License.
 
 
-from typing import Optional, Union
-
 from transformers.processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from transformers.tokenization_utils_base import PreTokenizedInput, TextInput
 
@@ -123,8 +121,8 @@ class Llama4Processor(ProcessorMixin):
     @auto_docstring
     def __call__(
         self,
-        images: Optional[ImageInput] = None,
-        text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         **kwargs: Unpack[Llama4ProcessorKwargs],
     ) -> BatchFeature:
         r"""
