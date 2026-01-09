@@ -86,9 +86,6 @@ class Glm4MoeLiteConfig(PreTrainedConfig):
             Number of selected groups for each token(for each token, ensuring the selected experts is only within `topk_group` groups).
         num_experts_per_tok (`int`, *optional*, defaults to 4):
             Number of selected experts, None means dense model.
-        first_k_dense_replace (`int`, *optional*, defaults to 1):
-            Number of dense layers in shallow layers(embed->dense->dense->...->dense->moe->moe...->lm_head).
-                                                            \--k dense layers--/
         norm_topk_prob (`bool`, *optional*, defaults to `True`):
             Whether to normalize the weights of the routed experts.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
@@ -178,7 +175,6 @@ class Glm4MoeLiteConfig(PreTrainedConfig):
         n_group: int | None = 1,
         topk_group: int | None = 1,
         num_experts_per_tok: int | None = 4,
-        first_k_dense_replace: int | None = 1,
         norm_topk_prob: bool | None = True,
         hidden_act: str | None = "silu",
         max_position_embeddings: int | None = 202752,
@@ -224,7 +220,6 @@ class Glm4MoeLiteConfig(PreTrainedConfig):
         self.n_group = n_group
         self.topk_group = topk_group
         self.num_experts_per_tok = num_experts_per_tok
-        self.first_k_dense_replace = first_k_dense_replace
         self.norm_topk_prob = norm_topk_prob
         self.rope_interleave = rope_interleave
         self.num_key_value_heads = num_key_value_heads
