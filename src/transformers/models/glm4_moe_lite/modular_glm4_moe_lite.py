@@ -14,10 +14,10 @@
 
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_rope_utils import RopeParameters
 from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3Attention
 from ..glm4_moe.modeling_glm4_moe import (
-    Glm4MoeDecoderLayer,
     Glm4MoeForCausalLM,
     Glm4MoeMLP,
     Glm4MoeModel,
@@ -272,8 +272,20 @@ class Glm4MoeLiteMoE(Glm4MoeMoE):
     pass
 
 
-class Glm4MoeLiteDecoderLayer(Glm4MoeDecoderLayer):
-    pass
+class Glm4MoeLiteDecoderLayer(GradientCheckpointingLayer):
+    def __init__(self, config: Glm4MoeLiteConfig, layer_idx: int):
+        super().__init__()
+        self.hidden_size = config.hidden_size
+
+        self.self_attn = Glm4MoeLiteAttention(config, layer_idx)
+
+        if config.mlp_layer_types[layer_idx] == "sparse":
+            self.mlp = Glm4MoeLiteMoE(config)
+        else:
+            self.mlp = Glm4MoeLiteMLP(config)
+
+        self.input_layernorm = Glm4MoeLiteRMSNorm(config.hidden_size, config.rms_norm_eps)
+        self.post_attention_layernorm = Glm4MoeLiteRMSNorm(config.hidden_size, config.rms_norm_eps)
 
 
 class Glm4MoeLitePreTrainedModel(Glm4MoePreTrainedModel):
