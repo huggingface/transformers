@@ -3232,7 +3232,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # If model was sharded, gather all sharded tensors to reconstruct full tensors for saving
         if self._tp_size is not None:
-            #TODO(3outeille): when adding supports for 2D device_mesh. Use device_mesh["tp"].size() instead of self._tp_size
+            # TODO(3outeille): when adding supports for 2D device_mesh. Use device_mesh["tp"].size() instead of self._tp_size
             state_dict = gather_state_dict_for_save(state_dict, self._tp_plan, self._device_mesh, self._tp_size)
 
         # Remove tied weights as safetensors do not handle them

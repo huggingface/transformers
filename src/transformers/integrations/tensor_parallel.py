@@ -38,6 +38,7 @@ if is_torch_available():
     # Cache this result has it's a C FFI call which can be pretty time-consuming
     _torch_distributed_available = torch.distributed.is_available()
 
+
 def initialize_tensor_parallelism(
     tp_plan: str | dict[str, str] | None, tp_size: int | None = None, device_mesh=None, device_map=None
 ):
@@ -426,6 +427,7 @@ def get_tensor_shard(param, empty_param, device_mesh, rank, dim, tensor_idx: int
 # Distributed Communication
 # =============================================================================
 
+
 class _AllReduceBackward(torch.autograd.Function):
     """Identity forward, all-reduce backward. Used before colwise layers (f in Megatron)."""
 
@@ -651,9 +653,7 @@ def repack_weights(
     Reorders a tensor that was reconstructed from sharded packed weights into its canonical packed format.
     """
     if num_blocks != 2:
-        raise ValueError(
-            "Num blocks different from 2 is not supported yet."
-        )
+        raise ValueError("Num blocks different from 2 is not supported yet.")
 
     actual_sharded_dim = sharded_dim if sharded_dim >= 0 else sharded_dim + packed_parameter.ndim
     total_size_on_sharded_dim = packed_parameter.shape[actual_sharded_dim]
@@ -661,7 +661,7 @@ def repack_weights(
     shard_chunk_size = original_block_size_on_dim // world_size
 
     prefix_shape = packed_parameter.shape[:actual_sharded_dim]
-    suffix_shape = packed_parameter.shape[actual_sharded_dim + 1:]
+    suffix_shape = packed_parameter.shape[actual_sharded_dim + 1 :]
 
     tensor_view = packed_parameter.view(
         *prefix_shape,
@@ -744,6 +744,7 @@ def distribute_module(
         module.register_forward_hook(lambda mod, inputs, outputs: output_fn(mod, outputs, device_mesh))
     return module
 
+
 class TensorParallelLayer:
     """General tensor parallel layer for transformers"""
 
@@ -762,8 +763,16 @@ class TensorParallelLayer:
     @staticmethod
     def _prepare_output_fn(mod, outputs, device_mesh): ...
 
-    def shard_tensor(self, param, param_type=None, param_casting_dtype=None, to_contiguous=None,
-                     rank=None, device_mesh=None, tensor_idx=None):
+    def shard_tensor(
+        self,
+        param,
+        param_type=None,
+        param_casting_dtype=None,
+        to_contiguous=None,
+        rank=None,
+        device_mesh=None,
+        tensor_idx=None,
+    ):
         raise NotImplementedError
 
     def prepare_module_tp(self, module: nn.Module, device_mesh) -> nn.Module:
@@ -773,6 +782,7 @@ class TensorParallelLayer:
             self._prepare_input_fn,
             self._prepare_output_fn,
         )
+
 
 class ColwiseParallel(TensorParallelLayer):
     """
@@ -794,8 +804,16 @@ class ColwiseParallel(TensorParallelLayer):
             return all_gather(outputs, device_mesh)
         return outputs
 
-    def shard_tensor(self, param, param_type=None, param_casting_dtype=None, to_contiguous=None,
-                     rank=None, device_mesh=None, tensor_idx=None):
+    def shard_tensor(
+        self,
+        param,
+        param_type=None,
+        param_casting_dtype=None,
+        to_contiguous=None,
+        rank=None,
+        device_mesh=None,
+        tensor_idx=None,
+    ):
         device_mesh = self.device_mesh
         empty_param = self.empty_param
         rank = self.rank
@@ -813,6 +831,7 @@ class ColwiseParallel(TensorParallelLayer):
             self._prepare_input_fn,
             self._prepare_output_fn,
         )
+
 
 class LocalColwiseParallel(ColwiseParallel):
     """
@@ -875,8 +894,16 @@ class RowwiseParallel(TensorParallelLayer):
             outputs = outputs + mod._bias
         return outputs
 
-    def shard_tensor(self, param, param_type=None, param_casting_dtype=None, to_contiguous=None,
-                     rank=None, device_mesh=None, tensor_idx=None):
+    def shard_tensor(
+        self,
+        param,
+        param_type=None,
+        param_casting_dtype=None,
+        to_contiguous=None,
+        rank=None,
+        device_mesh=None,
+        tensor_idx=None,
+    ):
         device_mesh = device_mesh or self.device_mesh
         empty_param = self.empty_param
         rank = rank if rank is not None else self.rank
@@ -896,11 +923,20 @@ class RowwiseParallel(TensorParallelLayer):
             self._prepare_output_fn,
         )
 
+
 class PackedColwiseParallel(ColwiseParallel):
     """Packed column-wise parallel for fused weights like gate_up_proj."""
 
-    def shard_tensor(self, param, param_type=None, param_casting_dtype=None, to_contiguous=None,
-                     rank=None, device_mesh=None, tensor_idx=None):
+    def shard_tensor(
+        self,
+        param,
+        param_type=None,
+        param_casting_dtype=None,
+        to_contiguous=None,
+        rank=None,
+        device_mesh=None,
+        tensor_idx=None,
+    ):
         device_mesh = device_mesh or self.device_mesh
         empty_param = self.empty_param
         rank = rank if rank is not None else self.rank
@@ -919,8 +955,16 @@ class PackedColwiseParallel(ColwiseParallel):
 class PackedRowwiseParallel(RowwiseParallel):
     """Packed row-wise parallel for fused weights like gate_up_proj."""
 
-    def shard_tensor(self, param, param_type=None, param_casting_dtype=None, to_contiguous=None,
-                     rank=None, device_mesh=None, tensor_idx=None):
+    def shard_tensor(
+        self,
+        param,
+        param_type=None,
+        param_casting_dtype=None,
+        to_contiguous=None,
+        rank=None,
+        device_mesh=None,
+        tensor_idx=None,
+    ):
         device_mesh = device_mesh or self.device_mesh
         empty_param = self.empty_param
         rank = rank if rank is not None else self.rank
@@ -971,7 +1015,7 @@ class EmbeddingParallel(TensorParallelLayer):
 
     def _prepare_output_fn(self, mod, outputs, device_mesh):
         # For vocab-parallel (dim 0), zero out embeddings for out-of-range tokens before all-reduce
-        if self.embedding_dim_sharding == 0 and hasattr(mod, '_input_mask'):
+        if self.embedding_dim_sharding == 0 and hasattr(mod, "_input_mask"):
             input_mask = mod._input_mask
             # Use multiplication instead of in-place assignment to preserve gradients
             mask_expanded = input_mask.unsqueeze(-1).expand_as(outputs)
@@ -980,15 +1024,25 @@ class EmbeddingParallel(TensorParallelLayer):
 
         return all_reduce_forward(outputs, device_mesh)
 
-    def shard_tensor(self, param, param_type=None, param_casting_dtype=None, to_contiguous=None,
-                     rank=None, device_mesh=None, tensor_idx=None):
+    def shard_tensor(
+        self,
+        param,
+        param_type=None,
+        param_casting_dtype=None,
+        to_contiguous=None,
+        rank=None,
+        device_mesh=None,
+        tensor_idx=None,
+    ):
         device_mesh = device_mesh or self.device_mesh
         empty_param = self.empty_param
         rank = rank if rank is not None else self.rank
         if param_type == "bias":
             parameter = get_tensor_shard(param, empty_param, device_mesh, rank, -1, tensor_idx=tensor_idx)
         else:
-            parameter = get_tensor_shard(param, empty_param, device_mesh, rank, self.embedding_dim_sharding, tensor_idx=tensor_idx)
+            parameter = get_tensor_shard(
+                param, empty_param, device_mesh, rank, self.embedding_dim_sharding, tensor_idx=tensor_idx
+            )
         parameter = parameter.to(param_casting_dtype)
         return parameter, None
 
@@ -1000,6 +1054,7 @@ class EmbeddingParallel(TensorParallelLayer):
             self._prepare_input_fn,
             self._prepare_output_fn,
         )
+
 
 class SequenceParallel(TensorParallelLayer):
     """
@@ -1020,8 +1075,16 @@ class SequenceParallel(TensorParallelLayer):
     def _prepare_output_fn(self, mod, outputs, device_mesh):
         return reduce_scatter(outputs, device_mesh)
 
-    def shard_tensor(self, param, param_type=None, param_casting_dtype=None, to_contiguous=None,
-                     rank=None, device_mesh=None, tensor_idx=None):
+    def shard_tensor(
+        self,
+        param,
+        param_type=None,
+        param_casting_dtype=None,
+        to_contiguous=None,
+        rank=None,
+        device_mesh=None,
+        tensor_idx=None,
+    ):
         parameter = param[...].to(param_casting_dtype)
         return parameter, None
 
@@ -1033,6 +1096,7 @@ class SequenceParallel(TensorParallelLayer):
             self._prepare_output_fn,
         )
 
+
 class GroupedGemmParallel(TensorParallelLayer):
     """
     Applies Expert Parallelism to MoE experts by loading the correct experts on each device.
@@ -1041,8 +1105,16 @@ class GroupedGemmParallel(TensorParallelLayer):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
-    def shard_tensor(self, param, param_type=None, param_casting_dtype=None, to_contiguous=None,
-                     rank=None, device_mesh=None, tensor_idx=None):
+    def shard_tensor(
+        self,
+        param,
+        param_type=None,
+        param_casting_dtype=None,
+        to_contiguous=None,
+        rank=None,
+        device_mesh=None,
+        tensor_idx=None,
+    ):
         empty_param = self.empty_param
         ep_rank = self.rank
         device_mesh = self.device_mesh
@@ -1055,6 +1127,7 @@ class GroupedGemmParallel(TensorParallelLayer):
         local_num_experts = global_num_experts // device_mesh.size()
         parameter = param[ep_rank * local_num_experts : (ep_rank + 1) * local_num_experts].to(param_casting_dtype)
         return parameter, None
+
 
 class RouterParallel(TensorParallelLayer):
     """
@@ -1122,8 +1195,16 @@ class RouterParallel(TensorParallelLayer):
         router_indices = router_indices.masked_fill(router_indices == -1, num_local_experts)
         return router_logits, router_scores, router_indices
 
-    def shard_tensor(self, param, param_type=None, param_casting_dtype=None, to_contiguous=None,
-                     rank=None, device_mesh=None, tensor_idx=None):
+    def shard_tensor(
+        self,
+        param,
+        param_type=None,
+        param_casting_dtype=None,
+        to_contiguous=None,
+        rank=None,
+        device_mesh=None,
+        tensor_idx=None,
+    ):
         parameter = param[...].to(param_casting_dtype)
         return parameter, None
 
@@ -1134,6 +1215,7 @@ class RouterParallel(TensorParallelLayer):
             self._prepare_input_fn,
             self._prepare_output_fn,
         )
+
 
 class ParallelInterface(GeneralInterface):
     # Class instance object, so that a call to `register` can be reflected into all other files correctly, even if
@@ -1162,6 +1244,7 @@ ALL_PARALLEL_STYLES: ParallelInterface = ParallelInterface()
 # =============================================================================
 # High-Level API Functions
 # =============================================================================
+
 
 def gather_full_tensor(local_tensor: torch.Tensor, shard_dim: int, device_mesh) -> torch.Tensor:
     """
