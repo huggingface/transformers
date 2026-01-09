@@ -112,10 +112,18 @@
       title: Writing a chat template
     title: Chat with models
   - sections:
-    - local: serving
+    - local: serve-cli/serving
       title: Serve CLI
-    - local: serve-cli-integrations
-      title: Serve CLI integrations
+    - local: serve-cli/serving_optims
+      title: Server optimizations
+    - local: serve-cli/cursor
+      title: Cursor
+    - local: serve-cli/jan
+      title: Jan
+    - local: serve-cli/openweb_ui
+      title: Open WebUI
+    - local: serve-cli/tiny_agents
+      title: tiny-agents
     title: Serving
   - local: agents
     title: Agents
