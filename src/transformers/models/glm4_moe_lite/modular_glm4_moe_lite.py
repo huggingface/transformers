@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 the HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,9 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional
 
-from ...configuration_utils import PreTrainedConfig
+from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...modeling_rope_utils import RopeParameters
 from ..deepseek_v3.modeling_deepseek_v3 import DeepseekV3Attention
 from ..glm4_moe.modeling_glm4_moe import (
@@ -121,6 +119,8 @@ class Glm4MoeLiteConfig(PreTrainedConfig):
             with longer `max_position_embeddings`.
         rope_interleave (`bool`, *optional*, defaults to `True`):
             Whether to interleave the rotary position embeddings.
+        mlp_layer_types (`list`, *optional*):
+            MLP (Moe vs Dense) pattern for each layer.
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -158,46 +158,54 @@ class Glm4MoeLiteConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 154880,
-        hidden_size: Optional[int] = 2048,
-        intermediate_size: Optional[int] = 10240,
-        moe_intermediate_size: Optional[int] = 1536,
-        num_hidden_layers: Optional[int] = 47,
-        num_attention_heads: Optional[int] = 20,
-        num_key_value_heads: Optional[int] = 20,
-        n_shared_experts: Optional[int] = 1,
-        n_routed_experts: Optional[int] = 64,
-        routed_scaling_factor: Optional[float] = 1.8,
-        kv_lora_rank: Optional[int] = 512,
-        q_lora_rank: Optional[int] = 768,
-        qk_rope_head_dim: Optional[int] = 64,
-        v_head_dim: Optional[int] = 256,
-        qk_nope_head_dim: Optional[int] = 192,
-        n_group: Optional[int] = 1,
-        topk_group: Optional[int] = 1,
-        num_experts_per_tok: Optional[int] = 4,
-        first_k_dense_replace: Optional[int] = 1,
-        norm_topk_prob: Optional[bool] = True,
-        hidden_act: Optional[str] = "silu",
-        max_position_embeddings: Optional[int] = 202752,
-        initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[int] = 1e-5,
-        use_cache: Optional[bool] = True,
-        pad_token_id: Optional[int] = None,
-        bos_token_id: Optional[int] = 0,
-        eos_token_id: Optional[int] = 1,
-        pretraining_tp: Optional[int] = 1,
-        tie_word_embeddings: Optional[bool] = False,
-        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        rope_interleave: Optional[bool] = True,
-        attention_bias: Optional[bool] = False,
-        attention_dropout: Optional[float] = 0.0,
+        vocab_size: int | None = 154880,
+        hidden_size: int | None = 2048,
+        intermediate_size: int | None = 10240,
+        moe_intermediate_size: int | None = 1536,
+        num_hidden_layers: int | None = 47,
+        num_attention_heads: int | None = 20,
+        num_key_value_heads: int | None = 20,
+        n_shared_experts: int | None = 1,
+        n_routed_experts: int | None = 64,
+        routed_scaling_factor: float | None = 1.8,
+        kv_lora_rank: int | None = 512,
+        q_lora_rank: int | None = 768,
+        qk_rope_head_dim: int | None = 64,
+        v_head_dim: int | None = 256,
+        qk_nope_head_dim: int | None = 192,
+        n_group: int | None = 1,
+        topk_group: int | None = 1,
+        num_experts_per_tok: int | None = 4,
+        first_k_dense_replace: int | None = 1,
+        norm_topk_prob: bool | None = True,
+        hidden_act: str | None = "silu",
+        max_position_embeddings: int | None = 202752,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: int | None = 1e-5,
+        use_cache: bool | None = True,
+        pad_token_id: int | None = None,
+        bos_token_id: int | None = 0,
+        eos_token_id: int | None = 1,
+        pretraining_tp: int | None = 1,
+        tie_word_embeddings: bool | None = False,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        rope_interleave: bool | None = True,
+        mlp_layer_types=None,
+        attention_bias: bool | None = False,
+        attention_dropout: float | None = 0.0,
         **kwargs,
     ):
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
+
+        # Default to MoE from the second layer and on
+        self.mlp_layer_types = mlp_layer_types
+        if self.mlp_layer_types is None:
+            self.mlp_layer_types = ["dense"] + ["sparse"] * (self.num_hidden_layers - 1)
+        layer_type_validation(self.mlp_layer_types, self.num_hidden_layers, attention=False)
+
         self.moe_intermediate_size = moe_intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
@@ -217,11 +225,6 @@ class Glm4MoeLiteConfig(PreTrainedConfig):
         self.first_k_dense_replace = first_k_dense_replace
         self.norm_topk_prob = norm_topk_prob
         self.rope_interleave = rope_interleave
-
-        # for backward compatibility
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
-
         self.num_key_value_heads = num_key_value_heads
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
