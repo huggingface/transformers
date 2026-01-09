@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,7 +18,6 @@ import os
 import re
 import warnings
 from functools import lru_cache
-from typing import Optional, Union
 
 import numpy as np
 from tokenizers import AddedToken, Tokenizer, decoders, pre_tokenizers, processors
@@ -208,7 +206,7 @@ class WhisperTokenizer(TokenizersBackend):
 
     def __init__(
         self,
-        vocab: Optional[Union[str, dict[str, int]]] = None,
+        vocab: str | dict[str, int] | None = None,
         merges=None,
         normalizer_file=None,
         unk_token="<|endoftext|>",
@@ -436,7 +434,7 @@ class WhisperTokenizer(TokenizersBackend):
         self,
         token_ids,
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: Optional[bool] = None,
+        clean_up_tokenization_spaces: bool | None = None,
         output_offsets: bool = False,
         time_precision: float = 0.02,
         decode_with_timestamps: bool = False,
@@ -563,7 +561,7 @@ class WhisperTokenizer(TokenizersBackend):
         normalizer = BasicTextNormalizer(remove_diacritics=remove_diacritics)
         return normalizer(text)
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: str | None = None) -> tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
@@ -594,7 +592,7 @@ class WhisperTokenizer(TokenizersBackend):
         return (vocab_file, merge_file, normalizer_file)
 
     def set_prefix_tokens(
-        self, language: Optional[str] = None, task: Optional[str] = None, predict_timestamps: Optional[bool] = None
+        self, language: str | None = None, task: str | None = None, predict_timestamps: bool | None = None
     ):
         """
         Override the prefix tokens appended to the start of the label sequence. This method can be used standalone to
@@ -678,7 +676,7 @@ class WhisperTokenizer(TokenizersBackend):
 
     # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer.get_special_tokens_mask
     def get_special_tokens_mask(
-        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None, already_has_special_tokens: bool = False
+        self, token_ids_0: list[int], token_ids_1: list[int] | None = None, already_has_special_tokens: bool = False
     ) -> list[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
@@ -776,7 +774,7 @@ class WhisperTokenizer(TokenizersBackend):
 def _combine_tokens_into_words(
     tokenizer,
     tokens: list[int],
-    language: Optional[str] = None,
+    language: str | None = None,
     prepend_punctuations: str = "\"'“¡¿([{-",
     append_punctuations: str = "\"'.。,，!！?？:：”)]}、",
 ):
@@ -1310,7 +1308,7 @@ def _collate_word_timestamps(tokenizer, tokens, token_timestamps, language, retu
 def _combine_tokens_into_words(
     tokenizer,
     tokens: list[int],
-    language: Optional[str] = None,
+    language: str | None = None,
     prepend_punctuations: str = "\"'“¡¿([{-",
     append_punctuations: str = "\"'.。,，!！?？:：”)]}、",
 ):

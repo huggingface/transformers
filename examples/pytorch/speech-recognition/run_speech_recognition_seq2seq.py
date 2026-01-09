@@ -35,7 +35,7 @@ import logging
 import os
 import sys
 from dataclasses import dataclass, field
-from typing import Any, Optional, Union
+from typing import Any
 
 import datasets
 import evaluate
@@ -77,19 +77,19 @@ class ModelArguments:
     model_name_or_path: str = field(
         metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models"}
     )
-    config_name: Optional[str] = field(
+    config_name: str | None = field(
         default=None,
         metadata={"help": "Pretrained config name or path if not the same as model_name"},
     )
-    tokenizer_name: Optional[str] = field(
+    tokenizer_name: str | None = field(
         default=None,
         metadata={"help": "Pretrained tokenizer name or path if not the same as model_name"},
     )
-    feature_extractor_name: Optional[str] = field(
+    feature_extractor_name: str | None = field(
         default=None,
         metadata={"help": "feature extractor name or path if not the same as model_name"},
     )
-    cache_dir: Optional[str] = field(
+    cache_dir: str | None = field(
         default=None,
         metadata={"help": "Where to store the pretrained models downloaded from huggingface.co"},
     )
@@ -168,11 +168,11 @@ class DataTrainingArguments:
         default=False,
         metadata={"help": "Overwrite the cached training and evaluation sets"},
     )
-    preprocessing_num_workers: Optional[int] = field(
+    preprocessing_num_workers: int | None = field(
         default=None,
         metadata={"help": "The number of processes to use for the preprocessing."},
     )
-    max_train_samples: Optional[int] = field(
+    max_train_samples: int | None = field(
         default=None,
         metadata={
             "help": (
@@ -181,7 +181,7 @@ class DataTrainingArguments:
             )
         },
     )
-    max_eval_samples: Optional[int] = field(
+    max_eval_samples: int | None = field(
         default=None,
         metadata={
             "help": (
@@ -270,7 +270,7 @@ class DataCollatorSpeechSeq2SeqWithPadding:
     decoder_start_token_id: int
     forward_attention_mask: bool
 
-    def __call__(self, features: list[dict[str, Union[list[int], torch.Tensor]]]) -> dict[str, torch.Tensor]:
+    def __call__(self, features: list[dict[str, list[int] | torch.Tensor]]) -> dict[str, torch.Tensor]:
         # split inputs and labels since they have to be of different lengths and need
         # different padding methods
         model_input_name = self.processor.model_input_names[0]
