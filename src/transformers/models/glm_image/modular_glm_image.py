@@ -456,7 +456,6 @@ class GlmImageModelOutputWithPast(Glm4vModelOutputWithPast):
 
 
 class GlmImageVQVAEVectorQuantizer(ChameleonVQVAEVectorQuantizer):
-
     def __init__(self, config: GlmImageVQVAEConfig):
         super().__init__(config)
         self.num_embeddings = config.num_embeddings
