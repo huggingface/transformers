@@ -160,6 +160,8 @@ class GlmImageTextConfig(PreTrainedConfig):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 32):
             Number of attention heads for each attention layer in the Transformer encoder.
+        attention_bias (`bool`, *optional*, defaults to `True`):
+            Whether to add a bias to the queries, keys and values.
         num_key_value_heads (`int`, *optional*, defaults to 2):
             This is the number of key_value heads that should be used to implement Grouped Query Attention. If
             `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
@@ -238,10 +240,12 @@ class GlmImageTextConfig(PreTrainedConfig):
         attention_dropout: float | None = 0.0,
         rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
         vision_vocab_size: int | None = 16512,
+        attention_bias: bool | None = True,
         **kwargs,
     ):
         self.vocab_size = vocab_size
         self.vision_vocab_size = vision_vocab_size
+        self.attention_bias = attention_bias
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
