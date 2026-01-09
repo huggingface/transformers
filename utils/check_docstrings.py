@@ -1012,8 +1012,6 @@ def find_matching_model_files(check_all: bool = False):
         # intersect with module_diff_files
         matching_files = sorted([file for file in matching_files if file in module_diff_files])
 
-    print("    Checking auto_docstrings in the following files:" + "\n    - " + "\n    - ".join(matching_files))
-
     return matching_files
 
 
@@ -1942,7 +1940,6 @@ def check_docstrings(overwrite: bool = False, check_all: bool = False):
         # quick escape route: if there are no module files in the diff, skip this check
         if len(module_diff_files) == 0:
             return
-        print("    Checking docstrings in the following files:" + "\n    - " + "\n    - ".join(module_diff_files))
 
     failures = []
     hard_failures = []
