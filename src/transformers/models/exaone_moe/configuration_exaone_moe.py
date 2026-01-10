@@ -146,7 +146,7 @@ class ExaoneMoEConfig(PreTrainedConfig):
         sliding_window_pattern=4,
         is_moe_layer=None,
         layer_types=None,
-        first_last_k_dense_replace=2,
+        first_k_dense_replace=1,
         moe_intermediate_size=1024,
         num_experts=64,
         num_experts_per_tok=8,
@@ -171,6 +171,7 @@ class ExaoneMoEConfig(PreTrainedConfig):
         self.attention_dropout = attention_dropout
         self.sliding_window = sliding_window
         self.sliding_window_pattern = sliding_window_pattern
+        self.first_k_dense_replace = first_k_dense_replace
         self.moe_intermediate_size = moe_intermediate_size
         self.num_experts = num_experts
         self.num_experts_per_tok = num_experts_per_tok
@@ -183,7 +184,9 @@ class ExaoneMoEConfig(PreTrainedConfig):
 
         self.is_moe_layer = is_moe_layer
         if self.is_moe_layer is None:
-            self.is_moe_layer = [0] + [1] * (self.num_hidden_layers - 1)
+            self.is_moe_layer = [0] * self.first_k_dense_replace + [1] * (
+                self.num_hidden_layers - self.first_k_dense_replace
+            )
 
         self.layer_types = layer_types
         if self.sliding_window is None:
@@ -195,39 +198,9 @@ class ExaoneMoEConfig(PreTrainedConfig):
                 else "full_attention"
                 for i in range(self.num_hidden_layers)
             ]
-        if "sliding_window" in self.layer_types:
+        if "sliding_attention" in self.layer_types:
             self.cache_implementation = "hybrid"
         layer_type_validation(self.layer_types)
-        self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_key_value_heads = num_key_value_heads
-        self.intermediate_size = intermediate_size
-        self.hidden_act = hidden_act
-        self.max_position_embeddings = max_position_embeddings
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.use_cache = use_cache
-        self.attention_dropout = attention_dropout
-        self.sliding_window = sliding_window
-        self.sliding_window_pattern = sliding_window_pattern
-
-        self.layer_types = layer_types
-        if self.sliding_window is None:
-            sliding_window_pattern = 0
-        if self.layer_types is None:
-            self.layer_types = [
-                "sliding_attention"
-                if ((i + 1) % (sliding_window_pattern) != 0 and i < self.num_hidden_layers)
-                else "full_attention"
-                for i in range(self.num_hidden_layers)
-            ]
-        if "sliding_window" in self.layer_types:
-            self.cache_implementation = "hybrid"
-        layer_type_validation(self.layer_types, self.num_hidden_layers)
-
-        self.rope_parameters = rope_parameters
 
         super().__init__(
             bos_token_id=bos_token_id, eos_token_id=eos_token_id, tie_word_embeddings=tie_word_embeddings, **kwargs
