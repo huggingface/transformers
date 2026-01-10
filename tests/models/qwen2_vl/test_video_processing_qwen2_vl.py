@@ -361,3 +361,36 @@ class Qwen2VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
 
             video_grid_thw = video_processed["video_grid_thw"]
             self.assertEqual(video_grid_thw.tolist(), [[2, 2, 2]])
+
+    def test_video_processor_runtime_min_max_pixels(self):
+        """Test that min_pixels/max_pixels kwargs work when passed at call time."""
+        for video_processing_class in self.video_processor_list:
+            video_processor_dict = {
+                "min_pixels": 56 * 56,
+                "max_pixels": 224 * 224,
+            }
+            video_processing = video_processing_class(**video_processor_dict)
+
+            n, h, w = 4, 224, 224
+            video_inputs = [(np.random.randint(0, 256, (h, w, 3), dtype=np.uint8)) for _ in range(n)]
+
+            default_result = video_processing(video_inputs, return_tensors="pt")
+            default_grid = default_result["video_grid_thw"]
+
+            constrained_result = video_processing(
+                video_inputs,
+                return_tensors="pt",
+                min_pixels=28 * 28,
+                max_pixels=56 * 56,
+            )
+            constrained_grid = constrained_result["video_grid_thw"]
+
+            default_patches = default_grid[0, 1].item() * default_grid[0, 2].item()
+            constrained_patches = constrained_grid[0, 1].item() * constrained_grid[0, 2].item()
+
+            self.assertLess(
+                constrained_patches,
+                default_patches,
+                f"Custom min/max_pixels should produce fewer patches. "
+                f"Got default={default_patches}, constrained={constrained_patches}",
+            )
