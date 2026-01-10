@@ -145,7 +145,7 @@ class Concatenate(ConversionOps):
     ) -> dict[str, torch.Tensor]:
         target_pattern = self.get_target_pattern(target_patterns)
         all_tensors = []
-        # Very important to keep the relative order of the source patterms here, so we iterate over them not the
+        # Very important to keep the relative order of the source patterns here, so we iterate over them not the
         # input directly as it's unordered!
         for source_pattern in source_patterns:
             tensors = input_dict[source_pattern]
@@ -473,30 +473,20 @@ class WeightTransform:
             # Qwen2.5, Sam3, Ernie4.5 VL MoE!
             pattern = re.sub(r"\(\?.+\)", "", pattern)
             # Allow capturing groups in patterns, i.e. to add/remove a prefix to all keys (e.g. timm_wrapper, sam3)
-            # Detect any capturing group pattern (not just (.+) or (\d+), but any pattern like ([a-z]+), etc.)
             capturing_group_match = re.search(r"\([^)]+\)", pattern)
             if capturing_group_match:
                 original_group = capturing_group_match.group(0)
                 target_capturing_groups.append(original_group)
                 pattern = pattern.replace(original_group, r"\1", 1)
-            else:
-                target_capturing_groups.append(None)
             self.target_patterns[i] = pattern
 
         # We also need to check capturing groups in the sources during reverse mapping (e.g. timm_wrapper, sam3)
-        # When reversing, target_patterns become source_patterns, so we need to restore the original capturing group
-        # In reverse mode: source_patterns (with \1) came from old target_patterns
-        #                 target_patterns (with original group) are the old source_patterns
-        # So we use the stored capturing group from target_patterns to restore \1 in source_patterns
+        capturing_groups_index = 0
         for i, pattern in enumerate(self.source_patterns):
             if r"\1" in pattern:
-                # Use the stored capturing group from target_patterns, or default to (.+)
-                original_group = (
-                    target_capturing_groups[i]
-                    if i < len(target_capturing_groups) and target_capturing_groups[i] is not None
-                    else r"(.+)"
-                )
-                pattern = pattern.replace(r"\1", original_group, 1)
+                # Use the stored capturing group from target_patterns
+                pattern = pattern.replace(r"\1", target_capturing_groups[capturing_groups_index], 1)
+                capturing_groups_index += 1
             self.source_patterns[i] = pattern
 
         # Construct the regex we will use to rename keys from the sources to the targets

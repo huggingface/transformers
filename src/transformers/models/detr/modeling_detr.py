@@ -753,6 +753,150 @@ class DetrDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
+def _expand(tensor, length: int):
+    return tensor.unsqueeze(1).repeat(1, int(length), 1, 1, 1).flatten(0, 1)
+
+
+# taken from https://github.com/facebookresearch/detr/blob/master/models/segmentation.py
+class DetrMaskHeadSmallConv(nn.Module):
+    """
+    Simple convolutional head, using group norm. Upsampling is done using a FPN approach
+    """
+
+    def __init__(self, dim, fpn_dims, context_dim):
+        super().__init__()
+
+        if dim % 8 != 0:
+            raise ValueError(
+                "The hidden_size + number of attention heads must be divisible by 8 as the number of groups in"
+                " GroupNorm is set to 8"
+            )
+
+        inter_dims = [dim, context_dim // 2, context_dim // 4, context_dim // 8, context_dim // 16, context_dim // 64]
+
+        self.lay1 = nn.Conv2d(dim, dim, 3, padding=1)
+        self.gn1 = nn.GroupNorm(8, dim)
+        self.lay2 = nn.Conv2d(dim, inter_dims[1], 3, padding=1)
+        self.gn2 = nn.GroupNorm(min(8, inter_dims[1]), inter_dims[1])
+        self.lay3 = nn.Conv2d(inter_dims[1], inter_dims[2], 3, padding=1)
+        self.gn3 = nn.GroupNorm(min(8, inter_dims[2]), inter_dims[2])
+        self.lay4 = nn.Conv2d(inter_dims[2], inter_dims[3], 3, padding=1)
+        self.gn4 = nn.GroupNorm(min(8, inter_dims[3]), inter_dims[3])
+        self.lay5 = nn.Conv2d(inter_dims[3], inter_dims[4], 3, padding=1)
+        self.gn5 = nn.GroupNorm(min(8, inter_dims[4]), inter_dims[4])
+        self.out_lay = nn.Conv2d(inter_dims[4], 1, 3, padding=1)
+
+        self.dim = dim
+
+        self.adapter1 = nn.Conv2d(fpn_dims[0], inter_dims[1], 1)
+        self.adapter2 = nn.Conv2d(fpn_dims[1], inter_dims[2], 1)
+        self.adapter3 = nn.Conv2d(fpn_dims[2], inter_dims[3], 1)
+
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                init.kaiming_uniform_(m.weight, a=1)
+                init.constant_(m.bias, 0)
+
+    def forward(self, x: torch.Tensor, bbox_mask: torch.Tensor, fpns: list[torch.Tensor]):
+        # here we concatenate x, the projected feature map, of shape (batch_size, d_model, height/32, width/32) with
+        # the bbox_mask = the attention maps of shape (batch_size, n_queries, n_heads, height/32, width/32).
+        # We expand the projected feature map to match the number of heads.
+        x = torch.cat([_expand(x, bbox_mask.shape[1]), bbox_mask.flatten(0, 1)], 1)
+
+        x = self.lay1(x)
+        x = self.gn1(x)
+        x = nn.functional.relu(x)
+        x = self.lay2(x)
+        x = self.gn2(x)
+        x = nn.functional.relu(x)
+
+        cur_fpn = self.adapter1(fpns[0])
+        if cur_fpn.size(0) != x.size(0):
+            cur_fpn = _expand(cur_fpn, x.size(0) // cur_fpn.size(0))
+        x = cur_fpn + nn.functional.interpolate(x, size=cur_fpn.shape[-2:], mode="nearest")
+        x = self.lay3(x)
+        x = self.gn3(x)
+        x = nn.functional.relu(x)
+
+        cur_fpn = self.adapter2(fpns[1])
+        if cur_fpn.size(0) != x.size(0):
+            cur_fpn = _expand(cur_fpn, x.size(0) // cur_fpn.size(0))
+        x = cur_fpn + nn.functional.interpolate(x, size=cur_fpn.shape[-2:], mode="nearest")
+        x = self.lay4(x)
+        x = self.gn4(x)
+        x = nn.functional.relu(x)
+
+        cur_fpn = self.adapter3(fpns[2])
+        if cur_fpn.size(0) != x.size(0):
+            cur_fpn = _expand(cur_fpn, x.size(0) // cur_fpn.size(0))
+        x = cur_fpn + nn.functional.interpolate(x, size=cur_fpn.shape[-2:], mode="nearest")
+        x = self.lay5(x)
+        x = self.gn5(x)
+        x = nn.functional.relu(x)
+
+        x = self.out_lay(x)
+        return x
+
+
+class DetrMHAttentionMap(nn.Module):
+    """This is a 2D attention module, which only returns the attention softmax (no multiplication by value)"""
+
+    def __init__(
+        self,
+        hidden_size: int,
+        num_attention_heads: int,
+        dropout: float = 0.0,
+        bias: bool = True,
+    ):
+        super().__init__()
+        self.head_dim = hidden_size // num_attention_heads
+        self.scaling = self.head_dim**-0.5
+        self.attention_dropout = dropout
+        self.dropout = nn.Dropout(dropout)
+
+        self.q_proj = nn.Linear(hidden_size, hidden_size, bias=bias)
+        self.k_proj = nn.Linear(hidden_size, hidden_size, bias=bias)
+
+    def forward(
+        self, query_states: torch.Tensor, key_states: torch.Tensor, attention_mask: torch.Tensor | None = None
+    ):
+        query_hidden_shape = (*query_states.shape[:-1], -1, self.head_dim)
+        key_hidden_shape = (key_states.shape[0], -1, self.head_dim, *key_states.shape[-2:])
+
+        query_states = self.q_proj(query_states).view(query_hidden_shape)
+        key_states = nn.functional.conv2d(
+            key_states, self.k_proj.weight.unsqueeze(-1).unsqueeze(-1), self.k_proj.bias
+        ).view(key_hidden_shape)
+
+        # Compute attention weights: (b, q, n, c) @ (b, n, c, h*w) -> (b, q, n, h, w)
+        batch_size, num_queries, num_heads, head_dim = query_states.shape
+        _, _, _, height, width = key_states.shape
+
+        query = (
+            (query_states * self.scaling)
+            .permute(0, 2, 1, 3)
+            .contiguous()
+            .view(batch_size * num_heads, num_queries, head_dim)
+        )
+        key = key_states.permute(0, 1, 3, 4, 2).contiguous().view(batch_size * num_heads, height * width, head_dim)
+
+        attn_weights = (
+            torch.matmul(query, key.transpose(1, 2))
+            .view(batch_size, num_heads, num_queries, height, width)
+            .permute(0, 2, 1, 3, 4)
+        )
+
+        if attention_mask is not None:
+            attn_weights = attn_weights.masked_fill(
+                attention_mask.unsqueeze(1).unsqueeze(1), torch.finfo(attn_weights.dtype).min
+            )
+
+        attn_weights = nn.functional.softmax(attn_weights.flatten(2), dim=-1).view(attn_weights.size())
+        attn_weights = nn.functional.dropout(attn_weights, p=self.attention_dropout, training=self.training)
+
+        return attn_weights
+
+
 @auto_docstring
 class DetrPreTrainedModel(PreTrainedModel):
     config: DetrConfig
@@ -1518,134 +1662,6 @@ class DetrForSegmentation(DetrPreTrainedModel):
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
         )
-
-
-def _expand(tensor, length: int):
-    return tensor.unsqueeze(1).repeat(1, int(length), 1, 1, 1).flatten(0, 1)
-
-
-# taken from https://github.com/facebookresearch/detr/blob/master/models/segmentation.py
-class DetrMaskHeadSmallConv(nn.Module):
-    """
-    Simple convolutional head, using group norm. Upsampling is done using a FPN approach
-    """
-
-    def __init__(self, dim, fpn_dims, context_dim):
-        super().__init__()
-
-        if dim % 8 != 0:
-            raise ValueError(
-                "The hidden_size + number of attention heads must be divisible by 8 as the number of groups in"
-                " GroupNorm is set to 8"
-            )
-
-        inter_dims = [dim, context_dim // 2, context_dim // 4, context_dim // 8, context_dim // 16, context_dim // 64]
-
-        self.lay1 = nn.Conv2d(dim, dim, 3, padding=1)
-        self.gn1 = nn.GroupNorm(8, dim)
-        self.lay2 = nn.Conv2d(dim, inter_dims[1], 3, padding=1)
-        self.gn2 = nn.GroupNorm(min(8, inter_dims[1]), inter_dims[1])
-        self.lay3 = nn.Conv2d(inter_dims[1], inter_dims[2], 3, padding=1)
-        self.gn3 = nn.GroupNorm(min(8, inter_dims[2]), inter_dims[2])
-        self.lay4 = nn.Conv2d(inter_dims[2], inter_dims[3], 3, padding=1)
-        self.gn4 = nn.GroupNorm(min(8, inter_dims[3]), inter_dims[3])
-        self.lay5 = nn.Conv2d(inter_dims[3], inter_dims[4], 3, padding=1)
-        self.gn5 = nn.GroupNorm(min(8, inter_dims[4]), inter_dims[4])
-        self.out_lay = nn.Conv2d(inter_dims[4], 1, 3, padding=1)
-
-        self.dim = dim
-
-        self.adapter1 = nn.Conv2d(fpn_dims[0], inter_dims[1], 1)
-        self.adapter2 = nn.Conv2d(fpn_dims[1], inter_dims[2], 1)
-        self.adapter3 = nn.Conv2d(fpn_dims[2], inter_dims[3], 1)
-
-        for m in self.modules():
-            if isinstance(m, nn.Conv2d):
-                init.kaiming_uniform_(m.weight, a=1)
-                init.constant_(m.bias, 0)
-
-    def forward(self, x: torch.Tensor, bbox_mask: torch.Tensor, fpns: list[torch.Tensor]):
-        # here we concatenate x, the projected feature map, of shape (batch_size, d_model, height/32, width/32) with
-        # the bbox_mask = the attention maps of shape (batch_size, n_queries, n_heads, height/32, width/32).
-        # We expand the projected feature map to match the number of heads.
-        x = torch.cat([_expand(x, bbox_mask.shape[1]), bbox_mask.flatten(0, 1)], 1)
-
-        x = self.lay1(x)
-        x = self.gn1(x)
-        x = nn.functional.relu(x)
-        x = self.lay2(x)
-        x = self.gn2(x)
-        x = nn.functional.relu(x)
-
-        cur_fpn = self.adapter1(fpns[0])
-        if cur_fpn.size(0) != x.size(0):
-            cur_fpn = _expand(cur_fpn, x.size(0) // cur_fpn.size(0))
-        x = cur_fpn + nn.functional.interpolate(x, size=cur_fpn.shape[-2:], mode="nearest")
-        x = self.lay3(x)
-        x = self.gn3(x)
-        x = nn.functional.relu(x)
-
-        cur_fpn = self.adapter2(fpns[1])
-        if cur_fpn.size(0) != x.size(0):
-            cur_fpn = _expand(cur_fpn, x.size(0) // cur_fpn.size(0))
-        x = cur_fpn + nn.functional.interpolate(x, size=cur_fpn.shape[-2:], mode="nearest")
-        x = self.lay4(x)
-        x = self.gn4(x)
-        x = nn.functional.relu(x)
-
-        cur_fpn = self.adapter3(fpns[2])
-        if cur_fpn.size(0) != x.size(0):
-            cur_fpn = _expand(cur_fpn, x.size(0) // cur_fpn.size(0))
-        x = cur_fpn + nn.functional.interpolate(x, size=cur_fpn.shape[-2:], mode="nearest")
-        x = self.lay5(x)
-        x = self.gn5(x)
-        x = nn.functional.relu(x)
-
-        x = self.out_lay(x)
-        return x
-
-
-class DetrMHAttentionMap(nn.Module):
-    """This is a 2D attention module, which only returns the attention softmax (no multiplication by value)"""
-
-    def __init__(
-        self,
-        hidden_size: int,
-        num_attention_heads: int,
-        dropout: float = 0.0,
-        bias: bool = True,
-    ):
-        super().__init__()
-        self.head_dim = hidden_size // num_attention_heads
-        self.scaling = self.head_dim**-0.5
-        self.attention_dropout = dropout
-        self.dropout = nn.Dropout(dropout)
-
-        self.q_proj = nn.Linear(hidden_size, hidden_size, bias=bias)
-        self.k_proj = nn.Linear(hidden_size, hidden_size, bias=bias)
-
-    def forward(
-        self, query_states: torch.Tensor, key_states: torch.Tensor, attention_mask: torch.Tensor | None = None
-    ):
-        query_hidden_shape = (*query_states.shape[:-1], -1, self.head_dim)
-        key_hidden_shape = (key_states.shape[0], -1, self.head_dim, *key_states.shape[-2:])
-
-        query_states = self.q_proj(query_states).view(query_hidden_shape)
-        key_states = nn.functional.conv2d(
-            key_states, self.k_proj.weight.unsqueeze(-1).unsqueeze(-1), self.k_proj.bias
-        ).view(key_hidden_shape)
-
-        attn_weights = torch.einsum("bqnc,bnchw->bqnhw", query_states * self.scaling, key_states)
-
-        if attention_mask is not None:
-            attn_weights = attn_weights.masked_fill(
-                attention_mask.unsqueeze(1).unsqueeze(1), torch.finfo(attn_weights.dtype).min
-            )
-
-        attn_weights = nn.functional.softmax(attn_weights.flatten(2), dim=-1).view(attn_weights.size())
-        attn_weights = nn.functional.dropout(attn_weights, p=self.attention_dropout, training=self.training)
-
-        return attn_weights
 
 
 __all__ = [
