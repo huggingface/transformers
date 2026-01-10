@@ -393,6 +393,7 @@ class LwDetrAttention(nn.Module):
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
         self.is_causal = False
+        self.num_key_value_groups = 1
 
         self.q_proj = nn.Linear(
             config.d_model, config.decoder_self_attention_heads * self.head_dim, bias=config.attention_bias
