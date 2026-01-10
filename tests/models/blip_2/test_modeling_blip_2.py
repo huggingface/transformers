@@ -199,22 +199,6 @@ class Blip2VisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training(self):
         pass
 
-    @unittest.skip
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_true(self):
-        pass
-
     @slow
     def test_model_from_pretrained(self):
         model_name = "Salesforce/blip2-opt-2.7b"
@@ -1086,10 +1070,6 @@ class Blip2TextModelWithProjectionTest(ModelTesterMixin, unittest.TestCase):
     def test_training(self):
         pass
 
-    @unittest.skip(reason="Training is not yet supported")
-    def test_training_gradient_checkpointing(self):
-        pass
-
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):
         pass
@@ -1239,18 +1219,6 @@ class Blip2VisionModelWithProjectionTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="Training is not yet supported")
     def test_training(self):
-        pass
-
-    @unittest.skip(reason="Training is not yet supported")
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(reason="Training is not yet supported")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(reason="Training is not yet supported")
-    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     @unittest.skip(reason="Blip2VisionModelWithProjection does not use inputs_embeds")
@@ -1469,18 +1437,6 @@ class Blip2TextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="Training is not yet supported")
     def test_training(self):
-        pass
-
-    @unittest.skip(reason="Training is not yet supported")
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(reason="Training is not yet supported")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(reason="Training is not yet supported")
-    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
 

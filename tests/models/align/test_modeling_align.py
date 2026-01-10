@@ -332,17 +332,6 @@ class AlignTextModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training(self):
         pass
 
-    @unittest.skip("No loss in the output of AlignTextModel")
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip("No loss in the output of AlignTextModel")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip("No loss in the output of AlignTextModel")
-    def test_training_gradient_checkpointing_use_reentrant_true(self):
-        pass
 
     @unittest.skip(reason="ALIGN does not use inputs_embeds")
     def test_inputs_embeds(self):

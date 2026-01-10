@@ -176,17 +176,6 @@ class AltCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training(self):
         pass
 
-    @unittest.skip("No loss in the output of AltCLIPVisionModel")
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip("No loss in the output of AltCLIPVisionModel")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip("No loss in the output of AltCLIPVisionModel")
-    def test_training_gradient_checkpointing_use_reentrant_true(self):
-        pass
 
     @unittest.skip(reason="AltCLIPVisionModel use the same cv backbone with CLIP model.")
     def test_model_from_pretrained(self):
@@ -309,17 +298,6 @@ class AltCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training(self):
         pass
 
-    @unittest.skip("No loss in the output of AltCLIPTextModel")
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip("No loss in the output of AltCLIPTextModel")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip("No loss in the output of AltCLIPTextModel")
-    def test_training_gradient_checkpointing_use_reentrant_true(self):
-        pass
 
     def test_model_outputs_equivalence(self):
         pass

@@ -192,18 +192,6 @@ class BlipVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training(self):
         pass
 
-    @unittest.skip("No loss in the output of BlipVisionModel")
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip("No loss in the output of BlipVisionModel")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip("No loss in the output of BlipVisionModel")
-    def test_training_gradient_checkpointing_use_reentrant_true(self):
-        pass
-
     @slow
     def test_model_from_pretrained(self):
         model_name = "Salesforce/blip-vqa-base"

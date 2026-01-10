@@ -165,18 +165,6 @@ class EfficientLoFTRModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training(self):
         pass
 
-    @unittest.skip(reason="EfficientLoFTRForKeypointMatching is not trainable")
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(reason="EfficientLoFTRForKeypointMatching is not trainable")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(reason="EfficientLoFTRForKeypointMatching is not trainable")
-    def test_training_gradient_checkpointing_use_reentrant_true(self):
-        pass
-
     @unittest.skip(reason="EfficientLoFTR does not output any loss term in the forward pass")
     def test_retain_grad_hidden_states_attentions(self):
         pass

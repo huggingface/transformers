@@ -713,18 +713,6 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
             print(output_ids_generate)
             self.assertIsNotNone(output_ids_generate)
 
-    @unittest.skip(reason="The audio encoder has no gradients.")
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(reason="The audio encoder has no gradients.")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(reason="The audio encoder has no gradients.")
-    def test_training_gradient_checkpointing_use_reentrant_true(self):
-        pass
-
     def test_generate_from_input_values(self):
         for model_class in self.all_generative_model_classes:
             config, input_ids, _, _ = self._get_input_ids_and_config()

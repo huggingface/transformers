@@ -1508,18 +1508,6 @@ class T5GemmaEncoderOnlyModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training(self):
         pass
 
-    @unittest.skip("No loss in the output of T5GemmaEncoderModel")
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip("No loss in the output of T5GemmaEncoderModel")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip("No loss in the output of T5GemmaEncoderModel")
-    def test_training_gradient_checkpointing_use_reentrant_true(self):
-        pass
-
     # Based on tests.test_modeling_common.ModelTesterMixin.test_flex_attention_with_grads
     # Update hidden size for encoder
     @require_torch_accelerator

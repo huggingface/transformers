@@ -208,18 +208,6 @@ class Phi4MultimodalModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.
         self.model_tester = Phi4MultimodalModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Phi4MultimodalConfig)
 
-    @unittest.skip(reason="Depending on input modalities, some params may not have gradients")
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(reason="Depending on input modalities, some params may not have gradients")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(reason="Depending on input modalities, some params may not have gradients")
-    def test_training_gradient_checkpointing_use_reentrant_true(self):
-        pass
-
     @unittest.skip(reason="Test tries to instantiate dynamic cache with an arg")
     def test_multi_gpu_data_parallel_forward(self):
         pass

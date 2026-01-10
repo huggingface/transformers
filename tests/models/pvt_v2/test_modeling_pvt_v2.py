@@ -175,19 +175,6 @@ class PvtV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_model_get_set_embeddings(self):
         pass
 
-    def test_training_gradient_checkpointing(self):
-        # Scenario - 1 default behaviour
-        self.check_training_gradient_checkpointing()
-
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        # Scenario - 2 with `use_reentrant=False` - this is the default value that is used in pytorch's
-        # torch.utils.checkpoint.checkpoint
-        self.check_training_gradient_checkpointing(gradient_checkpointing_kwargs={"use_reentrant": False})
-
-    def test_training_gradient_checkpointing_use_reentrant_true(self):
-        # Scenario - 3 with `use_reentrant=True` (old default behaviour, not recommended)
-        self.check_training_gradient_checkpointing(gradient_checkpointing_kwargs={"use_reentrant": True})
-
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
             model = model_class(config)

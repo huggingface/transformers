@@ -284,7 +284,7 @@ class PerceptionLMForConditionalGenerationModelTest(ModelTesterMixin, Generation
 
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         self.all_model_classes = (PerceptionLMForConditionalGeneration,) if is_torch_available() else ()
-        super().test_training_gradient_checkpointing_use_reentrant()
+        super().test_training_gradient_checkpointing_use_reentrant_false()
 
     def test_training_gradient_checkpointing_use_reentrant_true(self):
         self.all_model_classes = (PerceptionLMForConditionalGeneration,) if is_torch_available() else ()

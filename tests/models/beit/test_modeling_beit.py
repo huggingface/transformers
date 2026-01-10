@@ -369,14 +369,6 @@ class BeitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             loss = model(**inputs).loss
             loss.backward()
 
-    @unittest.skip("No loss in the output of BeitForMaskedImageModeling")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip("No loss in the output of BeitForMaskedImageModeling")
-    def test_training_gradient_checkpointing_use_reentrant_true(self):
-        pass
-
     @slow
     def test_model_from_pretrained(self):
         model_name = "microsoft/beit-base-patch16-224"

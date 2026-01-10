@@ -255,22 +255,6 @@ class CLIPVisionModelTest(CLIPModelTesterMixin, unittest.TestCase):
     def test_training(self):
         pass
 
-    @unittest.skip
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_true(self):
-        pass
-
     @slow
     def test_model_from_pretrained(self):
         model_name = "openai/clip-vit-base-patch32"
@@ -415,22 +399,6 @@ class CLIPTextModelTest(CLIPModelTesterMixin, unittest.TestCase):
 
     @unittest.skip
     def test_training(self):
-        pass
-
-    @unittest.skip
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     @unittest.skip(reason="CLIP does not use inputs_embeds")
@@ -635,18 +603,6 @@ class CLIPForImageClassificationModelTest(CLIPModelTesterMixin, PipelineTesterMi
 
     @unittest.skip(reason="CLIPForImageClassification does not support inputs_embeds")
     def test_model_get_set_embeddings(self):
-        pass
-
-    @unittest.skip(reason="CLIPForImageClassification does not support gradient checkpointing yet")
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(reason="CLIPForImageClassification does not support gradient checkpointing yet")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(reason="CLIPForImageClassification does not support gradient checkpointing yet")
-    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)

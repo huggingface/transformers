@@ -188,22 +188,6 @@ class Pix2StructVisionModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(reason="Training is tested directly on `Pix2StructTextImageModelTest`")
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_true(self):
-        pass
-
-    @unittest.skip(reason="Training is tested directly on `Pix2StructTextImageModelTest`")
     def test_retain_grad_hidden_states_attentions(self):
         pass
 
@@ -323,22 +307,6 @@ class Pix2StructTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="Training is tested directly on `Pix2StructTextImageModelTest`")
     def test_training(self):
-        pass
-
-    @unittest.skip(reason="Training is tested directly on `Pix2StructTextImageModelTest`")
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     @unittest.skip(reason="Pix2Struct does not use inputs_embeds")

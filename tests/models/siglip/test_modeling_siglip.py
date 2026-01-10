@@ -241,18 +241,6 @@ class SiglipVisionModelTest(SiglipModelTesterMixin, unittest.TestCase):
     def test_training(self):
         pass
 
-    @unittest.skip(reason="SiglipVisionModel does not support standalone training")
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(reason="SiglipVisionModel does not support standalone training")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(reason="SiglipVisionModel does not support standalone training")
-    def test_training_gradient_checkpointing_use_reentrant_true(self):
-        pass
-
     @slow
     def test_model_from_pretrained(self):
         model_name = "google/siglip-base-patch16-224"
@@ -374,18 +362,6 @@ class SiglipTextModelTest(SiglipModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="SiglipTextModel does not support standalone training")
     def test_training(self):
-        pass
-
-    @unittest.skip(reason="SiglipTextModel does not support standalone training")
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(reason="SiglipTextModel does not support standalone training")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(reason="SiglipTextModel does not support standalone training")
-    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     @unittest.skip(reason="Siglip does not use inputs_embeds")
@@ -567,18 +543,6 @@ class SiglipForImageClassificationModelTest(SiglipModelTesterMixin, PipelineTest
 
     @unittest.skip(reason="SiglipForImageClassification does not support inputs_embeds")
     def test_model_get_set_embeddings(self):
-        pass
-
-    @unittest.skip(reason="SiglipForImageClassification does not support gradient checkpointing yet")
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(reason="SiglipForImageClassification does not support gradient checkpointing yet")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(reason="SiglipForImageClassification does not support gradient checkpointing yet")
-    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
 

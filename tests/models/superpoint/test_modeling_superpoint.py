@@ -151,18 +151,6 @@ class SuperPointModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training(self):
         pass
 
-    @unittest.skip(reason="SuperPointForKeypointDetection does not support training")
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(reason="SuperPointForKeypointDetection does not support training")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(reason="SuperPointForKeypointDetection does not support training")
-    def test_training_gradient_checkpointing_use_reentrant_true(self):
-        pass
-
     @unittest.skip(reason="SuperPoint does not output any loss term in the forward pass")
     def test_retain_grad_hidden_states_attentions(self):
         pass

@@ -177,18 +177,6 @@ class ZoeDepthModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     def test_training(self):
         pass
 
-    @unittest.skip(reason="ZoeDepth does not support training yet")
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(reason="ZoeDepth does not support training yet")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(reason="ZoeDepth does not support training yet")
-    def test_training_gradient_checkpointing_use_reentrant_true(self):
-        pass
-
     @slow
     def test_model_from_pretrained(self):
         model_name = "Intel/zoedepth-nyu"

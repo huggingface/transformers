@@ -218,18 +218,6 @@ class Lfm2VlModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
     def test_sdpa_can_compile_dynamic(self):
         pass
 
-    @unittest.skip(reason="Backbone Siglip2VisionModel does not support standalone training")
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(reason="Backbone Siglip2VisionModel does not support standalone training")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(reason="Backbone Siglip2VisionModel does not support standalone training")
-    def test_training_gradient_checkpointing_use_reentrant_true(self):
-        pass
-
 
 @require_torch_accelerator
 @require_read_token
