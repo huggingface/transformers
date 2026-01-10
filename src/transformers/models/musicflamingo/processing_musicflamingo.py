@@ -152,7 +152,7 @@ class MusicFlamingoProcessor(ProcessorMixin):
 
             per_sample_windows: list[int] = []
             flat_chunks: list[np.ndarray] = []
-            audio_times_list: list[float] = []
+            audio_times_list: list[torch.Tensor] = []
 
             for audio_el in audio:
                 n_samples = int(audio_el.shape[0])
@@ -170,8 +170,11 @@ class MusicFlamingoProcessor(ProcessorMixin):
                     end = min((i + 1) * window_size, time_cap)
                     flat_chunks.append(audio_el[start:end])
                     # Calculate the start time of this audio chunk in seconds
-                    audio_start_time = start / audio_kwargs["sampling_rate"]
-                    audio_times_list.append(audio_start_time)
+                    start_sec = start / audio_kwargs["sampling_rate"]
+
+                    # Generate 750 timestamps at 40ms intervals (30s / 750 = 0.04s)
+                    chunk_times = torch.arange(750).float() * 0.04 + start_sec
+                    audio_times_list.append(chunk_times)
 
             # Feature extraction
             audio_inputs = self.feature_extractor(flat_chunks, **audio_kwargs)
@@ -180,7 +183,7 @@ class MusicFlamingoProcessor(ProcessorMixin):
 
             # Add audio times as tensor
             if return_tensors == "pt":
-                audio_inputs["audio_times"] = torch.tensor(audio_times_list, dtype=torch.float32)
+                audio_inputs["audio_times"] = torch.stack(audio_times_list).to(dtype=torch.float32)
 
             # Compute sequence lengths token counting
             audio_lengths = torch.stack([s.sum() for s in torch.split(padding_mask.sum(-1), per_sample_windows)])

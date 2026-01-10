@@ -55,7 +55,10 @@ def apply_rotary_emb(freqs, t, start_index=0, scale=1.0, seq_dim=-2):
     t = t.to(embed_dtype)
     if t.ndim == 3:
         seq_len = t.shape[seq_dim]
-        freqs = freqs[-seq_len:].to(t)
+        if freqs.ndim == 2:
+            freqs = freqs[-seq_len:].to(t)
+        else:
+            freqs = freqs.to(t)
 
     rot_dim = freqs.shape[-1]
     end_index = start_index + rot_dim

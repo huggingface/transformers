@@ -17,7 +17,6 @@
 from math import pi
 from typing import Optional, Union
 
-import numpy as np
 import torch
 from torch import nn
 
@@ -150,14 +149,16 @@ class MusicFlamingoEncoder(AudioFlamingo3Encoder):
         hidden_states = self.layer_norm(hidden_states)
 
         if audio_times is not None:
-            times = audio_times.to(hidden_states.device)
-            freqs = self.pos_emb.get_axial_freqs(times.shape[0], hidden_states.shape[-2]).to(self.conv1.weight.device)
-            angle = (-times * 2 * np.pi).to(self.conv1.weight.device)
-            # audio_times is [batch_size], need to expand to [batch_size, seq_len, freq_dim]
-            angle_expanded = (
-                angle.unsqueeze(1).unsqueeze(2).expand(times.shape[0], hidden_states.shape[-2], freqs.shape[-1])
-            )
-            freqs = freqs * angle_expanded
+            # Ensure audio_times is on correct device once
+            # We use pos_emb device because RotaryEmbedding.forward requires inputs on same device as parameters
+            device = self.pos_emb.freqs.device
+            dtype = hidden_states.dtype
+            audio_times = audio_times.to(device=device, dtype=dtype)
+
+            # Compute rotary embeddings directly from absolute times
+            # pos_emb(t) computes frequencies for t
+            freqs = self.pos_emb(audio_times)
+
             hidden_states = apply_rotary_emb(freqs, hidden_states)
 
         return BaseModelOutput(last_hidden_state=hidden_states)
