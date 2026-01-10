@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,51 +17,21 @@ Image/Text processor class for CLIPSeg
 
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
+from ...utils import auto_docstring
 
 
+@auto_docstring
 class CLIPSegProcessor(ProcessorMixin):
-    r"""
-    Constructs a CLIPSeg processor which wraps a CLIPSeg image processor and a CLIP tokenizer into a single processor.
-
-    [`CLIPSegProcessor`] offers all the functionalities of [`ViTImageProcessor`] and [`CLIPTokenizerFast`]. See the
-    [`~CLIPSegProcessor.__call__`] and [`~CLIPSegProcessor.decode`] for more information.
-
-    Args:
-        image_processor ([`ViTImageProcessor`], *optional*):
-            The image processor is a required input.
-        tokenizer ([`CLIPTokenizerFast`], *optional*):
-            The tokenizer is a required input.
-    """
-
     def __init__(self, image_processor=None, tokenizer=None, **kwargs):
         super().__init__(image_processor, tokenizer)
 
+    @auto_docstring
     def __call__(self, text=None, images=None, visual_prompt=None, return_tensors=None, **kwargs):
-        """
-        Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
-        and `kwargs` arguments to CLIPTokenizerFast's [`~CLIPTokenizerFast.__call__`] if `text` is not `None` to encode
-        the text. To prepare the image(s), this method forwards the `images` and `kwargs` arguments to
-        ViTImageProcessor's [`~ViTImageProcessor.__call__`] if `images` is not `None`. Please refer to the docstring of
-        the above two methods for more information.
-
-        Args:
-            text (`str`, `list[str]`, `list[list[str]]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. Both channels-first and channels-last formats are supported.
-            visual_prompt (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
-                The visual prompt image or batch of images to be prepared. Each visual prompt image can be a PIL image,
-                NumPy array or PyTorch tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape
-                (C, H, W), where C is a number of channels, H and W are image height and width.
-
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
+        r"""
+        visual_prompt (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
+            The visual prompt image or batch of images to be prepared. Each visual prompt image can be a PIL image,
+            NumPy array or PyTorch tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape
+            (C, H, W), where C is a number of channels, H and W are image height and width.
 
         Returns:
             [`BatchEncoding`]: A [`BatchEncoding`] with the following fields:
