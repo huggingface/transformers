@@ -644,11 +644,23 @@ class MusicFlamingoForConditionalGeneration(MusicFlamingoPreTrainedModel, Genera
         return outputs
 
     def prepare_inputs_for_generation(self, *args, **kwargs):
+        # Overwritten -- we should not pass input_features when we are in cached decoding stage
+
+        input_features = kwargs.pop("input_features", None)
+        input_features_mask = kwargs.pop("input_features_mask", None)
         audio_times = kwargs.pop("audio_times", None)
+        cache_position = kwargs.get("cache_position")
+
         model_inputs = super().prepare_inputs_for_generation(*args, **kwargs)
 
-        if "input_features" in model_inputs and audio_times is not None:
-            model_inputs["audio_times"] = audio_times
+        if cache_position is not None and cache_position[0] == 0:
+            # input_features should only be passed when we are not in cached decoding stage
+            if input_features is not None:
+                model_inputs["input_features"] = input_features
+            if input_features_mask is not None:
+                model_inputs["input_features_mask"] = input_features_mask
+            if audio_times is not None:
+                model_inputs["audio_times"] = audio_times
 
         return model_inputs
 
