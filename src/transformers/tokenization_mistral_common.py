@@ -735,9 +735,7 @@ class MistralCommonBackend(PushToHubMixin):
             if segment in all_special_tokens_set:
                 token_ids.append(self._special_token_to_id(segment))
             else:
-                segment_ids = self.tokenizer.instruct_tokenizer.tokenizer.encode(
-                    segment, bos=False, eos=False
-                )
+                segment_ids = self.tokenizer.instruct_tokenizer.tokenizer.encode(segment, bos=False, eos=False)
                 token_ids.extend(segment_ids)
 
         if add_special_tokens:

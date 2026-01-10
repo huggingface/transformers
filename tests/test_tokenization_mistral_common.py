@@ -2146,7 +2146,9 @@ class TestMistralCommonBackend(unittest.TestCase):
             # Case 1: Special token alone
             tokens = self.tokenizer.encode(special_token, add_special_tokens=False)
             self.assertEqual(len(tokens), 1, f"Failed: {special_token} was split into {len(tokens)} tokens: {tokens}")
-            self.assertEqual(tokens[0], special_token_id, f"Failed: Token ID mismatch. Expected {special_token_id}, got {tokens[0]}")
+            self.assertEqual(
+                tokens[0], special_token_id, f"Failed: Token ID mismatch. Expected {special_token_id}, got {tokens[0]}"
+            )
 
             # Case 2: check with add_special_tokens=True
             tokens_with_special = self.tokenizer.encode(special_token, add_special_tokens=True)
