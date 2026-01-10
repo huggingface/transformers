@@ -164,13 +164,10 @@ def _build_checkpoint_conversion_mapping():
             ),
         ],
         "detr": [
-            WeightRenaming("model.backbone.conv_encoder", "model.backbone"),
+            WeightRenaming("backbone.conv_encoder", "backbone"),
             WeightRenaming("out_proj", "o_proj"),
-            WeightRenaming("bbox_attention.q_linear", "bbox_attention.q_proj"),
-            WeightRenaming("bbox_attention.k_linear", "bbox_attention.k_proj"),
-            WeightRenaming(r"(\d+)\.fc1", r"\1.mlp.fc1"),
-            WeightRenaming(r"(\d+)\.fc2", r"\1.mlp.fc2"),
-            WeightRenaming(r"(\d+)\.fc1", r"\1.mlp.fc1"),
+            WeightRenaming(r"layers.(\d+).fc1", r"layers.\1.mlp.fc1"),
+            WeightRenaming(r"layers.(\d+).fc2", r"layers.\1.mlp.fc2"),
         ],
         "jamba": [
             WeightConverter(
@@ -297,6 +294,7 @@ VLMS = [
     "sam3_tracker_video",
     "paddleocrvl",
     "ernie4_5_vl_moe",
+    "detr",
 ]
 
 

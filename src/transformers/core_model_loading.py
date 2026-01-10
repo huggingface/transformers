@@ -460,6 +460,10 @@ class WeightTransform:
         # Due to how our `_checkpoint_conversion_mapping` mappings are written, we need a few exceptions here
         # when instantiating the reverse mapping (i.e. the targets become sources, and sources become targets)
         # The issues lie in the sources usually, so here we need to check the targets for the reversed mapping
+
+        # Process target_patterns: detect capturing groups and replace with \1
+        # Store the original capturing group patterns for reverse mapping
+        target_capturing_groups: list[str | None] = []
         for i, pattern in enumerate(self.target_patterns):
             # Some mapping contains `^` to notify start of string when matching -> remove it during reverse mapping
             pattern = pattern.removeprefix("^")
@@ -469,14 +473,30 @@ class WeightTransform:
             # Qwen2.5, Sam3, Ernie4.5 VL MoE!
             pattern = re.sub(r"\(\?.+\)", "", pattern)
             # Allow capturing groups in patterns, i.e. to add/remove a prefix to all keys (e.g. timm_wrapper, sam3)
-            if r"(.+)" in pattern:
-                pattern = pattern.replace(r"(.+)", r"\1")
+            # Detect any capturing group pattern (not just (.+) or (\d+), but any pattern like ([a-z]+), etc.)
+            capturing_group_match = re.search(r"\([^)]+\)", pattern)
+            if capturing_group_match:
+                original_group = capturing_group_match.group(0)
+                target_capturing_groups.append(original_group)
+                pattern = pattern.replace(original_group, r"\1", 1)
+            else:
+                target_capturing_groups.append(None)
             self.target_patterns[i] = pattern
 
         # We also need to check capturing groups in the sources during reverse mapping (e.g. timm_wrapper, sam3)
+        # When reversing, target_patterns become source_patterns, so we need to restore the original capturing group
+        # In reverse mode: source_patterns (with \1) came from old target_patterns
+        #                 target_patterns (with original group) are the old source_patterns
+        # So we use the stored capturing group from target_patterns to restore \1 in source_patterns
         for i, pattern in enumerate(self.source_patterns):
             if r"\1" in pattern:
-                pattern = pattern.replace(r"\1", r"(.+)")
+                # Use the stored capturing group from target_patterns, or default to (.+)
+                original_group = (
+                    target_capturing_groups[i]
+                    if i < len(target_capturing_groups) and target_capturing_groups[i] is not None
+                    else r"(.+)"
+                )
+                pattern = pattern.replace(r"\1", original_group, 1)
             self.source_patterns[i] = pattern
 
         # Construct the regex we will use to rename keys from the sources to the targets
