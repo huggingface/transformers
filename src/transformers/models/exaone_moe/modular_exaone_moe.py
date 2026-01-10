@@ -22,7 +22,7 @@ import torch.nn as nn
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache
-from ...configuration_utils import layer_type_validation
+from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
@@ -72,7 +72,7 @@ class ExaoneMoEConfig(Exaone4Config):
         sliding_window_pattern=4,
         is_moe_layer=None,
         layer_types=None,
-        first_last_k_dense_replace=2,
+        first_k_dense_replace=1,
         moe_intermediate_size=1024,
         num_experts=64,
         num_experts_per_tok=8,
@@ -97,6 +97,7 @@ class ExaoneMoEConfig(Exaone4Config):
         self.attention_dropout = attention_dropout
         self.sliding_window = sliding_window
         self.sliding_window_pattern = sliding_window_pattern
+        self.first_k_dense_replace = first_k_dense_replace
         self.moe_intermediate_size = moe_intermediate_size
         self.num_experts = num_experts
         self.num_experts_per_tok = num_experts_per_tok
@@ -109,7 +110,9 @@ class ExaoneMoEConfig(Exaone4Config):
 
         self.is_moe_layer = is_moe_layer
         if self.is_moe_layer is None:
-            self.is_moe_layer = [0] + [1] * (self.num_hidden_layers - 1)
+            self.is_moe_layer = [0] * self.first_k_dense_replace + [1] * (
+                self.num_hidden_layers - self.first_k_dense_replace
+            )
 
         self.layer_types = layer_types
         if self.sliding_window is None:
@@ -121,11 +124,11 @@ class ExaoneMoEConfig(Exaone4Config):
                 else "full_attention"
                 for i in range(self.num_hidden_layers)
             ]
-        if "sliding_window" in self.layer_types:
+        if "sliding_attention" in self.layer_types:
             self.cache_implementation = "hybrid"
         layer_type_validation(self.layer_types)
 
-        super().__init__(
+        PreTrainedConfig.__init__(
             bos_token_id=bos_token_id, eos_token_id=eos_token_id, tie_word_embeddings=tie_word_embeddings, **kwargs
         )
 
