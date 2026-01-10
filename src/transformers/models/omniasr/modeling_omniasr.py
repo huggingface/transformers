@@ -248,6 +248,7 @@ class OmniASRGroupNormConvLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
+# TODO use pos_encoder_depth? or always set to 1?
 class OmniASRPositionalConvEmbedding(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -258,26 +259,6 @@ class OmniASRPositionalConvEmbedding(nn.Module):
             padding=config.num_conv_pos_embeddings // 2,
             groups=config.num_conv_pos_embedding_groups,
         )
-
-        weight_norm = nn.utils.weight_norm
-        if hasattr(nn.utils.parametrizations, "weight_norm"):
-            weight_norm = nn.utils.parametrizations.weight_norm
-
-        if is_deepspeed_zero3_enabled():
-            import deepspeed
-
-            with deepspeed.zero.GatheredParameters(self.conv.weight, modifier_rank=0):
-                self.conv = weight_norm(self.conv, name="weight", dim=2)
-            if hasattr(self.conv, "parametrizations"):
-                weight_g = self.conv.parametrizations.weight.original0
-                weight_v = self.conv.parametrizations.weight.original1
-            else:
-                weight_g = self.conv.weight_g
-                weight_v = self.conv.weight_v
-            deepspeed.zero.register_external_parameter(self, weight_v)
-            deepspeed.zero.register_external_parameter(self, weight_g)
-        else:
-            self.conv = weight_norm(self.conv, name="weight", dim=2)
 
         self.padding = OmniASRSamePadLayer(config.num_conv_pos_embeddings)
         self.activation = ACT2FN[config.feat_extract_activation]
@@ -310,7 +291,7 @@ class OmniASRFeatureEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        # TODO remove group?
+        # TODO remove group? "layer" used by CTC
         if config.feat_extract_norm == "group":
             conv_layers = [OmniASRGroupNormConvLayer(config, layer_id=0)] + [
                 OmniASRNoLayerNormConvLayer(config, layer_id=i + 1) for i in range(config.num_feat_extract_layers - 1)
@@ -471,34 +452,10 @@ class OmniASRAttention(nn.Module):
         return attn_output, attn_weights, None
 
 
-class OmniASRFeedForward(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.intermediate_dropout = nn.Dropout(config.activation_dropout)
-
-        self.intermediate_dense = nn.Linear(config.hidden_size, config.intermediate_size)
-        if isinstance(config.hidden_act, str):
-            self.intermediate_act_fn = ACT2FN[config.hidden_act]
-        else:
-            self.intermediate_act_fn = config.hidden_act
-
-        self.output_dense = nn.Linear(config.intermediate_size, config.hidden_size)
-        self.output_dropout = nn.Dropout(config.hidden_dropout)
-
-    def forward(self, hidden_states):
-        hidden_states = self.intermediate_dense(hidden_states)
-        hidden_states = self.intermediate_act_fn(hidden_states)
-        hidden_states = self.intermediate_dropout(hidden_states)
-
-        hidden_states = self.output_dense(hidden_states)
-        hidden_states = self.output_dropout(hidden_states)
-        return hidden_states
-
-
 class OmniASREncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
-        self.attention = OmniASRAttention(
+        self.self_attn = OmniASRAttention(
             embed_dim=config.hidden_size,
             num_heads=config.num_attention_heads,
             dropout=config.attention_dropout,
@@ -508,19 +465,19 @@ class OmniASREncoderLayer(GradientCheckpointingLayer):
 
         self.dropout = nn.Dropout(config.hidden_dropout)
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.feed_forward = OmniASRFeedForward(config)
+        self.ffn = OmniASRFeedForward(config)
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
     def forward(self, hidden_states, attention_mask=None, output_attentions=False):
         attn_residual = hidden_states
-        hidden_states, attn_weights, _ = self.attention(
+        hidden_states, attn_weights, _ = self.self_attn(
             hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
         )
         hidden_states = self.dropout(hidden_states)
         hidden_states = attn_residual + hidden_states
 
         hidden_states = self.layer_norm(hidden_states)
-        hidden_states = hidden_states + self.feed_forward(hidden_states)
+        hidden_states = hidden_states + self.ffn(hidden_states)
         hidden_states = self.final_layer_norm(hidden_states)
 
         outputs = (hidden_states,)
@@ -531,134 +488,113 @@ class OmniASREncoderLayer(GradientCheckpointingLayer):
         return outputs
 
 
-class OmniASREncoderLayerStableLayerNorm(GradientCheckpointingLayer):
+# See Wav2Vec2BertRelPositionalEmbedding, TODO maybe not needed here 
+class OmniASRRelPositionalEmbedding(nn.Module):
+    """Relative positional encoding module."""
+
     def __init__(self, config):
         super().__init__()
-        self.attention = OmniASRAttention(
-            embed_dim=config.hidden_size,
-            num_heads=config.num_attention_heads,
-            dropout=config.attention_dropout,
-            is_decoder=False,
-            config=config,
+        self.max_len = config.max_source_positions
+        self.d_model = config.hidden_size
+        self.register_buffer("pe", self.extend_pe(torch.tensor(0.0).expand(1, self.max_len)), persistent=False)
+
+    def extend_pe(self, x, pe=None):
+        # Reset the positional encodings
+        if pe is not None:
+            # self.pe contains both positive and negative parts
+            # the length of self.pe is 2 * input_len - 1
+            if pe.size(1) >= x.size(1) * 2 - 1:
+                if pe.dtype != x.dtype or pe.device != x.device:
+                    pe = pe.to(dtype=x.dtype, device=x.device)
+                return pe
+        # Suppose `i` is the position of query vector and `j` is the
+        # position of key vector. We use positive relative positions when keys
+        # are to the left (i>j) and negative relative positions otherwise (i<j).
+        pe_positive = torch.zeros(x.size(1), self.d_model)
+        pe_negative = torch.zeros(x.size(1), self.d_model)
+        position = torch.arange(0, x.size(1), dtype=torch.int64).float().unsqueeze(1)
+        div_term = torch.exp(
+            torch.arange(0, self.d_model, 2, dtype=torch.int64).float() * -(math.log(10000.0) / self.d_model)
         )
-        self.dropout = nn.Dropout(config.hidden_dropout)
-        self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.feed_forward = OmniASRFeedForward(config)
-        self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        pe_positive[:, 0::2] = torch.sin(position * div_term)
+        pe_positive[:, 1::2] = torch.cos(position * div_term)
+        pe_negative[:, 0::2] = torch.sin(-1 * position * div_term)
+        pe_negative[:, 1::2] = torch.cos(-1 * position * div_term)
 
-        if getattr(config, "adapter_attn_dim", None) is not None:
-            self.adapter_layer = OmniASRAttnAdapterLayer(config)
-        else:
-            self.adapter_layer = None
+        # Reverse the order of positive indices and concat both positive and
+        # negative indices. This is used to support the shifting trick
+        # as in https://huggingface.co/papers/1901.02860
+        pe_positive = torch.flip(pe_positive, [0]).unsqueeze(0)
+        pe_negative = pe_negative[1:].unsqueeze(0)
+        pe = torch.cat([pe_positive, pe_negative], dim=1)
+        return pe.to(device=x.device, dtype=x.dtype)
 
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-    ):
-        attn_residual = hidden_states
-        hidden_states = self.layer_norm(hidden_states)
-        hidden_states, attn_weights, _ = self.attention(
-            hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
-        )
-        hidden_states = self.dropout(hidden_states)
-        hidden_states = attn_residual + hidden_states
-        hidden_states = hidden_states + self.feed_forward(self.final_layer_norm(hidden_states))
+    def forward(self, hidden_states: torch.Tensor):
+        self.pe = self.extend_pe(hidden_states, self.pe)
+        start_idx = self.pe.size(1) // 2 - hidden_states.size(1) + 1
+        end_idx = self.pe.size(1) // 2 + hidden_states.size(1)
+        relative_position_embeddings = self.pe[:, start_idx:end_idx]
 
-        if self.adapter_layer is not None:
-            hidden_states = hidden_states + self.adapter_layer(hidden_states)
-
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (attn_weights,)
-
-        return outputs
+        return relative_position_embeddings
 
 
+# See Wav2Vec2BertRotaryPositionalEmbedding, TODO maybe not needed here 
+class OmniASRRotaryPositionalEmbedding(nn.Module):
+    """Rotary positional embedding
+    Reference : https://blog.eleuther.ai/rotary-embeddings/ Paper: https://huggingface.co/papers/2104.09864
+    """
+
+    def __init__(self, config):
+        super().__init__()
+        dim = config.hidden_size // config.num_attention_heads
+        base = config.rotary_embedding_base
+
+        inv_freq = 1.0 / (base ** (torch.arange(0, dim, 2, dtype=torch.int64).float() / dim))
+        # Ignore copy
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.cached_sequence_length = None
+        self.cached_rotary_positional_embedding = None
+
+    def forward(self, hidden_states):
+        sequence_length = hidden_states.shape[1]
+
+        if sequence_length == self.cached_sequence_length and self.cached_rotary_positional_embedding is not None:
+            return self.cached_rotary_positional_embedding
+
+        self.cached_sequence_length = sequence_length
+        # Embeddings are computed in the dtype of the inv_freq constant
+        time_stamps = torch.arange(sequence_length).type_as(self.inv_freq)
+        freqs = torch.einsum("i,j->ij", time_stamps, self.inv_freq)
+        embeddings = torch.cat((freqs, freqs), dim=-1)
+
+        cos_embeddings = embeddings.cos()[:, None, None, :]
+        sin_embeddings = embeddings.sin()[:, None, None, :]
+        # Computed embeddings are cast to the dtype of the hidden state inputs
+        self.cached_rotary_positional_embedding = torch.stack([cos_embeddings, sin_embeddings]).type_as(hidden_states)
+        return self.cached_rotary_positional_embedding
+
+
+# see Wav2Vec2BertEncoder
 class OmniASREncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.pos_conv_embed = OmniASRPositionalConvEmbedding(config)
-        self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+
+        # self.pos_conv_embed = OmniASRPositionalConvEmbedding(config)  # Wav2vec2
+        # below is like in Wav2Vec2BertEncoder
+        if config.position_embeddings_type == "relative":
+            self.embed_positions = OmniASRRelPositionalEmbedding(config)
+        elif config.position_embeddings_type == "rotary":
+            self.embed_positions = OmniASRRotaryPositionalEmbedding(config)
+        elif config.position_embeddings_type == "conv":
+            self.embed_positions = OmniASRPositionalConvEmbedding(config)
+        else:
+            self.embed_positions = None
+
+        # NOTE (ebezzam) layer_norm was commented before
+        self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)  # Wav2vec2 applies here, while Wav2Vec2Bert applies within layers?
         self.dropout = nn.Dropout(config.hidden_dropout)
         self.layers = nn.ModuleList([OmniASREncoderLayer(config) for _ in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
-
-    def forward(
-        self,
-        hidden_states: torch.tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: bool = False,
-        output_hidden_states: bool = False,
-        return_dict: bool = True,
-    ):
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attentions = () if output_attentions else None
-
-        if attention_mask is not None:
-            # make sure padded tokens output 0
-            expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
-            hidden_states[~expand_attention_mask] = 0
-
-        attention_mask = create_bidirectional_mask(
-            config=self.config,
-            input_embeds=hidden_states,
-            attention_mask=attention_mask,
-        )
-
-        position_embeddings = self.pos_conv_embed(hidden_states)
-        hidden_states = hidden_states + position_embeddings
-        hidden_states = self.layer_norm(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-
-        synced_gpus = is_deepspeed_zero3_enabled() or is_fsdp_managed_module(self)
-
-        for layer in self.layers:
-            if output_hidden_states:
-                all_hidden_states = all_hidden_states + (hidden_states,)
-
-            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
-            dropout_probability = torch.rand([])
-
-            skip_the_layer = self.training and dropout_probability < self.config.layerdrop
-            if not skip_the_layer or synced_gpus:
-                # under fsdp or deepspeed zero3 all gpus must run in sync
-                layer_outputs = layer(
-                    hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
-                )
-                hidden_states = layer_outputs[0]
-
-            if skip_the_layer:
-                layer_outputs = (None, None)
-
-            if output_attentions:
-                all_self_attentions = all_self_attentions + (layer_outputs[1],)
-
-        if output_hidden_states:
-            all_hidden_states = all_hidden_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
-        return BaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attentions,
-        )
-
-
-class OmniASREncoderStableLayerNorm(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.pos_conv_embed = OmniASRPositionalConvEmbedding(config)
-        self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.dropout = nn.Dropout(config.hidden_dropout)
-        self.layers = nn.ModuleList(
-            [OmniASREncoderLayerStableLayerNorm(config) for _ in range(config.num_hidden_layers)]
-        )
         self.gradient_checkpointing = False
 
     def forward(
@@ -672,24 +608,28 @@ class OmniASREncoderStableLayerNorm(nn.Module):
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
+        conv_attention_mask = attention_mask
         if attention_mask is not None:
             # make sure padded tokens output 0
-            expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
-            hidden_states[~expand_attention_mask] = 0
+            hidden_states = hidden_states.masked_fill(~attention_mask.bool().unsqueeze(-1), 0.0)
 
-        attention_mask = create_bidirectional_mask(
-            config=self.config,
-            input_embeds=hidden_states,
-            attention_mask=attention_mask,
-        )
+            # extend attention_mask
+            attention_mask = 1.0 - attention_mask[:, None, None, :].to(dtype=hidden_states.dtype)
+            attention_mask = attention_mask * torch.finfo(hidden_states.dtype).min
+            attention_mask = attention_mask.expand(
+                attention_mask.shape[0], 1, attention_mask.shape[-1], attention_mask.shape[-1]
+            )
 
-        position_embeddings = self.pos_conv_embed(hidden_states)
-        hidden_states = hidden_states + position_embeddings
         hidden_states = self.dropout(hidden_states)
+
+        if self.embed_positions is not None:
+            relative_position_embeddings = self.embed_positions(hidden_states)
+        else:
+            relative_position_embeddings = None
 
         synced_gpus = is_deepspeed_zero3_enabled() or is_fsdp_managed_module(self)
 
-        for layer in self.layers:
+        for i, layer in enumerate(self.layers):
             if output_hidden_states:
                 all_hidden_states = all_hidden_states + (hidden_states,)
 
@@ -699,9 +639,12 @@ class OmniASREncoderStableLayerNorm(nn.Module):
             skip_the_layer = self.training and dropout_probability < self.config.layerdrop
             if not skip_the_layer or synced_gpus:
                 # under fsdp or deepspeed zero3 all gpus must run in sync
-                # XXX: could optimize this like synced_gpus in generate_utils but not sure if it's worth the code complication
                 layer_outputs = layer(
-                    hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
+                    hidden_states,
+                    attention_mask=attention_mask,
+                    relative_position_embeddings=relative_position_embeddings,
+                    output_attentions=output_attentions,
+                    conv_attention_mask=conv_attention_mask,
                 )
                 hidden_states = layer_outputs[0]
 
@@ -710,8 +653,6 @@ class OmniASREncoderStableLayerNorm(nn.Module):
 
             if output_attentions:
                 all_self_attentions = all_self_attentions + (layer_outputs[1],)
-
-        hidden_states = self.layer_norm(hidden_states)
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
@@ -837,6 +778,38 @@ class OmniASRPreTrainedModel(PreTrainedModel):
             if module.bias is not None:
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
                 init.uniform_(module.bias, a=-k, b=k)
+
+
+    def apply_weight_norm(self, legacy=True):
+        weight_norm = nn.utils.weight_norm
+        if hasattr(nn.utils.parametrizations, "weight_norm") and not legacy:
+            weight_norm = nn.utils.parametrizations.weight_norm
+
+        if is_deepspeed_zero3_enabled():
+            import deepspeed
+
+            with deepspeed.zero.GatheredParameters(self.encoder.embed_positions.conv.weight, modifier_rank=0):
+                weight_norm(self.encoder.embed_positions.conv, name="weight", dim=2)
+            if hasattr(self.encoder.embed_positions.conv, "parametrizations"):
+                weight_g = self.encoder.embed_positions.conv.parametrizations.weight.original0
+                weight_v = self.encoder.embed_positions.conv.parametrizations.weight.original1
+            else:
+                weight_g = self.encoder.embed_positions.conv.weight_g
+                weight_v = self.encoder.embed_positions.conv.weight_v
+            deepspeed.zero.register_external_parameter(self.encoder.embed_positions, weight_v)
+            deepspeed.zero.register_external_parameter(self.encoder.embed_positions, weight_g)
+        else:
+            weight_norm(self.encoder.embed_positions.conv, name="weight", dim=2)
+
+
+    def remove_weight_norm(self, legacy=True):
+        remove_weight_norm = nn.utils.remove_weight_norm
+        if hasattr(nn.utils.parametrizations, "weight_norm") and not legacy:
+            remove_weight_norm = torch.nn.utils.parametrize.remove_parametrizations
+
+        # TODO deepspeed zero3 case
+        remove_weight_norm(self.encoder.embed_positions.conv, name="weight")
+    
 
     def _get_feat_extract_output_lengths(
         self, input_lengths: Union[torch.LongTensor, int], add_adapter: Optional[bool] = None
@@ -1086,9 +1059,54 @@ class OmniASRPreTrainedModel(PreTrainedModel):
         self.target_lang = target_lang
 
 
+class OmniASRFeedForward(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.intermediate_dropout = nn.Dropout(config.activation_dropout)
+
+        self.intermediate_dense = nn.Linear(config.hidden_size, config.intermediate_size)
+        if isinstance(config.hidden_act, str):
+            self.intermediate_act_fn = ACT2FN[config.hidden_act]
+        else:
+            self.intermediate_act_fn = config.hidden_act
+
+        self.output_dense = nn.Linear(config.intermediate_size, config.hidden_size)
+        self.output_dropout = nn.Dropout(config.hidden_dropout)
+
+    def forward(self, hidden_states):
+        hidden_states = self.intermediate_dense(hidden_states)
+        hidden_states = self.intermediate_act_fn(hidden_states)
+        hidden_states = self.intermediate_dropout(hidden_states)
+
+        hidden_states = self.output_dense(hidden_states)
+        hidden_states = self.output_dropout(hidden_states)
+        return hidden_states
+
+
 @auto_docstring
 class OmniASRModel(OmniASRPreTrainedModel):
     def __init__(self, config: OmniASREncoderConfig):
+        # see Wav2Vec2BertModel
+    #     super().__init__(config)
+    #     self.config = config
+    #     self.feature_projection = OmniASRFeatureProjection(config)
+
+    #     # model only needs masking vector if mask prob is > 0.0
+    #     if config.mask_time_prob > 0.0 or config.mask_feature_prob > 0.0:
+    #         self.masked_spec_embed = nn.Parameter(torch.Tensor(config.hidden_size).uniform_())
+
+    #     self.encoder = OmniASREncoder(config)
+
+    #     # TODO (ebezzam) remove?
+    #     self.adapter = OmniASRAdapter(config) if config.add_adapter else None
+
+    #     # TODO (ebezzam) remove?
+    #     self.intermediate_ffn = None
+    #     if config.use_intermediate_ffn_before_adapter:
+    #         self.intermediate_ffn = OmniASRFeedForward(config)
+
+    #     self.post_init()
+
         super().__init__(config)
         self.config = config
         self.feature_extractor = OmniASRFeatureEncoder(config)
@@ -1096,13 +1114,10 @@ class OmniASRModel(OmniASRPreTrainedModel):
 
         # model only needs masking vector if mask prob is > 0.0
         if config.mask_time_prob > 0.0 or config.mask_feature_prob > 0.0:
+            raise ValueError("TODO (ebezzam) remove not used by final model?")
             self.masked_spec_embed = nn.Parameter(torch.Tensor(config.hidden_size).uniform_())
 
-        if config.do_stable_layer_norm:
-            # TODO (ebezzam) remove?
-            self.encoder = OmniASREncoderStableLayerNorm(config)
-        else:
-            self.encoder = OmniASREncoder(config)
+        self.encoder = OmniASREncoder(config)
 
         # TODO (ebezzam) remove?
         self.adapter = OmniASRAdapter(config) if config.add_adapter else None
@@ -1243,6 +1258,36 @@ class OmniASRForCTC(OmniASRPreTrainedModel):
         )
         self.lm_head = nn.Linear(output_hidden_size, config.vocab_size)
         self.post_init()
+
+    def apply_weight_norm(self, legacy=True):
+        weight_norm = nn.utils.weight_norm
+        if hasattr(nn.utils.parametrizations, "weight_norm") and not legacy:
+            weight_norm = nn.utils.parametrizations.weight_norm
+
+        if is_deepspeed_zero3_enabled():
+            import deepspeed
+
+            with deepspeed.zero.GatheredParameters(self.model.encoder.embed_positions.conv.weight, modifier_rank=0):
+                weight_norm(self.model.encoder.embed_positions.conv, name="weight", dim=2)
+            if hasattr(self.model.encoder.embed_positions.conv, "parametrizations"):
+                weight_g = self.model.encoder.embed_positions.conv.parametrizations.weight.original0
+                weight_v = self.model.encoder.embed_positions.conv.parametrizations.weight.original1
+            else:
+                weight_g = self.model.encoder.embed_positions.conv.weight_g
+                weight_v = self.model.encoder.embed_positions.conv.weight_v
+            deepspeed.zero.register_external_parameter(self.model.encoder.embed_positions, weight_v)
+            deepspeed.zero.register_external_parameter(self.model.encoder.embed_positions, weight_g)
+        else:
+            weight_norm(self.model.encoder.embed_positions.conv, name="weight", dim=2)
+
+
+    def remove_weight_norm(self, legacy=True):
+        remove_weight_norm = nn.utils.remove_weight_norm
+        if hasattr(nn.utils.parametrizations, "weight_norm") and not legacy:
+            remove_weight_norm = torch.nn.utils.parametrize.remove_parametrizations
+
+        # TODO deepspeed zero3 case
+        remove_weight_norm(self.model.encoder.embed_positions.conv, name="weight")
 
     def tie_weights(self, **kwargs):
         """

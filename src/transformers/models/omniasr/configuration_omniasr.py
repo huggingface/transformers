@@ -97,7 +97,6 @@ class OmniASREncoderConfig(PreTrainedConfig):
         num_fbank_channels=0, 
         fbank_stride=0, 
         sample_fbank_every_k=0, 
-        pos_encoder_type='conv', 
         pos_encoder_depth=1, 
         use_conformer=False, 
         dropout_p=0.0, 
@@ -118,17 +117,24 @@ class OmniASREncoderConfig(PreTrainedConfig):
         num_conv_pos_embedding_groups=16,
         hidden_dropout=0.1,
         intermediate_size=4096,
+        position_embeddings_type="conv",
         # NOTE: added to be compatible with Wav2Vec2 modeling
         initializer_range=0.02,
         feat_extract_activation="gelu",
         layer_norm_eps=1e-5,
         feat_proj_dropout=0.0,
-        do_stable_layer_norm=False,
         activation_dropout=0.1,
         hidden_act="gelu",
         add_adapter=False,
-        # -- specaugument parameters, TODO keep?
-        mask_time_prob=0.05,
+        use_intermediate_ffn_before_adapter=False,  # TODO remove?
+        # TODO keep spec agument params?
+        apply_spec_augment=False, 
+        mask_time_length=10, 
+        mask_time_prob=0.0, 
+        mask_time_min_masks=2, 
+        mask_feature_length=64, 
+        mask_feature_prob=0.0, 
+        mask_feature_min_masks=2,
         **kwargs,
     ):
         self.hidden_size = hidden_size
@@ -146,7 +152,7 @@ class OmniASREncoderConfig(PreTrainedConfig):
         self.num_fbank_channels = num_fbank_channels
         self.fbank_stride = fbank_stride
         self.sample_fbank_every_k = sample_fbank_every_k
-        self.pos_encoder_type = pos_encoder_type
+        self.position_embeddings_type = position_embeddings_type
         self.pos_encoder_depth = pos_encoder_depth
         self.num_conv_pos_embeddings = num_conv_pos_embeddings
         self.num_conv_pos_embedding_groups = num_conv_pos_embedding_groups
@@ -164,14 +170,24 @@ class OmniASREncoderConfig(PreTrainedConfig):
         
         self.layer_norm_eps = layer_norm_eps
         self.feat_proj_dropout = feat_proj_dropout
-        self.mask_time_prob = mask_time_prob
-        self.do_stable_layer_norm = do_stable_layer_norm
         self.activation_dropout = activation_dropout
         self.feat_extract_activation = feat_extract_activation
         self.hidden_act = hidden_act
         self.add_adapter=add_adapter
+        if use_intermediate_ffn_before_adapter and not add_adapter:
+            raise ValueError("`use_intermediate_ffn_before_adapter` is `True` but `add_adapter` is `False`.")
+        self.use_intermediate_ffn_before_adapter = use_intermediate_ffn_before_adapter
         
         self.initializer_range = initializer_range
+
+        # SpecAugment parameters
+        self.apply_spec_augment = apply_spec_augment
+        self.mask_time_length = mask_time_length
+        self.mask_time_prob = mask_time_prob
+        self.mask_time_min_masks = mask_time_min_masks
+        self.mask_feature_length = mask_feature_length
+        self.mask_feature_prob = mask_feature_prob
+        self.mask_feature_min_masks = mask_feature_min_masks
 
         super().__init__(**kwargs)
 
@@ -196,37 +212,25 @@ class OmniASRCTCConfig(PreTrainedConfig):
         self,
         vocab_size=10288,
         final_dropout=0.0, 
-        apply_spec_augment=False, 
-        mask_time_length=10, 
-        mask_time_prob=0.0, 
-        mask_time_min_masks=2, 
-        mask_feature_length=64, 
-        mask_feature_prob=0.0, 
-        mask_feature_min_masks=2,
         encoder_config: Union[dict, OmniASREncoderConfig] = None,
         # TODO check token ids, took from Wav2Vec2
-        pad_token_id=0,
-        bos_token_id=1,
+        bos_token_id=0,
+        pad_token_id=1,
         eos_token_id=2,
+        unk_token_id=3,
         **kwargs,
     ):
-        self.vocab_size = vocab_size
-        self.final_dropout = final_dropout
-        self.apply_spec_augment = apply_spec_augment
-        self.mask_time_length = mask_time_length
-        self.mask_time_prob = mask_time_prob
-        self.mask_time_min_masks = mask_time_min_masks
-        self.mask_feature_length = mask_feature_length
-        self.mask_feature_prob = mask_feature_prob
-        self.mask_feature_min_masks = mask_feature_min_masks
-
+        
         if isinstance(encoder_config, dict):
             encoder_config = OmniASREncoderConfig(**encoder_config)
         elif encoder_config is None:
             encoder_config = OmniASREncoderConfig()
-
         self.encoder_config = encoder_config
+
+        self.vocab_size = vocab_size
+        self.final_dropout = final_dropout
         self.initializer_range = self.encoder_config.initializer_range
+        self.unk_token_id = unk_token_id
 
         super().__init__(
             pad_token_id=pad_token_id,
