@@ -26,7 +26,7 @@ from dataclasses import dataclass
 from typing import Any
 
 import torch
-import torch.nn.functional as F  # noqa: F401
+import torch.nn.functional as F
 from torch import Tensor, nn
 
 from ... import initialization as init

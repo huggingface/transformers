@@ -18,7 +18,6 @@ from dataclasses import dataclass
 from typing import Any
 
 import torch
-import torch.nn.functional as F  # noqa: F401
 from torch import nn
 
 from ... import initialization as init
