@@ -1319,7 +1319,7 @@ class LwDetrModel(DeformableDetrModel):
         object_query = object_query.masked_fill(~output_proposals_valid, float(0))
         return object_query, output_proposals
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
@@ -1484,7 +1484,7 @@ class LwDetrForObjectDetection(DeformableDetrForObjectDetection):
 
         self.post_init()
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
