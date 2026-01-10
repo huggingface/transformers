@@ -630,7 +630,7 @@ class GlmImageModel(Glm4vModel):
         self,
         input_ids: torch.LongTensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
-        attention_masl: torch.LongTensor | None = None,
+        attention_mask: torch.LongTensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Calculate the 3D rope index for image generation task.
