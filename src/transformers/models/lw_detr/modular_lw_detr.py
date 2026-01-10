@@ -883,7 +883,6 @@ class LwDetrModel(DeformableDetrModel):
 
         self.post_init()
 
-    # Copied from modeling_detr.DeformableDetrModel.gen_encoder_output_proposals
     def gen_encoder_output_proposals(self, enc_output, padding_mask, spatial_shapes):
         """Generate the encoder output proposals from encoded enc_output.
 
