@@ -29,6 +29,144 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 logger = logging.get_logger(__name__)
 
 
+class LwDetrViTConfig(BackboneConfigMixin, PreTrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`LwDetrViTModel`]. It is used to instantiate an
+    LW-DETR ViT model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the LW-DETR ViT
+    [stevenbucaille/lwdetr_small_60e_coco](https://huggingface.co/stevenbucaille/lwdetr_small_60e_coco) architecture.
+
+    LW-DETR ViT is the Vision Transformer backbone used in the LW-DETR model for real-time object detection. It features
+    interleaved window and global attention mechanisms to reduce computational complexity while maintaining high performance.
+    The model uses a window-major feature map organization for efficient attention computation.
+
+    Configuration objects inherit from [`VitDetConfig`] and can be used to control the model outputs. Read the
+    documentation from [`VitDetConfig`] for more information.
+
+    Args:
+        hidden_size (`int`, *optional*, defaults to 768):
+            Dimensionality of the encoder layers and the pooler layer.
+        num_hidden_layers (`int`, *optional*, defaults to 12):
+            Number of hidden layers in the Transformer encoder.
+        num_attention_heads (`int`, *optional*, defaults to 12):
+            Number of attention heads for each attention layer in the Transformer encoder.
+        mlp_ratio (`int`, *optional*, defaults to 4):
+            Ratio of mlp hidden dim to embedding dim.
+        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"selu"` and `"gelu_new"` are supported.
+        dropout_prob (`float`, *optional*, defaults to 0.0):
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
+            The epsilon used by the layer normalization layers.
+        image_size (`int`, *optional*, defaults to 256):
+            The size (resolution) of each image.
+        pretrain_image_size (`int`, *optional*, defaults to 224):
+            The size (resolution) of each image during pretraining.
+        patch_size (`int`, *optional*, defaults to 16):
+            The size (resolution) of each patch.
+        num_channels (`int`, *optional*, defaults to 3):
+            The number of input channels.
+        qkv_bias (`bool`, *optional*, defaults to `True`):
+            Whether to add a bias to the queries, keys and values.
+        window_block_indices (`list[int]`, *optional*, defaults to `[]`):
+            List of indices of blocks that should have window attention instead of regular global self-attention.
+        use_absolute_position_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to add absolute position embeddings to the patch embeddings.
+        out_features (`list[str]`, *optional*):
+            If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
+            (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
+            corresponding stages. If unset and `out_indices` is unset, will default to the last stage. Must be in the
+            same order as defined in the `stage_names` attribute.
+        out_indices (`list[int]`, *optional*):
+            If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
+            many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
+            If unset and `out_features` is unset, will default to the last stage. Must be in the
+            same order as defined in the `stage_names` attribute.
+        cae_init_values (`float`, *optional*, defaults to 0.1):
+            Initialization value for CAE parameters when `use_cae` is enabled.
+        num_windows (`int`, *optional*, defaults to 16):
+            Number of windows for window-based attention. Must be a perfect square and the image size must be
+            divisible by the square root of this value. This enables efficient window-major feature map organization.
+
+    Example:
+
+    ```python
+    >>> from transformers import LwDetrViTConfig, LwDetrViTModel
+
+    >>> # Initializing a LW-DETR ViT configuration
+    >>> configuration = LwDetrViTConfig()
+
+    >>> # Initializing a model (with random weights) from the configuration
+    >>> model = LwDetrViTModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
+    model_type = "lw_detr_vit"
+
+    def __init__(
+        self,
+        hidden_size=768,
+        num_hidden_layers=12,
+        num_attention_heads=12,
+        mlp_ratio=4,
+        hidden_act="gelu",
+        dropout_prob=0.0,
+        initializer_range=0.02,
+        layer_norm_eps=1e-6,
+        image_size=256,
+        pretrain_image_size=224,
+        patch_size=16,
+        num_channels=3,
+        qkv_bias=True,
+        window_block_indices=[],
+        use_absolute_position_embeddings=True,
+        out_features=None,
+        out_indices=None,
+        cae_init_values: float = 0.1,
+        num_windows=16,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.mlp_ratio = mlp_ratio
+        self.hidden_act = hidden_act
+        self.dropout_prob = dropout_prob
+        self.initializer_range = initializer_range
+        self.layer_norm_eps = layer_norm_eps
+        self.image_size = image_size
+        self.pretrain_image_size = pretrain_image_size
+        self.patch_size = patch_size
+        self.num_channels = num_channels
+        self.qkv_bias = qkv_bias
+        self.window_block_indices = window_block_indices
+        self.use_absolute_position_embeddings = use_absolute_position_embeddings
+
+        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, self.num_hidden_layers + 1)]
+        self._out_features, self._out_indices = get_aligned_output_features_output_indices(
+            out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
+        )
+
+        self.cae_init_values = cae_init_values
+        if num_windows % math.sqrt(num_windows) != 0:
+            raise ValueError(
+                f"`num_windows` has to be a perfect square, where num_windows % math.sqrt(num_windows) != 0, but got {num_windows}."
+            )
+        if image_size / num_windows % math.sqrt(num_windows) != 0:
+            raise ValueError(
+                f"`image_size` has to be divisible by `num_windows`, where image_size / num_windows % math.sqrt(num_windows) != 0,but got {image_size} and {num_windows}."
+            )
+        self.num_windows = num_windows
+        self.num_windows_side = int(math.sqrt(num_windows))
+
+
 class LwDetrConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`LwDetrModel`]. It is used to instantiate
@@ -232,144 +370,6 @@ class LwDetrConfig(PreTrainedConfig):
         self.focal_alpha = focal_alpha
         self.disable_custom_kernels = disable_custom_kernels
         super().__init__(**kwargs)
-
-
-class LwDetrViTConfig(BackboneConfigMixin, PreTrainedConfig):
-    r"""
-    This is the configuration class to store the configuration of a [`LwDetrViTModel`]. It is used to instantiate an
-    LW-DETR ViT model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the LW-DETR ViT
-    [stevenbucaille/lwdetr_small_60e_coco](https://huggingface.co/stevenbucaille/lwdetr_small_60e_coco) architecture.
-
-    LW-DETR ViT is the Vision Transformer backbone used in the LW-DETR model for real-time object detection. It features
-    interleaved window and global attention mechanisms to reduce computational complexity while maintaining high performance.
-    The model uses a window-major feature map organization for efficient attention computation.
-
-    Configuration objects inherit from [`VitDetConfig`] and can be used to control the model outputs. Read the
-    documentation from [`VitDetConfig`] for more information.
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 768):
-            Dimensionality of the encoder layers and the pooler layer.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        mlp_ratio (`int`, *optional*, defaults to 4):
-            Ratio of mlp hidden dim to embedding dim.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` are supported.
-        dropout_prob (`float`, *optional*, defaults to 0.0):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the layer normalization layers.
-        image_size (`int`, *optional*, defaults to 256):
-            The size (resolution) of each image.
-        pretrain_image_size (`int`, *optional*, defaults to 224):
-            The size (resolution) of each image during pretraining.
-        patch_size (`int`, *optional*, defaults to 16):
-            The size (resolution) of each patch.
-        num_channels (`int`, *optional*, defaults to 3):
-            The number of input channels.
-        qkv_bias (`bool`, *optional*, defaults to `True`):
-            Whether to add a bias to the queries, keys and values.
-        window_block_indices (`list[int]`, *optional*, defaults to `[]`):
-            List of indices of blocks that should have window attention instead of regular global self-attention.
-        use_absolute_position_embeddings (`bool`, *optional*, defaults to `True`):
-            Whether to add absolute position embeddings to the patch embeddings.
-        out_features (`list[str]`, *optional*):
-            If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
-            (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
-            corresponding stages. If unset and `out_indices` is unset, will default to the last stage. Must be in the
-            same order as defined in the `stage_names` attribute.
-        out_indices (`list[int]`, *optional*):
-            If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
-            many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
-            If unset and `out_features` is unset, will default to the last stage. Must be in the
-            same order as defined in the `stage_names` attribute.
-        cae_init_values (`float`, *optional*, defaults to 0.1):
-            Initialization value for CAE parameters when `use_cae` is enabled.
-        num_windows (`int`, *optional*, defaults to 16):
-            Number of windows for window-based attention. Must be a perfect square and the image size must be
-            divisible by the square root of this value. This enables efficient window-major feature map organization.
-
-    Example:
-
-    ```python
-    >>> from transformers import LwDetrViTConfig, LwDetrViTModel
-
-    >>> # Initializing a LW-DETR ViT configuration
-    >>> configuration = LwDetrViTConfig()
-
-    >>> # Initializing a model (with random weights) from the configuration
-    >>> model = LwDetrViTModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```"""
-
-    model_type = "lw_detr_vit"
-
-    def __init__(
-        self,
-        hidden_size=768,
-        num_hidden_layers=12,
-        num_attention_heads=12,
-        mlp_ratio=4,
-        hidden_act="gelu",
-        dropout_prob=0.0,
-        initializer_range=0.02,
-        layer_norm_eps=1e-6,
-        image_size=256,
-        pretrain_image_size=224,
-        patch_size=16,
-        num_channels=3,
-        qkv_bias=True,
-        window_block_indices=[],
-        use_absolute_position_embeddings=True,
-        out_features=None,
-        out_indices=None,
-        cae_init_values: float = 0.1,
-        num_windows=16,
-        **kwargs,
-    ):
-        super().__init__(**kwargs)
-
-        self.hidden_size = hidden_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.mlp_ratio = mlp_ratio
-        self.hidden_act = hidden_act
-        self.dropout_prob = dropout_prob
-        self.initializer_range = initializer_range
-        self.layer_norm_eps = layer_norm_eps
-        self.image_size = image_size
-        self.pretrain_image_size = pretrain_image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.qkv_bias = qkv_bias
-        self.window_block_indices = window_block_indices
-        self.use_absolute_position_embeddings = use_absolute_position_embeddings
-
-        self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, self.num_hidden_layers + 1)]
-        self._out_features, self._out_indices = get_aligned_output_features_output_indices(
-            out_features=out_features, out_indices=out_indices, stage_names=self.stage_names
-        )
-
-        self.cae_init_values = cae_init_values
-        if num_windows % math.sqrt(num_windows) != 0:
-            raise ValueError(
-                f"`num_windows` has to be a perfect square, where num_windows % math.sqrt(num_windows) != 0, but got {num_windows}."
-            )
-        if image_size / num_windows % math.sqrt(num_windows) != 0:
-            raise ValueError(
-                f"`image_size` has to be divisible by `num_windows`, where image_size / num_windows % math.sqrt(num_windows) != 0,but got {image_size} and {num_windows}."
-            )
-        self.num_windows = num_windows
-        self.num_windows_side = int(math.sqrt(num_windows))
 
 
 __all__ = ["LwDetrConfig", "LwDetrViTConfig"]

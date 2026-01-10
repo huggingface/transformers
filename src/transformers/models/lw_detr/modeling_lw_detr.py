@@ -152,6 +152,412 @@ class LwDetrObjectDetectionOutput(ModelOutput):
     enc_outputs_coord_logits: torch.FloatTensor | None = None
 
 
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs: Unpack[TransformersKwargs],
+):
+    key_states = repeat_kv(key, module.num_key_value_groups)
+    value_states = repeat_kv(value, module.num_key_value_groups)
+
+    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
+    if attention_mask is not None:
+        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
+        attn_weights = attn_weights + causal_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value_states)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
+
+
+class LwDetrViTSelfAttention(nn.Module):
+    def __init__(self, config: LwDetrViTConfig):
+        super().__init__()
+        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
+            raise ValueError(
+                f"The hidden size {config.hidden_size} is not a multiple of the number of attention "
+                f"heads {config.num_attention_heads}."
+            )
+
+        self.config = config
+        self.num_attention_heads = config.num_attention_heads
+        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
+        self.all_head_size = self.num_attention_heads * self.attention_head_size
+        self.dropout_prob = config.dropout_prob
+        self.scaling = self.attention_head_size**-0.5
+        self.is_causal = False
+
+        self.query = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
+        self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
+        self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=False)
+        self.num_key_value_groups = 1
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        batch_size = hidden_states.shape[0]
+        new_shape = batch_size, -1, self.num_attention_heads, self.attention_head_size
+
+        key_layer = self.key(hidden_states).view(*new_shape).transpose(1, 2)
+        value_layer = self.value(hidden_states).view(*new_shape).transpose(1, 2)
+        query_layer = self.query(hidden_states).view(*new_shape).transpose(1, 2)
+
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        context_layer, attention_probs = attention_interface(
+            self,
+            query_layer,
+            key_layer,
+            value_layer,
+            None,
+            is_causal=self.is_causal,
+            scaling=self.scaling,
+            dropout=0.0 if not self.training else self.dropout_prob,
+            **kwargs,
+        )
+
+        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
+        context_layer = context_layer.reshape(new_context_layer_shape)
+
+        return context_layer, attention_probs
+
+
+class LwDetrViTAttention(nn.Module):
+    def __init__(self, config: LwDetrViTConfig):
+        """
+        Args:
+            config (`LwDetrViTConfig`):
+                Model configuration.
+        """
+        super().__init__()
+        self.attention = LwDetrViTSelfAttention(config)
+        self.output = nn.Linear(config.hidden_size, config.hidden_size)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        self_attn_output, _ = self.attention(hidden_states, **kwargs)
+        output = self.output(self_attn_output)
+        return output
+
+
+class LwDetrViTMlp(nn.Module):
+    def __init__(self, config, in_features: int, hidden_features: int) -> None:
+        super().__init__()
+        self.fc1 = nn.Linear(in_features, hidden_features)
+        self.act = ACT2FN[config.hidden_act]
+        self.fc2 = nn.Linear(hidden_features, in_features)
+        self.drop = nn.Dropout(config.dropout_prob)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.fc1(x)
+        x = self.act(x)
+        x = self.drop(x)
+        x = self.fc2(x)
+        x = self.drop(x)
+
+        return x
+
+
+class LwDetrViTLayer(GradientCheckpointingLayer):
+    def __init__(
+        self,
+        config: LwDetrViTConfig,
+        layer_idx,
+    ) -> None:
+        super().__init__()
+
+        dim = config.hidden_size
+        self.attention = LwDetrViTAttention(config)
+        self.intermediate = LwDetrViTMlp(config=config, in_features=dim, hidden_features=int(dim * config.mlp_ratio))
+        self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+
+        self.gamma_1 = nn.Parameter(torch.Tensor(dim), requires_grad=True)
+        self.gamma_2 = nn.Parameter(torch.Tensor(dim), requires_grad=True)
+
+        self.window = layer_idx in config.window_block_indices
+        self.num_windows = config.num_windows
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        batch_size, seq_len, channels = hidden_states.shape
+        hidden_states_norm = self.layernorm_before(hidden_states)
+
+        if not self.window:
+            hidden_states_norm = hidden_states_norm.reshape(
+                batch_size // self.num_windows, self.num_windows * seq_len, channels
+            )
+
+        attention_output = self.attention(hidden_states_norm, **kwargs)
+        attention_output = attention_output * self.gamma_1
+
+        if not self.window:
+            attention_output = attention_output.reshape(batch_size, seq_len, channels)
+
+        hidden_states = hidden_states + attention_output
+
+        layer_output = self.layernorm_after(hidden_states)
+        layer_output = self.intermediate(layer_output)
+        layer_output = layer_output * self.gamma_2
+
+        hidden_states = hidden_states + layer_output
+
+        return hidden_states
+
+
+class LwDetrViTEncoder(nn.Module):
+    def __init__(self, config: LwDetrViTConfig) -> None:
+        super().__init__()
+        self.config = config
+        self.layer = nn.ModuleList([LwDetrViTLayer(config, i) for i in range(config.num_hidden_layers)])
+        self.gradient_checkpointing = False
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> list[torch.Tensor]:
+        list_hidden_states = [hidden_states]
+        for i, layer_module in enumerate(self.layer):
+            hidden_states = layer_module(hidden_states, **kwargs)
+            list_hidden_states.append(hidden_states)
+        return list_hidden_states
+
+
+class LwDetrViTEmbeddings(nn.Module):
+    """
+    This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
+    `hidden_states` (patch embeddings) to be consumed by a Transformer.
+    """
+
+    def __init__(self, config):
+        super().__init__()
+        image_size, patch_size = config.pretrain_image_size, config.patch_size
+        num_channels, hidden_size = config.num_channels, config.hidden_size
+
+        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
+        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
+        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        self.image_size = image_size
+        self.patch_size = patch_size
+        self.num_channels = num_channels
+        self.num_patches = num_patches
+
+        if config.use_absolute_position_embeddings:
+            # Initialize absolute positional embedding with pretrain image size.
+            num_positions = num_patches + 1
+            self.position_embeddings = nn.Parameter(torch.zeros(1, num_positions, config.hidden_size))
+        else:
+            self.position_embeddings = None
+
+        self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
+
+    def get_absolute_positions(self, abs_pos_embeddings, has_cls_token, height, width):
+        """
+        Calculate absolute positional embeddings. If needed, resize embeddings and remove cls_token dimension for the
+        original embeddings.
+
+        Args:
+            abs_pos_embeddings (`torch.Tensor`):
+                Absolute positional embeddings with (1, num_position, num_channels).
+            has_cls_token (`bool`):
+                If true, has 1 embedding in abs_pos_embeddings for cls token.
+            height (`int`):
+                Height of input image tokens.
+            width (`int`):
+                Width of input image tokens.
+
+        Returns:
+            Absolute positional embeddings after processing with shape (1, height, width, num_channels)
+        """
+        if has_cls_token:
+            abs_pos_embeddings = abs_pos_embeddings[:, 1:]
+        num_position = abs_pos_embeddings.shape[1]
+        size = int(math.sqrt(num_position))  # This is a constant and can be recorded as such in the ONNX export.
+        if size * size != num_position:
+            raise ValueError("Absolute position embeddings must be a square number.")
+
+        if torch.jit.is_tracing() or (size != height or size != width):
+            # nn.functional.interpolate is a noop in case size == height and size == width - we need to always capture this path with jit.trace.
+            new_abs_pos_embeddings = nn.functional.interpolate(
+                abs_pos_embeddings.reshape(1, size, size, -1).permute(0, 3, 1, 2),
+                size=(height, width),
+                mode="bicubic",
+                align_corners=False,
+            )
+
+            return new_abs_pos_embeddings.permute(0, 2, 3, 1)
+        else:
+            return abs_pos_embeddings.reshape(1, height, width, -1)
+
+    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
+        num_channels = pixel_values.shape[1]
+        if num_channels != self.num_channels:
+            raise ValueError(
+                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
+                f" Expected {self.num_channels} but got {num_channels}."
+            )
+        embeddings = self.projection(pixel_values)
+
+        if self.position_embeddings is not None:
+            # (batch_size, num_channels, height, width) -> (batch_size, height, width, num_channels)
+            embeddings = embeddings.permute(0, 2, 3, 1)
+            # add position embeddings
+            embeddings = embeddings + self.get_absolute_positions(
+                self.position_embeddings, True, embeddings.shape[1], embeddings.shape[2]
+            )
+            # (batch_size, height, width, num_channels) -> (batch_size, num_channels, height, width)
+            embeddings = embeddings.permute(0, 3, 1, 2)
+
+        return embeddings
+
+
+@auto_docstring
+class LwDetrViTPreTrainedModel(PreTrainedModel):
+    config: LwDetrViTConfig
+    base_model_prefix = "lw_detr_vit"
+    main_input_name = "pixel_values"
+    input_modalities = ("image",)
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["LwDetrViTEmbeddings", "LwDetrViTLayer"]
+    _supports_sdpa = True
+    _supports_flash_attn = True
+    _supports_flex_attn = True
+    _supports_attention_backend = True
+    _can_record_outputs = {
+        "hidden_states": LwDetrViTLayer,
+        "attentions": LwDetrViTSelfAttention,
+    }
+
+    @torch.no_grad()
+    def _init_weights(self, module) -> None:
+        """Initialize the weights"""
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
+            init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                init.zeros_(module.bias)
+        elif isinstance(module, nn.LayerNorm):
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
+        elif isinstance(module, LwDetrViTEmbeddings):
+            init.trunc_normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
+        if isinstance(module, LwDetrViTLayer):
+            nn.init.constant_(module.gamma_1, self.config.cae_init_values)
+            nn.init.constant_(module.gamma_2, self.config.cae_init_values)
+
+
+@auto_docstring()
+class LwDetrViTBackbone(LwDetrViTPreTrainedModel, BackboneMixin):
+    def __init__(self, config):
+        super().__init__(config)
+        super()._init_backbone(config)
+
+        self.embeddings = LwDetrViTEmbeddings(config)
+        self.encoder = LwDetrViTEncoder(config)
+        self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
+
+        # initialize weights and apply final processing
+        self.post_init()
+
+    def get_input_embeddings(self) -> LwDetrViTEmbeddings:
+        return self.embeddings.projection
+
+    @check_model_inputs
+    @auto_docstring
+    def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BackboneOutput:
+        r"""
+        Examples:
+
+        ```python
+        >>> from transformers import LwDetrViTConfig, LwDetrViTBackbone
+        >>> import torch
+
+        >>> config = LwDetrViTConfig()
+        >>> model = LwDetrViTBackbone(config)
+
+        >>> pixel_values = torch.randn(1, 3, 224, 224)
+
+        >>> with torch.no_grad():
+        ...     outputs = model(pixel_values)
+
+        >>> feature_maps = outputs.feature_maps
+        >>> list(feature_maps[-1].shape)
+        [1, 768, 14, 14]
+        ```"""
+        embedding_output = self.embeddings(pixel_values)
+
+        batch_size, channels, height, width = embedding_output.shape
+        # (batch_size, channels, height, width) -> (batch_size, height, width, channels)
+        hidden_states = embedding_output.permute(0, 2, 3, 1)
+
+        window_height = height // self.config.num_windows_side
+        window_width = width // self.config.num_windows_side
+        # (batch_size, height, width, channels) -> (batch_size*num_windows_side**2, window_height*window_width, channels)
+        hidden_states = (
+            hidden_states.reshape(
+                batch_size,
+                self.config.num_windows_side,
+                window_height,
+                self.config.num_windows_side,
+                window_width,
+                channels,
+            )
+            .permute(0, 1, 3, 2, 4, 5)
+            .reshape(batch_size * self.config.num_windows_side**2, window_height * window_width, channels)
+        )
+
+        hidden_states = self.encoder(hidden_states, **kwargs)
+
+        feature_maps = ()
+        for stage, hidden_state in zip(self.stage_names, hidden_states):
+            if stage in self.out_features:
+                hidden_state = (
+                    hidden_state.reshape(
+                        batch_size,
+                        self.config.num_windows_side,
+                        self.config.num_windows_side,
+                        window_height,
+                        window_width,
+                        channels,
+                    )
+                    .permute(0, 5, 1, 3, 2, 4)
+                    .reshape(batch_size, channels, height, width)
+                )
+                feature_maps += (hidden_state,)
+
+        return BackboneOutput(feature_maps=feature_maps)
+
+
 class LwDetrConvNormLayer(nn.Module):
     def __init__(
         self,
@@ -344,44 +750,6 @@ class LwDetrConvEncoder(nn.Module):
             mask = nn.functional.interpolate(pixel_mask[None].float(), size=feature_map.shape[-2:]).to(torch.bool)[0]
             out.append((feature_map, mask))
         return out
-
-
-def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-    """
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-    if n_rep == 1:
-        return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
-
-
-def eager_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: torch.Tensor | None,
-    scaling: float,
-    dropout: float = 0.0,
-    **kwargs: Unpack[TransformersKwargs],
-):
-    key_states = repeat_kv(key, module.num_key_value_groups)
-    value_states = repeat_kv(value, module.num_key_value_groups)
-
-    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
-    if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
-
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights, value_states)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-
-    return attn_output, attn_weights
 
 
 class LwDetrAttention(nn.Module):
@@ -1317,374 +1685,6 @@ class LwDetrForObjectDetection(LwDetrPreTrainedModel):
             enc_outputs_class=enc_outputs_class_logits,
             enc_outputs_coord_logits=enc_outputs_boxes_logits,
         )
-
-
-class LwDetrViTSelfAttention(nn.Module):
-    def __init__(self, config: LwDetrViTConfig):
-        super().__init__()
-        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
-            raise ValueError(
-                f"The hidden size {config.hidden_size} is not a multiple of the number of attention "
-                f"heads {config.num_attention_heads}."
-            )
-
-        self.config = config
-        self.num_attention_heads = config.num_attention_heads
-        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
-        self.all_head_size = self.num_attention_heads * self.attention_head_size
-        self.dropout_prob = config.dropout_prob
-        self.scaling = self.attention_head_size**-0.5
-        self.is_causal = False
-
-        self.query = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
-        self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
-        self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=False)
-        self.num_key_value_groups = 1
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        batch_size = hidden_states.shape[0]
-        new_shape = batch_size, -1, self.num_attention_heads, self.attention_head_size
-
-        key_layer = self.key(hidden_states).view(*new_shape).transpose(1, 2)
-        value_layer = self.value(hidden_states).view(*new_shape).transpose(1, 2)
-        query_layer = self.query(hidden_states).view(*new_shape).transpose(1, 2)
-
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
-
-        context_layer, attention_probs = attention_interface(
-            self,
-            query_layer,
-            key_layer,
-            value_layer,
-            None,
-            is_causal=self.is_causal,
-            scaling=self.scaling,
-            dropout=0.0 if not self.training else self.dropout_prob,
-            **kwargs,
-        )
-
-        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        context_layer = context_layer.reshape(new_context_layer_shape)
-
-        return context_layer, attention_probs
-
-
-class LwDetrViTAttention(nn.Module):
-    def __init__(self, config: LwDetrViTConfig):
-        """
-        Args:
-            config (`LwDetrViTConfig`):
-                Model configuration.
-        """
-        super().__init__()
-        self.attention = LwDetrViTSelfAttention(config)
-        self.output = nn.Linear(config.hidden_size, config.hidden_size)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor:
-        self_attn_output, _ = self.attention(hidden_states, **kwargs)
-        output = self.output(self_attn_output)
-        return output
-
-
-class LwDetrViTMlp(nn.Module):
-    def __init__(self, config, in_features: int, hidden_features: int) -> None:
-        super().__init__()
-        self.fc1 = nn.Linear(in_features, hidden_features)
-        self.act = ACT2FN[config.hidden_act]
-        self.fc2 = nn.Linear(hidden_features, in_features)
-        self.drop = nn.Dropout(config.dropout_prob)
-
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = self.fc1(x)
-        x = self.act(x)
-        x = self.drop(x)
-        x = self.fc2(x)
-        x = self.drop(x)
-
-        return x
-
-
-class LwDetrViTLayer(GradientCheckpointingLayer):
-    def __init__(
-        self,
-        config: LwDetrViTConfig,
-        layer_idx,
-    ) -> None:
-        super().__init__()
-
-        dim = config.hidden_size
-        self.attention = LwDetrViTAttention(config)
-        self.intermediate = LwDetrViTMlp(config=config, in_features=dim, hidden_features=int(dim * config.mlp_ratio))
-        self.layernorm_before = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.layernorm_after = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-
-        self.gamma_1 = nn.Parameter(torch.Tensor(dim), requires_grad=True)
-        self.gamma_2 = nn.Parameter(torch.Tensor(dim), requires_grad=True)
-
-        self.window = layer_idx in config.window_block_indices
-        self.num_windows = config.num_windows
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor:
-        batch_size, seq_len, channels = hidden_states.shape
-        hidden_states_norm = self.layernorm_before(hidden_states)
-
-        if not self.window:
-            hidden_states_norm = hidden_states_norm.reshape(
-                batch_size // self.num_windows, self.num_windows * seq_len, channels
-            )
-
-        attention_output = self.attention(hidden_states_norm, **kwargs)
-        attention_output = attention_output * self.gamma_1
-
-        if not self.window:
-            attention_output = attention_output.reshape(batch_size, seq_len, channels)
-
-        hidden_states = hidden_states + attention_output
-
-        layer_output = self.layernorm_after(hidden_states)
-        layer_output = self.intermediate(layer_output)
-        layer_output = layer_output * self.gamma_2
-
-        hidden_states = hidden_states + layer_output
-
-        return hidden_states
-
-
-class LwDetrViTEncoder(nn.Module):
-    def __init__(self, config: LwDetrViTConfig) -> None:
-        super().__init__()
-        self.config = config
-        self.layer = nn.ModuleList([LwDetrViTLayer(config, i) for i in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> list[torch.Tensor]:
-        list_hidden_states = [hidden_states]
-        for i, layer_module in enumerate(self.layer):
-            hidden_states = layer_module(hidden_states, **kwargs)
-            list_hidden_states.append(hidden_states)
-        return list_hidden_states
-
-
-class LwDetrViTEmbeddings(nn.Module):
-    """
-    This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
-    `hidden_states` (patch embeddings) to be consumed by a Transformer.
-    """
-
-    def __init__(self, config):
-        super().__init__()
-        image_size, patch_size = config.pretrain_image_size, config.patch_size
-        num_channels, hidden_size = config.num_channels, config.hidden_size
-
-        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
-        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.num_patches = num_patches
-
-        if config.use_absolute_position_embeddings:
-            # Initialize absolute positional embedding with pretrain image size.
-            num_positions = num_patches + 1
-            self.position_embeddings = nn.Parameter(torch.zeros(1, num_positions, config.hidden_size))
-        else:
-            self.position_embeddings = None
-
-        self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
-
-    def get_absolute_positions(self, abs_pos_embeddings, has_cls_token, height, width):
-        """
-        Calculate absolute positional embeddings. If needed, resize embeddings and remove cls_token dimension for the
-        original embeddings.
-
-        Args:
-            abs_pos_embeddings (`torch.Tensor`):
-                Absolute positional embeddings with (1, num_position, num_channels).
-            has_cls_token (`bool`):
-                If true, has 1 embedding in abs_pos_embeddings for cls token.
-            height (`int`):
-                Height of input image tokens.
-            width (`int`):
-                Width of input image tokens.
-
-        Returns:
-            Absolute positional embeddings after processing with shape (1, height, width, num_channels)
-        """
-        if has_cls_token:
-            abs_pos_embeddings = abs_pos_embeddings[:, 1:]
-        num_position = abs_pos_embeddings.shape[1]
-        size = int(math.sqrt(num_position))  # This is a constant and can be recorded as such in the ONNX export.
-        if size * size != num_position:
-            raise ValueError("Absolute position embeddings must be a square number.")
-
-        if torch.jit.is_tracing() or (size != height or size != width):
-            # nn.functional.interpolate is a noop in case size == height and size == width - we need to always capture this path with jit.trace.
-            new_abs_pos_embeddings = nn.functional.interpolate(
-                abs_pos_embeddings.reshape(1, size, size, -1).permute(0, 3, 1, 2),
-                size=(height, width),
-                mode="bicubic",
-                align_corners=False,
-            )
-
-            return new_abs_pos_embeddings.permute(0, 2, 3, 1)
-        else:
-            return abs_pos_embeddings.reshape(1, height, width, -1)
-
-    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
-        num_channels = pixel_values.shape[1]
-        if num_channels != self.num_channels:
-            raise ValueError(
-                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
-                f" Expected {self.num_channels} but got {num_channels}."
-            )
-        embeddings = self.projection(pixel_values)
-
-        if self.position_embeddings is not None:
-            # (batch_size, num_channels, height, width) -> (batch_size, height, width, num_channels)
-            embeddings = embeddings.permute(0, 2, 3, 1)
-            # add position embeddings
-            embeddings = embeddings + self.get_absolute_positions(
-                self.position_embeddings, True, embeddings.shape[1], embeddings.shape[2]
-            )
-            # (batch_size, height, width, num_channels) -> (batch_size, num_channels, height, width)
-            embeddings = embeddings.permute(0, 3, 1, 2)
-
-        return embeddings
-
-
-@auto_docstring
-class LwDetrViTPreTrainedModel(PreTrainedModel):
-    config: LwDetrViTConfig
-    base_model_prefix = "lw_detr_vit"
-    main_input_name = "pixel_values"
-    input_modalities = ("image",)
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["LwDetrViTEmbeddings", "LwDetrViTLayer"]
-    _supports_sdpa = True
-    _supports_flash_attn = True
-    _supports_flex_attn = True
-    _supports_attention_backend = True
-    _can_record_outputs = {
-        "hidden_states": LwDetrViTLayer,
-        "attentions": LwDetrViTSelfAttention,
-    }
-
-    @torch.no_grad()
-    def _init_weights(self, module) -> None:
-        """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
-        elif isinstance(module, LwDetrViTEmbeddings):
-            init.trunc_normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
-        if isinstance(module, LwDetrViTLayer):
-            nn.init.constant_(module.gamma_1, self.config.cae_init_values)
-            nn.init.constant_(module.gamma_2, self.config.cae_init_values)
-
-
-@auto_docstring()
-class LwDetrViTBackbone(LwDetrViTPreTrainedModel, BackboneMixin):
-    def __init__(self, config):
-        super().__init__(config)
-        super()._init_backbone(config)
-
-        self.embeddings = LwDetrViTEmbeddings(config)
-        self.encoder = LwDetrViTEncoder(config)
-        self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
-
-        # initialize weights and apply final processing
-        self.post_init()
-
-    def get_input_embeddings(self) -> LwDetrViTEmbeddings:
-        return self.embeddings.projection
-
-    @check_model_inputs
-    @auto_docstring
-    def forward(self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BackboneOutput:
-        r"""
-        Examples:
-
-        ```python
-        >>> from transformers import LwDetrViTConfig, LwDetrViTBackbone
-        >>> import torch
-
-        >>> config = LwDetrViTConfig()
-        >>> model = LwDetrViTBackbone(config)
-
-        >>> pixel_values = torch.randn(1, 3, 224, 224)
-
-        >>> with torch.no_grad():
-        ...     outputs = model(pixel_values)
-
-        >>> feature_maps = outputs.feature_maps
-        >>> list(feature_maps[-1].shape)
-        [1, 768, 14, 14]
-        ```"""
-        embedding_output = self.embeddings(pixel_values)
-
-        batch_size, channels, height, width = embedding_output.shape
-        # (batch_size, channels, height, width) -> (batch_size, height, width, channels)
-        hidden_states = embedding_output.permute(0, 2, 3, 1)
-
-        window_height = height // self.config.num_windows_side
-        window_width = width // self.config.num_windows_side
-        # (batch_size, height, width, channels) -> (batch_size*num_windows_side**2, window_height*window_width, channels)
-        hidden_states = (
-            hidden_states.reshape(
-                batch_size,
-                self.config.num_windows_side,
-                window_height,
-                self.config.num_windows_side,
-                window_width,
-                channels,
-            )
-            .permute(0, 1, 3, 2, 4, 5)
-            .reshape(batch_size * self.config.num_windows_side**2, window_height * window_width, channels)
-        )
-
-        hidden_states = self.encoder(hidden_states, **kwargs)
-
-        feature_maps = ()
-        for stage, hidden_state in zip(self.stage_names, hidden_states):
-            if stage in self.out_features:
-                hidden_state = (
-                    hidden_state.reshape(
-                        batch_size,
-                        self.config.num_windows_side,
-                        self.config.num_windows_side,
-                        window_height,
-                        window_width,
-                        channels,
-                    )
-                    .permute(0, 5, 1, 3, 2, 4)
-                    .reshape(batch_size, channels, height, width)
-                )
-                feature_maps += (hidden_state,)
-
-        return BackboneOutput(feature_maps=feature_maps)
 
 
 __all__ = [
