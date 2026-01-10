@@ -460,6 +460,10 @@ class WeightTransform:
         # Due to how our `_checkpoint_conversion_mapping` mappings are written, we need a few exceptions here
         # when instantiating the reverse mapping (i.e. the targets become sources, and sources become targets)
         # The issues lie in the sources usually, so here we need to check the targets for the reversed mapping
+
+        # Process target_patterns: detect capturing groups and replace with \1
+        # Store the original capturing group patterns for reverse mapping
+        target_capturing_groups: list[str | None] = []
         for i, pattern in enumerate(self.target_patterns):
             # Some mapping contains `^` to notify start of string when matching -> remove it during reverse mapping
             pattern = pattern.removeprefix("^")
@@ -469,14 +473,20 @@ class WeightTransform:
             # Qwen2.5, Sam3, Ernie4.5 VL MoE!
             pattern = re.sub(r"\(\?.+\)", "", pattern)
             # Allow capturing groups in patterns, i.e. to add/remove a prefix to all keys (e.g. timm_wrapper, sam3)
-            if r"(.+)" in pattern:
-                pattern = pattern.replace(r"(.+)", r"\1")
+            capturing_group_match = re.search(r"\([^)]+\)", pattern)
+            if capturing_group_match:
+                original_group = capturing_group_match.group(0)
+                target_capturing_groups.append(original_group)
+                pattern = pattern.replace(original_group, r"\1", 1)
             self.target_patterns[i] = pattern
 
         # We also need to check capturing groups in the sources during reverse mapping (e.g. timm_wrapper, sam3)
+        capturing_groups_index = 0
         for i, pattern in enumerate(self.source_patterns):
             if r"\1" in pattern:
-                pattern = pattern.replace(r"\1", r"(.+)")
+                # Use the stored capturing group from target_patterns
+                pattern = pattern.replace(r"\1", target_capturing_groups[capturing_groups_index], 1)
+                capturing_groups_index += 1
             self.source_patterns[i] = pattern
 
         # Construct the regex we will use to rename keys from the sources to the targets
