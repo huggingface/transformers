@@ -12,15 +12,10 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import os
-import tempfile
 import unittest
 from functools import cached_property
 
-import numpy as np
-
 from transformers import (
-    CONFIG_NAME,
     DeformableDetrImageProcessor,
     LwDetrConfig,
     LwDetrViTConfig,
@@ -37,7 +32,7 @@ from transformers.testing_utils import (
 
 from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -452,9 +447,6 @@ class LwDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else {}
     )
     is_encoder_decoder = False
-    test_torchscript = False
-    test_pruning = False
-    test_head_masking = False
     test_missing_keys = False
     test_torch_exportable = True
 
@@ -615,32 +607,6 @@ class LwDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             config.output_hidden_states = True
             check_hidden_states_output(inputs_dict, config, model_class)
 
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            print("Model class:", model_class)
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    if (
-                        "level_embed" in name
-                        or "sampling_offsets.bias" in name
-                        or "value_proj" in name
-                        or "output_proj" in name
-                        or "reference_points" in name
-                        or "class_embed" in name
-                        or "gamma_1" in name
-                        or "gamma_2" in name
-                    ):
-                        continue
-                    self.assertIn(
-                        ((param.data.mean() * 1e9).round() / 1e9).item(),
-                        [0.0, 1.0],
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
-
     def test_retain_grad_hidden_states_attentions(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config.output_hidden_states = True
@@ -666,51 +632,6 @@ class LwDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
         self.assertIsNotNone(hidden_states.grad)
         self.assertIsNotNone(attentions.grad)
-
-    def test_save_load(self):
-        def check_save_load(out1, out2):
-            # make sure we don't have nans
-            out_2 = out2.cpu().numpy()
-            out_2[np.isnan(out_2)] = 0
-            out_2 = out_2[~np.isneginf(out_2)]
-
-            out_1 = out1.cpu().numpy()
-            out_1[np.isnan(out_1)] = 0
-            out_1 = out_1[~np.isneginf(out_1)]
-            max_diff = np.amax(np.abs(out_1 - out_2))
-            self.assertLessEqual(max_diff, 1e-5)
-
-        for model_class in self.all_model_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            model = model_class(config)
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                first = model(**self._prepare_for_class(inputs_dict, model_class))[0]
-
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model.save_pretrained(tmpdirname)
-
-                # the config file (and the generation config file, if it can generate) should be saved
-                self.assertTrue(os.path.exists(os.path.join(tmpdirname, CONFIG_NAME)))
-
-                model = model_class.from_pretrained(tmpdirname)
-                model.config._attn_implementation = "eager"  # TODO Have to force eager for testing, why ?
-                model.to(torch_device)
-                with torch.no_grad():
-                    second = model(**self._prepare_for_class(inputs_dict, model_class))[0]
-
-                # Save and load second time because `from_pretrained` adds a bunch of new config fields
-                # so we need to make sure those fields can be loaded back after saving
-                # Simply init as `model(config)` doesn't add those fields
-                model.save_pretrained(tmpdirname)
-                model = model_class.from_pretrained(tmpdirname)
-
-            if isinstance(first, tuple) and isinstance(second, tuple):
-                for tensor1, tensor2 in zip(first, second):
-                    check_save_load(tensor1, tensor2)
-            else:
-                check_save_load(first, second)
 
     def test_forward_auxiliary_loss(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
