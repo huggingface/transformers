@@ -1,4 +1,4 @@
-# Copyright 2025 HuggingFace Inc. team. All rights reserved.
+#  Copyright 2026 HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -20,14 +20,16 @@ import tempfile
 import unittest
 
 import numpy as np
-from datasets import Audio, load_dataset
 
 from transformers import VocosFeatureExtractor
 from transformers.testing_utils import check_json_file_has_correct_format, require_torch, require_torchaudio
-from transformers.utils.import_utils import is_torch_available
+from transformers.utils.import_utils import is_datasets_available, is_torch_available
 
 from ...test_sequence_feature_extraction_common import SequenceFeatureExtractionTestMixin
 
+
+if is_datasets_available():
+    from datasets import Audio, load_dataset
 
 if is_torch_available():
     import torch
@@ -42,7 +44,7 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
         rng = global_rng
 
     values = []
-    for batch_idx in range(shape[0]):
+    for _ in range(shape[0]):
         values.append([])
         for _ in range(shape[1]):
             values[-1].append(rng.random() * scale)
@@ -97,16 +99,16 @@ class VocosFeatureExtractionTester:
             return list(itertools.chain(*list_of_lists))
 
         if equal_length:
-            speech_inputs = [floats_list((self.max_seq_length, self.feature_size)) for _ in range(self.batch_size)]
+            audio_inputs = [floats_list((self.max_seq_length, self.feature_size)) for _ in range(self.batch_size)]
         else:
             # make sure that inputs increase in size
-            speech_inputs = [
+            audio_inputs = [
                 floats_list((x, self.feature_size))
                 for x in range(self.min_seq_length, self.max_seq_length, self.seq_length_diff)
             ]
         if numpify:
-            speech_inputs = [np.asarray(x) for x in speech_inputs]
-        return speech_inputs
+            audio_inputs = [np.asarray(x) for x in audio_inputs]
+        return audio_inputs
 
 
 @require_torchaudio
@@ -116,38 +118,39 @@ class VocosFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Te
 
     def setUp(self):
         self.feat_extract_tester = VocosFeatureExtractionTester(self)
+
         self.EXPECTED_INPUT_FEATURES = torch.tensor(
             [
-                -1.7733538150787354,
-                -2.6277995109558105,
-                -4.34464168548584,
-                -3.113943099975586,
-                -2.854297637939453,
-                -2.973206043243408,
-                -2.4957544803619385,
-                -2.252488851547241,
-                -2.255256175994873,
-                -2.6200737953186035,
-                -2.978632926940918,
-                -2.915842056274414,
-                -3.6588683128356934,
-                -2.4617226123809814,
-                -2.5469284057617188,
-                -2.164539098739624,
-                -2.7375283241271973,
-                -2.8342182636260986,
-                -3.9451725482940674,
-                -3.013962745666504,
-                -3.843592643737793,
-                -3.688326358795166,
-                -3.601658821105957,
-                -3.2761828899383545,
-                -3.0132853984832764,
-                -2.340486526489258,
-                -2.8324050903320312,
-                -2.718107223510742,
-                -2.8961753845214844,
-                -2.846886396408081,
+                -1.7733538151,
+                -2.6277995110,
+                -4.3446416855,
+                -3.1139431000,
+                -2.8542976379,
+                -2.9732060432,
+                -2.4957544804,
+                -2.2524888515,
+                -2.2552561760,
+                -2.6200737953,
+                -2.9786329269,
+                -2.9158420563,
+                -3.6588683128,
+                -2.4617226124,
+                -2.5469284058,
+                -2.1645390987,
+                -2.7375283241,
+                -2.8342182636,
+                -3.9451725483,
+                -3.0139627457,
+                -3.8435926437,
+                -3.6883263588,
+                -3.6016588211,
+                -3.2761828899,
+                -3.0132853985,
+                -2.3404865265,
+                -2.8324050903,
+                -2.7181072235,
+                -2.8961753845,
+                -2.8468863964,
             ]
         )
 
@@ -189,26 +192,27 @@ class VocosFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Te
         torch_audio_inputs = [torch.tensor(audio_input) for audio_input in audio_inputs]
 
         # Test feature size
-        audio_spectrogram = feature_extractor(np_audio_inputs, padding=True, return_tensors="np").audio_spectrogram
-        self.assertTrue(audio_spectrogram.ndim == 3)  # (batch, mel, frame)
-        self.assertTrue(audio_spectrogram.shape[1] == feature_extractor.feature_size)
+        input_features = feature_extractor(np_audio_inputs, padding=True, return_tensors="np").input_features
+        self.assertTrue(input_features.ndim == 3)  # (batch_size, num_mel_bins, frame)
+        self.assertTrue(input_features.shape[1] == feature_extractor.feature_size)
+        print(feature_extractor.feature_size, input_features.shape[1])
 
         # Test not batched input
         encoded_sequences_1 = feature_extractor(
             torch_audio_inputs[0], sampling_rate=sampling_rate, return_tensors="np"
-        ).audio_spectrogram
+        ).input_features
         encoded_sequences_2 = feature_extractor(
             np_audio_inputs[0], sampling_rate=sampling_rate, return_tensors="np"
-        ).audio_spectrogram
+        ).input_features
         self.assertTrue(np.allclose(encoded_sequences_1, encoded_sequences_2, atol=TOL))
 
         # Test batched
         encoded_sequences_1 = feature_extractor(
             torch_audio_inputs, sampling_rate=sampling_rate, return_tensors="np"
-        ).audio_spectrogram
+        ).input_features
         encoded_sequences_2 = feature_extractor(
             np_audio_inputs, sampling_rate=sampling_rate, return_tensors="np"
-        ).audio_spectrogram
+        ).input_features
         for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
             self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=TOL))
 
@@ -221,17 +225,53 @@ class VocosFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Te
         py_speech_inputs = np_speech_inputs.tolist()
 
         for inputs in [py_speech_inputs, np_speech_inputs]:
-            np_processed = feature_extractor.pad([{"audio_spectrogram": inputs}], return_tensors="np")
-            self.assertTrue(np_processed.audio_spectrogram.dtype == np.float32)
-            pt_processed = feature_extractor.pad([{"audio_spectrogram": inputs}], return_tensors="pt")
-            self.assertTrue(pt_processed.audio_spectrogram.dtype == torch.float32)
+            np_processed = feature_extractor.pad([{"input_features": inputs}], return_tensors="np")
+            self.assertTrue(np_processed.input_features.dtype == np.float32)
+            pt_processed = feature_extractor.pad([{"input_features": inputs}], return_tensors="pt")
+            self.assertTrue(pt_processed.input_features.dtype == torch.float32)
 
-    @require_torch
-    def test_integration_torch_backend(self):
+    def _load_datasamples(self, num_samples):
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         ds = ds.cast_column("audio", Audio(sampling_rate=24000))
-        speech = ds[0]["audio"]["array"]
-        feature_extractor = VocosFeatureExtractor.from_pretrained("hf-audio/vocos-mel-24khz")
-        audio_spectrogram = feature_extractor(speech, return_tensors="pt").audio_spectrogram
-        self.assertEqual(audio_spectrogram.shape, (1, 100, 549))
-        torch.testing.assert_close(audio_spectrogram[0, 0, :30], self.EXPECTED_INPUT_FEATURES, rtol=1e-6, atol=1e-6)
+        speech_samples = ds.sort("id")[:num_samples]["audio"]
+        return [x["array"] for x in speech_samples]
+
+    @require_torch
+    def test_integration(self):
+        audio = self._load_datasamples(1)[0]
+        feature_extractor = VocosFeatureExtractor.from_pretrained("Manel/vocos-mel-24khz")
+        input_features = feature_extractor(audio, return_tensors="pt").input_features
+        self.assertEqual(input_features.shape, (1, 100, 550))
+        torch.testing.assert_close(input_features[0, 0, :30], self.EXPECTED_INPUT_FEATURES, rtol=1e-6, atol=1e-6)
+
+    def test_truncation_and_padding(self):
+        audios = self._load_datasamples(2)
+
+        feature_extractor = VocosFeatureExtractor()
+        with self.assertRaisesRegex(
+            ValueError,
+            r"Both padding and truncation were set. Make sure you only set one.",
+        ):
+            truncated_outputs = feature_extractor(
+                audios, padding="max_length", truncation=True, sampling_rate=24000, return_tensors="pt"
+            ).input_features
+
+        with self.assertRaisesRegex(
+            ValueError, r"Unable to create tensor, you should probably activate padding with 'padding=True'"
+        ):
+            truncated_outputs = feature_extractor(
+                audios, padding=False, sampling_rate=24000, return_tensors="pt"
+            ).input_features
+
+        truncated_outputs = feature_extractor(
+            audios, padding=False, truncation=True, max_length=48000, sampling_rate=24000, return_tensors="pt"
+        ).input_features
+        self.assertEqual(truncated_outputs.shape, (2, 100, 188))
+
+        padded_outputs = feature_extractor(audios, padding=True, return_tensors="pt").input_features
+        self.assertEqual(padded_outputs.shape, (2, 100, 550))
+
+        truncated_outputs = feature_extractor(
+            audios[0], padding=False, sampling_rate=24000, return_tensors="pt"
+        ).input_features
+        self.assertEqual(truncated_outputs.shape, (1, 100, 549))
