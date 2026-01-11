@@ -16,11 +16,20 @@ import shutil
 import tempfile
 import unittest
 
-import numpy as np
-import torch
 from parameterized import parameterized
 
-from transformers import EncodecModel, VocosFeatureExtractor, VocosProcessor
+from transformers.utils import is_datasets_available, is_torch_available
+
+
+if is_datasets_available():
+    from datasets import Audio, load_dataset
+
+if is_torch_available():
+    import torch
+
+    from transformers import VocosEncodecProcessor, VocosFeatureExtractor
+
+from transformers import EncodecModel
 from transformers.testing_utils import require_torch
 
 
@@ -33,12 +42,12 @@ def check_models_equal(model1, model2):
 
 
 @require_torch
-class VocosProcessorTest(unittest.TestCase):
+class VocosEncodecProcessorTest(unittest.TestCase):
     def setUp(self):
-        self.checkpoint = "hf-audio/vocos-mel-24khz"
+        self.checkpoint = "Manel/vocos-encodec-24khz"
         self.tmpdir = tempfile.mkdtemp()
 
-        self.processor = VocosProcessor(
+        self.processor = VocosEncodecProcessor(
             feature_extractor=self.get_feature_extractor(), audio_tokenizer=self.get_audio_tokenizer()
         )
 
@@ -55,21 +64,19 @@ class VocosProcessorTest(unittest.TestCase):
         feature_extractor = self.get_feature_extractor()
         audio_tokenizer = self.get_audio_tokenizer()
 
-        processor = VocosProcessor(feature_extractor=feature_extractor, audio_tokenizer=audio_tokenizer)
+        processor = VocosEncodecProcessor(feature_extractor=feature_extractor, audio_tokenizer=audio_tokenizer)
         processor.save_pretrained(self.tmpdir)
 
         # load back
-        processor = VocosProcessor.from_pretrained(self.tmpdir)
+        processor = VocosEncodecProcessor.from_pretrained(self.tmpdir)
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor.to_json_string())
-        self.assertIsInstance(processor.feature_extractor, VocosFeatureExtractor)
-
         self.assertEqual(processor.audio_tokenizer.__class__.__name__, audio_tokenizer.__class__.__name__)
         self.assertIsInstance(processor.audio_tokenizer, EncodecModel)
         self.assertEqual(processor.audio_tokenizer.name_or_path, audio_tokenizer.name_or_path)
         self.assertTrue(check_models_equal(processor.audio_tokenizer, audio_tokenizer))
 
     def test_save_load_pretrained_additional_features(self):
-        processor = VocosProcessor(
+        processor = VocosEncodecProcessor(
             feature_extractor=self.get_feature_extractor(), audio_tokenizer=self.get_audio_tokenizer()
         )
 
@@ -78,10 +85,9 @@ class VocosProcessorTest(unittest.TestCase):
         feature_extractor_add_kwargs = self.get_feature_extractor(sampling_rate=16000)
         audio_tokenizer_add_kwargs = self.get_audio_tokenizer()
 
-        processor = VocosProcessor.from_pretrained(self.tmpdir, sampling_rate=16000)
+        processor = VocosEncodecProcessor.from_pretrained(self.tmpdir, sampling_rate=16000)
 
         self.assertEqual(processor.feature_extractor.to_json_string(), feature_extractor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.feature_extractor, VocosFeatureExtractor)
 
         self.assertEqual(processor.audio_tokenizer.__class__.__name__, audio_tokenizer_add_kwargs.__class__.__name__)
         self.assertEqual(processor.audio_tokenizer.name_or_path, audio_tokenizer_add_kwargs.name_or_path)
@@ -89,35 +95,12 @@ class VocosProcessorTest(unittest.TestCase):
         self.assertTrue(check_models_equal(processor.audio_tokenizer, audio_tokenizer_add_kwargs))
         self.assertIsInstance(processor.audio_tokenizer, EncodecModel)
 
-    def test_feature_extractor_mel_path(self):
-        # making sure processor and feature extractor give same results for mel path
-        audio = np.random.randn(2400).astype(np.float32)
-
-        feature_extractor = self.get_feature_extractor()
-
-        out_feature_extractor = feature_extractor(
-            audio=audio, sampling_rate=feature_extractor.sampling_rate, return_tensors="pt"
-        )["audio_spectrogram"]
-
-        out_processor = self.processor(audio=audio, return_tensors="pt")["audio_spectrogram"]
-
-        self.assertEqual(out_processor.shape, out_feature_extractor.shape)
-        np.testing.assert_allclose(out_processor, out_feature_extractor, atol=1e-5)
-
     @parameterized.expand([[1.5], [3.0], [6.0], [12.0]])
     def test_encodec_audio_vs_codes_consistency(self, bandwidth):
-        # checking that audio to codes and direct codes input give same outputs
+        # check that encoding audio to codes and passing those codes as input give same outputs
         audio = torch.randn(1, 1024, dtype=torch.float32)
         audio_tokenizer = self.processor.audio_tokenizer
 
-        # pad audio so same for both
-        audio = self.processor.feature_extractor(
-            audio,
-            sampling_rate=self.processor.feature_extractor.sampling_rate,
-            return_tensors="pt",
-            return_audio_only=True,
-            pad_to_multiple_of=audio_tokenizer.config.hop_length,
-        ).audio
         output_processor = self.processor(audio=audio, bandwidth=bandwidth, return_tensors="pt")["input_features"]
 
         with torch.no_grad():
@@ -146,3 +129,28 @@ class VocosProcessorTest(unittest.TestCase):
     def test_neither_audio_nor_codes_raises(self):
         with self.assertRaises(ValueError):
             self.processor()
+
+    def _load_datasamples(self, num_samples):
+        ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        ds = ds.cast_column("audio", Audio(sampling_rate=24000))
+        speech_samples = ds.sort("id")[:num_samples]["audio"]
+        return [x["array"] for x in speech_samples]
+
+    def test_and_batch_padding(self):
+        audios = self._load_datasamples(2)
+        input_features = self.processor(
+            audios, bandwidth=6.0, sampling_rate=24000, padding=True, return_tensors="pt"
+        ).input_features
+        self.assertEqual(input_features.shape, (2, 128, 440))
+
+        features_first = self.processor(
+            audios[0], sampling_rate=24000, bandwidth=6.0, padding=False, return_tensors="pt"
+        ).input_features
+        features_second = self.processor(
+            audios[1], sampling_rate=24000, bandwidth=6.0, padding=False, return_tensors="pt"
+        ).input_features
+
+        self.assertEqual(input_features.shape[1], features_first.shape[1])
+        time_dim1, time_dim2 = features_first.shape[-1], features_second.shape[-1]
+        time_dim = max(time_dim1, time_dim2)
+        self.assertEqual(input_features.shape[-1], time_dim)
