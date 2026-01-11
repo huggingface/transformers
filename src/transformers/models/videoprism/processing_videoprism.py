@@ -29,9 +29,9 @@ class VideoPrismProcessor(ProcessorMixin):
     [`~VideoPrismProcessor.__call__`] for more information.
 
     Args:
-        video_processor ([`VideoPrismVideoProcessor`]):
+        video_processor ([`VideoPrismVideoProcessor`], *optional*):
             An instance of [`VideoPrismVideoProcessor`].
-        tokenizer ([`VideoPrismTokenizer`]):
+        tokenizer ([`VideoPrismTokenizer`], *optional*):
             An instance of [`VideoPrismTokenizer`].
     """
 

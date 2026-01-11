@@ -11,7 +11,7 @@ from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, is_vision_available, logging, torch_int
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging, torch_int
 from ..llava_onevision.video_processing_llava_onevision import LlavaOnevisionVideoProcessor
 from ..qwen3_next.modeling_qwen3_next import l2norm
 from ..siglip.configuration_siglip import SiglipConfig
@@ -26,6 +26,7 @@ from ..vivit.modeling_vivit import (
     VivitTubeletEmbeddings,
 )
 
+
 logger = logging.get_logger(__name__)
 
 
@@ -35,7 +36,7 @@ class VideoPrismVisionConfig(VivitConfig):
     VideoPrism vision encoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the VideoPrism
     [google/videoprism](https://huggingface.co/google/videoprism) architecture.
-    
+
     Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PretrainedConfig`] for more information.
 
@@ -116,7 +117,22 @@ class VideoPrismVisionConfig(VivitConfig):
         apply_l2_norm=True,
         **kwargs,
     ):
-        super().__init__()
+        super().__init__(
+            image_size=image_size,
+            num_frames=num_frames,
+            tubelet_size=tubelet_size,
+            num_channels=num_channels,
+            hidden_size=hidden_size,
+            num_attention_heads=num_attention_heads,
+            intermediate_size=intermediate_size,
+            hidden_act=hidden_act,
+            hidden_dropout_prob=hidden_dropout_prob,
+            attention_probs_dropout_prob=attention_probs_dropout_prob,
+            initializer_range=initializer_range,
+            layer_norm_eps=layer_norm_eps,
+            qkv_bias=qkv_bias,
+            **kwargs,
+        )
         self.num_spatial_layers = num_spatial_layers
         self.num_temporal_layers = num_temporal_layers
         self.attn_logit_softcapping = attn_logit_softcapping
@@ -346,9 +362,9 @@ class VideoPrismProcessor(ProcessorMixin):
     [`~VideoPrismProcessor.__call__`] for more information.
 
     Args:
-        video_processor ([`VideoPrismVideoProcessor`]):
+        video_processor ([`VideoPrismVideoProcessor`], *optional*):
             An instance of [`VideoPrismVideoProcessor`].
-        tokenizer ([`VideoPrismTokenizer`]):
+        tokenizer ([`VideoPrismTokenizer`], *optional*):
             An instance of [`VideoPrismTokenizer`].
     """
 
