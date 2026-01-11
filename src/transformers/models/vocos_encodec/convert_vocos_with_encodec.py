@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -106,7 +106,9 @@ def convert_checkpoint(checkpoint_path, pytorch_dump_folder_path, push_to_hub=No
 
     feature_extractor = VocosFeatureExtractor()
 
-    processor = VocosEncodecProcessor(feature_extractor=feature_extractor, audio_tokenizer=hf_encodec)
+    processor = VocosEncodecProcessor(feature_extractor=feature_extractor, audio_tokenizer=None)
+
+    processor.audio_tokenizer = hf_encodec
 
     processor.save_pretrained(pytorch_dump_folder_path)
 

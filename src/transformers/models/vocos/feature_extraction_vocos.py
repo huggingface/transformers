@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -44,7 +44,7 @@ class VocosFeatureExtractor(SequenceFeatureExtractor):
     This feature extractor inherits from [`~feature_extraction_sequence_utils.SequenceFeatureExtractor`] which contains
     most of the main methods. Users should refer to this superclass for more information regarding those methods.
 
-    This class extracts mel-filter bank features from raw speech using `torchaudio.transforms.MelSpectrogram` which
+    This class extracts mel-filter bank features from raw speech using `torchaudio.transforms.MelSpectrogram` which 
     performs a Short-Time Fourier Transform (STFT) and then applies a Mel filter bank, computed as in original
     [Vocos](https://github.com/gemelo-ai/vocos/blob/c859e3b7b534f3776a357983029d34170ddd6fc3/vocos/feature_extractors.py#L28)
 
@@ -112,7 +112,7 @@ class VocosFeatureExtractor(SequenceFeatureExtractor):
     def _torch_extract_fbank_features(self, batched_audio, device=None):
         """Extract mel-spectrogram features from audio using torchaudio spectrogram implementation."""
 
-        audio = batched_audio["input_features"]
+        audio = batched_audio['input_features']
 
         if device is None:
             if isinstance(audio[0], torch.Tensor):
@@ -136,6 +136,8 @@ class VocosFeatureExtractor(SequenceFeatureExtractor):
         batched_audio["input_features"] = audio_spectrogram
 
         return batched_audio
+
+
 
     def __call__(
         self,

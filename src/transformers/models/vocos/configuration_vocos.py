@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -44,7 +44,7 @@ class VocosConfig(PretrainedConfig):
             Kernel size for depthwise convolutions.
         padding (`int`, *optional*, defaults to 3):
             Padding applied to depthwise convolutions.
-        layer_scale_init_value (`float`, *optional*, defaults to `1/8`):
+        layer_scale_init_value (`float`, *optional*, defaults to `0.125`):
             Initial value for layer-scale (if >0, enables per-block scaling).
         layer_norm_eps (`float`, *optional*, defaults to 1e-06):
             Epsilon for all LayerNorm operations.

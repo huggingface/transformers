@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -100,7 +100,7 @@ python src/transformers/models/vocos/convert_vocos_weights_to_hf.py \
 
 # quick sanity check from local folder that everything loads fine
 model = VocosModel.from_pretrained("vocos-mel-converted")
-processor  = VocosProcessor.from_pretrained("vocos-mel-converted")
+feature_extractor  = VocosFeatureExtractor.from_pretrained("vocos-mel-converted")
 
 """
 
