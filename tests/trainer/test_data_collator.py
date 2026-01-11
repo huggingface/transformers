@@ -1965,3 +1965,55 @@ class DataCollatorForLanguageModelingUnitTest(unittest.TestCase):
         ).astype(bool)
 
         np.testing.assert_array_equal(output_mask, expected_mask)
+
+
+class DataCollatorWithFlatteningTest(unittest.TestCase):
+    """Tests for DataCollatorWithFlattening"""
+
+    def test_flattening_with_tensor_labels(self):
+        """Test that DataCollatorWithFlattening supports tensor labels (fixes issue #42599)."""
+        features = [
+            {
+                "input_ids": torch.tensor([1, 2, 3, 4]),
+                "labels": torch.tensor([10, 11, 12, 13]),
+            },
+            {
+                "input_ids": torch.tensor([5, 6, 7]),
+                "labels": torch.tensor([14, 15, 16]),
+            },
+        ]
+        collator = DataCollatorWithFlattening(return_tensors="pt")
+
+        # This should not raise TypeError anymore
+        batch = collator(features)
+
+        # Verify the output
+        self.assertIsInstance(batch, dict)
+        self.assertIn("input_ids", batch)
+        self.assertIn("labels", batch)
+        self.assertIn("position_ids", batch)
+
+        # Check shapes
+        self.assertEqual(batch["input_ids"].shape, (1, 7))  # 4 + 3 tokens
+        self.assertEqual(batch["labels"].shape, (1, 7))
+        self.assertEqual(batch["position_ids"].shape, (1, 7))
+
+    def test_flattening_with_list_labels(self):
+        """Test that DataCollatorWithFlattening still works with list labels."""
+        features = [
+            {
+                "input_ids": torch.tensor([1, 2, 3, 4]),
+                "labels": [10, 11, 12, 13],
+            },
+            {
+                "input_ids": torch.tensor([5, 6, 7]),
+                "labels": [14, 15, 16],
+            },
+        ]
+        collator = DataCollatorWithFlattening(return_tensors="pt")
+        batch = collator(features)
+
+        # Verify it still works with lists
+        self.assertIsInstance(batch, dict)
+        self.assertEqual(batch["input_ids"].shape, (1, 7))
+        self.assertEqual(batch["labels"].shape, (1, 7))

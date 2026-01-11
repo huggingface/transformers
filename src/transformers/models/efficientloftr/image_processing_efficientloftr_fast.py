@@ -4,7 +4,7 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_efficientloftr.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-from typing import Optional, Union
+from typing import Optional
 
 import torch
 from PIL import Image, ImageDraw
@@ -24,7 +24,7 @@ from ...image_utils import (
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring
 from .image_processing_efficientloftr import EfficientLoFTRImageProcessorKwargs
-from .modeling_efficientloftr import KeypointMatchingOutput
+from .modeling_efficientloftr import EfficientLoFTRKeypointMatchingOutput
 
 
 def _is_valid_image(image):
@@ -116,14 +116,14 @@ class EfficientLoFTRImageProcessorFast(BaseImageProcessorFast):
     def _preprocess(
         self,
         images: list["torch.Tensor"],
-        size: Union[dict[str, int], SizeDict],
+        size: dict[str, int] | SizeDict,
         rescale_factor: float,
         do_rescale: bool,
         do_resize: bool,
         interpolation: Optional["F.InterpolationMode"],
         do_grayscale: bool,
         disable_grouping: bool,
-        return_tensors: Union[str, TensorType],
+        return_tensors: str | TensorType,
         **kwargs,
     ) -> BatchFeature:
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
@@ -153,21 +153,20 @@ class EfficientLoFTRImageProcessorFast(BaseImageProcessorFast):
         stacked_pairs = [torch.stack(pair, dim=0) for pair in image_pairs]
 
         # Return in same format as slow processor
-        image_pairs = torch.stack(stacked_pairs, dim=0) if return_tensors else stacked_pairs
 
-        return BatchFeature(data={"pixel_values": image_pairs})
+        return BatchFeature(data={"pixel_values": stacked_pairs}, tensor_type=return_tensors)
 
     def post_process_keypoint_matching(
         self,
-        outputs: "KeypointMatchingOutput",
-        target_sizes: Union[TensorType, list[tuple]],
+        outputs: "EfficientLoFTRKeypointMatchingOutput",
+        target_sizes: TensorType | list[tuple],
         threshold: float = 0.0,
     ) -> list[dict[str, torch.Tensor]]:
         """
-        Converts the raw output of [`KeypointMatchingOutput`] into lists of keypoints, scores and descriptors
+        Converts the raw output of [`EfficientLoFTRKeypointMatchingOutput`] into lists of keypoints, scores and descriptors
         with coordinates absolute to the original image sizes.
         Args:
-            outputs ([`KeypointMatchingOutput`]):
+            outputs ([`EfficientLoFTRKeypointMatchingOutput`]):
                 Raw outputs of the model.
             target_sizes (`torch.Tensor` or `List[Tuple[Tuple[int, int]]]`, *optional*):
                 Tensor of shape `(batch_size, 2, 2)` or list of tuples of tuples (`Tuple[int, int]`) containing the

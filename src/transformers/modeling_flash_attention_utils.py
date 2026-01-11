@@ -13,8 +13,9 @@
 # limitations under the License.
 import inspect
 import os
+from collections.abc import Callable
 from functools import partial
-from typing import Optional, TypedDict
+from typing import TypedDict
 
 import torch
 import torch.nn.functional as F
@@ -24,6 +25,7 @@ from .utils import (
     is_flash_attn_3_available,
     is_flash_attn_greater_or_equal_2_10,
     is_torch_npu_available,
+    is_torch_xpu_available,
     logging,
 )
 
@@ -45,10 +47,16 @@ def flash_attn_supports_top_left_mask():
 
 # TODO Deprecate when all models have the attention interface
 def is_flash_attn_available():
-    return is_flash_attn_3_available() or is_flash_attn_2_available() or is_torch_npu_available()
+    return (
+        is_flash_attn_3_available()
+        or is_flash_attn_2_available()
+        or is_torch_npu_available()
+        or is_torch_xpu_available()
+    )
 
 
 # `globals()` is not compatible with dynamo, hence we have do define them in global scope ourselves
+_loaded_implementation = None
 _flash_fn = None
 _flash_varlen_fn = None
 _pad_fn = None
@@ -63,7 +71,7 @@ _hf_api_to_flash_mapping = {
 }
 
 
-def _lazy_imports(implementation: Optional[str]):
+def _lazy_imports(implementation: str | None, attention_wrapper: Callable | None = None):
     """
     Lazy loads the respective flash attention implementations.
 
@@ -79,6 +87,9 @@ def _lazy_imports(implementation: Optional[str]):
 
     pad_input, unpad_input = _pad_input, _unpad_input
 
+    is_paged = implementation.startswith("paged|")
+    implementation = implementation.split("|")[1] if is_paged else implementation
+
     if (implementation == "flash_attention_2" and is_fa2) or (implementation is None and is_fa2 and not is_fa3):
         from flash_attn import flash_attn_func, flash_attn_varlen_func
         from flash_attn.bert_padding import pad_input, unpad_input
@@ -92,12 +103,24 @@ def _lazy_imports(implementation: Optional[str]):
             from flash_attn_interface import flash_attn_func, flash_attn_varlen_func
         # Kernels fallback
         else:
-            flash_attn_func = getattr(implementation, "flash_attn_func", None)
-            flash_attn_varlen_func = getattr(implementation, "flash_attn_varlen_func", None)
-            if flash_attn_varlen_func is None or flash_attn_func is None:
+            from .integrations.hub_kernels import load_and_register_attn_kernel
+
+            # We want to explicitly register the name with `paged|` if found
+            kernel_implementation = f"paged|{implementation}" if is_paged else implementation
+            kernel = load_and_register_attn_kernel(kernel_implementation, attention_wrapper)
+
+            flash_attn_func = getattr(kernel, "flash_attn_func", None)
+            flash_attn_varlen_func = getattr(kernel, "flash_attn_varlen_func", None)
+            if flash_attn_varlen_func is None:
                 raise ValueError(
                     f"Could not find the currently requested flash attention implementation at `{implementation}`."
-                    f"Make sure that you request a valid kernel from the hub, e.g. `kernels-community/flash-attn`."
+                    "Make sure that you request a valid kernel from the hub, e.g. `kernels-community/flash-attn2`."
+                )
+            if flash_attn_func is None:
+                logger.warning(
+                    f"The loaded flash attention implementation at `{implementation}` only supports varlen, i.e. "
+                    "it can only be used with continous batching and does not support the full functionality for "
+                    "the base transformers generation methods."
                 )
 
     return flash_attn_func, flash_attn_varlen_func, pad_input, unpad_input
@@ -124,22 +147,37 @@ def _lazy_define_process_function(flash_function):
     return partial(_process_flash_attention_kwargs, supports_mapping=supports_mapping)
 
 
-def lazy_import_flash_attention(implementation: Optional[str], force_import: Optional[bool] = False):
+def lazy_import_flash_attention(implementation: str | None, attention_wrapper: Callable | None = None):
     """
     Lazily import flash attention and return the respective functions + flags.
 
     NOTE: For fullgraph, this needs to be called before compile, while no fullgraph can
     work without preloading. See `load_and_register_attn_kernel` in `integrations.hub_kernels`.
     """
-    global _flash_fn, _flash_varlen_fn, _pad_fn, _unpad_fn
-    if force_import or any(k is None for k in [_flash_fn, _flash_varlen_fn, _pad_fn, _unpad_fn]):
-        _flash_fn, _flash_varlen_fn, _pad_fn, _unpad_fn = _lazy_imports(implementation)
+    global _loaded_implementation
+    if implementation is None and _loaded_implementation is None:
+        raise ValueError("Could not find any flash attn implementation based on your environment.")
 
-    global _process_flash_kwargs_fn
-    if force_import or _process_flash_kwargs_fn is None:
+    global _flash_fn, _flash_varlen_fn, _pad_fn, _unpad_fn, _process_flash_kwargs_fn
+    if implementation is not None and _loaded_implementation != implementation:
+        _loaded_implementation = implementation
+
+        _flash_fn, _flash_varlen_fn, _pad_fn, _unpad_fn = _lazy_imports(implementation, attention_wrapper)
         _process_flash_kwargs_fn = _lazy_define_process_function(_flash_varlen_fn)
 
     return (_flash_fn, _flash_varlen_fn, _pad_fn, _unpad_fn), _process_flash_kwargs_fn
+
+
+def lazy_import_paged_flash_attention(implementation: str | None):
+    """
+    Same as `lazy_import_flash_attention` but explicitly wrapping it with the paged implementation.
+    """
+    from .integrations.flash_paged import paged_attention_forward
+
+    (_, flash_attn_varlen_func, _, _), _ = lazy_import_flash_attention(
+        implementation, attention_wrapper=paged_attention_forward
+    )
+    return flash_attn_varlen_func
 
 
 def _index_first_axis(tensor, indices):
@@ -415,7 +453,7 @@ def fa_peft_integration_check(
     q: torch.Tensor,
     k: torch.Tensor,
     v: torch.Tensor,
-    target_dtype: Optional[torch.dtype] = None,
+    target_dtype: torch.dtype | None = None,
 ):
     """
     PEFT usually casts the layer norms in float32 for training stability reasons
@@ -444,10 +482,10 @@ class FlashAttentionKwargs(TypedDict, total=False):
             Maximum sequence length for key state.
     """
 
-    cu_seq_lens_q: Optional[torch.LongTensor]
-    cu_seq_lens_k: Optional[torch.LongTensor]
-    max_length_q: Optional[int]
-    max_length_k: Optional[int]
+    cu_seq_lens_q: torch.LongTensor | None
+    cu_seq_lens_k: torch.LongTensor | None
+    max_length_q: int | None
+    max_length_k: int | None
 
 
 def _process_flash_attention_kwargs(
@@ -455,13 +493,13 @@ def _process_flash_attention_kwargs(
     key_length: int,
     is_causal: bool,
     dropout: float = 0.0,
-    softmax_scale: Optional[float] = None,
-    sliding_window: Optional[int] = None,
+    softmax_scale: float | None = None,
+    sliding_window: int | None = None,
     use_top_left_mask: bool = False,
-    softcap: Optional[float] = None,
-    deterministic: Optional[bool] = None,
-    s_aux: Optional[torch.Tensor] = None,
-    supports_mapping: Optional[dict[str, bool]] = None,
+    softcap: float | None = None,
+    deterministic: bool | None = None,
+    s_aux: torch.Tensor | None = None,
+    supports_mapping: dict[str, bool] | None = None,
     **kwargs,
 ):
     """
@@ -530,22 +568,22 @@ def _flash_attention_forward(
     query_states: torch.Tensor,
     key_states: torch.Tensor,
     value_states: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
+    attention_mask: torch.Tensor | None,
     query_length: int,
     is_causal: bool,
     dropout: float = 0.0,
-    position_ids: Optional[torch.Tensor] = None,
-    softmax_scale: Optional[float] = None,
-    sliding_window: Optional[int] = None,
+    position_ids: torch.Tensor | None = None,
+    softmax_scale: float | None = None,
+    sliding_window: int | None = None,
     use_top_left_mask: bool = False,
-    softcap: Optional[float] = None,
-    deterministic: Optional[bool] = None,
-    cu_seq_lens_q: Optional[torch.LongTensor] = None,
-    cu_seq_lens_k: Optional[torch.LongTensor] = None,
-    max_length_q: Optional[int] = None,
-    max_length_k: Optional[int] = None,
-    target_dtype: Optional[torch.dtype] = None,
-    attn_implementation: Optional[str] = None,
+    softcap: float | None = None,
+    deterministic: bool | None = None,
+    cu_seq_lens_q: torch.LongTensor | None = None,
+    cu_seq_lens_k: torch.LongTensor | None = None,
+    max_length_q: int | None = None,
+    max_length_k: int | None = None,
+    target_dtype: torch.dtype | None = None,
+    attn_implementation: str | None = None,
     **kwargs,
 ):
     """

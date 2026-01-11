@@ -4,7 +4,7 @@ from typing import Any, overload
 
 import numpy as np
 
-from ..models.bert.tokenization_bert import BasicTokenizer
+from ..models.bert.tokenization_bert_legacy import BasicTokenizer
 from ..utils import (
     ExplicitEnum,
     add_end_docstrings,
@@ -279,7 +279,7 @@ class TokenClassificationPipeline(ChunkPipeline):
                 raise ValueError("When `is_split_into_words=True`, `sentence` must be a list of tokens.")
             words = sentence
             sentence = delimiter.join(words)  # Recreate the sentence string for later display and slicing
-            # This map will allows to convert back word => char indices
+            # This map will allow to convert back word => char indices
             word_to_chars_map = []
             delimiter_len = len(delimiter)
             char_offset = 0

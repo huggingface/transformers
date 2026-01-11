@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020, The T5 Authors and HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,7 +22,7 @@ logger = logging.get_logger(__name__)
 
 class MT5Config(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`MT5Model`] or a [`TFMT5Model`]. It is used to
+    This is the configuration class to store the configuration of a [`MT5Model`]. It is used to
     instantiate a mT5 model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the mT5
     [google/mt5-small](https://huggingface.co/google/mt5-small) architecture.
@@ -34,7 +33,7 @@ class MT5Config(PreTrainedConfig):
     Arguments:
         vocab_size (`int`, *optional*, defaults to 250112):
             Vocabulary size of the T5 model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`T5Model`] or [`TFT5Model`].
+            `inputs_ids` passed when calling [`T5Model`].
         d_model (`int`, *optional*, defaults to 512):
             Size of the encoder layers and the pooler layer.
         d_kv (`int`, *optional*, defaults to 64):
@@ -133,17 +132,16 @@ class MT5Config(PreTrainedConfig):
         if feed_forward_proj == "gated-gelu":
             self.dense_act_fn = "gelu_new"
 
+        # Force because official weights have False serialized, but we have to tie always
+        kwargs["tie_word_embeddings"] = True
         super().__init__(
             is_encoder_decoder=is_encoder_decoder,
             tokenizer_class=tokenizer_class,
-            tie_word_embeddings=tie_word_embeddings,
             pad_token_id=pad_token_id,
             eos_token_id=eos_token_id,
             decoder_start_token_id=decoder_start_token_id,
             **kwargs,
         )
-        # TODO: Mt5 never supported not tying encoder decoder so this has to be true.
-        self.tie_encoder_decoder = True
 
 
 __all__ = ["MT5Config"]

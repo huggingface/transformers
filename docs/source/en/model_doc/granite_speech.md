@@ -40,8 +40,114 @@ This model was contributed by [Alexander Brooks](https://huggingface.co/abrooks9
 ## Usage tips
 
 - This model bundles its own LoRA adapter, which will be automatically loaded and enabled/disabled as needed during inference calls. Be sure to install [PEFT](https://github.com/huggingface/peft) to ensure the LoRA is correctly applied!
+- The model expects 16kHz sampling rate audio. The processor will automatically resample if needed.
+- The LoRA adapter is automatically enabled when audio features are present and disabled for text-only inputs, so you don't need to manage it manually.
 
-<!-- TODO (@alex-jw-brooks) Add an example here once the model compatible with the transformers implementation is released -->
+## Usage example
+
+Granite Speech is a multimodal speech-to-text model that can transcribe audio and respond to text prompts. Here's how to use it:
+
+### Basic Speech Transcription
+
+```python
+from transformers import GraniteSpeechForConditionalGeneration, GraniteSpeechProcessor
+from datasets import load_dataset, Audio
+import torch
+
+# Load model and processor
+model = GraniteSpeechForConditionalGeneration.from_pretrained(
+    "ibm-granite/granite-3.2-8b-speech",
+    torch_dtype=torch.bfloat16,
+    device_map="auto"
+)
+processor = GraniteSpeechProcessor.from_pretrained("ibm-granite/granite-3.2-8b-speech")
+
+# Load audio from dataset (16kHz sampling rate required)
+ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+audio = ds['audio'][0]['array']
+
+# Process audio
+inputs = processor(audio=audio, return_tensors="pt").to(model.device)
+
+# Generate transcription
+generated_ids = model.generate(**inputs, max_new_tokens=256)
+transcription = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+print(transcription)
+```
+
+### Speech-to-Text with Chat Template
+
+For instruction-following with audio, use the chat template with audio directly in the conversation format:
+
+```python
+from transformers import GraniteSpeechForConditionalGeneration, GraniteSpeechProcessor
+from datasets import load_dataset, Audio
+import torch
+
+model = GraniteSpeechForConditionalGeneration.from_pretrained(
+    "ibm-granite/granite-3.2-8b-speech",
+    torch_dtype=torch.bfloat16,
+    device_map="auto"
+)
+processor = GraniteSpeechProcessor.from_pretrained("ibm-granite/granite-3.2-8b-speech")
+
+# Load audio from dataset
+ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+audio = ds['audio'][0]
+
+# Prepare conversation with audio and text
+conversation = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "audio", "audio": audio},
+            {"type": "text", "text": "Transcribe the following audio:"},
+        ],
+    }
+]
+
+# Apply chat template with audio - processor handles both tokenization and audio processing
+inputs = processor.apply_chat_template(conversation, tokenize=True, return_tensors="pt").to(model.device)
+
+# Generate transcription
+generated_ids = model.generate(**inputs, max_new_tokens=512)
+output_text = processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+print(output_text)
+```
+
+### Batch Processing
+
+Process multiple audio files efficiently:
+
+```python
+from transformers import GraniteSpeechForConditionalGeneration, GraniteSpeechProcessor
+from datasets import load_dataset, Audio
+import torch
+
+model = GraniteSpeechForConditionalGeneration.from_pretrained(
+    "ibm-granite/granite-3.2-8b-speech",
+    torch_dtype=torch.bfloat16,
+    device_map="auto"
+)
+processor = GraniteSpeechProcessor.from_pretrained("ibm-granite/granite-3.2-8b-speech")
+
+# Load multiple audio samples from dataset
+ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+ds = ds.cast_column("audio", Audio(sampling_rate=processor.feature_extractor.sampling_rate))
+audio_samples = [ds['audio'][i]['array'] for i in range(3)]
+
+# Process batch
+inputs = processor(audio=audio_samples, return_tensors="pt", padding=True).to(model.device)
+
+# Generate for all inputs
+generated_ids = model.generate(**inputs, max_new_tokens=256)
+transcriptions = processor.batch_decode(generated_ids, skip_special_tokens=True)
+
+for i, transcription in enumerate(transcriptions):
+    print(f"Audio {i+1}: {transcription}")
+```
 
 ## GraniteSpeechConfig
 
@@ -54,6 +160,7 @@ This model was contributed by [Alexander Brooks](https://huggingface.co/abrooks9
 ## GraniteSpeechProcessor
 
 [[autodoc]] GraniteSpeechProcessor
+    - __call__
 
 ## GraniteSpeechFeatureExtractor
 

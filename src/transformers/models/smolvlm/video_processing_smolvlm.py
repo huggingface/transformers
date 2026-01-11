@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, Union
+from typing import Optional
 
 import numpy as np
 import torch
@@ -216,9 +215,9 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
     def sample_frames(
         self,
         metadata: VideoMetadata,
-        num_frames: Optional[int] = None,
-        fps: Optional[Union[int, float]] = None,
-        skip_secs: Optional[int] = 1,
+        num_frames: int | None = None,
+        fps: int | float | None = None,
+        skip_secs: int | None = 1,
         **kwargs,
     ):
         """
@@ -289,9 +288,9 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
         rescale_factor: float,
         do_normalize: bool,
         do_pad: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        return_tensors: str | TensorType | None = None,
         **kwargs,
     ):
         grouped_videos, grouped_videos_index = group_videos_by_shape(videos)
@@ -331,7 +330,6 @@ class SmolVLMVideoProcessor(BaseVideoProcessor):
             processed_videos = reorder_videos(processed_videos_grouped, grouped_videos_index)
             pixel_attention_mask = reorder_videos(processed_padded_mask_grouped, grouped_videos_index)
 
-        processed_videos = torch.stack(processed_videos, dim=0) if return_tensors else processed_videos
         data = {"pixel_values": processed_videos}
 
         if do_pad:

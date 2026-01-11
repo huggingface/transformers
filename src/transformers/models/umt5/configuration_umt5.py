@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023, The T5 Authors and HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -34,7 +33,7 @@ class UMT5Config(PreTrainedConfig):
     Arguments:
         vocab_size (`int`, *optional*, defaults to 250112):
             Vocabulary size of the UMT5 model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`UMT5Model`] or [`TFUMT5Model`].
+            `inputs_ids` passed when calling [`UMT5Model`].
         d_model (`int`, *optional*, defaults to 512):
             Size of the encoder layers and the pooler layer.
         d_kv (`int`, *optional*, defaults to 64):
@@ -94,7 +93,6 @@ class UMT5Config(PreTrainedConfig):
         is_encoder_decoder=True,
         use_cache=True,
         tokenizer_class="T5Tokenizer",
-        tie_word_embeddings=True,
         pad_token_id=0,
         eos_token_id=1,
         decoder_start_token_id=0,
@@ -133,10 +131,11 @@ class UMT5Config(PreTrainedConfig):
         if feed_forward_proj == "gated-gelu":
             self.dense_act_fn = "gelu_new"
 
+        # Force because official weights have False serialized, but we have to tie always
+        kwargs["tie_word_embeddings"] = True
         super().__init__(
             is_encoder_decoder=is_encoder_decoder,
             tokenizer_class=tokenizer_class,
-            tie_word_embeddings=tie_word_embeddings,
             pad_token_id=pad_token_id,
             eos_token_id=eos_token_id,
             decoder_start_token_id=decoder_start_token_id,

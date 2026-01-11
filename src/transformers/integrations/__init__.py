@@ -19,7 +19,6 @@ from ..utils import OptionalDependencyNotAvailable, _LazyModule, is_torch_availa
 _import_structure = {
     "aqlm": ["replace_with_aqlm_linear"],
     "awq": [
-        "fuse_awq_modules",
         "post_init_awq_exllama_modules",
         "post_init_awq_ipex_modules",
         "replace_quantization_scales",
@@ -32,8 +31,8 @@ _import_structure = {
         "unpack_weights",
     ],
     "bitsandbytes": [
+        "Bnb4bitQuantize",
         "dequantize_and_replace",
-        "get_keys_to_not_convert",
         "replace_with_bnb_linear",
         "validate_bnb_backend_availability",
     ],
@@ -54,6 +53,7 @@ _import_structure = {
     "finegrained_fp8": ["FP8Linear", "replace_with_fp8_linear"],
     "fsdp": ["is_fsdp_enabled", "is_fsdp_managed_module"],
     "ggml": [
+        "GGUF_CONFIG_DEFAULTS_MAPPING",
         "GGUF_CONFIG_MAPPING",
         "GGUF_TOKENIZER_MAPPING",
         "_gguf_parse_value",
@@ -69,9 +69,12 @@ _import_structure = {
     "hqq": ["prepare_for_hqq_linear"],
     "hub_kernels": [
         "LayerRepository",
+        "lazy_load_kernel",
         "register_kernel_mapping",
         "replace_kernel_forward_from_hub",
         "use_kernel_forward_from_hub",
+        "use_kernel_func_from_hub",
+        "use_kernelized_func",
     ],
     "integration_utils": [
         "INTEGRATION_TO_CALLBACK",
@@ -113,6 +116,11 @@ _import_structure = {
         "run_hp_search_optuna",
         "run_hp_search_ray",
         "run_hp_search_wandb",
+    ],
+    "moe": [
+        "batched_mm_experts_forward",
+        "grouped_mm_experts_forward",
+        "use_experts_implementation",
     ],
     "mxfp4": [
         "Mxfp4GptOssExperts",
@@ -164,7 +172,6 @@ else:
 if TYPE_CHECKING:
     from .aqlm import replace_with_aqlm_linear
     from .awq import (
-        fuse_awq_modules,
         post_init_awq_exllama_modules,
         post_init_awq_ipex_modules,
         replace_quantization_scales,
@@ -177,8 +184,8 @@ if TYPE_CHECKING:
         unpack_weights,
     )
     from .bitsandbytes import (
+        Bnb4bitQuantize,
         dequantize_and_replace,
-        get_keys_to_not_convert,
         replace_with_bnb_linear,
         validate_bnb_backend_availability,
     )
@@ -199,6 +206,7 @@ if TYPE_CHECKING:
     from .finegrained_fp8 import FP8Linear, replace_with_fp8_linear
     from .fsdp import is_fsdp_enabled, is_fsdp_managed_module
     from .ggml import (
+        GGUF_CONFIG_DEFAULTS_MAPPING,
         GGUF_CONFIG_MAPPING,
         GGUF_TOKENIZER_MAPPING,
         _gguf_parse_value,
@@ -209,9 +217,12 @@ if TYPE_CHECKING:
     from .hqq import prepare_for_hqq_linear
     from .hub_kernels import (
         LayerRepository,
+        lazy_load_kernel,
         register_kernel_mapping,
         replace_kernel_forward_from_hub,
         use_kernel_forward_from_hub,
+        use_kernel_func_from_hub,
+        use_kernelized_func,
     )
     from .integration_utils import (
         INTEGRATION_TO_CALLBACK,
@@ -253,6 +264,11 @@ if TYPE_CHECKING:
         run_hp_search_optuna,
         run_hp_search_ray,
         run_hp_search_wandb,
+    )
+    from .moe import (
+        batched_mm_experts_forward,
+        grouped_mm_experts_forward,
+        use_experts_implementation,
     )
     from .mxfp4 import (
         Mxfp4GptOssExperts,

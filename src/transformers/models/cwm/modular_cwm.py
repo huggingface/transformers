@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional
 
 import torch
 
@@ -21,7 +19,6 @@ from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import layer_type_validation
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast
-from ...modeling_rope_utils import standardize_rope_params
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
 from ..llama.configuration_llama import LlamaConfig
@@ -41,7 +38,7 @@ class CwmConfig(LlamaConfig):
     """
     Configuration for Code World Model (CWM).
     This is an inherited Llama3-compatible configuration with layer-interleaved
-    sliding-window attention. Configures a `CwmModel`. Designed to yield a configuartion mirroring the model in the
+    sliding-window attention. Configures a `CwmModel`. Designed to yield a configuration mirroring the model in the
     [facebook/cwm](https://huggingface.co/facebook/cwm) architecture by default. Other models include:
     - [facebook/cwm-sft](https://huggingface.co/facebook/cwm-sft)
     - [facebook/cwm-pretrain](https://huggingface.co/facebook/cwm-pretrain)
@@ -92,7 +89,7 @@ class CwmConfig(LlamaConfig):
         mlp_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in up_proj, down_proj and gate_proj layers in the MLP layers.
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         sliding_window (`int`, *optional*, defaults to 8192):
@@ -103,6 +100,7 @@ class CwmConfig(LlamaConfig):
     """
 
     model_type = "cwm"
+    default_theta = 1_000_000.0
 
     def __init__(
         self,
@@ -118,17 +116,17 @@ class CwmConfig(LlamaConfig):
         initializer_range: float = 0.02,
         rms_norm_eps: float = 1e-5,
         use_cache: bool = True,
-        pad_token_id: Optional[int] = None,
+        pad_token_id: int | None = None,
         eos_token_id=[128001, 128008, 128009],
         bos_token_id: int = 128000,
         tie_word_embeddings: bool = False,
         attention_dropout: float = 0.0,
         pretraining_tp: int = 1,
         mlp_bias: bool = False,
-        rope_parameters: Optional[dict] = None,
+        rope_parameters: dict | None = None,
         # CWM interleaved sliding window fields
         sliding_window: int = 8192,
-        layer_types: Optional[list[str]] = None,  # ["full_attention"|"sliding_attention"] per layer
+        layer_types: list[str] | None = None,  # ["full_attention"|"sliding_attention"] per layer
         **kwargs,
     ):
         if rope_parameters is None:
@@ -182,10 +180,6 @@ class CwmConfig(LlamaConfig):
         # CWM models don't use attention bias, remove it from config
         del self.attention_bias
 
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 1_000_000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-
 
 class CwmRotaryEmbedding(Qwen2RotaryEmbedding):
     pass
@@ -225,13 +219,13 @@ class CwmModel(LlamaModel):
 
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        cache_position: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> CwmModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -245,8 +239,8 @@ class CwmModel(LlamaModel):
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position: torch.Tensor = torch.arange(
-                past_seen_tokens, past_seen_tokens + inputs_embeds.shape[1], device=inputs_embeds.device
+            cache_position: torch.Tensor = (
+                torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
             )
 
         if position_ids is None:

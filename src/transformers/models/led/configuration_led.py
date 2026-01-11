@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 Iz Beltagy, Matthew E. Peters, Arman Cohan and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """LED model configuration"""
-
-from typing import Union
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
@@ -37,7 +34,7 @@ class LEDConfig(PreTrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 50265):
             Vocabulary size of the LED model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`LEDModel`] or [`TFLEDModel`].
+            `inputs_ids` passed when calling [`LEDModel`].
         d_model (`int`, *optional*, defaults to 1024):
             Dimensionality of the layers and the pooler layer.
         encoder_layers (`int`, *optional*, defaults to 12):
@@ -127,7 +124,7 @@ class LEDConfig(PreTrainedConfig):
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
-        attention_window: Union[list[int], int] = 512,
+        attention_window: list[int] | int = 512,
         **kwargs,
     ):
         self.vocab_size = vocab_size

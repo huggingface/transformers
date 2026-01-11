@@ -99,9 +99,7 @@ print(f"Most likely label: {most_likely_label} with probability: {probs[0][most_
 ## CLIPTokenizer
 
 [[autodoc]] CLIPTokenizer
-    - build_inputs_with_special_tokens
     - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
     - save_vocabulary
 
 ## CLIPTokenizerFast
@@ -121,6 +119,7 @@ print(f"Most likely label: {most_likely_label} with probability: {probs[0][most_
 ## CLIPProcessor
 
 [[autodoc]] CLIPProcessor
+    - __call__
 
 ## CLIPModel
 

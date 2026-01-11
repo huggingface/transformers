@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -36,13 +35,16 @@ class Scheduler(ABC):
         self.retain_cache_on_finish = retain_cache_on_finish
         self._cancellation_lock = threading.Lock()
         self._requests_to_cancel: set[str] = set()
+        self._requests_to_fork: list[RequestState] = []
 
     @traced
     def add_waiting_request(self, state: RequestState):
         """Adds a request to the waiting list."""
         if self.retain_cache_on_finish and state.request_id in self.active_requests:
             old_state = self.active_requests.pop(state.request_id)
-            state.prompt_ids = state.prompt_ids[len(old_state.full_prompt_ids) :]  # XXX: check for indexing error?
+            state.tokens_to_process = state.tokens_to_process[
+                len(old_state.initial_tokens) :
+            ]  # XXX: check for indexing error?
             state.allocated_blocks = old_state.allocated_blocks
             state.position_offset = old_state.position_offset
         self.waiting_requests[state.request_id] = state
@@ -73,7 +75,7 @@ class Scheduler(ABC):
     def get_active_request_static_outputs(self, request_id: str) -> list[int]:
         """Gets generated tokens for an active request."""
         if request_id in self.active_requests:
-            return self.active_requests[request_id].static_outputs
+            return self.active_requests[request_id].generated_tokens
         return []
 
     @traced
@@ -113,7 +115,7 @@ class Scheduler(ABC):
         # 1. we check that the occupancy is less than the requested length
         # 2. we allocate enough blocks to cover the requested length
         current_len = state.current_len()
-        len_next_tokens = len(state.prompt_ids)
+        len_next_tokens = len(state.tokens_to_process)
         occupancy = state.allocated_blocks * self.cache.block_size - current_len
         if occupancy < len_next_tokens or state.allocated_blocks == 0:
             blocks_needed = ((len_next_tokens - occupancy + 1) // self.cache.block_size) + 1
@@ -131,44 +133,50 @@ class Scheduler(ABC):
         pending, this is where we look for a prefix match and split the request if found."""
         # If prefix sharing is enabled, we look for a prefix match and split the request if found
         if self.cache.use_prefix_sharing and state.status == RequestStatus.PENDING:
-            prefill_length = self.cache.search_prefix_match(state.request_id, state.prompt_ids)
+            prefill_length = self.cache.search_prefix_match(state.request_id, state.tokens_to_process)
             if prefill_length > 0:
                 self.active_requests[state.request_id] = state
                 request_ids_to_remove_from_waiting.add(state.request_id)
                 state.status = RequestStatus.SPLIT_PENDING_REMAINDER
                 # Even if we match the whole request, we keep at least 1 token to start decoding
-                prefill_length = min(prefill_length, len(state.prompt_ids) - 1)
-                state.remaining_prompt_ids = state.prompt_ids[prefill_length:]
-                state.prompt_ids = state.prompt_ids[prefill_length:]
+                prefill_length = min(prefill_length, len(state.tokens_to_process) - 1)
+                state.remaining_prefill_tokens = state.tokens_to_process[prefill_length:]
+                state.tokens_to_process = state.tokens_to_process[prefill_length:]
                 state.position_offset += prefill_length
 
         # If the request has a split prefill, the tokens to process are the remaining prompt ids
         if state.status == RequestStatus.SPLIT_PENDING_REMAINDER:
-            request_tokens = state.remaining_prompt_ids
+            request_tokens = state.remaining_prefill_tokens
         # Otherwise, the tokens to process are the prompt ids, which are the full prompt or the last predicted tokens
         else:
-            request_tokens = state.prompt_ids
+            request_tokens = state.tokens_to_process
 
+        # If the request has one or more children we make sure not to prefill it entrirely
+        if state.num_children > 0 and token_budget >= len(request_tokens) - 1:
+            token_budget = len(request_tokens) - 1
+            self._requests_to_fork.append(state)
+
+        # Case: we can process the entire prompt/remainder
         if len(request_tokens) < token_budget:
-            # Can process the entire prompt/remainder
             if state.status == RequestStatus.PENDING:
                 self.active_requests[state.request_id] = state
                 state.status = RequestStatus.PREFILLING
                 request_ids_to_remove_from_waiting.add(state.request_id)
             elif state.status == RequestStatus.SPLIT_PENDING_REMAINDER:
                 state.status = RequestStatus.PREFILLING
-                state.prompt_ids = state.remaining_prompt_ids
-                state.remaining_prompt_ids = []
+                state.tokens_to_process = state.remaining_prefill_tokens
+                state.remaining_prefill_tokens = []
+
+        # Otherwise: we need to split the request
         else:
-            # Need to split the request
             if state.status == RequestStatus.PENDING:
                 self.active_requests[state.request_id] = state
                 state.status = RequestStatus.PREFILLING_SPLIT
                 request_ids_to_remove_from_waiting.add(state.request_id)
             elif state.status == RequestStatus.SPLIT_PENDING_REMAINDER:
                 state.status = RequestStatus.PREFILLING_SPLIT
-            state.remaining_prompt_ids = request_tokens[token_budget:]
-            state.prompt_ids = request_tokens[:token_budget]
+            state.remaining_prefill_tokens = request_tokens[token_budget:]
+            state.tokens_to_process = request_tokens[:token_budget]
 
 
 # TODO: further common-ize the two classes
@@ -214,7 +222,7 @@ class FIFOScheduler(Scheduler):
                 break
 
             self._prepare_request_for_processing(state, token_budget, request_ids_to_remove_from_waiting)
-            request_len = len(state.prompt_ids)
+            request_len = len(state.tokens_to_process)
             # If we can't allocate blocks, do not schedule the request and break if the cache is full
             if not self._allocate_blocks_if_needed(state):
                 if self.cache.get_num_free_blocks() == 0:
@@ -227,7 +235,7 @@ class FIFOScheduler(Scheduler):
             # Update the token budget
             token_budget -= request_len
             # If using prefix sharing, we make note of the blocks that will be computed in the forward pass
-            if self.cache.use_prefix_sharing:
+            if self.cache.allow_block_sharing:
                 tokens_in_current_block = state.current_len() % self.cache.block_size
                 tokens_after_forward = tokens_in_current_block + request_len
                 complete_blocks = tokens_after_forward // self.cache.block_size
@@ -280,7 +288,7 @@ class PrefillFirstScheduler(Scheduler):
 
         for state in candidates:
             self._prepare_request_for_processing(state, token_budget, request_ids_to_remove_from_waiting)
-            request_len = len(state.prompt_ids)
+            request_len = len(state.tokens_to_process)
             # If we can't allocate blocks, do not schedule the request and break if the cache is full
             if not self._allocate_blocks_if_needed(state):
                 if self.cache.get_num_free_blocks() == 0:
@@ -293,7 +301,7 @@ class PrefillFirstScheduler(Scheduler):
             # Update the token budget
             token_budget -= request_len
             # If using prefix sharing, we make note of the blocks that will be computed in the forward pass
-            if self.cache.use_prefix_sharing:
+            if self.cache.allow_block_sharing:
                 tokens_in_current_block = state.current_len() % self.cache.block_size
                 tokens_after_forward = tokens_in_current_block + request_len
                 complete_blocks = tokens_after_forward // self.cache.block_size

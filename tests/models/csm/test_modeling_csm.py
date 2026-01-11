@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024, The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -277,6 +276,10 @@ class CsmForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMixin, u
 
     @unittest.skip(reason="CSM has special embeddings that can never be tied")
     def test_tied_weights_keys(self):
+        pass
+
+    @unittest.skip(reason="CSM has no separate base model without a head.")
+    def test_model_base_model_prefix(self):
         pass
 
     def _get_custom_4d_mask_test_data(self):

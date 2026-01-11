@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 Salesforce and HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,7 +22,7 @@ logger = logging.get_logger(__name__)
 
 class CTRLConfig(PreTrainedConfig):
     """
-    This is the configuration class to store the configuration of a [`CTRLModel`] or a [`TFCTRLModel`]. It is used to
+    This is the configuration class to store the configuration of a [`CTRLModel`]. It is used to
     instantiate a CTRL model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the
     [Salesforce/ctrl](https://huggingface.co/Salesforce/ctrl) architecture from SalesForce.
@@ -34,7 +33,7 @@ class CTRLConfig(PreTrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 246534):
             Vocabulary size of the CTRL model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`CTRLModel`] or [`TFCTRLModel`].
+            `inputs_ids` passed when calling [`CTRLModel`].
         n_positions (`int`, *optional*, defaults to 256):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
