@@ -175,6 +175,10 @@ class DepthAnythingModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
         pass
 
     @unittest.skip(reason="Training is not yet supported")
+    def test_training(self):
+        pass
+
+    @unittest.skip(reason="Training is not yet supported")
     def test_training_gradient_checkpointing(self):
         pass
 
