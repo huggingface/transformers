@@ -155,6 +155,51 @@ class TestMistralCommonBackend(unittest.TestCase):
             self.spm_repo_id, local_files_only=local_files_only, revision=None, mode=mode
         )
 
+    def test_special_token_string_encoding(self):
+        """Test that special token strings are preserved as single tokens when encoded."""
+        vocab = self.tokenizer.get_vocab()
+        special_tokens_to_test = ["[INST]", "[/INST]", "[IMG]"]
+        available_special_tokens = [t for t in special_tokens_to_test if t in vocab]
+
+        for special_token in available_special_tokens:
+            expected_id = self.tokenizer.convert_tokens_to_ids(special_token)
+
+            # Test 1:
+            # Special token alone
+            tokens = self.tokenizer.encode(special_token, add_special_tokens=False)
+            self.assertEqual(len(tokens), 1, f"{special_token} was split into {len(tokens)} tokens: {tokens}")
+            self.assertEqual(tokens[0], expected_id)
+
+            # Test 2:
+            #check with add_special_tokens=True
+            tokens_with_special = self.tokenizer.encode(special_token, add_special_tokens=True)
+            self.assertEqual(len(tokens_with_special), 2, f"Expected exactly 2 tokens (BOS + {special_token}), got {tokens_with_special}")
+            self.assertEqual(tokens_with_special[1], expected_id)
+
+            # Test 3:
+            # Special token in sentence
+            text = f"Hello {special_token} world"
+            tokens = self.tokenizer.encode(text, add_special_tokens=False)
+            self.assertIn(expected_id, tokens, f"{special_token} ID {expected_id} not found in encoded tokens: {tokens}")
+
+            # Test 4:
+            # Decode check
+            decoded = self.tokenizer.decode(tokens)
+            self.assertIn(special_token, decoded, f"Expected {special_token} in decoded text, got '{decoded}'")
+
+        # Test 5:
+        # Mixed special tokens
+        if len(available_special_tokens) >= 2:
+            t1 = available_special_tokens[0]
+            t2 = available_special_tokens[1]
+            t1_id = self.tokenizer.convert_tokens_to_ids(t1)
+            t2_id = self.tokenizer.convert_tokens_to_ids(t2)
+
+            text = f"{t1} text {t2}"
+            tokens = self.tokenizer.encode(text, add_special_tokens=False)
+            self.assertEqual(tokens[0], t1_id, f"Expected first token to be {t1} ({t1_id}), got {tokens[0]}")
+            self.assertEqual(tokens[-1], t2_id, f"Expected last token to be {t2} ({t2_id}), got {tokens[-1]}")
+
     def test_spm_vs_tekken_piece_to_id(self):
         spm_tokenizer = self._get_spm_tokenizer()
         self.assertEqual(spm_tokenizer._piece_to_id("<s>", False), 1)
