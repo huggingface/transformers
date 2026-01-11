@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Processor class for Vocos"""
+"""Processor class for VocosEncodec"""
 
 from collections.abc import Sequence
 from typing import Optional
@@ -45,21 +45,26 @@ class VocosProcessorKwargs(ProcessingKwargs, total=False):
 
 class VocosEncodecProcessor(ProcessorMixin):
     r"""
-    Constructs a Vocos processor which wraps a [`VocosFeatureExtractor`] and an audio tokenizer [`EncodecModel`]  into
-    a single processor that can handle both mel-spectrogram feature extraction and EnCodec neural codec based
-    feature extraction.
+    Constructs a VocosEncodec processor which  prepares inputs for [`VocosEncodecModel`] using the audio tokenizer [`EncodecModel`]. It supports two workflows:
+        - Audio reconstruction from audio: The processor runs the wrapped [`EncodecModel`] to obtain
+        quantized codes at the requested `bandwidth`, then converts them into embeddings (`input_features`) expected by
+        [`VocosEncodecModel`]. For this provide `audio` and `bandwidth.
+
+        - Audio reconstruction from precomputed codes: The processor converts `codes` into embeddings
+        (`input_features`) expected by [`VocosEncodecModel`]. For this provide `codes` and `bandwidth`.
 
     Args:
         feature_extractor (`VocosFeatureExtractor`):
-            Feature extractor that computes mel-spectrogram features.
+            Used only for padding `attention_mask` when processing audio batches. It does not compute
+            mel-spectrogram features in this processor.
         audio_tokenizer (`EncodecModel`):
-            Audio tokenizer used to encode raw audio into discrete codebooks
-            (when `bandwidth` is given) via the EnCodec model, then turns those codes into token embeddings.
+            Audio tokenizer used to encode raw audio into discrete codebooks via the EnCodec model, then
+            turns those codes into token embeddings.
     """
 
     feature_extractor_class = "VocosFeatureExtractor"
     audio_tokenizer_class = "EncodecModel"
-    attributes = ["feature_extractor"]
+    attributes = ["feature_extractor", "audio_tokenizer"]
 
     def __init__(self, feature_extractor, audio_tokenizer):
         super().__init__(feature_extractor=feature_extractor, audio_tokenizer=audio_tokenizer)
@@ -74,9 +79,9 @@ class VocosEncodecProcessor(ProcessorMixin):
         **kwargs: Unpack[VocosProcessorKwargs],
     ) -> BatchFeature:
         """
-        Main method to prepare inputs for the Vocos model, it supports two processing workflows:
-        - Mel-spectrogram variant (only `audio` provided): extracts mel-spectrogram features from raw audio, by passing
-        it to VocosFeatureExtractor [`~VocosFeatureExtractor.__call__`].
+        Main method to prepare inputs for [`VocosEncodecModel`].
+
+
         - EnCodec variant (`codes` or `bandwidth` provided): if `audio` provided and `codes` not provided, embeddings
         are computed with the neural audio codec EnCodec [`EncodecModel`] with the given `bandwidth`; if `codes` are
         provided, the corresponding embeddings are computed for the target bandwidth.
@@ -86,16 +91,19 @@ class VocosEncodecProcessor(ProcessorMixin):
                 Audio input to be processed of shape `(sequence_length,)` or `(batch_size, sequence_length)`.
             codes (`torch.LongTensor`, *optional*):
                 Pre-computed EnCodec quantized codes of shape `(num_codebooks, sequence_length)` or `(num_codebooks, batch_size, sequence_length)`
-            bandwidth (`float`, *optional*):
-                EnCodec bandwidth [1.5, 3.0, 6.0, 12.0] kbps, this triggers EnCodec pathway when provided.
+            bandwidth (`float`):
+                Target EnCodec bandwidth in kbps, it must be one of the configured `bandwidths` [1.5, 3.0, 6.0, 12.0].
             return_tensors (`str`, defaults to `"pt"`):
                 Only `"pt"` (PyTorch tensors) is supported.
             device (`str`, *optional*):
-                Device on to compute mel spectrogram. If left to `None`, uses the device of the first input
-                `audio` element, or CPU if the input is a numpy array.
+                Device on which EnCodec encoding and embedding are computed.
 
         Returns:
-            [`BatchFeature`]: Contains `audio_spectrogram` or `input_features` tensor for the model input.
+            [`BatchFeature`]: Contains:
+            - `input_features` (`torch.FloatTensor`): EnCodec-embedded features of shape `(batch_size, feature_dim, time_dim)`.
+            - `bandwidth` (`float`): The bandwidth used to obtain the codes / embeddings.
+            - `attention_mask` (`torch.Tensor`, *optional*): Present when `audio` was provided and padding was applied.
+              The mask corresponds to the padded input waveform samples and is passed through by the model (not used).
         """
 
         output_kwargs = self._merge_kwargs(VocosProcessorKwargs, **kwargs)
@@ -104,40 +112,40 @@ class VocosEncodecProcessor(ProcessorMixin):
         if return_tensors != "pt":
             raise ValueError(f"{self.__class__.__name__} only supports `return_tensors='pt'`.")
 
+        if audio is None and codes is None:
+            raise ValueError("Either `audio` or `codes` must be provided.")
+
+        if audio is not None and codes is not None:
+            raise ValueError("Both `audio` and `codes` were set, make sure you only set one.")
+
+        if bandwidth is None:
+            raise ValueError("`bandwidth` must be provided for EnCodec processing.")
+
         self.sampling_rate = audio_kwargs["sampling_rate"]
         self.bandwidths = audio_kwargs["bandwidths"]
-        if bandwidth is not None and bandwidth not in self.bandwidths:
+
+        if bandwidth not in self.bandwidths:
             raise ValueError(f"bandwidth {bandwidth} is not supported, supported bandwidths are {self.bandwidths}")
 
-        # Prepare model inputs
-        audio_spectrogram = None
-        input_features = None
-        padding_mask = None
         if audio is not None:
             if bandwidth is not None:
-                # pad audio into batch
-                pad_to_multiple_of = (
-                    None if len(make_list_of_audio(audio)) == 1 else self.audio_tokenizer.config.hop_length
+                audio_list = make_list_of_audio(audio)
+                pad_to_multiple_of = None if len(audio_list) == 1 else self.audio_tokenizer.config.hop_length
+                audio_list = [torch.as_tensor(_audio).view(-1, 1) for _audio in audio_list]
+                batch = BatchFeature({"input_features": audio_list})
+                padded_audio = self.feature_extractor.pad(
+                    batch, pad_to_multiple_of=pad_to_multiple_of, return_attention_mask=True, return_tensors="pt"
                 )
-                fe_outputs = self.feature_extractor(
-                    audio,
-                    return_audio_only=True,
-                    pad_to_multiple_of=pad_to_multiple_of,
-                    device=device,
-                    **audio_kwargs,
-                )
-                audio = fe_outputs["audio"]
 
-                # encode audio as in original:
-                # https://github.com/gemelo-ai/vocos/blob/c859e3b7b534f3776a357983029d34170ddd6fc3/vocos/feature_extractors.py#L79
-                audio = audio.unsqueeze(1)
+                attention_mask = padded_audio["attention_mask"]
+                padded_audio = padded_audio["input_features"].transpose(1, 2)
+
                 with torch.no_grad():
-                    encoded_frames = self.audio_tokenizer.encoder(audio.to(self.audio_tokenizer.device))
-                    codes = self.audio_tokenizer.quantizer.encode(encoded_frames, bandwidth=bandwidth)
-            else:
-                fe_outputs = self.feature_extractor(audio, device=device, **audio_kwargs)
-                audio_spectrogram = fe_outputs.audio_spectrogram
-            padding_mask = fe_outputs["padding_mask"]
+                    # encode audio as in original:
+                    # https://github.com/gemelo-ai/vocos/blob/c859e3b7b534f3776a357983029d34170ddd6fc3/vocos/feature_extractors.py#L79
+                    self.audio_tokenizer.to(device)
+                    embeddings = self.audio_tokenizer.encoder(padded_audio.to(device))
+                    codes = self.audio_tokenizer.quantizer.encode(embeddings, bandwidth=bandwidth)
 
         if codes is not None:
             if codes.ndim not in (2, 3):
@@ -145,30 +153,24 @@ class VocosEncodecProcessor(ProcessorMixin):
                     f"`codes` must have shape (num_codebooks, sequence_length) or (num_codebooks, batch_size, sequence_length), but got {codes.shape}."
                 )
             if codes.dim() == 2:
-                # add batch dimension
                 codes = codes.unsqueeze(1)
-            if bandwidth is None:
-                raise ValueError("When passing `codes`, `bandwidth` must be also be provided.")
 
             # Extract codebook weights: https://github.com/gemelo-ai/vocos/blob/c859e3b7b534f3776a357983029d34170ddd6fc3/vocos/feature_extractors.py#L71
             num_quantizers = self.audio_tokenizer.quantizer.get_num_quantizers_for_bandwidth(max(self.bandwidths))
             codebook_weights = torch.cat(
                 [layer.codebook.embed for layer in self.audio_tokenizer.quantizer.layers[:num_quantizers]], dim=0
             ).to(codes.device)
+
             num_bins = self.audio_tokenizer.quantizer.codebook_size
+
             # Embed with position https://github.com/gemelo-ai/vocos/blob/c859e3b7b534f3776a357983029d34170ddd6fc3/vocos/pretrained.py#L117
             offsets = torch.arange(0, num_bins * len(codes), num_bins, device=codes.device).reshape(-1, 1, 1)
             embeddings_idxs = codes + offsets
             input_features = F.embedding(embeddings_idxs, codebook_weights).sum(dim=0).transpose(1, 2)
 
-        if input_features is not None:
-            data = {"input_features": input_features, "bandwidth": float(bandwidth)}
-        elif audio_spectrogram is not None:
-            data = {"audio_spectrogram": audio_spectrogram}
-        else:
-            raise ValueError("Either 'codes' or 'audio' must be provided to compute features.")
-        if padding_mask is not None:
-            data["padding_mask"] = padding_mask
+        data = {"input_features": input_features, "bandwidth": float(bandwidth)}
+        if audio is not None:
+            data["attention_mask"] = attention_mask
 
         return BatchFeature(data, tensor_type=return_tensors)
 
