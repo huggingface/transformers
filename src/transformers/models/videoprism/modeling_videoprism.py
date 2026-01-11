@@ -32,7 +32,7 @@ class BaseModelOutputWithSpatialAndTemporalStates(ModelOutput):
     Args:
         last_hidden_state (Optional[torch.FloatTensor]):
             The last hidden state of the model, typically of shape
-            (batch_size, sequence_length, hidden_size).
+            (batch_size, num_patches * num_frames, hidden_size).
 
         temporal_hidden_state (Optional[torch.FloatTensor]):
             The last hidden_state of the temporal encoder, typically of shape
@@ -562,7 +562,11 @@ class VideoPrismPreTrainedModel(PreTrainedModel):
             init.ones_(module.weight)
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    The bare VideoPrism vision encoder outputting raw hidden-states without any specific head on top. This model is the backbone encoder used in VideoPrismVideoModel.
+    """
+)
 class VideoPrismVisionModel(VideoPrismPreTrainedModel):
     config: VideoPrismVisionConfig
 
@@ -587,6 +591,13 @@ class VideoPrismVisionModel(VideoPrismPreTrainedModel):
         interpolate_pos_encoding: bool | None = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithSpatialAndTemporalStates:
+        r"""
+        Args:
+            pixel_values_videos (`torch.FloatTensor`):
+                Pixel values of the video frames of shape (batch_size, num_frames, num_channels, height, width).
+            interpolate_pos_encoding (`bool`, *optional*, defaults to `False`):
+                Whether to interpolate positional encodings to match input size.
+        """
         if pixel_values_videos is None:
             raise ValueError("You have to specify pixel_values_videos")
 
@@ -694,7 +705,11 @@ def l2norm(x: torch.FloatTensor, dim: int = -1, eps: float = 1e-6):
     return x * inv_norm
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    The bare VideoPrism text encoder outputting raw hidden-states without any specific head on top. This model is used in VideoPrismClipModel.
+    """
+)
 class VideoPrismTextModel(VideoPrismPreTrainedModel):
     config: VideoPrismTextConfig
 
@@ -719,6 +734,13 @@ class VideoPrismTextModel(VideoPrismPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
+        r"""
+        Args:
+            input_ids (`torch.Tensor`):
+                Input token IDs.
+            attention_mask (`torch.Tensor`, *optional*):
+                Attention mask to avoid performing attention on padding token indices.
+        """
         batch_size, seq_length = input_ids.shape
         hidden_states = self.token_embeddings(input_ids)
         hidden_states = hidden_states * (self.config.hidden_size**0.5)
@@ -753,7 +775,11 @@ class VideoPrismTextModel(VideoPrismPreTrainedModel):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    VideoPrism video model consisting of the vision encoder backbone with auxiliary encoder layers and an attention pooling head on top. This model is used in VideoPrismClipModel.
+    """
+)
 class VideoPrismVideoModel(VideoPrismPreTrainedModel):
     config: VideoPrismVisionConfig
 
@@ -775,6 +801,13 @@ class VideoPrismVideoModel(VideoPrismPreTrainedModel):
         interpolate_pos_encoding: bool | None = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> VideoPrismVideoOutput:
+        r"""
+        Args:
+            pixel_values_videos (`torch.FloatTensor`):
+                Pixel values of the video frames.
+            interpolate_pos_encoding (`bool`, *optional*, defaults to `False`):
+                Whether to interpolate positional encodings to match input size.
+        """
         backbone_outputs = self.backbone(
             pixel_values_videos=pixel_values_videos, interpolate_pos_encoding=interpolate_pos_encoding, **kwargs
         )
@@ -793,7 +826,11 @@ class VideoPrismVideoModel(VideoPrismPreTrainedModel):
         )
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    VideoPrism model for video-text contrastive learning. This model consists of a VideoPrismVideoModel and a VideoPrismTextModel, and computes similarity scores between video and text inputs.
+    """
+)
 class VideoPrismClipModel(VideoPrismPreTrainedModel):
     def __init__(self, config: VideoPrismConfig):
         super().__init__(config)
@@ -813,6 +850,37 @@ class VideoPrismClipModel(VideoPrismPreTrainedModel):
         temperature: float | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> VideoPrismClipOutput:
+        r"""
+        Args:
+            pixel_values_videos (`torch.FloatTensor`):
+                Pixel values of the video frames.
+            input_ids (`torch.Tensor`):
+                Input token IDs for text.
+            attention_mask (`torch.Tensor`, *optional*):
+                Attention mask for text inputs.
+            interpolate_pos_encoding (`bool`, *optional*, defaults to `False`):
+                Whether to interpolate positional encodings.
+            temperature (`float`, *optional*):
+                Temperature parameter for scaling similarity scores.
+
+        Example:
+
+        ```python
+        >>> from transformers import VideoPrismProcessor, VideoPrismClipModel
+        >>> import torch
+
+        >>> processor = VideoPrismProcessor.from_pretrained("google/videoprism")
+        >>> model = VideoPrismClipModel.from_pretrained("google/videoprism")
+
+        >>> video = "sample_video.mp4"
+        >>> texts = ["a dog", "a cat"]
+        >>> inputs = processor(videos=video, texts=texts, return_tensors="pt", padding=True)
+
+        >>> with torch.no_grad():
+        ...     outputs = model(**inputs)
+        ...     logits_per_video = outputs.logits_per_video
+        ```
+        """
         video_model_outputs = self.video_model(
             pixel_values_videos=pixel_values_videos, interpolate_pos_encoding=interpolate_pos_encoding, **kwargs
         )
@@ -869,6 +937,32 @@ class VideoPrismForVideoClassification(VideoPrismPreTrainedModel):
         interpolate_pos_encoding: bool | None = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> ImageClassifierOutput:
+        r"""
+        Args:
+            pixel_values_videos (`torch.FloatTensor`):
+                Pixel values of the video frames.
+            labels (`torch.LongTensor`, *optional*):
+                Video classification labels.
+            interpolate_pos_encoding (`bool`, *optional*, defaults to `False`):
+                Whether to interpolate positional encodings.
+
+        Example:
+
+        ```python
+        >>> from transformers import VideoPrismVideoProcessor, VideoPrismForVideoClassification
+        >>> import torch
+
+        >>> processor = VideoPrismVideoProcessor("google/videoprism")
+        >>> model = VideoPrismForVideoClassification.from_pretrained("google/videoprism", num_labels=1000)
+
+        >>> video = "sample_video.mp4"
+        >>> inputs = processor(videos=video, return_tensors="pt")
+
+        >>> with torch.no_grad():
+        ...     outputs = model(**inputs)
+        ...     logits = outputs.logits
+        ```
+        """
         encoder_outputs = self.encoder(
             pixel_values_videos=pixel_values_videos, interpolate_pos_encoding=interpolate_pos_encoding, **kwargs
         )
