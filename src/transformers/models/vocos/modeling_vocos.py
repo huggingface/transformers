@@ -32,9 +32,16 @@ class VocosOutput(ModelOutput):
     Args:
         audio (`torch.FloatTensor` of shape `(batch_size, time)`):
             Reconstructed audio waveform.
+
+        attention_mask (`torch.Tensor` of shape `(batch_size, time)`, *optional*):
+            Attention mask indicates which positions contain valid audio vs padding tokens, values of 1 indicate valid audio,
+            0 indicates padding. Returned in the output to remove padding from reconstructed audios when
+            processing batches with sequences of different lengths (batch_size > 1).
+
     """
 
     audio: torch.FloatTensor
+    attention_mask: Optional[torch.Tensor] = None
 
 
 def custom_istft(input, n_fft: int, padding=None, **kwargs) -> "torch.Tensor":
@@ -231,7 +238,7 @@ class VocosPreTrainedModel(PreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    Main Vocos model for neural vocoding for high-quality audio generation.
+    Vocos model for neural vocoding reconstructed from mel spectrogram features.
     """
 )
 class VocosModel(VocosPreTrainedModel):
@@ -246,7 +253,6 @@ class VocosModel(VocosPreTrainedModel):
         self.layers = nn.ModuleList([VocosConvNeXtBlock(config) for _ in range(config.num_layers)])
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-        # Decoder (Linear + ISTFT)
         self.decoder = VocosISTFTHead(config)
 
         self.post_init()
@@ -256,17 +262,23 @@ class VocosModel(VocosPreTrainedModel):
     def forward(
         self,
         input_features: Optional[torch.FloatTensor] = None,
-        padding_mask: Optional[torch.BoolTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
     ) -> VocosOutput:
         r"""
-        input_features (`torch.FloatTensor` of shape `(batch_size, feature_dim, time_dim)`):
+        input_features (`torch.FloatTensor` of shape `(batch_size, num_mel_bins, num_frames)`):
             Mel-spectrogram features: computed directly from audio via (`VocosFeatureExtractor`).
-        padding_mask (`torch.BoolTensor` of shape `(batch_size, time_dim)`, *optional*):
-            Padding mask. Not used, but kept so feature extractor outputs can be passed directly.
+
+        attention_mask (`torch.Tensor` of shape `(batch_size, time)`, *optional*):
+            Attention mask indicates which positions contain valid audio vs padding tokens. Not used, returned in the output
+            to allow removing padding from reconstructed audios when processing batches with sequences of different lengths (batch_size > 1).
+
 
         Returns:
             `VocosOutput` or tuple `(audio,)`:
             - `audio` of shape (batch_size, time): Reconstructed audio waveform.
+            - `attention_mask` of shape (batch_size, time): atention mask for the reconstructed audio, used to remove padding from reconstructed audios
+                when processing batches with sequences of different lengths (batch_size > 1).
+
 
         Example:
 
@@ -274,26 +286,32 @@ class VocosModel(VocosPreTrainedModel):
         >>> from datasets import load_dataset, Audio
         >>> from transformers import VocosFeatureExtractor, VocosModel
 
-        >>> feature_extractor = VocosFeatureExtractor.from_pretrained("hf-audio/vocos-mel-24khz")
-        >>> model = VocosModel.from_pretrained("hf-audio/vocos-mel-24khz")
+        >>> feature_extractor = VocosFeatureExtractor.from_pretrained("Manel/vocos-mel-24khz")
+        >>> model = VocosModel.from_pretrained("Manel/vocos-mel-24khz")
 
         >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         >>> ds = ds.cast_column("audio", Audio(sampling_rate=feature_extractor.sampling_rate))
-        >>> audio_sample= ds[0]["audio"]["array"]
+        >>> audios = [x["array"] for x in ds.sort("id")[:3]["audio"]]
 
-        >>> # extract mel-spectrogram features from audio and reconstruct high-quality audio
-        >>> inputs = feature_extractor(audio=audio_sample)
+        >>> # extract mel-spectrogram features from audio
+        >>> inputs = feature_extractor(audio=audios)
+
+        >>> # reconstruct high-quality audio
         >>> outputs = model(**inputs)
-        >>> reconstructed_audio = outputs.audio
+        >>> reconstructed_audio, attention_mask = outputs.audio, outputs.attention_mask
+
+        >>> Remove padding from reconstructed audios using attention mask
+        >>> unpadded_audios = [reconstructed_audio[i][attention_mask[i].bool()].detach().cpu().numpy() for i in range(reconstructed_audio.shape[0])]
+
 
         ```
         """
-        hidden_states = self.embed(input_features)  # (B, hidden_size, time_dim)
+        hidden_states = self.embed(input_features)  # (batch_size, hidden_size, time_dim)
 
         # Apply initial norm in channel-last format
-        hidden_states = hidden_states.transpose(1, 2)  # (B, time_dim, hidden_size)
+        hidden_states = hidden_states.transpose(1, 2)  # (batch_size, time_dim, hidden_size)
         hidden_states = self.norm(hidden_states)
-        hidden_states = hidden_states.transpose(1, 2)  # back to (B, hidden_size, time_dim)
+        hidden_states = hidden_states.transpose(1, 2)  # back to (batch_size, hidden_size, time_dim)
 
         # Process through ConvNeXt layers
         for layer in self.layers:
@@ -302,7 +320,7 @@ class VocosModel(VocosPreTrainedModel):
         # Final norm and decoder expect channel-last format
         hidden_states = self.final_layer_norm(hidden_states.transpose(1, 2))
         audio = self.decoder(hidden_states)
-        return VocosOutput(audio=audio)
+        return VocosOutput(audio=audio, attention_mask=attention_mask)
 
 
 __all__ = ["VocosModel", "VocosPreTrainedModel"]
