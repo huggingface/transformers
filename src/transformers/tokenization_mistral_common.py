@@ -36,6 +36,8 @@ from transformers.tokenization_utils_base import (
 from transformers.utils import PaddingStrategy, TensorType, add_end_docstrings, logging, to_py_obj
 from transformers.utils.import_utils import is_mistral_common_available, is_torch_available, requires
 
+from .tokenization_python import Trie
+
 
 if is_mistral_common_available():
     from mistral_common.protocol.instruct.request import ChatCompletionRequest
@@ -281,6 +283,9 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
 
         self._all_special_ids = self._get_all_special_ids()
         self._all_special_tokens = self.convert_ids_to_tokens(self.all_special_ids)
+        self.special_tokens_trie = Trie()
+        for token in self._all_special_tokens:
+            self.special_tokens_trie.add(token)
 
         super().__init__(
             truncation_side=truncation_side,
@@ -633,8 +638,36 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
         Converts a string into a sequence of tokens ids, using the tokenizer.
         """
         add_eos = add_special_tokens and self._mode == ValidationMode.finetuning
-        tokens_ids = self.tokenizer.instruct_tokenizer.tokenizer.encode(text, bos=add_special_tokens, eos=add_eos)
-        return tokens_ids
+
+        segments = self.special_tokens_trie.split(text)
+
+        if len(segments) == 1 and segments[0] not in self._all_special_tokens:
+            return self.tokenizer.instruct_tokenizer.tokenizer.encode(
+                text, bos=add_special_tokens, eos=add_eos
+            )
+
+        all_special_tokens_set = set(self._all_special_tokens)
+        result = []
+        is_first_segment = True
+
+        for segment in segments:
+            if not segment:
+                continue
+
+            if segment in all_special_tokens_set:
+                result.append(self._piece_to_id(segment, warn=True))
+            else:
+                add_bos_here = add_special_tokens and is_first_segment
+                encoded = self.tokenizer.instruct_tokenizer.tokenizer.encode(
+                    segment, bos=add_bos_here, eos=False
+                )
+                result.extend(encoded)
+                is_first_segment = False
+
+        if add_eos:
+            result.append(self.tokenizer.instruct_tokenizer.tokenizer.eos_id)
+
+        return result
 
     def tokenize(
         self,
