@@ -268,7 +268,7 @@ class DepthProModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             loss = model(**inputs).loss
             loss.backward()
 
-    def check_training_gradient_checkpointing(self, gradient_checkpointing_kwargs):
+    def check_training_gradient_checkpointing(self, gradient_checkpointing_kwargs=None):
         for model_class in self.all_model_classes:
             if model_class.__name__ == "DepthProForDepthEstimation":
                 continue
