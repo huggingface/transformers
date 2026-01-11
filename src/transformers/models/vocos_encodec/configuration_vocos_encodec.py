@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -12,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Vocos model configuration"""
+"""VocosEncodec model configuration"""
 
 from ...configuration_utils import PretrainedConfig
 from ...utils import logging
@@ -52,7 +52,7 @@ class VocosEncodecConfig(PretrainedConfig):
             Epsilon for all LayerNorm operations.
         n_fft (`int`, *optional*, defaults to 1280):
             FFT size for ISTFT in the decoder.
-        hop_length (`int`, *optional*, defaults to 256):
+        hop_length (`int`, *optional*, defaults to 320):
             Hop length between STFT frames used in `VocosISTFTHead`.
         istft_padding (`str`, *optional*, defaults to `"same"`):
             Padding mode for spectrogram inversion (`"center"` or `"same"`).
