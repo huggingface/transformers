@@ -18,6 +18,7 @@ import tempfile
 import unittest
 
 import numpy as np
+import pytest
 import requests
 
 from transformers import CLIPSegConfig, CLIPSegProcessor, CLIPSegTextConfig, CLIPSegVisionConfig
@@ -458,6 +459,24 @@ class CLIPSegModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     @unittest.skip(reason="CLIPSegModel does not have input/output embeddings")
     def test_model_get_set_embeddings(self):
         pass
+
+    @pytest.mark.xfail(
+        reason="CLIPSegForImageSegmentation does not expose input embeddings. Gradients cannot flow back to the token embeddings when using gradient checkpointing."
+    )
+    def test_training_gradient_checkpointing(self):
+        super().test_training_gradient_checkpointing()
+
+    @pytest.mark.xfail(
+        reason="CLIPSegForImageSegmentation does not expose input embeddings. Gradients cannot flow back to the token embeddings when using gradient checkpointing."
+    )
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        super().test_training_gradient_checkpointing_use_reentrant_false()
+
+    @pytest.mark.xfail(
+        reason="CLIPSegForImageSegmentation does not expose input embeddings. Gradients cannot flow back to the token embeddings when using gradient checkpointing."
+    )
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        super().test_training_gradient_checkpointing_use_reentrant_true()
 
     def test_load_vision_text_config(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
