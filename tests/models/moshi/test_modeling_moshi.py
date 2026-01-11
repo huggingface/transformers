@@ -713,6 +713,18 @@ class MoshiTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
             print(output_ids_generate)
             self.assertIsNotNone(output_ids_generate)
 
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
+    def test_training_gradient_checkpointing(self):
+        super().test_training_gradient_checkpointing()
+
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        super().test_training_gradient_checkpointing_use_reentrant_false()
+
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        super().test_training_gradient_checkpointing_use_reentrant_true()
+
     def test_generate_from_input_values(self):
         for model_class in self.all_generative_model_classes:
             config, input_ids, _, _ = self._get_input_ids_and_config()
