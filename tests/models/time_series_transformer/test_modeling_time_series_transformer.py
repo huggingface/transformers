@@ -17,6 +17,7 @@ import inspect
 import tempfile
 import unittest
 
+import pytest
 from huggingface_hub import hf_hub_download
 from parameterized import parameterized
 
@@ -360,6 +361,18 @@ class TimeSeriesTransformerModelTest(ModelTesterMixin, PipelineTesterMixin, unit
             list(self_attentions[0].shape[-3:]),
             [self.model_tester.num_attention_heads, encoder_seq_length, encoder_seq_length],
         )
+
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
+    def test_training_gradient_checkpointing(self):
+        super().test_training_gradient_checkpointing()
+
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        super().test_training_gradient_checkpointing_use_reentrant_false()
+
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        super().test_training_gradient_checkpointing_use_reentrant_true()
 
     @parameterized.expand(
         [

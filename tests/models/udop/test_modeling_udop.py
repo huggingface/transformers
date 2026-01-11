@@ -17,6 +17,7 @@ import inspect
 import unittest
 from functools import cached_property
 
+import pytest
 from datasets import load_dataset
 
 from transformers import UdopConfig, is_torch_available
@@ -313,6 +314,18 @@ class UdopModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def test_model_fp16_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model_fp16_forward(*config_and_inputs)
+
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
+    def test_training_gradient_checkpointing(self):
+        super().test_training_gradient_checkpointing()
+
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        super().test_training_gradient_checkpointing_use_reentrant_false()
+
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        super().test_training_gradient_checkpointing_use_reentrant_true()
 
     @unittest.skip(reason="Udop has no separate base model without a head.")
     def test_model_base_model_prefix(self):

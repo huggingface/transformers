@@ -183,8 +183,20 @@ class Pix2StructVisionModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip(reason="Training is tested directly on `Pix2StructTextImageModelTest`")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training(self):
+        pass
+
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     @unittest.skip(reason="Training is tested directly on `Pix2StructTextImageModelTest`")

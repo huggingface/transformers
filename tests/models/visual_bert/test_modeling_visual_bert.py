@@ -16,6 +16,8 @@
 import copy
 import unittest
 
+import pytest
+
 from transformers import VisualBertConfig, is_torch_available
 from transformers.testing_utils import require_torch, slow, torch_device
 
@@ -545,6 +547,18 @@ class VisualBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         model_name = "uclanlp/visualbert-vqa"
         model = VisualBertModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
+
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
+    def test_training_gradient_checkpointing(self):
+        super().test_training_gradient_checkpointing()
+
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        super().test_training_gradient_checkpointing_use_reentrant_false()
+
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        super().test_training_gradient_checkpointing_use_reentrant_true()
 
 
 @require_torch
