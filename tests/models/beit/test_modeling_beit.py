@@ -340,7 +340,7 @@ class BeitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             loss = model(**inputs).loss
             loss.backward()
 
-    def test_training_gradient_checkpointing(self):
+    def check_training_gradient_checkpointing(self, gradient_checkpointing_kwargs=None):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         if not self.model_tester.is_training:
             self.skipTest(reason="model_tester.is_training is set to False")
@@ -362,7 +362,7 @@ class BeitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 continue
 
             model = model_class(config)
-            model.gradient_checkpointing_enable()
+            model.gradient_checkpointing_enable(gradient_checkpointing_kwargs=gradient_checkpointing_kwargs)
             model.to(torch_device)
             model.train()
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)

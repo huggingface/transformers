@@ -170,12 +170,20 @@ class DepthAnythingModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_depth_estimation(*config_and_inputs)
 
-    @unittest.skip(reason="Depth Anything does not support training yet")
-    def test_training(self):
-        pass
-
     @unittest.skip(reason="Depth Anything with AutoBackbone does not have a base model and hence no input_embeddings")
     def test_model_get_set_embeddings(self):
+        pass
+
+    @unittest.skip(reason="Training is not yet supported")
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(reason="Training is not yet supported")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
+    @unittest.skip(reason="Training is not yet supported")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     @slow

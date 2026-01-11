@@ -1463,6 +1463,18 @@ class Blip2TextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training(self):
         pass
 
+    @unittest.skip(reason="Training is not yet supported")
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(reason="Training is not yet supported")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
+    @unittest.skip(reason="Training is not yet supported")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        pass
+
 
 # We will verify our results on an image of cute cats
 def prepare_img():

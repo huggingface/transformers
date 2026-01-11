@@ -223,7 +223,7 @@ class DPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             loss = model(**inputs).loss
             loss.backward()
 
-    def test_training_gradient_checkpointing(self):
+    def check_training_gradient_checkpointing(self, gradient_checkpointing_kwargs):
         for model_class in self.all_model_classes:
             if model_class.__name__ == "DPTForDepthEstimation":
                 continue
@@ -236,7 +236,7 @@ class DPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 continue
             model = model_class(config)
             model.to(torch_device)
-            model.gradient_checkpointing_enable()
+            model.gradient_checkpointing_enable(gradient_checkpointing_kwargs=gradient_checkpointing_kwargs)
             model.train()
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             loss = model(**inputs).loss
