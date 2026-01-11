@@ -119,6 +119,24 @@ For more information, visit: https://github.com/huggingface/transformers
             help="Initialize default configuration"
         )
 
+        # Chat command
+        chat_parser = subparsers.add_parser(
+            "chat",
+            help="Start interactive chat with transformers"
+        )
+
+        # Dashboard command
+        dashboard_parser = subparsers.add_parser(
+            "dashboard",
+            help="Start web dashboard"
+        )
+        dashboard_parser.add_argument(
+            "--port",
+            type=int,
+            default=8765,
+            help="Port for web dashboard (default: 8765)"
+        )
+
         return parser
 
     def run(self, argv: Optional[list] = None):
@@ -143,6 +161,10 @@ For more information, visit: https://github.com/huggingface/transformers
                 asyncio.run(self._cmd_memory(args))
             elif args.command == "config":
                 self._cmd_config(args)
+            elif args.command == "chat":
+                asyncio.run(self._cmd_chat(args))
+            elif args.command == "dashboard":
+                asyncio.run(self._cmd_dashboard(args))
             else:
                 self.parser.print_help()
                 sys.exit(1)
@@ -268,6 +290,61 @@ For more information, visit: https://github.com/huggingface/transformers
 
             print("✅ Configuration initialized")
             print(f"📝 Location: {config_file}")
+
+    async def _cmd_chat(self, args):
+        """
+        Start interactive chat with transformers
+        """
+        print("💬 Starting interactive chat session...")
+        print()
+
+        config = self._load_config(args.repo / ".lifeline" / "config.json")
+
+        # Enable conversation in config
+        if "conversation" not in config:
+            config["conversation"] = {}
+        config["conversation"]["enabled"] = True
+
+        daemon = LifelineDaemon(repo_path=args.repo, config=config)
+
+        # Start daemon components needed for chat
+        await daemon.memory.load()
+
+        if daemon.voice:
+            await daemon.voice.initialize()
+
+            if daemon.voice.is_ready:
+                from lifeline.conversation.chat_interface import start_chat_session
+                await start_chat_session(daemon)
+            else:
+                print("⚠️  Voice system not available.")
+                print("   Install transformers: pip install transformers torch")
+        else:
+            print("⚠️  Conversation features not available.")
+            print("   Install transformers: pip install transformers torch")
+
+    async def _cmd_dashboard(self, args):
+        """
+        Start web dashboard
+        """
+        print("🌐 Starting web dashboard...")
+        print()
+
+        config = self._load_config(args.repo / ".lifeline" / "config.json")
+
+        # Enable web dashboard in config
+        if "web" not in config:
+            config["web"] = {}
+        config["web"]["enabled"] = True
+        config["web"]["port"] = args.port
+
+        daemon = LifelineDaemon(repo_path=args.repo, config=config)
+
+        try:
+            await daemon.start()
+        except KeyboardInterrupt:
+            print("\n🌐 Shutting down dashboard...")
+            await daemon.stop()
 
     def _load_config(self, config_path: Path) -> dict:
         """

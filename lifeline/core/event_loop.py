@@ -110,12 +110,22 @@ class EventLoop:
         # Get handlers for this event type
         handlers = self.handlers.get(event_type, [])
 
-        if not handlers:
+        # Also get wildcard handlers that listen to all events
+        wildcard_handlers = self.handlers.get("*", [])
+
+        if not handlers and not wildcard_handlers:
             logger.debug(f"No handlers registered for {event_type}")
             return
 
         # Execute all handlers concurrently
-        tasks = [handler(event_data) for handler in handlers]
+        # Regular handlers get just data, wildcard handlers get type + data
+        tasks = []
+
+        for handler in handlers:
+            tasks.append(handler(event_data))
+
+        for handler in wildcard_handlers:
+            tasks.append(handler(event_type, event_data))
 
         try:
             await asyncio.gather(*tasks, return_exceptions=True)

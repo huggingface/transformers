@@ -1,6 +1,7 @@
 {
-  "version": "0.1.0",
+  "version": "0.2.0",
   "log_level": "INFO",
+  "log_file": null,
 
   "ai": {
     "model_name": "gpt2",
@@ -8,6 +9,18 @@
     "alert_threshold": 0.7,
     "suggestion_threshold": 0.5,
     "max_file_size": 1000000
+  },
+
+  "conversation": {
+    "enabled": true,
+    "model_name": "microsoft/DialoGPT-medium",
+    "conversation_model": "microsoft/DialoGPT-medium",
+    "use_local": true
+  },
+
+  "web": {
+    "enabled": true,
+    "port": 8765
   },
 
   "watchers": {

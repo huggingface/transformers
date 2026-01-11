@@ -53,6 +53,29 @@ class LifelineDaemon:
         self.ai_engine = AIDecisionEngine(self.config.get("ai", {}))
         self.memory = ContextManager(self.repo_path)
 
+        # Optional components
+        self.web_dashboard = None
+        self.voice = None
+
+        # Enable web dashboard if configured
+        if self.config.get("web", {}).get("enabled", False):
+            try:
+                from lifeline.web.dashboard import LifelineDashboard
+                port = self.config.get("web", {}).get("port", 8765)
+                self.web_dashboard = LifelineDashboard(self, port=port)
+                logger.info(f"🌐 Web dashboard will run on port {port}")
+            except ImportError:
+                logger.warning("aiohttp not available - web dashboard disabled")
+
+        # Enable conversation if configured
+        if self.config.get("conversation", {}).get("enabled", False):
+            try:
+                from lifeline.conversation.voice import TransformerVoice
+                self.voice = TransformerVoice(self.config.get("conversation", {}))
+                logger.info("💬 Conversation features enabled")
+            except ImportError:
+                logger.warning("transformers not available - conversation disabled")
+
         # Setup signal handlers for graceful shutdown
         signal.signal(signal.SIGINT, self._signal_handler)
         signal.signal(signal.SIGTERM, self._signal_handler)
@@ -80,10 +103,22 @@ class LifelineDaemon:
         await self.git_watcher.start()
         await self.ai_engine.initialize()
 
+        # Start optional components
+        if self.web_dashboard:
+            await self.web_dashboard.start()
+
+        if self.voice:
+            await self.voice.initialize()
+
         logger.info(f"✨ Lifeline is now ALIVE at {self.birth_time}")
         logger.info(f"📍 Watching: {self.repo_path}")
         logger.info("🧠 Awareness: ACTIVE")
         logger.info("💚 Status: Ready to assist")
+
+        if self.web_dashboard:
+            logger.info(f"🌐 Dashboard: http://localhost:{self.web_dashboard.port}")
+        if self.voice and self.voice.is_ready:
+            logger.info("💬 Voice: Ready for conversation")
 
         # Register event handlers
         self._register_event_handlers()
@@ -106,6 +141,14 @@ class LifelineDaemon:
         await self.file_watcher.stop()
         await self.git_watcher.stop()
         await self.memory.save()
+
+        # Stop optional components
+        if self.web_dashboard:
+            await self.web_dashboard.stop()
+
+        if self.voice:
+            await self.voice.shutdown()
+
         await self.lifecycle.shutdown()
 
         uptime = datetime.now() - self.birth_time if self.birth_time else None
