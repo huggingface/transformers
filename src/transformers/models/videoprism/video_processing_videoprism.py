@@ -4,9 +4,13 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_videoprism.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-
-from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling
+from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
+from ...utils import is_vision_available
 from ...video_processing_utils import BaseVideoProcessor
+
+
+if is_vision_available():
+    from ...image_utils import PILImageResampling
 
 
 class VideoPrismVideoProcessor(BaseVideoProcessor):

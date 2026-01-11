@@ -4,7 +4,7 @@ from dataclasses import dataclass
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
+from ...utils import is_vision_available
 from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask
@@ -25,7 +25,8 @@ from ..vivit.modeling_vivit import (
     VivitLayer,
     VivitTubeletEmbeddings,
 )
-
+if is_vision_available():
+    from ...image_utils import PILImageResampling
 
 logger = logging.get_logger(__name__)
 
@@ -134,6 +135,7 @@ class VideoPrismTokenizer(T5Tokenizer):
 
 class VideoPrismVideoProcessor(LlavaOnevisionVideoProcessor):
     size = {"height": 288, "width": 288}
+    resample = PILImageResampling.BICUBIC
     do_normalize = False
 
 
