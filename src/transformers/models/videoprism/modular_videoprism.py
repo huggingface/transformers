@@ -4,14 +4,14 @@ from dataclasses import dataclass
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from ...utils import is_vision_available
+
 from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging, torch_int
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, is_vision_available, logging, torch_int
 from ..llava_onevision.video_processing_llava_onevision import LlavaOnevisionVideoProcessor
 from ..qwen3_next.modeling_qwen3_next import l2norm
 from ..siglip.configuration_siglip import SiglipConfig
@@ -25,6 +25,8 @@ from ..vivit.modeling_vivit import (
     VivitLayer,
     VivitTubeletEmbeddings,
 )
+
+
 if is_vision_available():
     from ...image_utils import PILImageResampling
 
@@ -386,6 +388,7 @@ def eager_attention_forward(
     scaling: float,
     dropout: float = 0.0,
     softcap: float | None = None,
+    **kwargs: Unpack[TransformersKwargs],
 ):
     # Take the dot product between "query" and "key" to get the raw attention scores.
     attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
@@ -425,7 +428,7 @@ class VideoPrismSelfAttention(nn.Module):
         self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
 
     def forward(
-        self, hidden_states: torch.Tensor, attention_mask: torch.Tensor | None
+        self, hidden_states: torch.Tensor, attention_mask: torch.Tensor | None, **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size = hidden_states.shape[0]
         new_shape = batch_size, -1, self.num_attention_heads, self.attention_head_size
@@ -446,6 +449,7 @@ class VideoPrismSelfAttention(nn.Module):
             scaling=self.scale,
             dropout=0.0 if not self.training else self.dropout_prob,
             softcap=self.config.attn_logit_softcapping,
+            **kwargs,
         )
 
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
@@ -455,8 +459,8 @@ class VideoPrismSelfAttention(nn.Module):
 
 
 class VideoPrismAttention(VivitAttention):
-    def forward(self, hidden_states: torch.Tensor, attention_mask: torch.Tensor) -> torch.Tensor:
-        self_attn_output, _ = self.attention(hidden_states, attention_mask)
+    def forward(self, hidden_states: torch.Tensor, attention_mask: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> torch.Tensor:
+        self_attn_output, _ = self.attention(hidden_states, attention_mask, **kwargs)
         output = self.output(self_attn_output, hidden_states)
         return output
 
@@ -475,9 +479,9 @@ class VideoPrismLayer(VivitLayer):
         self.layernorm_after = VideoPrismLayerNorm(self.config.hidden_size, eps=self.config.layer_norm_eps)
         self.layernorm_before = VideoPrismLayerNorm(self.config.hidden_size, eps=self.config.layer_norm_eps)
 
-    def forward(self, hidden_states: torch.Tensor, attention_mask: torch.Tensor | None = None) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, attention_mask: torch.Tensor | None = None, **kwargs: Unpack[TransformersKwargs],) -> torch.Tensor:
         hidden_states_norm = self.layernorm_before(hidden_states)
-        attention_output = self.attention(hidden_states_norm, attention_mask)
+        attention_output = self.attention(hidden_states_norm, attention_mask, **kwargs)
 
         # first residual connection
         hidden_states = attention_output + hidden_states
@@ -513,9 +517,9 @@ class VideoPrismAuxiliaryEncoder(VivitEncoder):
         self.layer = nn.ModuleList([VideoPrismLayer(self.config) for _ in range(config.num_auxiliary_layers)])
         self.gradient_checkpointing = False
 
-    def forward(self, hidden_states: torch.Tensor, attention_mask: torch.Tensor | None = None) -> BaseModelOutput:
+    def forward(self, hidden_states: torch.Tensor, attention_mask: torch.Tensor | None = None, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutput:
         for i, layer_module in enumerate(self.layer):
-            hidden_states = layer_module(hidden_states, attention_mask)
+            hidden_states = layer_module(hidden_states, attention_mask, **kwargs)
 
         return BaseModelOutput(last_hidden_state=hidden_states)
 
@@ -526,9 +530,9 @@ class VideoPrismTextEncoder(VivitEncoder):
         self.layer = nn.ModuleList([VideoPrismLayer(config) for _ in range(config.num_text_layers)])
         self.gradient_checkpointing = False
 
-    def forward(self, hidden_states: torch.Tensor, attention_mask: torch.Tensor | None = None) -> BaseModelOutput:
+    def forward(self, hidden_states: torch.Tensor, attention_mask: torch.Tensor | None = None, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutput:
         for i, layer_module in enumerate(self.layer):
-            hidden_states = layer_module(hidden_states, attention_mask)
+            hidden_states = layer_module(hidden_states, attention_mask, **kwargs)
 
         return BaseModelOutput(last_hidden_state=hidden_states)
 
@@ -587,20 +591,21 @@ class VideoPrismVisionModel(VideoPrismPreTrainedModel):
         self,
         pixel_values_videos: torch.FloatTensor | None = None,
         interpolate_pos_encoding: bool | None = False,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithSpatialAndTemporalStates:
         if pixel_values_videos is None:
             raise ValueError("You have to specify pixel_values_videos")
 
         input_shape = pixel_values_videos.shape
         spatial_embeds = self.spatial_embeddings(pixel_values_videos, interpolate_pos_encoding)
-        spatial_encoder_outputs: BaseModelOutput = self.spatial_encoder(hidden_states=spatial_embeds)
+        spatial_encoder_outputs: BaseModelOutput = self.spatial_encoder(hidden_states=spatial_embeds, **kwargs)
         spatial_sequence_output = (
             spatial_encoder_outputs.last_hidden_state
         )  # shape is (B * num_frames, num_patches, dim)
         features = self.layernorm1(spatial_sequence_output)
 
         temporal_embeds = self.temporal_embeddings(features, input_shape, interpolate_pos_encoding)
-        temporal_encoder_outputs: BaseModelOutput = self.temporal_encoder(hidden_states=temporal_embeds)
+        temporal_encoder_outputs: BaseModelOutput = self.temporal_encoder(hidden_states=temporal_embeds, **kwargs)
         temporal_sequence_output = (
             temporal_encoder_outputs.last_hidden_state
         )  # shape is (B * num_patches, num_frames, 768)
@@ -646,6 +651,7 @@ class VideoPrismMultiheadAttentionPoolingHead(nn.Module):
         self,
         hidden_states: torch.FloatTensor,
         attention_mask: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor, torch.FloatTensor]:
         batch_size, seq_length, hidden_size = hidden_states.shape
         query = self.pooling_attention_query.expand(batch_size, -1, -1)
@@ -678,6 +684,7 @@ class VideoPrismMultiheadAttentionPoolingHead(nn.Module):
             scaling=1.0,
             dropout=0.0 if not self.training else self.dropout_prob,
             softcap=None,
+            **kwargs,
         )
 
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
@@ -710,6 +717,7 @@ class VideoPrismTextModel(VideoPrismPreTrainedModel):
         self,
         input_ids: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         batch_size, seq_length = input_ids.shape
         hidden_states = self.token_embeddings(input_ids)
@@ -765,14 +773,15 @@ class VideoPrismVideoModel(VideoPrismPreTrainedModel):
         self,
         pixel_values_videos: torch.FloatTensor,
         interpolate_pos_encoding: bool | None = False,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> VideoPrismVideoOutput:
         backbone_outputs = self.backbone(
-            pixel_values_videos=pixel_values_videos, interpolate_pos_encoding=interpolate_pos_encoding
+            pixel_values_videos=pixel_values_videos, interpolate_pos_encoding=interpolate_pos_encoding, **kwargs
         )
         video_features = backbone_outputs.last_hidden_state
         auxiliary_output = self.auxiliary_encoder(video_features)
         auxiliary_output_features = auxiliary_output.last_hidden_state
-        contrastive_vision_pooler_output = self.contrastive_vision_pooler(auxiliary_output_features)
+        contrastive_vision_pooler_output = self.contrastive_vision_pooler(auxiliary_output_features, **kwargs)
         video_embeddings = contrastive_vision_pooler_output[0]
         if self.normalize:
             video_embeddings = l2norm(video_embeddings, dim=-1)
@@ -860,10 +869,10 @@ class VideoPrismForVideoClassification(VideoPrismPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> ImageClassifierOutput:
         encoder_outputs = self.encoder(
-            pixel_values_videos=pixel_values_videos, interpolate_pos_encoding=interpolate_pos_encoding
+            pixel_values_videos=pixel_values_videos, interpolate_pos_encoding=interpolate_pos_encoding, **kwargs
         )
         sequence_output = encoder_outputs.last_hidden_state
-        pooled_output = self.contrastive_vision_pooler(sequence_output).pooled_output
+        pooled_output = self.contrastive_vision_pooler(sequence_output, **kwargs).pooled_output
         logits = self.classifier(pooled_output)
         loss = None
         if labels is not None:
