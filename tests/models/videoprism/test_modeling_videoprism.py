@@ -50,10 +50,13 @@ if is_torch_available():
     )
 
 if is_vision_available():
-    pass
+    from transformers import VideoPrismVideoProcessor
+    from transformers.video_utils import load_video
 
 if is_sentencepiece_available():
     from transformers import VideoPrismTokenizer
+
+torch.set_printoptions(precision=10)
 
 
 @require_vision
@@ -366,16 +369,6 @@ class VideoPrismTextModelTest(unittest.TestCase):
 
 
 @require_vision
-class VideoPrismVideoModelTester:
-    pass
-
-
-@require_vision
-class VideoPrismVideoModelTest(unittest.TestCase):
-    pass
-
-
-@require_vision
 class VideoPrismClipModelTester:
     def __init__(self, parent, text_kwargs=None, vision_kwargs=None, is_training=True):
         if text_kwargs is None:
@@ -490,27 +483,19 @@ class VideoPrismClipModelTest(unittest.TestCase):
         self.assertIsNotNone(model)
 
 
-@require_torch
-class VideoPrismImageClassificationModelTester:
-    pass
-
-
-@require_torch
-class VideoPrismImageClassificationModelTest(unittest.TestCase):
-    pass
-
-
-def prepare_video():
+def prepare_video(frames=True):
     """
     Input video tensor proprocessed using the original repo's processor
     """
-    import numpy as np
 
     api = HfApi()
-    frames = api.hf_hub_download(
-        repo_id="MHRDYN7/water_bottle_drumming_video", filename="frames_16_288.npy", repo_type="dataset"
-    )
-    return np.load(frames)
+    if frames:
+        filename = "frames_16_288.npy"
+    else:
+        filename = "water_bottle_drumming.mp4"
+
+    file = api.hf_hub_download(repo_id="MHRDYN7/water_bottle_drumming_video", filename=filename, repo_type="dataset")
+    return file
 
 
 def prepare_texts():
@@ -529,10 +514,10 @@ def prepare_texts():
 @require_torch
 class VideoPrismModelIntegrationTest(unittest.TestCase):
     @slow
-    def test_vision_model(self):
+    def test_videoprism_vision_model(self):
         model = VideoPrismVisionModel.from_pretrained("MHRDYN7/videoprism-base-f16r288").to(torch_device)
         model.config._attn_implementation = "eager"
-        frames = torch.tensor(prepare_video()).unsqueeze(0).permute(0, 1, 4, 2, 3)
+        frames = torch.tensor(prepare_video(frames=True)).unsqueeze(0).permute(0, 1, 4, 2, 3)
         input_vids = torch.cat([frames, frames], dim=0)  # batch size 2
         with torch.no_grad():
             outputs = model(input_vids).last_hidden_state
@@ -548,48 +533,80 @@ class VideoPrismModelIntegrationTest(unittest.TestCase):
             ]
         )
         expected_slice = outputs[0, :3, :3]
-        torch.testing.assert_close(expected_slice, expectations, atol=1e-5)
+        print(expected_slice)
+        torch.testing.assert_close(expected_slice, expectations, rtol=1e-5, atol=1e-5)
         return
 
     @slow
-    def test_clip_model(self):
+    def test_videoprism_clip_model(self):
         model = VideoPrismClipModel.from_pretrained("MHRDYN7/videoprism-lvt-base-f16r288").to(torch_device)
         model.config._attn_implementation = "eager"
-        frames = torch.tensor(prepare_video()).unsqueeze(0).permute(0, 1, 4, 2, 3)
+        frames = torch.tensor(prepare_video(frames=True)).unsqueeze(0).permute(0, 1, 4, 2, 3)
         input_vids = torch.cat([frames, frames], dim=0)
         tokenizer, text_queries = prepare_texts()
         tokens = tokenizer(text_queries, max_length=64, padding="max_length", return_tensors="pt").to(torch_device)
         with torch.no_grad():
             outputs = model(input_vids, **tokens)
-        torch.testing.assert_close(outputs.video_embeds[0], outputs.video_embeds[1], atol=1e-5)
-        video_expectation = (
-            torch.tensor(
-                [
-                    -0.01940615,
-                    -0.04830061,
-                    0.0069022,
-                    0.02915299,
-                    -0.05897291,
-                    0.02168823,
-                    -0.01471708,
-                    -0.00971614,
-                    -0.00220576,
-                ]
-            ),
+        torch.testing.assert_close(outputs.video_embeds[0], outputs.video_embeds[1], rtol=1e-5, atol=1e-5)
+
+        self.assertEqual(
+            outputs.logits_per_video.shape,
+            torch.Size((input_vids.shape[0], tokens.input_ids.shape[0])),
         )
-        text_expectation = (
-            torch.tensor(
-                [
-                    [-0.00802545, 0.00931361, 0.01555958],
-                    [0.02245245, 0.00010197, -0.01073526],
-                    [-0.02258418, 0.00133927, -0.01555064],
-                    [0.01056228, 0.01835608, -0.01539922],
-                    [-0.00366718, 0.00370416, 0.00800336],
-                ]
-            ),
+        self.assertEqual(
+            outputs.logits_per_text.shape,
+            torch.Size((tokens.input_ids.shape[0], input_vids.shape[0])),
+        )
+
+        video_expectation = torch.tensor(
+            [
+                -0.01940615,
+                -0.04830061,
+                0.0069022,
+                0.02915299,
+                -0.05897291,
+                0.02168823,
+                -0.01471708,
+                -0.00971614,
+                -0.00220576,
+            ]
+        )
+        text_expectation = torch.tensor(
+            [
+                [-0.00802545, 0.00931361, 0.01555958],
+                [0.02245245, 0.00010197, -0.01073526],
+                [-0.02258418, 0.00133927, -0.01555064],
+                [0.01056228, 0.01835608, -0.01539922],
+                [-0.00366718, 0.00370416, 0.00800336],
+            ]
         )
 
         video_logits = outputs.video_embeds[0, :9]
         text_logits = outputs.text_embeds[:, :3]
-        torch.testing.assert_close(video_logits, video_expectation, atol=1e-5)
-        torch.testing.assert_close(text_logits, text_expectation, atol=1e-5)
+        torch.testing.assert_close(video_logits, video_expectation, rtol=1e-5, atol=1e-5)
+        torch.testing.assert_close(text_logits, text_expectation, rtol=1e-5, atol=1e-5)
+
+    @slow
+    def test_videoprism_interpolate_pos_encoding(self):
+        model_name = "MHRDYN7/videoprism-base-f16r288"
+        model = VideoPrismVisionModel.from_pretrained(model_name).to(torch_device)
+
+        video, metadata = load_video(prepare_video(frames=False))
+        processor = VideoPrismVideoProcessor.from_pretrained(model_name)
+
+        kwargs = {
+            "do_sample_frames": True,
+            "num_frames": 10,
+            "video_metadata": metadata,
+            "size": {"height": 144, "width": 144},
+            "do_resize": True,
+        }
+
+        inputs = processor(videos=video, return_tensors="pt", **kwargs).to(torch_device)
+
+        # forward pass
+        with torch.no_grad():
+            outputs = model(**inputs, interpolate_pos_encoding=True)
+
+        expected_shape = torch.Size([1, int((144 / 18) * (144 / 18) * 10), model.config.hidden_size])
+        self.assertEqual(outputs.last_hidden_state.shape, expected_shape)

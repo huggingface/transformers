@@ -33,12 +33,17 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 [[autodoc]] VideoPrismConfig
 
-## VideoPrismModel
+## VideoPrismVisionModel
 
-[[autodoc]] VideoPrismModel
+[[autodoc]] VideoPrismVisionModel
+    - forward
+
+## VideoPrismClipModel
+
+[[autodoc]] VideoPrismClipModel
     - forward
 
 ## VideoPrismForVideoClassification
 
-[[autodoc]] transformers.VideoPrismForVideoClassification
+[[autodoc]] VideoPrismForVideoClassification
     - forward

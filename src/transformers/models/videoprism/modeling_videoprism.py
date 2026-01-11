@@ -216,7 +216,6 @@ class VideoPrismTemporalEmbeddings(nn.Module):
         - https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174-L194, and
         - https://github.com/facebookresearch/dinov2/blob/e1277af2ba9496fbadf7aec6eba56e8d882d1e35/dinov2/models/vision_transformer.py#L179-L211
         """
-
         target_emb_length = embeddings.shape[1]
         source_emb_length = self.position_embeddings.shape[1]
 
@@ -671,6 +670,7 @@ def l2norm(x: torch.FloatTensor, dim: int = -1, eps: float = 1e-6):
     return x * inv_norm
 
 
+@auto_docstring
 class VideoPrismTextModel(VideoPrismPreTrainedModel):
     config: VideoPrismTextConfig
 
@@ -728,6 +728,7 @@ class VideoPrismTextModel(VideoPrismPreTrainedModel):
         )
 
 
+@auto_docstring
 class VideoPrismVideoModel(VideoPrismPreTrainedModel):
     config: VideoPrismVisionConfig
 
@@ -766,6 +767,7 @@ class VideoPrismVideoModel(VideoPrismPreTrainedModel):
         )
 
 
+@auto_docstring
 class VideoPrismClipModel(VideoPrismPreTrainedModel):
     def __init__(self, config: VideoPrismConfig):
         super().__init__(config)
@@ -814,6 +816,11 @@ class VideoPrismClipModel(VideoPrismPreTrainedModel):
         )
 
 
+@auto_docstring(
+    custom_intro="""
+    VideoPrism Model transformer with a video classification head on top (a linear layer on top of the attention pooler).
+    """
+)
 class VideoPrismForVideoClassification(VideoPrismPreTrainedModel):
     config: VideoPrismVisionConfig
 
@@ -824,9 +831,6 @@ class VideoPrismForVideoClassification(VideoPrismPreTrainedModel):
         self.contrastive_vision_pooler = VideoPrismMultiheadAttentionPoolingHead(self.config)
         self.classifier = nn.Linear(self.config.hidden_size, self.config.num_labels)
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.encoder.spatial_embeddings.patch_embeddings
 
     def forward(
         self,

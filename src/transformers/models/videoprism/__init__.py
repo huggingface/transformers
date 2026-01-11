@@ -20,6 +20,7 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_videoprism import *
     from .modeling_videoprism import *
+    from .processing_videoprism import *
     from .tokenization_videoprism import *
     from .video_processing_videoprism import *
 else:

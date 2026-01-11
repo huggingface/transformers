@@ -12,7 +12,7 @@ from ...image_utils import PILImageResampling
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...processing_utils import Unpack
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, logging, torch_int
 from ..llava_onevision.video_processing_llava_onevision import LlavaOnevisionVideoProcessor
 from ..qwen3_next.modeling_qwen3_next import l2norm
@@ -138,6 +138,41 @@ class VideoPrismVideoProcessor(LlavaOnevisionVideoProcessor):
     resample = PILImageResampling.BICUBIC
     size = {"height": 288, "width": 288}
     do_normalize = False
+
+
+class VideoPrismProcessorKwargs(ProcessingKwargs, total=False):
+    _defaults = {
+        "text_kwargs": {
+            "padding": "max_length",
+            "truncation": True,
+            "max_length": 64,
+        },
+        "video_kwargs": {
+            "size": {"height": 288, "width": 288},
+            "resample": PILImageResampling.BICUBIC,
+            "do_normalize": False,
+        },
+    }
+
+
+class VideoPrismProcessor(ProcessorMixin):
+    r"""
+    Constructs a VideoPrism processor which wraps a VideoPrism video processor and a VideoPrism tokenizer into a single processor.
+
+    [`VideoPrismProcessor`] offers all the functionalities of [`VideoPrismVideoProcessor`] and [`VideoPrismTokenizer`]. See the
+    [`~VideoPrismProcessor.__call__`] for more information.
+
+    Args:
+        video_processor ([`VideoPrismVideoProcessor`]):
+            An instance of [`VideoPrismVideoProcessor`].
+        tokenizer ([`VideoPrismTokenizer`]):
+            An instance of [`VideoPrismTokenizer`].
+    """
+
+    valid_processor_kwargs = VideoPrismProcessorKwargs
+
+    def __init__(self, video_processor: VideoPrismVideoProcessor = None, tokenizer: VideoPrismTokenizer = None):
+        super().__init__(video_processor, tokenizer)
 
 
 @dataclass
@@ -654,6 +689,7 @@ class VideoPrismMultiheadAttentionPoolingHead(nn.Module):
         return (outputs, attention_probs)
 
 
+@auto_docstring
 class VideoPrismTextModel(VideoPrismPreTrainedModel):
     config: VideoPrismTextConfig
 
@@ -711,6 +747,7 @@ class VideoPrismTextModel(VideoPrismPreTrainedModel):
         )
 
 
+@auto_docstring
 class VideoPrismVideoModel(VideoPrismPreTrainedModel):
     config: VideoPrismVisionConfig
 
@@ -749,6 +786,7 @@ class VideoPrismVideoModel(VideoPrismPreTrainedModel):
         )
 
 
+@auto_docstring
 class VideoPrismClipModel(VideoPrismPreTrainedModel):
     def __init__(self, config: VideoPrismConfig):
         super().__init__(config)
@@ -797,6 +835,11 @@ class VideoPrismClipModel(VideoPrismPreTrainedModel):
         )
 
 
+@auto_docstring(
+    custom_intro="""
+    VideoPrism Model transformer with a video classification head on top (a linear layer on top of the attention pooler).
+    """
+)
 class VideoPrismForVideoClassification(VideoPrismPreTrainedModel):
     config: VideoPrismVisionConfig
 
@@ -807,9 +850,6 @@ class VideoPrismForVideoClassification(VideoPrismPreTrainedModel):
         self.contrastive_vision_pooler = VideoPrismMultiheadAttentionPoolingHead(self.config)
         self.classifier = nn.Linear(self.config.hidden_size, self.config.num_labels)
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.encoder.spatial_embeddings.patch_embeddings
 
     def forward(
         self,
@@ -847,4 +887,5 @@ __all__ = [
     "VideoPrismForVideoClassification",
     "VideoPrismTokenizer",
     "VideoPrismVideoProcessor",
+    "VideoPrismProcessor",
 ]
