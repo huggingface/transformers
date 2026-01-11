@@ -18,13 +18,15 @@ import json
 import tempfile
 import unittest
 
-from datasets import Audio, load_dataset
-
-from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
-from transformers.utils import is_torch_available
+from transformers.testing_utils import require_torch, require_torch_gpu, torch_device
+from transformers.utils import is_datasets_available, is_torch_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
+
+
+if is_datasets_available():
+    from datasets import Audio, load_dataset
 
 
 if is_torch_available():
@@ -40,9 +42,9 @@ class VocosModelTester:
     def __init__(self, parent):
         self.parent = parent
         self.batch_size = 2
-        self.input_channels = 8
-        self.hidden_dim = 16
-        self.intermediate_dim = 32
+        self.n_mels = 100
+        self.hidden_size = 16
+        self.intermediate_size = 32
         self.num_layers = 2
         self.kernel_size = 3
         self.padding = 1
@@ -52,14 +54,15 @@ class VocosModelTester:
         self.layer_norm_eps = 1e-6
         self.n_fft = 16
         self.hop_length = 8
-        self.spec_padding = "center"
+        self.istft_padding = "center"
         self.seq_length = 10
+        self.hidden_act = "gelu"
 
     def get_config(self):
         return VocosConfig(
-            input_channels=self.input_channels,
-            hidden_dim=self.hidden_dim,
-            intermediate_dim=self.intermediate_dim,
+            n_mels=self.n_mels,
+            hidden_size=self.hidden_size,
+            intermediate_size=self.intermediate_size,
             num_layers=self.num_layers,
             kernel_size=self.kernel_size,
             padding=self.padding,
@@ -69,29 +72,33 @@ class VocosModelTester:
             layer_norm_eps=self.layer_norm_eps,
             n_fft=self.n_fft,
             hop_length=self.hop_length,
-            spec_padding=self.spec_padding,
+            istft_padding=self.istft_padding,
+            hidden_act=self.hidden_act,
         )
 
     def prepare_config_and_inputs(self):
         config = self.get_config()
-        input_values = floats_tensor([self.batch_size, self.input_channels, self.seq_length])
+        input_values = floats_tensor([self.batch_size, self.n_mels, self.seq_length])
         return config, input_values
 
     def prepare_config_and_inputs_for_common(self):
         config, features = self.prepare_config_and_inputs()
-        return config, {"audio_spectrogram": features}
+        return config, {"input_features": features}
 
     def create_and_check_model(self, config, features):
         model = VocosModel(config=config).to(torch_device).eval()
         with torch.no_grad():
             output = model(features.to(torch_device))
-        if config.spec_padding == "center":
-            # the expected output using PyTorch's ISTFT
+
+        if config.istft_padding == "center":
+            # when padding is `center`,  output is computed using PyTorch's ISTFT
             expected_len = (self.seq_length - 1) * config.hop_length
-        else:
-            # when padding is same "same" padding, the expected output using the custom ISTFT implementation
+
+        elif config.istft_padding == "same":
+            # when padding is `same`, output is computed using custom ISTFT implementation in `custom_istft`
             pad = (config.n_fft - config.hop_length) // 2
             expected_len = (self.seq_length - 1) * config.hop_length + config.n_fft - 2 * pad
+
         self.parent.assertEqual(output.audio.shape, (self.batch_size, expected_len))
 
 
@@ -125,7 +132,7 @@ class VocosModelTest(ModelTesterMixin, unittest.TestCase):
         model = VocosModel(config)
         signature = inspect.signature(model.forward)
         arg_names = list(signature.parameters.keys())
-        self.assertListEqual(arg_names, ["audio_spectrogram", "input_features", "bandwidth", "kwargs"])
+        self.assertListEqual(arg_names, ["input_features", "attention_mask"])
 
     @unittest.skip(
         reason="The VocosModel is not transformers based, thus it does not have the usual `hidden_states` logic"
@@ -230,7 +237,7 @@ class VocosModelTest(ModelTesterMixin, unittest.TestCase):
 @require_torch
 class VocosModelIntegrationTest(unittest.TestCase):
     """
-    See code for reproducing expected outputs: https://gist.github.com/Manalelaidouni/853f4c902ab0ce0a512e5217d87d564c
+    See code for reproducing expected outputs: https://gist.github.com/Manalelaidouni/f09cbaac2c56199f0e5e05c498fdb6b0
     Outputs should be computed on GPU because the mel spectrogram outputs differ on CPU and GPU.
     """
 
@@ -246,11 +253,10 @@ class VocosModelIntegrationTest(unittest.TestCase):
         with open("tests/fixtures/vocos/vocos_mel_batch_integration.json", "r") as f:
             self.mel_batch_expected = json.load(f)
 
-    @slow
     @require_torch_gpu
     def test_inference(self):
-        hf_repo_id = "hf-audio/vocos-mel-24khz"
-        processor = VocosFeatureExtractor.from_pretrained(hf_repo_id)
+        hf_repo_id = "Manel/vocos-mel-24khz"
+        feature_extractor = VocosFeatureExtractor.from_pretrained(hf_repo_id)
         model = VocosModel.from_pretrained(hf_repo_id).to(torch_device).eval()
 
         audio_np = self._load_datasamples(1)[0]
@@ -258,7 +264,7 @@ class VocosModelIntegrationTest(unittest.TestCase):
 
         EXPECTED_AUDIO = torch.tensor(self.mel_expected["reconstructed_audio"], dtype=torch.float32).to(torch_device)
 
-        inputs = processor(audio, return_tensors="pt").to(torch_device)
+        inputs = feature_extractor(audio, return_tensors="pt", device=torch_device)
         with torch.no_grad():
             audio_output = model(**inputs).audio
 
@@ -269,16 +275,15 @@ class VocosModelIntegrationTest(unittest.TestCase):
             atol=1e-5,
         )
 
-    @slow
     @require_torch_gpu
     def test_inference_batch(self):
-        repo_id = "hf-audio/vocos-mel-24khz"
-        processor = VocosFeatureExtractor.from_pretrained(repo_id)
+        repo_id = "Manel/vocos-mel-24khz"
+        feature_extractor = VocosFeatureExtractor.from_pretrained(repo_id)
         model = VocosModel.from_pretrained(repo_id).to(torch_device).eval()
 
         audios = self._load_datasamples(3)
 
-        inputs = processor(audio=audios, return_tensors="pt").to(torch_device)
+        inputs = feature_extractor(audio=audios, return_tensors="pt", device=torch_device)
         hf_batch_output = model(**inputs).audio
 
         for i, saved in enumerate(self.mel_batch_expected["reconstructed_audio"]):
