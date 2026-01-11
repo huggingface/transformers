@@ -252,6 +252,7 @@ class PvtV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_training_gradient_checkpointing_use_reentrant_true(self):
         super().test_training_gradient_checkpointing_use_reentrant_true()
 
+
 @require_torch
 class PvtV2ModelIntegrationTest(unittest.TestCase):
     @slow
