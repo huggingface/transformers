@@ -92,7 +92,7 @@ class VocosEncodecPreTrainedModel(VocosPreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    Vocos model for neural vocoding from EnCodec codes.
+    Vocos model for neural vocoding reconstructed from EnCodec embedded features.
     """
 )
 class VocosEncodecModel(VocosModel):
@@ -104,10 +104,6 @@ class VocosEncodecModel(VocosModel):
         )
         self.norm = VocosEncodecAdaptiveLayerNorm(config)
 
-        # TODO do we keep codebook weights? maybe if they were retrained
-        # can be used like this to compute input to `self.embed`:
-        # https://github.com/gemelo-ai/vocos/blob/c859e3b7b534f3776a357983029d34170ddd6fc3/vocos/feature_extractors.py#L98
-        self.register_buffer("codebook_weights", torch.zeros(config.num_quantizers, config.codebook_dim))
         self._bandwidth_to_id = {bandwidth: id for id, bandwidth in enumerate(config.bandwidths)}
 
     @can_return_tuple
@@ -115,43 +111,66 @@ class VocosEncodecModel(VocosModel):
     def forward(
         self,
         input_features: Optional[torch.FloatTensor],
+        attention_mask: Optional[torch.Tensor] = None,
         bandwidth: Optional[float] = None,
-        padding_mask: Optional[torch.BoolTensor] = None,
     ) -> VocosEncodecOutput:
         r"""
         input_features (`torch.FloatTensor` of shape `(batch_size, feature_dim, time_dim)`):
             EnCodec neural audio codec features which can be computed either from precomputed EnCodec RVQ codes via
             `processor(codes=codes, bandwidth=1.5)` or from raw audio via `processor(audio=waveform, bandwidth=1.5)`.
             It must be provided with the corresponding EnCodec bandwidth.
+
+        attention_mask (`torch.Tensor` of shape `(batch_size, time)`, *optional*):
+            Attention mask indicates which positions contain valid audio vs padding tokens. Not used, returned in the output
+            to allow removing padding from reconstructed audios when processing batches with sequences of different lengths (batch_size > 1).
+
         bandwidth (`float`, *optional*):
             Target bandwidth for EnCodec quantizer, e.g. one of [1.5, 3, 6, 12] kbps, to be provided if
             `input_features`is not None.
-        padding_mask (`torch.BoolTensor` of shape `(batch_size, time_dim)`, *optional*):
-            Padding mask. Not used, but kept so processor outputs can be passed directly.
 
         Returns:
             `VocosOutput` or tuple `(audio,)`:
             - `audio` of shape (batch_size, time): Reconstructed audio waveform.
+            - `attention_mask` of shape (batch_size, time): atention mask for the reconstructed audio. Not used inside model, used to remove padding from reconstructed audios
+                when processing batches with sequences of different lengths (batch_size > 1).
+
 
         Example:
 
         ```python
-        >>> # Encode audio using EnCodec neural codec and reconstruct from audio from that
-        >>> processor = VocosProcessor.from_pretrained("hf-audio/vocos-encodec-24khz")
-        >>> model = VocosModel.from_pretrained("hf-audio/vocos-encodec-24khz")
+        >>> from datasets import load_dataset, Audio
+        >>> from transformers import VocosEncodecProcessor, VocosEncodecModel
+
+        >>> # Encode audio using `EnCodec` neural codec model into embeddings and reconstruct a higher quality audio from it using `VocosEncodecModel`
+        >>> processor = VocosEncodecProcessor.from_pretrained("Manel/vocos-encodec-24khz")
+        >>> model = VocosEncodecModel.from_pretrained("Manel/vocos-encodec-24khz")
+
+        >>> ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
+        >>> ds = ds.cast_column("audio", Audio(sampling_rate=24000))
+        >>> audios = [x["array"] for x in ds.sort("id")[:3]["audio"]]
 
         >>> bandwidth = 6.0
-        >>> inputs = processor(audio=audio_sample, bandwidth=bandwidth)
+        >>> inputs = processor(audio=audios, bandwidth=bandwidth)
         >>> outputs = model(**inputs)
-        >>> reconstructed_audio = outputs.audio
+        >>> reconstructed_audio, attention_mask = outputs.audio, outputs.attention_mask
+
+        >>> # Remove padding from reconstructed audios using attention mask
+        >>> unpadded_audios = [reconstructed_audio[i][attention_mask[i].bool()].detach().cpu().numpy() for i in range(reconstructed_audio.shape[0])]
 
         >>> # Reconstruct audio directly from pre-computed EnCodec quantized codes
-        >>> inputs = processor(codes=audio_codes, bandwidth=bandwidth)
+        >>> inputs = processor(codes=quantized_codes, bandwidth=bandwidth)
         >>> outputs = model(**inputs)
         >>> reconstructed_audio = outputs.audio
 
         ```
         """
+
+        if bandwidth is None:
+            # if model is used without processor to avoid passing without bandwidth
+            raise ValueError(
+                "VocosEncodecModel requires a `bandwidth` argument, please provide bandwidth in kbps (supported values are [1.5, 3, 6, 12])."
+            )
+
         bandwidth_id = self._bandwidth_to_id[float(bandwidth)]
 
         hidden_states = self.embed(input_features)
@@ -168,7 +187,7 @@ class VocosEncodecModel(VocosModel):
 
         # Decode back to audio (linear + ISTFT)
         audio = self.decoder(hidden_states)
-        return VocosEncodecOutput(audio=audio)
+        return VocosEncodecOutput(audio=audio, attention_mask=attention_mask)
 
 
 __all__ = ["VocosEncodecModel", "VocosEncodecPreTrainedModel"]
