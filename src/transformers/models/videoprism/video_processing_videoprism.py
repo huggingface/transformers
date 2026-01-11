@@ -28,6 +28,7 @@ class VideoPrismVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BICUBIC
     image_mean = OPENAI_CLIP_MEAN
     image_std = OPENAI_CLIP_STD
+
     size = {"height": 288, "width": 288}
     rescale_factor = 1 / 255
     default_to_square = False

@@ -45,7 +45,7 @@ class VideoPrismVisionConfig(VivitConfig):
             The size of the input image.
         num_frames (`int`, *optional*, defaults to 16):
             The number of frames in the input video.
-        tubelet_size (`List[int]`, *optional*, defaults to [1, 18, 18]):
+        tubelet_size (`List[int]`, *optional*, defaults to `[1, 18, 18]`):
             The size of the tubelet patch.
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
@@ -92,6 +92,7 @@ class VideoPrismVisionConfig(VivitConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "videoprism_vision_model"
     base_config_key = "vision_config"
 
@@ -194,6 +195,7 @@ class VideoPrismTextConfig(PreTrainedConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     model_type = "videoprism_text_model"
     base_config_key = "text_config"
 
@@ -262,6 +264,7 @@ class VideoPrismConfig(SiglipConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     def __init__(self, text_config=None, vision_config=None, **kwargs):
         super().__init__(**kwargs)
         del self.initializer_factor
@@ -298,6 +301,7 @@ class VideoPrismTokenizer(T5Tokenizer):
     >>> encoded = tokenizer("Hello, my dog is cute", return_tensors="pt")
     >>> print(encoded)
     ```"""
+
     def __init__(
         self,
         vocab: str | list[tuple[str, float]] | None = None,
@@ -336,6 +340,7 @@ class VideoPrismVideoProcessor(LlavaOnevisionVideoProcessor):
         do_normalize (`bool`, *optional*, defaults to `False`):
             Whether to normalize the video frames.
     """
+
     size = {"height": 288, "width": 288}
     do_normalize = False
 
@@ -627,7 +632,10 @@ class VideoPrismSelfAttention(nn.Module):
         self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
 
     def forward(
-        self, hidden_states: torch.Tensor, attention_mask: torch.Tensor | None, **kwargs: Unpack[TransformersKwargs],
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size = hidden_states.shape[0]
         new_shape = batch_size, -1, self.num_attention_heads, self.attention_head_size
@@ -658,7 +666,9 @@ class VideoPrismSelfAttention(nn.Module):
 
 
 class VideoPrismAttention(VivitAttention):
-    def forward(self, hidden_states: torch.Tensor, attention_mask: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> torch.Tensor:
+    def forward(
+        self, hidden_states: torch.Tensor, attention_mask: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> torch.Tensor:
         self_attn_output, _ = self.attention(hidden_states, attention_mask, **kwargs)
         output = self.output(self_attn_output, hidden_states)
         return output
@@ -678,7 +688,12 @@ class VideoPrismLayer(VivitLayer):
         self.layernorm_after = VideoPrismLayerNorm(self.config.hidden_size, eps=self.config.layer_norm_eps)
         self.layernorm_before = VideoPrismLayerNorm(self.config.hidden_size, eps=self.config.layer_norm_eps)
 
-    def forward(self, hidden_states: torch.Tensor, attention_mask: torch.Tensor | None = None, **kwargs: Unpack[TransformersKwargs],) -> torch.Tensor:
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
         hidden_states_norm = self.layernorm_before(hidden_states)
         attention_output = self.attention(hidden_states_norm, attention_mask, **kwargs)
 
@@ -716,7 +731,12 @@ class VideoPrismAuxiliaryEncoder(VivitEncoder):
         self.layer = nn.ModuleList([VideoPrismLayer(self.config) for _ in range(config.num_auxiliary_layers)])
         self.gradient_checkpointing = False
 
-    def forward(self, hidden_states: torch.Tensor, attention_mask: torch.Tensor | None = None, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutput:
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutput:
         for i, layer_module in enumerate(self.layer):
             hidden_states = layer_module(hidden_states, attention_mask, **kwargs)
 
@@ -729,7 +749,12 @@ class VideoPrismTextEncoder(VivitEncoder):
         self.layer = nn.ModuleList([VideoPrismLayer(config) for _ in range(config.num_text_layers)])
         self.gradient_checkpointing = False
 
-    def forward(self, hidden_states: torch.Tensor, attention_mask: torch.Tensor | None = None, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutput:
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutput:
         for i, layer_module in enumerate(self.layer):
             hidden_states = layer_module(hidden_states, attention_mask, **kwargs)
 

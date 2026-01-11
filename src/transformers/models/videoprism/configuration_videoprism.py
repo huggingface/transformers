@@ -26,7 +26,7 @@ class VideoPrismVisionConfig(PreTrainedConfig):
             The size of the input image.
         num_frames (`int`, *optional*, defaults to 16):
             The number of frames in the input video.
-        tubelet_size (`List[int]`, *optional*, defaults to [1, 18, 18]):
+        tubelet_size (`List[int]`, *optional*, defaults to `[1, 18, 18]`):
             The size of the tubelet patch.
         num_channels (`int`, *optional*, defaults to 3):
             The number of input channels.
