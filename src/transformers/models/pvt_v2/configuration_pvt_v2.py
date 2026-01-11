@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 Authors: Wenhai Wang, Enze Xie, Xiang Li, Deng-Ping Fan,
 # Kaitao Song, Ding Liang, Tong Lu, Ping Luo, Ling Shao and The HuggingFace Inc. team.
 # All rights reserved.
@@ -17,7 +16,6 @@
 """Pvt V2 model configuration"""
 
 from collections.abc import Callable
-from typing import Union
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
@@ -104,7 +102,7 @@ class PvtV2Config(BackboneConfigMixin, PreTrainedConfig):
 
     def __init__(
         self,
-        image_size: Union[int, tuple[int, int]] = 224,
+        image_size: int | tuple[int, int] = 224,
         num_channels: int = 3,
         num_encoder_blocks: int = 4,
         depths: list[int] = [2, 2, 2, 2],
@@ -114,7 +112,7 @@ class PvtV2Config(BackboneConfigMixin, PreTrainedConfig):
         strides: list[int] = [4, 2, 2, 2],
         num_attention_heads: list[int] = [1, 2, 5, 8],
         mlp_ratios: list[int] = [8, 8, 4, 4],
-        hidden_act: Union[str, Callable] = "gelu",
+        hidden_act: str | Callable = "gelu",
         hidden_dropout_prob: float = 0.0,
         attention_probs_dropout_prob: float = 0.0,
         initializer_range: float = 0.02,

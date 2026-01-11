@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The Microsoft Authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +14,6 @@
 """ProphetNet model configuration"""
 
 from collections.abc import Callable
-from typing import Optional, Union
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
@@ -102,32 +100,32 @@ class ProphetNetConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        activation_dropout: Optional[float] = 0.1,
-        activation_function: Optional[Union[str, Callable]] = "gelu",
-        vocab_size: Optional[int] = 30522,
-        hidden_size: Optional[int] = 1024,
-        encoder_ffn_dim: Optional[int] = 4096,
-        num_encoder_layers: Optional[int] = 12,
-        num_encoder_attention_heads: Optional[int] = 16,
-        decoder_ffn_dim: Optional[int] = 4096,
-        num_decoder_layers: Optional[int] = 12,
-        num_decoder_attention_heads: Optional[int] = 16,
-        attention_dropout: Optional[float] = 0.1,
-        dropout: Optional[float] = 0.1,
-        max_position_embeddings: Optional[int] = 512,
-        init_std: Optional[float] = 0.02,
-        is_encoder_decoder: Optional[bool] = True,
-        add_cross_attention: Optional[bool] = True,
-        decoder_start_token_id: Optional[int] = 0,
-        ngram: Optional[int] = 2,
-        num_buckets: Optional[int] = 32,
-        relative_max_distance: Optional[int] = 128,
-        disable_ngram_loss: Optional[bool] = False,
-        eps: Optional[float] = 0.0,
-        use_cache: Optional[bool] = True,
-        pad_token_id: Optional[int] = 0,
-        bos_token_id: Optional[int] = 1,
-        eos_token_id: Optional[int] = 2,
+        activation_dropout: float | None = 0.1,
+        activation_function: str | Callable | None = "gelu",
+        vocab_size: int | None = 30522,
+        hidden_size: int | None = 1024,
+        encoder_ffn_dim: int | None = 4096,
+        num_encoder_layers: int | None = 12,
+        num_encoder_attention_heads: int | None = 16,
+        decoder_ffn_dim: int | None = 4096,
+        num_decoder_layers: int | None = 12,
+        num_decoder_attention_heads: int | None = 16,
+        attention_dropout: float | None = 0.1,
+        dropout: float | None = 0.1,
+        max_position_embeddings: int | None = 512,
+        init_std: float | None = 0.02,
+        is_encoder_decoder: bool | None = True,
+        add_cross_attention: bool | None = True,
+        decoder_start_token_id: int | None = 0,
+        ngram: int | None = 2,
+        num_buckets: int | None = 32,
+        relative_max_distance: int | None = 128,
+        disable_ngram_loss: bool | None = False,
+        eps: float | None = 0.0,
+        use_cache: bool | None = True,
+        pad_token_id: int | None = 0,
+        bos_token_id: int | None = 1,
+        eos_token_id: int | None = 2,
         **kwargs,
     ):
         self.vocab_size = vocab_size

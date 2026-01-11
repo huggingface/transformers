@@ -42,7 +42,6 @@ if is_torch_available():
         MODEL_FOR_QUESTION_ANSWERING_MAPPING,
         LEDForConditionalGeneration,
         LEDForQuestionAnswering,
-        LEDForSequenceClassification,
         LEDModel,
         LEDTokenizer,
     )
@@ -264,19 +263,15 @@ class LEDModelTester:
 @require_torch
 class LEDModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (LEDModel, LEDForConditionalGeneration, LEDForSequenceClassification, LEDForQuestionAnswering)
-        if is_torch_available()
-        else ()
+        (LEDModel, LEDForConditionalGeneration, LEDForQuestionAnswering) if is_torch_available() else ()
     )
     pipeline_model_mapping = (
         {
             "feature-extraction": LEDModel,
             "question-answering": LEDForQuestionAnswering,
             "summarization": LEDForConditionalGeneration,
-            "text-classification": LEDForSequenceClassification,
             "text2text-generation": LEDForConditionalGeneration,
             "translation": LEDForConditionalGeneration,
-            "zero-shot": LEDForSequenceClassification,
         }
         if is_torch_available()
         else {}
@@ -336,11 +331,10 @@ class LEDModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
         inputs_dict.pop("global_attention_mask")
         return config, inputs_dict
 
-    # LEDForSequenceClassification does not support inputs_embeds
     def test_inputs_embeds(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
-        for model_class in (LEDModel, LEDForConditionalGeneration, LEDForQuestionAnswering):
+        for model_class in self.all_model_classes:
             model = model_class(config)
             model.to(torch_device)
             model.eval()
