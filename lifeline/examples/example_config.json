@@ -1,0 +1,44 @@
+{
+  "version": "0.1.0",
+  "log_level": "INFO",
+
+  "ai": {
+    "model_name": "gpt2",
+    "use_local": true,
+    "alert_threshold": 0.7,
+    "suggestion_threshold": 0.5,
+    "max_file_size": 1000000
+  },
+
+  "watchers": {
+    "file_poll_interval": 2.0,
+    "git_poll_interval": 5.0,
+    "ignored_patterns": [
+      ".git",
+      "__pycache__",
+      "*.pyc",
+      ".lifeline",
+      "node_modules",
+      ".pytest_cache",
+      ".venv",
+      "venv",
+      "*.egg-info",
+      "dist",
+      "build"
+    ]
+  },
+
+  "safety": {
+    "max_memory_size": 100000000,
+    "max_insights_stored": 2000,
+    "max_commits_stored": 1000,
+    "auto_save_interval": 300
+  },
+
+  "features": {
+    "proactive_suggestions": true,
+    "security_alerts": true,
+    "code_quality_analysis": true,
+    "commit_analysis": true
+  }
+}
