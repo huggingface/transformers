@@ -332,7 +332,7 @@ class DINOv3ViTLayer(GradientCheckpointingLayer):
         hidden_states = self.mlp(hidden_states)
         hidden_states = self.layer_scale2(hidden_states)
         hidden_states = self.drop_path(hidden_states) + residual
-        
+
         outputs = (hidden_states, )
 
         if output_attentions:
@@ -417,7 +417,7 @@ class DINOv3ViTModel(DINOv3ViTPreTrainedModel):
             if output_attentions:
                 all_attentions = all_attentions + (layer_outputs[1],)
 
-            
+
         sequence_output = self.norm(hidden_states)
         pooled_output = sequence_output[:, 0, :]
 
