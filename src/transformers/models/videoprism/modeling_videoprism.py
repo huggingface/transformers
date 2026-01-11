@@ -832,6 +832,9 @@ class VideoPrismForVideoClassification(VideoPrismPreTrainedModel):
         self.classifier = nn.Linear(self.config.hidden_size, self.config.num_labels)
         self.post_init()
 
+    def get_input_embeddings(self):
+        return self.encoder.spatial_embeddings.patch_embeddings
+
     def forward(
         self,
         pixel_values_videos: torch.FloatTensor,

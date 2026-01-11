@@ -8,7 +8,6 @@ import torch.nn.functional as F
 
 from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig
-from ...image_utils import PILImageResampling
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutput, ImageClassifierOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -135,7 +134,6 @@ class VideoPrismTokenizer(T5Tokenizer):
 
 
 class VideoPrismVideoProcessor(LlavaOnevisionVideoProcessor):
-    resample = PILImageResampling.BICUBIC
     size = {"height": 288, "width": 288}
     do_normalize = False
 
@@ -149,7 +147,6 @@ class VideoPrismProcessorKwargs(ProcessingKwargs, total=False):
         },
         "video_kwargs": {
             "size": {"height": 288, "width": 288},
-            "resample": PILImageResampling.BICUBIC,
             "do_normalize": False,
         },
     }
@@ -850,6 +847,9 @@ class VideoPrismForVideoClassification(VideoPrismPreTrainedModel):
         self.contrastive_vision_pooler = VideoPrismMultiheadAttentionPoolingHead(self.config)
         self.classifier = nn.Linear(self.config.hidden_size, self.config.num_labels)
         self.post_init()
+
+    def get_input_embeddings(self):
+        return self.encoder.spatial_embeddings.patch_embeddings
 
     def forward(
         self,

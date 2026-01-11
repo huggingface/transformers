@@ -28,14 +28,43 @@ Tips:
 This model was contributed by [INSERT YOUR HF USERNAME HERE](https://huggingface.co/<INSERT YOUR HF USERNAME HERE>).
 The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
+## VideoPrismVisionConfig
+
+[[autodoc]] VideoPrismVisionConfig
+
+## VideoPrismTextConfig
+
+[[autodoc]] VideoPrismTextConfig
 
 ## VideoPrismConfig
 
 [[autodoc]] VideoPrismConfig
 
+## VideoPrismVideoProcessor
+
+[[autodoc]] VideoPrismVideoProcessor
+
+## VideoPrismTokenize
+
+[[autodoc]] VideoPrismTokenizer
+
+## VideoPrismProcessor
+
+[[autodoc]] VideoPrismProcessor
+
 ## VideoPrismVisionModel
 
 [[autodoc]] VideoPrismVisionModel
+    - forward
+
+## VideoPrismVideoModel
+
+[[autodoc]] VideoPrismVideoModel
+    - forward
+
+## VideoPrismTextModel
+
+[[autodoc]] VideoPrismTextModel
     - forward
 
 ## VideoPrismClipModel

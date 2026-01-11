@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_videoprism.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-from ...image_utils import PILImageResampling
 from ...processing_utils import ProcessingKwargs, ProcessorMixin
 from .tokenization_videoprism import VideoPrismTokenizer
 from .video_processing_videoprism import VideoPrismVideoProcessor
@@ -19,7 +18,6 @@ class VideoPrismProcessorKwargs(ProcessingKwargs, total=False):
         },
         "video_kwargs": {
             "size": {"height": 288, "width": 288},
-            "resample": PILImageResampling.BICUBIC,
             "do_normalize": False,
         },
     }

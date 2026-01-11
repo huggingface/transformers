@@ -56,8 +56,6 @@ if is_vision_available():
 if is_sentencepiece_available():
     from transformers import VideoPrismTokenizer
 
-torch.set_printoptions(precision=10)
-
 
 @require_vision
 class VideoPrismVisionModelTester:
