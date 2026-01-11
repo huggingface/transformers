@@ -811,11 +811,12 @@ class VideoPrismClipModel(VideoPrismPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         interpolate_pos_encoding: bool | None = False,
         temperature: float | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> VideoPrismClipOutput:
         video_model_outputs = self.video_model(
-            pixel_values_videos=pixel_values_videos, interpolate_pos_encoding=interpolate_pos_encoding
+            pixel_values_videos=pixel_values_videos, interpolate_pos_encoding=interpolate_pos_encoding, **kwargs
         )
-        text_model_outputs = self.text_model(input_ids=input_ids, attention_mask=attention_mask)
+        text_model_outputs = self.text_model(input_ids=input_ids, attention_mask=attention_mask, **kwargs)
 
         video_embeddings = video_model_outputs.video_last_hidden_state
         text_embeddings = text_model_outputs.last_hidden_state
