@@ -1,3 +1,6 @@
+@claude
+@copilot
+@douglasdavis08161978
 name: PR - build doc via comment
 on:
   issue_comment:
