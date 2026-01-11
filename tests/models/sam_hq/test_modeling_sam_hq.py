@@ -233,8 +233,20 @@ class SamHQVisionModelTest(ModelTesterMixin, unittest.TestCase):
                 list(expected_attention_shape),
             )
 
-    @unittest.skip(reason="SamVisionModel does not support training")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training(self):
+        pass
+
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     @unittest.skip(reason="SamVisionModel does not support training")
@@ -645,8 +657,20 @@ class SamHQModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 list(expected_mask_decoder_attention_shape),
             )
 
-    @unittest.skip(reason="SamHQModel does not support training")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training(self):
+        pass
+
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     @unittest.skip(reason="SamHQModel does not support training")

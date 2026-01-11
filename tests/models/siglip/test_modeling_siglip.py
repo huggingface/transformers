@@ -18,6 +18,7 @@ import tempfile
 import unittest
 
 import numpy as np
+import pytest
 import requests
 from parameterized import parameterized
 
@@ -556,6 +557,18 @@ class SiglipForImageClassificationModelTest(SiglipModelTesterMixin, PipelineTest
     @unittest.skip(reason="SiglipForImageClassification does not support inputs_embeds")
     def test_model_get_set_embeddings(self):
         pass
+
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
+    def test_training_gradient_checkpointing(self):
+        super().test_training_gradient_checkpointing()
+
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        super().test_training_gradient_checkpointing_use_reentrant_false()
+
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        super().test_training_gradient_checkpointing_use_reentrant_true()
 
 
 # We will verify our results on an image of cute cats

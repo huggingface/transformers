@@ -508,9 +508,20 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         self.assertEqual(output.beam_indices.shape[0], input_features.shape[0] * 3)
         self.assertEqual(output.sequences_scores.shape[0], input_features.shape[0] * 3)
 
-    # training is not supported yet
-    @unittest.skip(reason="Training is not supported yet")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training(self):
+        pass
+
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     @parameterized.expand([("offloaded",)])

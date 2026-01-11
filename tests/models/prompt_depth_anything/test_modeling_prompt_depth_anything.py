@@ -169,8 +169,20 @@ class PromptDepthAnythingModelTest(ModelTesterMixin, PipelineTesterMixin, unitte
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_depth_estimation(*config_and_inputs)
 
-    @unittest.skip(reason="Prompt Depth Anything does not support training yet")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training(self):
+        pass
+
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     @unittest.skip(
