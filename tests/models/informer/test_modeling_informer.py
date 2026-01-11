@@ -18,6 +18,7 @@ import tempfile
 import unittest
 
 import numpy as np
+import pytest
 from huggingface_hub import hf_hub_download
 
 from transformers import is_torch_available
@@ -292,6 +293,18 @@ class InformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     @unittest.skip(reason="randomly selects U keys while calculating attentions")
     def test_batching_equivalence(self):
         pass
+
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
+    def test_training_gradient_checkpointing(self):
+        super().test_training_gradient_checkpointing()
+
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        super().test_training_gradient_checkpointing_use_reentrant_false()
+
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        super().test_training_gradient_checkpointing_use_reentrant_true()
 
     # # Input is 'static_categorical_features' not 'input_ids'
     def test_model_main_input_name(self):

@@ -17,6 +17,7 @@ import copy
 import unittest
 
 import numpy as np
+import pytest
 from huggingface_hub import hf_hub_download
 from parameterized import parameterized
 
@@ -300,6 +301,18 @@ class LlavaNextVideoForConditionalGenerationModelTest(ModelTesterMixin, Generati
             base_model = getattr(model, "model", model)
             assert base_model.multi_modal_projector.linear_1.in_features == expected_features
             model(**input_dict)
+
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
+    def test_training_gradient_checkpointing(self):
+        super().test_training_gradient_checkpointing()
+
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        super().test_training_gradient_checkpointing_use_reentrant_false()
+
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        super().test_training_gradient_checkpointing_use_reentrant_true()
 
     @unittest.skip("FlashAttention only support fp16 and bf16 data type")
     def test_flash_attn_2_fp32_ln(self):

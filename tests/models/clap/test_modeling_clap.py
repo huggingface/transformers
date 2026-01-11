@@ -380,7 +380,6 @@ class ClapTextModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training(self):
         pass
 
-
     @unittest.skip(reason="ClapTextModel does not use inputs_embeds")
     def test_inputs_embeds(self):
         pass

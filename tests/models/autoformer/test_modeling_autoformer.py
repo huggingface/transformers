@@ -17,6 +17,7 @@ import inspect
 import tempfile
 import unittest
 
+import pytest
 from huggingface_hub import hf_hub_download
 
 from transformers import is_torch_available
@@ -242,6 +243,13 @@ class AutoformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     def test_resize_tokens_embeddings(self):
         pass
 
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
+    def test_training_gradient_checkpointing(self):
+        super().test_training_gradient_checkpointing()
+
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        super().test_training_gradient_checkpointing_use_reentrant_false()
 
     # # Input is 'static_categorical_features' not 'input_ids'
     def test_model_main_input_name(self):

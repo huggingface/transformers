@@ -375,8 +375,20 @@ class ChineseCLIPTextModelTest(ModelTesterMixin, unittest.TestCase):
         model = ChineseCLIPTextModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
-    @unittest.skip
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training(self):
+        pass
+
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing(self):
+        pass
+
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
 
@@ -432,7 +444,6 @@ class ChineseCLIPVisionModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip
     def test_training(self):
         pass
-
 
     @slow
     def test_model_from_pretrained(self):
