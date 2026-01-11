@@ -7,7 +7,6 @@
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import torch
 import torch.nn as nn
@@ -44,9 +43,9 @@ class BaseModelOutputWithSpatialAndTemporalStates(ModelOutput):
             (batch_size * num_frames, num_patches, hidden_size).
     """
 
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    temporal_hidden_state: Optional[torch.FloatTensor] = None
-    spatial_hidden_state: Optional[torch.FloatTensor] = None
+    last_hidden_state: torch.FloatTensor | None = None
+    temporal_hidden_state: torch.FloatTensor | None = None
+    spatial_hidden_state: torch.FloatTensor | None = None
 
 
 @dataclass
@@ -55,10 +54,10 @@ class VideoPrismClipOutput(ModelOutput):
     Base class for VideoPrismClip model outputs.
     """
 
-    logits_per_video: Optional[torch.FloatTensor] = None
-    logits_per_text: Optional[torch.FloatTensor] = None
-    video_embeds: Optional[torch.FloatTensor] = None
-    text_embeds: Optional[torch.FloatTensor] = None
+    logits_per_video: torch.FloatTensor | None = None
+    logits_per_text: torch.FloatTensor | None = None
+    video_embeds: torch.FloatTensor | None = None
+    text_embeds: torch.FloatTensor | None = None
 
 
 @dataclass
@@ -67,9 +66,9 @@ class VideoPrismVideoOutput(ModelOutput):
     Base class for VideoPrismVideo model outputs.
     """
 
-    video_last_hidden_state: Optional[torch.FloatTensor] = None
-    auxiliary_output: Optional[torch.FloatTensor] = None
-    attention_pooling_output: Optional[torch.FloatTensor] = None
+    video_last_hidden_state: torch.FloatTensor | None = None
+    auxiliary_output: torch.FloatTensor | None = None
+    attention_pooling_output: torch.FloatTensor | None = None
 
 
 class VideoPrismTubeletEmbeddings(nn.Module):
@@ -174,7 +173,7 @@ class VideoPrismSpatialEmbeddings(nn.Module):
         return patch_pos_embed
 
     def forward(
-        self, pixel_values_videos: torch.Tensor, interpolate_pos_encoding: Optional[bool] = False
+        self, pixel_values_videos: torch.Tensor, interpolate_pos_encoding: bool | None = False
     ) -> torch.Tensor:
         b, t, c, h, w = pixel_values_videos.shape
         assert h == w, "Input image height and width must be the same"
@@ -239,7 +238,7 @@ class VideoPrismTemporalEmbeddings(nn.Module):
         self,
         pixel_values_videos: torch.Tensor,
         input_shape: torch.Size,
-        interpolate_pos_encoding: Optional[bool] = False,
+        interpolate_pos_encoding: bool | None = False,
     ) -> torch.Tensor:
         if input_shape is not None:
             b, t, c, h, w = input_shape
@@ -262,10 +261,10 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
+    attention_mask: torch.Tensor | None,
     scaling: float,
     dropout: float = 0.0,
-    softcap: Optional[float] = None,
+    softcap: float | None = None,
 ):
     # Take the dot product between "query" and "key" to get the raw attention scores.
     attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
@@ -286,7 +285,7 @@ def eager_attention_forward(
 
 
 class VideoPrismSelfAttention(nn.Module):
-    def __init__(self, config: Union[VideoPrismVisionConfig, VideoPrismTextConfig]):
+    def __init__(self, config: VideoPrismVisionConfig | VideoPrismTextConfig):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
             raise ValueError(
@@ -402,7 +401,7 @@ class VideoPrismOutput(nn.Module):
 class VideoPrismLayer(GradientCheckpointingLayer):
     """This corresponds to the EncoderBlock class in the scenic/videoprism implementation."""
 
-    def __init__(self, config: Union[VideoPrismVisionConfig, VideoPrismTextConfig]):
+    def __init__(self, config: VideoPrismVisionConfig | VideoPrismTextConfig):
         super().__init__()
         self.config = config
         self.attention = VideoPrismAttention(config)
@@ -411,7 +410,7 @@ class VideoPrismLayer(GradientCheckpointingLayer):
         self.layernorm_before = VideoPrismLayerNorm(self.config.hidden_size, eps=self.config.layer_norm_eps)
         self.layernorm_after = VideoPrismLayerNorm(self.config.hidden_size, eps=self.config.layer_norm_eps)
 
-    def forward(self, hidden_states: torch.Tensor, attention_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, attention_mask: torch.Tensor | None = None) -> torch.Tensor:
         hidden_states_norm = self.layernorm_before(hidden_states)
         attention_output = self.attention(hidden_states_norm, attention_mask)
 
@@ -463,7 +462,7 @@ class VideoPrismAuxiliaryEncoder(nn.Module):
         self.layer = nn.ModuleList([VideoPrismLayer(self.config) for _ in range(config.num_auxiliary_layers)])
         self.gradient_checkpointing = False
 
-    def forward(self, hidden_states: torch.Tensor, attention_mask: Optional[torch.Tensor] = None) -> BaseModelOutput:
+    def forward(self, hidden_states: torch.Tensor, attention_mask: torch.Tensor | None = None) -> BaseModelOutput:
         for i, layer_module in enumerate(self.layer):
             hidden_states = layer_module(hidden_states, attention_mask)
 
@@ -477,7 +476,7 @@ class VideoPrismTextEncoder(nn.Module):
         self.layer = nn.ModuleList([VideoPrismLayer(config) for _ in range(config.num_text_layers)])
         self.gradient_checkpointing = False
 
-    def forward(self, hidden_states: torch.Tensor, attention_mask: Optional[torch.Tensor] = None) -> BaseModelOutput:
+    def forward(self, hidden_states: torch.Tensor, attention_mask: torch.Tensor | None = None) -> BaseModelOutput:
         for i, layer_module in enumerate(self.layer):
             hidden_states = layer_module(hidden_states, attention_mask)
 
@@ -562,8 +561,8 @@ class VideoPrismVisionModel(VideoPrismPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values_videos: Optional[torch.FloatTensor] = None,
-        interpolate_pos_encoding: Optional[bool] = False,
+        pixel_values_videos: torch.FloatTensor | None = None,
+        interpolate_pos_encoding: bool | None = False,
     ) -> BaseModelOutputWithSpatialAndTemporalStates:
         if pixel_values_videos is None:
             raise ValueError("You have to specify pixel_values_videos")
@@ -622,7 +621,7 @@ class VideoPrismMultiheadAttentionPoolingHead(nn.Module):
     def forward(
         self,
         hidden_states: torch.FloatTensor,
-        attention_mask: Optional[torch.LongTensor] = None,
+        attention_mask: torch.LongTensor | None = None,
     ) -> tuple[torch.FloatTensor, torch.FloatTensor]:
         batch_size, seq_length, hidden_size = hidden_states.shape
         query = self.pooling_attention_query.expand(batch_size, -1, -1)
@@ -692,7 +691,7 @@ class VideoPrismTextModel(VideoPrismPreTrainedModel):
     def forward(
         self,
         input_ids: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
     ) -> BaseModelOutput:
         batch_size, seq_length = input_ids.shape
         hidden_states = self.token_embeddings(input_ids)
@@ -747,7 +746,7 @@ class VideoPrismVideoModel(VideoPrismPreTrainedModel):
     def forward(
         self,
         pixel_values_videos: torch.FloatTensor,
-        interpolate_pos_encoding: Optional[bool] = False,
+        interpolate_pos_encoding: bool | None = False,
     ) -> VideoPrismVideoOutput:
         backbone_outputs = self.backbone(
             pixel_values_videos=pixel_values_videos, interpolate_pos_encoding=interpolate_pos_encoding
@@ -782,9 +781,9 @@ class VideoPrismClipModel(VideoPrismPreTrainedModel):
         self,
         pixel_values_videos: torch.FloatTensor,
         input_ids: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        interpolate_pos_encoding: Optional[bool] = False,
-        temperature: Optional[float] = None,
+        attention_mask: torch.Tensor | None = None,
+        interpolate_pos_encoding: bool | None = False,
+        temperature: float | None = None,
     ) -> VideoPrismClipOutput:
         video_model_outputs = self.video_model(
             pixel_values_videos=pixel_values_videos, interpolate_pos_encoding=interpolate_pos_encoding
@@ -838,8 +837,8 @@ class VideoPrismForVideoClassification(VideoPrismPreTrainedModel):
     def forward(
         self,
         pixel_values_videos: torch.FloatTensor,
-        labels: Optional[torch.LongTensor] = None,
-        interpolate_pos_encoding: Optional[bool] = False,
+        labels: torch.LongTensor | None = None,
+        interpolate_pos_encoding: bool | None = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> ImageClassifierOutput:
         encoder_outputs = self.encoder(

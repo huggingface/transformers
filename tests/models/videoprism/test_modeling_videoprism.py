@@ -493,6 +493,8 @@ def prepare_video(frames=True):
         filename = "water_bottle_drumming.mp4"
 
     file = api.hf_hub_download(repo_id="MHRDYN7/water_bottle_drumming_video", filename=filename, repo_type="dataset")
+    if frames:
+        file = np.load(file)
     return file
 
 
