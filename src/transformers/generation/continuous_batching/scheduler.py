@@ -189,8 +189,79 @@ class Scheduler(ABC):
             state.remaining_prefill_tokens = request_tokens[token_budget:]
             state.tokens_to_process = request_tokens[:token_budget]
 
+    def _process_candidates(
+        self,
+        candidates: list[RequestState],
+        token_budget: int,
+        request_ids_to_remove_from_waiting: set[str],
+        safety_margin: float | None = None,
+    ) -> list[RequestState]:
+        """Process candidates and return scheduled requests. This is the common logic shared by all schedulers.
 
-# TODO: further common-ize the two classes
+        Args:
+            candidates: List of candidate requests to process, ordered by priority.
+            token_budget: Maximum number of tokens that can be processed in this batch.
+            request_ids_to_remove_from_waiting: Set to track which requests to remove from waiting queue.
+            safety_margin: Optional safety margin threshold. If provided and cache usage exceeds this,
+                          only DECODING requests will be scheduled.
+
+        Returns:
+            List of scheduled requests.
+        """
+        scheduled_requests = []
+        safety_threshold = safety_margin * self.cache.num_blocks if safety_margin is not None else None
+
+        for state in candidates:
+            # Safety margin check (only for FIFOScheduler)
+            if safety_threshold is not None:
+                num_free_blocks = self.cache.get_num_free_blocks()
+                outside_safety_margin = num_free_blocks < safety_threshold
+                if outside_safety_margin and scheduled_requests and state.status != RequestStatus.DECODING:
+                    break
+
+            self._prepare_request_for_processing(state, token_budget, request_ids_to_remove_from_waiting)
+            request_len = len(state.tokens_to_process)
+
+            # If we can't allocate blocks, do not schedule the request and break if the cache is full
+            if not self._allocate_blocks_if_needed(state):
+                if self.cache.get_num_free_blocks() == 0:
+                    break
+                continue
+
+            # If this point is reached, it means we can safely schedule the request
+            self._schedule_request(state, request_tokens, token_budget, request_ids_to_remove_from_waiting)
+            request_len = len(state.tokens_to_process)  # it may change after scheduling
+            scheduled_requests.append(state)
+
+            # Update the token and cache budgets
+            token_budget -= request_len
+
+            # If using prefix sharing, we make note of the blocks that will be computed in the forward pass
+            if self.cache.allow_block_sharing:
+                tokens_in_current_block = state.current_len() % self.cache.block_size
+                tokens_after_forward = tokens_in_current_block + request_len
+                complete_blocks = tokens_after_forward // self.cache.block_size
+                self.cache.blocks_to_complete[state.request_id] = complete_blocks
+
+            # Remove the request from the waiting queue and mark it as removed
+            req_id = state.request_id
+            was_waiting = self.waiting_requests.pop(req_id, None) is not None
+            if was_waiting:
+                request_ids_to_remove_from_waiting.add(req_id)
+
+            # Early exit of the loop if we have no budget left
+            if token_budget == 0 or cache_budget == 0:
+                break
+
+        return scheduled_requests
+
+    def _cleanup_waiting_queue(self, request_ids_to_remove_from_waiting: set[str]) -> None:
+        """Remove processed requests from the waiting queue order."""
+        self.waiting_requests_order = deque(
+            [req_id for req_id in self.waiting_requests_order if req_id not in request_ids_to_remove_from_waiting]
+        )
+
+
 @attach_tracer()
 class FIFOScheduler(Scheduler):
     """This scheduler processes requests in the order they arrive, meaning decoding requests has priority over
@@ -206,98 +277,28 @@ class FIFOScheduler(Scheduler):
         self.safety_margin = safety_margin
 
     @traced
-    def schedule_batch(self, token_budget: int, cache_budget: int) -> list[RequestState] | None:
+    def schedule_batch(self, token_budget: int) -> list[RequestState]:
         priority_states: list[RequestState] = []
         second_priority_states: list[RequestState] = []
-        scheduled_requests = []
 
         for state in self.active_requests.values():
             if state.status == RequestStatus.DECODING:
                 priority_states.append(state)
-            if state.status in [RequestStatus.SPLIT_PENDING_REMAINDER, RequestStatus.PREFILLING_SPLIT]:
+            elif state.status in [RequestStatus.SPLIT_PENDING_REMAINDER, RequestStatus.PREFILLING_SPLIT]:
                 second_priority_states.append(state)
 
-        # Add waiting requests to second priority
-        if not self.block_new_requests:
-            for req_id in self.waiting_requests_order:
-                second_priority_states.append(self.waiting_requests[req_id])
+        # Add waiting requests to second priority (FIFO order)
+        for req_id in self.waiting_requests_order:
+            second_priority_states.append(self.waiting_requests[req_id])
 
         candidates = priority_states + second_priority_states
-        request_ids_to_remove_from_waiting = set()
-        safety_margins = self.safety_margin * self.cache.num_blocks
+        request_ids_to_remove_from_waiting: set[str] = set()
 
-        one_allocation_failed = False
-
-        for state in candidates:
-            # If we are out the safety margin, we only accept decoding requests or the first prefill request
-            num_free_blocks = self.cache.get_num_free_blocks()
-            outside_safety_margin = num_free_blocks < safety_margins
-            if outside_safety_margin and scheduled_requests and state.status != RequestStatus.DECODING:
-                logger.info(
-                    f"Outside safety margin, breaking out of scheduling loop. {num_free_blocks = } {safety_margins = }"
-                )
-                break
-
-            # Check cache budget
-            cache_needed = state.current_len()
-            cache_needed = (
-                cache_needed if self.cache_budget_module is None else cache_needed % self.cache_budget_module
-            )
-            if cache_budget < cache_needed:
-                continue
-
-            # Infer the tokens that will be present in the batch if token budget is enough
-            request_tokens = self._infer_request_tokens(state, request_ids_to_remove_from_waiting)
-            # Account for token budget
-            request_len = min(len(request_tokens), token_budget)
-            # Check there will be enough cache for the new tokens
-            allocation_successful = self._allocate_blocks_if_needed(state, request_len)
-
-            # If the allocation would not be successful, we move on to the next request
-            if not allocation_successful:
-                one_allocation_failed = True
-                # If we have reached a request that was waiting, all subsequent requests are also waiting, and will need
-                # allocation as well. So if there is no more free blocks, we can safely break out of the loop.
-                if num_free_blocks == 0 and state.request_id in self.waiting_requests:
-                    logger.info(f"Breaking mid-loop for request {state.request_id} because the cache is full")
-                    break
-                continue
-
-            # If this point is reached, it means we can safely schedule the request
-            self._schedule_request(state, request_tokens, token_budget, request_ids_to_remove_from_waiting)
-            request_len = len(state.tokens_to_process)  # it may change after scheduling
-            scheduled_requests.append(state)
-
-            # Update the token and cache budgets
-            token_budget -= request_len
-            cache_budget -= cache_needed
-
-            # If using prefix sharing, we make note of the blocks that will be computed in the forward pass
-            if self.cache.allow_block_sharing:
-                tokens_in_current_block = state.current_len() % self.cache.block_size
-                tokens_after_forward = tokens_in_current_block + request_len
-                complete_blocks = tokens_after_forward // self.cache.block_size
-                self.cache.blocks_to_complete[state.request_id] = complete_blocks
-
-            # Remove the request from the waiting queue and mark it as removed
-            req_id = state.request_id
-            was_waiting = self.waiting_requests.pop(req_id, None) is not None
-            if was_waiting:
-                request_ids_to_remove_from_waiting.add(req_id)
-
-            # Early exit of the loop if we have no budget left
-            if token_budget == 0 or cache_budget == 0:
-                break
-
-        # We remove waiting requests before checking requests were scheduled, because there might have been prefill matches
-        self.waiting_requests_order = deque(
-            [req_id for req_id in self.waiting_requests_order if req_id not in request_ids_to_remove_from_waiting]
+        scheduled_requests = self._process_candidates(
+            candidates, token_budget, request_ids_to_remove_from_waiting, safety_margin=self.safety_margin
         )
 
-        # If no requests were scheduled and the cache is full, we signal it by returning None
-        if not scheduled_requests and one_allocation_failed:
-            return None
-
+        self._cleanup_waiting_queue(request_ids_to_remove_from_waiting)
         return scheduled_requests
 
 
@@ -313,7 +314,6 @@ class PrefillFirstScheduler(Scheduler):
     def schedule_batch(self, token_budget: int, cache_budget: int) -> list[RequestState] | None:
         priority_states: list[RequestState] = []
         second_priority_states: list[RequestState] = []
-        scheduled_requests = []
 
         for state in self.active_requests.values():
             # XXX: when cache is full, state can stay on `PREFILLING_SPLIT` so we need to take those into account
@@ -322,74 +322,18 @@ class PrefillFirstScheduler(Scheduler):
             elif state.status == RequestStatus.DECODING:
                 second_priority_states.append(state)
 
-        # Add waiting requests to second priority
-        if not self.block_new_requests:
-            for req_id in self.waiting_requests_order:
-                second_priority_states.append(self.waiting_requests[req_id])
+        # Add waiting requests to second priority (after DECODING)
+        for req_id in self.waiting_requests_order:
+            second_priority_states.append(self.waiting_requests[req_id])
 
         candidates = priority_states + second_priority_states
-        request_ids_to_remove_from_waiting = set()
-        one_allocation_failed = False
+        request_ids_to_remove_from_waiting: set[str] = set()
 
-        for state in candidates:
-            # Check cache budget
-            cache_needed = state.current_len()
-            cache_needed = (
-                cache_needed if self.cache_budget_module is None else cache_needed % self.cache_budget_module
-            )
-            if cache_budget < cache_needed:
-                continue
-
-            # Infer the tokens that will be present in the batch if token budget is enough
-            request_tokens = self._infer_request_tokens(state, request_ids_to_remove_from_waiting)
-            # Account for token budget
-            request_len = min(len(request_tokens), token_budget)
-            # Check there will be enough cache for the new tokens
-            allocation_successful = self._allocate_blocks_if_needed(state, request_len)
-
-            # If the allocation would not be successful, we move on to the next request
-            if not allocation_successful:
-                one_allocation_failed = True
-                # If the request was waiting, all requests afterwards will need allocation, so we break if the cache is full
-                if state.request_id in self.waiting_requests and self.cache.get_num_free_blocks() == 0:
-                    break
-                continue
-
-            # If this point is reached, it means we can safely schedule the request
-            self._schedule_request(state, request_tokens, token_budget, request_ids_to_remove_from_waiting)
-            request_len = len(state.tokens_to_process)  # it may change after scheduling
-            scheduled_requests.append(state)
-
-            # Update the token and cache budgets
-            token_budget -= request_len
-            cache_budget -= cache_needed
-
-            # If using prefix sharing, we make note of the blocks that will be computed in the forward pass
-            if self.cache.allow_block_sharing:
-                tokens_in_current_block = state.current_len() % self.cache.block_size
-                tokens_after_forward = tokens_in_current_block + request_len
-                complete_blocks = tokens_after_forward // self.cache.block_size
-                self.cache.blocks_to_complete[state.request_id] = complete_blocks
-
-            # Remove the request from the waiting queue and mark it as removed
-            req_id = state.request_id
-            was_waiting = self.waiting_requests.pop(req_id, None) is not None
-            if was_waiting:
-                request_ids_to_remove_from_waiting.add(req_id)
-
-            # Early exit of the loop if we have no budget left
-            if token_budget == 0 or cache_budget == 0:
-                break
-
-        # We remove waiting requests before checking requests were scheduled, because there might have been prefill matches
-        self.waiting_requests_order = deque(
-            [req_id for req_id in self.waiting_requests_order if req_id not in request_ids_to_remove_from_waiting]
+        scheduled_requests = self._process_candidates(
+            candidates, token_budget, request_ids_to_remove_from_waiting, safety_margin=None
         )
 
-        # If no requests were scheduled and the cache is full, we signal it by returning None
-        if not scheduled_requests and one_allocation_failed:
-            return None
-
+        self._cleanup_waiting_queue(request_ids_to_remove_from_waiting)
         return scheduled_requests
 
 
