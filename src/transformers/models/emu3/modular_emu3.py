@@ -700,7 +700,7 @@ class Emu3VQVAE(PreTrainedModel):
         "Emu3VQVAEVectorQuantizer",
     ]
     _can_record_outputs = {
-        "hidden_states": Emu3VQVAETemporalResnetBlock,
+        "hidden_states": [Emu3VQVAEResnetBlock, Emu3VQVAETemporalResnetBlock],
         "attentions": Emu3VQVAEAttentionBlock,
     }
 
@@ -871,14 +871,13 @@ class Emu3PreTrainedModel(ChameleonPreTrainedModel, Emu3VQVAE):
     ]
     _supports_flex_attn = True
     _supports_attention_backend = True
-
-
-class Emu3TextModel(LlamaModel, Emu3PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": Emu3DecoderLayer,
         "attentions": Emu3Attention,
     }
 
+
+class Emu3TextModel(LlamaModel, Emu3PreTrainedModel):
     def __init__(self, config: Emu3Config):
         super().__init__(config)
         self.layers = nn.ModuleList(

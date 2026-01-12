@@ -59,6 +59,7 @@ from ..blip.image_processing_blip import BlipImageProcessor
 from ..blip_2.modeling_blip_2 import Blip2VisionModel
 from ..chameleon.configuration_chameleon import ChameleonVQVAEConfig
 from ..chameleon.modeling_chameleon import (
+    ChameleonAttention,
     ChameleonVQVAE,
     ChameleonVQVAEEncoderAttnBlock,
     ChameleonVQVAEEncoderConvDownsample,
@@ -552,6 +553,11 @@ class JanusVisionEncoder(SiglipEncoder):
 
 
 class JanusVisionModel(Blip2VisionModel):
+    _can_record_outputs = {
+        "hidden_states": JanusVisionEncoderLayer,
+        "attentions": JanusVisionAttention,
+    }
+
     def __init__(self, config: JanusVisionConfig):
         super().__init__(config)
         self.encoder = JanusVisionEncoder(config)
@@ -819,6 +825,10 @@ class JanusVQVAE(ChameleonVQVAE):
         "JanusVQVAEResnetBlock",
         "JanusVQVAEVectorQuantizer",
     ]
+    _can_record_outputs = {
+        "hidden_states": JanusVQVAEResnetBlock,
+        "attentions": JanusVQVAEAttnBlock,
+    }
     main_input_name = "pixel_values"
 
     def __init__(self, config: JanusVQVAEConfig):

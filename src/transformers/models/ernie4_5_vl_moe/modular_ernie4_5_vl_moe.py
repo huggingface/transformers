@@ -713,8 +713,8 @@ class Ernie4_5_VL_MoePreTrainedModel(Qwen2_5_VLPreTrainedModel):
 
     _can_record_outputs = {
         "router_logits": OutputRecorder(Ernie4_5_VL_MoeMoeBlock, index=1),
-        "hidden_states": [Ernie4_5_VL_MoeDecoderLayer, Ernie4_5_VL_MoeVisionBlock],
-        "attentions": [Ernie4_5_VL_MoeTextAttention, Ernie4_5_VL_MoeVisionAttention],
+        "hidden_states": Ernie4_5_VL_MoeDecoderLayer,
+        "attentions": Ernie4_5_VL_MoeTextAttention,
     }
     _keep_in_fp32_modules_strict = ["gate.weight", "moe_statics"]
 
@@ -851,6 +851,11 @@ class Ernie4_5_VL_MoeVisionRotaryEmbedding(Qwen2_5_VisionRotaryEmbedding):
 
 
 class Ernie4_5_VL_MoeVisionTransformerPretrainedModel(Qwen2VisionTransformerPretrainedModel):
+    _can_record_outputs = {
+        "router_logits": OutputRecorder(Ernie4_5_VL_MoeMoeBlock, index=1),
+        "hidden_states": Ernie4_5_VL_MoeVisionBlock,
+        "attentions": Ernie4_5_VL_MoeVisionAttention,
+    }
     def __init__(self, config) -> None:
         super().__init__(config)
 

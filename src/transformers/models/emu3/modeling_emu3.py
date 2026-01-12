@@ -1133,6 +1133,10 @@ class Emu3PreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_flex_attn = True
     _supports_attention_backend = True
+    _can_record_outputs = {
+        "hidden_states": Emu3DecoderLayer,
+        "attentions": Emu3Attention,
+    }
 
 
 class Emu3RotaryEmbedding(nn.Module):
@@ -1202,11 +1206,6 @@ class Emu3RotaryEmbedding(nn.Module):
 
 @auto_docstring
 class Emu3TextModel(Emu3PreTrainedModel):
-    _can_record_outputs = {
-        "hidden_states": Emu3DecoderLayer,
-        "attentions": Emu3Attention,
-    }
-
     def __init__(self, config: Emu3Config):
         super().__init__(config)
         self.padding_idx = config.pad_token_id

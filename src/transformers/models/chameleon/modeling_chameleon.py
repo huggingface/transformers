@@ -800,6 +800,10 @@ class ChameleonPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_flex_attn = True
     _supports_attention_backend = True
+    _can_record_outputs = {
+        "hidden_states": [ChameleonDecoderLayer, ChameleonSwinDecoderLayer],
+        "attentions": ChameleonAttention,
+    }
 
 
 @auto_docstring(
@@ -819,7 +823,7 @@ class ChameleonVQVAE(ChameleonPreTrainedModel):
     ]
     _can_record_outputs = {
         "hidden_states": ChameleonVQVAEEncoderResnetBlock,
-        "attentions": [ChameleonAttention, ChameleonVQVAEEncoderAttnBlock],
+        "attentions": ChameleonVQVAEEncoderAttnBlock,
     }
 
     def __init__(self, config: ChameleonVQVAEConfig):

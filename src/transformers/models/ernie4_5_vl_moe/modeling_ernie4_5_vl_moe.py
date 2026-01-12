@@ -699,8 +699,8 @@ class Ernie4_5_VL_MoePreTrainedModel(PreTrainedModel):
 
     _can_record_outputs = {
         "router_logits": OutputRecorder(Ernie4_5_VL_MoeMoeBlock, index=1),
-        "hidden_states": [Ernie4_5_VL_MoeDecoderLayer, Ernie4_5_VL_MoeVisionBlock],
-        "attentions": [Ernie4_5_VL_MoeTextAttention, Ernie4_5_VL_MoeVisionAttention],
+        "hidden_states": Ernie4_5_VL_MoeDecoderLayer,
+        "attentions": Ernie4_5_VL_MoeTextAttention,
     }
     _keep_in_fp32_modules_strict = ["gate.weight", "moe_statics"]
 
@@ -874,6 +874,11 @@ class Ernie4_5_VL_MoeVisionTransformerPretrainedModel(Ernie4_5_VL_MoePreTrainedM
     input_modalities = ("image", "video")
     _no_split_modules = ["Ernie4_5_VL_MoeVisionBlock"]
     _input_embed_layer = "patch_embed"
+    _can_record_outputs = {
+        "router_logits": OutputRecorder(Ernie4_5_VL_MoeMoeBlock, index=1),
+        "hidden_states": Ernie4_5_VL_MoeVisionBlock,
+        "attentions": Ernie4_5_VL_MoeVisionAttention,
+    }
 
     def __init__(self, config) -> None:
         super().__init__(config)
