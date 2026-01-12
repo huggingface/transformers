@@ -902,15 +902,13 @@ class GlmImageModel(Glm4vModel):
                 Discrete token indices from the VQVAE codebook.
 
         Returns:
-            input_ids (`torch.LongTensor` of shape `(batch_size, seq_len)`):
-                Input token ids with image placeholders replaced by actual image tokens.
+            special_image_mask (`torch.LongTensor` of shape `(batch_size, seq_len)`):
+                Mask indicating positions in input ids that will be replaced by actual image tokens.
         """
 
         special_image_mask = input_ids == self.config.image_token_id
         n_placeholder_tokens = special_image_mask.sum().item()
-
-        image_ids_flat = image_ids.view(-1)
-        n_image_tokens = image_ids_flat.shape[0]
+        n_image_tokens = image_ids.shape[0]
 
         if n_placeholder_tokens != n_image_tokens:
             raise ValueError(
@@ -918,10 +916,7 @@ class GlmImageModel(Glm4vModel):
                 f"number of image tokens from VQVAE ({n_image_tokens})"
             )
 
-        input_ids = input_ids.clone()
-        input_ids[special_image_mask] = image_ids_flat.to(input_ids.device)
-
-        return input_ids
+        return special_image_mask
 
     def forward(
         self,
@@ -949,7 +944,9 @@ class GlmImageModel(Glm4vModel):
             image_embeds = self.get_image_features(pixel_values, image_grid_thw[:-1])
             image_embeds = torch.cat(image_embeds, dim=0)
             image_ids = self.get_image_tokens(image_embeds, image_grid_thw[:-1])
-            input_ids = self.get_placeholder_mask(input_ids, image_ids)
+            image_ids = image_ids.view(-1).to(input_ids.device)
+            special_image_mask = self.get_placeholder_mask(input_ids, image_ids)
+            input_ids = input_ids.masked_scatter(special_image_mask, image_ids)
 
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
