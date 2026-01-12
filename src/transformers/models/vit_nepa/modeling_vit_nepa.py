@@ -22,7 +22,6 @@ import collections.abc
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -63,10 +62,10 @@ class BaseModelOutputWithEmbedding(ModelOutput):
             heads.
     """
 
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    input_embedding: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    last_hidden_state: torch.FloatTensor | None = None
+    input_embedding: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 @dataclass
@@ -91,10 +90,10 @@ class EmbeddedModelingOutput(ModelOutput):
             the self-attention heads.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    loss: torch.FloatTensor | None = None
+    last_hidden_state: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 @dataclass
@@ -144,9 +143,9 @@ def get_patches_center_coordinates(
 
 def augment_patches_center_coordinates(
     coords: torch.Tensor,
-    shift: Optional[float] = None,
-    jitter: Optional[float] = None,
-    rescale: Optional[float] = None,
+    shift: float | None = None,
+    jitter: float | None = None,
+    rescale: float | None = None,
 ) -> torch.Tensor:
     # Shift coords by adding a uniform value in [-shift, shift]
     if shift is not None:
@@ -238,7 +237,7 @@ class ViTNepaEmbeddings(nn.Module):
     def forward(
         self,
         pixel_values: torch.Tensor,
-        bool_masked_pos: Optional[torch.BoolTensor] = None,
+        bool_masked_pos: torch.BoolTensor | None = None,
     ) -> ViTNepaEmbeddingOutput:
         batch_size, _, height, width = pixel_values.shape
         embeddings = self.patch_embeddings(pixel_values, interpolate_pos_encoding=False)
@@ -344,8 +343,8 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.BoolTensor] = None,
-    scaling: Optional[float] = None,
+    attention_mask: torch.BoolTensor | None = None,
+    scaling: float | None = None,
     is_causal: bool = False,
     dropout: float = 0.0,
     **kwargs: Unpack[TransformersKwargs],
@@ -480,7 +479,7 @@ class ViTNepaAttention(nn.Module):
         self.output = ViTNepaSelfOutput(config)
 
     def forward(
-        self, hidden_states: torch.Tensor, position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None
+        self, hidden_states: torch.Tensor, position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None
     ) -> torch.Tensor:
         self_attn_output, _ = self.attention(hidden_states, position_embeddings)
         output = self.output(self_attn_output, hidden_states)
@@ -540,7 +539,7 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
 class ViTNepaDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
-    def __init__(self, drop_prob: Optional[float] = None) -> None:
+    def __init__(self, drop_prob: float | None = None) -> None:
         super().__init__()
         self.drop_prob = drop_prob
 
@@ -638,7 +637,7 @@ class ViTNepaPreTrainedModel(PreTrainedModel):
     }
 
     @torch.no_grad()
-    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]):
+    def _init_weights(self, module: nn.Linear | nn.Conv2d | nn.LayerNorm):
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
@@ -686,8 +685,8 @@ class ViTNepaModel(ViTNepaPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.Tensor] = None,
-        bool_masked_pos: Optional[torch.BoolTensor] = None,
+        pixel_values: torch.Tensor | None = None,
+        bool_masked_pos: torch.BoolTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithEmbedding:
         r"""
@@ -730,7 +729,7 @@ class ViTNepaForPreTraining(ViTNepaPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.Tensor] = None,
+        pixel_values: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> EmbeddedModelingOutput:
         outputs: BaseModelOutputWithEmbedding = self.vit_nepa(
@@ -787,8 +786,8 @@ class ViTNepaForImageClassification(ViTNepaPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
+        pixel_values: torch.Tensor | None = None,
+        labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> ImageClassifierOutput:
         r"""

@@ -18,7 +18,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Optional
 
 from ... import PreTrainedConfig
 
@@ -127,9 +126,9 @@ class ViTNepaConfig(PreTrainedConfig):
         drop_path_prob=0.0,
         add_pooling_layer=False,
         is_causal=True,
-        pos_embed_shift: Optional[float] = None,
-        pos_embed_jitter: Optional[float] = None,
-        pos_embed_rescale: Optional[float] = 2.0,
+        pos_embed_shift: float | None = None,
+        pos_embed_jitter: float | None = None,
+        pos_embed_rescale: float | None = 2.0,
         **kwargs,
     ):
         super().__init__(**kwargs)
