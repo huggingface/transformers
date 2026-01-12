@@ -1,4 +1,4 @@
-<!--Copyright 2025 The HuggingFace Team. All rights reserved.
+<!--Copyright 2026 The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -91,7 +91,7 @@ print(f"The predicted class label is: {predicted_class_label}")
 - After pretraining, the models are fine-tuned on downstream tasks such as image classification.
 - The models utilize standard Vision Transformer architectures with modifications to support the NEPA training objective.
 - Use [`ViTImageProcessorFast`] to resize (or rescale) and normalize images to the expected size.
-- The patch and image resolution are reflected in the checkpoint name. For example, `SixAILab/nepa-base-patch14-224-sft`, is the **base-sized** architecture with a patch resolution of 16x16 and fine-tuning resolution of 224x224.
+- The patch and image resolution are reflected in the checkpoint name. For example, [SixAILab/nepa-base-patch14-224-sft](https://huggingface.co/SixAILab/nepa-base-patch14-224-sft), is the **base-sized** architecture with a patch resolution of 16x16 and fine-tuning resolution of 224x224.
 
 ## ViTNepaConfig
 
