@@ -90,7 +90,7 @@ class Mamba2ModelTester:
         num_labels=3,
         num_choices=4,
         scope=None,
-        tie_word_embeddings=False,
+        tie_word_embeddings=True,
     ):
         self.parent = parent
         self.num_heads = num_heads
