@@ -648,13 +648,6 @@ def require_flash_attn_3(test_case):
     return unittest.skipUnless(is_flash_attn_3_available(), "test requires Flash Attention 3")(test_case)
 
 
-def require_read_token(test_case):
-    """
-    A decorator that loads the HF token for tests that require to load gated models.
-    """
-    return test_case
-
-
 def require_peft(test_case):
     """
     Decorator marking a test that requires PEFT.
