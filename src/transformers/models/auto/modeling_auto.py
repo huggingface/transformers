@@ -1026,7 +1026,6 @@ MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES = OrderedDict(
         ("glm46v", "Glm46VForConditionalGeneration"),
         ("glm4v", "Glm4vForConditionalGeneration"),
         ("glm4v_moe", "Glm4vMoeForConditionalGeneration"),
-        ("glm_image", "GlmImageForConditionalGeneration"),
         ("got_ocr2", "GotOcr2ForConditionalGeneration"),
         ("idefics", "IdeficsForVisionText2Text"),
         ("idefics2", "Idefics2ForConditionalGeneration"),

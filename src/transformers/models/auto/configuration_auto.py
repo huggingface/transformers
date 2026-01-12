@@ -638,7 +638,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("glm4v_text", "GLM4V"),
         ("glm4v_vision", "Glm4vVisionModel"),
         ("glm_image", "GlmImage"),
-        ("glm_image_text", "GlmImage"),
+        ("glm_image_text", "GlmImageText"),
         ("glm_image_vision", "GlmImageVisionModel"),
         ("glm_image_vqmodel", "GlmImageVQVAE"),
         ("glmasr", "GLM-ASR"),
