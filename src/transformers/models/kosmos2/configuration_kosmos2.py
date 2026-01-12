@@ -103,7 +103,6 @@ class Kosmos2TextConfig(PreTrainedConfig):
         bos_token_id=0,
         eos_token_id=2,
         add_cross_attention=False,
-        tie_word_embeddings=True,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -111,7 +110,6 @@ class Kosmos2TextConfig(PreTrainedConfig):
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
         self.add_cross_attention = add_cross_attention
-        self.tie_word_embeddings = tie_word_embeddings
 
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
@@ -218,8 +216,8 @@ class Kosmos2Config(PreTrainedConfig):
             Dictionary of configuration options used to initialize [`Kosmos2VisionConfig`].
         latent_query_num (`int`, *optional*, defaults to 64):
             The number of latent query tokens that represent the image features used in the text decoder component.
-        kwargs (*optional*):
-            Dictionary of keyword arguments.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether the model's input and output word embeddings should be tied.
 
     Example:
 
@@ -244,6 +242,7 @@ class Kosmos2Config(PreTrainedConfig):
         text_config=None,
         vision_config=None,
         latent_query_num=64,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         if text_config is None:
@@ -261,6 +260,7 @@ class Kosmos2Config(PreTrainedConfig):
         self.text_config = text_config
         self.vision_config = vision_config
         self.latent_query_num = latent_query_num
+        self.tie_word_embeddings = tie_word_embeddings
         super().__init__(**kwargs)
 
 

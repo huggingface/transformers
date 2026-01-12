@@ -78,8 +78,6 @@ class T5Gemma2TextConfig(PreTrainedConfig):
             End of stream token id.
         bos_token_id (`int`, *optional*, defaults to 2):
             Beginning of stream token id.
-        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
-            Whether to tie weight embeddings
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -135,7 +133,6 @@ class T5Gemma2TextConfig(PreTrainedConfig):
         pad_token_id: int | None = 0,
         eos_token_id: int | None = 1,
         bos_token_id: int | None = 2,
-        tie_word_embeddings: bool | None = True,
         attention_bias: bool | None = False,
         attention_dropout: float | None = 0.0,
         query_pre_attn_scalar: int | None = 256,
@@ -149,7 +146,6 @@ class T5Gemma2TextConfig(PreTrainedConfig):
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
-        self.tie_word_embeddings = tie_word_embeddings
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -234,7 +230,8 @@ class T5Gemma2EncoderConfig(PreTrainedConfig):
             The image token index to encode the image prompt.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
     Example:
 
@@ -273,11 +270,12 @@ class T5Gemma2EncoderConfig(PreTrainedConfig):
         self,
         text_config: T5Gemma2TextConfig | dict[str, Any] | None = None,
         vision_config: SiglipVisionConfig | dict[str, Any] | None = None,
-        mm_tokens_per_image: int = 256,
-        boi_token_index: int = 255_999,
-        eoi_token_index: int = 256_000,
-        image_token_index: int = 262_144,
-        initializer_range: float = 0.02,
+        mm_tokens_per_image: int | None = 256,
+        boi_token_index: int | None = 255_999,
+        eoi_token_index: int | None = 256_000,
+        image_token_index: int | None = 262_144,
+        initializer_range: float | None = 0.02,
+        tie_word_embeddings: bool | None = True,
         **kwargs,
     ):
         if text_config is None:
@@ -299,6 +297,7 @@ class T5Gemma2EncoderConfig(PreTrainedConfig):
         self.eoi_token_index = eoi_token_index
         self.image_token_index = image_token_index
         self.initializer_range = initializer_range
+        self.tie_word_embeddings = tie_word_embeddings
 
         super().__init__(**kwargs)
 
@@ -352,8 +351,6 @@ class T5Gemma2DecoderConfig(PreTrainedConfig):
             End of stream token id.
         bos_token_id (`int`, *optional*, defaults to 2):
             Beginning of stream token id.
-        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
-            Whether to tie weight embeddings
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -409,7 +406,6 @@ class T5Gemma2DecoderConfig(PreTrainedConfig):
         pad_token_id: int | None = 0,
         eos_token_id: int | None = 1,
         bos_token_id: int | None = 2,
-        tie_word_embeddings: bool | None = True,
         attention_bias: bool | None = False,
         attention_dropout: float | None = 0.0,
         query_pre_attn_scalar: int | None = 256,
@@ -423,7 +419,6 @@ class T5Gemma2DecoderConfig(PreTrainedConfig):
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
-        self.tie_word_embeddings = tie_word_embeddings
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -509,6 +504,9 @@ class T5Gemma2Config(PreTrainedConfig):
         image_token_index (`int`, *optional*, defaults to 256001):
             The image token index to encode the image prompt. Defaults to 256001, which is right after the eoi_token_index.
             Note this is different from Gemma 3.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
+
     ```python
     >>> from transformers import T5Gemma2Config, T5Gemma2Model
     >>> t5gemma2_config = T5Gemma2Config.from_pretrained("google/t5gemma-270m-270m")

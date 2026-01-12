@@ -177,7 +177,6 @@ class Idefics3Config(PreTrainedConfig):
             text_config = CONFIG_MAPPING["llama"](
                 rms_norm_eps=1e-5,
                 pad_token_id=pad_token_id,
-                tie_word_embeddings=tie_word_embeddings,
             )
         self.text_config = text_config
         self.scale_factor = scale_factor

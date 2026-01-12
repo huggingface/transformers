@@ -135,8 +135,6 @@ class Ernie4_5_VL_MoeTextConfig(PreTrainedConfig):
             relevant if `config.is_decoder=True`.
         use_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in any of the projections including mlp and attention for example.
-        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
-            Whether the model's input and output word embeddings should be tied.
         rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
@@ -204,7 +202,6 @@ class Ernie4_5_VL_MoeTextConfig(PreTrainedConfig):
         rms_norm_eps=1e-5,
         use_cache=True,
         use_bias=False,
-        tie_word_embeddings=True,
         rope_parameters=None,
         mlp_layer_types=None,
         moe_intermediate_size=None,
@@ -251,7 +248,6 @@ class Ernie4_5_VL_MoeTextConfig(PreTrainedConfig):
         self.pad_token_id = pad_token_id
         self.eos_token_id = eos_token_id
         self.bos_token_id = bos_token_id
-        self.tie_word_embeddings = tie_word_embeddings
 
         super().__init__(ignore_keys_at_rope_validation={"mrope_section"}, **kwargs)
 
@@ -283,6 +279,8 @@ class Ernie4_5_VL_MoeConfig(PreTrainedConfig):
             The video token index to encode the end of video.
         video_token_id (`int`, *optional*, defaults to 103367):
             The video token index to encode the video prompt.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether the model's input and output word embeddings should be tied.
 
     ```python
     >>> from transformers import Ernie4_5_VL_MoeForConditionalGeneration, Ernie4_5_VL_MoeConfig
@@ -311,6 +309,7 @@ class Ernie4_5_VL_MoeConfig(PreTrainedConfig):
         video_start_token_id=101306,
         video_end_token_id=101307,
         video_token_id=103367,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         if isinstance(vision_config, dict):
@@ -333,6 +332,7 @@ class Ernie4_5_VL_MoeConfig(PreTrainedConfig):
         self.video_start_token_id = video_start_token_id
         self.video_end_token_id = video_end_token_id
         self.video_token_id = video_token_id
+        self.tie_word_embeddings = tie_word_embeddings
 
         super().__init__(**kwargs)
 

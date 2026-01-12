@@ -143,7 +143,6 @@ class FuyuConfig(PreTrainedConfig):
                 "pad_token_id": pad_token_id,
                 "bos_token_id": bos_token_id,
                 "eos_token_id": eos_token_id,
-                "tie_word_embeddings": tie_word_embeddings,
             }
             logger.info("text_config is None. initializing the text model with default values.")
         text_model_type = text_config.get("model_type", "persimmon")

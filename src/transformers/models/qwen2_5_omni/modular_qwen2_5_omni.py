@@ -356,7 +356,6 @@ class Qwen2_5OmniTextConfig(PreTrainedConfig):
         initializer_range: float | None = 0.02,
         rms_norm_eps: int | None = 1e-6,
         use_cache: bool | None = True,
-        tie_word_embeddings: bool | None = False,
         rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
         use_sliding_window: bool | None = False,
         sliding_window: int | None = 32768,
@@ -368,7 +367,6 @@ class Qwen2_5OmniTextConfig(PreTrainedConfig):
         eos_token_id: int | None = None,
         **kwargs,
     ):
-        self.tie_word_embeddings = tie_word_embeddings
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -446,6 +444,8 @@ class Qwen2_5OmniThinkerConfig(PreTrainedConfig):
             The user token index to encode the user token.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether the model's input and output word embeddings should be tied.
 
     Example:
 
@@ -497,6 +497,7 @@ class Qwen2_5OmniThinkerConfig(PreTrainedConfig):
         audio_end_token_id=151648,
         user_token_id=872,
         initializer_range=0.02,
+        tie_word_embeddings=False,
         **kwargs,
     ):
         self.audio_token_index = audio_token_index
@@ -508,6 +509,7 @@ class Qwen2_5OmniThinkerConfig(PreTrainedConfig):
         self.audio_start_token_id = audio_start_token_id
         self.audio_end_token_id = audio_end_token_id
         self.initializer_range = initializer_range
+        self.tie_word_embeddings = tie_word_embeddings
 
         if isinstance(vision_config, dict):
             vision_config = Qwen2_5OmniVisionEncoderConfig(**vision_config)
