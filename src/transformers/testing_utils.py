@@ -3397,7 +3397,7 @@ def _get_test_info():
     for frame_info in reversed(captured_frames):
         tb = types.TracebackType(tb_next, frame_info.frame, frame_info.frame.f_lasti, frame_info.frame.f_lineno)
         tb_next = tb
-    test_traceback = tb_next
+    test_traceback = tb
 
     origin_method_being_patched = frame_of_patched_obj.frame.f_locals["orig_method"]
 
