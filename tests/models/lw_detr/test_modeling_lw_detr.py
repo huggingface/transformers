@@ -682,7 +682,7 @@ class LwDetrModelIntegrationTest(unittest.TestCase):
 
         expectations = Expectations(
             {
-                (None, None): [-7.76931, -4.12702, -2.90175, -4.06055, -2.95753],
+                (None, None): [-7.7648, -4.1330, -2.9003, -4.0559, -2.9635],
             }
         )
         expected_logits = torch.tensor(expectations.get_expectation()).to(torch_device)
@@ -693,7 +693,7 @@ class LwDetrModelIntegrationTest(unittest.TestCase):
 
         expectations = Expectations(
             {
-                (None, None): [0.16942, 0.19788, 0.21209, 0.09115, 0.25367],
+                (None, None): [0.1694, 0.1979, 0.2121, 0.0912, 0.2537],
             }
         )
         expected_boxes = torch.tensor(expectations.get_expectation()).to(torch_device)
@@ -706,7 +706,7 @@ class LwDetrModelIntegrationTest(unittest.TestCase):
 
         expectations = Expectations(
             {
-                (None, None): [0.8676, 0.7526, 0.7177, 0.4391],
+                (None, None): [0.8684, 0.7492, 0.7146, 0.4362],
             }
         )
         expected_scores = torch.tensor(expectations.get_expectation()).to(torch_device)
@@ -716,15 +716,14 @@ class LwDetrModelIntegrationTest(unittest.TestCase):
         expectations = Expectations(
             {
                 (None, None): [
-                    [4.8948, 56.5549, 319.8077, 474.7936],
-                    [40.5620, 73.1059, 176.2996, 116.8567],
-                    [340.3327, 25.1024, 640.3193, 368.6755],
-                    [334.2945, 76.9876, 371.2914, 189.8221],
+                    [4.9333, 56.6130, 319.7758, 474.7774],
+                    [40.5547, 73.0968, 176.2951, 116.8605],
+                    [340.3403, 25.1044, 640.2798, 368.7382],
+                    [334.2971, 77.0087, 371.2877, 189.8089],
                 ],
             }
         )
         expected_slice_boxes = torch.tensor(expectations.get_expectation()).to(torch_device)
-
         torch.testing.assert_close(results["scores"][:4], expected_scores, atol=1e-3, rtol=2e-4)
         self.assertSequenceEqual(results["labels"][:4].tolist(), expected_labels)
         torch.testing.assert_close(results["boxes"][:4], expected_slice_boxes, atol=1e-3, rtol=2e-4)
@@ -749,7 +748,7 @@ class LwDetrModelIntegrationTest(unittest.TestCase):
 
         expectations = Expectations(
             {
-                (None, None): [-11.92917, -4.33070, -4.40749, -5.02067, -6.92108],
+                (None, None): [-11.9394, -4.3419, -4.4172, -5.0299, -6.9282],
             }
         )
         expected_logits = torch.tensor(expectations.get_expectation()).to(torch_device)
@@ -760,7 +759,7 @@ class LwDetrModelIntegrationTest(unittest.TestCase):
 
         expectations = Expectations(
             {
-                (None, None): [0.76880, 0.41065, 0.46179, 0.72450, 0.25261],
+                (None, None): [0.7689, 0.4107, 0.4617, 0.7244, 0.2526],
             }
         )
         expected_boxes = torch.tensor(expectations.get_expectation()).to(torch_device)
@@ -773,7 +772,7 @@ class LwDetrModelIntegrationTest(unittest.TestCase):
 
         expectations = Expectations(
             {
-                (None, None): [0.9745, 0.9715, 0.9339, 0.8163],
+                (None, None): [0.9746, 0.9717, 0.9344, 0.8182],
             }
         )
         expected_scores = torch.tensor(expectations.get_expectation()).to(torch_device)
@@ -783,10 +782,10 @@ class LwDetrModelIntegrationTest(unittest.TestCase):
         expectations = Expectations(
             {
                 (None, None): [
-                    [7.4487, 54.2930, 315.8945, 474.8726],
-                    [344.2597, 23.2305, 639.8083, 370.9894],
-                    [40.4780, 73.3095, 175.6083, 116.9673],
-                    [333.9890, 77.1452, 370.4069, 186.1300],
+                    [7.4541, 54.2878, 315.8890, 474.8681],
+                    [344.3325, 23.2591, 639.7999, 370.9900],
+                    [40.4797, 73.3092, 175.6086, 116.9654],
+                    [333.9930, 77.1547, 370.4000, 186.1230],
                 ],
             }
         )
