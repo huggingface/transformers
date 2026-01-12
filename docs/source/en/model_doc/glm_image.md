@@ -52,7 +52,6 @@ Using GLM-Image with image input to generate vision token for DIT using.
 ```python
 from transformers import GlmImageForConditionalGeneration, AutoProcessor
 import torch
-import re
 from math import sqrt
 
 # Load model and processor
@@ -64,51 +63,36 @@ model = GlmImageForConditionalGeneration.from_pretrained(
 )
 processor = AutoProcessor.from_pretrained(model_id, use_fast=True)
 
-
-def parse_shape_info(prompt: str) -> tuple[str, int, int, int, int]:
-    """Parse image dimensions and expand shape tokens for two-stage generation."""
-    match = re.search(r'<sop>(\d+)\s+(\d+)<eop>', prompt)
-    token_h, token_w = int(match.group(1)), int(match.group(2))
-    ratio = token_h / token_w
-    prev_token_h = int(sqrt(ratio) * 16)
-    prev_token_w = int(sqrt(1 / ratio) * 16)
-
-    old_shape = f'<sop>{token_h} {token_w}<eop>'
-    new_shape = f'<sop>{token_h} {token_w}<eop><sop>{prev_token_h} {prev_token_w}<eop>'
-    expanded_prompt = prompt.replace(old_shape, new_shape)
-
-    return expanded_prompt, token_h, token_w, prev_token_h, prev_token_w
-
-
 # Text-to-Image Generation
-prompt = "A cute cartoon-style text design featuring the word 'Taro' in clean, bright white rounded letters with a soft, hand-drawn feel. The background is a gentle taro purple with a misty gradient effect, decorated with small stars, hearts, and bubble elements. The overall atmosphere is light and sweet, with soft lighting like afternoon sunshine casting a warm glow from the upper left.<sop>36 24<eop>"
-
-prompt, token_h, token_w, prev_h, prev_w = parse_shape_info(prompt)
-print(f"Large image: {token_h} x {token_w} = {token_h * token_w} tokens")
-print(f"Small image: {prev_h} x {prev_w} = {prev_h * prev_w} tokens")
+prompt = "A cute cartoon-style text design featuring the word 'Taro' in clean, bright white rounded letters with a soft, hand-drawn feel. The background is a gentle taro purple with a misty gradient effect, decorated with small stars, hearts, and bubble elements. The overall atmosphere is light and sweet, with soft lighting like afternoon sunshine casting a warm glow from the upper left."
 
 messages = [{"role": "user", "content": [{"type": "text", "text": prompt}]}]
 
+target_h, target_w = 36, 24, # adjust the h/w of large image here
+
 inputs = processor.apply_chat_template(
     messages,
+    target_h=target_h,
+    target_w=target_w,
     add_generation_prompt=True,
     tokenize=True,
     return_dict=True,
     return_tensors="pt",
-)
-
-# Build image grid for two-stage generation (small image + large image)
-inputs["image_grid_thw"] = torch.tensor([
-    [1, token_h, token_w],
-    [1, prev_h, prev_w],
-])
+).to(model.device)
 
 # Calculate generation parameters
+factor = 32
+target_h = (target_h // factor) * factor
+target_w = (target_w // factor) * factor
+token_h = target_h // factor
+token_w = target_w // factor
+ratio = token_h / token_w
+prev_token_h = int(math.sqrt(ratio) * (factor // 2))
+prev_token_w = int(math.sqrt(1 / ratio) * (factor // 2))
+
 small_image_tokens = prev_h * prev_w
 large_image_tokens = token_h * token_w
 max_new_tokens = small_image_tokens + large_image_tokens + 1
-
-inputs = inputs.to(model.device)
 
 # Generate image tokens
 outputs = model.generate(
@@ -135,14 +119,11 @@ Image-to-Image generation:
 # Image-to-Image Generation
 from PIL import Image
 
-prompt = "Transform this image into a watercolor painting style with soft, flowing brushstrokes and pastel colors.<sop>36 24<eop>"
-
-prompt, token_h, token_w, prev_h, prev_w = parse_shape_info(prompt)
-print(f"Large image: {token_h} x {token_w} = {token_h * token_w} tokens")
-print(f"Small image: {prev_h} x {prev_w} = {prev_h * prev_w} tokens")
+prompt = "Transform this image into a watercolor painting style with soft, flowing brushstrokes and pastel colors."
 
 # Load input image
 image_path = "input.png"  # Replace with your image path
+target_h, target_w = 36, 24, # adjust the h/w of large image here
 
 messages = [
     {
@@ -160,20 +141,15 @@ inputs = processor.apply_chat_template(
     tokenize=True,
     return_dict=True,
     return_tensors="pt",
-)
-
-# Get existing image grid from input image and append target image dimensions
-existing_grid = inputs.get("image_grid_thw")
-inputs["image_grid_thw"] = torch.cat([
-    existing_grid,
-    torch.tensor([[1, token_h, token_w]])
-], dim=0)
+    target_h=target_h,
+    target_w=target_w,
+).to(model.device)
 
 # For image-to-image, only generate large image tokens (no small preview needed)
+token_h = target_h // factor
+token_w = target_w // factor
 large_image_tokens = token_h * token_w
 max_new_tokens = large_image_tokens + 1
-
-inputs = inputs.to(model.device)
 
 # Generate image tokens
 outputs = model.generate(

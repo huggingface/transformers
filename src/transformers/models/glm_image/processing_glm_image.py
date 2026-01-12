@@ -18,6 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
 
 import numpy as np
 
@@ -25,6 +26,11 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...utils import is_torch_available
+
+
+if is_torch_available():
+    import torch
 
 
 class GlmImageProcessorKwargs(ProcessingKwargs, total=False):
@@ -32,6 +38,10 @@ class GlmImageProcessorKwargs(ProcessingKwargs, total=False):
         "text_kwargs": {
             "padding": False,
             "return_mm_token_type_ids": False,
+        },
+        "images_kwargs": {
+            "target_h": 1152,
+            "target_w": 768,
         },
     }
 
@@ -51,6 +61,8 @@ class GlmImageProcessor(ProcessorMixin):
 
     def __init__(self, image_processor=None, tokenizer=None, chat_template=None, **kwargs):
         self.image_token = tokenizer.image_token
+        self.grid_bos_token = tokenizer.grid_bos_token
+        self.grid_eos_token = tokenizer.grid_eos_token
         self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
@@ -93,6 +105,10 @@ class GlmImageProcessor(ProcessorMixin):
             tokenizer_init_kwargs=self.tokenizer.init_kwargs,
             **kwargs,
         )
+        target_h = output_kwargs["images_kwargs"].pop("target_h", None)
+        target_w = output_kwargs["images_kwargs"].pop("target_w", None)
+        is_text_to_image = images is None
+
         if images is not None:
             image_inputs = self.image_processor(images=images, **output_kwargs["images_kwargs"])
             image_grid_thw = image_inputs["image_grid_thw"]
@@ -104,7 +120,7 @@ class GlmImageProcessor(ProcessorMixin):
             text = [text]
 
         text = text.copy()  # below lines change text in-place
-        if image_grid_thw is not None:
+        if not is_text_to_image:
             index = 0
             for i in range(len(text)):
                 while self.image_token in text[i]:
@@ -114,10 +130,29 @@ class GlmImageProcessor(ProcessorMixin):
                     index += 1
                 text[i] = text[i].replace("<|placeholder|>", self.image_token)
 
+        expanded_text = []
+        expanded_grid = []
+        for i in range(len(text)):
+            sample, token_h, token_w, prev_h, prev_w = self._build_prompt_with_target_shape(
+                text[i], height=target_h, width=target_w, is_text_to_image=is_text_to_image
+            )
+            image_grid_thw = self._build_target_image_grid_thw(
+                token_h=token_h,
+                token_w=token_w,
+                prev_h=prev_h,
+                prev_w=prev_w,
+                image_grid_thw=image_grid_thw[i] if not is_text_to_image else None,
+            )
+            expanded_text.append(sample)
+            expanded_grid.append(image_grid_thw)
+
+        if not is_text_to_image:
+            image_inputs["image_grid_thw"] = expanded_grid
+
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
-        text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
-        self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
+        text_inputs = self.tokenizer(expanded_text, **output_kwargs["text_kwargs"])
+        self._check_special_mm_tokens(expanded_text, text_inputs, modalities=["image"])
 
         if return_mm_token_type_ids:
             array_ids = np.array(text_inputs["input_ids"])
@@ -125,6 +160,48 @@ class GlmImageProcessor(ProcessorMixin):
             mm_token_type_ids[array_ids == self.image_token_id] = 1
             text_inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
         return BatchFeature(data={**text_inputs, **image_inputs}, tensor_type=return_tensors)
+
+    def _build_prompt_with_target_shape(
+        self,
+        prompt: str,
+        height: int,
+        width: int,
+        is_text_to_image: bool,
+    ) -> tuple[str, int, int, int, int]:
+        factor = 32
+        height = (height // factor) * factor
+        width = (width // factor) * factor
+        token_h = height // factor
+        token_w = width // factor
+        ratio = token_h / token_w
+        prev_token_h = int(math.sqrt(ratio) * (factor // 2))
+        prev_token_w = int(math.sqrt(1 / ratio) * (factor // 2))
+
+        if is_text_to_image:
+            expanded_prompt = f"{prompt}{self.grid_bos_token}{token_h} {token_w}{self.grid_eos_token}{self.grid_bos_token}{prev_token_h} {prev_token_w}{self.grid_eos_token}"
+        else:
+            expanded_prompt = f"{prompt}{self.grid_bos_token}{token_h} {token_w}{self.grid_eos_token}"
+
+        return expanded_prompt, token_h, token_w, prev_token_h, prev_token_w
+
+    def _build_target_image_grid_thw(
+        token_h: int,
+        token_w: int,
+        prev_token_h: int,
+        prev_token_w: int,
+        image_grid_thw: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        if image_grid_thw is None:
+            return torch.tensor(
+                [
+                    [1, token_h, token_w],
+                    [1, prev_token_h, prev_token_w],
+                ],
+            )
+        else:
+            return torch.cat(
+                [image_grid_thw, torch.tensor([[1, token_h, token_w]], device=image_grid_thw.device)], dim=0
+            )
 
 
 __all__ = ["GlmImageProcessor"]

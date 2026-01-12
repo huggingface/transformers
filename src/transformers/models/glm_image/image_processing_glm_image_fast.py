@@ -21,7 +21,6 @@
 import math
 from typing import Optional, Union
 
-import torch
 import torch.nn.functional as F
 
 from ...feature_extraction_utils import BatchFeature
@@ -35,8 +34,12 @@ from ...image_utils import (
     SizeDict,
 )
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring
+from ...utils import TensorType, auto_docstring, is_torch_available
 from .image_processing_glm_image import GlmImageImageProcessorKwargs
+
+
+if is_torch_available():
+    import torch
 
 
 def smart_resize(
