@@ -31,7 +31,7 @@ import torch
 
 from .integrations.accelerate import offload_weight
 from .integrations.tensor_parallel import ALL_PARALLEL_STYLES
-from .utils import is_env_variable_true, is_torch_greater_or_equal, logging
+from .utils import is_env_variable_true, logging
 
 
 _torch_distributed_available = torch.distributed.is_available()

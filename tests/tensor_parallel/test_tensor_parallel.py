@@ -26,7 +26,7 @@ import warnings
 from safetensors import safe_open
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, is_torch_available
-from transformers.integrations.tensor_parallel import get_packed_weights, repack_weights
+from transformers.integrations.tensor_parallel import get_packed_weights, get_tensor_shard, repack_weights
 from transformers.testing_utils import (
     TestCasePlus,
     backend_device_count,
