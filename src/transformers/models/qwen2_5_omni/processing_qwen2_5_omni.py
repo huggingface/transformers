@@ -18,7 +18,6 @@ Processor class for Qwen2.5Omni.
 
 import logging
 import re
-from typing import Optional, Union
 
 import numpy as np
 
@@ -75,7 +74,7 @@ class Qwen2_5_OmniVideosKwargs(VideosKwargs, total=False):
     max_frames: int
     use_audio_in_video: bool
     seconds_per_chunk: float
-    position_id_per_seconds: Union[int, float]
+    position_id_per_seconds: int | float
 
 
 class Qwen2_5OmniProcessorKwargs(ProcessingKwargs, total=False):
@@ -120,10 +119,10 @@ class Qwen2_5OmniProcessor(ProcessorMixin):
     @auto_docstring
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        images: Optional[ImageInput] = None,
-        videos: Optional[VideoInput] = None,
-        audio: Optional[AudioInput] = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
+        images: ImageInput | None = None,
+        videos: VideoInput | None = None,
+        audio: AudioInput | None = None,
         **kwargs: Unpack[Qwen2_5OmniProcessorKwargs],
     ) -> BatchFeature:
         if text is None:

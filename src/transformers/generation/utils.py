@@ -1902,6 +1902,7 @@ class GenerationMixin(ContinuousMixin):
         # NOTE: remove xlnet/reformer when the models are deprecated, non-standard model architecture/cache name
         return not cls._is_stateful and all(
             special_model_name not in cls.__name__.lower()
+            or "minimaxm2" in cls.__name__.lower()  # name clash between minimax and minimax m2
             for special_model_name in [
                 "reformer",
                 "minimax",
@@ -2417,7 +2418,7 @@ class GenerationMixin(ContinuousMixin):
                 raise NotImplementedError(
                     f"assistant_model is not supported for continuous batching. Got {assistant_model = }"
                 )
-            if streamer is not None:  # TODO: actualy this could be supported
+            if streamer is not None:  # TODO: actually this could be supported
                 raise NotImplementedError(f"streaming is not supported for continuous batching. Got {streamer = }")
             if negative_prompt_ids is not None:
                 raise NotImplementedError(
@@ -2473,9 +2474,11 @@ class GenerationMixin(ContinuousMixin):
         generation_config, model_kwargs = self._prepare_generation_config(generation_config, **kwargs)
 
         generation_mode = generation_config.get_generation_mode(assistant_model)
+        deprecated_mode_repo = self._get_deprecated_gen_repo(generation_mode, trust_remote_code, custom_generate)
+
         if isinstance(custom_generate, Callable):
             decoding_method = custom_generate
-        else:
+        elif deprecated_mode_repo is None:
             # type() required to access the unbound class-level method
             decoding_method = getattr(type(self), GENERATION_MODES_MAPPING[generation_mode])
 
@@ -2486,7 +2489,7 @@ class GenerationMixin(ContinuousMixin):
         # NOTE: This must come after initializing generation_config, since we need it to determine if this is a deprecated mode.
         # It must also be before any preparation steps, since Hub repos expect to be loaded before preparation steps.
         # TODO joao, manuel: remove this in v4.62.0
-        if deprecated_mode_repo := self._get_deprecated_gen_repo(generation_mode, trust_remote_code, custom_generate):
+        if deprecated_mode_repo is not None:
             return GenerationMixin.generate(
                 self,
                 inputs=inputs,
@@ -3863,7 +3866,6 @@ class GenerationMixin(ContinuousMixin):
                 model_kwargs["cache_position"] = torch.arange(
                     past_length, current_length, dtype=torch.long, device=input_chunk.device
                 )
-                model_kwargs["position_ids"] = model_kwargs["cache_position"].unsqueeze(0)
                 model_inputs = self.prepare_inputs_for_generation(input_chunk, **model_kwargs)
 
                 outputs = model_forward(**model_inputs, return_dict=True)
