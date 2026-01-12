@@ -641,6 +641,11 @@ class ViTNepaPreTrainedModel(PreTrainedModel):
             init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
                 init.zeros_(module.bias)
+        elif isinstance(module, nn.LayerNorm):
+            if module.bias is not None:
+                init.zeros_(module.bias)
+            if module.weight is not None:
+                init.ones_(module.weight)
         elif isinstance(module, ViTNepaEmbeddings):
             init.trunc_normal_(module.cls_token, mean=0.0, std=self.config.initializer_range)
             if module.mask_token is not None:
@@ -648,6 +653,8 @@ class ViTNepaPreTrainedModel(PreTrainedModel):
         elif isinstance(module, ViTNepaRopePositionEmbedding):
             inv_freq = 1 / module.base ** torch.arange(0, 1, 4 / module.head_dim, dtype=torch.float32)
             init.copy_(module.inv_freq, inv_freq)
+        elif isinstance(module, ViTNepaLayerScale):
+            init.constant_(module.lambda1, self.config.layerscale_value)
 
 
 @auto_docstring
