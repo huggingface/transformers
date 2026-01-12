@@ -2471,9 +2471,11 @@ class GenerationMixin(ContinuousMixin):
         generation_config, model_kwargs = self._prepare_generation_config(generation_config, **kwargs)
 
         generation_mode = generation_config.get_generation_mode(assistant_model)
+        deprecated_mode_repo = self._get_deprecated_gen_repo(generation_mode, trust_remote_code, custom_generate)
+
         if isinstance(custom_generate, Callable):
             decoding_method = custom_generate
-        else:
+        elif deprecated_mode_repo is None:
             # type() required to access the unbound class-level method
             decoding_method = getattr(type(self), GENERATION_MODES_MAPPING[generation_mode])
 
@@ -2484,7 +2486,7 @@ class GenerationMixin(ContinuousMixin):
         # NOTE: This must come after initializing generation_config, since we need it to determine if this is a deprecated mode.
         # It must also be before any preparation steps, since Hub repos expect to be loaded before preparation steps.
         # TODO joao, manuel: remove this in v4.62.0
-        if deprecated_mode_repo := self._get_deprecated_gen_repo(generation_mode, trust_remote_code, custom_generate):
+        if deprecated_mode_repo is not None:
             return GenerationMixin.generate(
                 self,
                 inputs=inputs,
