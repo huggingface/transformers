@@ -169,6 +169,21 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"layers.(\d+).fc1", r"layers.\1.mlp.fc1"),
             WeightRenaming(r"layers.(\d+).fc2", r"layers.\1.mlp.fc2"),
         ],
+        "rt_detr": [
+            WeightRenaming("out_proj", "o_proj"),
+            WeightRenaming(r"layers.(\d+).fc1", r"layers.\1.mlp.fc1"),
+            WeightRenaming(r"layers.(\d+).fc2", r"layers.\1.mlp.fc2"),
+        ],
+        "rt_detr_v2": [
+            WeightRenaming("out_proj", "o_proj"),
+            WeightRenaming(r"layers.(\d+).fc1", r"layers.\1.mlp.fc1"),
+            WeightRenaming(r"layers.(\d+).fc2", r"layers.\1.mlp.fc2"),
+        ],
+        "d_fine": [
+            WeightRenaming("out_proj", "o_proj"),
+            WeightRenaming(r"layers.(\d+).fc1", r"layers.\1.mlp.layers.0"),
+            WeightRenaming(r"layers.(\d+).fc2", r"layers.\1.mlp.layers.1"),
+        ],
         "jamba": [
             WeightConverter(
                 source_patterns=[
