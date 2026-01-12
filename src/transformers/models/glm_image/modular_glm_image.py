@@ -1325,6 +1325,7 @@ class GlmImageProcessor(ProcessorMixin):
         self.image_token = tokenizer.image_token
         self.grid_bos_token = tokenizer.grid_bos_token
         self.grid_eos_token = tokenizer.grid_eos_token
+        self.bos_token = tokenizer.bos_token
         self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
@@ -1435,9 +1436,9 @@ class GlmImageProcessor(ProcessorMixin):
         prev_token_w = int(math.sqrt(1 / ratio) * (factor // 2))
 
         if is_text_to_image:
-            expanded_prompt = f"{prompt}{self.grid_bos_token}{token_h} {token_w}{self.grid_eos_token}{self.grid_bos_token}{prev_token_h} {prev_token_w}{self.grid_eos_token}"
+            expanded_prompt = f"{prompt}{self.grid_bos_token}{token_h} {token_w}{self.grid_eos_token}{self.grid_bos_token}{prev_token_h} {prev_token_w}{self.grid_eos_token}{self.bos_token}"
         else:
-            expanded_prompt = f"{prompt}{self.grid_bos_token}{token_h} {token_w}{self.grid_eos_token}"
+            expanded_prompt = f"{prompt}{self.grid_bos_token}{token_h} {token_w}{self.grid_eos_token}{self.bos_token}"
 
         return expanded_prompt, token_h, token_w, prev_token_h, prev_token_w
 
