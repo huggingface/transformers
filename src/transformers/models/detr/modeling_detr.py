@@ -1486,11 +1486,7 @@ class DetrForSegmentation(DetrPreTrainedModel):
 
         # segmentation head
         hidden_size, number_of_heads = config.d_model, config.encoder_attention_heads
-        if config.intermediate_channel_sizes is not None:
-            intermediate_channel_sizes = config.intermediate_channel_sizes
-        else:
-            # Backward compatibility: infer from backbone if not explicitly set in config
-            intermediate_channel_sizes = self.detr.model.backbone.intermediate_channel_sizes
+        intermediate_channel_sizes = self.detr.model.backbone.intermediate_channel_sizes
 
         self.mask_head = DetrMaskHeadSmallConv(
             hidden_size + number_of_heads, intermediate_channel_sizes[::-1][-3:], hidden_size

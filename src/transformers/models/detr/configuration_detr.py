@@ -109,9 +109,6 @@ class DetrConfig(PreTrainedConfig):
             Relative weight of the generalized IoU loss in the object detection loss.
         eos_coefficient (`float`, *optional*, defaults to 0.1):
             Relative classification weight of the 'no-object' class in the object detection loss.
-        intermediate_channel_sizes (`list[int]`, *optional*, defaults to `None`):
-            The channel sizes of the intermediate feature maps from the backbone. If `None`, will be automatically
-            inferred from the backbone. This is used by the segmentation head to determine the input channel sizes.
 
     Examples:
 
@@ -172,7 +169,6 @@ class DetrConfig(PreTrainedConfig):
         bbox_loss_coefficient=5,
         giou_loss_coefficient=2,
         eos_coefficient=0.1,
-        intermediate_channel_sizes=None,
         **kwargs,
     ):
         # We default to values which were previously hard-coded in the model. This enables configurability of the config
@@ -240,7 +236,6 @@ class DetrConfig(PreTrainedConfig):
         self.bbox_loss_coefficient = bbox_loss_coefficient
         self.giou_loss_coefficient = giou_loss_coefficient
         self.eos_coefficient = eos_coefficient
-        self.intermediate_channel_sizes = intermediate_channel_sizes
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
 
