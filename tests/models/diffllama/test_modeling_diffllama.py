@@ -26,7 +26,6 @@ from transformers.testing_utils import (
     cleanup,
     require_bitsandbytes,
     require_flash_attn,
-    require_read_token,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -326,7 +325,6 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     @require_torch_accelerator
     @require_bitsandbytes
     @pytest.mark.flash_attn_test
-    @require_read_token
     @slow
     def test_flash_attn_2_generate_padding_right(self):
         """
@@ -457,7 +455,6 @@ class DiffLlamaIntegrationTest(unittest.TestCase):
 
     @slow
     @require_torch_accelerator
-    @require_read_token
     @pytest.mark.torch_compile_test
     def test_compile_static_cache(self):
         # `torch==2.2` will throw an error on this test (as in other compilation tests), but torch==2.1.2 and torch>2.2

@@ -28,7 +28,6 @@ from transformers import (
 from transformers.testing_utils import (
     cleanup,
     require_bitsandbytes,
-    require_read_token,
     require_torch,
     slow,
     torch_device,
@@ -374,7 +373,6 @@ TEST_MODEL_PATH = "facebook/Perception-LM-1B"
 @require_torch
 @require_bitsandbytes
 @slow
-@require_read_token
 class PerceptionLMForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.processor = AutoProcessor.from_pretrained(TEST_MODEL_PATH)

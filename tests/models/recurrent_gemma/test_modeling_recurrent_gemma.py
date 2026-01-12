@@ -22,7 +22,6 @@ from transformers import AutoModelForCausalLM, AutoTokenizer, BitsAndBytesConfig
 from transformers.testing_utils import (
     Expectations,
     require_bitsandbytes,
-    require_read_token,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -134,7 +133,6 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
     input_long_text = ['<bos><s>Marseille, France (CNN)The French prosecutor leading an investigation into the crash of Germanwings Flight 9525 insisted Wednesday that he was not aware of any video footage from on board the plane. Marseille prosecutor Brice Robin told CNN that "so far no videos were used in the crash investigation." He added, "A person who has such a video needs to immediately give it to the investigators." Robin\'s comments follow claims by two magazines, German daily Bild and French Paris Match, of a cell phone video showing the harrowing final seconds from on board Germanwings Flight 9525 as it crashed into the French Alps. All 150 on board were killed. Paris Match and Bild reported that the video was recovered from a phone at the wreckage site. The two publications described the supposed video, but did not post it on their websites. The publications said that they watched the video, which was found by a source close to the investigation. "One can hear cries of \'My God\' in several languages," Paris Match reported. "Metallic banging can also be heard more than three times, perhaps of the pilot trying to open the cockpit door with a heavy object.  Towards the end, after a heavy shake, stronger than the others, the screaming intensifies. Then nothing." "It is a very disturbing scene," said Julian Reichelt, editor-in-chief of Bild online. An official with France\'s accident investigation agency, the BEA, said the agency is not aware of any such video. Lt. Col.']  # fmt: skip
     model_id = "google/recurrentgemma-2b"
 
-    @require_read_token
     def test_2b_generate(self):
         EXPECTED_TEXTS = ['Hello I am doing a project on the topic of "The impact of the internet on the society" and I am looking for some information on the topic. I am looking for some information on the impact of the internet on the society. I am looking for some information on the impact of the internet on the society. I am looking for some', 'Hi today is a new app that allows you to make money by watching videos.\n\nThe app is very simple to use and you can earn money by watching videos.\n\nThe app is available for both Android and iOS devices and you can download it from the Google Play Store or the App Store.\n\nOnce you have downloaded the app']  # fmt: skip
         model = AutoModelForCausalLM.from_pretrained(
@@ -167,7 +165,6 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
         output_text = tokenizer.batch_decode(output, skip_special_tokens=True)
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
-    @require_read_token
     def test_2b_sample(self):
         set_seed(0)
         expectations = Expectations(
@@ -191,7 +188,6 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_TEXT)
 
     @require_bitsandbytes
-    @require_read_token
     def test_model_2b_8bit(self):
         # fmt: off
         EXPECTED_TEXTS = Expectations(
@@ -218,7 +214,6 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
 
         self.assertEqual(output_text, EXPECTED_TEXT)
 
-    @require_read_token
     def test_long_context(self):
         EXPECTED_GENERATION = [' Jean-Paul Delannoy told CNN that the BEA is "not aware of any video footage that could have been taken on board the plane." He added that the BEA is "not aware of any video footage that could have been taken on board the plane." The BEA is the French equivalent of the National Transportation Safety Board']  # fmt: skip
 
@@ -230,7 +225,6 @@ class RecurrentGemmaIntegrationTest(unittest.TestCase):
         print(output_text)
         self.assertEqual(output_text, EXPECTED_GENERATION)
 
-    @require_read_token
     def test_longer_than_window(self):
         EXPECTED_GENERATION = [" Robin's comments follow claims by two magazines, German daily Bild and French Paris Match, of a cell phone video showing the harrowing final seconds from on board Germanwings Flight 9525 as it crashed into the French Alps. All 150 on board were killed. Paris Match and Bild reported that the"]  # fmt: skip
 

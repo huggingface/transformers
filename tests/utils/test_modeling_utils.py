@@ -72,7 +72,6 @@ from transformers.testing_utils import (
     is_staging_test,
     require_accelerate,
     require_non_hpu,
-    require_read_token,
     require_torch,
     require_torch_accelerator,
     require_torch_multi_accelerator,
@@ -1949,7 +1948,6 @@ class ModelUtilsTest(TestCasePlus):
 
     @parameterized.expand([("Qwen/Qwen2.5-3B-Instruct", 10), ("meta-llama/Llama-2-7b-chat-hf", 10)])
     @slow
-    @require_read_token
     @require_torch_accelerator
     def test_loading_is_fast_on_gpu(self, model_id: str, max_loading_time: float):
         """

@@ -29,7 +29,6 @@ from transformers import (
 from transformers.testing_utils import (
     Expectations,
     cleanup,
-    require_read_token,
     require_torch,
     slow,
     torch_device,
@@ -336,7 +335,6 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
 
 @slow
 @require_torch
-@require_read_token
 class PaliGemmaForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.processor = PaliGemmaProcessor.from_pretrained("google/paligemma-3b-pt-224")
