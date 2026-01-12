@@ -2422,7 +2422,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # If the config does not specify any tying, return empty dict
         # NOTE: not all modules have `tie_word_embeddings` attr, for example vision-only
         # modules do not have any word embeddings!
-        tie_word_embeddings = getattr(self.config.get_text_config(decoder=True), "tie_word_embeddings", False)
+        tie_word_embeddings = getattr(self.config, "tie_word_embeddings", False)
         if not tie_word_embeddings:
             return {}
         # If None, return empty dict
