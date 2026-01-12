@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_aria.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2024 The Rhymes-AI Teams Authors and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from collections.abc import Iterable
-from typing import Optional, Union
 
 import numpy as np
 
@@ -107,16 +105,16 @@ class AriaImageProcessor(BaseImageProcessor):
 
     def __init__(
         self,
-        image_mean: Optional[list[float]] = None,
-        image_std: Optional[list[float]] = None,
+        image_mean: list[float] | None = None,
+        image_std: list[float] | None = None,
         max_image_size: int = 980,
         min_image_size: int = 336,
-        split_resolutions: Optional[list[tuple[int, int]]] = None,
-        split_image: Optional[bool] = False,
-        do_convert_rgb: Optional[bool] = True,
+        split_resolutions: list[tuple[int, int]] | None = None,
+        split_image: bool | None = False,
+        do_convert_rgb: bool | None = True,
         do_rescale: bool = True,
-        rescale_factor: Union[int, float] = 1 / 255,
-        do_normalize: Optional[bool] = True,
+        rescale_factor: int | float = 1 / 255,
+        do_normalize: bool | None = True,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         **kwargs,
     ):
@@ -143,20 +141,20 @@ class AriaImageProcessor(BaseImageProcessor):
 
     def preprocess(
         self,
-        images: Union[ImageInput, list[ImageInput]],
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
-        max_image_size: Optional[int] = None,
-        min_image_size: Optional[int] = None,
-        split_image: Optional[bool] = None,
-        do_convert_rgb: Optional[bool] = None,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[float] = None,
-        do_normalize: Optional[bool] = None,
-        resample: Optional[PILImageResampling] = None,
-        return_tensors: Optional[Union[str, TensorType]] = "pt",
-        data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        images: ImageInput | list[ImageInput],
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        max_image_size: int | None = None,
+        min_image_size: int | None = None,
+        split_image: bool | None = None,
+        do_convert_rgb: bool | None = None,
+        do_rescale: bool | None = None,
+        rescale_factor: float | None = None,
+        do_normalize: bool | None = None,
+        resample: PILImageResampling | None = None,
+        return_tensors: str | TensorType | None = "pt",
+        data_format: ChannelDimension | None = ChannelDimension.FIRST,
+        input_data_format: str | ChannelDimension | None = None,
     ):
         """
         Process a list of images.
@@ -386,11 +384,11 @@ class AriaImageProcessor(BaseImageProcessor):
     def pad(
         self,
         image: np.ndarray,
-        padding: Union[int, tuple[int, int], Iterable[tuple[int, int]]],
+        padding: int | tuple[int, int] | Iterable[tuple[int, int]],
         mode: PaddingMode = PaddingMode.CONSTANT,
-        constant_values: Union[float, Iterable[float]] = 0.0,
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        constant_values: float | Iterable[float] = 0.0,
+        data_format: str | ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
     ) -> np.ndarray:
         """
         Pads the `image` with the specified `padding` and `mode`. Padding can be in the (`height`, `width`)

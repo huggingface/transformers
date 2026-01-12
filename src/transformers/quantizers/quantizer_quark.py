@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Advanced Micro Devices, Inc. and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -72,7 +71,7 @@ class QuarkHfQuantizer(HfQuantizer):
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
         return True
 
-    def is_serializable(self, **kwargs):
+    def is_serializable(self):
         return False
 
     @property

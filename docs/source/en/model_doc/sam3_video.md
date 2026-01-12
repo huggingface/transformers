@@ -188,6 +188,21 @@ For real-time applications, SAM3 Video supports processing video frames as they 
 >>> print(f"Masks are at original video resolution: {frame_0_outputs['masks'].shape}")
 ```
 
+#### Custom Resolution Inference
+
+<div class="warning">
+⚠️ **Performance Note**: Custom resolutions may degrade accuracy. The model is meant to be used at 1008px resolution.
+</div>
+
+For faster inference or lower memory usage:
+
+```python
+>>> config = Sam3VideoConfig.from_pretrained("facebook/sam3")
+>>> config.image_size = 560
+>>> model = Sam3VideoModel.from_pretrained("facebook/sam3", config=config).to(device, dtype=torch.bfloat16)
+>>> processor = Sam3VideoProcessor.from_pretrained("facebook/sam3", size={"height": 560, "width": 560})
+```
+
 ## Sam3VideoConfig
 
 [[autodoc]] Sam3VideoConfig
@@ -213,4 +228,3 @@ For real-time applications, SAM3 Video supports processing video frames as they 
 [[autodoc]] Sam3VideoModel
     - forward
     - propagate_in_video_iterator
-

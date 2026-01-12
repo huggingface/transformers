@@ -302,6 +302,7 @@ model = Qwen2VLForConditionalGeneration.from_pretrained(
 ## Qwen2VLProcessor
 
 [[autodoc]] Qwen2VLProcessor
+    - __call__
 
 ## Qwen2VLTextModel
 

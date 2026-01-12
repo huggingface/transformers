@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The Google AI Language Team Authors, Allegro.pl, Facebook Inc. and the HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional
 
 from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import BPE
@@ -54,41 +52,31 @@ class HerbertTokenizer(TokenizersBackend):
             The mask token.
         sep_token (`str`, *optional*, defaults to `"</s>"`):
             The separator token.
-        vocab (`dict`, *optional*):
+        vocab (`str`, `dict` or `list`, *optional*):
             Custom vocabulary dictionary.
-        merges (`list`, *optional*):
+        merges (`str` or `list[str]`, *optional*):
             Custom merges list.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
-    slow_tokenizer_class = None
+    model_input_names = ["input_ids", "attention_mask"]
+    model = BPE
 
     def __init__(
         self,
-        vocab: Optional[dict] = None,
-        merges: Optional[list] = None,
+        vocab: str | dict[str, int] | None = None,
+        merges: str | list[str] | None = None,
         cls_token: str = "<s>",
         unk_token: str = "<unk>",
         pad_token: str = "<pad>",
         mask_token: str = "<mask>",
         sep_token: str = "</s>",
-        vocab_file: Optional[str] = None,
-        merges_file: Optional[str] = None,
+        vocab_file: str | None = None,
+        merges_file: str | None = None,
         **kwargs,
     ):
-        if vocab is not None:
-            self._vocab = (
-                {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
-            )
-        else:
-            self._vocab = {}
-
-        if merges is not None:
-            # Convert lists to tuples if necessary (happens when loading from JSON)
-            self._merges = [tuple(merge) if isinstance(merge, list) else merge for merge in merges]
-        else:
-            self._merges = []
-
+        self._vocab = vocab if vocab is not None else {str(unk_token): 0}
+        self._merges = merges or []
         self._tokenizer = Tokenizer(
             BPE(
                 vocab=self._vocab,
@@ -105,13 +93,7 @@ class HerbertTokenizer(TokenizersBackend):
         self._tokenizer.pre_tokenizer = pre_tokenizers.BertPreTokenizer()
         self._tokenizer.decoder = decoders.BPEDecoder(suffix="</w>")
 
-        tokenizer_object = self._tokenizer
-
-        self.vocab_file = vocab_file
-        self.merges_file = merges_file
-
         super().__init__(
-            tokenizer_object=tokenizer_object,
             cls_token=cls_token,
             unk_token=unk_token,
             pad_token=pad_token,

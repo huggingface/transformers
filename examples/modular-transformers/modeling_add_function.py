@@ -5,10 +5,11 @@
 #                          modular_add_function.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 # Note that zamba does not have the `apply_rotary_pos_emb` function!
-from typing import Optional
 
 import torch
 from torch import nn
+
+from ...integrations import use_kernel_func_from_hub
 
 
 def rotate_half(x):
@@ -18,6 +19,7 @@ def rotate_half(x):
     return torch.cat((-x2, x1), dim=-1)
 
 
+@use_kernel_func_from_hub("rotary_pos_emb")
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
@@ -62,5 +64,5 @@ class TestAttention(nn.Module):
     def __init__(self):
         pass
 
-    def forward(self) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+    def forward(self) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         _ = apply_rotary_pos_emb(1, 1, 1, 1)

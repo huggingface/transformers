@@ -19,7 +19,6 @@ import socket
 import time
 import warnings
 from pathlib import Path
-from typing import Union
 from zipfile import ZipFile
 
 import numpy as np
@@ -685,7 +684,7 @@ def load_yaml(path):
         return yaml.load(f, Loader=yaml.BaseLoader)
 
 
-def save_json(content: Union[dict, list], path: str) -> None:
+def save_json(content: dict | list, path: str) -> None:
     with open(path, "w") as f:
         json.dump(content, f)
 
