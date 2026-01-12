@@ -44,7 +44,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ...utils.generic import check_model_inputs, maybe_autocast
+from ...utils.generic import can_return_tuple, check_model_inputs, maybe_autocast
 from ...utils.import_utils import is_triton_available
 from .configuration_modernbert import ModernBertConfig
 
@@ -272,6 +272,9 @@ class ModernBertAttention(nn.Module):
         self.Wqkv = nn.Linear(config.hidden_size, 3 * config.hidden_size, bias=config.attention_bias)
 
         if layer_idx % config.global_attn_every_n_layers != 0:
+            # +1 is needed because flash attention sets inclusive boundaries (see modeling_flash_attention_utils.py)
+            # i.e., window_size=(w-1, w-1) attends to 2*w-1 tokens total. To get a total window of 2*sliding_window+1,
+            # we need to pass sliding_window+1 here so it becomes (sliding_window, sliding_window).
             self.sliding_window = config.sliding_window + 1
         else:
             self.sliding_window = None
@@ -284,9 +287,9 @@ class ModernBertAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        **kwargs,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
 
@@ -345,12 +348,12 @@ class ModernBertEncoderLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         position_embeddings: torch.Tensor | None = None,
-        **kwargs,
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        attn_output, attn_weights = self.attn(
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
+        attn_output, _ = self.attn(
             self.attn_norm(hidden_states),
-            attention_mask=attention_mask,
             position_embeddings=position_embeddings,
+            attention_mask=attention_mask,
             **kwargs,
         )
         hidden_states = hidden_states + attn_output
@@ -361,7 +364,7 @@ class ModernBertEncoderLayer(GradientCheckpointingLayer):
         )
         hidden_states = hidden_states + mlp_output
 
-        return hidden_states, attn_weights
+        return hidden_states
 
 
 @auto_docstring
@@ -372,7 +375,7 @@ class ModernBertPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["ModernBertEmbeddings", "ModernBertEncoderLayer"]
     _supports_flash_attn = True
     _supports_sdpa = True
-    _supports_flex_attn = False
+    _supports_flex_attn = True
     _supports_attention_backend = True
 
     _can_record_outputs = {
@@ -534,7 +537,7 @@ class ModernBertModel(ModernBertPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.Tensor | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -559,14 +562,22 @@ class ModernBertModel(ModernBertPreTrainedModel):
         hidden_states = self.embeddings(input_ids=input_ids, inputs_embeds=inputs_embeds)
 
         if not isinstance(attention_mask_mapping := attention_mask, dict):
-            attention_mask_mapping = self._update_attention_mask(hidden_states, attention_mask)
+            mask_kwargs = {
+                "config": self.config,
+                "input_embeds": hidden_states,
+                "attention_mask": attention_mask,
+            }
+            attention_mask_mapping = {
+                "full_attention": create_bidirectional_mask(**mask_kwargs),
+                "sliding_attention": create_bidirectional_sliding_window_mask(**mask_kwargs),
+            }
 
         position_embeddings = {}
         for layer_type in self.config.layer_types:
             position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
 
         for encoder_layer in self.layers:
-            hidden_states, _ = encoder_layer(
+            hidden_states = encoder_layer(
                 hidden_states,
                 attention_mask=attention_mask_mapping[encoder_layer.attention_type],
                 position_embeddings=position_embeddings[encoder_layer.attention_type],
@@ -576,25 +587,6 @@ class ModernBertModel(ModernBertPreTrainedModel):
         hidden_states = self.final_norm(hidden_states)
 
         return BaseModelOutput(last_hidden_state=hidden_states)
-
-    def _update_attention_mask(
-        self, hidden_states: torch.Tensor, attention_mask: torch.Tensor
-    ) -> dict[str, torch.Tensor]:
-        """
-        Creates attention masks for different attention types (full_attention and sliding_attention).
-        """
-        mask_kwargs = {
-            "config": self.config,
-            "input_embeds": hidden_states,
-            "attention_mask": attention_mask,
-        }
-
-        attention_mask_mapping = {
-            "full_attention": create_bidirectional_mask(**mask_kwargs),
-            "sliding_attention": create_bidirectional_sliding_window_mask(**mask_kwargs),
-        }
-
-        return attention_mask_mapping
 
 
 class ModernBertPredictionHead(nn.Module):
@@ -640,6 +632,7 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
     def compiled_head(self, output: torch.Tensor) -> torch.Tensor:
         return self.decoder(self.head(output))
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -648,10 +641,8 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
         position_ids: torch.Tensor | None = None,
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | MaskedLMOutput:
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         self._maybe_set_compile()
 
         outputs = self.model(
@@ -659,7 +650,7 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
             attention_mask=attention_mask,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
-            return_dict=return_dict,
+            return_dict=True,
             **kwargs,
         )
         last_hidden_state = outputs[0]
@@ -683,10 +674,6 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
         loss = None
         if labels is not None:
             loss = self.loss_function(logits, labels, vocab_size=self.config.vocab_size, **kwargs)
-
-        if not return_dict:
-            output = (logits,)
-            return ((loss,) + output) if loss is not None else output
 
         return MaskedLMOutput(
             loss=loss,
@@ -715,6 +702,7 @@ class ModernBertForSequenceClassification(ModernBertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -723,8 +711,7 @@ class ModernBertForSequenceClassification(ModernBertPreTrainedModel):
         position_ids: torch.Tensor | None = None,
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | SequenceClassifierOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -732,7 +719,6 @@ class ModernBertForSequenceClassification(ModernBertPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         self._maybe_set_compile()
 
         if input_ids is not None:
@@ -752,7 +738,7 @@ class ModernBertForSequenceClassification(ModernBertPreTrainedModel):
             attention_mask=attention_mask,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
-            return_dict=return_dict,
+            return_dict=True,
             **kwargs,
         )
         last_hidden_state = outputs[0]
@@ -791,10 +777,6 @@ class ModernBertForSequenceClassification(ModernBertPreTrainedModel):
                 loss_fct = BCEWithLogitsLoss()
                 loss = loss_fct(logits, labels)
 
-        if not return_dict:
-            output = (logits,)
-            return ((loss,) + output) if loss is not None else output
-
         return SequenceClassifierOutput(
             loss=loss,
             logits=logits,
@@ -821,6 +803,7 @@ class ModernBertForTokenClassification(ModernBertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -829,14 +812,12 @@ class ModernBertForTokenClassification(ModernBertPreTrainedModel):
         position_ids: torch.Tensor | None = None,
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | TokenClassifierOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         self._maybe_set_compile()
 
         outputs = self.model(
@@ -844,7 +825,7 @@ class ModernBertForTokenClassification(ModernBertPreTrainedModel):
             attention_mask=attention_mask,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
-            return_dict=return_dict,
+            return_dict=True,
             **kwargs,
         )
         last_hidden_state = outputs[0]
@@ -857,10 +838,6 @@ class ModernBertForTokenClassification(ModernBertPreTrainedModel):
         if labels is not None:
             loss_fct = CrossEntropyLoss()
             loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return ((loss,) + output) if loss is not None else output
 
         return TokenClassifierOutput(
             loss=loss,
@@ -883,6 +860,7 @@ class ModernBertForQuestionAnswering(ModernBertPreTrainedModel):
 
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -891,17 +869,15 @@ class ModernBertForQuestionAnswering(ModernBertPreTrainedModel):
         position_ids: torch.Tensor | None = None,
         start_positions: torch.Tensor | None = None,
         end_positions: torch.Tensor | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | QuestionAnsweringModelOutput:
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         self._maybe_set_compile()
 
         outputs = self.model(
             input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            return_dict=return_dict,
+            return_dict=True,
             **kwargs,
         )
         last_hidden_state = outputs[0]
@@ -917,10 +893,6 @@ class ModernBertForQuestionAnswering(ModernBertPreTrainedModel):
         loss = None
         if start_positions is not None and end_positions is not None:
             loss = self.loss_function(start_logits, end_logits, start_positions, end_positions, **kwargs)
-
-        if not return_dict:
-            output = (start_logits, end_logits) + outputs[1:]
-            return ((loss,) + output) if loss is not None else output
 
         return QuestionAnsweringModelOutput(
             loss=loss,
@@ -949,6 +921,7 @@ class ModernBertForMultipleChoice(ModernBertPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -957,15 +930,13 @@ class ModernBertForMultipleChoice(ModernBertPreTrainedModel):
         position_ids: torch.Tensor | None = None,
         inputs_embeds: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | MultipleChoiceModelOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the multiple choice classification loss. Indices should be in `[0, ...,
             num_choices-1]` where `num_choices` is the size of the second dimension of the input tensors.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         num_choices = input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
 
         input_ids = input_ids.view(-1, input_ids.size(-1)) if input_ids is not None else None
@@ -984,7 +955,7 @@ class ModernBertForMultipleChoice(ModernBertPreTrainedModel):
             attention_mask=attention_mask,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
-            return_dict=return_dict,
+            return_dict=True,
             **kwargs,
         )
         last_hidden_state = outputs[0]  # shape (num_choices, seq_len, hidden_size)
@@ -1016,10 +987,6 @@ class ModernBertForMultipleChoice(ModernBertPreTrainedModel):
         if labels is not None:
             loss_fct = nn.CrossEntropyLoss()
             loss = loss_fct(reshaped_logits, labels)
-
-        if not return_dict:
-            output = (reshaped_logits,) + outputs[1:]
-            return ((loss,) + output) if loss is not None else output
 
         return MultipleChoiceModelOutput(
             loss=loss,

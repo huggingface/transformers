@@ -120,11 +120,12 @@ def sliding_window_causal_mask_function(sliding_window: int) -> Callable:
 def sliding_window_bidirectional_overlay(sliding_window: int) -> Callable:
     """
     This is an overlay depicting a bidirectional sliding window pattern.
-    Tokens can attend to other tokens within `sliding_window` positions in both directions.
     """
 
     def inner_mask(batch_idx: int, head_idx: int, q_idx: int, kv_idx: int) -> bool:
-        return (q_idx - sliding_window < kv_idx) & (kv_idx < q_idx + sliding_window + 1)
+        """A token can attend to any other token if their absolute distance is within
+        the (exclusive) sliding window size (distance < sliding_window)."""
+        return abs(q_idx - kv_idx) < sliding_window
 
     return inner_mask
 
@@ -272,14 +273,59 @@ def _ignore_causal_mask_sdpa(
     return False
 
 
-def _ignore_bidirectional_mask_sdpa(padding_mask: torch.Tensor | None) -> bool:
+def _can_skip_bidirectional_mask_xpu(
+    padding_mask: torch.Tensor | None,
+    kv_length: int,
+    local_attention_size: int | None,
+) -> bool:
     """
-    Detects whether the bidirectional mask can be ignored in case PyTorch's SDPA is used, i.e. when there is full
-    attention with no padding.
+    XPU-specific logic for determining if we can skip bidirectional mask creation.
+
+    For XPU devices, we have special handling:
+    - Skip if no padding and no local attention constraint
     """
+
+    if is_tracing(padding_mask):
+        return False
+
+    # Check local attention constraint (same as CUDA)
+    if local_attention_size is not None and kv_length >= local_attention_size:
+        return False
+
+    if padding_mask is None:
+        # Without padding mask, can always skip for full bidirectional attention
+        return True
+
+    # Skip only if no padding tokens present
+    return padding_mask.all()
+
+
+def _ignore_bidirectional_mask_sdpa(
+    padding_mask: torch.Tensor | None,
+    kv_length: int,
+    local_attention_size: int | None = None,
+) -> bool:
+    """
+    Detects whether the bidirectional mask can be ignored in case PyTorch's SDPA is used.
+
+    In case no token is masked in the 2D `padding_mask` argument and no local attention constraint applies
+    (i.e. `local_attention_size` is None or `kv_length < local_attention_size`), we skip mask creation,
+    allowing to dispatch to the flash attention kernel (that can otherwise not be used if a custom `attn_mask` is
+    passed).
+    """
+    if _is_torch_xpu_available:
+        # XPU devices have special handling for mask skipping:
+        # - Skip if no padding and no local attention constraint
+        return _can_skip_bidirectional_mask_xpu(padding_mask, kv_length, local_attention_size)
+
     # When using `torch.export` or `torch.onnx.dynamo_export`, we need to avoid to check the contents of the mask;
     # otherwise, we will encounter dynamic control flows
-    if not is_tracing(padding_mask) and (padding_mask is None or padding_mask.all()):
+    if (
+        not is_tracing(padding_mask)
+        and (padding_mask is None or padding_mask.all())
+        # in this case we need to add special patterns to the mask so cannot be skipped otherwise
+        and (local_attention_size is None or kv_length < local_attention_size)
+    ):
         return True
 
     return False
@@ -440,7 +486,7 @@ def sdpa_mask(
     #   2. Bidirectional do not need any further processing (no bias)
     if allow_is_causal_skip and _ignore_causal_mask_sdpa(padding_mask, q_length, kv_length, kv_offset, local_size):
         return None
-    if allow_is_bidirectional_skip and _ignore_bidirectional_mask_sdpa(padding_mask):
+    if allow_is_bidirectional_skip and _ignore_bidirectional_mask_sdpa(padding_mask, kv_length, local_size):
         return None
 
     # Potentially add the padding 2D mask
@@ -1085,26 +1131,30 @@ def create_bidirectional_sliding_window_mask(
     and_mask_function: Callable | None = None,
 ) -> torch.Tensor | BlockMask | None:
     """
-    Create a bidirectional sliding window mask based on the attention implementation used (stored in the config).
-    This type of attention pattern is used by encoder models like ModernBERT where tokens can attend to other tokens
-    within a fixed window in both directions.
+    Create a standard bidirectional sliding window mask based on the attention implementation used (stored in the config).
 
     Args:
         config (`PreTrainedConfig`):
             The model config.
         input_embeds (`torch.Tensor`):
-            The input embeddings of shape (batch_size, query_length, hidden_dim). This is used only to infer the
-            batch size, query length and dtype.
+            The input embeddings of shape (batch_size, query_length, hidden_dim). This is only used to infer metadata
+            such as the batch size, query length, dtype, and device.
         attention_mask (`torch.Tensor`, optional):
             The 2D attention mask corresponding to padded tokens of shape (batch_size, kv_length).
-            It can also be an already prepared 4D mask, in which case it is returned as-is.
+            It can also be an already prepared 4D mask of shape (batch_size, 1, query_length, kv_length),
+            in which case it is returned as-is.
         or_mask_function (`Callable`, optional):
-            An optional mask function to combine with the sliding window mask function (by doing the union of both).
+            An optional mask function to combine with the base mask function (by doing the union of both). This is
+            useful to easily overlay another mask on top, for example for image tokens handling.
         and_mask_function (`Callable`, optional):
-            An optional mask function to combine with the sliding window mask function (by doing the intersection of both).
+            An optional mask function to combine with the base mask function (by doing the intersection of both). This is
+            useful to easily overlay another mask on top, for example for image tokens handling.
     """
+    # Due to the logic surrounding `cache_position` in inferring query-related information, we
+    # construct a dummy tensor imitating initial positions
     cache_position = torch.arange(input_embeds.shape[1], device=input_embeds.device, dtype=torch.long)
 
+    # We ignore a few irrelevant arguments at the end as we do not have a (growing) cache here
     early_exit, attention_mask, _, kv_length, kv_offset = _preprocess_mask_arguments(
         config, input_embeds, attention_mask, cache_position, None, None, 0
     )
@@ -1144,10 +1194,10 @@ def create_bidirectional_sliding_window_mask(
         attention_mask=attention_mask,
         allow_is_causal_skip=False,
         allow_is_bidirectional_skip=allow_is_bidirectional_skip,
-        local_size=sliding_window,
-        dtype=dtype,
-        config=config,
-        use_vmap=use_vmap,
+        local_size=sliding_window,  # Additional kwarg for sdpa
+        dtype=dtype,  # Additional kwarg for eager
+        config=config,  # Pass the config as well, in case someone wants to easily have their own mask_interface
+        use_vmap=use_vmap,  # Short-circuit to non-vmap expansions for the mask
     )
     return attention_mask
 

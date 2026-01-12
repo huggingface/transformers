@@ -19,6 +19,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 from typing import Literal
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
@@ -99,6 +100,8 @@ class ModernBertConfig(PreTrainedConfig):
             Whether to use bias in the classifier.
         classifier_activation (`str`, *optional*, defaults to `"gelu"`):
             The activation function for the classifier.
+        deterministic_flash_attn (`bool`, *optional*, defaults to `False`):
+            Whether to use deterministic flash attention. If `False`, inference will be faster but not deterministic.
         sparse_prediction (`bool`, *optional*, defaults to `False`):
             Whether to use sparse prediction for the masked language model instead of returning the full dense logits.
         sparse_pred_ignore_index (`int`, *optional*, defaults to -100):
@@ -126,6 +129,7 @@ class ModernBertConfig(PreTrainedConfig):
 
     model_type = "modernbert"
     keys_to_ignore_at_inference = ["past_key_values"]
+    attribute_map = {"local_attention": "sliding_window"}
     default_theta = {"global": 160_000.0, "local": 10_000.0}
 
     def __init__(
@@ -159,6 +163,7 @@ class ModernBertConfig(PreTrainedConfig):
         classifier_dropout: float | None = 0.0,
         classifier_bias: bool | None = False,
         classifier_activation: str | None = "gelu",
+        deterministic_flash_attn: bool | None = False,
         sparse_prediction: bool | None = False,
         sparse_pred_ignore_index: int | None = -100,
         reference_compile: bool | None = None,
@@ -189,6 +194,9 @@ class ModernBertConfig(PreTrainedConfig):
         self.sparse_prediction = sparse_prediction
         self.sparse_pred_ignore_index = sparse_pred_ignore_index
         self.reference_compile = reference_compile
+
+        if deterministic_flash_attn:
+            os.environ["FLASH_ATTENTION_DETERMINISTIC"] = "1"
 
         if self.classifier_pooling not in ["cls", "mean"]:
             raise ValueError(
