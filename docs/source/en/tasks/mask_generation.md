@@ -262,7 +262,7 @@ Let's take a look at a sample.
 train_ds[0]
 ```
 
-```
+```json
  {'image': <PIL.PngImagePlugin.PngImageFile image mode=RGB size=2040x1356>,
  'mask': <PIL.PngImagePlugin.PngImageFile image mode=L size=2040x1356>,
  'prompt': '{"point": [[137, 1165, 1], [77, 1273, 0], [58, 1351, 0]], "bbox": [0, 701, 251, 1356]}',
