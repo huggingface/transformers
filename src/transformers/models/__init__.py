@@ -234,6 +234,7 @@ if TYPE_CHECKING:
     from .mgp_str import *
     from .mimi import *
     from .minimax import *
+    from .minimax_m2 import *
     from .ministral import *
     from .ministral3 import *
     from .mistral import *

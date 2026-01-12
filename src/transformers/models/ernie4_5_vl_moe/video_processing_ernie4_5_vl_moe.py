@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Baidu and HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +15,7 @@ import os.path
 from functools import partial
 from pathlib import Path
 from shutil import SameFileError, copyfile
-from typing import Any, Optional, Union
+from typing import Any
 
 import numpy as np
 import torch
@@ -130,7 +129,7 @@ class Ernie4_5_VL_MoeVideoProcessor(BaseVideoProcessor):
 
     @classmethod
     def get_video_processor_dict(
-        cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs
+        cls, pretrained_model_name_or_path: str | os.PathLike, **kwargs
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         """Overriden to additionally load the font for drawing on frames."""
         cache_dir = kwargs.pop("cache_dir", None)
@@ -283,7 +282,7 @@ class Ernie4_5_VL_MoeVideoProcessor(BaseVideoProcessor):
 
         return output
 
-    def save_pretrained(self, save_directory: Union[str, os.PathLike], push_to_hub: bool = False, **kwargs):
+    def save_pretrained(self, save_directory: str | os.PathLike, push_to_hub: bool = False, **kwargs):
         """We additionally save a copy of the font to the `save_directory` (if we found a file there)"""
         os.makedirs(save_directory, exist_ok=True)
 
@@ -297,7 +296,7 @@ class Ernie4_5_VL_MoeVideoProcessor(BaseVideoProcessor):
 
     def _further_process_kwargs(
         self,
-        size: Optional[SizeDict] = None,
+        size: SizeDict | None = None,
         **kwargs,
     ) -> dict:
         """
@@ -312,10 +311,10 @@ class Ernie4_5_VL_MoeVideoProcessor(BaseVideoProcessor):
     def sample_frames(
         self,
         metadata: VideoMetadata,
-        min_frames: Optional[int] = None,
-        max_frames: Optional[int] = None,
-        num_frames: Optional[int] = None,
-        fps: Optional[Union[int, float]] = None,
+        min_frames: int | None = None,
+        max_frames: int | None = None,
+        num_frames: int | None = None,
+        fps: int | float | None = None,
         **kwargs,
     ):
         if fps is not None and num_frames is not None:
@@ -387,9 +386,9 @@ class Ernie4_5_VL_MoeVideoProcessor(BaseVideoProcessor):
     def _prepare_input_videos(
         self,
         videos: VideoInput,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        device: Optional[str] = None,
-        video_metadata: Optional[list[VideoMetadata]] = None,
+        input_data_format: str | ChannelDimension | None = None,
+        device: str | None = None,
+        video_metadata: list[VideoMetadata] | None = None,
         draw_on_frames: bool = True,
     ) -> list["torch.Tensor"]:
         """
@@ -448,16 +447,16 @@ class Ernie4_5_VL_MoeVideoProcessor(BaseVideoProcessor):
         videos: list[torch.Tensor],
         do_convert_rgb: bool = True,
         do_resize: bool = True,
-        size: Optional[SizeDict] = None,
+        size: SizeDict | None = None,
         interpolation: PILImageResampling = PILImageResampling.BICUBIC,
         do_rescale: bool = True,
         rescale_factor: float = 1 / 255.0,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
-        patch_size: Optional[int] = None,
-        merge_size: Optional[int] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        patch_size: int | None = None,
+        merge_size: int | None = None,
+        return_tensors: str | TensorType | None = None,
         **kwargs,
     ):
         # Group videos by size for batched resizing

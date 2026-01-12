@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 the HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,7 +13,6 @@
 # limitations under the License.
 
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import torch
 
@@ -65,8 +63,8 @@ class BaseModelOutputWithFeatureMaps(BaseModelOutputWithPooling):
         List of position embeddings corresponding to the feature maps.
     """
 
-    feature_maps: Optional[list[torch.Tensor]] = None
-    feature_maps_position_embeddings: Optional[list[torch.Tensor]] = None
+    feature_maps: list[torch.Tensor] | None = None
+    feature_maps_position_embeddings: list[torch.Tensor] | None = None
 
 
 class Sam3TrackerVideoPromptEncoderConfig(Sam2VideoPromptEncoderConfig):
@@ -567,7 +565,7 @@ class Sam3TrackerVideoModel(Sam2VideoModel):
         self,
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, Sam3TrackerVideoVisionEncoderOutput]:
+    ) -> tuple | Sam3TrackerVideoVisionEncoderOutput:
         r"""
         Extract and preprocess image features using the vision encoder.
 

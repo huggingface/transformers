@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -243,13 +242,13 @@ class RequestState:
             generated_tokens=self.generated_tokens[:],
             allocated_blocks=self.allocated_blocks,
             position_offset=self.position_offset,
-            status=self.status,
+            _status=self.status,
             max_new_tokens=self.max_new_tokens,
             eos_token_id=self.eos_token_id,
             streaming=self.streaming,
             created_time=t,
             lifespan=(t, -1),
-            timestamps=None if self.timestamps is None else self.timestamps[:],
+            _timestamps=None if self.timestamps is None else self.timestamps[:],
             error=self.error,
             record_timestamps=self.record_timestamps,
         )

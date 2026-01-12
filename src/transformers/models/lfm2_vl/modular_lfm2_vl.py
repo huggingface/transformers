@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """PyTorch Lfm2-VL model."""
-
-from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -102,7 +99,7 @@ class Lfm2VlModel(LlavaModel):
         spatial_shapes: torch.Tensor,
         pixel_attention_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, BaseModelOutputWithPooling]:
+    ) -> tuple | BaseModelOutputWithPooling:
         """
         Obtains image last hidden states from the vision tower and apply multimodal projection.
 
@@ -175,18 +172,18 @@ class Lfm2VlModel(LlavaModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        spatial_shapes: Optional[torch.Tensor] = None,
-        pixel_attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        spatial_shapes: torch.Tensor | None = None,
+        pixel_attention_mask: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, Lfm2VlModelOutputWithPast]:
+    ) -> tuple | Lfm2VlModelOutputWithPast:
         r"""
         spatial_shapes (`torch.Tensor` of shape `(batch_size, 2)`, *optional*):
             The spatial shapes of the input images.
@@ -243,7 +240,7 @@ class Lfm2VlForConditionalGeneration(LlavaForConditionalGeneration):
         spatial_shapes: torch.Tensor,
         pixel_attention_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, BaseModelOutputWithPooling]:
+    ) -> tuple | BaseModelOutputWithPooling:
         return self.model.get_image_features(
             pixel_values=pixel_values,
             spatial_shapes=spatial_shapes,
@@ -254,20 +251,20 @@ class Lfm2VlForConditionalGeneration(LlavaForConditionalGeneration):
     @can_return_tuple
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        spatial_shapes: Optional[torch.Tensor] = None,
-        pixel_attention_mask: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        spatial_shapes: torch.Tensor | None = None,
+        pixel_attention_mask: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, Lfm2VlCausalLMOutputWithPast]:
+    ) -> tuple | Lfm2VlCausalLMOutputWithPast:
         r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, channels, height, width)`, *optional*):
             The input image tensors.
