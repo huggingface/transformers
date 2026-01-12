@@ -165,6 +165,7 @@ class LwDetrViTBackboneTest(ModelTesterMixin, BackboneTesterMixin, unittest.Test
     config_class = LwDetrViTConfig
     test_resize_embeddings = False
     test_torch_exportable = True
+    model_split_percents = [0.5, 0.87, 0.9]
 
     def setUp(self):
         self.model_tester = LwDetrVitModelTester(self)
@@ -448,6 +449,7 @@ class LwDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     is_encoder_decoder = False
     test_missing_keys = False
     test_torch_exportable = True
+    model_split_percents = [0.5, 0.87, 0.9]
 
     # special case for head models
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
