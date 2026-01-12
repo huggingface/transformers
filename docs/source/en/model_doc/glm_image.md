@@ -47,28 +47,73 @@ This model was contributed by [Raushan Turganbay](https://huggingface.co/Raushan
 
 Using GLM-Image with image input to generate vision token for DIT using.
 
-### Text-to-Image Generation
-
 ```python
 from transformers import GlmImageForConditionalGeneration, AutoProcessor
 import torch
-from math import sqrt
 
-# Load model and processor
-model_id = "zai-org/GLM-Image"
 model = GlmImageForConditionalGeneration.from_pretrained(
-    model_id, 
-    torch_dtype=torch.bfloat16, 
-    device_map="auto"
+    pretrained_model_name_or_path="zai-org/GLM-Image/vision_language_encoder",
+    dtype=torch.bfloat16,
+    device_map="cuda:0"
 )
-processor = AutoProcessor.from_pretrained(model_id, use_fast=True)
+processor = AutoProcessor.from_pretrained(
+    pretrained_model_name_or_path="zai-org/GLM-Image/processor",
+    use_fast=True
+)
 
-# Text-to-Image Generation
-prompt = "A cute cartoon-style text design featuring the word 'Taro' in clean, bright white rounded letters with a soft, hand-drawn feel. The background is a gentle taro purple with a misty gradient effect, decorated with small stars, hearts, and bubble elements. The overall atmosphere is light and sweet, with soft lighting like afternoon sunshine casting a warm glow from the upper left."
+# Case1 T2I
+prompt = "现代美食杂志风格的甜点制作教程图，主题为覆盆子慕斯蛋糕。整体布局干净明亮，分为四个主要区域：顶部左侧是黑色粗体标题“覆盆子慕斯蛋糕制作指南”，右侧搭配光线柔和的成品蛋糕特写照片，蛋糕呈淡粉色，表面点缀新鲜覆盆子与薄荷叶；左下方为配料清单区域，标题“配料”使用简洁字体，下方列有“面粉 150g”“鸡蛋 3个”“细砂糖 120g”“覆盆子果泥 200g”“明胶片 10g”“淡奶油 300ml”“新鲜覆盆子”等配料，每种配料旁配有简约线图标（如面粉袋、鸡蛋、糖罐等）；右下方是四个等大的步骤方框，每个方框内含高清微距实拍图及对应操作说明，从上到下依次为：步骤1展示打蛋器打发白色泡沫（对应说明“打发蛋白至干性发泡”），步骤2展示红白相间的混合物被刮刀翻拌（对应说明“轻柔翻拌果泥与面糊”），步骤3展示粉色液体被倒入圆形模具（对应说明“倒入模具并冷藏4小时”），步骤4展示成品蛋糕表面装饰覆盆子与薄荷叶（对应说明“用覆盆子和薄荷装饰”）；底部边缘设浅棕色信息条，左侧图标分别代表“准备时间：30分钟”“烹饪时间：20分钟”“份量：8人份”。整体色调以奶油白、淡粉色为主，背景带轻微纸质纹理，图文排版紧凑有序，信息层级分明。"
+target_h, target_w = 1152, 768
+use_reference_images = False
+reference_image_paths = None
 
-messages = [{"role": "user", "content": [{"type": "text", "text": prompt}]}]
+# ## Case2
+# prompt = "Replace the background of the snow forest with an underground station featuring an automatic escalator."
+# cond_0 = "cond.jpg"
+# target_h, target_w = 1152, 768
+# use_reference_images = False
+# reference_image_paths = [cond_0]
 
-target_h, target_w = 74, 42, # adjust the h/w of large image here
+## Case3
+# prompt = "Make the man in the first figure and the child from the second image bow at the same time in a respectful KTV."
+# cond_0 = "cond_0.jpg"
+# cond_1 = "cond_1.jpg"
+# target_h, target_w = 1152, 768
+# use_reference_images = True
+# reference_image_paths = [cond_0, cond_1]
+
+
+def build_messages(prompt, use_reference_images, reference_image_paths):
+    content = []
+    if use_reference_images:
+        for img_path in reference_image_paths:
+            content.append({"type": "image", "url": img_path})
+    content.append({"type": "text", "text": prompt})
+    return [{"role": "user", "content": content}]
+
+
+def compute_generation_params(image_grid_thw, use_reference_images):
+    grid_sizes = []
+    for i in range(image_grid_thw.shape[0]):
+        t, h, w = image_grid_thw[i].tolist()
+        grid_sizes.append(int(h * w))
+
+    target_output_length = grid_sizes[0]
+
+    if use_reference_images:
+        max_new_tokens = grid_sizes[-1] + 1
+        output_start_offset = 0
+        output_length = grid_sizes[-1]
+    else:
+        total_tokens = sum(grid_sizes)
+        max_new_tokens = total_tokens + 1
+        output_start_offset = sum(grid_sizes[1:])
+        output_length = target_output_length
+
+    return max_new_tokens, output_start_offset, output_length
+
+
+messages = build_messages(prompt, use_reference_images, reference_image_paths if use_reference_images else None)
 
 inputs = processor.apply_chat_template(
     messages,
@@ -80,91 +125,30 @@ inputs = processor.apply_chat_template(
     return_tensors="pt",
 ).to(model.device)
 
-# Calculate generation parameters
-factor = 32
-target_h = (target_h // factor) * factor
-target_w = (target_w // factor) * factor
-token_h = target_h // factor
-token_w = target_w // factor
-ratio = token_h / token_w
-prev_token_h = int(math.sqrt(ratio) * (factor // 2))
-prev_token_w = int(math.sqrt(1 / ratio) * (factor // 2))
+image_grid_thw = inputs.get('image_grid_thw')
+print(f"image_grid_thw: {image_grid_thw}")
 
-small_image_tokens = prev_h * prev_w
-large_image_tokens = token_h * token_w
-max_new_tokens = small_image_tokens + large_image_tokens + 1
+max_new_tokens, output_start_offset, output_length = compute_generation_params(
+    image_grid_thw, use_reference_images
+)
 
-# Generate image tokens
+print(f"use_reference_images: {use_reference_images}")
+print(f"max_new_tokens: {max_new_tokens}")
+print(f"output_start_offset: {output_start_offset}")
+print(f"output_length: {output_length}")
+
 outputs = model.generate(
     **inputs,
     max_new_tokens=max_new_tokens,
     do_sample=True
 )
 
-# Extract large image tokens (skip small image tokens)
 input_length = inputs["input_ids"].shape[-1]
-generated_tokens = outputs[0][input_length:]
-large_image_tokens_ids = generated_tokens[small_image_tokens:small_image_tokens + large_image_tokens].tolist()
-
-print(f"Total generated tokens: {len(outputs[0]) - input_length}")
-print(f"Large image tokens: {len(large_image_tokens_ids)}")
-```
-
-### Image-to-Image Generation
-
-A portion of the Text-to-Image script can be modified—specifically the prompt and input sections—to implement
-Image-to-Image generation:
-
-```python
-# Image-to-Image Generation
-from PIL import Image
-
-prompt = "Transform this image into a watercolor painting style with soft, flowing brushstrokes and pastel colors."
-
-# Load input image
-image_path = "input.png"  # Replace with your image path
-target_h, target_w = 36, 24, # adjust the h/w of large image here
-
-messages = [
-    {
-        "role": "user",
-        "content": [
-            {"type": "image", "url": image_path},
-            {"type": "text", "text": prompt},
-        ],
-    }
-]
-
-inputs = processor.apply_chat_template(
-    messages,
-    add_generation_prompt=True,
-    tokenize=True,
-    return_dict=True,
-    return_tensors="pt",
-    target_h=target_h,
-    target_w=target_w,
-).to(model.device)
-
-# For image-to-image, only generate large image tokens (no small preview needed)
-token_h = target_h // factor
-token_w = target_w // factor
-large_image_tokens = token_h * token_w
-max_new_tokens = large_image_tokens + 1
-
-# Generate image tokens
-outputs = model.generate(
-    **inputs,
-    max_new_tokens=max_new_tokens,
-    do_sample=True
-)
-
-# Extract generated image tokens
-input_length = inputs["input_ids"].shape[-1]
-generated_tokens = outputs[0][input_length:]
-large_image_tokens_ids = generated_tokens[:large_image_tokens].tolist()
-
-print(f"Total generated tokens: {len(outputs[0]) - input_length}")
-print(f"Large image tokens: {len(large_image_tokens_ids)}")
+output_tokens = outputs[0][input_length:][output_start_offset:output_start_offset + output_length]
+print(f"Input length: {input_length}")
+print(f"Total generated tokens: {outputs[0].shape[-1] - input_length}")
+print(f"Extracted output tokens shape: {output_tokens.shape}")
+print(f"Output tokens: {output_tokens}")
 ```
 
 ## GlmImageConfig
