@@ -987,7 +987,6 @@ DEPRECATED_OBJECTS = [
     "SquadV1Processor",
     "SquadV2Processor",
     "Wav2Vec2ForMaskedLM",
-    "Wav2Vec2Tokenizer",
     "glue_compute_metrics",
     "glue_convert_examples_to_features",
     "glue_output_modes",
@@ -1010,7 +1009,6 @@ UNDOCUMENTED_OBJECTS = [
     "DPRPretrainedReader",  # Like an Encoder.
     "DummyObject",  # Just picked by mistake sometimes.
     "MecabTokenizer",  # Internal, should never have been in the main init.
-    "ModelCard",  # Internal type.
     "SqueezeBertModule",  # Internal building block (should have been called SqueezeBertLayer)
     "TransfoXLCorpus",  # Internal type.
     "WordpieceTokenizer",  # Internal, should never have been in the main init.
@@ -1232,7 +1230,7 @@ def check_models_have_kwargs():
         if model_dir.is_dir() and (modeling_file := list(model_dir.glob("modeling_*.py"))):
             modeling_file = modeling_file[0]
 
-            with open(modeling_file, "r") as f:
+            with open(modeling_file, "r", encoding="utf-8") as f:
                 tree = ast.parse(f.read())
 
             # Map all classes in the file to their base classes

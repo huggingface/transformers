@@ -28,7 +28,6 @@ from transformers.testing_utils import (
     cleanup,
     get_device_properties,
     require_deterministic_for_xpu,
-    require_read_token,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -208,7 +207,6 @@ class AyaVisionModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         pass
 
 
-@require_read_token
 @require_torch
 class AyaVisionIntegrationTest(unittest.TestCase):
     @classmethod

@@ -34,7 +34,6 @@ from transformers.testing_utils import (
     cleanup,
     require_flash_attn,
     require_kernels,
-    require_read_token,
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
@@ -343,7 +342,6 @@ if __name__ == "__main__":
     # Non-distributed test
     # ------------------------
     @parameterized.expand(PARAMETERS)
-    @require_read_token
     def test_model_outputs(self, quantized, model, kernels, attn_impl, mode):
         model_id = f"openai/gpt-oss-{model}"
         output_texts = self.load_and_forward(
@@ -406,7 +404,6 @@ if __name__ == "__main__":
     # Distributed test
     # ------------------------
     @parameterized.expand(PARAMETERS)
-    @require_read_token
     def test_model_outputs_distributed(self, quantized, model, kernels, attn_impl, mode):
         self.run_distributed_test(quantized, model, kernels, attn_impl, mode)
 
@@ -414,7 +411,6 @@ if __name__ == "__main__":
     # Training test
     # ------------------------
     @parameterized.expand(PARAMETERS)
-    @require_read_token
     def test_training_step(self, quantized, model, kernels, attn_impl, mode):
         if mode != "train":
             self.skipTest("This test is only for training mode.")

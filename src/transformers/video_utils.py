@@ -44,7 +44,6 @@ from .utils import (
 
 if is_vision_available():
     import PIL.Image
-    import PIL.ImageOps
 
     if is_torchvision_available():
         from torchvision import io as torchvision_io
@@ -118,9 +117,7 @@ class VideoMetadata(Mapping):
                 setattr(self, key, value)
 
 
-VideoMetadataType = Union[
-    VideoMetadata, dict, list[Union[dict, VideoMetadata]], list[list[Union[dict, VideoMetadata]]]
-]
+VideoMetadataType = VideoMetadata | dict | list[dict | VideoMetadata] | list[list[dict | VideoMetadata]]
 
 
 def is_valid_video_frame(frame):

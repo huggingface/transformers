@@ -15,7 +15,6 @@
 
 import copy
 import inspect
-import os
 import random
 import re
 import tempfile
@@ -31,7 +30,6 @@ from transformers import WhisperConfig
 from transformers.testing_utils import (
     Expectations,
     is_flaky,
-    require_read_token,
     require_torch,
     require_torch_accelerator,
     require_torch_fp16,
@@ -1486,22 +1484,17 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertListEqual(transcript, EXPECTED_TRANSCRIPT)
 
-    @require_read_token
     @slow
     def test_large_batched_generation_multilingual(self):
         processor = WhisperProcessor.from_pretrained("openai/whisper-large")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-large")
         model.to(torch_device)
 
-        token = os.getenv("HF_HUB_READ_TOKEN", None)
-        if token is None:
-            token = True
         ds = load_dataset(
             "hf-internal-testing/fixtures_common_voice",
             "ja",
             split="test",
             streaming=True,
-            token=token,
         )
         ds = ds.cast_column("audio", datasets.Audio(sampling_rate=16_000))
 
