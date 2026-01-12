@@ -45,7 +45,7 @@ from transformers import (
     set_seed,
 )
 from transformers.conversion_mapping import get_model_conversion_mapping
-from transformers.core_model_loading import WeightRenaming
+from transformers.core_model_loading import WeightRenaming, reverse_target_pattern
 from transformers.integrations import HfDeepSpeedConfig
 from transformers.integrations.deepspeed import (
     is_deepspeed_available,
@@ -4515,7 +4515,9 @@ class ModelTesterMixin:
                         # Sometimes the mappings specify keys that are tied, so absent from the saved state dict
                         if isinstance(conversion, WeightRenaming):
                             if any(
-                                re.search(conversion.target_patterns[0], k) for k in model.all_tied_weights_keys.keys()
+                                re.search(reverse_target_pattern(target_pattern)[0], k)
+                                for k in model.all_tied_weights_keys.keys()
+                                for target_pattern in conversion.target_patterns
                             ):
                                 continue
                         num_matches = sum(re.search(source_pattern, key) is not None for key in serialized_keys)
