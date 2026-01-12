@@ -107,7 +107,12 @@ def batched_mm_experts_forward(
     gate, up = gate_up_out.chunk(2, dim=-1)  # both have shape (S, intermediate_dim)
 
     # Apply activation
-    hidden_after_activation = self.act_fn(gate) * up  # (S, intermediate_dim)
+    if hasattr(self, "_apply_gate"):
+        # Applies custom handling of the gating mechanism if defined
+        hidden_after_activation = self._apply_gate(gate, up)  # (S, intermediate_dim)
+    else:
+        # Default gating mechanism
+        hidden_after_activation = self.act_fn(gate) * up  # (S, intermediate_dim)
 
     # --- Down projection per expert (batched) ---
     out_per_sample = torch.bmm(selected_down, hidden_after_activation.unsqueeze(-1)).squeeze(-1)
@@ -185,7 +190,12 @@ def grouped_mm_experts_forward(
     gate, up = gate_up_out.chunk(2, dim=-1)  # both have shape (S, intermediate_dim)
 
     # Apply activation
-    hidden_after_activation = self.act_fn(gate) * up  # (S, intermediate_dim)
+    if hasattr(self, "_apply_gate"):
+        # Applies custom handling of the gating mechanism if defined
+        hidden_after_activation = self._apply_gate(gate, up)  # (S, intermediate_dim)
+    else:
+        # Default gating mechanism
+        hidden_after_activation = self.act_fn(gate) * up  # (S, intermediate_dim)
 
     # --- Down projection per expert (grouped_mm) ---
     out_per_sample_g = torch._grouped_mm(hidden_after_activation, self.down_proj.transpose(-2, -1), offs=offsets)
