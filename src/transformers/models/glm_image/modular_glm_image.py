@@ -1246,11 +1246,7 @@ def smart_resize(
             f"absolute aspect ratio must be smaller than 200, got {max(height, width) / min(height, width)}"
         )
 
-    height = height // 2
-    width = width // 2
-
     if height * width >= min_pixels**2:
-        # need to downscale again
         height = height // 2
         width = width // 2
 

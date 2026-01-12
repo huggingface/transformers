@@ -71,7 +71,7 @@ reference_image_paths = None
 # prompt = "Replace the background of the snow forest with an underground station featuring an automatic escalator."
 # cond_0 = "cond.jpg"
 # target_h, target_w = 1152, 768
-# use_reference_images = False
+# use_reference_images = True
 # reference_image_paths = [cond_0]
 
 ## Case3
