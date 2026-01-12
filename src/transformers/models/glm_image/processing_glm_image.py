@@ -132,6 +132,9 @@ class GlmImageProcessor(ProcessorMixin):
         if not isinstance(text, list):
             text = [text]
 
+        if len(text) > 1:
+            raise ValueError("The model does not support batch size > 1")
+
         text = text.copy()  # below lines change text in-place
         if not is_text_to_image:
             index = 0
@@ -143,29 +146,21 @@ class GlmImageProcessor(ProcessorMixin):
                     index += 1
                 text[i] = text[i].replace("<|placeholder|>", self.image_token)
 
-        expanded_text = []
-        expanded_grid = []
-        for i in range(len(text)):
-            sample, token_h, token_w, prev_h, prev_w = self._build_prompt_with_target_shape(
-                text[i], height=target_h, width=target_w, is_text_to_image=is_text_to_image
-            )
-            image_grid_thw = self._build_target_image_grid_thw(
-                token_h=token_h,
-                token_w=token_w,
-                prev_token_h=prev_h,
-                prev_token_w=prev_w,
-                image_grid_thw=image_grid_thw[i] if not is_text_to_image else None,
-            )
-            expanded_text.append(sample)
-            expanded_grid.append(image_grid_thw)
-
-        if not is_text_to_image:
-            image_inputs["image_grid_thw"] = expanded_grid
+        text[0], token_h, token_w, prev_h, prev_w = self._build_prompt_with_target_shape(
+            text[0], height=target_h, width=target_w, is_text_to_image=is_text_to_image
+        )
+        image_inputs["image_grid_thw"] = self._build_target_image_grid_thw(
+            token_h=token_h,
+            token_w=token_w,
+            prev_token_h=prev_h,
+            prev_token_w=prev_w,
+            image_grid_thw=image_grid_thw if not is_text_to_image else None,
+        )
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
-        text_inputs = self.tokenizer(expanded_text, **output_kwargs["text_kwargs"])
-        self._check_special_mm_tokens(expanded_text, text_inputs, modalities=["image"])
+        text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
+        self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
 
         if return_mm_token_type_ids:
             array_ids = np.array(text_inputs["input_ids"])

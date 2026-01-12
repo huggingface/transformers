@@ -68,7 +68,7 @@ prompt = "A cute cartoon-style text design featuring the word 'Taro' in clean, b
 
 messages = [{"role": "user", "content": [{"type": "text", "text": prompt}]}]
 
-target_h, target_w = 36, 24, # adjust the h/w of large image here
+target_h, target_w = 74, 42, # adjust the h/w of large image here
 
 inputs = processor.apply_chat_template(
     messages,
