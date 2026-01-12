@@ -122,7 +122,7 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
             size = {"shortest_edge": min_pixels, "longest_edge": max_pixels}
         elif size is not None:
             if "shortest_edge" not in size or "longest_edge" not in size:
-                raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
+                raise ValueError("dictionary `size` must contain 'shortest_edge' and 'longest_edge' keys.")
             min_pixels = size["shortest_edge"]
             max_pixels = size["longest_edge"]
         else:
