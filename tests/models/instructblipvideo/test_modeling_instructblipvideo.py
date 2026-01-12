@@ -625,6 +625,12 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyTest(
                     ):
                         raise ValueError("The eager model should not have SDPA attention layers")
 
+    def _video_features_prepare_config_and_inputs(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        del inputs_dict["input_ids"]
+        del inputs_dict["attention_mask"]
+        return config, inputs_dict
+
 
 # We will verify our results on an image of cute cats
 def prepare_video():

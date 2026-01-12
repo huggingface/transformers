@@ -575,6 +575,13 @@ class XCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         model = XCLIPModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
 
+    def _video_features_prepare_config_and_inputs(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        del inputs_dict["input_ids"]
+        del inputs_dict["attention_mask"]
+        del inputs_dict["return_loss"]
+        return config, inputs_dict
+
 
 # We will verify our results on a spaghetti video
 def prepare_video():

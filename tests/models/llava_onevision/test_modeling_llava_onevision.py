@@ -152,13 +152,22 @@ class LlavaOnevisionVisionText2TextModelTester:
                 self.vision_config["image_size"],
             ]
         )
+        pixel_values_videos = floats_tensor(
+            [
+                self.batch_size,
+                8,
+                self.vision_config["num_channels"],
+                self.vision_config["image_size"],
+                self.vision_config["image_size"],
+            ]
+        )
         config = self.get_config()
 
-        return config, pixel_values
+        return config, pixel_values, pixel_values_videos
 
     def prepare_config_and_inputs_for_common(self):
         config_and_inputs = self.prepare_config_and_inputs()
-        config, pixel_values = config_and_inputs
+        config, pixel_values, pixel_values_videos = config_and_inputs
         input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 2) + 2
         attention_mask = torch.ones(input_ids.shape, dtype=torch.long).to(torch_device)
 
@@ -170,6 +179,7 @@ class LlavaOnevisionVisionText2TextModelTester:
 
         inputs_dict = {
             "pixel_values": pixel_values,
+            "pixel_values_videos": pixel_values_videos,
             "image_sizes": torch.tensor([[45, 45]] * self.batch_size),
             "input_ids": input_ids,
             "attention_mask": attention_mask,
@@ -291,6 +301,11 @@ class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, Generati
     )
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
         pass
+
+    def _video_features_prepare_config_and_inputs(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        inputs_dict = {"pixel_values": inputs_dict["pixel_values_videos"]}
+        return config, inputs_dict
 
 
 @require_torch

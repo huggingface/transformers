@@ -1325,14 +1325,15 @@ class XCLIPModel(XCLIPPreTrainedModel):
         batch_size, num_frames, num_channels, height, width = pixel_values.shape
         pixel_values = pixel_values.reshape(-1, num_channels, height, width)
 
-        vision_outputs: BaseModelOutputWithPooling = self.vision_model(pixel_values=pixel_values, **kwargs)
-        video_embeds = vision_outputs.pooler_output
+        video_outputs: BaseModelOutputWithPooling = self.vision_model(pixel_values=pixel_values, **kwargs)
+        video_embeds = video_outputs.pooler_output
         video_embeds = self.visual_projection(video_embeds)
 
         cls_features = video_embeds.view(batch_size, num_frames, -1)
-        mit_outputs: BaseModelOutputWithPooling = self.mit(cls_features, **kwargs)
+        mit_outputs: BaseModelOutputWithPooling = self.mit(cls_features, return_dict=True, **kwargs)
+        video_outputs.pooler_output = mit_outputs.pooler_output
 
-        return mit_outputs
+        return video_outputs
 
     @auto_docstring
     def forward(

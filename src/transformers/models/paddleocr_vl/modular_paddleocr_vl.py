@@ -1118,6 +1118,9 @@ class PaddleOCRVLModel(Qwen2VLModel):
     def set_input_embeddings(self, value):
         self.language_model.embed_tokens = value
 
+    def get_video_features(self):
+        raise AttributeError("PaddleOCRVLModel does not support video.")
+
     @can_return_tuple
     def get_image_features(
         self,
@@ -1257,6 +1260,9 @@ class PaddleOCRVLForConditionalGeneration(Qwen2VLForConditionalGeneration):
         r"^model(?!(\.visual|\.projector|\.language_model))": "model.language_model",
     }
     _keys_to_ignore_on_load_unexpected = ["packing_position_embedding", "vision_model.head"]
+
+    def get_video_features(self):
+        raise AttributeError("PaddleOCRVLForConditionalGeneration does not support video.")
 
     @can_return_tuple
     @auto_docstring
