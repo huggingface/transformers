@@ -1,4 +1,3 @@
-# coding = utf-8
 # Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -54,101 +53,6 @@ from ..vitdet.modeling_vitdet import (
 
 
 logger = logging.get_logger(__name__)
-
-
-@dataclass
-@auto_docstring(
-    custom_intro="""
-    Base class for outputs of the LwDetrDecoder. This class adds two attributes to
-    BaseModelOutputWithCrossAttentions, namely:
-    - a stacked tensor of intermediate decoder hidden states (i.e. the output of each decoder layer)
-    - a stacked tensor of intermediate reference points.
-    """
-)
-class LwDetrDecoderOutput(DeformableDetrDecoderOutput):
-    pass
-
-
-@dataclass
-@auto_docstring(
-    custom_intro="""
-    Base class for outputs of the LwDetr backbone-decoder model.
-    """
-)
-class LwDetrModelOutput(ModelOutput):
-    r"""
-    init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
-        Initial reference points sent through the Transformer decoder.
-    intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
-        Stacked intermediate hidden states (output of each layer of the decoder).
-    intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
-        Stacked intermediate reference points (reference points of each layer of the decoder).
-    enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
-        Predicted bounding boxes scores where the top `config.two_stage_num_proposals` scoring bounding boxes are
-        picked as region proposals in the first stage. Output of bounding box binary classification (i.e.
-        foreground and background).
-    enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
-        Logits of predicted bounding boxes coordinates in the first stage.
-    """
-
-    init_reference_points: torch.FloatTensor | None = None
-    last_hidden_state: torch.FloatTensor | None = None
-    intermediate_hidden_states: torch.FloatTensor | None = None
-    intermediate_reference_points: torch.FloatTensor | None = None
-    enc_outputs_class: torch.FloatTensor | None = None
-    enc_outputs_coord_logits: torch.FloatTensor | None = None
-
-
-@dataclass
-@auto_docstring(
-    custom_intro="""
-    Output type of [`LwDetrForObjectDetection`].
-    """
-)
-class LwDetrObjectDetectionOutput(ModelOutput):
-    r"""
-    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
-        Total loss as a linear combination of a negative log-likehood (cross-entropy) for class prediction and a
-        bounding box loss. The latter is defined as a linear combination of the L1 loss and the generalized
-        scale-invariant IoU loss.
-    loss_dict (`Dict`, *optional*):
-        A dictionary containing the individual losses. Useful for logging.
-    logits (`torch.FloatTensor` of shape `(batch_size, num_queries, num_classes + 1)`):
-        Classification logits (including no-object) for all queries.
-    pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
-        Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
-        values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
-        possible padding). You can use [`~DeformableDetrProcessor.post_process_object_detection`] to retrieve the
-        unnormalized bounding boxes.
-    auxiliary_outputs (`list[Dict]`, *optional*):
-        Optional, only returned when auxiliary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
-        and labels are provided. It is a list of dictionaries containing the two above keys (`logits` and
-        `pred_boxes`) for each decoder layer.
-    init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
-        Initial reference points sent through the Transformer decoder.
-    intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
-        Stacked intermediate hidden states (output of each layer of the decoder).
-    intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
-        Stacked intermediate reference points (reference points of each layer of the decoder).
-    enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
-        Predicted bounding boxes scores where the top `config.two_stage_num_proposals` scoring bounding boxes are
-        picked as region proposals in the first stage. Output of bounding box binary classification (i.e.
-        foreground and background).
-    enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
-        Logits of predicted bounding boxes coordinates in the first stage.
-    """
-
-    loss: torch.FloatTensor | None = None
-    loss_dict: dict | None = None
-    logits: torch.FloatTensor | None = None
-    pred_boxes: torch.FloatTensor | None = None
-    auxiliary_outputs: list[dict] | None = None
-    init_reference_points: torch.FloatTensor | None = None
-    last_hidden_state: torch.FloatTensor | None = None
-    intermediate_hidden_states: torch.FloatTensor | None = None
-    intermediate_reference_points: torch.FloatTensor | None = None
-    enc_outputs_class: Any = None
-    enc_outputs_coord_logits: torch.FloatTensor | None = None
 
 
 class LwDetrViTConfig(VitDetConfig):
@@ -1143,6 +1047,19 @@ def refine_bboxes(reference_points, deltas):
     return new_reference_points
 
 
+@dataclass
+@auto_docstring(
+    custom_intro="""
+    Base class for outputs of the LwDetrDecoder. This class adds two attributes to
+    BaseModelOutputWithCrossAttentions, namely:
+    - a stacked tensor of intermediate decoder hidden states (i.e. the output of each decoder layer)
+    - a stacked tensor of intermediate reference points.
+    """
+)
+class LwDetrDecoderOutput(DeformableDetrDecoderOutput):
+    pass
+
+
 class LwDetrDecoder(LwDetrPreTrainedModel):
     """
     Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`DeformableDetrDecoderLayer`].
@@ -1227,6 +1144,36 @@ class LwDetrDecoder(LwDetrPreTrainedModel):
             intermediate_hidden_states=intermediate,
             intermediate_reference_points=intermediate_reference_points,
         )
+
+
+@dataclass
+@auto_docstring(
+    custom_intro="""
+    Base class for outputs of the LwDetr backbone-decoder model.
+    """
+)
+class LwDetrModelOutput(ModelOutput):
+    r"""
+    init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
+        Initial reference points sent through the Transformer decoder.
+    intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
+        Stacked intermediate hidden states (output of each layer of the decoder).
+    intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+        Stacked intermediate reference points (reference points of each layer of the decoder).
+    enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
+        Predicted bounding boxes scores where the top `config.two_stage_num_proposals` scoring bounding boxes are
+        picked as region proposals in the first stage. Output of bounding box binary classification (i.e.
+        foreground and background).
+    enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
+        Logits of predicted bounding boxes coordinates in the first stage.
+    """
+
+    init_reference_points: torch.FloatTensor | None = None
+    last_hidden_state: torch.FloatTensor | None = None
+    intermediate_hidden_states: torch.FloatTensor | None = None
+    intermediate_reference_points: torch.FloatTensor | None = None
+    enc_outputs_class: torch.FloatTensor | None = None
+    enc_outputs_coord_logits: torch.FloatTensor | None = None
 
 
 @auto_docstring(
@@ -1469,6 +1416,58 @@ class LwDetrMLPPredictionHead(DeformableDetrMLPPredictionHead):
     pass
 
 
+@dataclass
+@auto_docstring(
+    custom_intro="""
+    Output type of [`LwDetrForObjectDetection`].
+    """
+)
+class LwDetrObjectDetectionOutput(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
+        Total loss as a linear combination of a negative log-likehood (cross-entropy) for class prediction and a
+        bounding box loss. The latter is defined as a linear combination of the L1 loss and the generalized
+        scale-invariant IoU loss.
+    loss_dict (`Dict`, *optional*):
+        A dictionary containing the individual losses. Useful for logging.
+    logits (`torch.FloatTensor` of shape `(batch_size, num_queries, num_classes + 1)`):
+        Classification logits (including no-object) for all queries.
+    pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
+        Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
+        values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
+        possible padding). You can use [`~DeformableDetrProcessor.post_process_object_detection`] to retrieve the
+        unnormalized bounding boxes.
+    auxiliary_outputs (`list[Dict]`, *optional*):
+        Optional, only returned when auxiliary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
+        and labels are provided. It is a list of dictionaries containing the two above keys (`logits` and
+        `pred_boxes`) for each decoder layer.
+    init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
+        Initial reference points sent through the Transformer decoder.
+    intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
+        Stacked intermediate hidden states (output of each layer of the decoder).
+    intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+        Stacked intermediate reference points (reference points of each layer of the decoder).
+    enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
+        Predicted bounding boxes scores where the top `config.two_stage_num_proposals` scoring bounding boxes are
+        picked as region proposals in the first stage. Output of bounding box binary classification (i.e.
+        foreground and background).
+    enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
+        Logits of predicted bounding boxes coordinates in the first stage.
+    """
+
+    loss: torch.FloatTensor | None = None
+    loss_dict: dict | None = None
+    logits: torch.FloatTensor | None = None
+    pred_boxes: torch.FloatTensor | None = None
+    auxiliary_outputs: list[dict] | None = None
+    init_reference_points: torch.FloatTensor | None = None
+    last_hidden_state: torch.FloatTensor | None = None
+    intermediate_hidden_states: torch.FloatTensor | None = None
+    intermediate_reference_points: torch.FloatTensor | None = None
+    enc_outputs_class: Any = None
+    enc_outputs_coord_logits: torch.FloatTensor | None = None
+
+
 @auto_docstring(
     custom_intro="""
     LW DETR Model (consisting of a backbone and decoder Transformer) with object detection heads on
@@ -1479,7 +1478,7 @@ class LwDetrForObjectDetection(DeformableDetrForObjectDetection):
     _tied_weights_keys = None
 
     def __init__(self, config: LwDetrConfig):
-        LwDetrPreTrainedModel.__init__(config)
+        PreTrainedModel.__init__(self, config)
         self.model = LwDetrModel(config)
         self.class_embed = nn.Linear(config.d_model, config.num_labels)
         self.bbox_embed = LwDetrMLPPredictionHead(config.d_model, config.d_model, 4, num_layers=3)
