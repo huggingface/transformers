@@ -24,7 +24,6 @@ from transformers import AutoProcessor, is_torch_available
 from transformers.models.lfm2_vl.modeling_lfm2_vl import Lfm2VlForConditionalGeneration
 from transformers.testing_utils import (
     cleanup,
-    require_read_token,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -232,7 +231,6 @@ class Lfm2VlModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase
 
 
 @require_torch_accelerator
-@require_read_token
 @slow
 class Lfm2VlForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
