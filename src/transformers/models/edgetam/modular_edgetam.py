@@ -38,11 +38,6 @@ from ..sam2.modeling_sam2 import (
 )
 
 
-# fix this in modular
-if True:
-    from ..timm_wrapper.modeling_timm_wrapper import TimmWrapperModel
-
-
 class EdgeTamVisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`EdgeTamVisionModel`]. It is used to instantiate a SAM
@@ -189,7 +184,7 @@ class EdgeTamPreTrainedModel(Sam2PreTrainedModel):
 class EdgeTamVisionModel(Sam2VisionModel):
     config_class = EdgeTamVisionConfig
     main_input_name = "pixel_values"
-    _can_record_outputs = {"hidden_states": TimmWrapperModel, "attentions": TimmWrapperModel}
+    _can_record_outputs = {}
 
     def get_input_embeddings(self):
         raise NotImplementedError("Can't get input embeddings from timm wrapper model")

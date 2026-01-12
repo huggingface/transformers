@@ -600,8 +600,6 @@ class Sam3TrackerVideoModel(Sam2VideoModel):
         vision_outputs.fpn_hidden_states = feature_maps
         vision_outputs.fpn_position_encoding = feature_maps_position_embeddings
 
-        # NOTE: @Tom I'm not 100% sure that the feature_maps/feature_maps_position_embeddings match the
-        # fpn hidden states/position encoding order, still have to double-check
         return vision_outputs
 
 

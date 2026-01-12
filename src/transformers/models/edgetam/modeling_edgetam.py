@@ -32,7 +32,7 @@ from transformers.utils.generic import OutputRecorder
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...modeling_outputs import BaseModelOutput
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
@@ -45,11 +45,6 @@ from .configuration_edgetam import (
     EdgeTamPromptEncoderConfig,
     EdgeTamVisionConfig,
 )
-
-
-# fix this in modular
-if True:
-    from ..timm_wrapper.modeling_timm_wrapper import TimmWrapperModel
 
 
 class EdgeTamLayerNorm(nn.LayerNorm):
@@ -80,7 +75,7 @@ class EdgeTamLayerNorm(nn.LayerNorm):
 
 @dataclass
 @auto_docstring(custom_intro="Base class for the vision encoder's outputs.")
-class EdgeTamVisionEncoderOutput(ModelOutput):
+class EdgeTamVisionEncoderOutput(BaseModelOutputWithPooling):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, height, width, hidden_size)`):
         Sequence of hidden-states at the output of the last layer of the model.
@@ -100,11 +95,8 @@ class EdgeTamVisionEncoderOutput(ModelOutput):
         the self-attention heads.
     """
 
-    last_hidden_state: torch.FloatTensor | None = None
     fpn_hidden_states: torch.FloatTensor | None = None
     fpn_position_encoding: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 def eager_attention_forward(
@@ -425,7 +417,7 @@ class EdgeTamVisionNeck(nn.Module):
 class EdgeTamVisionModel(EdgeTamPreTrainedModel):
     config_class = EdgeTamVisionConfig
     main_input_name = "pixel_values"
-    _can_record_outputs = {"hidden_states": TimmWrapperModel, "attentions": TimmWrapperModel}
+    _can_record_outputs = {}
 
     def __init__(self, config: EdgeTamVisionConfig):
         super().__init__(config)
@@ -1231,8 +1223,6 @@ class EdgeTamModel(EdgeTamPreTrainedModel):
         vision_outputs.fpn_hidden_states = feature_maps
         vision_outputs.fpn_position_encoding = feature_maps_position_embeddings
 
-        # NOTE: @Tom I'm not 100% sure that the feature_maps/feature_maps_position_embeddings match the
-        # fpn hidden states/position encoding order, still have to double-check
         return vision_outputs
 
 

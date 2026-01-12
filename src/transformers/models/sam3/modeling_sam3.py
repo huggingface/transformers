@@ -56,23 +56,16 @@ logger = logging.get_logger(__name__)
 
 @dataclass
 @auto_docstring
-class Sam3VisionEncoderOutput(ModelOutput):
+class Sam3VisionEncoderOutput(BaseModelOutputWithPooling):
     r"""
     fpn_hidden_states (`tuple[torch.FloatTensor]`):
         Tuple of multi-level FPN feature maps.
     fpn_position_encoding (`tuple[torch.FloatTensor]`):
         Tuple of position encodings for each FPN level.
-    hidden_states (`tuple[torch.FloatTensor]`, *optional*):
-        Tuple of hidden states from all ViT layers.
-    attentions (`tuple[torch.FloatTensor]`, *optional*):
-        Tuple of attention weights from all ViT layers.
     """
 
-    last_hidden_state: torch.FloatTensor = None
     fpn_hidden_states: tuple[torch.FloatTensor, ...] = None
     fpn_position_encoding: tuple[torch.FloatTensor, ...] = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
 
 
 @dataclass

@@ -430,6 +430,10 @@ class EdgeTamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_sdpa_can_compile_dynamic(self):
         self.skipTest(reason="EDGETAM model can't be compiled dynamic yet")
 
+    @unittest.skip("Cannot set `output_attentions` for timm models.")
+    def test_get_image_features_attentions(self):
+        pass
+
 
 def prepare_image():
     img_url = "https://huggingface.co/datasets/hf-internal-testing/sam2-fixtures/resolve/main/truck.jpg"

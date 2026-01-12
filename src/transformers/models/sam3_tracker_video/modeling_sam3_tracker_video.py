@@ -1137,7 +1137,7 @@ class Sam3TrackerVideoMemoryEncoder(nn.Module):
 
 @dataclass
 @auto_docstring(custom_intro="Base class for the vision encoder's outputs.")
-class Sam3TrackerVideoVisionEncoderOutput(ModelOutput):
+class Sam3TrackerVideoVisionEncoderOutput(BaseModelOutputWithPooling):
     r"""
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, height, width, hidden_size)`):
         Sequence of hidden-states at the output of the last layer of the model.
@@ -1157,11 +1157,8 @@ class Sam3TrackerVideoVisionEncoderOutput(ModelOutput):
         the self-attention heads.
     """
 
-    last_hidden_state: torch.FloatTensor | None = None
     fpn_hidden_states: torch.FloatTensor | None = None
     fpn_position_encoding: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor, ...] | None = None
-    attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 class Sam3TrackerVideoPositionalEmbedding(nn.Module):
@@ -1900,8 +1897,6 @@ class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
         vision_outputs.fpn_hidden_states = feature_maps
         vision_outputs.fpn_position_encoding = feature_maps_position_embeddings
 
-        # NOTE: @Tom I'm not 100% sure that the feature_maps/feature_maps_position_embeddings match the
-        # fpn hidden states/position encoding order, still have to double-check
         return vision_outputs
 
     def _prepare_vision_features(
