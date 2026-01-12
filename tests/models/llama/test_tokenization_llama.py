@@ -3,13 +3,11 @@ import unittest
 from tests.test_tokenization_common import TokenizerTesterMixin
 from transformers.models.llama.tokenization_llama import LlamaTokenizer
 from transformers.testing_utils import (
-    require_read_token,
     require_tokenizers,
 )
 
 
 @require_tokenizers
-@require_read_token
 class LlamaTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     from_pretrained_id = [
         "hf-internal-testing/llama-tokenizer",
