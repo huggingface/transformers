@@ -501,9 +501,7 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
 
         num_paddings = inputs_non_padded.shape[-1] - inputs["attention_mask"][-1].long().sum().item()
         inputs_padded = tokenizer(sentences[1], return_tensors="pt").input_ids.to(torch_device)
-        output_padded = model.generate(
-            input_ids=inputs_padded, max_length=max_length - num_paddings
-        )
+        output_padded = model.generate(input_ids=inputs_padded, max_length=max_length - num_paddings)
 
         batch_out_sentence = tokenizer.batch_decode(outputs, skip_special_tokens=True)
         batch_out_sentence_tt = tokenizer.batch_decode(outputs_tt, skip_special_tokens=True)
@@ -566,9 +564,7 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
 
         num_paddings = inputs_non_padded.shape[-1] - inputs["attention_mask"][-1].long().sum().item()
         inputs_padded = tokenizer(sentences[1], return_tensors="pt").input_ids.to(torch_device)
-        output_padded = model.generate(
-            input_ids=inputs_padded, max_length=max_length - num_paddings
-        )
+        output_padded = model.generate(input_ids=inputs_padded, max_length=max_length - num_paddings)
 
         batch_out_sentence = tokenizer.batch_decode(outputs, skip_special_tokens=True)
         batch_out_sentence_tt = tokenizer.batch_decode(outputs_tt, skip_special_tokens=True)
