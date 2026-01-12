@@ -592,10 +592,11 @@ class VideoPrismVisionModel(VideoPrismPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithSpatialAndTemporalStates:
         r"""
-        pixel_values_videos (`torch.FloatTensor`):
-            Pixel values of the video frames of shape (batch_size, num_frames, num_channels, height, width).
-        interpolate_pos_encoding (`bool`, *optional*, defaults to `False`):
-            Whether to interpolate positional encodings to match input size.
+        Args:
+            pixel_values_videos (`torch.FloatTensor`):
+                Pixel values of the video frames of shape (batch_size, num_frames, num_channels, height, width).
+            interpolate_pos_encoding (`bool`, *optional*, defaults to `False`):
+                Whether to interpolate positional encodings to match input size.
 
         Example:
 
