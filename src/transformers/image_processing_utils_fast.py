@@ -50,7 +50,7 @@ from .utils import (
     is_vision_available,
     logging,
 )
-from .utils.import_utils import is_rocm_platform
+from .utils.import_utils import is_rocm_platform, is_torchdynamo_compiling
 
 
 if is_vision_available():
@@ -73,17 +73,17 @@ logger = logging.get_logger(__name__)
 
 @lru_cache(maxsize=10)
 def validate_fast_preprocess_arguments(
-    do_rescale: Optional[bool] = None,
-    rescale_factor: Optional[float] = None,
-    do_normalize: Optional[bool] = None,
-    image_mean: Optional[Union[float, list[float]]] = None,
-    image_std: Optional[Union[float, list[float]]] = None,
-    do_center_crop: Optional[bool] = None,
-    crop_size: Optional[SizeDict] = None,
-    do_resize: Optional[bool] = None,
-    size: Optional[SizeDict] = None,
+    do_rescale: bool | None = None,
+    rescale_factor: float | None = None,
+    do_normalize: bool | None = None,
+    image_mean: float | list[float] | None = None,
+    image_std: float | list[float] | None = None,
+    do_center_crop: bool | None = None,
+    crop_size: SizeDict | None = None,
+    do_resize: bool | None = None,
+    size: SizeDict | None = None,
     interpolation: Optional["F.InterpolationMode"] = None,
-    return_tensors: Optional[Union[str, TensorType]] = None,
+    return_tensors: str | TensorType | None = None,
     data_format: ChannelDimension = ChannelDimension.FIRST,
 ):
     """
@@ -110,7 +110,7 @@ def validate_fast_preprocess_arguments(
         raise ValueError("Only channel first data format is currently supported.")
 
 
-def safe_squeeze(tensor: "torch.Tensor", axis: Optional[int] = None) -> "torch.Tensor":
+def safe_squeeze(tensor: "torch.Tensor", axis: int | None = None) -> "torch.Tensor":
     """
     Squeezes a tensor, but only if the axis specified has dim 1.
     """
@@ -166,6 +166,129 @@ def divide_to_patches(
 
 @auto_docstring
 class BaseImageProcessorFast(BaseImageProcessor):
+    r"""
+    Base class for fast image processors using PyTorch and TorchVision for image transformations.
+
+    This class provides a complete implementation for standard image preprocessing operations (resize, crop, rescale,
+    normalize) with GPU support and batch processing optimizations. Most image processors can be implemented by simply
+    setting class attributes; only processors requiring custom logic need to override methods.
+
+    Basic Implementation
+    --------------------
+
+    For processors that only need standard operations (resize, center crop, rescale, normalize), define class
+    attributes:
+
+        class MyImageProcessorFast(BaseImageProcessorFast):
+            resample = PILImageResampling.BILINEAR
+            image_mean = IMAGENET_DEFAULT_MEAN
+            image_std = IMAGENET_DEFAULT_STD
+            size = {"height": 224, "width": 224}
+            do_resize = True
+            do_rescale = True
+            do_normalize = True
+
+    Custom Processing
+    -----------------
+
+    Override `_preprocess` (most common):
+        For custom image processing logic, override `_preprocess`. This method receives a list of torch tensors with
+        channel dimension first and should return a BatchFeature. Use `group_images_by_shape` and `reorder_images` for
+        efficient batch processing:
+
+            def _preprocess(
+                self,
+                images: list[torch.Tensor],
+                do_resize: bool,
+                size: SizeDict,
+                # ... other parameters
+                **kwargs,
+            ) -> BatchFeature:
+                # Group images by shape for batched operations
+                grouped_images, indices = group_images_by_shape(images)
+                processed_groups = {}
+
+                for shape, stacked_images in grouped_images.items():
+                    if do_resize:
+                        stacked_images = self.resize(stacked_images, size)
+                    # Custom processing here
+                    processed_groups[shape] = stacked_images
+
+                processed_images = reorder_images(processed_groups, indices)
+                return BatchFeature(data={"pixel_values": torch.stack(processed_images)})
+
+    Override `_preprocess_image_like_inputs` (for additional inputs):
+        For processors handling multiple input types (e.g., images + segmentation maps), override this method:
+
+            def _preprocess_image_like_inputs(
+                self,
+                images: ImageInput,
+                segmentation_maps: Optional[ImageInput] = None,
+                do_convert_rgb: bool,
+                input_data_format: ChannelDimension,
+                device: Optional[torch.device] = None,
+                **kwargs,
+            ) -> BatchFeature:
+                images = self._prepare_image_like_inputs(images, do_convert_rgb, input_data_format, device)
+                batch_feature = self._preprocess(images, **kwargs)
+
+                if segmentation_maps is not None:
+                    # Process segmentation maps separately
+                    maps = self._prepare_image_like_inputs(segmentation_maps, ...)
+                    batch_feature["labels"] = self._preprocess(maps, ...)
+
+                return batch_feature
+
+    Override `_further_process_kwargs` (for custom kwargs formatting):
+        To format custom kwargs before validation:
+
+            def _further_process_kwargs(self, custom_param=None, **kwargs):
+                kwargs = super()._further_process_kwargs(**kwargs)
+                if custom_param is not None:
+                    kwargs["custom_param"] = self._format_custom_param(custom_param)
+                return kwargs
+
+    Override `_validate_preprocess_kwargs` (for custom validation):
+        To add custom validation logic:
+
+            def _validate_preprocess_kwargs(self, custom_param=None, **kwargs):
+                super()._validate_preprocess_kwargs(**kwargs)
+                if custom_param is not None and custom_param < 0:
+                    raise ValueError("custom_param must be non-negative")
+
+    Override `_prepare_images_structure` (for nested inputs):
+        By default, nested image lists are flattened. Override to preserve structure:
+
+            def _prepare_images_structure(self, images, expected_ndims=3):
+                # Custom logic to handle nested structure
+                return images  # Return as-is or with custom processing
+
+    Custom Parameters
+    -----------------
+
+    To add parameters beyond `ImagesKwargs`, create a custom kwargs class and set it as `valid_kwargs`:
+
+        class MyImageProcessorKwargs(ImagesKwargs):
+            custom_param: Optional[int] = None
+            another_param: Optional[bool] = None
+
+        class MyImageProcessorFast(BaseImageProcessorFast):
+            valid_kwargs = MyImageProcessorKwargs
+            custom_param = 10  # default value
+
+            def _preprocess(self, images, custom_param, **kwargs):
+                # Use custom_param in processing
+                ...
+
+    Key Notes
+    ---------
+
+    - Images in `_preprocess` are always torch tensors with channel dimension first, regardless of input format
+    - Arguments not provided by users default to class attribute values
+    - Use batch processing utilities (`group_images_by_shape`, `reorder_images`) for GPU efficiency
+    - Image loading, format conversion, and argument handling are automatic - focus only on processing logic
+    """
+
     resample = None
     image_mean = None
     image_std = None
@@ -224,11 +347,11 @@ class BaseImageProcessorFast(BaseImageProcessor):
         self,
         images: list["torch.Tensor"],
         pad_size: SizeDict = None,
-        fill_value: Optional[int] = 0,
-        padding_mode: Optional[str] = "constant",
+        fill_value: int | None = 0,
+        padding_mode: str | None = "constant",
         return_mask: bool = False,
-        disable_grouping: Optional[bool] = False,
-        is_nested: Optional[bool] = False,
+        disable_grouping: bool | None = False,
+        is_nested: bool | None = False,
         **kwargs,
     ) -> Union[tuple["torch.Tensor", "torch.Tensor"], "torch.Tensor"]:
         """
@@ -343,7 +466,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         # This is a workaround to avoid a bug in torch.compile when dealing with uint8 on AMD MI3XX GPUs
         # Tracked in PyTorch issue: https://github.com/pytorch/pytorch/issues/155209
         # TODO: remove this once the bug is fixed (detected with torch==2.7.0+git1fee196, torchvision==0.22.0+9eb57cd)
-        if torch.compiler.is_compiling() and is_rocm_platform():
+        if is_torchdynamo_compiling() and is_rocm_platform():
             return self.compile_friendly_resize(image, new_size, interpolation, antialias)
         return F.resize(image, new_size, interpolation=interpolation, antialias=antialias)
 
@@ -395,8 +518,8 @@ class BaseImageProcessorFast(BaseImageProcessor):
     def normalize(
         self,
         image: "torch.Tensor",
-        mean: Union[float, Iterable[float]],
-        std: Union[float, Iterable[float]],
+        mean: float | Iterable[float],
+        std: float | Iterable[float],
         **kwargs,
     ) -> "torch.Tensor":
         """
@@ -418,11 +541,11 @@ class BaseImageProcessorFast(BaseImageProcessor):
     @lru_cache(maxsize=10)
     def _fuse_mean_std_and_rescale_factor(
         self,
-        do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[float] = None,
+        do_normalize: bool | None = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        do_rescale: bool | None = None,
+        rescale_factor: float | None = None,
         device: Optional["torch.device"] = None,
     ) -> tuple:
         if do_rescale and do_normalize:
@@ -438,8 +561,8 @@ class BaseImageProcessorFast(BaseImageProcessor):
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Union[float, list[float]],
-        image_std: Union[float, list[float]],
+        image_mean: float | list[float],
+        image_std: float | list[float],
     ) -> "torch.Tensor":
         """
         Rescale and normalize images.
@@ -552,8 +675,8 @@ class BaseImageProcessorFast(BaseImageProcessor):
     def _process_image(
         self,
         image: ImageInput,
-        do_convert_rgb: Optional[bool] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        do_convert_rgb: bool | None = None,
+        input_data_format: str | ChannelDimension | None = None,
         device: Optional["torch.device"] = None,
     ) -> "torch.Tensor":
         image_type = get_image_type(image)
@@ -590,8 +713,8 @@ class BaseImageProcessorFast(BaseImageProcessor):
     def _prepare_image_like_inputs(
         self,
         images: ImageInput,
-        do_convert_rgb: Optional[bool] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        do_convert_rgb: bool | None = None,
+        input_data_format: str | ChannelDimension | None = None,
         device: Optional["torch.device"] = None,
         expected_ndims: int = 3,
     ) -> list["torch.Tensor"]:
@@ -633,13 +756,13 @@ class BaseImageProcessorFast(BaseImageProcessor):
 
     def _further_process_kwargs(
         self,
-        size: Optional[SizeDict] = None,
-        crop_size: Optional[SizeDict] = None,
-        pad_size: Optional[SizeDict] = None,
-        default_to_square: Optional[bool] = None,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
-        data_format: Optional[ChannelDimension] = None,
+        size: SizeDict | None = None,
+        crop_size: SizeDict | None = None,
+        pad_size: SizeDict | None = None,
+        default_to_square: bool | None = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        data_format: ChannelDimension | None = None,
         **kwargs,
     ) -> dict:
         """
@@ -681,18 +804,18 @@ class BaseImageProcessorFast(BaseImageProcessor):
 
     def _validate_preprocess_kwargs(
         self,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[float] = None,
-        do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, tuple[float]]] = None,
-        image_std: Optional[Union[float, tuple[float]]] = None,
-        do_resize: Optional[bool] = None,
-        size: Optional[SizeDict] = None,
-        do_center_crop: Optional[bool] = None,
-        crop_size: Optional[SizeDict] = None,
+        do_rescale: bool | None = None,
+        rescale_factor: float | None = None,
+        do_normalize: bool | None = None,
+        image_mean: float | tuple[float] | None = None,
+        image_std: float | tuple[float] | None = None,
+        do_resize: bool | None = None,
+        size: SizeDict | None = None,
+        do_center_crop: bool | None = None,
+        crop_size: SizeDict | None = None,
         interpolation: Optional["F.InterpolationMode"] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        data_format: Optional[ChannelDimension] = None,
+        return_tensors: str | TensorType | None = None,
+        data_format: ChannelDimension | None = None,
         **kwargs,
     ):
         """
@@ -750,7 +873,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         *args,
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
-        device: Optional[Union[str, "torch.device"]] = None,
+        device: Union[str, "torch.device"] | None = None,
         **kwargs: Unpack[ImagesKwargs],
     ) -> BatchFeature:
         """
@@ -775,12 +898,12 @@ class BaseImageProcessorFast(BaseImageProcessor):
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        do_pad: Optional[bool],
-        pad_size: Optional[SizeDict],
-        disable_grouping: Optional[bool],
-        return_tensors: Optional[Union[str, TensorType]],
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        do_pad: bool | None,
+        pad_size: SizeDict | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         # Group images by size for batched resizing
@@ -809,11 +932,22 @@ class BaseImageProcessorFast(BaseImageProcessor):
         if do_pad:
             processed_images = self.pad(processed_images, pad_size=pad_size, disable_grouping=disable_grouping)
 
-        processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
     def to_dict(self):
         encoder_dict = super().to_dict()
-        encoder_dict.pop("_valid_processor_keys", None)
-        encoder_dict.pop("_valid_kwargs_names", None)
-        return encoder_dict
+
+        # Filter out None values that are class defaults, but preserve explicitly set None values
+        filtered_dict = {}
+        for key, value in encoder_dict.items():
+            if value is None:
+                class_default = getattr(type(self), key, "NOT_FOUND")
+                # Keep None if user explicitly set it (class default is non-None)
+                if class_default != "NOT_FOUND" and class_default is not None:
+                    filtered_dict[key] = value
+            else:
+                filtered_dict[key] = value
+
+        filtered_dict.pop("_valid_processor_keys", None)
+        filtered_dict.pop("_valid_kwargs_names", None)
+        return filtered_dict

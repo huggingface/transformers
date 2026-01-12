@@ -246,6 +246,7 @@ model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
 ## Qwen2_5_VLProcessor
 
 [[autodoc]] Qwen2_5_VLProcessor
+    - __call__
 
 ## Qwen2_5_VLTextModel
 

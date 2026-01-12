@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,11 +14,10 @@
 """AutoImageProcessor class."""
 
 import importlib
-import json
 import os
 import warnings
 from collections import OrderedDict
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING
 
 # Build the list of all image processors
 from ...configuration_utils import PreTrainedConfig
@@ -29,12 +27,14 @@ from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...utils import (
     CONFIG_NAME,
     IMAGE_PROCESSOR_NAME,
+    PROCESSOR_NAME,
     cached_file,
     is_timm_config_dict,
     is_timm_local_checkpoint,
     is_torchvision_available,
     is_vision_available,
     logging,
+    safe_load_json_file,
 )
 from ...utils.import_utils import requires
 from .auto_factory import _LazyAutoMapping
@@ -55,7 +55,7 @@ FORCE_FAST_IMAGE_PROCESSOR = ["Qwen2VLImageProcessor"]
 if TYPE_CHECKING:
     # This significantly improves completion suggestion performance when
     # the transformers package is used with Microsoft's Pylance language server.
-    IMAGE_PROCESSOR_MAPPING_NAMES: OrderedDict[str, tuple[Optional[str], Optional[str]]] = OrderedDict()
+    IMAGE_PROCESSOR_MAPPING_NAMES: OrderedDict[str, tuple[str | None, str | None]] = OrderedDict()
 else:
     IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         [
@@ -88,7 +88,6 @@ else:
             ("deit", ("DeiTImageProcessor", "DeiTImageProcessorFast")),
             ("depth_anything", ("DPTImageProcessor", "DPTImageProcessorFast")),
             ("depth_pro", ("DepthProImageProcessor", "DepthProImageProcessorFast")),
-            ("deta", ("DetaImageProcessor", None)),
             ("detr", ("DetrImageProcessor", "DetrImageProcessorFast")),
             ("dinat", ("ViTImageProcessor", "ViTImageProcessorFast")),
             ("dinov2", ("BitImageProcessor", "BitImageProcessorFast")),
@@ -96,11 +95,11 @@ else:
             ("donut-swin", ("DonutImageProcessor", "DonutImageProcessorFast")),
             ("dpt", ("DPTImageProcessor", "DPTImageProcessorFast")),
             ("edgetam", (None, "Sam2ImageProcessorFast")),
-            ("efficientformer", ("EfficientFormerImageProcessor", None)),
             ("efficientloftr", ("EfficientLoFTRImageProcessor", "EfficientLoFTRImageProcessorFast")),
             ("efficientnet", ("EfficientNetImageProcessor", "EfficientNetImageProcessorFast")),
             ("emu3", ("Emu3ImageProcessor", None)),
             ("eomt", ("EomtImageProcessor", "EomtImageProcessorFast")),
+            ("ernie4_5_vl_moe", ("Ernie4_5_VL_MoeImageProcessor", "Ernie4_5_VL_MoeImageProcessorFast")),
             ("flava", ("FlavaImageProcessor", "FlavaImageProcessorFast")),
             ("florence2", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
             ("focalnet", ("BitImageProcessor", "BitImageProcessorFast")),
@@ -108,6 +107,7 @@ else:
             ("gemma3", ("Gemma3ImageProcessor", "Gemma3ImageProcessorFast")),
             ("gemma3n", ("SiglipImageProcessor", "SiglipImageProcessorFast")),
             ("git", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
+            ("glm46v", ("Glm46VImageProcessor", "Glm46VImageProcessorFast")),
             ("glm4v", ("Glm4vImageProcessor", "Glm4vImageProcessorFast")),
             ("glpn", ("GLPNImageProcessor", "GLPNImageProcessorFast")),
             ("got_ocr2", ("GotOcr2ImageProcessor", "GotOcr2ImageProcessorFast")),
@@ -130,7 +130,7 @@ else:
             ("levit", ("LevitImageProcessor", "LevitImageProcessorFast")),
             ("lfm2_vl", (None, "Lfm2VlImageProcessorFast")),
             ("lightglue", ("LightGlueImageProcessor", "LightGlueImageProcessorFast")),
-            ("llama4", ("Llama4ImageProcessor", "Llama4ImageProcessorFast")),
+            ("llama4", (None, "Llama4ImageProcessorFast")),
             ("llava", ("LlavaImageProcessor", "LlavaImageProcessorFast")),
             ("llava_next", ("LlavaNextImageProcessor", "LlavaNextImageProcessorFast")),
             ("llava_next_video", ("LlavaNextImageProcessor", "LlavaNextImageProcessorFast")),
@@ -147,18 +147,19 @@ else:
             ("mobilenet_v2", ("MobileNetV2ImageProcessor", "MobileNetV2ImageProcessorFast")),
             ("mobilevit", ("MobileViTImageProcessor", "MobileViTImageProcessorFast")),
             ("mobilevitv2", ("MobileViTImageProcessor", "MobileViTImageProcessorFast")),
-            ("nat", ("ViTImageProcessor", "ViTImageProcessorFast")),
             ("nougat", ("NougatImageProcessor", "NougatImageProcessorFast")),
             ("omdet-turbo", ("DetrImageProcessor", "DetrImageProcessorFast")),
             ("oneformer", ("OneFormerImageProcessor", "OneFormerImageProcessorFast")),
             ("ovis2", ("Ovis2ImageProcessor", "Ovis2ImageProcessorFast")),
             ("owlv2", ("Owlv2ImageProcessor", "Owlv2ImageProcessorFast")),
             ("owlvit", ("OwlViTImageProcessor", "OwlViTImageProcessorFast")),
+            ("paddleocr_vl", ("PaddleOCRVLImageProcessor", "PaddleOCRVLImageProcessorFast")),
             ("paligemma", ("SiglipImageProcessor", "SiglipImageProcessorFast")),
             ("perceiver", ("PerceiverImageProcessor", "PerceiverImageProcessorFast")),
             ("perception_lm", (None, "PerceptionLMImageProcessorFast")),
             ("phi4_multimodal", (None, "Phi4MultimodalImageProcessorFast")),
-            ("pix2struct", ("Pix2StructImageProcessor", None)),
+            ("pix2struct", ("Pix2StructImageProcessor", "Pix2StructImageProcessorFast")),
+            ("pixio", ("BitImageProcessor", "BitImageProcessorFast")),
             ("pixtral", ("PixtralImageProcessor", "PixtralImageProcessorFast")),
             ("poolformer", ("PoolFormerImageProcessor", "PoolFormerImageProcessorFast")),
             ("prompt_depth_anything", ("PromptDepthAnythingImageProcessor", "PromptDepthAnythingImageProcessorFast")),
@@ -175,6 +176,10 @@ else:
             ("sam", ("SamImageProcessor", "SamImageProcessorFast")),
             ("sam2", (None, "Sam2ImageProcessorFast")),
             ("sam2_video", (None, "Sam2ImageProcessorFast")),
+            ("sam3", (None, "Sam3ImageProcessorFast")),
+            ("sam3_tracker", (None, "Sam3ImageProcessorFast")),
+            ("sam3_tracker_video", (None, "Sam3ImageProcessorFast")),
+            ("sam3_video", (None, "Sam3ImageProcessorFast")),
             ("sam_hq", ("SamImageProcessor", "SamImageProcessorFast")),
             ("segformer", ("SegformerImageProcessor", "SegformerImageProcessorFast")),
             ("seggpt", ("SegGptImageProcessor", None)),
@@ -188,26 +193,25 @@ else:
             ("swin", ("ViTImageProcessor", "ViTImageProcessorFast")),
             ("swin2sr", ("Swin2SRImageProcessor", "Swin2SRImageProcessorFast")),
             ("swinv2", ("ViTImageProcessor", "ViTImageProcessorFast")),
+            ("t5gemma2", ("Gemma3ImageProcessor", "Gemma3ImageProcessorFast")),
             ("table-transformer", ("DetrImageProcessor", "DetrImageProcessorFast")),
             ("textnet", ("TextNetImageProcessor", "TextNetImageProcessorFast")),
             ("timesformer", ("VideoMAEImageProcessor", None)),
             ("timm_wrapper", ("TimmWrapperImageProcessor", None)),
             ("trocr", ("ViTImageProcessor", "ViTImageProcessorFast")),
-            ("tvlt", ("TvltImageProcessor", None)),
             ("tvp", ("TvpImageProcessor", "TvpImageProcessorFast")),
             ("udop", ("LayoutLMv3ImageProcessor", "LayoutLMv3ImageProcessorFast")),
             ("upernet", ("SegformerImageProcessor", "SegformerImageProcessorFast")),
-            ("van", ("ConvNextImageProcessor", "ConvNextImageProcessorFast")),
             ("video_llama_3", ("VideoLlama3ImageProcessor", "VideoLlama3ImageProcessorFast")),
             ("video_llava", ("VideoLlavaImageProcessor", None)),
             ("videomae", ("VideoMAEImageProcessor", None)),
             ("vilt", ("ViltImageProcessor", "ViltImageProcessorFast")),
             ("vipllava", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
             ("vit", ("ViTImageProcessor", "ViTImageProcessorFast")),
-            ("vit_hybrid", ("ViTHybridImageProcessor", None)),
             ("vit_mae", ("ViTImageProcessor", "ViTImageProcessorFast")),
             ("vit_msn", ("ViTImageProcessor", "ViTImageProcessorFast")),
             ("vitmatte", ("VitMatteImageProcessor", "VitMatteImageProcessorFast")),
+            ("vitpose", ("VitPoseImageProcessor", "VitPoseImageProcessorFast")),
             ("xclip", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
             ("yolos", ("YolosImageProcessor", "YolosImageProcessorFast")),
             ("zoedepth", ("ZoeDepthImageProcessor", "ZoeDepthImageProcessorFast")),
@@ -255,12 +259,12 @@ def get_image_processor_class_from_name(class_name: str):
 
 
 def get_image_processor_config(
-    pretrained_model_name_or_path: Union[str, os.PathLike],
-    cache_dir: Optional[Union[str, os.PathLike]] = None,
+    pretrained_model_name_or_path: str | os.PathLike,
+    cache_dir: str | os.PathLike | None = None,
     force_download: bool = False,
-    proxies: Optional[dict[str, str]] = None,
-    token: Optional[Union[bool, str]] = None,
-    revision: Optional[str] = None,
+    proxies: dict[str, str] | None = None,
+    token: bool | str | None = None,
+    revision: str | None = None,
     local_files_only: bool = False,
     **kwargs,
 ):
@@ -319,9 +323,10 @@ def get_image_processor_config(
     image_processor.save_pretrained("image-processor-test")
     image_processor_config = get_image_processor_config("image-processor-test")
     ```"""
-    resolved_config_file = cached_file(
+    # Load with a priority given to the nested processor config, if available in repo
+    resolved_processor_file = cached_file(
         pretrained_model_name_or_path,
-        IMAGE_PROCESSOR_NAME,
+        filename=PROCESSOR_NAME,
         cache_dir=cache_dir,
         force_download=force_download,
         proxies=proxies,
@@ -330,16 +335,38 @@ def get_image_processor_config(
         local_files_only=local_files_only,
         _raise_exceptions_for_gated_repo=False,
         _raise_exceptions_for_missing_entries=False,
-        _raise_exceptions_for_connection_errors=False,
     )
-    if resolved_config_file is None:
-        logger.info(
-            "Could not locate the image processor configuration file, will try to use the model config instead."
-        )
+    resolved_image_processor_file = cached_file(
+        pretrained_model_name_or_path,
+        filename=IMAGE_PROCESSOR_NAME,
+        cache_dir=cache_dir,
+        force_download=force_download,
+        proxies=proxies,
+        token=token,
+        revision=revision,
+        local_files_only=local_files_only,
+        _raise_exceptions_for_gated_repo=False,
+        _raise_exceptions_for_missing_entries=False,
+    )
+
+    # An empty list if none of the possible files is found in the repo
+    if not resolved_image_processor_file and not resolved_processor_file:
+        logger.info("Could not locate the image processor configuration file.")
         return {}
 
-    with open(resolved_config_file, encoding="utf-8") as reader:
-        return json.load(reader)
+    # Load image_processor dict. Priority goes as (nested config if found -> image processor config)
+    # We are downloading both configs because almost all models have a `processor_config.json` but
+    # not all of these are nested. We need to check if it was saved recently as nested or if it is legacy style
+    image_processor_dict = {}
+    if resolved_processor_file is not None:
+        processor_dict = safe_load_json_file(resolved_processor_file)
+        if "image_processor" in processor_dict:
+            image_processor_dict = processor_dict["image_processor"]
+
+    if resolved_image_processor_file is not None and image_processor_dict is None:
+        image_processor_dict = safe_load_json_file(resolved_image_processor_file)
+
+    return image_processor_dict
 
 
 def _warning_fast_image_processor_available(fast_class):
@@ -581,9 +608,9 @@ class AutoImageProcessor:
             image_processor_class = get_class_from_dynamic_module(class_ref, pretrained_model_name_or_path, **kwargs)
             _ = kwargs.pop("code_revision", None)
             image_processor_class.register_for_auto_class()
-            return image_processor_class.from_dict(config_dict, **kwargs)
+            return image_processor_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
         elif image_processor_class is not None:
-            return image_processor_class.from_dict(config_dict, **kwargs)
+            return image_processor_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
         # Last try: we use the IMAGE_PROCESSOR_MAPPING.
         elif type(config) in IMAGE_PROCESSOR_MAPPING:
             image_processor_tuple = IMAGE_PROCESSOR_MAPPING[type(config)]

@@ -14,7 +14,6 @@
 """PyTorch UnivNetModel model."""
 
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -43,8 +42,8 @@ class UnivNetModelOutput(ModelOutput):
         The batched length in samples of each unpadded waveform in `waveforms`.
     """
 
-    waveforms: Optional[torch.FloatTensor] = None
-    waveform_lengths: Optional[torch.FloatTensor] = None
+    waveforms: torch.FloatTensor | None = None
+    waveform_lengths: torch.FloatTensor | None = None
 
 
 class UnivNetKernelPredictorResidualBlock(nn.Module):
@@ -472,11 +471,12 @@ class UnivNetModel(PreTrainedModel):
     def forward(
         self,
         input_features: torch.FloatTensor,
-        noise_sequence: Optional[torch.FloatTensor] = None,
-        padding_mask: Optional[torch.FloatTensor] = None,
-        generator: Optional[torch.Generator] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple[torch.FloatTensor], UnivNetModelOutput]:
+        noise_sequence: torch.FloatTensor | None = None,
+        padding_mask: torch.FloatTensor | None = None,
+        generator: torch.Generator | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple[torch.FloatTensor] | UnivNetModelOutput:
         r"""
         noise_sequence (`torch.FloatTensor`, *optional*):
             Tensor containing a noise sequence of standard Gaussian noise. Can be batched and of shape `(batch_size,
@@ -590,13 +590,6 @@ class UnivNetModel(PreTrainedModel):
             waveforms=waveform,
             waveform_lengths=waveform_lengths,
         )
-
-    def _init_weights(self, module):
-        """Initialize the weights."""
-        if isinstance(module, (nn.Linear, nn.Conv1d, nn.ConvTranspose1d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
 
     def apply_weight_norm(self):
         weight_norm = nn.utils.weight_norm

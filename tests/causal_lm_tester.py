@@ -24,7 +24,7 @@ from transformers.testing_utils import (
     _COMMON_MODEL_NAMES_MAP,
     is_flaky,
     require_flash_attn,
-    require_torch_gpu,
+    require_torch_accelerator,
     slow,
 )
 
@@ -38,6 +38,7 @@ from .test_modeling_common import (
     torch_device,
 )
 from .test_pipeline_mixin import PipelineTesterMixin
+from .test_training_mixin import TrainingTesterMixin
 
 
 if is_torch_available():
@@ -175,7 +176,7 @@ class CausalLMModelTester:
         num_hidden_layers=2,
         num_attention_heads=2,
         num_key_value_heads=2,
-        intermediate_size=37,
+        intermediate_size=32,
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
@@ -192,7 +193,7 @@ class CausalLMModelTester:
         scope=None,
         expert_interval=1,
         moe_layer_start_index=0,
-        moe_intermediate_size=12,
+        moe_intermediate_size=16,
         shared_expert_intermediate_size=36,
         shared_expert_gate=True,
         moe_num_shared_experts=2,
@@ -248,6 +249,7 @@ class CausalLMModelTester:
         self.mamba_d_conv = mamba_d_conv
         self.mamba_expand = mamba_expand
         self.mamba_chunk_size = mamba_chunk_size
+        self.tie_word_embeddings = False
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -303,7 +305,7 @@ class CausalLMModelTester:
 
 
 @require_torch
-class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin):
+class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, TrainingTesterMixin):
     model_tester_class = None
     all_model_classes = None
     pipeline_model_mapping = None
@@ -432,11 +434,20 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         if not _config_supports_rope_scaling(config):
             self.skipTest("This model does not support RoPE scaling")
 
+        partial_rotary_factor = config.rope_parameters.get("partial_rotary_factor", 1.0)
         short_input = ids_tensor([1, 10], config.vocab_size)
         long_input = ids_tensor([1, int(config.max_position_embeddings * 1.5)], config.vocab_size)
 
         set_seed(42)  # Fixed seed at init time so the two models get the same random weights
-        _set_config_rope_params(config, {"rope_type": "default", "rope_theta": 10_000.0})
+        _set_config_rope_params(
+            config,
+            {
+                "rope_type": "default",
+                "rope_theta": 10_000.0,
+                "partial_rotary_factor": partial_rotary_factor,
+                "original_max_position_embeddings": 16384,
+            },
+        )
         original_model = self.model_tester_class.base_model_class(config)
         original_model.to(torch_device)
         original_model.eval()
@@ -444,7 +455,15 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         original_long_output = original_model(long_input).last_hidden_state
 
         set_seed(42)  # Fixed seed at init time so the two models get the same random weights
-        _set_config_rope_params(config, {"rope_type": scaling_type, "factor": 10.0, "rope_theta": 10_000.0})
+        _set_config_rope_params(
+            config,
+            {
+                "rope_type": scaling_type,
+                "factor": 10.0,
+                "rope_theta": 10_000.0,
+                "partial_rotary_factor": partial_rotary_factor,
+            },
+        )
         scaled_model = self.model_tester_class.base_model_class(config)
         scaled_model.to(torch_device)
         scaled_model.eval()
@@ -484,6 +503,7 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
 
         scaling_factor = 10
         short_input_length = 10
+        partial_rotary_factor = config.rope_parameters.get("partial_rotary_factor", 1.0)
         long_input_length = int(config.max_position_embeddings * 1.5)
 
         # Inputs
@@ -496,7 +516,9 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         position_ids_long = position_ids_long.unsqueeze(0)
 
         # Sanity check original RoPE
-        _set_config_rope_params(config, {"rope_type": "default", "rope_theta": 10_000.0})
+        _set_config_rope_params(
+            config, {"rope_type": "default", "rope_theta": 10_000.0, "partial_rotary_factor": partial_rotary_factor}
+        )
         original_rope = rope_class(config=config).to(torch_device)
         original_cos_short, original_sin_short = original_rope(x, position_ids_short)
         original_cos_long, original_sin_long = original_rope(x, position_ids_long)
@@ -505,7 +527,15 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
 
         # Sanity check linear RoPE scaling
         # New position "x" should match original position with index "x/scaling_factor"
-        _set_config_rope_params(config, {"rope_type": "linear", "factor": scaling_factor, "rope_theta": 10_000.0})
+        _set_config_rope_params(
+            config,
+            {
+                "rope_type": "linear",
+                "factor": scaling_factor,
+                "rope_theta": 10_000.0,
+                "partial_rotary_factor": partial_rotary_factor,
+            },
+        )
         linear_scaling_rope = rope_class(config=config).to(torch_device)
         linear_cos_short, linear_sin_short = linear_scaling_rope(x, position_ids_short)
         linear_cos_long, linear_sin_long = linear_scaling_rope(x, position_ids_long)
@@ -519,7 +549,15 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         # Sanity check Dynamic NTK RoPE scaling
         # Scaling should only be observed after a long input is fed. We can observe that the frequencies increase
         # with scaling_factor (or that `inv_freq` decreases)
-        _set_config_rope_params(config, {"rope_type": "dynamic", "factor": scaling_factor, "rope_theta": 10_000.0})
+        _set_config_rope_params(
+            config,
+            {
+                "rope_type": "dynamic",
+                "factor": scaling_factor,
+                "rope_theta": 10_000.0,
+                "partial_rotary_factor": partial_rotary_factor,
+            },
+        )
         ntk_scaling_rope = rope_class(config=config).to(torch_device)
         ntk_cos_short, ntk_sin_short = ntk_scaling_rope(x, position_ids_short)
         ntk_cos_long, ntk_sin_long = ntk_scaling_rope(x, position_ids_long)
@@ -533,7 +571,15 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
 
         # Sanity check Yarn RoPE scaling
         # Scaling should be over the entire input
-        _set_config_rope_params(config, {"rope_type": "yarn", "factor": scaling_factor, "rope_theta": 10_000.0})
+        _set_config_rope_params(
+            config,
+            {
+                "rope_type": "yarn",
+                "factor": scaling_factor,
+                "rope_theta": 10_000.0,
+                "partial_rotary_factor": partial_rotary_factor,
+            },
+        )
         yarn_scaling_rope = rope_class(config=config).to(torch_device)
         yarn_cos_short, yarn_sin_short = yarn_scaling_rope(x, position_ids_short)
         yarn_cos_long, yarn_sin_long = yarn_scaling_rope(x, position_ids_long)
@@ -549,7 +595,7 @@ class CausalLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
             torch.testing.assert_close(yarn_sin_long, original_sin_long)
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @pytest.mark.flash_attn_test
     @is_flaky()
     @slow
@@ -610,7 +656,9 @@ def _config_supports_rope_scaling(config: PreTrainedConfig) -> bool:
 
 def _set_config_rope_params(config: PreTrainedConfig, rope_params: dict) -> bool:
     """Recursively sets RoPE parameters on configs and subconfigs, by duplicating the same RoPE values."""
-    config.rope_parameters = rope_params
+    config.rope_parameters = getattr(config, "rope_parameters", {}) or {}
+    config.rope_parameters.update(rope_params)
+
     if any(name in config.__class__.__name__.lower() for name in ["gemma3", "modernbert"]):
         config.rope_parameters = {layer_type: config.rope_parameters.copy() for layer_type in config.layer_types}
 

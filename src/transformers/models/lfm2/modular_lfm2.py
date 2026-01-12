@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from collections.abc import Callable
-from typing import Any, Optional, Union
+from typing import Any
 
 import torch
 import torch.nn.functional as F
@@ -24,7 +24,7 @@ from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
-from ...utils.import_utils import is_causal_conv1d_available
+from ...utils.import_utils import is_causal_conv1d_available, is_torchdynamo_compiling
 from ..bamba.modeling_bamba import apply_mask_to_padding_states
 from ..gemma2.modeling_gemma2 import Gemma2RotaryEmbedding
 from ..llama.modeling_llama import (
@@ -100,7 +100,7 @@ class Lfm2HybridConvCache:
         config: Lfm2Config,
         max_batch_size: int,
         dtype: torch.dtype = torch.float32,
-        device: Union[torch.device, str, None] = None,
+        device: torch.device | str | None = None,
     ):
         self.key_cache = []
         self.value_cache = []
@@ -130,7 +130,7 @@ class Lfm2HybridConvCache:
         key_states: torch.Tensor,
         value_states: torch.Tensor,
         layer_idx: int,
-        cache_kwargs: Optional[dict[str, Any]] = None,
+        cache_kwargs: dict[str, Any] | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Updates the cache with the new `key_states` and `value_states` for the layer `layer_idx`.
@@ -171,7 +171,7 @@ class Lfm2HybridConvCache:
                 device = self.conv_cache[layer_idx].device
                 self.conv_cache[layer_idx] = self.conv_cache[layer_idx].index_select(0, beam_idx.to(device))
 
-    def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
+    def get_seq_length(self, layer_idx: int | None = 0) -> int:
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
         # take any layer that contains cache and not empty tensor
         layer_idx = self.first_attention_layer if self.layer_types[layer_idx] != "full_attention" else layer_idx
@@ -230,12 +230,11 @@ class Lfm2Attention(LlamaAttention):
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: Optional[torch.Tensor],
-        past_key_values: Optional[Lfm2HybridConvCache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
+        attention_mask: torch.Tensor | None,
+        past_key_values: Lfm2HybridConvCache | None = None,
+        cache_position: torch.LongTensor | None = None,
         **kwargs,
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -295,9 +294,9 @@ class Lfm2ShortConv(nn.Module):
     def cuda_kernels_forward(
         self,
         x: torch.Tensor,
-        past_key_values: Optional[Lfm2HybridConvCache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
+        past_key_values: Lfm2HybridConvCache | None = None,
+        cache_position: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
     ):
         x = apply_mask_to_padding_states(x, attention_mask)
         BCx = self.in_proj(x).transpose(-1, -2)
@@ -329,9 +328,9 @@ class Lfm2ShortConv(nn.Module):
     def slow_forward(
         self,
         x: torch.Tensor,
-        past_key_values: Optional[Lfm2HybridConvCache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
+        past_key_values: Lfm2HybridConvCache | None = None,
+        cache_position: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
     ):
         seqlen = x.shape[1]
 
@@ -367,11 +366,11 @@ class Lfm2ShortConv(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        past_key_values: Optional[Lfm2HybridConvCache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
+        past_key_values: Lfm2HybridConvCache | None = None,
+        cache_position: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
     ):
-        if is_fast_path_available and "cuda" in hidden_states.device.type and not torch._dynamo.is_compiling():
+        if is_fast_path_available and "cuda" in hidden_states.device.type and not is_torchdynamo_compiling():
             return self.cuda_kernels_forward(hidden_states, past_key_values, cache_position, attention_mask)
         return self.slow_forward(hidden_states, past_key_values, cache_position, attention_mask)
 
@@ -392,11 +391,11 @@ class Lfm2DecoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Lfm2HybridConvCache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Lfm2HybridConvCache | None = None,
+        cache_position: torch.LongTensor | None = None,
         **kwargs,
     ) -> torch.Tensor:
         residual = hidden_states
@@ -435,13 +434,13 @@ class Lfm2Model(LlamaModel):
 
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Lfm2HybridConvCache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Lfm2HybridConvCache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,8 +14,6 @@
 """Testing suite for the PyTorch DeepSeekV2 model."""
 
 import unittest
-
-import pytest
 
 from transformers import BitsAndBytesConfig, Cache, is_torch_available
 from transformers.testing_utils import require_read_token, require_torch, require_torch_accelerator, slow, torch_device
@@ -135,10 +132,16 @@ class DeepseekV2ModelTest(CausalLMModelTest, unittest.TestCase):
         with self.assertRaises(AssertionError):
             torch.testing.assert_close(yarn_freqs_cis_long, original_freqs_cis_long)
 
-    @unittest.skip("Dynamic control flow in MoE")
-    @pytest.mark.torch_compile_test
-    def test_torch_compile_for_training(self):
-        pass
+    def test_tp_plan_matches_params(self):
+        """Need to overwrite as the plan contains keys that are valid but depend on some configs flags and cannot
+        be valid all at the same time"""
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        # The key is valid but not always used based on the flag
+        if config.q_lora_rank is not None:
+            config.base_model_tp_plan.pop("layers.*.self_attn.q_proj")
+        super().test_tp_plan_matches_params()
+        # Put them back in class attribute
+        config.base_model_tp_plan.update({"layers.*.self_attn.q_proj": "colwise"})
 
 
 @slow

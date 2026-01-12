@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 University of Sydney and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,11 +14,11 @@
 """PyTorch VitPose model."""
 
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
@@ -52,10 +51,10 @@ class VitPoseEstimatorOutput(ModelOutput):
         (also called feature maps) of the model at the output of each stage.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    heatmaps: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    loss: torch.FloatTensor | None = None
+    heatmaps: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 @auto_docstring
@@ -63,22 +62,19 @@ class VitPosePreTrainedModel(PreTrainedModel):
     config: VitPoseConfig
     base_model_prefix = "vit"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = True
 
-    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]):
+    @torch.no_grad()
+    def _init_weights(self, module: nn.Linear | nn.Conv2d | nn.LayerNorm):
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
-            # `trunc_normal_cpu` not implemented in `half` issues
-            module.weight.data = nn.init.trunc_normal_(
-                module.weight.data.to(torch.float32), mean=0.0, std=self.config.initializer_range
-            ).to(module.weight.dtype)
+            init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.data.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
 
 
 def flip_back(output_flipped, flip_pairs, target_type="gaussian-heatmap"):
@@ -136,7 +132,7 @@ class VitPoseSimpleDecoder(nn.Module):
             config.backbone_config.hidden_size, config.num_labels, kernel_size=3, stride=1, padding=1
         )
 
-    def forward(self, hidden_state: torch.Tensor, flip_pairs: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward(self, hidden_state: torch.Tensor, flip_pairs: torch.Tensor | None = None) -> torch.Tensor:
         # Transform input: ReLU + upsample
         hidden_state = self.activation(hidden_state)
         hidden_state = self.upsampling(hidden_state)
@@ -169,7 +165,7 @@ class VitPoseClassicDecoder(nn.Module):
 
         self.conv = nn.Conv2d(256, config.num_labels, kernel_size=1, stride=1, padding=0)
 
-    def forward(self, hidden_state: torch.Tensor, flip_pairs: Optional[torch.Tensor] = None):
+    def forward(self, hidden_state: torch.Tensor, flip_pairs: torch.Tensor | None = None):
         hidden_state = self.deconv1(hidden_state)
         hidden_state = self.batchnorm1(hidden_state)
         hidden_state = self.relu1(hidden_state)
@@ -215,9 +211,9 @@ class VitPoseForPoseEstimation(VitPosePreTrainedModel):
     def forward(
         self,
         pixel_values: torch.Tensor,
-        dataset_index: Optional[torch.Tensor] = None,
-        flip_pairs: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
+        dataset_index: torch.Tensor | None = None,
+        flip_pairs: torch.Tensor | None = None,
+        labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> VitPoseEstimatorOutput:
         r"""

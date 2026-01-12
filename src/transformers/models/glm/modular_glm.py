@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The GLM & ZhipuAI team and HuggingFace Inc. team. All rights reserved.
 #
 #
@@ -42,9 +41,9 @@ class GlmMLP(Phi3MLP):
 class GlmRotaryEmbedding(LlamaRotaryEmbedding):
     @staticmethod
     def compute_default_rope_parameters(
-        config: Optional[GlmConfig] = None,
+        config: GlmConfig | None = None,
         device: Optional["torch.device"] = None,
-        seq_len: Optional[int] = None,
+        seq_len: int | None = None,
     ) -> tuple["torch.Tensor", float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
@@ -60,7 +59,7 @@ class GlmRotaryEmbedding(LlamaRotaryEmbedding):
             post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
         base = config.rope_parameters["rope_theta"]
-        partial_rotary_factor = getattr(config, "partial_rotary_factor", 1.0)
+        partial_rotary_factor = config.rope_parameters.get("partial_rotary_factor", 1.0)
         head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
         dim = int(head_dim * partial_rotary_factor)
 
@@ -123,7 +122,7 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
 
 
 class GlmAttention(LlamaAttention):
-    def __init__(self, config: GlmConfig, layer_idx: Optional[int] = None):
+    def __init__(self, config: GlmConfig, layer_idx: int | None = None):
         super().__init__(config, layer_idx)
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
 

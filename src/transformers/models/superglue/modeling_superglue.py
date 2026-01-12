@@ -15,7 +15,6 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -23,6 +22,7 @@ from torch import nn
 from transformers import PreTrainedModel
 from transformers.models.superglue.configuration_superglue import SuperGlueConfig
 
+from ... import initialization as init
 from ...utils import ModelOutput, auto_docstring, logging
 from ..auto import AutoModelForKeypointDetection
 
@@ -148,14 +148,14 @@ def arange_like(x, dim: int) -> torch.Tensor:
 @dataclass
 @auto_docstring(
     custom_intro="""
-    Base class for outputs of keypoint matching models. Due to the nature of keypoint detection and matching, the number
+    Base class for outputs of SuperGlue keypoint matching models. Due to the nature of keypoint detection and matching, the number
     of keypoints is not fixed and can vary from image to image, which makes batching non-trivial. In the batch of
     images, the maximum number of matches is set as the dimension of the matches and matching scores. The mask tensor is
     used to indicate which values in the keypoints, matches and matching_scores tensors are keypoint matching
     information.
     """
 )
-class KeypointMatchingOutput(ModelOutput):
+class SuperGlueKeypointMatchingOutput(ModelOutput):
     r"""
     loss (`torch.FloatTensor` of shape `(1,)`, *optional*):
         Loss computed during training.
@@ -176,13 +176,13 @@ class KeypointMatchingOutput(ModelOutput):
         num_keypoints)`, returned when `output_attentions=True` is passed or when `config.output_attentions=True`)
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    matches: Optional[torch.FloatTensor] = None
-    matching_scores: Optional[torch.FloatTensor] = None
-    keypoints: Optional[torch.FloatTensor] = None
-    mask: Optional[torch.IntTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
+    loss: torch.FloatTensor | None = None
+    matches: torch.FloatTensor | None = None
+    matching_scores: torch.FloatTensor | None = None
+    keypoints: torch.FloatTensor | None = None
+    mask: torch.IntTensor | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
 
 
 class SuperGlueMultiLayerPerceptron(nn.Module):
@@ -220,8 +220,8 @@ class SuperGlueKeypointEncoder(nn.Module):
         self,
         keypoints: torch.Tensor,
         scores: torch.Tensor,
-        output_hidden_states: Optional[bool] = False,
-    ) -> tuple[torch.Tensor, Optional[tuple[torch.Tensor]]]:
+        output_hidden_states: bool | None = False,
+    ) -> tuple[torch.Tensor, tuple[torch.Tensor] | None]:
         scores = scores.unsqueeze(2)
         hidden_state = torch.cat([keypoints, scores], dim=2)
         all_hidden_states = () if output_hidden_states else None
@@ -256,10 +256,10 @@ class SuperGlueSelfAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = False,
+        attention_mask: torch.FloatTensor | None = None,
+        encoder_hidden_states: torch.FloatTensor | None = None,
+        encoder_attention_mask: torch.FloatTensor | None = None,
+        output_attentions: bool | None = False,
     ) -> tuple[torch.Tensor]:
         # If this is instantiated as a cross-attention module, the keys
         # and values come from an encoder; the attention mask needs to be
@@ -337,10 +337,10 @@ class SuperGlueAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
+        attention_mask: torch.FloatTensor | None = None,
+        encoder_hidden_states: torch.FloatTensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
+        output_attentions: bool | None = False,
     ) -> tuple[torch.Tensor]:
         self_outputs = self.self(
             hidden_states,
@@ -370,12 +370,12 @@ class SuperGlueAttentionalPropagation(nn.Module):
     def forward(
         self,
         descriptors: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
         output_attentions: bool = False,
         output_hidden_states: bool = False,
-    ) -> tuple[torch.Tensor, Optional[tuple[torch.Tensor]], Optional[tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, tuple[torch.Tensor] | None, tuple[torch.Tensor] | None]:
         attention_outputs = self.attention(
             descriptors,
             attention_mask=attention_mask,
@@ -407,10 +407,10 @@ class SuperGlueAttentionalGNN(nn.Module):
     def forward(
         self,
         descriptors: torch.Tensor,
-        mask: Optional[torch.Tensor] = None,
+        mask: torch.Tensor | None = None,
         output_attentions: bool = False,
-        output_hidden_states: Optional[bool] = False,
-    ) -> tuple[torch.Tensor, Optional[tuple], Optional[tuple]]:
+        output_hidden_states: bool | None = False,
+    ) -> tuple[torch.Tensor, tuple | None, tuple | None]:
         all_hidden_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
 
@@ -467,20 +467,14 @@ class SuperGluePreTrainedModel(PreTrainedModel):
     config: SuperGlueConfig
     base_model_prefix = "superglue"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
 
+    @torch.no_grad()
     def _init_weights(self, module: nn.Module) -> None:
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.BatchNorm1d):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-
+        super()._init_weights(module)
         if hasattr(module, "bin_score"):
-            module.bin_score.data.fill_(1.0)
+            init.ones_(module.bin_score)
 
 
 @auto_docstring(
@@ -527,9 +521,9 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
         scores: torch.Tensor,
         height: int,
         width: int,
-        mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        mask: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor, tuple, tuple]:
         """
         Perform keypoint matching between two images.
@@ -671,11 +665,12 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, KeypointMatchingOutput]:
+        labels: torch.LongTensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple | SuperGlueKeypointMatchingOutput:
         r"""
         Examples:
 
@@ -743,7 +738,7 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
                 if v is not None
             )
 
-        return KeypointMatchingOutput(
+        return SuperGlueKeypointMatchingOutput(
             loss=loss,
             matches=matches,
             matching_scores=matching_scores,

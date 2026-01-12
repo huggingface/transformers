@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -36,6 +35,7 @@ from transformers.testing_utils import (
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -221,7 +221,9 @@ class Florence2VisionText2TextModelTester:
 
 
 @require_torch
-class Florence2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class Florence2ForConditionalGenerationModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
     """
     Model tester for `Florence2ForConditionalGeneration`.
     """
@@ -231,6 +233,7 @@ class Florence2ForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
         {
             "image-to-text": Florence2ForConditionalGeneration,
             "image-text-to-text": Florence2ForConditionalGeneration,
+            "any-to-any": Florence2ForConditionalGeneration,
         }
         if is_torch_available()
         else {}

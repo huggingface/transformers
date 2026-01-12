@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The Qwen team, Alibaba Group and the HuggingFace Inc. team. All rights reserved.
 #
 #
@@ -37,7 +36,7 @@ from transformers.testing_utils import (
     cleanup,
     require_flash_attn,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     slow,
     torch_device,
 )
@@ -256,9 +255,9 @@ class Qwen3OmniMoeThinkerForConditionalGenerationTester:
 
 
 @require_torch
-class Qwen2_5OmniThinkerForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class Qwen3OmniMoeThinkerForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     """
-    Model tester for `Qwen2_5OmniThinkerForConditionalGeneration`.
+    Model tester for `Qwen3OmniMoeThinkerForConditionalGeneration`.
     """
 
     all_model_classes = (Qwen3OmniMoeThinkerForConditionalGeneration,) if is_torch_available() else ()
@@ -477,6 +476,10 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gene
     def test_model_is_small(self):
         pass
 
+    @unittest.skip("Qwen3Omni has no base model, model architecture is special")
+    def test_model_base_model_prefix(self):
+        pass
+
     @unittest.skip("FIXME this is important, but in a rush to merge, cannot investigate now")
     def test_get_rope_index_video_with_audio(self):
         image_grid_thw = torch.empty((0, 3), dtype=torch.long)
@@ -617,7 +620,7 @@ class Qwen2_5OmniThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gene
 
 
 @require_torch
-class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
+class Qwen3OmniModelIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.processor = AutoProcessor.from_pretrained(
             "Qwen/Qwen3-Omni-30B-A3B-Instruct", min_pixels=28 * 28, max_pixels=56 * 56
@@ -849,7 +852,7 @@ class Qwen2_5OmniModelIntegrationTest(unittest.TestCase):
 
     @slow
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @pytest.mark.flash_attn_test
     def test_small_model_integration_test_batch_flashatt2(self):
         model = Qwen3OmniMoeForConditionalGeneration.from_pretrained(

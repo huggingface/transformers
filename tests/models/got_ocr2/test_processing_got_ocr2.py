@@ -12,19 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import shutil
-import tempfile
 import unittest
 
-from transformers import AutoProcessor, GotOcr2Processor, PreTrainedTokenizerFast
+from transformers import GotOcr2Processor
 from transformers.testing_utils import require_vision
-from transformers.utils import is_vision_available
 
 from ...test_processing_common import ProcessorTesterMixin
-
-
-if is_vision_available():
-    from transformers import GotOcr2ImageProcessor
 
 
 @require_vision
@@ -32,25 +25,14 @@ class GotOcr2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = GotOcr2Processor
 
     @classmethod
-    def setUpClass(cls):
-        cls.tmpdirname = tempfile.mkdtemp()
+    def _setup_tokenizer(cls):
+        tokenizer_class = cls._get_component_class_from_processor("tokenizer")
+        tokenizer = tokenizer_class.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf")
+        return tokenizer
 
-        image_processor = GotOcr2ImageProcessor()
-        tokenizer = PreTrainedTokenizerFast.from_pretrained("stepfun-ai/GOT-OCR-2.0-hf")
-        processor_kwargs = {}
-        processor = GotOcr2Processor(image_processor, tokenizer, **processor_kwargs)
-        processor.save_pretrained(cls.tmpdirname)
-        cls.image_token = processor.img_pad_token
-
-    def get_tokenizer(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
-
-    def get_image_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
-
-    @classmethod
-    def tearDownClass(cls):
-        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
+    @unittest.skip("GotOcr2Processor pop the image processor output 'num_patches'")
+    def test_image_processor_defaults(self):
+        pass
 
     def test_ocr_queries(self):
         processor = self.get_processor()
