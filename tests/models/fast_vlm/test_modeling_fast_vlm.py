@@ -227,6 +227,10 @@ class FastVlmForConditionalGenerationModelTest(ModelTesterMixin, GenerationTeste
     def test_can_be_initialized_on_meta(self):
         pass
 
+    @unittest.skip("Cannot set output_attentions on timm models.")
+    def test_get_image_features_attentions(self):
+        pass
+
 
 @require_torch
 @slow
