@@ -115,7 +115,7 @@ class FlexOlmoConfig(PreTrainedConfig):
         "layers.*.self_attn.q_proj": "colwise_gather_output",  # we need to replicate here due to the added norm on q and k
         "layers.*.self_attn.k_proj": "colwise_gather_output",  # we need to replicate here due to the added norm on q and k
         "layers.*.self_attn.v_proj": "colwise_gather_output",  # we need to replicate here due to the added norm on q and k
-        "layers.*.self_attn.o_proj": "rowwise_split_input",  # we need to replicate here due to the added norm on q and k
+        "layers.*.self_attn.o_proj": "rowwise_split_input",  # input is replicated due to the added norm on q and k
         "layers.*.mlp.experts.gate_up_proj": "rowwise",
         "layers.*.mlp.experts.down_proj": "rowwise",
     }

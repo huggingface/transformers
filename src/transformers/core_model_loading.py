@@ -630,7 +630,12 @@ def set_param_for_module(
         # Remove from missing keys (it's either mismatched, or all good)
         missing_keys.discard(target_name)
         # Skip shape check when tensor parallel sharding is applied (shape is intentionally different)
-        if ref is not None and ref.shape != param_value.shape and hf_quantizer is None and distributed_operation is None:
+        if (
+            ref is not None
+            and ref.shape != param_value.shape
+            and hf_quantizer is None
+            and distributed_operation is None
+        ):
             mismatch_keys.add((target_name, param_value.shape, ref.shape))
         else:
             # super important otherwise _init_weight will re-init the param

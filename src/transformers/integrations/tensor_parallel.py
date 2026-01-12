@@ -115,8 +115,6 @@ def initialize_tensor_parallelism(
     return device_map, device_mesh, tp_size
 
 
-
-
 def replace_layer_number_by_wildcard(name: str) -> str:
     """
     Replace the numbers in the `name` by wildcards, only if they are in-between dots (`.`) or if they are between
@@ -144,6 +142,7 @@ def _get_parameter_tp_plan(parameter_name: str, tp_plan: dict[str, str], is_weig
         return tp_plan[module_name]
     return None
 
+
 # =============================================================================
 # Tensor Sharding Utilities
 # =============================================================================
@@ -163,6 +162,7 @@ if is_torch_available():
         "I64": torch.int64,
         "F8_E4M3": torch.float8_e4m3fn,
     }
+
 
 def _blocks_to_block_sizes(total_size: int, blocks: int | list[int]) -> list[int]:
     """
@@ -427,13 +427,16 @@ def get_tensor_shard(param, empty_param, device_mesh, rank, dim, tensor_idx: int
     dimensions[dim] = 0
     return torch.empty(tuple(dimensions), dtype=torch.int64)  # empty allocates memory....
 
+
 def _split_along_last_dim(x, world_size):
     """Split tensor along last dimension into world_size chunks."""
     return torch.chunk(x, world_size, dim=-1)
 
+
 # =============================================================================
 # Distributed Communication
 # =============================================================================
+
 
 class _AllReduceBackward(torch.autograd.Function):
     """Identity forward, all-reduce backward. Used before colwise layers (f in Megatron)."""
@@ -465,6 +468,7 @@ class _AllReduceForward(torch.autograd.Function):
     @staticmethod
     def backward(ctx, grad_output):
         return grad_output, None
+
 
 class _AllGather(torch.autograd.Function):
     """All-gather forward, split backward. Gathers sharded outputs."""
@@ -708,6 +712,7 @@ class ColwiseParallel(TensorParallelLayer):
             self._prepare_input_fn,
             self._prepare_output_fn,
         )
+
 
 class RowwiseParallel(TensorParallelLayer):
     """
