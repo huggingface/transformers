@@ -110,7 +110,7 @@ class Cohere2VisionModel(AyaVisionModel):
             image_features (List[`torch.Tensor`]): List of image feature tensor, each contains all the visual feature of all patches
             and are of shape `(num_patches, image_length, embed_dim)`).
         """
-        image_outputs = self.vision_tower(pixel_values, output_hidden_states=True)
+        image_outputs = self.vision_tower(pixel_values, **kwargs)
         selected_image_feature = image_outputs.last_hidden_state
         image_outputs.pooler_output = self.multi_modal_projector(selected_image_feature)
 

@@ -686,6 +686,25 @@ class Blip2TextModelTester:
             is_encoder_decoder=True,
         )
 
+    def prepare_config_and_inputs_for_common(self):
+        config_and_inputs = self.prepare_config_and_inputs()
+        (
+            config,
+            input_ids,
+            decoder_input_ids,
+            attention_mask,
+            decoder_attention_mask,
+            labels,
+        ) = config_and_inputs
+        inputs_dict = {
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "decoder_input_ids": decoder_input_ids,
+            "decoder_attention_mask": decoder_attention_mask,
+            "labels": labels,
+        }
+        return config, inputs_dict
+
 
 # this model tester uses an encoder-decoder language model (T5)
 class Blip2ModelTester:

@@ -171,7 +171,9 @@ class FuyuModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
     test_cpu_offload = False
     test_disk_offload = False
-    test_get_image_features = False
+    test_get_image_features_output = False
+    test_get_image_features_hidden_states = False
+    test_get_image_features_attentions = False
 
     def setUp(self):
         self.model_tester = FuyuModelTester(self)
