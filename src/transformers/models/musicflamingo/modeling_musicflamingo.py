@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_musicflamingo.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2026 NVIDIA CORPORATION and the HuggingFace Inc. team. All rights
 # reserved.
 #
@@ -23,7 +22,6 @@
 import math
 from collections.abc import Callable
 from math import pi
-from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -105,8 +103,8 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
-    scaling: Optional[float] = None,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
     dropout: float = 0.0,
     **kwargs,
 ):
@@ -137,8 +135,8 @@ class MusicFlamingoAttention(nn.Module):
         is_decoder: bool = False,
         bias: bool = True,
         is_causal: bool = False,
-        layer_idx: Optional[int] = None,
-        config: Optional[MusicFlamingoConfig] = None,
+        layer_idx: int | None = None,
+        config: MusicFlamingoConfig | None = None,
     ):
         super().__init__()
         self.embed_dim = embed_dim
@@ -172,15 +170,15 @@ class MusicFlamingoAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        key_value_states: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Cache] = None,
-        attention_mask: Optional[torch.Tensor] = None,
+        key_value_states: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        attention_mask: torch.Tensor | None = None,
         output_attentions: bool = False,
-        cache_position: Optional[torch.Tensor] = None,
+        cache_position: torch.Tensor | None = None,
         # TODO: we need a refactor so that the different attention modules can get their specific kwargs
         # ATM, we have mixed things encoder, decoder, and encoder-decoder attn
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         """Input shape: Batch x Time x Channel"""
 
         # if key_value_states are provided this layer is used as a cross-attention layer
@@ -367,8 +365,8 @@ class MusicFlamingoEncoder(MusicFlamingoPreTrainedModel):
     def forward(
         self,
         input_features: torch.Tensor,
-        input_features_mask: Optional[torch.Tensor] = None,
-        audio_times: Optional[torch.Tensor] = None,
+        input_features_mask: torch.Tensor | None = None,
+        audio_times: torch.Tensor | None = None,
         **kwargs,
     ):
         r"""
@@ -416,15 +414,11 @@ class MusicFlamingoEncoder(MusicFlamingoPreTrainedModel):
         hidden_states = self.layer_norm(hidden_states)
 
         if audio_times is not None:
-            # Ensure audio_times is on correct device once
-            # We use pos_emb device because RotaryEmbedding.forward requires inputs on same device as parameters
-            device = self.pos_emb.freqs.device
-            dtype = hidden_states.dtype
-            audio_times = audio_times.to(device=device, dtype=dtype)
-
-            # Compute rotary embeddings directly from absolute times
-            # pos_emb(t) computes frequencies for t
-            freqs = self.pos_emb(audio_times)
+            times = audio_times.to(hidden_states.device)
+            freqs = self.pos_emb.get_axial_freqs(times.shape[0], hidden_states.shape[-2]).to(self.conv1.weight.device)
+            angle = (-times * 2 * pi).to(self.conv1.weight.device)
+            angle_expanded = angle.unsqueeze(2).expand(times.shape[0], hidden_states.shape[-2], freqs.shape[-1])
+            freqs = freqs * angle_expanded
 
             hidden_states = apply_rotary_emb(freqs, hidden_states)
 
@@ -505,7 +499,7 @@ class MusicFlamingoForConditionalGeneration(MusicFlamingoPreTrainedModel, Genera
         self,
         input_features: torch.FloatTensor,
         input_features_mask: torch.Tensor,
-        audio_times: Optional[torch.Tensor] = None,
+        audio_times: torch.Tensor | None = None,
     ) -> torch.FloatTensor:
         """
         This method is used to get the audio embeddings from input features (a log mel spectrogram), meaning inferring the audio encoder and the multi-modal projector.
@@ -540,18 +534,18 @@ class MusicFlamingoForConditionalGeneration(MusicFlamingoPreTrainedModel, Genera
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        input_features: Optional[torch.FloatTensor] = None,
-        input_features_mask: Optional[torch.Tensor] = None,
-        audio_times: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
+        input_ids: torch.LongTensor | None = None,
+        input_features: torch.FloatTensor | None = None,
+        input_features_mask: torch.Tensor | None = None,
+        audio_times: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         r"""

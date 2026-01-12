@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2026 NVIDIA CORPORATION and the HuggingFace Inc. team. All rights
 # reserved.
 #
@@ -15,7 +14,6 @@
 # limitations under the License.
 
 from math import pi
-from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -100,8 +98,8 @@ class MusicFlamingoEncoder(AudioFlamingo3Encoder):
     def forward(
         self,
         input_features: torch.Tensor,
-        input_features_mask: Optional[torch.Tensor] = None,
-        audio_times: Optional[torch.Tensor] = None,
+        input_features_mask: torch.Tensor | None = None,
+        audio_times: torch.Tensor | None = None,
         **kwargs,
     ):
         r"""
@@ -149,15 +147,11 @@ class MusicFlamingoEncoder(AudioFlamingo3Encoder):
         hidden_states = self.layer_norm(hidden_states)
 
         if audio_times is not None:
-            # Ensure audio_times is on correct device once
-            # We use pos_emb device because RotaryEmbedding.forward requires inputs on same device as parameters
-            device = self.pos_emb.freqs.device
-            dtype = hidden_states.dtype
-            audio_times = audio_times.to(device=device, dtype=dtype)
-
-            # Compute rotary embeddings directly from absolute times
-            # pos_emb(t) computes frequencies for t
-            freqs = self.pos_emb(audio_times)
+            times = audio_times.to(hidden_states.device)
+            freqs = self.pos_emb.get_axial_freqs(times.shape[0], hidden_states.shape[-2]).to(self.conv1.weight.device)
+            angle = (-times * 2 * pi).to(self.conv1.weight.device)
+            angle_expanded = angle.unsqueeze(2).expand(times.shape[0], hidden_states.shape[-2], freqs.shape[-1])
+            freqs = freqs * angle_expanded
 
             hidden_states = apply_rotary_emb(freqs, hidden_states)
 
@@ -178,7 +172,7 @@ class MusicFlamingoForConditionalGeneration(AudioFlamingo3ForConditionalGenerati
         self,
         input_features: torch.FloatTensor,
         input_features_mask: torch.Tensor,
-        audio_times: Optional[torch.Tensor] = None,
+        audio_times: torch.Tensor | None = None,
     ) -> torch.FloatTensor:
         # Encode audio with dtype conversion and audio_times
         input_features = input_features.to(dtype=self.audio_tower.conv1.weight.dtype)
@@ -197,18 +191,18 @@ class MusicFlamingoForConditionalGeneration(AudioFlamingo3ForConditionalGenerati
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        input_features: Optional[torch.FloatTensor] = None,
-        input_features_mask: Optional[torch.Tensor] = None,
-        audio_times: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
+        input_ids: torch.LongTensor | None = None,
+        input_features: torch.FloatTensor | None = None,
+        input_features_mask: torch.Tensor | None = None,
+        audio_times: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         r"""
