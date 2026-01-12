@@ -15,8 +15,6 @@
 Audio/Text processor class for SeamlessM4T
 """
 
-from typing import Optional, Union
-
 from ...audio_utils import AudioInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
@@ -37,8 +35,8 @@ class SeamlessM4TTextKwargs(TextKwargs):
         specify the desired output language for translation tasks. The model will generate text in this language.
     """
 
-    src_lang: Optional[str]
-    tgt_lang: Optional[str]
+    src_lang: str | None
+    tgt_lang: str | None
 
 
 class SeamlessM4TProcessorKwargs(ProcessingKwargs, total=False):
@@ -56,8 +54,8 @@ class SeamlessM4TProcessor(ProcessorMixin):
     @auto_docstring
     def __call__(
         self,
-        text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
-        audio: Optional[AudioInput] = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        audio: AudioInput | None = None,
         **kwargs: Unpack[ProcessingKwargs],
     ):
         r"""

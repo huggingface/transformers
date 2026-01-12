@@ -15,8 +15,6 @@
 Processor class for EVOLLA.
 """
 
-from typing import Optional, Union
-
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import (
     ProcessorMixin,
@@ -89,10 +87,10 @@ class EvollaProcessor(ProcessorMixin):
     @auto_docstring
     def __call__(
         self,
-        proteins: Optional[Union[list[dict], dict]] = None,
-        messages_list: Optional[Union[list[list[dict]], list[dict]]] = None,
-        protein_max_length: Optional[int] = None,
-        text_max_length: Optional[int] = None,
+        proteins: list[dict] | dict | None = None,
+        messages_list: list[list[dict]] | list[dict] | None = None,
+        protein_max_length: int | None = None,
+        text_max_length: int | None = None,
         **kwargs,
     ):
         r"""

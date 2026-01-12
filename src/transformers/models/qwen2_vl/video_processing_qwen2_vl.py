@@ -19,7 +19,7 @@
 """video processor class for Qwen2-VL."""
 
 import math
-from typing import Optional, Union
+from typing import Optional
 
 import torch
 from torchvision.transforms.v2 import functional as F
@@ -110,11 +110,11 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
     def sample_frames(
         self,
         metadata: VideoMetadata,
-        temporal_patch_size: Optional[int] = None,
-        min_frames: Optional[int] = None,
-        max_frames: Optional[int] = None,
-        num_frames: Optional[int] = None,
-        fps: Optional[Union[int, float]] = None,
+        temporal_patch_size: int | None = None,
+        min_frames: int | None = None,
+        max_frames: int | None = None,
+        num_frames: int | None = None,
+        fps: int | float | None = None,
         **kwargs,
     ):
         """
@@ -186,12 +186,12 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        patch_size: Optional[int] = None,
-        temporal_patch_size: Optional[int] = None,
-        merge_size: Optional[int] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        patch_size: int | None = None,
+        temporal_patch_size: int | None = None,
+        merge_size: int | None = None,
+        return_tensors: str | TensorType | None = None,
         **kwargs,
     ):
         # Group videos by size for batched resizing
