@@ -38,26 +38,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "DiaConfig": ["delay_pattern"],
     "BambaConfig": ["attn_layer_indices"],
     "Dots1Config": ["max_window_layers"],
-    "JambaConfig": [
-        "max_position_embeddings",
-        "attn_layer_offset",
-        "attn_layer_period",
-        "expert_layer_offset",
-        "expert_layer_period",
-    ],
-    "PaddleOCRTextConfig": ["tie_word_embeddings"],
-    "Qwen2Config": ["use_sliding_window", "max_window_layers"],
-    "Qwen2MoeConfig": ["use_sliding_window", "max_window_layers"],
-    "Qwen2VLTextConfig": ["use_sliding_window", "max_window_layers"],
-    "Qwen2_5_VLTextConfig": ["use_sliding_window", "max_window_layers"],
-    "Qwen2_5OmniTextConfig": ["use_sliding_window", "max_window_layers"],
-    "Qwen2_5OmniTalkerConfig": ["use_sliding_window", "max_window_layers"],
-    "Qwen3Config": ["max_window_layers", "use_sliding_window"],  # now use `layer_types` instead
-    "Qwen3MoeConfig": ["max_window_layers", "use_sliding_window"],
-    # `cache_implementation` should be in the default generation config, but we don't yet support per-model
-    # generation configs (TODO joao)
-    "Gemma2Config": ["tie_word_embeddings", "cache_implementation"],
-    "Cohere2Config": ["cache_implementation"],
+    "JambaConfig": ["attn_layer_offset", "attn_layer_period", "expert_layer_offset", "expert_layer_period"],
     "JetMoeConfig": ["output_router_logits"],
     "Phi3Config": ["embd_pdrop"],
     "EncodecConfig": ["overlap"],

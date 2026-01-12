@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from collections.abc import Callable
-from typing import Any, Optional, Union
+from typing import Any
 
 import numpy as np
 import torch
@@ -124,24 +124,24 @@ class LightOnOcrTextConfig(Qwen3Config):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 151936,
-        hidden_size: Optional[int] = 4096,
-        intermediate_size: Optional[int] = 22016,
-        num_hidden_layers: Optional[int] = 32,
-        num_attention_heads: Optional[int] = 32,
-        num_key_value_heads: Optional[int] = 32,
-        head_dim: Optional[int] = 128,
-        hidden_act: Optional[str] = "silu",
-        max_position_embeddings: Optional[int] = 32768,
-        initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[float] = 1e-6,
-        use_cache: Optional[bool] = True,
-        tie_word_embeddings: Optional[bool] = False,
-        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        attention_bias: Optional[bool] = False,
-        sliding_window: Optional[int] = None,
-        layer_types: Optional[list[str]] = None,
-        attention_dropout: Optional[float] = 0.0,
+        vocab_size: int | None = 151936,
+        hidden_size: int | None = 4096,
+        intermediate_size: int | None = 22016,
+        num_hidden_layers: int | None = 32,
+        num_attention_heads: int | None = 32,
+        num_key_value_heads: int | None = 32,
+        head_dim: int | None = 128,
+        hidden_act: str | None = "silu",
+        max_position_embeddings: int | None = 32768,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: float | None = 1e-6,
+        use_cache: bool | None = True,
+        tie_word_embeddings: bool | None = False,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        attention_bias: bool | None = False,
+        sliding_window: int | None = None,
+        layer_types: list[str] | None = None,
+        attention_dropout: float | None = 0.0,
         **kwargs,
     ):
         super().__init__(
@@ -214,8 +214,8 @@ class LightOnOcrConfig(PretrainedConfig):
         self,
         spatial_merge_size: int = 2,
         image_token_id: int = 151655,
-        vision_config: Optional[dict[str, Any]] = None,
-        text_config: Optional[dict[str, Any]] = None,
+        vision_config: dict[str, Any] | None = None,
+        text_config: dict[str, Any] | None = None,
         **kwargs,
     ):
         self.spatial_merge_size = spatial_merge_size
@@ -309,8 +309,8 @@ class LightOnOcrProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        images: Optional[ImageInput] = None,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         **kwargs: Unpack[LightOnOcrProcessorKwargs],
     ) -> BatchFeature:
         if images is None and text is None:
@@ -425,7 +425,7 @@ class LightOnOcrPatchMerger(nn.Module):
 
         self.merging_layer = nn.Linear(self.hidden_size * self.spatial_merge_size**2, self.hidden_size, bias=False)
 
-    def forward(self, image_features: torch.Tensor, image_sizes: Union[torch.Tensor, list]) -> torch.Tensor:
+    def forward(self, image_features: torch.Tensor, image_sizes: torch.Tensor | list) -> torch.Tensor:
         image_sizes_in_patches = [
             (image_size[0] // self.patch_size, image_size[1] // self.patch_size) for image_size in image_sizes
         ]
@@ -472,7 +472,7 @@ class LightOnOcrVisionProjector(nn.Module):
         )
         self.linear_2 = nn.Linear(config.text_config.hidden_size, config.text_config.hidden_size, bias=False)
 
-    def forward(self, image_features: torch.Tensor, image_sizes: Union[torch.Tensor, list]):
+    def forward(self, image_features: torch.Tensor, image_sizes: torch.Tensor | list):
         image_features = self.norm(image_features)
         image_features = self.patch_merger(image_features, image_sizes)
         hidden_states = self.linear_1(image_features)
@@ -504,11 +504,11 @@ class LightOnOcrAttention(PixtralAttention):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-        output_attentions: Optional[bool] = False,
+        attention_mask: torch.Tensor | None = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        output_attentions: bool | None = False,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
 
         batch_size, patches, _ = hidden_states.size()
@@ -598,7 +598,7 @@ class LightOnOcrModel(LightOnOcrPreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
-    def get_image_features(self, pixel_values: torch.Tensor, image_sizes: Union[torch.Tensor, list]):
+    def get_image_features(self, pixel_values: torch.Tensor, image_sizes: torch.Tensor | list):
         """
         Obtains image features from the vision encoder and projection.
 
@@ -648,14 +648,14 @@ class LightOnOcrModel(LightOnOcrPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        pixel_values: Optional[torch.Tensor] = None,
-        image_sizes: Optional[Union[torch.Tensor, list]] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[torch.Tensor] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
+        input_ids: torch.Tensor | None = None,
+        pixel_values: torch.Tensor | None = None,
+        image_sizes: torch.Tensor | list | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: torch.Tensor | None = None,
+        cache_position: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
         if inputs_embeds is None:
@@ -697,15 +697,15 @@ class LightOnOcrForConditionalGeneration(LightOnOcrPreTrainedModel, GenerationMi
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        pixel_values: Optional[torch.Tensor] = None,
-        image_sizes: Optional[Union[torch.Tensor, list]] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[torch.Tensor] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        labels: Optional[torch.Tensor] = None,
+        input_ids: torch.Tensor | None = None,
+        pixel_values: torch.Tensor | None = None,
+        image_sizes: torch.Tensor | list | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: torch.Tensor | None = None,
+        cache_position: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         outputs: BaseModelOutputWithPast = self.model(

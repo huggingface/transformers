@@ -17,8 +17,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 import math
-from typing import Optional, Union
 
 import numpy as np
 
@@ -62,9 +62,9 @@ def _num_image_tokens(image_size: tuple[int, int], patch_size: tuple[int, int]) 
 
 def get_resize_output_image_size(
     input_image: ImageInput,
-    size: Union[int, tuple[int, int], list[int], tuple[int]],
-    patch_size: Union[int, tuple[int, int], list[int], tuple[int]],
-    input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    size: int | tuple[int, int] | list[int] | tuple[int],
+    patch_size: int | tuple[int, int] | list[int] | tuple[int],
+    input_data_format: str | ChannelDimension | None = None,
 ) -> tuple:
     """
     Find the target (height, width) dimension of the output image after resizing given the input image and the desired
@@ -129,8 +129,8 @@ class LightOnOcrProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        images: Optional[ImageInput] = None,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         **kwargs: Unpack[LightOnOcrProcessorKwargs],
     ) -> BatchFeature:
         if images is None and text is None:

@@ -17,7 +17,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Any, Optional
+from typing import Any
 
 from ...configuration_utils import PreTrainedConfig, PretrainedConfig, layer_type_validation
 from ...modeling_rope_utils import RopeParameters
@@ -77,17 +77,17 @@ class LightOnOcrVisionConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        hidden_size: Optional[int] = 1024,
-        intermediate_size: Optional[int] = 4096,
-        num_hidden_layers: Optional[int] = 24,
-        num_attention_heads: Optional[int] = 16,
-        num_channels: Optional[int] = 3,
-        image_size: Optional[int] = 1024,
-        patch_size: Optional[int] = 16,
-        hidden_act: Optional[str] = "gelu",
-        attention_dropout: Optional[float] = 0.0,
-        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        initializer_range: Optional[float] = 0.02,
+        hidden_size: int | None = 1024,
+        intermediate_size: int | None = 4096,
+        num_hidden_layers: int | None = 24,
+        num_attention_heads: int | None = 16,
+        num_channels: int | None = 3,
+        image_size: int | None = 1024,
+        patch_size: int | None = 16,
+        hidden_act: str | None = "gelu",
+        attention_dropout: float | None = 0.0,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        initializer_range: float | None = 0.02,
         **kwargs,
     ):
         self.hidden_size = hidden_size
@@ -193,24 +193,24 @@ class LightOnOcrTextConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 151936,
-        hidden_size: Optional[int] = 4096,
-        intermediate_size: Optional[int] = 22016,
-        num_hidden_layers: Optional[int] = 32,
-        num_attention_heads: Optional[int] = 32,
-        num_key_value_heads: Optional[int] = 32,
-        head_dim: Optional[int] = 128,
-        hidden_act: Optional[str] = "silu",
-        max_position_embeddings: Optional[int] = 32768,
-        initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[float] = 1e-6,
-        use_cache: Optional[bool] = True,
-        tie_word_embeddings: Optional[bool] = False,
-        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        attention_bias: Optional[bool] = False,
-        sliding_window: Optional[int] = None,
-        layer_types: Optional[list[str]] = None,
-        attention_dropout: Optional[float] = 0.0,
+        vocab_size: int | None = 151936,
+        hidden_size: int | None = 4096,
+        intermediate_size: int | None = 22016,
+        num_hidden_layers: int | None = 32,
+        num_attention_heads: int | None = 32,
+        num_key_value_heads: int | None = 32,
+        head_dim: int | None = 128,
+        hidden_act: str | None = "silu",
+        max_position_embeddings: int | None = 32768,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: float | None = 1e-6,
+        use_cache: bool | None = True,
+        tie_word_embeddings: bool | None = False,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        attention_bias: bool | None = False,
+        sliding_window: int | None = None,
+        layer_types: list[str] | None = None,
+        attention_dropout: float | None = 0.0,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -294,8 +294,8 @@ class LightOnOcrConfig(PretrainedConfig):
         self,
         spatial_merge_size: int = 2,
         image_token_id: int = 151655,
-        vision_config: Optional[dict[str, Any]] = None,
-        text_config: Optional[dict[str, Any]] = None,
+        vision_config: dict[str, Any] | None = None,
+        text_config: dict[str, Any] | None = None,
         **kwargs,
     ):
         self.spatial_merge_size = spatial_merge_size
