@@ -4595,6 +4595,21 @@ class ModelTesterMixin:
             }
         return config, inputs_dict
 
+    def _audio_features_prepare_config_and_inputs(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        if hasattr(self.model_tester, "audio_model_tester"):
+            _, inputs_dict = self.model_tester.audio_model_tester.prepare_config_and_inputs_for_common()
+        else:
+            inputs_dict = {
+                key: value
+                for key, value in inputs_dict.items()
+                if "audio" in key
+                or "input_values" in key
+                or "input_features" in key
+                or key in ["padding_mask", "is_longer", "feature_attention_mask"]
+            }
+        return config, inputs_dict
+
     def _text_features_get_expected_num_attentions(self, model_tester=None):
         if model_tester is None:
             model_tester = self.model_tester
@@ -4630,6 +4645,28 @@ class ModelTesterMixin:
 
     def _image_features_get_expected_num_hidden_states(self, model_tester=None):
         return self._image_features_get_expected_num_attentions(model_tester) + 1
+
+    def _audio_features_get_expected_num_attentions(self, model_tester=None):
+        if model_tester is None:
+            model_tester = self.model_tester
+
+        if hasattr(model_tester, "audio_model_tester"):
+            return self._audio_features_get_expected_num_attentions(model_tester.audio_model_tester)
+        elif (
+            hasattr(model_tester, "audio_config")
+            and isinstance(model_tester.audio_config, dict)
+            and "num_hidden_layers" in model_tester.audio_config
+        ):
+            return model_tester.audio_config["num_hidden_layers"]
+
+        if hasattr(model_tester, "expected_num_hidden_layers"):
+            return model_tester.expected_num_hidden_layers - 1
+        elif hasattr(model_tester, "num_hidden_layers"):
+            return model_tester.num_hidden_layers
+        raise ValueError("Cannot determine the expected number of layers for audio features")
+
+    def _audio_features_get_expected_num_hidden_states(self, model_tester=None):
+        return self._audio_features_get_expected_num_attentions(model_tester) + 1
 
     def test_get_text_features_output(self):
         for model_class in self.all_model_classes:
@@ -4830,6 +4867,106 @@ class ModelTesterMixin:
                 continue
 
             config, inputs_dict = self._image_features_prepare_config_and_inputs()
+
+            # force eager attention to support output attentions
+            config._attn_implementation = "eager"
+            inputs_dict["output_hidden_states"] = False
+            inputs_dict["output_attentions"] = True
+            check_attentions_output(inputs_dict, config, model_class)
+
+            # check that output_attentions also work using config
+            del inputs_dict["output_attentions"]
+            config.output_attentions = True
+            for k in config.sub_configs:
+                if getattr(config, k) is not None:
+                    getattr(config, k).output_attentions = True
+
+            check_attentions_output(inputs_dict, config, model_class)
+
+    def test_get_audio_features_output(self):
+        for model_class in self.all_model_classes:
+            if not hasattr(model_class, "get_audio_features"):
+                continue
+
+            config, inputs_dict = self._audio_features_prepare_config_and_inputs()
+
+            model = model_class(config).eval()
+            model = model.to(torch_device)
+
+            torch.manual_seed(0)
+            with torch.no_grad():
+                outputs = model.get_audio_features(**inputs_dict)
+            self.assertTrue(isinstance(outputs, ModelOutput), "get_audio_features() must return a BaseModelOutput")
+            self.assertTrue(
+                hasattr(outputs, "last_hidden_state"),
+                "get_audio_features() must return a BaseModelOutput with last_hidden_state",
+            )
+            self.assertTrue(
+                hasattr(outputs, "pooler_output"),
+                "get_audio_features() must return a BaseModelOutput with pooler_output",
+            )
+            self.assertTrue(
+                hasattr(outputs, "hidden_states"),
+                "get_audio_features() must return a BaseModelOutput with hidden_states",
+            )
+            if self.has_attentions:
+                self.assertTrue(
+                    hasattr(outputs, "attentions"),
+                    "get_audio_features() must return a BaseModelOutput with attentions",
+                )
+
+    def test_get_audio_features_hidden_states(self):
+        def check_hidden_states_output(inputs_dict, config, model_class):
+            model = model_class(copy.deepcopy(config))
+            model.to(torch_device)
+            model.eval()
+
+            with torch.no_grad():
+                outputs = model.get_audio_features(**inputs_dict)
+            hidden_states = outputs.hidden_states
+            expected_num_hidden_states = self._audio_features_get_expected_num_hidden_states()
+            self.assertIsNotNone(hidden_states, "hidden_states should not be None")
+            self.assertEqual(len(hidden_states), expected_num_hidden_states, "Number of hidden states layers mismatch")
+
+        for model_class in self.all_model_classes:
+            if not hasattr(model_class, "get_audio_features"):
+                continue
+
+            config, inputs_dict = self._audio_features_prepare_config_and_inputs()
+
+            inputs_dict["output_hidden_states"] = True
+            check_hidden_states_output(inputs_dict, config, model_class)
+
+            # check that output_hidden_states also work using config
+            del inputs_dict["output_hidden_states"]
+            config.output_hidden_states = True
+            for k in config.sub_configs:
+                if getattr(config, k) is not None:
+                    getattr(config, k).output_hidden_states = True
+
+            check_hidden_states_output(inputs_dict, config, model_class)
+
+    def test_get_audio_features_attentions(self):
+        def check_attentions_output(inputs_dict, config, model_class):
+            model = model_class(copy.deepcopy(config))
+            model.to(torch_device)
+            model.eval()
+
+            with torch.no_grad():
+                outputs = model.get_audio_features(**inputs_dict)
+            attentions = outputs.attentions
+            expected_num_attentions = self._audio_features_get_expected_num_attentions()
+            self.assertIsNotNone(attentions, "attentions should not be None")
+            self.assertEqual(len(attentions), expected_num_attentions, "Number of attention layers mismatch")
+
+        if not self.has_attentions:
+            return
+
+        for model_class in self.all_model_classes:
+            if not hasattr(model_class, "get_audio_features"):
+                continue
+
+            config, inputs_dict = self._audio_features_prepare_config_and_inputs()
 
             # force eager attention to support output attentions
             config._attn_implementation = "eager"

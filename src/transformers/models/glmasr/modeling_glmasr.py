@@ -292,6 +292,10 @@ class GlmAsrEncoder(GlmAsrPreTrainedModel):
     main_input_name = "input_features"
     input_modalities = "audio"
     _no_split_modules = ["GlmAsrEncoderLayer"]
+    _can_record_outputs = {
+        "hidden_states": GlmAsrEncoderLayer,
+        "attentions": GlmAsrAttention,
+    }
 
     def __init__(self, config: GlmAsrEncoderConfig):
         super().__init__(config)

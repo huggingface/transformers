@@ -35,6 +35,7 @@ from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPa
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.generic import check_model_inputs
 from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_audioflamingo3 import AudioFlamingo3Config, AudioFlamingo3EncoderConfig
 
@@ -279,6 +280,11 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
     input_modalities = "audio"
     _no_split_modules = ["AudioFlamingo3EncoderLayer"]
 
+    _can_record_outputs = {
+        "hidden_states": AudioFlamingo3EncoderLayer,
+        "attentions": AudioFlamingo3Attention,
+    }
+
     def __init__(self, config: AudioFlamingo3EncoderConfig):
         super().__init__(config)
         self.dropout = config.dropout
@@ -316,7 +322,7 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
     def set_input_embeddings(self, value: nn.Module):
         self.conv1 = value
 
-    @can_return_tuple
+    @check_model_inputs(tie_last_hidden_states=False)
     def forward(
         self,
         input_features: torch.Tensor,

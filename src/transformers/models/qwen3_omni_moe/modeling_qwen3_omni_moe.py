@@ -681,6 +681,10 @@ class Qwen3OmniMoeAudioEncoder(Qwen3OmniMoePreTrainedModel):
     input_modalities = "audio"
     _no_split_modules = ["Qwen3OmniMoeAudioEncoderLayer"]
     _supports_sdpa = True
+    _can_record_outputs = {
+        "hidden_states": Qwen3OmniMoeAudioEncoderLayer,
+        "attentions": Qwen3OmniMoeAudioAttention,
+    }
 
     def __init__(self, config: Qwen3OmniMoeAudioEncoderConfig):
         super().__init__(config)

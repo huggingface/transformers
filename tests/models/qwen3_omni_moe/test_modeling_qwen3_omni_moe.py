@@ -628,6 +628,16 @@ class Qwen3OmniMoeThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gen
             model_tester = self.model_tester
         return model_tester.vision_config["depth"] + 1
 
+    def _audio_features_get_expected_num_attentions(self, model_tester=None):
+        if model_tester is None:
+            model_tester = self.model_tester
+        return model_tester.audio_config["encoder_layers"]
+
+    def _audio_features_get_expected_num_hidden_states(self, model_tester=None):
+        if model_tester is None:
+            model_tester = self.model_tester
+        return model_tester.audio_config["encoder_layers"] + 1
+
 
 @require_torch
 class Qwen3OmniModelIntegrationTest(unittest.TestCase):

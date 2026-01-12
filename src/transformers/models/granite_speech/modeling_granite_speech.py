@@ -26,6 +26,7 @@ from ...modeling_outputs import BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_peft_available, logging
+from ...utils.generic import check_model_inputs
 from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_granite_speech import GraniteSpeechConfig, GraniteSpeechEncoderConfig
 
@@ -249,36 +250,6 @@ class GraniteSpeechConformerBlock(nn.Module):
         return hidden_states
 
 
-class GraniteSpeechCTCEncoder(nn.Module):
-    def __init__(self, config: GraniteSpeechEncoderConfig):
-        super().__init__()
-        self.config = config
-
-        # Precompute clamped relative positional encoding distances
-        seq = torch.arange(config.context_size)
-        relpos_dist = seq.view(-1, 1) - seq.view(1, -1)
-        attention_dists = torch.clamp(relpos_dist, -config.context_size, config.context_size) + config.max_pos_emb
-        self.register_buffer("attention_dists", attention_dists, persistent=False)
-        self.input_linear = nn.Linear(config.input_dim, config.hidden_dim, bias=True)
-        self.layers = nn.ModuleList([GraniteSpeechConformerBlock(config) for _ in range(config.num_layers)])
-
-        self.out = nn.Linear(config.hidden_dim, config.output_dim, bias=True)
-        self.out_mid = nn.Linear(config.output_dim, config.hidden_dim, bias=True)
-        self.num_layers = config.num_layers
-
-    def forward(self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutputWithPooling:
-        hidden_states = self.input_linear(hidden_states)
-        for idx, layer in enumerate(self.layers, start=1):
-            hidden_states = layer(hidden_states, attention_dists=self.attention_dists)
-
-            if idx == self.num_layers // 2:
-                hidden_states_mid = hidden_states.clone()
-                hidden_states_mid = self.out(hidden_states_mid)
-                hidden_states += self.out_mid(nn.Softmax(dim=-1)(hidden_states_mid))
-
-        return BaseModelOutputWithPooling(last_hidden_state=hidden_states)
-
-
 @auto_docstring
 class GraniteSpeechPreTrainedModel(PreTrainedModel):
     config: GraniteSpeechConfig
@@ -299,6 +270,43 @@ class GraniteSpeechPreTrainedModel(PreTrainedModel):
             relpos_dist = seq.view(-1, 1) - seq.view(1, -1)
             attention_dists = torch.clamp(relpos_dist, -context_size, context_size) + module.config.max_pos_emb
             init.copy_(module.attention_dists, attention_dists)
+
+
+class GraniteSpeechCTCEncoder(GraniteSpeechPreTrainedModel):
+    config: GraniteSpeechEncoderConfig
+    input_modalities = "audio"
+    _can_record_outputs = {
+        "hidden_states": GraniteSpeechConformerBlock,
+        "attentions": GraniteSpeechConformerAttention,
+    }
+
+    def __init__(self, config: GraniteSpeechEncoderConfig):
+        super().__init__(config)
+
+        # Precompute clamped relative positional encoding distances
+        seq = torch.arange(config.context_size)
+        relpos_dist = seq.view(-1, 1) - seq.view(1, -1)
+        attention_dists = torch.clamp(relpos_dist, -config.context_size, config.context_size) + config.max_pos_emb
+        self.register_buffer("attention_dists", attention_dists, persistent=False)
+        self.input_linear = nn.Linear(config.input_dim, config.hidden_dim, bias=True)
+        self.layers = nn.ModuleList([GraniteSpeechConformerBlock(config) for _ in range(config.num_layers)])
+
+        self.out = nn.Linear(config.hidden_dim, config.output_dim, bias=True)
+        self.out_mid = nn.Linear(config.output_dim, config.hidden_dim, bias=True)
+        self.num_layers = config.num_layers
+
+    @check_model_inputs(tie_last_hidden_states=False)
+    def forward(self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutputWithPooling:
+        hidden_states = self.input_linear(hidden_states)
+        for idx, layer in enumerate(self.layers, start=1):
+            hidden_states = layer(hidden_states, attention_dists=self.attention_dists)
+
+            if idx == self.num_layers // 2:
+                hidden_states_mid = hidden_states.clone()
+                hidden_states_mid = self.out(hidden_states_mid)
+                hidden_states += self.out_mid(nn.Softmax(dim=-1)(hidden_states_mid))
+
+        return BaseModelOutputWithPooling(last_hidden_state=hidden_states)
 
 
 @auto_docstring(

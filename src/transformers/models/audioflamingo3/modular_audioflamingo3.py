@@ -22,16 +22,21 @@ from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils.generic import check_model_inputs
 from ..qwen2_audio.modeling_qwen2_audio import (
     Qwen2AudioEncoder,
     Qwen2AudioPreTrainedModel,
 )
 from ..voxtral.modeling_voxtral import VoxtralForConditionalGeneration, VoxtralMultiModalProjector
-from ..whisper.modeling_whisper import WhisperEncoderLayer
+from ..whisper.modeling_whisper import WhisperAttention, WhisperEncoderLayer
 from .configuration_audioflamingo3 import AudioFlamingo3Config
 
 
 logger = logging.get_logger(__name__)
+
+
+class AudioFlamingo3Attention(WhisperAttention):
+    pass
 
 
 class AudioFlamingo3EncoderLayer(WhisperEncoderLayer):
@@ -52,7 +57,12 @@ class AudioFlamingo3Encoder(Qwen2AudioEncoder):
     AudioFlamingo3 encoder: Whisper encoder, average pool (time/2), then LayerNorm.
     """
 
-    @can_return_tuple
+    _can_record_outputs = {
+        "hidden_states": AudioFlamingo3EncoderLayer,
+        "attentions": AudioFlamingo3Attention,
+    }
+
+    @check_model_inputs(tie_last_hidden_states=False)
     def forward(
         self,
         input_features: torch.Tensor,

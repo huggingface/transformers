@@ -1659,6 +1659,10 @@ class Qwen2_5OmniAudioEncoder(Qwen2_5OmniPreTrainedModel):
     input_modalities = "audio"
     _no_split_modules = ["Qwen2_5OmniAudioEncoderLayer"]
     _supports_sdpa = True
+    _can_record_outputs = {
+        "hidden_states": Qwen2_5OmniAudioEncoderLayer,
+        "attentions": Qwen2_5OmniAudioAttention,
+    }
 
     def __init__(self, config: Qwen2_5OmniAudioEncoderConfig):
         super().__init__(config)
