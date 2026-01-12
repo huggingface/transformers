@@ -12,22 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ..utils import is_accelerate_available, is_torch_available, is_torch_xpu_available, logging
+from ..utils import is_torch_available, is_torch_xpu_available, logging
 
 
 if is_torch_available():
     import torch
     from torch import nn
-from typing import Optional
-
-from ..core_model_loading import ConversionOps
-
-
-if is_accelerate_available():
-    from accelerate import init_empty_weights
-
 from contextlib import contextmanager
 
+from ..core_model_loading import ConversionOps
 from ..quantizers.quantizers_utils import get_module_from_name, should_convert_module
 
 
@@ -82,8 +75,8 @@ class Mxfp4Quantize(ConversionOps):
     def convert(
         self,
         input_dict: dict[str, torch.Tensor],
-        model: Optional[torch.nn.Module] = None,
-        missing_keys: Optional[list[str]] = None,
+        model: torch.nn.Module | None = None,
+        missing_keys: list[str] | None = None,
         full_layer_name: str | None = None,
         **kwargs,
     ) -> dict[str, torch.Tensor]:
@@ -130,7 +123,7 @@ class Mxfp4Dequantize(ConversionOps):
     def convert(
         self,
         input_dict: dict[str, torch.Tensor],
-        model: Optional[torch.nn.Module] = None,
+        model: torch.nn.Module | None = None,
         full_layer_name: str | None = None,
         missing_keys=None,
         **kwargs,
@@ -159,9 +152,9 @@ class Mxfp4Deserialize(ConversionOps):
     def convert(
         self,
         input_dict: dict[str, torch.Tensor],
-        model: Optional[torch.nn.Module] = None,
+        model: torch.nn.Module | None = None,
         full_layer_name: str | None = None,
-        missing_keys: Optional[list[str]] = None,
+        missing_keys: list[str] | None = None,
         **kwargs,
     ) -> dict[str, torch.Tensor]:
         param_data = {}
@@ -610,7 +603,7 @@ def replace_with_mxfp4_linear(model, quantization_config=None, modules_to_not_co
     if quantization_config.dequantize:
         return model
 
-    from kernels import get_kernel
+    from .hub_kernels import get_kernel
 
     global triton_kernels_hub
     triton_kernels_hub = get_kernel("kernels-community/triton_kernels")
@@ -620,7 +613,7 @@ def replace_with_mxfp4_linear(model, quantization_config=None, modules_to_not_co
         if not should_convert_module(module_name, modules_to_not_convert):
             continue
         if module.__class__.__name__ == "GptOssExperts" and not quantization_config.dequantize:
-            with init_empty_weights():
+            with torch.device("meta"):
                 model.set_submodule(module_name, Mxfp4GptOssExperts(model.config))
                 has_been_replaced = True
         if module.__class__.__name__ == "GptOssMLP" and not quantization_config.dequantize:

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,7 +22,7 @@ python utils/sort_auto_mappings.py
 
 to auto-fix all the auto mappings (used in `make style`).
 
-To only check if the mappings are properly sorted (as used in `make quality`), do:
+To only check if the mappings are properly sorted (as used in `make check-repo`), do:
 
 ```bash
 python utils/sort_auto_mappings.py --check_only

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Deepseek AI and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,11 +15,9 @@ import argparse
 import gc
 import json
 import os
-from typing import Optional
 
 import regex as re
 import torch
-from accelerate import init_empty_weights
 from huggingface_hub import snapshot_download
 from huggingface_hub.errors import HFValidationError
 from safetensors.torch import load_file
@@ -208,8 +205,8 @@ def load_model_state_dict(input_path: str) -> dict:
 
 def convert_model(
     hf_repo_id: str,
-    output_dir: Optional[str] = None,
-    output_hub_path: Optional[str] = None,
+    output_dir: str | None = None,
+    output_hub_path: str | None = None,
 ):
     if output_dir:
         os.makedirs(output_dir, exist_ok=True)
@@ -285,7 +282,7 @@ def convert_model(
     # ------------------------------------------------------------
 
     print("Creating empty model...")
-    with init_empty_weights():
+    with torch.device("meta"):
         model = DeepseekVLForConditionalGeneration(config)
 
     # Load and convert state dict

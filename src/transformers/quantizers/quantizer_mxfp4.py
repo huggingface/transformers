@@ -53,7 +53,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
         """Lazy import and initialize kernels only when needed"""
         if self.triton_kernels_hub is None:
             try:
-                from kernels import get_kernel
+                from ..integrations.hub_kernels import get_kernel
 
                 self.triton_kernels_hub = get_kernel("kernels-community/triton_kernels")
             except ImportError:
@@ -135,18 +135,6 @@ class Mxfp4HfQuantizer(HfQuantizer):
                     "Please use a quantized checkpoint or remove the CPU or disk device from the device_map."
                 )
 
-    def update_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
-        if dtype is None:
-            dtype = torch.bfloat16
-            logger.info(
-                "Overriding dtype=%s with `dtype=torch.bfloat16` due to "
-                "requirements of `fbgemm-gpu` to enable model loading in fp4. "
-                "Pass your own dtype to specify the dtype of the remaining non-linear layers or pass"
-                " dtype=torch.bfloat16 to remove this warning.",
-                dtype,
-            )
-        return dtype
-
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
         from ..integrations import Mxfp4GptOssExperts
 
@@ -167,7 +155,6 @@ class Mxfp4HfQuantizer(HfQuantizer):
     def _process_model_before_weight_loading(
         self,
         model: "PreTrainedModel",
-        keep_in_fp32_modules: list[str] | None = None,
         use_kernels: bool = False,
         **kwargs,
     ):
@@ -182,7 +169,7 @@ class Mxfp4HfQuantizer(HfQuantizer):
             self.quantization_config.dequantize = True
 
         self.modules_to_not_convert = self.get_modules_to_not_convert(
-            model, self.quantization_config.modules_to_not_convert, keep_in_fp32_modules
+            model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
 
         model = replace_with_mxfp4_linear(
@@ -214,19 +201,6 @@ class Mxfp4HfQuantizer(HfQuantizer):
                     }
                 )
         return config
-
-    def get_param_name(self, param_name: str) -> str:
-        if self.quantization_config.dequantize:
-            if "_blocks" in param_name:
-                return param_name.replace("_blocks", "")
-            elif "_scales" in param_name:
-                return param_name.replace("_scales", "")
-        elif not self.pre_quantized:
-            if param_name.endswith("gate_up_proj"):
-                return param_name.replace("gate_up_proj", "gate_up_proj_blocks")
-            if param_name.endswith("down_proj"):
-                return param_name.replace("down_proj", "down_proj_blocks")
-        return param_name
 
     def get_state_dict_and_metadata(self, model):
         from ..integrations import Mxfp4GptOssExperts

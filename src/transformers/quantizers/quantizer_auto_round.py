@@ -19,12 +19,9 @@ from .base import HfQuantizer
 if TYPE_CHECKING:
     from ..modeling_utils import PreTrainedModel
 
-from ..utils import is_auto_round_available, is_torch_available, logging
+from ..utils import is_auto_round_available, logging
 from ..utils.quantization_config import QuantizationConfigMixin
 
-
-if is_torch_available():
-    import torch
 
 logger = logging.get_logger(__name__)
 
@@ -46,12 +43,6 @@ class AutoRoundQuantizer(HfQuantizer):
             raise ImportError(
                 "Loading an AutoRound quantized model requires auto-round library (`pip install 'auto-round>=0.5'`)"
             )
-
-    def update_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
-        if dtype is None:
-            dtype = torch.bfloat16
-            logger.info("Loading the model in `torch.bfloat16`. To overwrite it, set `dtype` manually.")
-        return dtype
 
     def _process_model_before_weight_loading(self, model: "PreTrainedModel", **kwargs):
         if model.__class__.main_input_name != "input_ids":
