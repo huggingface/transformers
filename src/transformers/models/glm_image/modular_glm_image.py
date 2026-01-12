@@ -1288,7 +1288,21 @@ class GlmImageImageProcessorFast(Qwen2VLImageProcessorFast):
     pass
 
 
+
+class GlmImageImagesKwargs(ImagesKwargs, total=False):
+    """
+    target_h (`int`):
+        Height of the target image to be generated.
+    target_w (`int`):
+        Width of the target image to be generated.
+    """
+
+    target_h: int
+    target_w: int
+
 class GlmImageProcessorKwargs(Qwen2VLProcessorKwargs):
+    images_kwargs: GlmImageImagesKwargs
+
     _defaults = {
         "text_kwargs": {
             "padding": False,
@@ -1394,8 +1408,8 @@ class GlmImageProcessor(ProcessorMixin):
             image_grid_thw = self._build_target_image_grid_thw(
                 token_h=token_h,
                 token_w=token_w,
-                prev_h=prev_h,
-                prev_w=prev_w,
+                prev_token_h=prev_h,
+                prev_token_w=prev_w,
                 image_grid_thw=image_grid_thw[i] if not is_text_to_image else None,
             )
             expanded_text.append(sample)
@@ -1439,6 +1453,7 @@ class GlmImageProcessor(ProcessorMixin):
 
         return expanded_prompt, token_h, token_w, prev_token_h, prev_token_w
 
+    @staticmethod
     def _build_target_image_grid_thw(
         token_h: int,
         token_w: int,
