@@ -15,7 +15,6 @@
 
 import copy
 import inspect
-import os
 import random
 import re
 import tempfile
