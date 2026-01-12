@@ -952,7 +952,7 @@ class Emu3VQVAE(PreTrainedModel):
         "Emu3VQVAEVectorQuantizer",
     ]
     _can_record_outputs = {
-        "hidden_states": Emu3VQVAETemporalResnetBlock,
+        "hidden_states": [Emu3VQVAEResnetBlock, Emu3VQVAETemporalResnetBlock],
         "attentions": Emu3VQVAEAttentionBlock,
     }
 
