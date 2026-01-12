@@ -1237,7 +1237,7 @@ def check_models_have_kwargs():
         if model_dir.is_dir() and (modeling_file := list(model_dir.glob("modeling_*.py"))):
             modeling_file = modeling_file[0]
 
-            with open(modeling_file, "r") as f:
+            with open(modeling_file, "r", encoding="utf-8") as f:
                 tree = ast.parse(f.read())
 
             # Map all classes in the file to their base classes
