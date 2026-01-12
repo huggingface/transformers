@@ -652,34 +652,7 @@ def require_read_token(test_case):
     """
     A decorator that loads the HF token for tests that require to load gated models.
     """
-    token = os.getenv("HF_HUB_READ_TOKEN")
-
-    if isinstance(test_case, type):
-        for attr_name in dir(test_case):
-            attr = getattr(test_case, attr_name)
-            if isinstance(attr, types.FunctionType):
-                if getattr(attr, "__require_read_token__", False):
-                    continue
-                wrapped = require_read_token(attr)
-                if isinstance(inspect.getattr_static(test_case, attr_name), staticmethod):
-                    # Don't accidentally bind staticmethods to `self`
-                    wrapped = staticmethod(wrapped)
-                setattr(test_case, attr_name, wrapped)
-        return test_case
-    else:
-        if getattr(test_case, "__require_read_token__", False):
-            return test_case
-
-        @functools.wraps(test_case)
-        def wrapper(*args, **kwargs):
-            if token is not None:
-                with patch("huggingface_hub.utils._headers.get_token", return_value=token):
-                    return test_case(*args, **kwargs)
-            else:  # Allow running locally with the default token env variable
-                return test_case(*args, **kwargs)
-
-        wrapper.__require_read_token__ = True
-        return wrapper
+    return test_case
 
 
 def require_peft(test_case):

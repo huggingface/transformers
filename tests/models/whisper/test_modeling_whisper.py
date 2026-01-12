@@ -1493,15 +1493,11 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-large")
         model.to(torch_device)
 
-        token = os.getenv("HF_HUB_READ_TOKEN", None)
-        if token is None:
-            token = True
         ds = load_dataset(
             "hf-internal-testing/fixtures_common_voice",
             "ja",
             split="test",
             streaming=True,
-            token=token,
         )
         ds = ds.cast_column("audio", datasets.Audio(sampling_rate=16_000))
 
