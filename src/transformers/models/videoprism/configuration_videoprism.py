@@ -237,8 +237,8 @@ class VideoPrismConfig(PreTrainedConfig):
     >>> # Initializing a VideoPrismConfig with default values
     >>> configuration = VideoPrismConfig()
 
-    >>> # Initializing a VideoPrismModel with the configuration
-    >>> model = VideoPrismModel(configuration)
+    >>> # Initializing a VideoPrismClipModel with the configuration
+    >>> model = VideoPrismClipModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config

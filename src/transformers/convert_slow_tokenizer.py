@@ -2066,8 +2066,6 @@ def convert_slow_tokenizer(transformer_tokenizer, from_tiktoken=False) -> Tokeni
     else:
         try:
             logger.info("Converting from Tiktoken")
-            print(transformer_tokenizer.vocab_file)
-            print(transformer_tokenizer.additional_special_tokens)
             return TikTokenConverter(
                 vocab_file=transformer_tokenizer.vocab_file,
                 extra_special_tokens=transformer_tokenizer.extra_special_tokens,

@@ -109,9 +109,7 @@ class VideoPrismVisionModelTester:
         pixel_values = floats_tensor(
             [self.batch_size, self.num_frames, self.num_channels, self.image_size, self.image_size]
         )
-
         config = self.get_config()
-
         return config, pixel_values
 
     def get_config(self):
@@ -143,7 +141,6 @@ class VideoPrismVisionModelTester:
         model.eval()
         with torch.no_grad():
             result = model(pixel_values)
-
         image_size = (self.image_size, self.image_size)
         patch_size = (self.tubelet_size[1], self.tubelet_size[2])
         num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
@@ -203,13 +200,11 @@ class VideoPrismVisionModelTest(unittest.TestCase):
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
         for model_class in self.all_model_classes:
             model = model_class(config)
             signature = inspect.signature(model.forward)
             # signature.parameters is an OrderedDict => so arg_names order is deterministic
             arg_names = [*signature.parameters.keys()]
-
             self.assertEqual(arg_names[0], "pixel_values_videos")
 
     def test_model(self):
@@ -483,7 +478,7 @@ class VideoPrismClipModelTest(unittest.TestCase):
 
 def prepare_video(frames=True):
     """
-    Input video tensor proprocessed using the original repo's processor
+    Returns input video array proprocessed using the original repo's processor if frames=True, else returns the original video file.
     """
 
     api = HfApi()
@@ -504,9 +499,7 @@ def prepare_texts():
 
     text_queries = TEXT_QUERY_CSV.split(",")
     text_queries = [PROMPT_TEMPLATE.format(t) for t in text_queries]
-
     tokenizer = VideoPrismTokenizer.from_pretrained("MHRDYN7/videoprism-lvt-base-f16r288")
-
     return tokenizer, text_queries
 
 

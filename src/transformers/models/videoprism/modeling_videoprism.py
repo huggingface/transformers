@@ -592,11 +592,26 @@ class VideoPrismVisionModel(VideoPrismPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithSpatialAndTemporalStates:
         r"""
-        Args:
-            pixel_values_videos (`torch.FloatTensor`):
-                Pixel values of the video frames of shape (batch_size, num_frames, num_channels, height, width).
-            interpolate_pos_encoding (`bool`, *optional*, defaults to `False`):
-                Whether to interpolate positional encodings to match input size.
+        pixel_values_videos (`torch.FloatTensor`):
+            Pixel values of the video frames of shape (batch_size, num_frames, num_channels, height, width).
+        interpolate_pos_encoding (`bool`, *optional*, defaults to `False`):
+            Whether to interpolate positional encodings to match input size.
+
+        Example:
+
+        ```python
+        >>> from transformers import VideoPrismVideoProcessor, VideoPrismVisionModel
+        >>> import torch
+
+        >>> processor = VideoPrismVideoProcessor.from_pretrained("google/videoprism")
+        >>> model = VideoPrismVisionModel.from_pretrained("google/videoprism")
+
+        >>> video = "sample_video.mp4"
+        >>> inputs = processor(videos=video)
+        >>> with torch.no_grad():
+        ...     outputs = model(**inputs)
+        ...     features = outputs.last_hidden_state
+        ```
         """
         if pixel_values_videos is None:
             raise ValueError("You have to specify pixel_values_videos")
@@ -604,16 +619,14 @@ class VideoPrismVisionModel(VideoPrismPreTrainedModel):
         input_shape = pixel_values_videos.shape
         spatial_embeds = self.spatial_embeddings(pixel_values_videos, interpolate_pos_encoding)
         spatial_encoder_outputs: BaseModelOutput = self.spatial_encoder(hidden_states=spatial_embeds, **kwargs)
-        spatial_sequence_output = (
-            spatial_encoder_outputs.last_hidden_state
-        )  # shape is (B * num_frames, num_patches, dim)
+        # shape of spatial_sequence_output is (B * num_frames, num_patches, dim)
+        spatial_sequence_output = spatial_encoder_outputs.last_hidden_state
         features = self.layernorm1(spatial_sequence_output)
 
         temporal_embeds = self.temporal_embeddings(features, input_shape, interpolate_pos_encoding)
         temporal_encoder_outputs: BaseModelOutput = self.temporal_encoder(hidden_states=temporal_embeds, **kwargs)
-        temporal_sequence_output = (
-            temporal_encoder_outputs.last_hidden_state
-        )  # shape is (B * num_patches, num_frames, 768)
+        # shape of temporal_sequence_output is (B * num_patches, num_frames, dim)
+        temporal_sequence_output = temporal_encoder_outputs.last_hidden_state
         features = self.layernorm2(temporal_sequence_output)
         _, num_frames, dim = features.shape
         features = features.view(input_shape[0], -1, num_frames, dim).permute(0, 2, 1, 3).contiguous()
