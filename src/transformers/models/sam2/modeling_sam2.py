@@ -50,20 +50,6 @@ from .configuration_sam2 import (
 
 
 @dataclass
-@auto_docstring
-class BaseModelOutputWithFeatureMaps(BaseModelOutputWithPooling):
-    """
-    feature_maps (`list[torch.Tensor]`):
-        List of feature maps from different layers of the model.
-    feature_maps_position_embeddings (`list[torch.Tensor]`):
-        List of position embeddings corresponding to the feature maps.
-    """
-
-    feature_maps: list[torch.Tensor] | None = None
-    feature_maps_position_embeddings: list[torch.Tensor] | None = None
-
-
-@dataclass
 @auto_docstring(custom_intro="Base class for the vision encoder's outputs.")
 class Sam2VisionEncoderOutput(BaseModelOutputWithPooling):
     r"""

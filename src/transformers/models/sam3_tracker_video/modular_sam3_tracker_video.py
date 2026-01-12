@@ -12,14 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from dataclasses import dataclass
 
 import torch
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import TransformersKwargs, can_return_tuple
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..sam2_video.configuration_sam2_video import Sam2VideoMaskDecoderConfig, Sam2VideoPromptEncoderConfig
 from ..sam2_video.modeling_sam2_video import (
@@ -51,20 +49,6 @@ from ..sam2_video.modeling_sam2_video import (
     Sam2VideoVisionRotaryEmbedding,
 )
 from ..sam2_video.processing_sam2_video import Sam2VideoProcessor
-
-
-@dataclass
-@auto_docstring
-class BaseModelOutputWithFeatureMaps(BaseModelOutputWithPooling):
-    """
-    feature_maps (`list[torch.Tensor]`):
-        List of feature maps from different layers of the model.
-    feature_maps_position_embeddings (`list[torch.Tensor]`):
-        List of position embeddings corresponding to the feature maps.
-    """
-
-    feature_maps: list[torch.Tensor] | None = None
-    feature_maps_position_embeddings: list[torch.Tensor] | None = None
 
 
 class Sam3TrackerVideoPromptEncoderConfig(Sam2VideoPromptEncoderConfig):
