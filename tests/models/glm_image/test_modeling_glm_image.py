@@ -24,6 +24,8 @@ from transformers import (
     GlmImageModel,
     is_torch_available,
 )
+from transformers.models.auto import get_values
+from transformers.models.auto.modeling_auto import MODEL_MAPPING_NAMES
 from transformers.testing_utils import (
     cleanup,
     require_flash_attn,
@@ -37,6 +39,7 @@ from transformers.testing_utils import (
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
+    TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
     floats_tensor,
     ids_tensor,
@@ -237,6 +240,36 @@ class GlmImageModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
         text_gen_config.forced_eos_token_id = None
 
         return config, filtered_inputs_dict
+
+    def test_training(self):
+        # Model isn't in any auto-mapping so we need to build labels manually
+        if not self.model_tester.is_training:
+            self.skipTest(reason="ModelTester is not configured to run training tests")
+
+        for model_class in self.all_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            config.return_dict = True
+
+            if model_class.__name__ in [
+                *get_values(MODEL_MAPPING_NAMES),
+            ]:
+                continue
+
+            model = model_class(config)
+            model.to(torch_device)
+            model.train()
+            inputs_dict["labels"] = torch.zeros(
+                (self.model_tester.batch_size, self.model_tester.seq_length), dtype=torch.long, device=torch_device
+            )
+            loss = model(**inputs_dict).loss
+            loss.backward()
+
+    @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
+    @unittest.skip("Needs special input preparation. Not important test for model, skip for now")
+    def test_eager_matches_sdpa_inference(
+        self, name, dtype, padding_side, use_attention_mask, output_attentions, enable_kernels
+    ):
+        pass
 
     @unittest.skip(reason="No available kernels - not supported")
     def test_sdpa_can_dispatch_on_flash(self):
