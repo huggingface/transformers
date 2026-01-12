@@ -27,7 +27,6 @@ deps = {
     "ipadic": "ipadic>=1.0.0,<2.0",
     "jinja2": "jinja2>=3.1.0",
     "jmespath": "jmespath>=1.0.1",
-    "kenlm": "kenlm",
     "kernels": "kernels>=0.10.2,<0.11",
     "librosa": "librosa",
     "natten": "natten>=0.14.6,<0.15.0",
