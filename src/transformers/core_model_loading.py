@@ -615,27 +615,27 @@ def set_param_for_module(
     module_path, _, param_name = target_name.rpartition(".")
     module_obj = model.get_submodule(module_path) if module_path else model
 
-        ref = getattr(module_obj, param_name)
-        if ref is None:
-            unexpected_keys.add(target_name)
-        else:
-            if not isinstance(param_value, torch.nn.Parameter):
-                if distributed_operation is not None:
-                    device_mesh = distributed_operation.device_mesh
-                    target_device = torch.device(f"{device_mesh.device_type}:{device_mesh.get_local_rank()}")
-                    param_value = param_value.to(target_device)
-                if param_name not in module_obj._buffers:
-                    param_value = torch.nn.Parameter(param_value, requires_grad=param_value.is_floating_point())
+    ref = getattr(module_obj, param_name)
+    if ref is None:
+        unexpected_keys.add(target_name)
+    else:
+        if not isinstance(param_value, torch.nn.Parameter):
+            if distributed_operation is not None:
+                device_mesh = distributed_operation.device_mesh
+                target_device = torch.device(f"{device_mesh.device_type}:{device_mesh.get_local_rank()}")
+                param_value = param_value.to(target_device)
+            if param_name not in module_obj._buffers:
+                param_value = torch.nn.Parameter(param_value, requires_grad=param_value.is_floating_point())
 
-            # Remove from missing keys (it's either mismatched, or all good)
-            missing_keys.discard(target_name)
-            # Skip shape check when tensor parallel sharding is applied (shape is intentionally different)
-            if ref is not None and ref.shape != param_value.shape and hf_quantizer is None and distributed_operation is None:
-                mismatch_keys.add((target_name, param_value.shape, ref.shape))
-            else:
-                # super important otherwise _init_weight will re-init the param
-                param_value._is_hf_initialized = True
-                setattr(module_obj, param_name, param_value)
+        # Remove from missing keys (it's either mismatched, or all good)
+        missing_keys.discard(target_name)
+        # Skip shape check when tensor parallel sharding is applied (shape is intentionally different)
+        if ref is not None and ref.shape != param_value.shape and hf_quantizer is None and distributed_operation is None:
+            mismatch_keys.add((target_name, param_value.shape, ref.shape))
+        else:
+            # super important otherwise _init_weight will re-init the param
+            param_value._is_hf_initialized = True
+            setattr(module_obj, param_name, param_value)
 
 
 def offload_and_maybe_resave_param(

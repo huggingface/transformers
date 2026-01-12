@@ -115,30 +115,6 @@ def initialize_tensor_parallelism(
     return device_map, device_mesh, tp_size
 
 
-def _blocks_to_block_sizes(total_size: int, blocks: int | list[int]) -> list[int]:
-    """
-    Convert block count or proportions to block sizes.
-
-    This function accepts
-
-    - The number of blocks (int), in which case the block size is
-      total_size//blocks; or
-    - A list of block sizes (list[int]).
-
-    In the second case, if sum(blocks) < total_size, the ratios between
-    the block sizes will be preserved. For instance, if blocks is
-    [2, 1, 1] and total_size is 1024, the returned block sizes are
-    [512, 256, 256].
-    """
-    if isinstance(blocks, list):
-        total_blocks = sum(blocks)
-        assert total_size % total_blocks == 0, f"Cannot split {total_size} in proportional blocks: {blocks}"
-        part_size = total_size // total_blocks
-        return [part_size * block for block in blocks]
-    else:
-        assert total_size % blocks == 0, f"Prepacked is not divisible by {blocks}"
-        single_size = total_size // blocks
-        return [single_size] * blocks
 
 
 def replace_layer_number_by_wildcard(name: str) -> str:
@@ -168,6 +144,10 @@ def _get_parameter_tp_plan(parameter_name: str, tp_plan: dict[str, str], is_weig
         return tp_plan[module_name]
     return None
 
+# =============================================================================
+# Tensor Sharding Utilities
+# =============================================================================
+
 
 if is_torch_available():
     str_to_dtype = {
@@ -183,6 +163,31 @@ if is_torch_available():
         "I64": torch.int64,
         "F8_E4M3": torch.float8_e4m3fn,
     }
+
+def _blocks_to_block_sizes(total_size: int, blocks: int | list[int]) -> list[int]:
+    """
+    Convert block count or proportions to block sizes.
+
+    This function accepts
+
+    - The number of blocks (int), in which case the block size is
+      total_size//blocks; or
+    - A list of block sizes (list[int]).
+
+    In the second case, if sum(blocks) < total_size, the ratios between
+    the block sizes will be preserved. For instance, if blocks is
+    [2, 1, 1] and total_size is 1024, the returned block sizes are
+    [512, 256, 256].
+    """
+    if isinstance(blocks, list):
+        total_blocks = sum(blocks)
+        assert total_size % total_blocks == 0, f"Cannot split {total_size} in proportional blocks: {blocks}"
+        part_size = total_size // total_blocks
+        return [part_size * block for block in blocks]
+    else:
+        assert total_size % blocks == 0, f"Prepacked is not divisible by {blocks}"
+        single_size = total_size // blocks
+        return [single_size] * blocks
 
 
 def get_packed_weights(param, empty_param, device_mesh, rank, dim):
@@ -422,11 +427,13 @@ def get_tensor_shard(param, empty_param, device_mesh, rank, dim, tensor_idx: int
     dimensions[dim] = 0
     return torch.empty(tuple(dimensions), dtype=torch.int64)  # empty allocates memory....
 
+def _split_along_last_dim(x, world_size):
+    """Split tensor along last dimension into world_size chunks."""
+    return torch.chunk(x, world_size, dim=-1)
 
 # =============================================================================
 # Distributed Communication
 # =============================================================================
-
 
 class _AllReduceBackward(torch.autograd.Function):
     """Identity forward, all-reduce backward. Used before colwise layers (f in Megatron)."""
@@ -458,7 +465,6 @@ class _AllReduceForward(torch.autograd.Function):
     @staticmethod
     def backward(ctx, grad_output):
         return grad_output, None
-
 
 class _AllGather(torch.autograd.Function):
     """All-gather forward, split backward. Gathers sharded outputs."""
@@ -599,135 +605,6 @@ def reduce_scatter(x, device_mesh):
     return _ReduceScatter.apply(x, device_mesh)
 
 
-# =============================================================================
-# Tensor Sharding Utilities
-# =============================================================================
-
-
-def get_packed_weights(param, empty_param, device_mesh, rank, dim):
-    """
-    When weights are packed (gate_up_proj), we need to make sure each shard gets its correct share.
-    """
-    slice_ = param
-    total_size = empty_param.shape[dim]
-    world_size = device_mesh.size()
-    block_sizes = _blocks_to_block_sizes(total_size=total_size, blocks=2)
-
-    tensors_slices = []
-    block_offset = 0
-    for block_size in block_sizes:
-        shard_block_size = block_size // world_size
-        start = rank * shard_block_size
-        stop = (rank + 1) * shard_block_size
-        tensors_slices += range(block_offset + start, block_offset + stop)
-        block_offset += block_size
-
-    slice_dtype = slice_.get_dtype()
-    casted = False
-    if slice_dtype == "F8_E4M3" or slice_dtype == "F8_E5M2":
-        slice_ = slice_[...].to(torch.float16)
-        casted = True
-
-    if dim == 0:
-        tensor = slice_[tensors_slices, ...]
-    elif dim == 1 or dim == -2:
-        tensor = slice_[:, tensors_slices, ...]
-    elif dim == 2 or dim == -1:
-        tensor = slice_[..., tensors_slices]
-    else:
-        raise ValueError(f"Unsupported dim {dim}, only dim 0, 1 or 2 are supported")
-
-    if casted:
-        return tensor
-    else:
-        return tensor.to(str_to_dtype[slice_dtype])
-
-
-def repack_weights(
-    packed_parameter: torch.Tensor,
-    sharded_dim: int,
-    world_size: int,
-    num_blocks: int = 2,
-) -> torch.Tensor:
-    """
-    Reorders a tensor that was reconstructed from sharded packed weights into its canonical packed format.
-    """
-    if num_blocks != 2:
-        raise ValueError("Num blocks different from 2 is not supported yet.")
-
-    actual_sharded_dim = sharded_dim if sharded_dim >= 0 else sharded_dim + packed_parameter.ndim
-    total_size_on_sharded_dim = packed_parameter.shape[actual_sharded_dim]
-    original_block_size_on_dim = total_size_on_sharded_dim // num_blocks
-    shard_chunk_size = original_block_size_on_dim // world_size
-
-    prefix_shape = packed_parameter.shape[:actual_sharded_dim]
-    suffix_shape = packed_parameter.shape[actual_sharded_dim + 1 :]
-
-    tensor_view = packed_parameter.view(
-        *prefix_shape,
-        world_size,
-        num_blocks,
-        shard_chunk_size,
-        *suffix_shape,
-    )
-
-    axis_ws_abs = len(prefix_shape)
-    axis_npp_abs = len(prefix_shape) + 1
-
-    permute_order = list(range(tensor_view.ndim))
-    permute_order[axis_ws_abs], permute_order[axis_npp_abs] = permute_order[axis_npp_abs], permute_order[axis_ws_abs]
-
-    tensor_permuted = tensor_view.permute(*permute_order)
-    final_ordered_tensor = tensor_permuted.reshape_as(packed_parameter)
-
-    return final_ordered_tensor
-
-
-def get_tensor_shard(param, empty_param, device_mesh, rank, dim, tensor_idx: int | None = None):
-    """
-    Generalized tensor sharding across a multi-dimensional device mesh.
-    """
-    param_dim = empty_param.ndim
-    mesh_shape = device_mesh.shape
-    world_size = reduce(operator.mul, mesh_shape)
-    if dim < 0:
-        dim = param_dim + dim
-    if empty_param.dim() == 3 and dim == 1 and len(param.get_shape()) == 2:
-        dim = 0
-    elif empty_param.dim() == 3 and dim == 2 and len(param.get_shape()) == 2:
-        dim = 0
-
-    shard_size = math.ceil(empty_param.size(dim) / world_size)
-    start = rank * shard_size
-    end = min(start + shard_size, empty_param.size(dim))
-
-    if dim >= param_dim:
-        raise ValueError(f"dim {dim} is out of bounds for tensor of dimension {param_dim}")
-
-    if rank >= world_size:
-        raise ValueError(f"Rank {rank} is out of bounds for mesh size {world_size}")
-
-    dimensions = param.get_shape()
-
-    if empty_param.dim() == 3 and dim == 0 and len(param.get_shape()) == 2:
-        if start <= tensor_idx < end:
-            return param[:]
-        else:
-            return torch.empty([], dtype=torch.int64, device=rank)
-
-    slice_indices = [slice(None)] * len(param.get_shape())
-
-    if start < param.get_shape()[dim]:
-        slice_indices[dim] = slice(start, end)
-        param = param[tuple(slice_indices)]
-        if isinstance(param, list):
-            param = [p[:] for p in param]
-        return param
-
-    dimensions[dim] = 0
-    return torch.empty(tuple(dimensions), dtype=torch.int64)
-
-
 def distribute_module(
     module: nn.Module,
     device_mesh=None,
@@ -831,35 +708,6 @@ class ColwiseParallel(TensorParallelLayer):
             self._prepare_input_fn,
             self._prepare_output_fn,
         )
-
-
-class LocalColwiseParallel(ColwiseParallel):
-    """
-    Colwise parallel with use_dtensor=False for local tensor operations.
-    """
-
-    def __init__(self, **kwargs):
-        super().__init__(use_dtensor=False, **kwargs)
-
-
-class LocalPackedColwiseParallel(PackedColwiseParallel):
-    """
-    Packed colwise parallel with use_dtensor=False for local tensor operations.
-    Used for packed weights like gate_up_proj in MoE models.
-    """
-
-    def __init__(self, **kwargs):
-        super().__init__(use_dtensor=False, **kwargs)
-
-
-class ColwiseParallelReplicate(ColwiseParallel):
-    """
-    Colwise parallel with output layouts replicated.
-    """
-
-    def __init__(self, **kwargs):
-        super().__init__(output_layouts=Replicate(), **kwargs)
-
 
 class RowwiseParallel(TensorParallelLayer):
     """

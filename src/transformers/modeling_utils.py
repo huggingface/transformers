@@ -3230,9 +3230,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 if ignore_key in state_dict:
                     del state_dict[ignore_key]
 
-        # If model was sharded, gather all sharded tensors to reconstruct full tensors for saving
+        # If model was sharded with TP, gather full tensors for saving
         if self._tp_size is not None:
-            # TODO(3outeille): when adding supports for 2D device_mesh. Use device_mesh["tp"].size() instead of self._tp_size
             state_dict = gather_state_dict_for_save(state_dict, self._tp_plan, self._device_mesh, self._tp_size)
 
         # Remove tied weights as safetensors do not handle them
@@ -3282,15 +3281,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 os.remove(full_filename)
 
         # Save the model
-        filename_to_tensors = state_dict_split.filename_to_tensors.items()
-        if module_map:
-            filename_to_tensors = logging.tqdm(filename_to_tensors, desc="Saving checkpoint shards")
-        for shard_file, tensors in filename_to_tensors:
-            shard = {}
-            for tensor in tensors:
-                shard[tensor] = state_dict[tensor].contiguous()
-                # delete reference, see https://github.com/huggingface/transformers/pull/34890
-                del state_dict[tensor]
+        for shard_file, tensor_names in logging.tqdm(
+            state_dict_split.filename_to_tensors.items(), desc="Writing model shards"
+        ):
+            filename = os.path.join(save_directory, shard_file)
+            shard_state_dict = {}
+            for tensor_name in tensor_names:
+                # Get the tensor, and remove it from state_dict to avoid keeping the ref
+                tensor = state_dict.pop(tensor_name)
 
                 # If the param was offloaded, we need to load it back from disk to resave it. It's a strange pattern,
                 # but it would otherwise not be contained in the saved shard if we were to simply move the file
