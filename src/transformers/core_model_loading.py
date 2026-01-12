@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,11 +26,11 @@ from contextlib import contextmanager
 from copy import deepcopy
 from dataclasses import dataclass, field
 from itertools import chain
-from typing import TYPE_CHECKING, Any, Optional, Union
+from typing import TYPE_CHECKING, Any
 
 import torch
 
-from .integrations.accelerate import offload_weight
+from .integrations.accelerate import get_device, offload_weight
 from .integrations.tensor_parallel import ALL_PARALLEL_STYLES
 from .utils import is_env_variable_true, is_torch_greater_or_equal, logging
 
@@ -51,7 +50,7 @@ logger = logging.get_logger(__name__)
 
 
 def build_glob_alternation(
-    globs: list[Union[WeightRenaming, WeightConverter, str]],
+    globs: list[WeightRenaming | WeightConverter | str],
 ) -> tuple[re.Pattern, dict[str, str], dict[str, str]]:
     """
     Build a single alternation regex with one named group per glob.
@@ -146,7 +145,7 @@ class Concatenate(ConversionOps):
     ) -> dict[str, torch.Tensor]:
         target_pattern = self.get_target_pattern(target_patterns)
         all_tensors = []
-        # Very important to keep the relative order of the source patterms here, so we iterate over them not the
+        # Very important to keep the relative order of the source patterns here, so we iterate over them not the
         # input directly as it's unordered!
         for source_pattern in source_patterns:
             tensors = input_dict[source_pattern]
@@ -432,7 +431,7 @@ class Transpose(ConversionOps):
             tensor = input_dict.get(key, [])
             if len(tensor) != 1:
                 raise ValueError(f"Transpose conversion requires exactly one tensor, found {len(tensor)}.")
-            output[target_pattern] = torch.transpose(tensor[0], dim0=self.dim0, dim1=self.dim1)
+            output[target_pattern] = torch.transpose(tensor[0], dim0=self.dim0, dim1=self.dim1).contiguous()
         return output
 
     @property
@@ -442,12 +441,12 @@ class Transpose(ConversionOps):
 
 @dataclass(slots=True)
 class WeightTransform:
-    source_patterns: Union[str, list[str]] = field(init=True)
-    target_patterns: Union[str, list[str]] = field(init=True)
+    source_patterns: str | list[str] = field(init=True)
+    target_patterns: str | list[str] = field(init=True)
     compiled_sources: re.Pattern = field(init=False)
 
-    distributed_operation: Optional[TensorParallelLayer] = None
-    quantization_operation: Optional[ConversionOps] = None
+    distributed_operation: TensorParallelLayer | None = None
+    quantization_operation: ConversionOps | None = None
 
     collected_tensors: dict[str, list[Future]] = field(default_factory=lambda: defaultdict(list), init=False)
     layer_targets: dict[str, set[str]] = field(default_factory=lambda: defaultdict(set), init=False)
@@ -573,8 +572,8 @@ class WeightRenaming(WeightTransform):
         model=None,
         config=None,
         hf_quantizer=None,
-        missing_keys: Optional[MutableSet[str]] = None,
-        conversion_errors: Optional[MutableMapping[str, str]] = None,
+        missing_keys: MutableSet[str] | None = None,
+        conversion_errors: MutableMapping[str, str] | None = None,
     ):
         # Collect the tensors here - we use a new dictionary to avoid keeping them in memory in the internal
         # attribute during the whole process
@@ -630,8 +629,8 @@ class WeightConverter(WeightTransform):
         model=None,
         config=None,
         hf_quantizer=None,
-        missing_keys: Optional[MutableSet[str]] = None,
-        conversion_errors: Optional[MutableMapping[str, str]] = None,
+        missing_keys: MutableSet[str] | None = None,
+        conversion_errors: MutableMapping[str, str] | None = None,
     ):
         # Collect the tensors here - we use a new dictionary to avoid keeping them in memory in the internal
         # attribute during the whole process
@@ -712,13 +711,13 @@ def spawn_materialize(
 
 
 def spawn_tp_materialize(
-    thread_pool: ThreadPoolExecutor | None, tensor: torch.Tensor, sharding_method, tensor_idx, dtype=None
+    thread_pool: ThreadPoolExecutor | None, tensor: torch.Tensor, sharding_method, tensor_idx, device=None, dtype=None
 ) -> Future | Callable:
     """Materialize and shard a tensor (according to the TP-plan) from file asynchronously if `thread_pool` is provided, or
     return a Callable that will load the tensor synchronously when called."""
 
     def _job():
-        return sharding_method.shard_tensor(tensor, param_casting_dtype=dtype, tensor_idx=tensor_idx)[0]
+        return sharding_method.shard_tensor(tensor, tensor_idx=tensor_idx, device=device, dtype=dtype)
 
     if thread_pool is not None:
         return thread_pool.submit(_job)
@@ -742,7 +741,7 @@ def log_conversion_errors(
     first_target_key: str,
     conversion_errors: MutableMapping[str, str],
     extras: Any = None,
-    op: Union[list[ConversionOps], ConversionOps, None] = None,
+    op: list[ConversionOps] | ConversionOps | None = None,
 ):
     """Catch all exceptions during `convert` calls, and log the errors for later. Re-raise a `SkipParameters` exception
     that will be catched later to skip the parameters that raised the original Exception."""
@@ -750,7 +749,7 @@ def log_conversion_errors(
         yield
     except Exception as e:
 
-        def _format_op_name(curr_op: Union[list[ConversionOps], ConversionOps, None]) -> Optional[str]:
+        def _format_op_name(curr_op: list[ConversionOps] | ConversionOps | None) -> str | None:
             if curr_op is None:
                 return None
             if isinstance(curr_op, (list, tuple, set)):
@@ -786,7 +785,7 @@ def set_param_for_module(
     mismatch_keys: MutableSet[tuple[str, torch.Size, torch.Size]],
     missing_keys: MutableSet[str],
     unexpected_keys: MutableSet[str],
-    distributed_operation: Optional[TensorParallelLayer],
+    distributed_operation: TensorParallelLayer | None,
     hf_quantizer: HfQuantizer,
 ):
     module_path, _, param_name = target_name.rpartition(".")
@@ -796,20 +795,17 @@ def set_param_for_module(
     if ref is None:
         unexpected_keys.add(target_name)
     else:
-        use_dtensor = hasattr(distributed_operation, "use_dtensor") and distributed_operation.use_dtensor
         if not isinstance(param_value, torch.nn.Parameter):
             if distributed_operation is not None:
-                param_value = DTensor.from_local(
-                    param_value,
-                    distributed_operation.device_mesh,
-                    getattr(distributed_operation, "shard", Replicate()),
-                    run_check=False,
-                    shape=ref.size(),
-                    stride=ref.stride(),
-                )
-                if not use_dtensor:
-                    # we convert to local
-                    param_value = param_value.to_local()
+                if getattr(distributed_operation, "use_dtensor", False):
+                    param_value = DTensor.from_local(
+                        param_value,
+                        distributed_operation.device_mesh,
+                        getattr(distributed_operation, "shard", Replicate()),
+                        run_check=False,
+                        shape=ref.size(),
+                        stride=ref.stride(),
+                    )
             if param_name not in module_obj._buffers:
                 param_value = torch.nn.Parameter(param_value, requires_grad=param_value.is_floating_point())
 
@@ -899,6 +895,7 @@ def convert_and_load_state_dict_in_model(
     device_mesh: torch.distributed.device_mesh.DeviceMesh | None = None,
     disk_offload_index: dict | None = None,
     disk_offload_folder: str | None = None,
+    offload_buffers: bool = False,
 ):
     r"""
     We build a mapping from the keys obtained by renaming each of the checkpoint keys according to the weight_mapping rules.
@@ -989,15 +986,12 @@ def convert_and_load_state_dict_in_model(
     prefix = model.base_model_prefix
     tp_plan = tp_plan or {}
     device_map = device_map or {"": "cpu"}
-    # Here, we first sort by number of submodules, then length of the full string, to make sure to match correctly
-    device_map_regex = re.compile(
-        "|".join(rf"({k})" for k in sorted(device_map.keys(), key=lambda x: (x.count("."), len(x)), reverse=True))
-    )
     dtype_plan = dtype_plan or {}
     weight_mapping = weight_mapping or []
     meta_model_state_dict = model.state_dict()
-    missing_keys = set(meta_model_state_dict.keys())
+    model_buffers = {k for k, _ in model.named_buffers()}
 
+    missing_keys = set(meta_model_state_dict.keys())
     conversion_errors = {}
     mismatch_keys = set()
     unexpected_keys = set()
@@ -1071,7 +1065,7 @@ def convert_and_load_state_dict_in_model(
                     if getattr(mapping, "distributed_operation", None) is None:
                         tp_layer = ALL_PARALLEL_STYLES[model.tp_plan[matched_tp_pattern]].__class__
                         mapping.distributed_operation = tp_layer(
-                            device_mesh=device_mesh, rank=device_map[""].index, empty_param=empty_param.clone()
+                            device_mesh=device_mesh, rank=device_mesh.get_local_rank(), empty_param=empty_param.clone()
                         )
                     shard_index = len(mapping.collected_tensors.get(original_key, []))
                     future_or_tensor = spawn_tp_materialize(
@@ -1079,14 +1073,12 @@ def convert_and_load_state_dict_in_model(
                         tensor,
                         mapping.distributed_operation,
                         shard_index,
+                        device_map[""],
                         _dtype,
                     )
 
             if future_or_tensor is None:
-                device_match = device_map_regex.match(renamed_key)
-                param_device = device_map[device_match.group()] if device_match else device_map.get("", "cpu")
-                # If disk, we need to materialize on cpu first
-                param_device = "cpu" if param_device == "disk" else param_device
+                param_device = get_device(device_map, renamed_key, valid_torch_device=True)
                 future_or_tensor = spawn_materialize(thread_pool, tensor, param_device, _dtype)
 
             mapping.add_tensor(renamed_key, original_key, source_pattern, future_or_tensor)
@@ -1115,10 +1107,9 @@ def convert_and_load_state_dict_in_model(
                     )
                     for target_name, param in realized_value.items():
                         param = param[0] if isinstance(param, list) else param
-                        device_match = device_map_regex.match(target_name)
-                        param_device = device_map[device_match.group()] if device_match else device_map.get("", "cpu")
+                        param_device = get_device(device_map, target_name)
                         # Offloading support
-                        if param_device == "disk":
+                        if param_device == "disk" and (target_name not in model_buffers or offload_buffers):
                             disk_offload_index = offload_and_maybe_resave_param(
                                 target_name, param, missing_keys, disk_offload_folder, disk_offload_index, mapping
                             )

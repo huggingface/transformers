@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 SHI Labs and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -156,8 +155,8 @@ def compute_segments(
     pred_labels,
     mask_threshold: float = 0.5,
     overlap_mask_area_threshold: float = 0.8,
-    label_ids_to_fuse: Optional[set[int]] = None,
-    target_size: Optional[tuple[int, int]] = None,
+    label_ids_to_fuse: set[int] | None = None,
+    target_size: tuple[int, int] | None = None,
 ):
     height = mask_probs.shape[1] if target_size is None else target_size[0]
     width = mask_probs.shape[2] if target_size is None else target_size[1]
@@ -210,8 +209,8 @@ def compute_segments(
 
 def convert_segmentation_map_to_binary_masks_fast(
     segmentation_map: "torch.Tensor",
-    instance_id_to_semantic_id: Optional[dict[int, int]] = None,
-    ignore_index: Optional[int] = None,
+    instance_id_to_semantic_id: dict[int, int] | None = None,
+    ignore_index: int | None = None,
     do_reduce_labels: bool = False,
 ):
     if do_reduce_labels and ignore_index is None:
@@ -250,8 +249,8 @@ def convert_segmentation_map_to_binary_masks_fast(
 
 def get_oneformer_resize_output_image_size(
     image: "torch.Tensor",
-    size: Union[int, tuple[int, int], list[int], tuple[int]],
-    max_size: Optional[int] = None,
+    size: int | tuple[int, int] | list[int] | tuple[int],
+    max_size: int | None = None,
     default_to_square: bool = True,
 ) -> tuple:
     """
@@ -331,9 +330,9 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
     def preprocess(
         self,
         images: ImageInput,
-        task_inputs: Optional[list[str]] = None,
-        segmentation_maps: Optional[ImageInput] = None,
-        instance_id_to_semantic_id: Optional[Union[list[dict[int, int]], dict[int, int]]] = None,
+        task_inputs: list[str] | None = None,
+        segmentation_maps: ImageInput | None = None,
+        instance_id_to_semantic_id: list[dict[int, int]] | dict[int, int] | None = None,
         **kwargs: Unpack[OneFormerImageProcessorKwargs],
     ) -> BatchFeature:
         r"""
@@ -355,12 +354,12 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
     def _preprocess_image_like_inputs(
         self,
         images: ImageInput,
-        task_inputs: Optional[list[str]],
+        task_inputs: list[str] | None,
         segmentation_maps: ImageInput,
-        instance_id_to_semantic_id: Optional[Union[list[dict[int, int]], dict[int, int]]],
+        instance_id_to_semantic_id: list[dict[int, int]] | dict[int, int] | None,
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
-        device: Optional[Union[str, "torch.device"]] = None,
+        device: Union[str, "torch.device"] | None = None,
         **kwargs: Unpack[OneFormerImageProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -384,21 +383,21 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
     def _preprocess(
         self,
         images: list["torch.Tensor"],
-        task_inputs: Optional[list[str]],
+        task_inputs: list[str] | None,
         segmentation_maps: list["torch.Tensor"],
-        instance_id_to_semantic_id: Optional[Union[list[dict[int, int]], dict[int, int]]],
+        instance_id_to_semantic_id: list[dict[int, int]] | dict[int, int] | None,
         do_resize: bool,
         size: SizeDict,
         interpolation: Optional["F.InterpolationMode"],
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        ignore_index: Optional[int],
-        do_reduce_labels: Optional[bool],
-        disable_grouping: Optional[bool],
-        return_tensors: Optional[Union[str, TensorType]],
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        ignore_index: int | None,
+        do_reduce_labels: bool | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
@@ -476,7 +475,7 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
         self,
         images: list["torch.Tensor"],
         return_pixel_mask: bool = True,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        return_tensors: str | TensorType | None = None,
     ) -> BatchFeature:
         """
         Pad a batch of images to the same size using torch operations.
@@ -510,8 +509,8 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
     def convert_segmentation_map_to_binary_masks(
         self,
         segmentation_map: "torch.Tensor",
-        instance_id_to_semantic_id: Optional[dict[int, int]] = None,
-        ignore_index: Optional[int] = None,
+        instance_id_to_semantic_id: dict[int, int] | None = None,
+        ignore_index: int | None = None,
         do_reduce_labels: bool = False,
     ):
         return convert_segmentation_map_to_binary_masks_fast(
@@ -620,12 +619,12 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
     def _encode_inputs_fast(
         self,
         pixel_values_list: list["torch.Tensor"],
-        task_inputs: Optional[list[str]] = None,
-        segmentation_maps: Optional[list["torch.Tensor"]] = None,
-        instance_id_to_semantic_id: Optional[Union[list[dict[int, int]], dict[int, int]]] = None,
-        ignore_index: Optional[int] = None,
+        task_inputs: list[str] | None = None,
+        segmentation_maps: list["torch.Tensor"] | None = None,
+        instance_id_to_semantic_id: list[dict[int, int]] | dict[int, int] | None = None,
+        ignore_index: int | None = None,
         do_reduce_labels: bool = False,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        return_tensors: str | TensorType | None = None,
     ) -> BatchFeature:
         if task_inputs is None:
             task_inputs = ["panoptic"]
@@ -688,7 +687,7 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
         return encoded_inputs
 
     def post_process_semantic_segmentation(
-        self, outputs, target_sizes: Optional[list[tuple[int, int]]] = None
+        self, outputs, target_sizes: list[tuple[int, int]] | None = None
     ) -> "torch.Tensor":
         """
         Converts the output of [`MaskFormerForInstanceSegmentation`] into semantic segmentation maps. Only supports
@@ -747,8 +746,8 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
         threshold: float = 0.5,
         mask_threshold: float = 0.5,
         overlap_mask_area_threshold: float = 0.8,
-        target_sizes: Optional[list[tuple[int, int]]] = None,
-        return_coco_annotation: Optional[bool] = False,
+        target_sizes: list[tuple[int, int]] | None = None,
+        return_coco_annotation: bool | None = False,
     ):
         """
         Converts the output of [`OneFormerForUniversalSegmentationOutput`] into image instance segmentation
@@ -865,8 +864,8 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
         threshold: float = 0.5,
         mask_threshold: float = 0.5,
         overlap_mask_area_threshold: float = 0.8,
-        label_ids_to_fuse: Optional[set[int]] = None,
-        target_sizes: Optional[list[tuple[int, int]]] = None,
+        label_ids_to_fuse: set[int] | None = None,
+        target_sizes: list[tuple[int, int]] | None = None,
     ) -> list[dict]:
         """
         Converts the output of [`MaskFormerForInstanceSegmentationOutput`] into image panoptic segmentation

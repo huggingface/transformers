@@ -19,6 +19,8 @@
       title: Customizing model components
     - local: model_sharing
       title: Sharing
+    - local: serialization
+      title: Exporting to production
     - local: modular_transformers
       title: Contributing a new model to Transformers
     - local: add_new_model
@@ -74,6 +76,8 @@
       title: Overview
     - local: attention_interface
       title: Attention backends
+    - local: experts_interface
+      title: Experts backends
     - local: continuous_batching
       title: Continuous batching
     - local: kernel_doc/overview
@@ -123,8 +127,6 @@
     title: Agents
   - local: tools
     title: Tools
-  - local: transformers_as_backend
-    title: Transformers as modeling backend
   title: Inference
 - isExpanded: false
   sections:
@@ -226,11 +228,19 @@
   title: Quantization
 - isExpanded: false
   sections:
-  - local: serialization
-    title: ONNX
-  - local: executorch
-    title: ExecuTorch
-  title: Export to production
+  - sections:
+    - local: community_integrations/vllm
+      title: vLLM
+    - local: community_integrations/sglang
+      title: SGLang
+    - local: community_integrations/transformers_as_backend
+      title: Building a compatible model backend for inference
+    title: Inference engines
+  - sections:
+    - local: community_integrations/llama_cpp
+      title: llama.cpp
+    title: Local deployment
+  title: Community integrations
 - isExpanded: false
   sections:
   - sections:
@@ -597,6 +607,8 @@
         title: MegatronGPT2
       - local: model_doc/minimax
         title: MiniMax
+      - local: model_doc/minimax_m2
+        title: MiniMax-M2
       - local: model_doc/ministral
         title: Ministral
       - local: model_doc/ministral3
@@ -1053,6 +1065,8 @@
         title: Gemma3n
       - local: model_doc/git
         title: GIT
+      - local: model_doc/glmasr
+        title: GLM-ASR
       - local: model_doc/glm46v
         title: Glm46V
       - local: model_doc/glm4v

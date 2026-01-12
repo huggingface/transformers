@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,7 +21,7 @@ python utils/update_metadata.py --token <token> --commit_sha <commit_sha>
 ```
 
 Usage to check all pipelines are properly defined in the constant `PIPELINE_TAGS_AND_AUTO_MODELS` of this script, so
-that new pipelines are properly added as metadata (as used in `make repo-consistency`):
+that new pipelines are properly added as metadata (as used in `make check-repo`):
 
 ```bash
 python utils/update_metadata.py --check-only

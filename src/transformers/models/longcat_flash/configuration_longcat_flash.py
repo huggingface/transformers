@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Meituan and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,8 +13,6 @@
 # limitations under the License.
 
 """LongCat Flash model configuration"""
-
-from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
@@ -143,37 +140,37 @@ class LongcatFlashConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 131072,
-        hidden_size: Optional[int] = 6144,
-        num_hidden_layers: Optional[int] = 56,
-        num_layers: Optional[int] = 28,
-        num_attention_heads: Optional[int] = 64,
-        num_key_value_heads: Optional[int] = None,
-        hidden_act: Optional[str] = "silu",
-        max_position_embeddings: Optional[int] = 131072,
-        initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[float] = 1e-5,
-        use_cache: Optional[bool] = True,
-        pad_token_id: Optional[int] = None,
-        bos_token_id: Optional[int] = 1,
-        eos_token_id: Optional[int] = 2,
-        tie_word_embeddings: Optional[bool] = False,
-        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        attention_bias: Optional[bool] = False,
-        attention_dropout: Optional[float] = 0.0,
-        ffn_hidden_size: Optional[int] = 12288,
-        q_lora_rank: Optional[int] = 1536,
-        kv_lora_rank: Optional[int] = 512,
-        qk_nope_head_dim: Optional[int] = 128,
-        qk_rope_head_dim: Optional[int] = 64,
-        head_dim: Optional[int] = 64,
-        v_head_dim: Optional[int] = 128,
-        qk_head_dim: Optional[int] = None,
-        moe_topk: Optional[int] = 12,
-        n_routed_experts: Optional[int] = 512,
-        zero_expert_num: Optional[int] = 256,
-        expert_ffn_hidden_size: Optional[int] = 2048,
-        routed_scaling_factor: Optional[float] = 6.0,
+        vocab_size: int | None = 131072,
+        hidden_size: int | None = 6144,
+        num_hidden_layers: int | None = 56,
+        num_layers: int | None = 28,
+        num_attention_heads: int | None = 64,
+        num_key_value_heads: int | None = None,
+        hidden_act: str | None = "silu",
+        max_position_embeddings: int | None = 131072,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: float | None = 1e-5,
+        use_cache: bool | None = True,
+        pad_token_id: int | None = None,
+        bos_token_id: int | None = 1,
+        eos_token_id: int | None = 2,
+        tie_word_embeddings: bool | None = False,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        attention_bias: bool | None = False,
+        attention_dropout: float | None = 0.0,
+        ffn_hidden_size: int | None = 12288,
+        q_lora_rank: int | None = 1536,
+        kv_lora_rank: int | None = 512,
+        qk_nope_head_dim: int | None = 128,
+        qk_rope_head_dim: int | None = 64,
+        head_dim: int | None = 64,
+        v_head_dim: int | None = 128,
+        qk_head_dim: int | None = None,
+        moe_topk: int | None = 12,
+        n_routed_experts: int | None = 512,
+        zero_expert_num: int | None = 256,
+        expert_ffn_hidden_size: int | None = 2048,
+        routed_scaling_factor: float | None = 6.0,
         **kwargs,
     ):
         if num_key_value_heads is None:
@@ -221,7 +218,7 @@ class LongcatFlashConfig(PreTrainedConfig):
             **kwargs,
         )
 
-    def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation: Optional[set] = None, **kwargs):
+    def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation: set | None = None, **kwargs):
         rope_scaling = kwargs.pop("rope_scaling", None)
         self.rope_parameters = rope_scaling or self.rope_parameters
         self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else {}
