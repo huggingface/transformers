@@ -1,7 +1,7 @@
 import torch.nn.functional as F
 
 
-def ViTNepaPreTrainingLoss(hidden_states_in, hidden_states_out, shift: bool = True):
+def ViTNepaPreTrainingLoss(hidden_states_in, hidden_states_out):
     """
     Similarity loss between two hidden states.
 
@@ -17,14 +17,9 @@ def ViTNepaPreTrainingLoss(hidden_states_in, hidden_states_out, shift: bool = Tr
     # detach target
     hidden_states_in = hidden_states_in.detach()
 
-    if shift:
-        # shift one step forward
-        p = hidden_states_out[:, :-1, :]  # predict next
-        z = hidden_states_in[:, 1:, :]  # target is next hidden state
-    else:
-        # same-position matching
-        p = hidden_states_out
-        z = hidden_states_in
+    # shift one step forward
+    p = hidden_states_out[:, :-1, :]  # predict next
+    z = hidden_states_in[:, 1:, :]  # target is next hidden state
 
     # normalize
     p = F.normalize(p, dim=-1)
