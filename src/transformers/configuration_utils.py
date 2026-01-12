@@ -1100,6 +1100,9 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         Checks and removes if there are any keys in the dict that should not be serialized when saving the config.
         Runs recursive check on the dict, to remove from all sub configs.
         """
+
+        if "_is_quantized" in d:
+            del d["_is_quantized"]
         if "_auto_class" in d:
             del d["_auto_class"]
         if "_output_attentions" in d:
