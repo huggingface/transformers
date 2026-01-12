@@ -24,11 +24,26 @@ from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_python import PreTokenizedInput, TextInput
-from ...utils import TensorType
+from ...utils import TensorType, auto_docstring
 from ..auto import AutoTokenizer
 
 
 class AriaImagesKwargs(ImagesKwargs, total=False):
+    """
+    split_image (`bool`, *optional*, defaults to `False`):
+        Whether to split large images into multiple crops. When enabled, images exceeding the maximum size are
+        divided into overlapping crops that are processed separately and then combined. This allows processing
+        of very high-resolution images that exceed the model's input size limits.
+    max_image_size (`int`, *optional*, defaults to `980`):
+        Maximum image size (in pixels) for a single image crop. Images larger than this will be split into
+        multiple crops when `split_image=True`, or resized if splitting is disabled. This parameter controls
+        the maximum resolution of individual image patches processed by the model.
+    min_image_size (`int`, *optional*):
+        Minimum image size (in pixels) for a single image crop. Images smaller than this will be upscaled to
+        meet the minimum requirement. If not specified, images are processed at their original size (subject
+        to the maximum size constraint).
+    """
+
     split_image: bool
     max_image_size: int
     min_image_size: int
@@ -50,21 +65,8 @@ class AriaProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@auto_docstring
 class AriaProcessor(ProcessorMixin):
-    """
-    AriaProcessor is a processor for the Aria model which wraps the Aria image preprocessor and the LLama slow tokenizer.
-
-    Args:
-        image_processor (`AriaImageProcessor`, *optional*):
-            The AriaImageProcessor to use for image preprocessing.
-        tokenizer (`PreTrainedTokenizerBase`, *optional*):
-            An instance of [`PreTrainedTokenizerBase`]. This should correspond with the model's text model. The tokenizer is a required input.
-        chat_template (`str`, *optional*):
-            A Jinja template which will be used to convert lists of messages in a chat into a tokenizable string.
-        size_conversion (`Dict`, *optional*):
-            A dictionary indicating size conversions for images.
-    """
-
     def __init__(
         self,
         image_processor=None,
@@ -72,6 +74,10 @@ class AriaProcessor(ProcessorMixin):
         chat_template: str | None = None,
         size_conversion: dict[float | int, int] | None = None,
     ):
+        r"""
+        size_conversion (`Dict`, *optional*):
+            A dictionary indicating size conversions for images.
+        """
         if size_conversion is None:
             size_conversion = {490: 128, 980: 256}
         self.size_conversion = {int(k): v for k, v in size_conversion.items()}
@@ -83,25 +89,14 @@ class AriaProcessor(ProcessorMixin):
 
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
+    @auto_docstring
     def __call__(
         self,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput],
         images: ImageInput | None = None,
         **kwargs: Unpack[AriaProcessorKwargs],
     ) -> BatchFeature:
-        """
-        Main method to prepare for the model one or several sequences(s) and image(s).
-
-        Args:
-            text (`TextInput`, `PreTokenizedInput`, `list[TextInput]`, `list[PreTokenizedInput]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            images (`ImageInput`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. Both channels-first and channels-last formats are supported.
-
-
+        r"""
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
             - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.

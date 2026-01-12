@@ -15,7 +15,6 @@
 Processor class for IDEFICS.
 """
 
-from typing import Optional, Union
 from urllib.parse import urlparse
 
 from ...feature_extraction_utils import BatchFeature
@@ -27,7 +26,7 @@ from ...processing_utils import (
     Unpack,
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import is_torch_available
+from ...utils import auto_docstring, is_torch_available
 
 
 if is_torch_available():
@@ -38,8 +37,18 @@ IMAGE_TOKEN = "<image>"
 
 
 class IdeficsTextKwargs(TextKwargs, total=False):
-    add_eos_token: Optional[bool]
-    add_end_of_utterance_token: Optional[bool]
+    """
+    add_eos_token (`bool`, *optional*, defaults to `False`):
+        Whether to add an end-of-sequence token at the end of the text input. When enabled, an EOS token is
+        appended to mark the end of the text sequence, which is useful for generation tasks.
+    add_end_of_utterance_token (`bool`, *optional*):
+        Whether to add an end-of-utterance token to mark the end of a user's message in conversational contexts.
+        This token helps the model distinguish between different utterances in a multi-turn conversation and is
+        particularly important for chat-based models.
+    """
+
+    add_eos_token: bool | None
+    add_end_of_utterance_token: bool | None
 
 
 class IdeficsProcessorKwargs(ProcessingKwargs, total=False):
@@ -133,25 +142,15 @@ def is_url(string):
     return all([result.scheme, result.netloc])
 
 
+@auto_docstring
 class IdeficsProcessor(ProcessorMixin):
-    r"""
-    Constructs a IDEFICS processor which wraps a LLama tokenizer and IDEFICS image processor into a single processor.
-
-    [`IdeficsProcessor`] offers all the functionalities of [`IdeficsImageProcessor`] and [`LlamaTokenizerFast`]. See
-    the docstring of [`~IdeficsProcessor.__call__`] and [`~IdeficsProcessor.decode`] for more information.
-
-    Args:
-        image_processor (`IdeficsImageProcessor`):
-            An instance of [`IdeficsImageProcessor`]. The image processor is a required input.
-        tokenizer (`LlamaTokenizerFast`):
-            An instance of [`LlamaTokenizerFast`]. The tokenizer is a required input.
-        image_size (`int`, *optional*, defaults to 224):
-            Image size (assuming a square image)
-        add_end_of_utterance_token (`str`, *optional*):
-            The string representation of token representing end of utterance
-    """
-
     def __init__(self, image_processor, tokenizer=None, image_size=224, add_end_of_utterance_token=None, **kwargs):
+        r"""
+        image_size (int, *optional*, defaults to 224):
+            The size of the image to be processed.
+        add_end_of_utterance_token (bool, *optional*, defaults to None):
+            Whether to add the end of utterance token to the text.
+        """
         super().__init__(image_processor, tokenizer)
         self.image_token_id = (
             tokenizer.image_token_id
@@ -169,42 +168,28 @@ class IdeficsProcessor(ProcessorMixin):
             "<end_of_utterance>" in self.tokenizer.special_tokens_map.get("additional_special_tokens", [])
         )
 
+    @auto_docstring
     def __call__(
         self,
-        images: Union[ImageInput, list[ImageInput], str, list[str], list[list[str]]] = None,
-        text: Union[
-            TextInput,
-            PreTokenizedInput,
-            list[TextInput],
-            list[PreTokenizedInput],
-            list[list[TextInput]],
-            list[list[PreTokenizedInput]],
-        ] = None,
+        images: ImageInput | list[ImageInput] | str | list[str] | list[list[str]] = None,
+        text: TextInput
+        | PreTokenizedInput
+        | list[TextInput]
+        | list[PreTokenizedInput]
+        | list[list[TextInput]]
+        | list[list[PreTokenizedInput]] = None,
         **kwargs: Unpack[IdeficsProcessorKwargs],
     ) -> BatchFeature:
-        """This method takes batched or non-batched prompts made of text and images and converts them into prompts that
-        the model was trained on and prepares the image pixel values for the model to process.
-
-        Args:
-            images (`Union[ImageInput, list[ImageInput], str, list[str], list[list[str]]]`):
-                either a single image or a batched list of images - can be passed in when text contains only text prompts,
-                in order to use the image-text-to-text behavior.
-            text (`Union[list[TextInput], [list[list[TextInput]]]]`):
-                either a single prompt or a batched list of prompts - see the detailed description immediately after
-                the end of the arguments doc section.
-            return_tensors (`str` or `TensorType`, *optional*, defaults to `TensorType.PYTORCH`):
-                The type of tensors to return. Can be one of:
-                    - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
-
+        r"""
         Returns:
             a dict with entries: `input_ids`, `attention_mask`, `pixel_values`, `image_attention_mask` which can be
             directly passed to `model.generate`
 
-        Detailed explanation:
+            Detailed explanation:
 
-        Each entry in `text` is either a text to be passed as is or an image that will be processed.
+            Each entry in `text` is either a text to be passed as is or an image that will be processed.
 
-        An image can be either an image object (`PIL.Image`) or a url from which the image can be retrieved.
+            An image can be either an image object (`PIL.Image`) or a url from which the image can be retrieved.
 
         When the processor encounters an image it'll inject `<fake_token_around_image><image><fake_token_around_image>`
         entry into the prompt.

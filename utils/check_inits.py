@@ -29,7 +29,7 @@ Use from the root of the repo with:
 python utils/check_inits.py
 ```
 
-for a check that will error in case of inconsistencies (used by `make repo-consistency`).
+for a check that will error in case of inconsistencies (used by `make check-repo`).
 
 There is no auto-fix possible here sadly :-(
 """
