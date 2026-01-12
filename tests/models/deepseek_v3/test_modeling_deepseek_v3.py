@@ -22,7 +22,6 @@ from parameterized import parameterized
 from transformers import AutoTokenizer, DeepseekV3Config, is_torch_available
 from transformers.testing_utils import (
     cleanup,
-    require_read_token,
     require_torch,
     require_torch_accelerator,
     require_torch_large_accelerator,
@@ -391,7 +390,6 @@ class DeepseekV3IntegrationTest(unittest.TestCase):
     @slow
     @require_torch_accelerator
     @pytest.mark.torch_compile_test
-    @require_read_token
     def test_compile_static_cache(self):
         # `torch==2.2` will throw an error on this test (as in other compilation tests), but torch==2.1.2 and torch>2.2
         # work as intended. See https://github.com/pytorch/pytorch/issues/121943
