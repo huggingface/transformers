@@ -4514,9 +4514,7 @@ class ModelTesterMixin:
                     for source_pattern in conversion.source_patterns:
                         # Sometimes the mappings specify keys that are tied, so absent from the saved state dict
                         if isinstance(conversion, WeightRenaming):
-                            if any(
-                                re.search(conversion.target_patterns[0], k) for k in model.all_tied_weights_keys.keys()
-                            ):
+                            if any(re.search(source_pattern, k) for k in model.all_tied_weights_keys.values()):
                                 continue
                         num_matches = sum(re.search(source_pattern, key) is not None for key in serialized_keys)
                         self.assertTrue(
