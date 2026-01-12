@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,7 +13,7 @@
 # limitations under the License.
 """Fast Image processor class for GLPN."""
 
-from typing import Optional, Union
+from typing import Optional
 
 import torch
 from torchvision.transforms.v2 import functional as F
@@ -83,16 +82,16 @@ class GLPNImageProcessorFast(BaseImageProcessorFast):
         self,
         images: list["torch.Tensor"],
         do_resize: bool,
-        size_divisor: Optional[int] = None,
+        size_divisor: int | None = None,
         interpolation: Optional["F.InterpolationMode"] = None,
         do_rescale: bool = True,
-        rescale_factor: Optional[float] = 1 / 255,
+        rescale_factor: float | None = 1 / 255,
         do_normalize: bool = False,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
-        disable_grouping: Optional[bool] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        resample: Optional[PILImageResampling] = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        disable_grouping: bool | None = None,
+        return_tensors: str | TensorType | None = None,
+        resample: PILImageResampling | None = None,
         **kwargs,
     ) -> BatchFeature:
         grouped_images, grouped_index = group_images_by_shape(images, disable_grouping=disable_grouping)
@@ -107,7 +106,6 @@ class GLPNImageProcessorFast(BaseImageProcessorFast):
             processed_groups[shape] = stacked_images
 
         processed_images = reorder_images(processed_groups, grouped_index)
-        processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
     def post_process_depth_estimation(self, outputs, target_sizes=None):

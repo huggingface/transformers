@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -139,6 +138,12 @@ class MLCDVisionModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertIsInstance(model.get_input_embeddings(), (torch.nn.Module))
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, torch.nn.Linear))
+
+    @unittest.skip(
+        reason="MLCD passes position embeddings as tuples in its vision encoder, which breaks reentrant GC."
+    )
+    def test_enable_input_require_grads_with_gradient_checkpointing(self):
+        pass
 
 
 @require_torch

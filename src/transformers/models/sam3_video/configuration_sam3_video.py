@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -95,6 +94,9 @@ class Sam3VideoConfig(PreTrainedConfig):
 
     >>> # Initializing a SAM3 Video configuration with default detector and tracker
     >>> configuration = Sam3VideoConfig()
+
+    >>> # Changing image size for custom resolution inference (automatically propagates to all nested configs)
+    >>> configuration.image_size = 560
 
     >>> # Initializing a model from the configuration
     >>> model = Sam3VideoModel(configuration)
@@ -224,6 +226,17 @@ class Sam3VideoConfig(PreTrainedConfig):
         self.recondition_every_nth_frame = recondition_every_nth_frame
         self.high_conf_thresh = high_conf_thresh
         self.high_iou_thresh = high_iou_thresh
+
+    @property
+    def image_size(self):
+        """Image size for the video model."""
+        return self.detector_config.image_size
+
+    @image_size.setter
+    def image_size(self, value):
+        """Recursively propagate the image size to detector and tracker configs."""
+        self.detector_config.image_size = value
+        self.tracker_config.image_size = value
 
 
 __all__ = ["Sam3VideoConfig"]

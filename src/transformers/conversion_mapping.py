@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright (C) 2025 the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,7 +17,15 @@ from __future__ import annotations
 from copy import deepcopy
 from typing import TYPE_CHECKING
 
-from .core_model_loading import Concatenate, MergeModulelist, WeightConverter, WeightRenaming
+from .core_model_loading import (
+    Chunk,
+    Concatenate,
+    ErnieFuseAndSplitTextVisionExperts,
+    MergeModulelist,
+    Transpose,
+    WeightConverter,
+    WeightRenaming,
+)
 from .utils import is_torch_available
 
 
@@ -105,6 +112,57 @@ def _build_checkpoint_conversion_mapping():
                 operations=[MergeModulelist(dim=0)],
             ),
         ],
+        "ernie4_5_vl_moe": [
+            # vision
+            WeightRenaming("vision_model", "vision_tower"),
+            # resampler
+            WeightRenaming("spatial_linear.0", "spatial_linear.fc1"),
+            WeightRenaming("spatial_linear.2", "spatial_linear.fc2"),
+            WeightRenaming("spatial_linear.3", "spatial_linear.ln"),
+            WeightRenaming("temporal_linear.0", "temporal_linear.fc1"),
+            WeightRenaming("temporal_linear.2", "temporal_linear.fc2"),
+            WeightRenaming("temporal_linear.3", "temporal_linear.ln"),
+            # language model
+            WeightRenaming(r"(?<!language_model\.)embed_tokens", "language_model.embed_tokens"),
+            WeightRenaming(r"(?<!language_model\.)layers", "language_model.layers"),
+            WeightConverter(
+                source_patterns="mlp.gate.weight_1",
+                target_patterns="mlp.vision_moe.gate.weight",
+                operations=[Transpose(dim0=0, dim1=1)],
+            ),
+            WeightConverter(
+                source_patterns="mlp.gate.weight",
+                target_patterns="mlp.text_moe.gate.weight",
+                operations=[Transpose(dim0=0, dim1=1)],
+            ),
+            WeightConverter(
+                source_patterns=["mlp.moe_statics.e_score_correction_bias"],
+                target_patterns=[
+                    "mlp.text_moe.gate.moe_statics.e_score_correction_bias",
+                    "mlp.vision_moe.gate.moe_statics.e_score_correction_bias",
+                ],
+                operations=[Chunk(dim=0)],
+            ),
+            WeightConverter(
+                source_patterns=["experts.*.down_proj.weight"],
+                target_patterns=[
+                    "text_moe.experts.down_proj",
+                    "vision_moe.experts.down_proj",
+                ],
+                operations=[ErnieFuseAndSplitTextVisionExperts(stack_dim=0, concat_dim=1)],
+            ),
+            WeightConverter(
+                source_patterns=[
+                    "experts.*.gate_proj.weight",
+                    "experts.*.up_proj.weight",
+                ],
+                target_patterns=[
+                    "text_moe.experts.gate_up_proj",
+                    "vision_moe.experts.gate_up_proj",
+                ],
+                operations=[ErnieFuseAndSplitTextVisionExperts(stack_dim=0, concat_dim=1)],
+            ),
+        ],
         "jamba": [
             WeightConverter(
                 source_patterns=[
@@ -142,12 +200,12 @@ def _build_checkpoint_conversion_mapping():
     if hasattr(torch.nn.utils.parametrizations, "weight_norm"):
         mapping["legacy"] += [
             WeightRenaming(
-                source_patterns="weight_g",
-                target_patterns="parametrizations.weight.original0",
+                source_patterns=".weight_g$",
+                target_patterns=".parametrizations.weight.original0",
             ),
             WeightRenaming(
-                source_patterns="weight_v",
-                target_patterns="parametrizations.weight.original1",
+                source_patterns=".weight_v$",
+                target_patterns=".parametrizations.weight.original1",
             ),
         ]
     else:
@@ -166,6 +224,9 @@ def _build_checkpoint_conversion_mapping():
     mapping["deepseek_v3"] = mapping["qwen2_moe"].copy()
     mapping["dots1"] = mapping["qwen2_moe"].copy()
     mapping["ernie4_5_moe"] = mapping["qwen2_moe"].copy()
+    mapping["ernie4_5_moe"] += [
+        WeightRenaming("mlp.moe_statics.e_score_correction_bias", "mlp.gate.moe_statics.e_score_correction_bias")
+    ]
     mapping["glm4_moe"] = mapping["qwen2_moe"].copy()
     mapping["glm4v_moe"] = mapping["qwen2_moe"].copy()
     mapping["longcat_flash"] = mapping["qwen2_moe"].copy()
@@ -175,6 +236,10 @@ def _build_checkpoint_conversion_mapping():
     mapping["qwen3_vl_moe"] = mapping["qwen2_moe"].copy()
     mapping["hunyuan_v1_moe"] = mapping["qwen2_moe"].copy()
     mapping["minimax"] = mapping["mixtral"].copy()
+    mapping["minimax_m2"] = mapping["mixtral"].copy()
+    mapping["minimax_m2"] += [
+        WeightRenaming(".block_sparse_moe.e_score_correction_bias", ".mlp.e_score_correction_bias"),
+    ]
     mapping["flex_olmo"] = mapping["qwen2_moe"].copy()
     mapping["olmoe"] = mapping["qwen2_moe"].copy()
 
@@ -186,8 +251,20 @@ _checkpoint_conversion_mapping_cache = None
 
 def get_checkpoint_conversion_mapping(model_type):
     global _checkpoint_conversion_mapping_cache
-    _checkpoint_conversion_mapping_cache = _build_checkpoint_conversion_mapping()
+    if _checkpoint_conversion_mapping_cache is None:
+        _checkpoint_conversion_mapping_cache = _build_checkpoint_conversion_mapping()
     return deepcopy(_checkpoint_conversion_mapping_cache.get(model_type))
+
+
+def register_checkpoint_conversion_mapping(
+    model_type: str, mapping: list[WeightConverter | WeightRenaming], overwrite: bool = False
+) -> None:
+    global _checkpoint_conversion_mapping_cache
+    if _checkpoint_conversion_mapping_cache is None:
+        _checkpoint_conversion_mapping_cache = _build_checkpoint_conversion_mapping()
+    if model_type in _checkpoint_conversion_mapping_cache and not overwrite:
+        raise ValueError(f"Model type {model_type} already exists in the checkpoint conversion mapping.")
+    _checkpoint_conversion_mapping_cache[model_type] = mapping
 
 
 # DO NOT MODIFY, KEPT FOR BC ONLY
@@ -213,6 +290,8 @@ VLMS = [
     "sam3",
     "sam3_tracker",
     "sam3_tracker_video",
+    "paddleocrvl",
+    "ernie4_5_vl_moe",
 ]
 
 
@@ -228,7 +307,7 @@ def get_model_conversion_mapping(
     """
     weight_conversions = []
 
-    # Load models with key mapping
+    # Load models with explicit, user-provided key mapping
     if key_mapping is not None:
         weight_conversions = [WeightRenaming(source_patterns=k, target_patterns=v) for k, v in key_mapping.items()]
     elif any(

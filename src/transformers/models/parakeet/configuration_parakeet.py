@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Parakeet model configuration."""
-
-from typing import Union
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
@@ -121,9 +118,6 @@ class ParakeetEncoderConfig(PreTrainedConfig):
         initializer_range=0.02,
         **kwargs,
     ):
-        super().__init__(
-            **kwargs,
-        )
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
@@ -133,10 +127,7 @@ class ParakeetEncoderConfig(PreTrainedConfig):
         self.attention_bias = attention_bias
         self.convolution_bias = convolution_bias
 
-        if (conv_kernel_size - 1) % 2 != 0:
-            raise ValueError(f"conv_kernel_size must be odd, got {conv_kernel_size}")
         self.conv_kernel_size = conv_kernel_size
-
         self.subsampling_conv_kernel_size = subsampling_conv_kernel_size
         self.subsampling_conv_stride = subsampling_conv_stride
 
@@ -152,6 +143,10 @@ class ParakeetEncoderConfig(PreTrainedConfig):
         self.max_position_embeddings = max_position_embeddings
         self.scale_input = scale_input
         self.initializer_range = initializer_range
+
+        super().__init__(
+            **kwargs,
+        )
 
 
 class ParakeetCTCConfig(PreTrainedConfig):
@@ -203,7 +198,7 @@ class ParakeetCTCConfig(PreTrainedConfig):
         vocab_size=1025,
         ctc_loss_reduction="mean",
         ctc_zero_infinity=True,
-        encoder_config: Union[dict, ParakeetEncoderConfig] = None,
+        encoder_config: dict | ParakeetEncoderConfig = None,
         pad_token_id=1024,
         **kwargs,
     ):

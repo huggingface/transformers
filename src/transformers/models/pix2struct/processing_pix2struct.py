@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,12 +15,10 @@
 Processor class for Pix2Struct.
 """
 
-from typing import Union
-
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
-from ...utils import logging
+from ...utils import auto_docstring, logging
 
 
 class Pix2StructProcessorKwargs(ProcessingKwargs, total=False):
@@ -46,41 +43,19 @@ class Pix2StructProcessorKwargs(ProcessingKwargs, total=False):
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring
 class Pix2StructProcessor(ProcessorMixin):
-    r"""
-    Constructs a PIX2STRUCT processor which wraps a BERT tokenizer and PIX2STRUCT image processor into a single
-    processor.
-
-    [`Pix2StructProcessor`] offers all the functionalities of [`Pix2StructImageProcessor`] and [`T5Tokenizer`]. See
-    the docstring of [`~Pix2StructProcessor.__call__`] and [`~Pix2StructProcessor.decode`] for more information.
-
-    Args:
-        image_processor (`Pix2StructImageProcessor`):
-            An instance of [`Pix2StructImageProcessor`]. The image processor is a required input.
-        tokenizer (`T5Tokenizer`):
-            An instance of ['T5Tokenizer`]. The tokenizer is a required input.
-    """
-
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "Pix2StructImageProcessor"
-    tokenizer_class = ("T5Tokenizer",)
-
     def __init__(self, image_processor, tokenizer):
         tokenizer.return_token_type_ids = False
         super().__init__(image_processor, tokenizer)
 
+    @auto_docstring
     def __call__(
         self,
         images=None,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         **kwargs: Unpack[Pix2StructProcessorKwargs],
-    ) -> Union[BatchEncoding, BatchFeature]:
-        """
-        This method uses [`Pix2StructImageProcessor.preprocess`] method to prepare image(s) for the model, and
-        [`T5Tokenizer.__call__`] to prepare text for the model.
-
-        Please refer to the docstring of the above two methods for more information.
-        """
+    ) -> BatchEncoding | BatchFeature:
         if images is None and text is None:
             raise ValueError("You have to specify either images or text.")
 

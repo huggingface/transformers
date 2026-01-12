@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +14,7 @@
 
 from ..core_model_loading import ConversionOps
 from ..quantizers.quantizers_utils import should_convert_module
-from ..utils import is_accelerate_available, is_torch_accelerator_available, is_torch_available, logging
+from ..utils import is_torch_accelerator_available, is_torch_available, logging
 
 
 if is_torch_available():
@@ -25,23 +24,16 @@ if is_torch_available():
     import triton.language as tl
     from torch.nn import functional as F
 
-if is_accelerate_available():
-    from accelerate import init_empty_weights
-
 
 logger = logging.get_logger(__name__)
 try:
     _FP8_DTYPE = torch.float8_e4m3fn
     _FP8_MIN = torch.finfo(_FP8_DTYPE).min
     _FP8_MAX = torch.finfo(_FP8_DTYPE).max
-    _FP8_IS_INT = False
 except AttributeError:
-    _FP8_DTYPE = torch.int8
-    _FP8_MIN, _FP8_MAX = -127, 127
-    _FP8_IS_INT = True
-    logger.warning_once(
-        "torch.float8_e4m3fn not available; falling back to int8 emulation for Fp8Quantize operations."
-    )
+    _FP8_DTYPE = None
+    _FP8_MIN, _FP8_MAX = -448, 448
+    logger.warning_once("torch.float8_e4m3fn not available")
 
 
 # Copied from https://huggingface.co/deepseek-ai/DeepSeek-V3/blob/main/inference/kernel.py
@@ -466,9 +458,11 @@ class FP8Linear(nn.Linear):
                     qinput, scale = act_quant(input, self.block_size[1])
                 elif self.activation_scheme == "static":
                     scale = self.activation_scale.to(torch.float32)
-                    qinput = (input / scale).to(torch.float8_e4m3fn)
+                    qinput = (input / scale).clamp(min=_FP8_MIN, max=_FP8_MAX).to(torch.float8_e4m3fn)
+
                 else:
                     raise NotImplementedError("Not supported")
+
                 output = w8a8_block_fp8_matmul_triton(
                     qinput,
                     weight,
@@ -483,7 +477,8 @@ class FP8Linear(nn.Linear):
             torch_accelerator_module.synchronize()
             if self.bias is not None:
                 output = output + self.bias
-            output = torch.nan_to_num(output, nan=0.0)
+
+            #            output = torch.nan_to_num(output, nan=0.0)
             return output.to(dtype=input.dtype)
 
 
@@ -532,6 +527,9 @@ class FP8Expert(nn.Module):
         # Keep a handle here; actual usage happens in forward of your MoE block
         self.act_fn = ACT2FN[config.hidden_act]
 
+    # We follow the mixtral "eager" moe implementation at
+    # https://github.com/huggingface/transformers/blob/457048fbfdba9a7dee8bd03328c62f49e57b95f9/src/transformers/models/mixtral/modular_mixtral.py#L148
+    # The core changes in this FP8 version should only relate to how we call the linear projections
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -539,18 +537,17 @@ class FP8Expert(nn.Module):
         top_k_weights: torch.Tensor,
     ) -> torch.Tensor:
         final_hidden_states = torch.zeros_like(hidden_states)
-        num_experts = top_k_weights.shape[1]
         with torch.no_grad():
-            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=num_experts + 1)
+            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
             expert_mask = expert_mask.permute(2, 1, 0)
             expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
 
         for expert_idx in expert_hit:
             expert_idx = expert_idx[0]
-            if expert_idx == num_experts:
+            if expert_idx == self.num_experts:
                 continue
-            _, token_idx = torch.where(expert_mask[expert_idx])
-            current_state = hidden_states.index_select(0, token_idx)
+            top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
+            current_state = hidden_states[token_idx]
             gate, up = self.linear(
                 current_state, self.gate_up_proj[expert_idx], self.gate_up_proj_scale_inv[expert_idx]
             ).chunk(2, dim=-1)
@@ -559,7 +556,7 @@ class FP8Expert(nn.Module):
                 current_hidden_states, self.down_proj[expert_idx], self.down_proj_scale_inv[expert_idx]
             )
 
-            routing_weights = top_k_weights[token_idx, expert_idx].unsqueeze(-1)
+            routing_weights = top_k_weights[token_idx, top_k_pos, None]
             current_hidden_states = current_hidden_states * routing_weights.to(current_hidden_states.dtype)
             final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
 
@@ -589,12 +586,22 @@ class FP8Expert(nn.Module):
 
 
 def replace_with_fp8_linear(
-    model,
-    modules_to_not_convert=None,
-    quantization_config=None,
-    pre_quantized=False,
+    model, modules_to_not_convert: list[str] | None = None, quantization_config=None, pre_quantized=False
 ):
-    """Helper function to replace model layers with FP8 versions."""
+    """
+    A helper function to replace all `torch.nn.Linear` modules by `FP8Linear` modules.
+
+    Parameters:
+        model (`torch.nn.Module`):
+            Input model or `torch.nn.Module` as the function is run recursively.
+        modules_to_not_convert (`list[`str`]`, *optional*, defaults to `None`):
+            Names of the modules to not convert. In practice we keep the `lm_head` in full precision for numerical stability reasons.
+        quantization_config (`FbgemmFp8Config`):
+            The quantization config object that contains the quantization parameters.
+        pre_quantized (`book`, defaults to `False`):
+            Whether the model is pre-quantized or not
+    """
+
     if quantization_config.dequantize:
         return model
 
@@ -605,8 +612,8 @@ def replace_with_fp8_linear(
         # we need this to correctly materialize the weights during quantization
         module_kwargs = {} if pre_quantized else {"dtype": None}
         new_module = None
-        with init_empty_weights():
-            if "gate_up_proj" in module_name or "down_proj" in module_name and "experts" in module_name:
+        with torch.device("meta"):
+            if module_name.endswith(".experts"):
                 new_module = FP8Expert(
                     config=model.config, block_size=quantization_config.weight_block_size, **module_kwargs
                 )
@@ -688,10 +695,7 @@ class Fp8Quantize(ConversionOps):
         scales_broadcast = scales.unsqueeze(-1).unsqueeze(-3)  # -> (..., rows_tiles, 1, cols_tiles, 1)
         scaled = reshaped * scales_broadcast
 
-        if _FP8_IS_INT:
-            quantized = torch.clamp(scaled.round(), min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
-        else:
-            quantized = torch.clamp(scaled, min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
+        quantized = torch.clamp(scaled, min=_FP8_MIN, max=_FP8_MAX).to(_FP8_DTYPE)
 
         quantized = quantized.reshape(original_shape)
 

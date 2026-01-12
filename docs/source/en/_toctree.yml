@@ -9,6 +9,8 @@
 - isExpanded: false
   sections:
   - sections:
+    - local: weightconverter
+      title: Dynamic weight loading
     - local: models
       title: Loading models
     - local: custom_models
@@ -17,14 +19,14 @@
       title: Customizing model components
     - local: model_sharing
       title: Sharing
+    - local: serialization
+      title: Exporting to production
     - local: modular_transformers
       title: Contributing a new model to Transformers
     - local: add_new_model
       title: Legacy model contribution
     - local: auto_docstring
       title: Documenting a model
-    - local: attention_interface
-      title: Customizing attention function
     title: Models
   - sections:
     - local: fast_tokenizers
@@ -61,27 +63,47 @@
     - local: llm_tutorial
       title: Text generation
     - local: generation_strategies
-      title: Generation strategies
+      title: Decoding methods
     - local: generation_features
       title: Generation features
     - local: tasks/prompting
       title: Prompt engineering
-    - local: llm_optims
-      title: Optimizing inference
-    - local: cache_explanation
-      title: Caching
-    - local: kv_cache
-      title: KV cache strategies
-    - local: llm_tutorial_optimization
-      title: Getting the most out of LLMs
     - local: perplexity
       title: Perplexity of fixed-length models
-    title: LLMs
+    title: Generate API
+  - sections:
+    - local: optimization_overview
+      title: Overview
+    - local: attention_interface
+      title: Attention backends
+    - local: experts_interface
+      title: Experts backends
+    - local: continuous_batching
+      title: Continuous batching
+    - local: kernel_doc/overview
+      title: Kernels in transformers
+    - local: perf_torch_compile
+      title: torch.compile
+    - local: perf_infer_gpu_multi
+      title: Tensor parallelism
+    - local: expert_parallelism
+      title: Expert parallelism
+    - local: kv_cache
+      title: Cache strategies
+    - local: cache_explanation
+      title: Caching
+    - local: assisted_decoding
+      title: Assisted decoding
+    - local: llm_tutorial_optimization
+      title: Getting the most out of LLMs
+    title: Optimization
   - sections:
     - local: conversations
       title: Chat basics
     - local: chat_templating
       title: Chat templates
+    - local: chat_content_patterns
+      title: Chat message patterns
     - local: chat_templating_multimodal
       title: Multimodal chat templates
     - local: chat_extras
@@ -101,24 +123,10 @@
     - local: open_webui
       title: Open WebUI
     title: Serving
-  - sections:
-    - local: perf_torch_compile
-      title: torch.compile
-    - local: perf_infer_gpu_one
-      title: GPU
-    - local: perf_infer_gpu_multi
-      title: Distributed inference
-    - local: perf_infer_cpu
-      title: CPU
-    title: Optimization
   - local: agents
     title: Agents
   - local: tools
     title: Tools
-  - local: transformers_as_backend
-    title: Transformers as modeling backend
-  - local: continuous_batching
-    title: Continuous Batching
   title: Inference
 - isExpanded: false
   sections:
@@ -220,16 +228,19 @@
   title: Quantization
 - isExpanded: false
   sections:
-  - local: kernel_doc/overview
-    title: Kernels in transformers
-  title: Kernels
-- isExpanded: false
-  sections:
-  - local: serialization
-    title: ONNX
-  - local: executorch
-    title: ExecuTorch
-  title: Export to production
+  - sections:
+    - local: community_integrations/vllm
+      title: vLLM
+    - local: community_integrations/sglang
+      title: SGLang
+    - local: community_integrations/transformers_as_backend
+      title: Building a compatible model backend for inference
+    title: Inference engines
+  - sections:
+    - local: community_integrations/llama_cpp
+      title: llama.cpp
+    title: Local deployment
+  title: Community integrations
 - isExpanded: false
   sections:
   - sections:
@@ -550,6 +561,8 @@
         title: HunYuanMoEV1
       - local: model_doc/ibert
         title: I-BERT
+      - local: model_doc/jais2
+        title: Jais2
       - local: model_doc/jamba
         title: Jamba
       - local: model_doc/jetmoe
@@ -594,6 +607,8 @@
         title: MegatronGPT2
       - local: model_doc/minimax
         title: MiniMax
+      - local: model_doc/minimax_m2
+        title: MiniMax-M2
       - local: model_doc/ministral
         title: Ministral
       - local: model_doc/ministral3
@@ -816,6 +831,8 @@
         title: MobileViT
       - local: model_doc/mobilevitv2
         title: MobileViTV2
+      - local: model_doc/pixio
+        title: Pixio
       - local: model_doc/poolformer
         title: PoolFormer
       - local: model_doc/prompt_depth_anything
@@ -904,6 +921,8 @@
         title: Hubert
       - local: model_doc/kyutai_speech_to_text
         title: Kyutai Speech-To-Text
+      - local: model_doc/lasr
+        title: LASR
       - local: model_doc/mimi
         title: Mimi
       - local: model_doc/mms
@@ -918,6 +937,8 @@
         title: MusicGen Melody
       - local: model_doc/parakeet
         title: Parakeet
+      - local: model_doc/pe_audio
+        title: PE Audio
       - local: model_doc/pop2piano
         title: Pop2Piano
       - local: model_doc/seamless_m4t
@@ -960,6 +981,8 @@
         title: XLSR-Wav2Vec2
       title: Audio models
     - sections:
+      - local: model_doc/pe_video
+        title: PE Video
       - local: model_doc/sam2_video
         title: SAM2 Video
       - local: model_doc/sam3_tracker_video
@@ -1026,6 +1049,8 @@
         title: EdgeTamVideo
       - local: model_doc/emu3
         title: Emu3
+      - local: model_doc/ernie4_5_vl_moe
+        title: ernie4_5_vl_moe
       - local: model_doc/evolla
         title: Evolla
       - local: model_doc/fast_vlm
@@ -1040,6 +1065,8 @@
         title: Gemma3n
       - local: model_doc/git
         title: GIT
+      - local: model_doc/glmasr
+        title: GLM-ASR
       - local: model_doc/glm46v
         title: Glm46V
       - local: model_doc/glm4v
@@ -1120,8 +1147,12 @@
         title: OWL-ViT
       - local: model_doc/owlv2
         title: OWLv2
+      - local: model_doc/paddleocr_vl
+        title: PaddleOCRVL
       - local: model_doc/paligemma
         title: PaliGemma
+      - local: model_doc/pe_audio_video
+        title: PE Audio Video
       - local: model_doc/perceiver
         title: Perceiver
       - local: model_doc/perception_lm

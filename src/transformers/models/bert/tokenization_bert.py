@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 The Google AI Language Team Authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +14,6 @@
 """Tokenization classes for Bert."""
 
 import collections
-from typing import Optional
 
 from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import WordPiece
@@ -48,8 +46,8 @@ class BertTokenizer(TokenizersBackend):
     this superclass for more information regarding those methods.
 
     Args:
-        vocab_file (`str`, *optional*):
-            File containing the vocabulary.
+        vocab (`str` or `dict[str, int]`, *optional*):
+            Custom vocabulary dictionary. If not provided, vocabulary is loaded from `vocab_file`.
         do_lower_case (`bool`, *optional*, defaults to `False`):
             Whether or not to lowercase the input when tokenizing.
         unk_token (`str`, *optional*, defaults to `"[UNK]"`):
@@ -72,17 +70,15 @@ class BertTokenizer(TokenizersBackend):
         strip_accents (`bool`, *optional*):
             Whether or not to strip all accents. If this option is not specified, then it will be determined by the
             value for `lowercase` (as in the original BERT).
-        vocab (`dict`, *optional*):
-            Custom vocabulary dictionary. If not provided, vocabulary is loaded from vocab_file.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "token_type_ids", "attention_mask"]
-    slow_tokenizer_class = None
+    model = WordPiece
 
     def __init__(
         self,
-        vocab_file: Optional[str] = None,
+        vocab: str | dict[str, int] | None = None,
         do_lower_case: bool = False,
         unk_token: str = "[UNK]",
         sep_token: str = "[SEP]",
@@ -90,29 +86,22 @@ class BertTokenizer(TokenizersBackend):
         cls_token: str = "[CLS]",
         mask_token: str = "[MASK]",
         tokenize_chinese_chars: bool = True,
-        strip_accents: Optional[bool] = None,
-        vocab: Optional[dict] = None,
+        strip_accents: bool | None = None,
         **kwargs,
     ):
         self.do_lower_case = do_lower_case
         self.tokenize_chinese_chars = tokenize_chinese_chars
         self.strip_accents = strip_accents
-
-        if vocab is not None:
-            self._vocab = (
-                {token: idx for idx, (token, _score) in enumerate(vocab)} if isinstance(vocab, list) else vocab
-            )
-        else:
-            self._vocab = {
+        if vocab is None:
+            vocab = {
                 str(pad_token): 0,
                 str(unk_token): 1,
                 str(cls_token): 2,
                 str(sep_token): 3,
                 str(mask_token): 4,
             }
-
+        self._vocab = vocab
         self._tokenizer = Tokenizer(WordPiece(self._vocab, unk_token=str(unk_token)))
-
         self._tokenizer.normalizer = normalizers.BertNormalizer(
             clean_text=True,
             handle_chinese_chars=tokenize_chinese_chars,
@@ -121,11 +110,7 @@ class BertTokenizer(TokenizersBackend):
         )
         self._tokenizer.pre_tokenizer = pre_tokenizers.BertPreTokenizer()
         self._tokenizer.decoder = decoders.WordPiece(prefix="##")
-
-        tokenizer_object = self._tokenizer
-
         super().__init__(
-            tokenizer_object=tokenizer_object,
             do_lower_case=do_lower_case,
             unk_token=unk_token,
             sep_token=sep_token,

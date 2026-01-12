@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,7 +13,7 @@
 # limitations under the License.
 """Fast Image processor class for LLaVa-NeXT."""
 
-from typing import Optional, Union
+from typing import Optional
 
 import torch
 from torchvision.transforms.v2 import functional as F
@@ -202,11 +201,11 @@ class LlavaNextImageProcessorFast(BaseImageProcessorFast):
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
         do_pad: bool,
-        disable_grouping: Optional[bool],
-        return_tensors: Optional[Union[str, TensorType]],
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         processed_images = []
@@ -260,7 +259,6 @@ class LlavaNextImageProcessorFast(BaseImageProcessorFast):
 
         if do_pad:
             processed_images = self._pad_for_batching(processed_images)
-        processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
         return BatchFeature(
             data={"pixel_values": processed_images, "image_sizes": image_sizes}, tensor_type=return_tensors
         )

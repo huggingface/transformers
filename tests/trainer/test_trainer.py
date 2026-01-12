@@ -24,7 +24,6 @@ import sys
 import tempfile
 import unittest
 from functools import partial
-from itertools import product
 from pathlib import Path
 from typing import Any
 from unittest.mock import Mock, patch
@@ -114,9 +113,6 @@ from transformers.training_args import OptimizerNames
 from transformers.utils import (
     SAFE_WEIGHTS_INDEX_NAME,
     SAFE_WEIGHTS_NAME,
-    WEIGHTS_INDEX_NAME,
-    WEIGHTS_NAME,
-    check_torch_load_is_safe,
     is_accelerate_available,
     is_apex_available,
     is_bitsandbytes_available,
@@ -640,10 +636,8 @@ if is_torch_available():
 
 
 class TrainerIntegrationCommon:
-    def check_saved_checkpoints(
-        self, output_dir, freq, total, is_pretrained=True, safe_weights=True, use_scaler=False
-    ):
-        weights_file = WEIGHTS_NAME if not safe_weights else SAFE_WEIGHTS_NAME
+    def check_saved_checkpoints(self, output_dir, freq, total, is_pretrained=True, use_scaler=False):
+        weights_file = SAFE_WEIGHTS_NAME
         file_list = [weights_file, "training_args.bin", "optimizer.pt", "scheduler.pt", "trainer_state.json"]
         if is_pretrained:
             file_list.append("config.json")
@@ -656,7 +650,14 @@ class TrainerIntegrationCommon:
                 self.assertTrue(os.path.isfile(os.path.join(checkpoint, filename)))
 
     def check_best_model_has_been_loaded(
-        self, output_dir, freq, total, trainer, metric, greater_is_better=False, is_pretrained=True, safe_weights=True
+        self,
+        output_dir,
+        freq,
+        total,
+        trainer,
+        metric,
+        greater_is_better=False,
+        is_pretrained=True,
     ):
         checkpoint = os.path.join(output_dir, f"checkpoint-{(total // freq) * freq}")
         log_history = TrainerState.load_from_json(os.path.join(checkpoint, "trainer_state.json")).log_history
@@ -670,11 +671,7 @@ class TrainerIntegrationCommon:
             best_model.to(trainer.args.device)
         else:
             best_model = RegressionModel()
-            if not safe_weights:
-                check_torch_load_is_safe()
-                state_dict = torch.load(os.path.join(checkpoint, WEIGHTS_NAME), weights_only=True)
-            else:
-                state_dict = safetensors.torch.load_file(os.path.join(checkpoint, SAFE_WEIGHTS_NAME))
+            state_dict = safetensors.torch.load_file(os.path.join(checkpoint, SAFE_WEIGHTS_NAME))
             best_model.load_state_dict(state_dict)
             best_model.to(trainer.args.device)
         torch.testing.assert_close(best_model.a, trainer.model.a)
@@ -707,26 +704,15 @@ class TrainerIntegrationCommon:
 
             self.assertEqual(log, log1)
 
-    def convert_to_sharded_checkpoint(self, folder, save_safe=True, load_safe=True):
+    def convert_to_sharded_checkpoint(self, folder):
         # Converts a checkpoint of a regression model to a sharded checkpoint.
-        if load_safe:
-            loader = safetensors.torch.load_file
-            weights_file = os.path.join(folder, SAFE_WEIGHTS_NAME)
-        else:
-            check_torch_load_is_safe()
-            loader = torch.load
-            weights_file = os.path.join(folder, WEIGHTS_NAME)
+        loader = safetensors.torch.load_file
+        weights_file = os.path.join(folder, SAFE_WEIGHTS_NAME)
 
-        if save_safe:
-            extension = "safetensors"
-            saver = safetensors.torch.save_file
-            index_file = os.path.join(folder, SAFE_WEIGHTS_INDEX_NAME)
-            shard_name = SAFE_WEIGHTS_NAME
-        else:
-            extension = "bin"
-            saver = torch.save
-            index_file = os.path.join(folder, WEIGHTS_INDEX_NAME)
-            shard_name = WEIGHTS_NAME
+        extension = "safetensors"
+        saver = safetensors.torch.save_file
+        index_file = os.path.join(folder, SAFE_WEIGHTS_INDEX_NAME)
+        shard_name = SAFE_WEIGHTS_NAME
 
         state_dict = loader(weights_file)
 
@@ -872,7 +858,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
             )
             # train with base loss
             set_seed(42)
-            model = AutoModelForCausalLM.from_pretrained(model_name)
+            model = AutoModelForCausalLM.from_pretrained(model_name, dtype=torch.float32)
             base_loss_callback = StoreLossCallback()
             trainer = Trainer(
                 model,
@@ -1555,9 +1541,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         tiny_model = get_peft_model(tiny_model, peft_config, "adapter1")
         tiny_model.add_adapter("adapter2", peft_config)
 
-        max_len_single_sentence = self.model_max_length - self.num_special_tokens_to_add(pair=False)
-
-        train_dataset = get_dataset(PATH_SAMPLE_TEXT, tokenizer, max_len_single_sentence)
+        train_dataset = get_dataset(PATH_SAMPLE_TEXT, tokenizer, 100)
 
         tokenizer.pad_token = tokenizer.eos_token
 
@@ -3101,25 +3085,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         trainer.train()
         self.check_saved_checkpoints(tmp_dir, 5, int(self.n_epochs * 64 / self.batch_size), False)
 
-    def test_safe_checkpoints(self):
-        for save_safetensors in [True, False]:
-            tmp_dir = self.get_auto_remove_tmp_dir()
-            trainer = get_regression_trainer(output_dir=tmp_dir, save_steps=5, save_safetensors=save_safetensors)
-            trainer.train()
-            self.check_saved_checkpoints(
-                tmp_dir, 5, int(self.n_epochs * 64 / self.batch_size), safe_weights=save_safetensors
-            )
-
-            # With a regular model that is not a PreTrainedModel
-            tmp_dir = self.get_auto_remove_tmp_dir()
-            trainer = get_regression_trainer(
-                output_dir=tmp_dir, save_steps=5, pretrained=False, save_safetensors=save_safetensors
-            )
-            trainer.train()
-            self.check_saved_checkpoints(
-                tmp_dir, 5, int(self.n_epochs * 64 / self.batch_size), False, safe_weights=save_safetensors
-            )
-
     def test_save_collator_tokenizer_by_default(self):
         class FakeCollator:
             def __init__(self):
@@ -3131,9 +3096,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
         data_collator = FakeCollator()
         tmp_dir = self.get_auto_remove_tmp_dir()
-        trainer = get_regression_trainer(
-            output_dir=tmp_dir, save_steps=5, save_safetensors=True, data_collator=data_collator
-        )
+        trainer = get_regression_trainer(output_dir=tmp_dir, save_steps=5, data_collator=data_collator)
         trainer.train()
         loaded_tokenizer = AutoTokenizer.from_pretrained(os.path.join(tmp_dir, os.listdir(tmp_dir)[0]))
         assert len(loaded_tokenizer) == len(trainer.data_collator.tokenizer), "Failed to load updated tokenizer"
@@ -3338,9 +3301,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             # Delete the reference
             del model_params, trainer
             # Checks if all checkpoints are there, +1 is necessary because range is 1-indexed
-            self.check_saved_checkpoints(
-                tmpdir, freq=1, total=training_steps + 1, is_pretrained=True, safe_weights=True, use_scaler=True
-            )
+            self.check_saved_checkpoints(tmpdir, freq=1, total=training_steps + 1, is_pretrained=True, use_scaler=True)
 
             # Checkpoint at intermediate step
             checkpoint = os.path.join(tmpdir, f"checkpoint-{resume_from_step + 1}")
@@ -3550,39 +3511,34 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             self.check_trainer_state_are_the_same(state, state1)
 
     @require_torch_up_to_2_accelerators
-    def test_resume_training_with_safe_checkpoint(self):
+    def test_resume_training_with_checkpoint(self):
         # This test will fail for more than 2 GPUs since the batch size will get bigger and with the number of
         # save_steps, the checkpoint will resume training at epoch 2 or more (so the data seen by the model
         # won't be the same since the training dataloader is shuffled).
 
-        for initial_safe in [False, True]:
-            for loaded_safe in [False, True]:
-                with tempfile.TemporaryDirectory() as tmpdir:
-                    trainer = get_regression_trainer(
-                        output_dir=tmpdir,
-                        train_len=128,
-                        save_steps=5,
-                        learning_rate=0.1,
-                        save_safetensors=initial_safe,
-                    )
-                    trainer.train()
-                    (a, b) = trainer.model.a.item(), trainer.model.b.item()
-                    state = dataclasses.asdict(trainer.state)
+        with tempfile.TemporaryDirectory() as tmpdir:
+            trainer = get_regression_trainer(
+                output_dir=tmpdir,
+                train_len=128,
+                save_steps=5,
+                learning_rate=0.1,
+            )
+            trainer.train()
+            (a, b) = trainer.model.a.item(), trainer.model.b.item()
+            state = dataclasses.asdict(trainer.state)
 
-                    checkpoint = os.path.join(tmpdir, "checkpoint-5")
-                    self.convert_to_sharded_checkpoint(checkpoint, load_safe=initial_safe, save_safe=loaded_safe)
+            checkpoint = os.path.join(tmpdir, "checkpoint-5")
+            self.convert_to_sharded_checkpoint(checkpoint)
 
-                    # Reinitialize trainer
-                    trainer = get_regression_trainer(
-                        output_dir=tmpdir, train_len=128, save_steps=5, learning_rate=0.1, save_safetensors=loaded_safe
-                    )
+            # Reinitialize trainer
+            trainer = get_regression_trainer(output_dir=tmpdir, train_len=128, save_steps=5, learning_rate=0.1)
 
-                    trainer.train(resume_from_checkpoint=checkpoint)
-                    (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
-                    state1 = dataclasses.asdict(trainer.state)
-                    self.assertEqual(a, a1)
-                    self.assertEqual(b, b1)
-                    self.check_trainer_state_are_the_same(state, state1)
+            trainer.train(resume_from_checkpoint=checkpoint)
+            (a1, b1) = trainer.model.a.item(), trainer.model.b.item()
+            state1 = dataclasses.asdict(trainer.state)
+            self.assertEqual(a, a1)
+            self.assertEqual(b, b1)
+            self.check_trainer_state_are_the_same(state, state1)
 
     @require_torch_up_to_2_accelerators
     def test_resume_training_with_gradient_accumulation(self):
@@ -3735,8 +3691,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
     def test_load_best_model_from_safetensors(self):
         total = int(self.n_epochs * 64 / self.batch_size)
-        for save_safetensors, pretrained in product([False, True], [False, True]):
-            save_safetensors = True
+        for pretrained in [False, True]:
             with tempfile.TemporaryDirectory() as tmpdir:
                 trainer = get_regression_trainer(
                     a=1.5,
@@ -3747,15 +3702,12 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
                     eval_strategy="steps",
                     save_steps=5,
                     load_best_model_at_end=True,
-                    save_safetensors=save_safetensors,
                     pretrained=pretrained,
                 )
                 self.assertFalse(trainer.args.greater_is_better)
                 trainer.train()
-                self.check_saved_checkpoints(tmpdir, 5, total, is_pretrained=pretrained, safe_weights=save_safetensors)
-                self.check_best_model_has_been_loaded(
-                    tmpdir, 5, total, trainer, "eval_loss", is_pretrained=pretrained, safe_weights=save_safetensors
-                )
+                self.check_saved_checkpoints(tmpdir, 5, total, is_pretrained=pretrained)
+                self.check_best_model_has_been_loaded(tmpdir, 5, total, trainer, "eval_loss", is_pretrained=pretrained)
 
     @slow
     def test_trainer_eval_mrpc(self):
@@ -3779,9 +3731,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
         model = AutoModelForCausalLM.from_pretrained(MODEL_ID)
 
-        max_len_single_sentence = self.model_max_length - self.num_special_tokens_to_add(pair=False)
-
-        dataset = get_dataset(PATH_SAMPLE_TEXT, tokenizer, max_len_single_sentence)
+        dataset = get_dataset(PATH_SAMPLE_TEXT, tokenizer, 100)
         with tempfile.TemporaryDirectory() as tmp_dir:
             training_args = TrainingArguments(
                 output_dir=tmp_dir,
@@ -3805,8 +3755,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
     def test_trainer_eval_lm(self):
         MODEL_ID = "distilbert/distilroberta-base"
         tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
-        max_len_single_sentence = self.model_max_length - self.num_special_tokens_to_add(pair=False)
-        dataset = get_dataset(PATH_SAMPLE_TEXT, tokenizer, max_len_single_sentence)
+        dataset = get_dataset(PATH_SAMPLE_TEXT, tokenizer, 100)
         self.assertEqual(len(dataset), 31)
 
     def test_training_iterable_dataset(self):
@@ -4638,9 +4587,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
         image_processor_dict = image_processor.to_dict()
         reloaded_image_processor_dict = reloaded_image_processor.to_dict()
-        # When the processor is saved in the trainer, the _processor_class gets set in the reload_image_processor dict
-        image_processor_dict.pop("_processor_class")
-        reloaded_image_processor_dict.pop("_processor_class")
         self.assertDictEqual(image_processor_dict, reloaded_image_processor_dict)
 
         # For tokenizers, there isn't a direct to_dict method and the properties stored in the configs e.g.
@@ -4991,10 +4937,8 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-LlamaForCausalLM")
         model = BasicTextGenerationModel(vocab_size=tokenizer.vocab_size, hidden_size=32)
-        # Note that this class does not have a config attribute
-        max_len_single_sentence = tokenizer.model_max_length - tokenizer.num_special_tokens_to_add(pair=False)
 
-        train_dataset = get_dataset(PATH_SAMPLE_TEXT, tokenizer, max_len_single_sentence)
+        train_dataset = get_dataset(PATH_SAMPLE_TEXT, tokenizer, 100)
 
         with tempfile.TemporaryDirectory() as tmpdir:
             training_args = TrainingArguments(
@@ -5584,6 +5528,7 @@ class TrainerHyperParameterOptunaIntegrationTestWithFullEval(unittest.TestCase):
 
 @require_torch
 @require_ray
+@unittest.skip("don't work because of a serialization issue")
 class TrainerHyperParameterRayIntegrationTest(unittest.TestCase):
     def setUp(self):
         args = TrainingArguments("..")

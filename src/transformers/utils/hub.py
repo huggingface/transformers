@@ -37,6 +37,7 @@ from huggingface_hub import (
     create_repo,
     hf_hub_download,
     hf_hub_url,
+    is_offline_mode,
     list_repo_tree,
     snapshot_download,
     try_to_load_from_cache,
@@ -81,13 +82,6 @@ class DownloadKwargs(TypedDict, total=False):
     revision: str | None
     subfolder: str
     commit_hash: str | None
-
-
-def is_offline_mode():
-    # Import inside the function so test patches on `huggingface_hub.constants` are picked up.
-    from huggingface_hub import constants as hf_hub_constants
-
-    return hf_hub_constants.HF_HUB_OFFLINE
 
 
 # Determine default cache directory.
@@ -727,8 +721,7 @@ class PushToHubMixin:
         revision: str | None = None,
         create_pr: bool = False,
         # Serialization details
-        max_shard_size: int | str | None = "5GB",
-        safe_serialization: bool = True,
+        max_shard_size: int | str | None = "50GB",
         tags: list[str] | None = None,
     ) -> str:
         """
@@ -751,13 +744,10 @@ class PushToHubMixin:
                 Branch to push the uploaded files to.
             create_pr (`bool`, *optional*, defaults to `False`):
                 Whether or not to create a PR with the uploaded files or directly commit.
-            max_shard_size (`int` or `str`, *optional*, defaults to `"5GB"`):
+            max_shard_size (`int` or `str`, *optional*, defaults to `"50GB"`):
                 Only applicable for models. The maximum size for a checkpoint before being sharded. Checkpoints shard
                 will then be each of size lower than this size. If expressed as a string, needs to be digits followed
-                by a unit (like `"5MB"`). We default it to `"5GB"` so that users can easily load models on free-tier
-                Google Colab instances without any CPU OOM issues.
-            safe_serialization (`bool`, *optional*, defaults to `True`):
-                Whether or not to convert the model weights in safetensors format for safer serialization.
+                by a unit (like `"5MB"`).
             tags (`list[str]`, *optional*):
                 List of tags to push on the Hub.
 
@@ -783,7 +773,7 @@ class PushToHubMixin:
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             # Save all files.
-            self.save_pretrained(tmp_dir, max_shard_size=max_shard_size, safe_serialization=safe_serialization)
+            self.save_pretrained(tmp_dir, max_shard_size=max_shard_size)
 
             # Update model card
             model_card.save(os.path.join(tmp_dir, "README.md"))

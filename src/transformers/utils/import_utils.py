@@ -55,9 +55,15 @@ def _is_package_available(pkg_name: str, return_version: bool = False) -> tuple[
             # importlib.metadata works with the distribution package, which may be different from the import
             # name (e.g. `PIL` is the import name, but `pillow` is the distribution name)
             distributions = PACKAGE_DISTRIBUTION_MAPPING[pkg_name]
-            # In most cases, the packages are well-behaved and both have the same name. If it's not the case, we
-            # pick the first item of the list as best guess (it's almost always a list of length 1 anyway)
-            distribution_name = pkg_name if pkg_name in distributions else distributions[0]
+            # Per PEP 503, underscores and hyphens are equivalent in package names.
+            # Prefer the distribution that matches the (normalized) package name.
+            normalized_pkg_name = pkg_name.replace("_", "-")
+            if normalized_pkg_name in distributions:
+                distribution_name = normalized_pkg_name
+            elif pkg_name in distributions:
+                distribution_name = pkg_name
+            else:
+                distribution_name = distributions[0]
             package_version = importlib.metadata.version(distribution_name)
         except (importlib.metadata.PackageNotFoundError, KeyError):
             # If we cannot find the metadata (because of editable install for example), try to import directly.
@@ -69,6 +75,16 @@ def _is_package_available(pkg_name: str, return_version: bool = False) -> tuple[
         return package_exists, package_version
     else:
         return package_exists
+
+
+def is_env_variable_true(env_variable: str) -> bool:
+    """Detect whether `env_variable` has been set to a true value in the environment"""
+    return os.getenv(env_variable, "false").lower() in ("true", "1", "y", "yes", "on")
+
+
+def is_env_variable_false(env_variable: str) -> bool:
+    """Detect whether `env_variable` has been set to a false value in the environment"""
+    return os.getenv(env_variable, "true").lower() in ("false", "0", "n", "no", "off")
 
 
 ENV_VARS_TRUE_VALUES = {"1", "ON", "YES", "TRUE"}
@@ -537,6 +553,11 @@ def is_torch_flex_attn_available() -> bool:
 
 
 @lru_cache
+def is_grouped_mm_available() -> bool:
+    return is_torch_available() and version.parse(get_torch_version()) >= version.parse("2.9.0")
+
+
+@lru_cache
 def is_kenlm_available() -> bool:
     return _is_package_available("kenlm")
 
@@ -869,14 +890,17 @@ def is_flash_attn_2_available() -> bool:
 
     import torch
 
-    if torch.version.cuda:
-        return version.parse(flash_attn_version) >= version.parse("2.1.0")
-    elif torch.version.hip:
-        # TODO: Bump the requirement to 2.1.0 once released in https://github.com/ROCmSoftwarePlatform/flash-attention
-        return version.parse(flash_attn_version) >= version.parse("2.0.4")
-    elif is_torch_mlu_available():
-        return version.parse(flash_attn_version) >= version.parse("2.3.3")
-    else:
+    try:
+        if torch.version.cuda:
+            return version.parse(flash_attn_version) >= version.parse("2.1.0")
+        elif torch.version.hip:
+            # TODO: Bump the requirement to 2.1.0 once released in https://github.com/ROCmSoftwarePlatform/flash-attention
+            return version.parse(flash_attn_version) >= version.parse("2.0.4")
+        elif is_torch_mlu_available():
+            return version.parse(flash_attn_version) >= version.parse("2.3.3")
+        else:
+            return False
+    except packaging.version.InvalidVersion:
         return False
 
 
@@ -894,7 +918,12 @@ def is_flash_attn_greater_or_equal_2_10() -> bool:
 @lru_cache
 def is_flash_attn_greater_or_equal(library_version: str) -> bool:
     is_available, flash_attn_version = _is_package_available("flash_attn", return_version=True)
-    return is_available and version.parse(flash_attn_version) >= version.parse(library_version)
+    if not is_available:
+        return False
+    try:
+        return version.parse(flash_attn_version) >= version.parse(library_version)
+    except packaging.version.InvalidVersion:
+        return False
 
 
 @lru_cache
@@ -978,7 +1007,7 @@ def is_optimum_available() -> bool:
 
 
 @lru_cache
-def is_auto_awq_available() -> bool:
+def is_llm_awq_available() -> bool:
     return _is_package_available("awq")
 
 
@@ -1013,11 +1042,6 @@ def is_qutlass_available():
 @lru_cache
 def is_compressed_tensors_available() -> bool:
     return _is_package_available("compressed_tensors")
-
-
-@lru_cache
-def is_auto_gptq_available() -> bool:
-    return _is_package_available("auto_gptq")
 
 
 @lru_cache
@@ -1061,6 +1085,11 @@ def is_pytest_available() -> bool:
 
 
 @lru_cache
+def is_pytest_order_available() -> bool:
+    return is_pytest_available() and _is_package_available("pytest_order")
+
+
+@lru_cache
 def is_spacy_available() -> bool:
     return _is_package_available("spacy")
 
@@ -1093,6 +1122,16 @@ def is_natten_available() -> bool:
 @lru_cache
 def is_nltk_available() -> bool:
     return _is_package_available("nltk")
+
+
+@lru_cache
+def is_numba_available() -> bool:
+    is_available = _is_package_available("numba")
+    if not is_available:
+        return False
+
+    numpy_available, numpy_version = _is_package_available("numpy", return_version=True)
+    return not numpy_available or version.parse(numpy_version) < version.parse("2.2.0")
 
 
 @lru_cache
@@ -1292,6 +1331,34 @@ def is_torch_fx_proxy(x):
         return False
 
 
+def is_jax_jitting(x):
+    """returns True if we are inside of `jax.jit` context, False otherwise.
+
+    When a torch model is being compiled with `jax.jit` using torchax,
+    the tensor that goes through the model would be an instance of
+    `torchax.tensor.Tensor`, which is a tensor subclass. This tensor has
+    a `jax` method to return the inner Jax array
+    (https://github.com/google/torchax/blob/13ce870a1d9adb2430333c27bb623469e3aea34e/torchax/tensor.py#L134).
+    Here we use ducktyping to detect if the inner jax array is a jax Tracer
+    then we are in tracing context. (See more at: https://github.com/jax-ml/jax/discussions/9241)
+
+    Args:
+      x: torch.Tensor
+
+    Returns:
+      bool: whether we are inside of jax jit tracing.
+    """
+
+    if not hasattr(x, "jax"):
+        return False
+    try:
+        import jax
+
+        return isinstance(x.jax(), jax.core.Tracer)
+    except Exception:
+        return False
+
+
 def is_jit_tracing() -> bool:
     try:
         import torch
@@ -1311,12 +1378,14 @@ def is_cuda_stream_capturing() -> bool:
 
 
 def is_tracing(tensor=None) -> bool:
-    """Checks whether we are tracing a graph with dynamo (compile or export), torch.jit, torch.fx or CUDA stream capturing"""
+    """Checks whether we are tracing a graph with dynamo (compile or export), torch.jit, torch.fx, jax.jit (with torchax) or
+    CUDA stream capturing"""
     # Note that `is_torchdynamo_compiling` checks both compiling and exporting (the export check is stricter and
     # only checks export)
     _is_tracing = is_torchdynamo_compiling() or is_jit_tracing() or is_cuda_stream_capturing()
     if tensor is not None:
         _is_tracing |= is_torch_fx_proxy(tensor)
+        _is_tracing |= is_jax_jitting(tensor)
     return _is_tracing
 
 
@@ -1784,6 +1853,20 @@ BACKENDS_MAPPING = OrderedDict(
 
 
 def requires_backends(obj, backends):
+    """
+    Method that automatically raises in case the specified backends are not available. It is often used during class
+    initialization to ensure the required dependencies are installed:
+
+    ```py
+    requires_backends(self, ["torch"])
+    ```
+
+    The backends should be defined in the `BACKEND_MAPPING` defined in `transformers.utils.import_utils`.
+
+    Args:
+        obj: object to be checked
+        backends: list or tuple of backends to check.
+    """
     if not isinstance(backends, (list, tuple)):
         backends = [backends]
 

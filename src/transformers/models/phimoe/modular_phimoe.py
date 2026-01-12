@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 Microsoft and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -24,7 +23,7 @@ from ...modeling_layers import (
     GenericForSequenceClassification,
 )
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
-from ...utils.generic import OutputRecorder
+from ...utils.generic import OutputRecorder, maybe_autocast
 from ..llama.modeling_llama import LlamaAttention
 from ..mixtral.modeling_mixtral import (
     MixtralDecoderLayer,
@@ -52,7 +51,7 @@ class PhimoeRotaryEmbedding(MixtralRotaryEmbedding):
         inv_freq, self.attention_scaling = self.rope_init_fn(self.config, device)
 
         self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.original_inv_freq = inv_freq
+        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
     def forward(self, x, position_ids=None, layer_type=None):
         if layer_type is not None:
@@ -74,7 +73,7 @@ class PhimoeRotaryEmbedding(MixtralRotaryEmbedding):
         position_ids_expanded = position_ids[:, None, :].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos() * mscale
