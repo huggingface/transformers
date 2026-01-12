@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,7 +18,7 @@ import os
 import re
 from collections import OrderedDict
 from collections.abc import Callable, Iterator, KeysView, ValuesView
-from typing import Any, TypeVar, Union
+from typing import Any, TypeVar
 
 from ...configuration_utils import PreTrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
@@ -264,6 +263,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("mgp-str", "MgpstrConfig"),
         ("mimi", "MimiConfig"),
         ("minimax", "MiniMaxConfig"),
+        ("minimax_m2", "MiniMaxM2Config"),
         ("ministral", "MinistralConfig"),
         ("ministral3", "Ministral3Config"),
         ("mistral", "MistralConfig"),
@@ -726,6 +726,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("mgp-str", "MGP-STR"),
         ("mimi", "Mimi"),
         ("minimax", "MiniMax"),
+        ("minimax_m2", "MiniMax-M2"),
         ("ministral", "Ministral"),
         ("ministral3", "Ministral3"),
         ("mistral", "Mistral"),
@@ -1035,7 +1036,7 @@ def model_type_to_module_name(key) -> str:
     return key
 
 
-def config_class_to_model_type(config) -> Union[str, None]:
+def config_class_to_model_type(config) -> str | None:
     """Converts a config class name to the corresponding model type"""
     for key, cls in CONFIG_MAPPING_NAMES.items():
         if cls == config:
@@ -1152,7 +1153,7 @@ class _LazyLoadAllMappings(OrderedDict[str, str]):
         return item in self._data
 
 
-def _get_class_name(model_class: Union[str, list[str]]):
+def _get_class_name(model_class: str | list[str]):
     if isinstance(model_class, (list, tuple)):
         return " or ".join([f"[`{c}`]" for c in model_class if c is not None])
     return f"[`{model_class}`]"
@@ -1245,7 +1246,7 @@ class AutoConfig:
 
     @classmethod
     @replace_list_option_in_docstrings()
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike[str]], **kwargs):
+    def from_pretrained(cls, pretrained_model_name_or_path: str | os.PathLike[str], **kwargs):
         r"""
         Instantiate one of the configuration classes of the library from a pretrained model configuration.
 

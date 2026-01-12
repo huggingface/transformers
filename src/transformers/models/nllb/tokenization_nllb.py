@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The Facebook AI Research Team Authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, Union
 
 from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import BPE
@@ -90,8 +88,8 @@ class NllbTokenizer(TokenizersBackend):
 
     def __init__(
         self,
-        vocab: Optional[Union[str, dict[str, int]]] = None,
-        merges: Optional[Union[str, list[str]]] = None,
+        vocab: str | dict[str, int] | None = None,
+        merges: str | list[str] | None = None,
         bos_token="<s>",
         eos_token="</s>",
         sep_token="</s>",
@@ -190,7 +188,7 @@ class NllbTokenizer(TokenizersBackend):
         self.set_src_lang_special_tokens(self._src_lang)
 
     def _build_translation_inputs(
-        self, raw_inputs, return_tensors: str, src_lang: Optional[str], tgt_lang: Optional[str], **extra_kwargs
+        self, raw_inputs, return_tensors: str, src_lang: str | None, tgt_lang: str | None, **extra_kwargs
     ):
         """Used by translation pipeline, to prepare inputs for the generate function"""
         if src_lang is None or tgt_lang is None:
@@ -205,12 +203,12 @@ class NllbTokenizer(TokenizersBackend):
         self,
         src_texts: list[str],
         src_lang: str = "eng_Latn",
-        tgt_texts: Optional[list[str]] = None,
+        tgt_texts: list[str] | None = None,
         tgt_lang: str = "fra_Latn",
-        max_length: Optional[int] = None,
-        max_target_length: Optional[int] = None,
+        max_length: int | None = None,
+        max_target_length: int | None = None,
         padding: str = "longest",
-        return_tensors: Optional[str] = None,
+        return_tensors: str | None = None,
         truncation: bool = True,
         **kwargs,
     ) -> BatchEncoding:

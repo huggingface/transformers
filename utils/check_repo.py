@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,7 +21,7 @@ Utility that performs several consistency checks on the repo. This includes:
 - checking all the auto mapping are properly defined (no typos, importable)
 - checking the list of deprecated models is up to date
 
-Use from the root of the repo with (as used in `make repo-consistency`):
+Use from the root of the repo with (as used in `make check-repo`):
 
 ```bash
 python utils/check_repo.py
@@ -988,7 +987,6 @@ DEPRECATED_OBJECTS = [
     "SquadV1Processor",
     "SquadV2Processor",
     "Wav2Vec2ForMaskedLM",
-    "Wav2Vec2Tokenizer",
     "glue_compute_metrics",
     "glue_convert_examples_to_features",
     "glue_output_modes",
@@ -1011,7 +1009,6 @@ UNDOCUMENTED_OBJECTS = [
     "DPRPretrainedReader",  # Like an Encoder.
     "DummyObject",  # Just picked by mistake sometimes.
     "MecabTokenizer",  # Internal, should never have been in the main init.
-    "ModelCard",  # Internal type.
     "SqueezeBertModule",  # Internal building block (should have been called SqueezeBertLayer)
     "TransfoXLCorpus",  # Internal type.
     "WordpieceTokenizer",  # Internal, should never have been in the main init.

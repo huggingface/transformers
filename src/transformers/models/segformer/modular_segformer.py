@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -57,10 +56,10 @@ class SegformerImageProcessorFast(BeitImageProcessorFast):
     def _preprocess_image_like_inputs(
         self,
         images: ImageInput,
-        segmentation_maps: Optional[ImageInput],
+        segmentation_maps: ImageInput | None,
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
-        device: Optional[Union[str, "torch.device"]] = None,
+        device: Union[str, "torch.device"] | None = None,
         **kwargs: Unpack[SegformerImageProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -107,10 +106,10 @@ class SegformerImageProcessorFast(BeitImageProcessorFast):
         do_normalize: bool,
         size: SizeDict,
         rescale_factor: float,
-        image_mean: Union[float, list[float]],
-        image_std: Union[float, list[float]],
+        image_mean: float | list[float],
+        image_std: float | list[float],
         disable_grouping: bool,
-        return_tensors: Optional[Union[str, TensorType]],
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:  # Return type can be list if return_tensors=None
         if do_reduce_labels:

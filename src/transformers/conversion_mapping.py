@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright (C) 2025 the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -237,6 +236,10 @@ def _build_checkpoint_conversion_mapping():
     mapping["qwen3_vl_moe"] = mapping["qwen2_moe"].copy()
     mapping["hunyuan_v1_moe"] = mapping["qwen2_moe"].copy()
     mapping["minimax"] = mapping["mixtral"].copy()
+    mapping["minimax_m2"] = mapping["mixtral"].copy()
+    mapping["minimax_m2"] += [
+        WeightRenaming(".block_sparse_moe.e_score_correction_bias", ".mlp.e_score_correction_bias"),
+    ]
     mapping["flex_olmo"] = mapping["qwen2_moe"].copy()
     mapping["olmoe"] = mapping["qwen2_moe"].copy()
 
