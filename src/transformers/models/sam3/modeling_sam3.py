@@ -2146,7 +2146,6 @@ class Sam3Model(Sam3PreTrainedModel):
         self,
         input_ids: torch.LongTensor,
         attention_mask: torch.Tensor | None = None,
-        return_dict: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
