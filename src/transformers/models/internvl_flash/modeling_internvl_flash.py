@@ -1097,9 +1097,6 @@ class InternvlFlashModel(InternvlFlashPreTrainedModel):
         """
         Reconstructs the batch by removing compressed visual tokens based on gating results.
         """
-        # python utils/modular_model_converter.py internvl_flash
-        # make style
-        # pytest tests/models/internvl_flash/test_modeling_internvl_flash.py
         device = inputs_embeds.device
 
         gate_result_split = torch.split(gate_result, lengths.tolist())
