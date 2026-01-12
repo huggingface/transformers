@@ -46,7 +46,7 @@ def smart_resize(
     height: int,
     width: int,
     factor: int = 16,
-    min_pixels: int = 512 * 512,
+    min_pixels: int = 384 * 384,
     max_pixels: int = 2048 * 2048,
 ) -> tuple[int, int]:
     if height < factor or width < factor:
@@ -56,7 +56,11 @@ def smart_resize(
             f"absolute aspect ratio must be smaller than 200, got {max(height, width) / min(height, width)}"
         )
 
+    height = height // 2
+    width = width // 2
+
     if height * width >= min_pixels**2:
+        # need to downscale again
         height = height // 2
         width = width // 2
 
@@ -73,11 +77,8 @@ def smart_resize(
     if max_side * scale > longest_edge:
         scale = longest_edge / max_side
 
-    new_h = height * scale
-    new_w = height * scale
-
-    h_bar = max(factor, int(round(new_h / factor)) * factor)
-    w_bar = max(factor, int(round(new_w / factor)) * factor)
+    h_bar = max(factor, int(round(height * scale / factor)) * factor)
+    w_bar = max(factor, int(round(width * scale / factor)) * factor)
 
     if max(h_bar, w_bar) > longest_edge:
         beta = max(h_bar, w_bar) / longest_edge
