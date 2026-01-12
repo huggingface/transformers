@@ -1236,7 +1236,7 @@ def smart_resize(
     height: int,
     width: int,
     factor: int = 16,
-    min_pixels: int = 1024 * 1024,
+    min_pixels: int = 512 * 512,
     max_pixels: int = 2048 * 2048,
 ) -> tuple[int, int]:
     if height < factor or width < factor:
