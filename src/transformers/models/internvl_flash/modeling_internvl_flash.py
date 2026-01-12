@@ -33,6 +33,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
+from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
@@ -44,7 +45,7 @@ from .configuration_internvl_flash import InternvlFlashConfig, InternvlFlashVisi
 
 
 class InternvlFlashMLP(nn.Module):
-    def __init__(self, in_dim, out_dim, dropout=0.0):
+    def __init__(self, in_dim, out_dim, dropout=0.1):
         super().__init__()
         self.dense_in = nn.Linear(in_dim, out_dim)
         self.act_fn = nn.GELU()
@@ -64,10 +65,46 @@ class InternvlFlashMLP(nn.Module):
         return hidden_states
 
 
-class InternvlFlashMLP2(nn.Module):
-    def __init__(self, vit_hidden_size, llm_hidden_size, config):
+def pixel_shuffle(vision_features: torch.Tensor, scale_factor: float = 0.5):
+    """Perform pixel shuffle downsampling on vision features.
+
+    Args:
+        vision_features (`torch.Tensor`):
+            Input tensor of shape (batch_size, width, height, channels).
+        scale_factor (`float`, *optional*, defaults to `0.5`):
+            Factor by which to downsample. Default is 0.5, which halves the dimensions.
+
+    Returns:
+        vision_features (`torch.Tensor`):
+            Downsampled tensor of shape (batch_size, height*scale_factor, width*scale_factor, channels/(scale_factor^2)).
+    """
+    batch_size, width, height, channels = vision_features.size()
+
+    if height % scale_factor != 0 or width % scale_factor != 0:
+        raise ValueError("Height and width must be divisible by scale_factor for proper downsampling.")
+
+    # Reshape to allow downsampling
+    vision_features = vision_features.view(batch_size, width, int(height * scale_factor), int(channels / scale_factor))
+    # Permute dimensions to align downsampled axis correctly
+    vision_features = vision_features.permute(0, 2, 1, 3).contiguous()
+
+    # Reshape to achieve final downsampled dimensions
+    vision_features = vision_features.view(
+        batch_size, int(height * scale_factor), int(width * scale_factor), int(channels / (scale_factor**2))
+    )
+
+    # Swap height and width back for proper orientation
+    vision_features = vision_features.permute(0, 2, 1, 3).contiguous()
+
+    return vision_features
+
+
+class InternvlFlashMultimodalProjection(nn.Module):
+    def __init__(self, config):
         super().__init__()
 
+        vit_hidden_size = config.vision_config.hidden_size
+        llm_hidden_size = config.text_config.hidden_size
         in_dim = vit_hidden_size * int(1 / config.downsample_ratio) ** 4
         mid_dim = llm_hidden_size * 2
         out_dim = llm_hidden_size
@@ -79,8 +116,13 @@ class InternvlFlashMLP2(nn.Module):
         self.act_fn2 = nn.GELU()
         self.dropout2 = nn.Dropout(0.1)
         self.dense3 = nn.Linear(mid_dim, out_dim)
+        self.downsample_ratio = config.downsample_ratio
 
     def forward(self, hidden_states):
+        # pixel shuffle (downsample_ratio^2)
+        hidden_states = pixel_shuffle(hidden_states, scale_factor=self.downsample_ratio**2)
+        hidden_states = hidden_states.reshape(hidden_states.shape[0], -1, hidden_states.shape[-1])
+
         hidden_states = self.norm(hidden_states)
         hidden_states = self.dense1(hidden_states)
         hidden_states = self.act_fn1(hidden_states)
@@ -94,9 +136,8 @@ class InternvlFlashMLP2(nn.Module):
 
 
 class InternvlFlashGating(nn.Module):
-    def __init__(self, hidden_size=2048, expansion_factor=4, dropout=0.1, use_checkpoint=True):
+    def __init__(self, hidden_size=2048, expansion_factor=4):
         super().__init__()
-        self.use_checkpoint = use_checkpoint
         mid_dim = hidden_size * expansion_factor
 
         self.block1 = InternvlFlashMLP(hidden_size, mid_dim)
@@ -112,7 +153,7 @@ class InternvlFlashGating(nn.Module):
         x = x + self.block3(x)
         x = x + self.block4(x)
         logits = self.gate_proj(self.gate_norm(x))
-        probs = torch.softmax(logits, dim=-1)  # 每个 token 的 expert 选择概率
+        probs = torch.softmax(logits, dim=-1)
         return probs
 
 
@@ -207,31 +248,20 @@ class InternvlFlashCrossAttentionPooling(nn.Module):
         batched_tokens: List of Tensors of shape [Ti, D], length = B
         """
         B = len(batched_tokens)
-        if B == 0:
-            return torch.empty(
-                0, self.query_token.shape[-1], device=self.query_token.device, dtype=self.query_token.dtype
-            )
-
         D = batched_tokens[0].shape[-1]
         device = batched_tokens[0].device
         # 1. Padding
         max_len = max(t.shape[0] for t in batched_tokens)
         dtype = self.query_token.dtype
         padded = torch.zeros(B, max_len, D, dtype=dtype, device=device)
-        padding_mask = torch.ones(B, max_len, dtype=torch.bool, device=device)
+        attention_mask = torch.zeros(B, max_len, dtype=torch.long, device=device)
         for i, t in enumerate(batched_tokens):
             L = t.shape[0]
             padded[i, :L] = t
-            padding_mask[i, :L] = False
-        # 2. Query token: [B, 1, D]
+            attention_mask[i, :L] = 1
+
         query = self.query_token.unsqueeze(0).expand(B, -1, -1)  # learnable token for each sample
-
-        attention_mask = torch.zeros_like(padding_mask, dtype=query.dtype)
-        min_value = torch.finfo(query.dtype).min
-        attention_mask.masked_fill_(padding_mask, min_value)
-
-        # 3. Adjust Attention Score: [B, Num_Heads, Q_Len, K_Len]
-        attention_mask = attention_mask.unsqueeze(1).unsqueeze(1)
+        attention_mask = _prepare_4d_attention_mask(attention_mask, dtype, tgt_len=1)
 
         # 4. Attention layers
         out1 = self.attn1(query, padded, padded, attention_mask=attention_mask)[0]  # [B, 1, D]
@@ -246,7 +276,7 @@ class InternvlFlashCrossAttentionPooling(nn.Module):
 
 
 class InternvlFlashMultiModalProjector(nn.Module):
-    def __init__(self, config: InternvlFlashConfig):
+    def __init__(self, config):
         super().__init__()
         self.layer_norm = nn.LayerNorm(config.vision_config.hidden_size * int(1 / config.downsample_ratio) ** 2)
         self.linear_1 = nn.Linear(
@@ -254,8 +284,11 @@ class InternvlFlashMultiModalProjector(nn.Module):
         )
         self.act = ACT2FN[config.projector_hidden_act]
         self.linear_2 = nn.Linear(config.text_config.hidden_size, config.text_config.hidden_size)
+        self.downsample_ratio = config.downsample_ratio
 
     def forward(self, image_features):
+        image_features = pixel_shuffle(image_features, scale_factor=self.downsample_ratio)
+        image_features = image_features.reshape(image_features.shape[0], -1, image_features.shape[-1])
         hidden_states = self.layer_norm(image_features)
         hidden_states = self.linear_1(hidden_states)
         hidden_states = self.act(hidden_states)
@@ -737,15 +770,14 @@ class InternvlFlashModel(InternvlFlashPreTrainedModel):
     def __init__(self, config: InternvlFlashConfig):
         super().__init__(config)
         self.vision_tower = AutoModel.from_config(config.vision_config)
+
         self.multi_modal_projector = InternvlFlashMultiModalProjector(config)
         self.language_model = AutoModel.from_config(config.text_config)
 
         vit_hidden_size = config.vision_config.hidden_size
         self.pooling_before_gating = InternvlFlashCrossAttentionPooling(dim=vit_hidden_size)
         self.gating = InternvlFlashGating(hidden_size=vit_hidden_size)
-
-        llm_hidden_size = config.text_config.hidden_size
-        self.mlp2 = InternvlFlashMLP2(vit_hidden_size, llm_hidden_size, config)
+        self.mlp2 = InternvlFlashMultimodalProjection(config)
         self.flash_relative_threshold = config.flash_relative_threshold
         self.flash_absolute_threshold = config.flash_absolute_threshold
         self.post_init()
@@ -774,8 +806,8 @@ class InternvlFlashModel(InternvlFlashPreTrainedModel):
         Args:
             pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`)
                The tensors corresponding to the input images.
-            vision_feature_layer (`int` or `list[int]`):
-                Layer index or list of layer indices to extract features from.
+            lengths (`torch.Tensor`):
+                A tensor containing the number of image patches per image in the batch.
         Returns:
             vision_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`.
         """
@@ -795,12 +827,8 @@ class InternvlFlashModel(InternvlFlashPreTrainedModel):
 
         vit_embeds_256 = vit_embeds_1024.clone()
 
-        vit_embeds_64 = self.pixel_shuffle(vit_embeds_1024, scale_factor=self.config.downsample_ratio**2)
-        vit_embeds_64 = vit_embeds_64.reshape(vit_embeds_64.shape[0], -1, vit_embeds_64.shape[-1])
-        vit_embeds_64 = self.mlp2(vit_embeds_64)
+        vit_embeds_64 = self.mlp2(vit_embeds_1024)
 
-        vit_embeds_256 = self.pixel_shuffle(vit_embeds_256, scale_factor=self.config.downsample_ratio)
-        vit_embeds_256 = vit_embeds_256.reshape(vit_embeds_256.shape[0], -1, vit_embeds_256.shape[-1])
         vit_embeds_256 = self.multi_modal_projector(vit_embeds_256)
 
         relative_threshold_value = torch.quantile(gate[:, 0].to(torch.float32), self.flash_relative_threshold)
@@ -864,8 +892,8 @@ class InternvlFlashModel(InternvlFlashPreTrainedModel):
         cache_position: Optional[torch.LongTensor] = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Union[tuple, InternvlFlashModelOutputWithPast]:
-        if (input_ids is None) ^ (inputs_embeds is not None):
-            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+        if input_ids is None and inputs_embeds is None:
+            raise ValueError("You must specify at least one of input_ids or inputs_embeds")
         # image feature is vit embeds
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
@@ -894,21 +922,23 @@ class InternvlFlashModel(InternvlFlashPreTrainedModel):
                 starts=global_starts,
             )
             if isinstance(attention_mask, dict):  # add support for StaticCache
-                attention_mask = attention_mask["full_attention"]
+                pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else 0
+                attention_mask = input_ids.ne(pad_token_id)
 
             if attention_mask is not None:
-                if attention_mask.dim() > 2 or attention_mask.numel() != input_ids.numel():
+                if attention_mask.numel() != input_ids.numel():
                     pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else 0
                     attention_mask = input_ids.ne(pad_token_id)
-                else:
-                    attention_mask = attention_mask.reshape(B * N)
 
+                attention_mask = attention_mask.reshape(B * N)
+
+            attention_mask = attention_mask[keep_mask].to(inputs_embeds.device)
             attention_mask = attention_mask[keep_mask].to(inputs_embeds.device)
 
             inputs_embeds = self._scatter_image_embeddings(
                 inputs_embeds=inputs_embeds,
-                input_ids=input_ids,
                 vit_embeds=vit_embeds,
+                input_ids=input_ids,
             )
 
             inputs_embeds, attention_mask = self._reconstruct_batch(
@@ -1023,7 +1053,7 @@ class InternvlFlashModel(InternvlFlashPreTrainedModel):
         if input_ids is None:
             raise ValueError("input_ids cannot be None when pixel_values are provided. ")
         if input_ids.dim() == 1:
-            input_ids = input_ids.squeeze(0)  # (N,) #todo add batch size support
+            input_ids = input_ids.squeeze(0)
         selected = input_ids == self.config.image_token_id
 
         padded = F.pad(selected.int(), (1, 1), value=0)
@@ -1043,9 +1073,11 @@ class InternvlFlashModel(InternvlFlashPreTrainedModel):
     def _scatter_image_embeddings(
         self,
         inputs_embeds: torch.Tensor,
-        input_ids: torch.Tensor,
         vit_embeds: torch.Tensor,
+        input_ids: Optional[torch.LongTensor] = None,
     ) -> torch.Tensor:
+        if input_ids is None:
+            return inputs_embeds
         selected_mask = input_ids == self.config.image_token_id
         if selected_mask.sum() == 0:
             return inputs_embeds
@@ -1065,6 +1097,9 @@ class InternvlFlashModel(InternvlFlashPreTrainedModel):
         """
         Reconstructs the batch by removing compressed visual tokens based on gating results.
         """
+        # python utils/modular_model_converter.py internvl_flash
+        # make style
+        # pytest tests/models/internvl_flash/test_modeling_internvl_flash.py
         device = inputs_embeds.device
 
         gate_result_split = torch.split(gate_result, lengths.tolist())
