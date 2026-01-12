@@ -91,7 +91,7 @@ class Ovis2VisionEmbeddings(SiglipVisionEmbeddings):
         return embeddings
 
 
-class Ovis2VisionAttention(Aimv2Attention):
+class Ovis2Attention(Aimv2Attention):
     pass
 
 
@@ -161,7 +161,7 @@ class Ovis2PreTrainedModel(PreTrainedModel):
     base_model_prefix = "model"
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
-    _no_split_modules = ["Ovis2VisionAttention"]
+    _no_split_modules = ["Ovis2Attention"]
     _skip_keys_device_placement = "past_key_values"
     _supports_cache_class = True
     _supports_flash_attn = True
@@ -181,7 +181,7 @@ class Ovis2VisionModel(Ovis2PreTrainedModel):
     config: Ovis2VisionConfig
     _can_record_outputs = {
         "hidden_states": Ovis2VisionEncoderLayer,
-        "attentions": Ovis2VisionAttention,
+        "attentions": Ovis2Attention,
     }
 
     def __init__(self, config: Ovis2VisionConfig):

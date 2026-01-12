@@ -59,7 +59,6 @@ from ..blip.image_processing_blip import BlipImageProcessor
 from ..blip_2.modeling_blip_2 import Blip2VisionModel
 from ..chameleon.configuration_chameleon import ChameleonVQVAEConfig
 from ..chameleon.modeling_chameleon import (
-    ChameleonAttention,
     ChameleonVQVAE,
     ChameleonVQVAEEncoderAttnBlock,
     ChameleonVQVAEEncoderConvDownsample,

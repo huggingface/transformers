@@ -856,6 +856,7 @@ class Ernie4_5_VL_MoeVisionTransformerPretrainedModel(Qwen2VisionTransformerPret
         "hidden_states": Ernie4_5_VL_MoeVisionBlock,
         "attentions": Ernie4_5_VL_MoeVisionAttention,
     }
+
     def __init__(self, config) -> None:
         super().__init__(config)
 
