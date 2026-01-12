@@ -209,12 +209,10 @@ class FlavaTextConfig(PreTrainedConfig):
         layer_norm_eps: float = 1e-12,
         pad_token_id: int = 0,
         qkv_bias: bool = True,
-        is_decoder: bool = False,
         **kwargs,
     ):
         super().__init__(**kwargs)
 
-        self.is_decoder = is_decoder
         self.vocab_size = vocab_size
         self.type_vocab_size = type_vocab_size
         self.max_position_embeddings = max_position_embeddings
@@ -315,7 +313,6 @@ class FlavaMultimodalConfig(PreTrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.qkv_bias = qkv_bias
         self.use_cls_token = use_cls_token
-        self.is_decoder = False  # need until mask API is updated
 
 
 class FlavaImageCodebookConfig(PreTrainedConfig):

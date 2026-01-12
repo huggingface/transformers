@@ -83,9 +83,6 @@ class LightGlueConfig(PreTrainedConfig):
             The dropout ratio for the attention probabilities.
         attention_bias (`bool`, *optional*, defaults to `True`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
-        is_decoder (`bool`, *optional*, defaults to `False`):
-            Whether to only use the decoder in an encoder-decoder architecture, otherwise it has no effect on
-            decoder-only or encoder-only architectures.
         trust_remote_code (`bool`, *optional*, defaults to `False`):
             Whether to trust remote code when using other models than SuperPoint as keypoint detector.
 
@@ -121,7 +118,6 @@ class LightGlueConfig(PreTrainedConfig):
         hidden_act: str = "gelu",
         attention_dropout=0.0,
         attention_bias=True,
-        is_decoder=False,
         trust_remote_code: bool = False,
         **kwargs,
     ):
@@ -171,7 +167,6 @@ class LightGlueConfig(PreTrainedConfig):
         self.hidden_act = hidden_act
         self.attention_dropout = attention_dropout
         self.attention_bias = attention_bias
-        self.is_decoder = is_decoder
         super().__init__(**kwargs)
 
 

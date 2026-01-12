@@ -414,6 +414,7 @@ class T5Gemma2Config(PreTrainedConfig):
         classifier_dropout_rate: float = 0.0,
         initializer_range: float = 0.02,
         image_token_index: int = 256_001,
+        tie_word_embeddings: bool | None = True,
         **kwargs,
     ):
         if isinstance(encoder, dict):
@@ -474,6 +475,7 @@ class T5Gemma2Config(PreTrainedConfig):
         self.initializer_range = initializer_range
         self.eoi_token_index = encoder.eoi_token_index
         self.image_token_index = image_token_index
+        self.tie_word_embeddings = tie_word_embeddings
 
     def __setattr__(self, key, value):
         shared_attr_with_submodules = [

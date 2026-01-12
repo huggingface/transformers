@@ -69,12 +69,6 @@ class ChineseCLIPTextConfig(PreTrainedConfig):
             Beginning of sequence token id.
         eos_token_id (`int`, *optional*):
             End of stream token id.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
-        is_decoder (`bool`, *optional*, defaults to `False`):
-            Whether to only use the decoder in an encoder-decoder architecture, otherwise it has no effect on
-            decoder-only or encoder-only architectures.
 
     Example:
 
@@ -112,15 +106,12 @@ class ChineseCLIPTextConfig(PreTrainedConfig):
         pad_token_id=0,
         bos_token_id=0,
         eos_token_id=None,
-        use_cache=True,
-        is_decoder=False,
         **kwargs,
     ):
         super().__init__(**kwargs)
         self.bos_token_id = bos_token_id
         self.pad_token_id = pad_token_id
         self.eos_token_id = eos_token_id
-        self.is_decoder = is_decoder
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
@@ -134,7 +125,6 @@ class ChineseCLIPTextConfig(PreTrainedConfig):
         self.initializer_range = initializer_range
         self.initializer_factor = initializer_factor
         self.layer_norm_eps = layer_norm_eps
-        self.use_cache = use_cache
 
 
 class ChineseCLIPVisionConfig(PreTrainedConfig):

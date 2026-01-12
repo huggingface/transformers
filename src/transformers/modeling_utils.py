@@ -924,7 +924,7 @@ class ModuleUtilsMixin:
         if dtype is None:
             dtype = self.dtype
 
-        if not (attention_mask.dim() == 2 and self.config.is_decoder):
+        if not (attention_mask.dim() == 2 and getattr(self.config, "is_decoder", None)):
             # show warning only if it won't be shown in `create_extended_attention_mask_for_decoder`
             if device is not None:
                 warnings.warn(
@@ -938,7 +938,7 @@ class ModuleUtilsMixin:
             # Provided a padding mask of dimensions [batch_size, seq_length]
             # - if the model is a decoder, apply a causal mask in addition to the padding mask
             # - if the model is an encoder, make the mask broadcastable to [batch_size, num_heads, seq_length, seq_length]
-            if self.config.is_decoder:
+            if getattr(self.config, "is_decoder", None):
                 extended_attention_mask = ModuleUtilsMixin.create_extended_attention_mask_for_decoder(
                     input_shape, attention_mask, device
                 )

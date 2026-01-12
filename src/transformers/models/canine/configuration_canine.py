@@ -74,9 +74,6 @@ class CanineConfig(PreTrainedConfig):
         local_transformer_stride (`int`, *optional*, defaults to 128):
             The stride of the local attention of the first shallow Transformer encoder. Defaults to 128 for good
             TPU/XLA memory alignment.
-        is_decoder (`bool`, *optional*, defaults to `False`):
-            Whether to only use the decoder in an encoder-decoder architecture, otherwise it has no effect on
-            decoder-only or encoder-only architectures.
 
     Example:
 
@@ -116,18 +113,13 @@ class CanineConfig(PreTrainedConfig):
         num_hash_functions=8,
         num_hash_buckets=16384,
         local_transformer_stride=128,  # Good TPU/XLA memory alignment.
-        is_decoder=False,
         **kwargs,
     ):
         super().__init__(**kwargs)
-        self.pad_token_id = pad_token_id
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
 
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
-        self.is_decoder = is_decoder
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers

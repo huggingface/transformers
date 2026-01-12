@@ -80,9 +80,6 @@ class SqueezeBertConfig(PreTrainedConfig):
             The number of groups in the second feed forward network layer.
         output_groups (`int`, *optional*, defaults to 4):
             The number of groups in the third feed forward network layer.
-        is_decoder (`bool`, *optional*, defaults to `False`):
-            Whether to only use the decoder in an encoder-decoder architecture, otherwise it has no effect on
-            decoder-only or encoder-only architectures.
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to tie weight embeddings
 
@@ -128,13 +125,11 @@ class SqueezeBertConfig(PreTrainedConfig):
         post_attention_groups=1,
         intermediate_groups=4,
         output_groups=4,
-        is_decoder=False,
         tie_word_embeddings=True,
         **kwargs,
     ):
         super().__init__(**kwargs)
 
-        self.is_decoder = is_decoder
         self.tie_word_embeddings = tie_word_embeddings
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id

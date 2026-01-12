@@ -93,12 +93,10 @@ class Pop2PianoConfig(PreTrainedConfig):
         eos_token_id=1,
         dense_act_fn="relu",
         is_decoder=False,
-        add_cross_attention=False,
         tie_word_embeddings=True,
         **kwargs,
     ):
         self.is_decoder = is_decoder
-        self.add_cross_attention = add_cross_attention
         self.tie_word_embeddings = tie_word_embeddings
         self.vocab_size = vocab_size
         self.composer_vocab_size = composer_vocab_size

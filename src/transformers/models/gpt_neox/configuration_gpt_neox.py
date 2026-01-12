@@ -127,11 +127,9 @@ class GPTNeoXConfig(PreTrainedConfig):
         rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
         attention_bias: bool | None = True,
         is_decoder: bool | None = False,
-        add_cross_attention: bool | None = False,
         **kwargs,
     ):
         self.is_decoder = is_decoder
-        self.add_cross_attention = add_cross_attention
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
         self.vocab_size = vocab_size

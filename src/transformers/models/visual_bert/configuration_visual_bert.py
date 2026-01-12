@@ -110,7 +110,6 @@ class VisualBertConfig(PreTrainedConfig):
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
-        is_decoder=False,
         tie_word_embeddings=True,
         **kwargs,
     ):
@@ -120,7 +119,6 @@ class VisualBertConfig(PreTrainedConfig):
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
         self.tie_word_embeddings = tie_word_embeddings
-        self.is_decoder = is_decoder
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size

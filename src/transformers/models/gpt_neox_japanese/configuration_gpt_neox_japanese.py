@@ -98,13 +98,11 @@ class GPTNeoXJapaneseConfig(PreTrainedConfig):
         attention_dropout: float | None = 0.1,
         hidden_dropout: float | None = 0.0,
         is_decoder: bool | None = False,
-        add_cross_attention: bool | None = False,
         pad_token_id: int | None = None,
         tie_word_embeddings: bool | None = True,
         **kwargs,
     ):
         self.is_decoder = is_decoder
-        self.add_cross_attention = add_cross_attention
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
         self.pad_token_id = pad_token_id

@@ -101,9 +101,6 @@ class GPT2Config(PreTrainedConfig):
         reorder_and_upcast_attn (`bool`, *optional*, defaults to `False`):
             Whether to scale keys (K) prior to computing attention (dot-product) and upcast attention
             dot-product/softmax to float() when training with mixed precision.
-        is_decoder (`bool`, *optional*, defaults to `False`):
-            Whether to only use the decoder in an encoder-decoder architecture, otherwise it has no effect on
-            decoder-only or encoder-only architectures.
         add_cross_attention (`bool`, *optional*, defaults to `False`):
             Whether cross-attention layers should be added to the model.
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
@@ -159,12 +156,10 @@ class GPT2Config(PreTrainedConfig):
         pad_token_id=None,
         scale_attn_by_inverse_layer_idx=False,
         reorder_and_upcast_attn=False,
-        is_decoder=False,
         add_cross_attention=False,
         tie_word_embeddings=True,
         **kwargs,
     ):
-        self.is_decoder = is_decoder
         self.add_cross_attention = add_cross_attention
         self.tie_word_embeddings = tie_word_embeddings
         self.vocab_size = vocab_size

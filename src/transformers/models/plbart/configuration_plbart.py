@@ -130,11 +130,9 @@ class PLBartConfig(PreTrainedConfig):
         forced_eos_token_id=2,
         is_decoder=False,
         tie_word_embeddings=True,
-        add_cross_attention=False,
         **kwargs,
     ):
         self.is_decoder = is_decoder
-        self.add_cross_attention = add_cross_attention
         self.tie_word_embeddings = tie_word_embeddings
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings

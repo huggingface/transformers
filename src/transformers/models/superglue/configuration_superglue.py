@@ -54,8 +54,6 @@ class SuperGlueConfig(PreTrainedConfig):
         is_decoder (`bool`, *optional*, defaults to `False`):
             Whether to only use the decoder in an encoder-decoder architecture, otherwise it has no effect on
             decoder-only or encoder-only architectures.
-        add_cross_attention (`bool`, *optional*, defaults to `False`):
-            Whether cross-attention layers should be added to the model.
 
     Examples:
         ```python
@@ -86,7 +84,6 @@ class SuperGlueConfig(PreTrainedConfig):
         matching_threshold: float = 0.0,
         initializer_range: float = 0.02,
         is_decoder=False,
-        add_cross_attention=False,
         **kwargs,
     ):
         self.gnn_layers_types = gnn_layers_types if gnn_layers_types is not None else ["self", "cross"] * 9
@@ -106,7 +103,6 @@ class SuperGlueConfig(PreTrainedConfig):
         self.num_attention_heads = num_attention_heads
         self.sinkhorn_iterations = sinkhorn_iterations
         self.matching_threshold = matching_threshold
-        self.add_cross_attention = add_cross_attention
 
         if isinstance(keypoint_detector_config, dict):
             keypoint_detector_config["model_type"] = keypoint_detector_config.get("model_type", "superpoint")

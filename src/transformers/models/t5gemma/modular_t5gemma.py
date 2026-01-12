@@ -133,8 +133,6 @@ class T5GemmaModuleConfig(Gemma2Config):
         is_decoder (`bool`, *optional*, defaults to `False`):
             Whether to only use the decoder in an encoder-decoder architecture, otherwise it has no effect on
             decoder-only or encoder-only architectures.
-        add_cross_attention (`bool`, *optional*, defaults to `False`):
-            Whether cross-attention layers should be added to the model.
 
     ```python
     >>> from transformers import T5GemmaModuleModel, T5GemmaModuleConfig
@@ -173,11 +171,9 @@ class T5GemmaModuleConfig(Gemma2Config):
         final_logit_softcapping: float | None = 30.0,
         attn_logit_softcapping: float | None = 50.0,
         is_decoder: bool | None = False,
-        add_cross_attention: bool | None = False,
         **kwargs,
     ):
         self.is_decoder = is_decoder
-        self.add_cross_attention = add_cross_attention
         super().__init__(
             vocab_size=vocab_size,
             hidden_size=hidden_size,

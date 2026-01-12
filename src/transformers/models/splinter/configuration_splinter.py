@@ -59,9 +59,6 @@ class SplinterConfig(PreTrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
         question_token_id (`int`, *optional*, defaults to 104):
             The id of the `[QUESTION]` token.
 
@@ -96,17 +93,14 @@ class SplinterConfig(PreTrainedConfig):
         type_vocab_size=2,
         initializer_range=0.02,
         layer_norm_eps=1e-12,
-        use_cache=True,
         pad_token_id=0,
         bos_token_id=None,
         eos_token_id=None,
         question_token_id=104,
-        is_decoder=False,
         **kwargs,
     ):
         super().__init__(**kwargs)
 
-        self.is_decoder = is_decoder
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
@@ -122,7 +116,6 @@ class SplinterConfig(PreTrainedConfig):
         self.initializer_range = initializer_range
         self.type_vocab_size = type_vocab_size
         self.layer_norm_eps = layer_norm_eps
-        self.use_cache = use_cache
         self.question_token_id = question_token_id
 
 
