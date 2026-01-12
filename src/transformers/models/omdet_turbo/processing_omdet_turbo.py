@@ -16,7 +16,7 @@ Processor class for OmDet-Turbo.
 """
 
 import warnings
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_transforms import center_to_corners_format
@@ -44,7 +44,7 @@ class OmDetTurboTextKwargs(TextKwargs, total=False):
         or pre-tokenized input. The task description guides the model on what objects to detect in the images.
     """
 
-    task: Optional[Union[str, list[str], TextInput, PreTokenizedInput]]
+    task: str | list[str] | TextInput | PreTokenizedInput | None
 
 
 if is_torch_available():
@@ -136,7 +136,7 @@ def _post_process_boxes_for_image(
     image_size: tuple[int, int],
     threshold: float,
     nms_threshold: float,
-    max_num_det: Optional[int] = None,
+    max_num_det: int | None = None,
 ) -> tuple["torch.Tensor", "torch.Tensor", "torch.Tensor"]:
     """
     Filter predicted results using given thresholds and NMS.
@@ -214,8 +214,8 @@ class OmDetTurboProcessor(ProcessorMixin):
     @auto_docstring
     def __call__(
         self,
-        images: Optional[ImageInput] = None,
-        text: Optional[Union[list[str], list[list[str]]]] = None,
+        images: ImageInput | None = None,
+        text: list[str] | list[list[str]] | None = None,
         **kwargs: Unpack[OmDetTurboProcessorKwargs],
     ) -> BatchFeature:
         if images is None or text is None:
@@ -284,11 +284,11 @@ class OmDetTurboProcessor(ProcessorMixin):
     def post_process_grounded_object_detection(
         self,
         outputs: "OmDetTurboObjectDetectionOutput",
-        text_labels: Optional[Union[list[str], list[list[str]]]] = None,
+        text_labels: list[str] | list[list[str]] | None = None,
         threshold: float = 0.3,
         nms_threshold: float = 0.5,
-        target_sizes: Optional[Union[TensorType, list[tuple]]] = None,
-        max_num_det: Optional[int] = None,
+        target_sizes: TensorType | list[tuple] | None = None,
+        max_num_det: int | None = None,
     ):
         """
         Converts the raw output of [`OmDetTurboForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,

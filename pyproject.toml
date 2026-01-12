@@ -50,16 +50,6 @@ extend-safe-fixes = [
 "__init__.py" = ["E402", "F401", "F403", "F811"]
 "src/transformers/file_utils.py" = ["F401"]
 "src/transformers/utils/dummy_*.py" = ["F401"]
-# type validation does not work with `x | y` syntax, so we have to exclude all these files....
-# TODO: really needs to be upstreamed in huggingface_hub
-"src/transformers/processing_utils.py" = ["UP045", "UP007"]
-"src/transformers/image_processing_utils_fast.py" = ["UP045", "UP007"]
-"src/transformers/video_processing_utils.py" = ["UP045", "UP007"]
-"src/transformers/image_utils.py" = ["UP045", "UP007"]
-"src/transformers/video_utils.py" = ["UP045", "UP007"]
-"src/transformers/models/**/image_processing_*.py" = ["UP045", "UP007"]
-"src/transformers/models/**/processing_*.py" = ["UP045", "UP007"]
-"src/transformers/models/**/video_processing_*.py" = ["UP045", "UP007"]
 
 [tool.ruff.lint.isort]
 lines-after-imports = 2

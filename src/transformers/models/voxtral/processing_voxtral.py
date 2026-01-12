@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import io
-from typing import Optional, Union
 
 from ...utils import auto_docstring, is_mistral_common_available, is_soundfile_available, is_torch_available, logging
 
@@ -42,7 +41,7 @@ class VoxtralAudioKwargs(AudioKwargs, total=False):
         Maximum number of positions per chunk when splitting mel spectrogram features along the time dimension.
     """
 
-    max_source_positions: Optional[int]
+    max_source_positions: int | None
 
 
 class VoxtralProcessorKwargs(ProcessingKwargs, total=False):
@@ -97,7 +96,7 @@ class VoxtralProcessor(ProcessorMixin):
 
     def apply_chat_template(
         self,
-        conversation: Union[list[dict[str, str]], list[list[dict[str, str]]]],
+        conversation: list[dict[str, str]] | list[list[dict[str, str]]],
         **kwargs: Unpack[AllKwargsForChatTemplate],
     ) -> str:
         """
@@ -232,7 +231,7 @@ class VoxtralProcessor(ProcessorMixin):
     )
     def __call__(
         self,
-        text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]],
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None,
         **kwargs: Unpack[VoxtralProcessorKwargs],
     ):
         if isinstance(text, str):
@@ -251,11 +250,11 @@ class VoxtralProcessor(ProcessorMixin):
     # TODO: @eustlb, this should be moved to mistral_common + testing
     def apply_transcription_request(
         self,
-        audio: Union[str, list[str], AudioInput],
+        audio: str | list[str] | AudioInput,
         model_id: str,
-        language: Optional[Union[str, list[Union[str, None]]]] = None,
-        sampling_rate: Optional[int] = None,
-        format: Optional[Union[str, list[str]]] = None,
+        language: str | list[str | None] | None = None,
+        sampling_rate: int | None = None,
+        format: str | list[str] | None = None,
         **kwargs: Unpack[VoxtralProcessorKwargs],
     ):
         """
