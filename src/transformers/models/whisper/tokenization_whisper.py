@@ -517,10 +517,10 @@ class WhisperTokenizer(TokenizersBackend):
         text = super()._decode(*args, **kwargs)
 
         if normalize:
-            clean_text = self._normalize(text)
+            clean_text = self.normalize(text)
             return clean_text
         elif basic_normalize:
-            clean_text = self._basic_normalize(text, remove_diacritics=remove_diacritics)
+            clean_text = self.basic_normalize(text, remove_diacritics=remove_diacritics)
             return clean_text
         else:
             return text
