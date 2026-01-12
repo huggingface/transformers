@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 Cohere team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +14,7 @@
 
 # This file is based on the tokenization_llama.py file in transformers
 
-from typing import Literal, Optional, Union
+from typing import Literal
 
 from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers
 from tokenizers.models import BPE
@@ -115,8 +114,8 @@ class CohereTokenizer(TokenizersBackend):
 
     def __init__(
         self,
-        vocab: Optional[Union[str, dict[str, int]]] = None,
-        merges: Optional[Union[str, list[str]]] = None,
+        vocab: str | dict[str, int] | None = None,
+        merges: str | list[str] | None = None,
         errors: str = "replace",
         unk_token: str = "<UNK>",
         bos_token: str = "<BOS_TOKEN>",
@@ -189,7 +188,7 @@ class CohereTokenizer(TokenizersBackend):
         conversation: list[dict[str, str]],
         tools: list[dict],
         **kwargs,
-    ) -> Union[str, list[int]]:
+    ) -> str | list[int]:
         """Create a Command-R tool-use prompt.
 
         Once rendered, the prompt instructs the model to generate a list of actions to perform on a set of user supplied tools
@@ -301,7 +300,7 @@ class CohereTokenizer(TokenizersBackend):
         documents: list[dict],
         citation_mode: Literal["fast", "accurate"] = "accurate",
         **kwargs,
-    ) -> Union[str, list[int]]:
+    ) -> str | list[int]:
         """Create a Command-R grounded generation (aka RAG) prompt.
 
         Once rendered, the prompt instructs the model to generate a response with citations in, based on supplied documents.

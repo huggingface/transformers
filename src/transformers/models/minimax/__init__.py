@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 MiniMaxAI and HuggingFace Inc. teams. All rights reserved.
 #
 #

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The Fairseq Authors and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -157,7 +156,6 @@ class BartConfig(PreTrainedConfig):
             decoder_start_token_id=decoder_start_token_id,
             **kwargs,
         )
-        self.tie_encoder_decoder = True
 
 
 __all__ = ["BartConfig"]

@@ -95,6 +95,7 @@ print(processor.decode(generation[0]))
 [[autodoc]] T5Gemma2EncoderConfig
 
 ## T5Gemma2DecoderConfig
+
 [[autodoc]] T5Gemma2DecoderConfig
 
 ## T5Gemma2Model

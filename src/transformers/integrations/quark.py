@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional
 
 from ..core_model_loading import ConversionOps
 from ..utils import is_torch_available
@@ -30,8 +28,8 @@ class QuarkDeserialize(ConversionOps):
     def convert(
         self,
         input_dict: torch.Tensor,
-        model: Optional[torch.nn.Module] = None,
-        missing_keys: Optional[list[str]] = None,
+        model: torch.nn.Module | None = None,
+        missing_keys: list[str] | None = None,
         full_layer_name: str | None = None,
         **kwargs,
     ) -> dict[str, torch.Tensor]:

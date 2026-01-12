@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,7 +13,7 @@
 # limitations under the License.
 """Image processor class for GLPN."""
 
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING, Union
 
 from ...utils.import_utils import requires
 
@@ -91,7 +90,7 @@ class GLPNImageProcessor(BaseImageProcessor):
         size_divisor: int = 32,
         resample=PILImageResampling.BILINEAR,
         do_rescale: bool = True,
-        rescale_factor: Optional[float] = 1 / 255,
+        rescale_factor: float | None = 1 / 255,
         **kwargs,
     ) -> None:
         self.do_resize = do_resize
@@ -106,8 +105,8 @@ class GLPNImageProcessor(BaseImageProcessor):
         image: np.ndarray,
         size_divisor: int,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
-        data_format: Optional[ChannelDimension] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        data_format: ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -155,14 +154,14 @@ class GLPNImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: Union["PIL.Image.Image", TensorType, list["PIL.Image.Image"], list[TensorType]],
-        do_resize: Optional[bool] = None,
-        size_divisor: Optional[int] = None,
+        do_resize: bool | None = None,
+        size_divisor: int | None = None,
         resample=None,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[float] = None,
-        return_tensors: Optional[Union[TensorType, str]] = None,
+        do_rescale: bool | None = None,
+        rescale_factor: float | None = None,
+        return_tensors: TensorType | str | None = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: str | ChannelDimension | None = None,
     ) -> BatchFeature:
         """
         Preprocess the given images.
@@ -250,7 +249,7 @@ class GLPNImageProcessor(BaseImageProcessor):
     def post_process_depth_estimation(
         self,
         outputs: "DepthEstimatorOutput",
-        target_sizes: Optional[Union[TensorType, list[tuple[int, int]], None]] = None,
+        target_sizes: TensorType | list[tuple[int, int]] | None | None = None,
     ) -> list[dict[str, TensorType]]:
         """
         Converts the raw output of [`DepthEstimatorOutput`] into final depth predictions and depth PIL images.

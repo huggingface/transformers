@@ -29,14 +29,11 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import is_accelerate_available, is_torch_available
+from transformers.utils import is_torch_available
 
 
 if is_torch_available():
     import torch
-
-if is_accelerate_available():
-    from accelerate import init_empty_weights
 
 
 @require_torch_accelerator
@@ -80,7 +77,7 @@ class BitNetTest(unittest.TestCase):
         model_id = "facebook/opt-350m"
         config = AutoConfig.from_pretrained(model_id)
 
-        with init_empty_weights():
+        with torch.device("meta"):
             model = OPTForCausalLM(config)
 
         nb_linears = 0

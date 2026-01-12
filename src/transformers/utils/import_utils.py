@@ -553,6 +553,11 @@ def is_torch_flex_attn_available() -> bool:
 
 
 @lru_cache
+def is_grouped_mm_available() -> bool:
+    return is_torch_available() and version.parse(get_torch_version()) >= version.parse("2.9.0")
+
+
+@lru_cache
 def is_kenlm_available() -> bool:
     return _is_package_available("kenlm")
 
@@ -885,14 +890,17 @@ def is_flash_attn_2_available() -> bool:
 
     import torch
 
-    if torch.version.cuda:
-        return version.parse(flash_attn_version) >= version.parse("2.1.0")
-    elif torch.version.hip:
-        # TODO: Bump the requirement to 2.1.0 once released in https://github.com/ROCmSoftwarePlatform/flash-attention
-        return version.parse(flash_attn_version) >= version.parse("2.0.4")
-    elif is_torch_mlu_available():
-        return version.parse(flash_attn_version) >= version.parse("2.3.3")
-    else:
+    try:
+        if torch.version.cuda:
+            return version.parse(flash_attn_version) >= version.parse("2.1.0")
+        elif torch.version.hip:
+            # TODO: Bump the requirement to 2.1.0 once released in https://github.com/ROCmSoftwarePlatform/flash-attention
+            return version.parse(flash_attn_version) >= version.parse("2.0.4")
+        elif is_torch_mlu_available():
+            return version.parse(flash_attn_version) >= version.parse("2.3.3")
+        else:
+            return False
+    except packaging.version.InvalidVersion:
         return False
 
 
@@ -910,7 +918,12 @@ def is_flash_attn_greater_or_equal_2_10() -> bool:
 @lru_cache
 def is_flash_attn_greater_or_equal(library_version: str) -> bool:
     is_available, flash_attn_version = _is_package_available("flash_attn", return_version=True)
-    return is_available and version.parse(flash_attn_version) >= version.parse(library_version)
+    if not is_available:
+        return False
+    try:
+        return version.parse(flash_attn_version) >= version.parse(library_version)
+    except packaging.version.InvalidVersion:
+        return False
 
 
 @lru_cache
@@ -1069,6 +1082,11 @@ def is_pytesseract_available() -> bool:
 @lru_cache
 def is_pytest_available() -> bool:
     return _is_package_available("pytest")
+
+
+@lru_cache
+def is_pytest_order_available() -> bool:
+    return is_pytest_available() and _is_package_available("pytest_order")
 
 
 @lru_cache

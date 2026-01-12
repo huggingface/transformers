@@ -645,7 +645,7 @@ src/transformers/configuration_utils.py
             assert set(example_tests_to_run.split(" ")) == example_tests
 
             with patch_transformer_repo_path(tmp_folder):
-                infer_tests_to_run(tmp_folder / "test-output.txt", filter_models=False)
+                infer_tests_to_run(tmp_folder / "test-output.txt")
                 with open(tmp_folder / "test-output.txt") as f:
                     tests_to_run = f.read()
                 with open(tmp_folder / "examples_test_list.txt") as f:

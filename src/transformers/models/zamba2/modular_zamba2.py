@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 Zyphra Technologies and the HuggingFace Inc. team. All rights reserved.
 #
 #
@@ -16,7 +15,6 @@
 import math
 from collections.abc import Callable
 from itertools import cycle
-from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -108,7 +106,7 @@ class Zamba2HybridDynamicCache(ZambaHybridDynamicCache):
     """
 
     def __init__(
-        self, config: Zamba2Config, batch_size: int, dtype: torch.dtype = torch.float16, device: Optional[str] = None
+        self, config: Zamba2Config, batch_size: int, dtype: torch.dtype = torch.float16, device: str | None = None
     ):
         self.dtype = dtype
         self.layers_block_type = config.layers_block_type
@@ -155,7 +153,7 @@ class Zamba2HybridDynamicCache(ZambaHybridDynamicCache):
         self.conv_states.zero_()
         self.ssm_states.zero_()
 
-    def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
+    def get_seq_length(self, layer_idx: int | None = 0) -> int:
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
         # take any layer that contains cache and not empty tensor
         layer_idx = self.transformer_layers[0] if layer_idx not in self.transformer_layers else layer_idx
@@ -187,9 +185,9 @@ class Zamba2Attention(ZambaAttention):
     def __init__(
         self,
         config: Zamba2Config,
-        layer_idx: Optional[int] = None,
-        num_fwd_mem_blocks: Optional[int] = None,
-        block_id: Optional[int] = None,
+        layer_idx: int | None = None,
+        num_fwd_mem_blocks: int | None = None,
+        block_id: int | None = None,
     ):
         super().__init__(config, layer_idx)
         self.num_fwd_mem_blocks = num_fwd_mem_blocks
@@ -229,11 +227,11 @@ class Zamba2Attention(ZambaAttention):
         self,
         hidden_states: torch.Tensor,
         layer_idx: int,
-        attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Zamba2HybridDynamicCache] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
+        attention_mask: torch.Tensor | None = None,
+        past_key_values: Zamba2HybridDynamicCache | None = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -285,7 +283,7 @@ class Zamba2MambaMixer(nn.Module):
     and is why Mamba is called **selective** state spaces)
     """
 
-    def __init__(self, config: Zamba2Config, layer_idx: Optional[int] = None):
+    def __init__(self, config: Zamba2Config, layer_idx: int | None = None):
         super().__init__()
         self.config = config
         self.hidden_size = config.hidden_size
@@ -351,8 +349,8 @@ class Zamba2MambaMixer(nn.Module):
     def cuda_kernels_forward(
         self,
         hidden_states: torch.Tensor,
-        cache_params: Optional[Zamba2HybridDynamicCache] = None,
-        attention_mask: Optional[torch.Tensor] = None,
+        cache_params: Zamba2HybridDynamicCache | None = None,
+        attention_mask: torch.Tensor | None = None,
     ):
         # set up dimensions for reshapes later
 
@@ -499,7 +497,7 @@ class Zamba2MambaMixer(nn.Module):
         return out
 
     # fmt: off
-    def torch_forward(self, input_states, cache_params: Optional[Zamba2HybridDynamicCache]=None, attention_mask: Optional[torch.Tensor]=None):
+    def torch_forward(self, input_states, cache_params: Zamba2HybridDynamicCache | None=None, attention_mask: torch.Tensor | None=None):
         batch_size, seq_len, _ = input_states.shape
         dtype = input_states.dtype
         # Gated MLP's linear projection
@@ -696,8 +694,8 @@ class Zamba2MambaMixer(nn.Module):
     def forward(
         self,
         hidden_states,
-        cache_params: Optional[Zamba2HybridDynamicCache] = None,
-        attention_mask: Optional[torch.Tensor] = None,
+        cache_params: Zamba2HybridDynamicCache | None = None,
+        attention_mask: torch.Tensor | None = None,
     ):
         if is_fast_path_available and "cuda" in self.in_proj.weight.device.type:
             return self.cuda_kernels_forward(hidden_states, cache_params, attention_mask)
@@ -706,7 +704,7 @@ class Zamba2MambaMixer(nn.Module):
 
 
 class Zamba2MLP(nn.Module):
-    def __init__(self, config: Zamba2Config, num_fwd_mem_blocks=None, block_id: Optional[int] = None):
+    def __init__(self, config: Zamba2Config, num_fwd_mem_blocks=None, block_id: int | None = None):
         """
         This MLP layer contributes to tied transformer blocks aimed to increasing compute without increasing model size. Because this layer
         is tied, un-tied adapter modules (formally same as LoRA, but used in the base model) are added to the up and gate projectors to increase expressivity with a small memory overhead.
@@ -748,7 +746,7 @@ class Zamba2MLP(nn.Module):
 
 
 class Zamba2AttentionDecoderLayer(ZambaAttentionDecoderLayer):
-    def __init__(self, config: Zamba2Config, block_id: Optional[int] = None, layer_idx: Optional[int] = None):
+    def __init__(self, config: Zamba2Config, block_id: int | None = None, layer_idx: int | None = None):
         self.block_id = block_id
         num_gs = len(config.hybrid_layer_ids)
         super().__init__(config, layer_idx)
@@ -760,12 +758,12 @@ class Zamba2AttentionDecoderLayer(ZambaAttentionDecoderLayer):
         hidden_states: torch.Tensor,
         original_hidden_states: torch.Tensor,
         layer_idx: int,
-        attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Zamba2HybridDynamicCache] = None,
-        output_attentions: Optional[bool] = False,
-        position_embeddings: Optional[torch.LongTensor] = None,
+        attention_mask: torch.Tensor | None = None,
+        past_key_values: Zamba2HybridDynamicCache | None = None,
+        output_attentions: bool | None = False,
+        position_embeddings: torch.LongTensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
+    ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
         """
         Args:
             hidden_states (`torch.FloatTensor`): output of previous Mamba layer of shape `(batch, seq_len, embed_dim)`
@@ -827,16 +825,16 @@ class Zamba2HybridLayer(ZambaHybridLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        original_hidden_states: Optional[torch.Tensor] = None,
-        layer_idx: Optional[int] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        causal_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Zamba2HybridDynamicCache] = None,
-        output_attentions: Optional[bool] = False,
-        use_cache: Optional[bool] = False,
-        position_embeddings: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-    ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
+        original_hidden_states: torch.Tensor | None = None,
+        layer_idx: int | None = None,
+        attention_mask: torch.Tensor | None = None,
+        causal_mask: torch.Tensor | None = None,
+        past_key_values: Zamba2HybridDynamicCache | None = None,
+        output_attentions: bool | None = False,
+        use_cache: bool | None = False,
+        position_embeddings: torch.LongTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+    ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -982,18 +980,18 @@ class Zamba2Model(ZambaModel, Zamba2PreTrainedModel):
 
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Zamba2HybridDynamicCache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Zamba2HybridDynamicCache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
         **kwargs,
-    ) -> Union[tuple, BaseModelOutputWithPast]:
+    ) -> tuple | BaseModelOutputWithPast:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states

@@ -147,7 +147,7 @@ message = [
 
 ## Batched
 
-Batched inference processes multiple conversations in a single forward pass to improve throughput and efficiency. Wrap each conversation in its own list, then pass them together as a list of lists. 
+Batched inference processes multiple conversations in a single forward pass to improve throughput and efficiency. Wrap each conversation in its own list, then pass them together as a list of lists.
 
 ```py
 messages = [

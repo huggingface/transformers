@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """PyTorch UperNet model. Based on OpenMMLab's implementation, found in https://github.com/open-mmlab/mmsegmentation."""
-
-from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -37,10 +34,10 @@ class UperNetConvModule(nn.Module):
         self,
         in_channels: int,
         out_channels: int,
-        kernel_size: Union[int, tuple[int, int]],
-        padding: Union[int, tuple[int, int], str] = 0,
+        kernel_size: int | tuple[int, int],
+        padding: int | tuple[int, int] | str = 0,
         bias: bool = False,
-        dilation: Union[int, tuple[int, int]] = 1,
+        dilation: int | tuple[int, int] = 1,
     ) -> None:
         super().__init__()
         self.conv = nn.Conv2d(
@@ -218,7 +215,7 @@ class UperNetFCNHead(nn.Module):
     """
 
     def __init__(
-        self, config, in_channels, in_index: int = 2, kernel_size: int = 3, dilation: Union[int, tuple[int, int]] = 1
+        self, config, in_channels, in_index: int = 2, kernel_size: int = 3, dilation: int | tuple[int, int] = 1
     ) -> None:
         super().__init__()
 
@@ -296,13 +293,13 @@ class UperNetForSemanticSegmentation(UperNetPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        labels: Optional[torch.Tensor] = None,
-        return_dict: Optional[bool] = None,
+        pixel_values: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        labels: torch.Tensor | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, SemanticSegmenterOutput]:
+    ) -> tuple | SemanticSegmenterOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
             Ground truth semantic segmentation maps for computing the loss. Indices should be in `[0, ...,

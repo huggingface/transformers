@@ -102,7 +102,7 @@ model = AutoModelForCausalLM.from_pretrained(
 
 ## Caching
 
-[Caching](./kv_cache) speeds up generation by reusing past keys and values instead of recomputing them for every token. To offset and reduce the memory cost of storing past keys and values, Transformers 
+[Caching](./kv_cache) speeds up generation by reusing past keys and values instead of recomputing them for every token. To offset and reduce the memory cost of storing past keys and values, Transformers
 supports offloading the cache to the CPU. Only the current layer remains on the GPU.
 
 Use the `cache_implementation` argument in [`~GenerationMixin.generate`] to set a cache strategy.

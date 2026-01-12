@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,7 +13,7 @@
 # limitations under the License.
 
 import enum
-from typing import Any, Optional, Union, overload
+from typing import Any, Union, overload
 
 import numpy as np
 
@@ -234,38 +233,31 @@ class AnyToAnyPipeline(Pipeline):
     @overload
     def __call__(
         self,
-        text: Optional[str] = None,
-        images: Optional[Union[str, "Image.Image"]] = None,
-        videos: Optional[Union[str, "np.ndarray", "torch.Tensor"]] = None,
-        audio: Optional[Union[str, "np.ndarray"]] = None,
+        text: str | None = None,
+        images: Union[str, "Image.Image"] | None = None,
+        videos: Union[str, "np.ndarray", "torch.Tensor"] | None = None,
+        audio: Union[str, "np.ndarray"] | None = None,
         **kwargs: Any,
     ) -> list[dict[str, Any]]: ...
 
     @overload
     def __call__(
         self,
-        text: Optional[list[str]] = None,
-        images: Optional[Union[list[str], list["Image.Image"]]] = None,
-        videos: Optional[Union[list[str], list["np.ndarray"], list["torch.Tensor"]]] = None,
-        audio: Optional[Union[list[str], list["np.ndarray"]]] = None,
+        text: list[str] | None = None,
+        images: list[str] | list["Image.Image"] | None = None,
+        videos: list[str] | list["np.ndarray"] | list["torch.Tensor"] | None = None,
+        audio: list[str] | list["np.ndarray"] | None = None,
         **kwargs: Any,
     ) -> list[list[dict[str, Any]]]: ...
 
     def __call__(
         self,
-        text: Union[str, list[str], list[dict]],
-        images: Optional[
-            Union[
-                str,
-                list[str],
-                list[list[str]],
-                ImageInput,
-            ]
-        ] = None,
-        videos: Optional[Union[str, list[str], VideoInput]] = None,
-        audio: Optional[Union[str, list[str], AudioInput]] = None,
+        text: str | list[str] | list[dict],
+        images: str | list[str] | list[list[str]] | ImageInput | None = None,
+        videos: str | list[str] | VideoInput | None = None,
+        audio: str | list[str] | AudioInput | None = None,
         **kwargs,
-    ) -> Union[list[dict[str, Any]], list[list[dict[str, Any]]]]:
+    ) -> list[dict[str, Any]] | list[list[dict[str, Any]]]:
         """
         Generate a text given text and optionally multimodal data passed as inputs.
 

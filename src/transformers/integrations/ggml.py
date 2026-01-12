@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The ggml.ai team and The HuggingFace Inc. team. and pygguf author (github.com/99991)
 # https://github.com/99991/pygguf
 #

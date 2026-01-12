@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Deepseek AI and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,10 +24,8 @@ import gc
 import json
 import os
 import re
-from typing import Optional
 
 import torch
-from accelerate import init_empty_weights
 from huggingface_hub import snapshot_download
 
 from transformers import (
@@ -169,7 +166,7 @@ def convert_state_dict_to_hf(state_dict):
 
 
 def ensure_model_downloaded(
-    repo_id: Optional[str] = None, revision: Optional[str] = None, local_dir: Optional[str] = None
+    repo_id: str | None = None, revision: str | None = None, local_dir: str | None = None
 ) -> str:
     """
     Ensures model files are downloaded locally, downloads them if not.
@@ -403,7 +400,7 @@ def convert_model(
 
     # Initialize model with empty weights
     print("Creating empty model...")
-    with init_empty_weights():
+    with torch.device("meta"):
         model = JanusForConditionalGeneration(config)
 
     model.generation_config._from_model_config = False

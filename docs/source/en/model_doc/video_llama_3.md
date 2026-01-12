@@ -212,6 +212,7 @@ model = VideoLlama3ForConditionalGeneration.from_pretrained(
 ## VideoLlama3Processor
 
 [[autodoc]] VideoLlama3Processor
+    - __call__
 
 ## VideoLlama3Model
 

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Optional, Union
 
 from tokenizers import Tokenizer, decoders, pre_tokenizers
 from tokenizers.models import BPE
@@ -93,8 +91,8 @@ class LlamaTokenizer(TokenizersBackend):
 
     def __init__(
         self,
-        vocab: Optional[Union[str, dict, list]] = None,
-        merges: Optional[Union[str, list]] = None,
+        vocab: str | dict | list | None = None,
+        merges: str | list | None = None,
         clean_up_tokenization_spaces=False,
         unk_token="<unk>",
         bos_token="<s>",

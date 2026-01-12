@@ -63,6 +63,7 @@ This model was contributed by [aps](https://huggingface.co/aps). The original co
 ## FlavaProcessor
 
 [[autodoc]] FlavaProcessor
+    - __call__
 
 ## FlavaImageProcessor
 

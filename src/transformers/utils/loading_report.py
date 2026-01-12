@@ -17,7 +17,7 @@ import shutil
 import sys
 from collections import OrderedDict, defaultdict
 from collections.abc import Iterable
-from typing import Any, Optional
+from typing import Any
 
 
 _DIGIT_RX = re.compile(r"(?<=\.)(\d+)(?=\.|$)")  # numbers between dots or at the end
@@ -141,8 +141,8 @@ def log_state_dict_report(
     *,
     model,
     pretrained_model_name_or_path,
-    logger: Optional[logging.Logger] = None,
-    error_msgs: Optional[Iterable[str]] = None,
+    logger: logging.Logger | None = None,
+    error_msgs: Iterable[str] | None = None,
     unexpected_keys=None,
     missing_keys=None,
     mismatched_keys=None,

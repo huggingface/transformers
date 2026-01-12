@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_got_ocr2.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2024 HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,8 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
-from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
 from ..auto import CONFIG_MAPPING, AutoConfig
@@ -162,11 +159,11 @@ class GotOcr2Config(PreTrainedConfig):
 
     def __init__(
         self,
-        vision_config: Optional[dict] = None,
-        text_config: Optional[dict] = None,
-        image_token_index: Optional[int] = 151859,
-        image_seq_length: Optional[int] = 576,
-        pad_token_id: Optional[int] = -1,
+        vision_config: dict | None = None,
+        text_config: dict | None = None,
+        image_token_index: int | None = 151859,
+        image_seq_length: int | None = 576,
+        pad_token_id: int | None = -1,
         **kwargs,
     ):
         self.image_token_index = image_token_index

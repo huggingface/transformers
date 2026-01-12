@@ -179,7 +179,7 @@ def maybe_autocast(
     device_type: str,
     dtype: Optional["_dtype"] = None,
     enabled: bool = True,
-    cache_enabled: Optional[bool] = None,
+    cache_enabled: bool | None = None,
 ):
     """
     Context manager that only autocasts if:

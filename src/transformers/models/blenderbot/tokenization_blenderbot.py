@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The Facebook Inc. and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -160,13 +159,6 @@ class BlenderbotTokenizer(TokenizersBackend):
 
         self._tokenizer.pre_tokenizer = pre_tokenizers.ByteLevel(add_prefix_space=add_prefix_space)
         self._tokenizer.decoder = decoders.ByteLevel()
-        self._tokenizer.post_processor = processors.RobertaProcessing(
-            sep=(str(eos_token), self._vocab.get(str(eos_token), 2)),
-            cls=(str(bos_token), self._vocab.get(str(bos_token), 0)),
-            add_prefix_space=add_prefix_space,
-            trim_offsets=True,
-        )
-
         super().__init__(
             bos_token=bos_token,
             eos_token=eos_token,
@@ -177,6 +169,12 @@ class BlenderbotTokenizer(TokenizersBackend):
             mask_token=mask_token,
             add_prefix_space=add_prefix_space,
             **kwargs,
+        )
+        self._tokenizer.post_processor = processors.RobertaProcessing(
+            sep=(str(eos_token), self.eos_token_id),
+            cls=(str(bos_token), self.bos_token_id),
+            add_prefix_space=add_prefix_space,
+            trim_offsets=True,
         )
 
 

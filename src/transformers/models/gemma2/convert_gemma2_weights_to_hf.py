@@ -16,7 +16,6 @@ import os
 import warnings
 
 import torch
-from accelerate import init_empty_weights
 
 from transformers import Gemma2Config, Gemma2ForCausalLM, GemmaTokenizer
 
@@ -143,7 +142,7 @@ def write_model(save_path, input_base_path, config, push_to_hub=False, dtype=tor
     torch.set_default_dtype(dtype)
 
     print("Loading the checkpoint in a Gemma2 model.")
-    with init_empty_weights():
+    with torch.device("meta"):
         model = Gemma2ForCausalLM(config)
     model.load_state_dict(state_dict, assign=True, strict=False)
 

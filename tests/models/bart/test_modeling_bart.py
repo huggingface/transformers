@@ -622,7 +622,7 @@ class FastIntegrationTests(unittest.TestCase):
         dct = tok(ARTICLE, return_tensors="pt")
         generated_ids = hf.generate(**dct, num_beams=4)
         result = tok.batch_decode(generated_ids)[0]
-        assert EXPECTED == result
+        assert result == EXPECTED
 
     def test_xsum_1_1_batch_generation(self):
         # test batch
@@ -894,7 +894,7 @@ class BartModelIntegrationTests(unittest.TestCase):
 
     @slow
     def test_inference_no_head(self):
-        model = BartModel.from_pretrained("facebook/bart-large").to(torch_device)
+        model = BartModel.from_pretrained("facebook/bart-large", dtype=torch.float32).to(torch_device)
         input_ids = _long_tensor([[0, 31414, 232, 328, 740, 1140, 12695, 69, 46078, 1588, 2]])
         attention_mask = input_ids.ne(model.config.pad_token_id)
         with torch.no_grad():
@@ -987,7 +987,7 @@ class BartModelIntegrationTests(unittest.TestCase):
 
     def test_xsum_config_generation_params(self):
         model = BartForConditionalGeneration.from_pretrained("facebook/bart-large-xsum")
-        expected_params = {"num_beams": 6, "do_sample": False, "early_stopping": True, "length_penalty": None}
+        expected_params = {"num_beams": 6, "do_sample": None, "early_stopping": True, "length_penalty": None}
         config_params = {k: getattr(model.generation_config, k, "MISSING") for k, v in expected_params.items()}
         self.assertDictEqual(expected_params, config_params)
 

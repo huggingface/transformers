@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -37,10 +36,10 @@ from .configuration_pe_video import PeVideoConfig, PeVideoEncoderConfig
 @dataclass
 # @auto_docstring
 class PeVideoOutput(ModelOutput):
-    loss: Optional[torch.FloatTensor] = None
-    logits_video_text: Optional[torch.FloatTensor] = None
-    text_video_embeds: Optional[torch.FloatTensor] = None
-    video_embeds: Optional[torch.FloatTensor] = None
+    loss: torch.FloatTensor | None = None
+    logits_video_text: torch.FloatTensor | None = None
+    text_video_embeds: torch.FloatTensor | None = None
+    video_embeds: torch.FloatTensor | None = None
     text_outputs: BaseModelOutputWithPooling = None
     video_outputs: BaseModelOutputWithPooling = None
 
@@ -66,8 +65,8 @@ class PeVideoEncoderEmbedder(nn.Module):
     def forward(
         self,
         pixel_values_videos: torch.Tensor,
-        padding_mask: Optional[torch.Tensor] = None,
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+        padding_mask: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = pixel_values_videos.shape
 
         pixel_values_videos = pixel_values_videos.view(-1, *input_shape[2:])
@@ -105,7 +104,7 @@ class PeVideoEncoder(PeAudioVideoEncoder):
     def forward(
         self,
         pixel_values_videos: torch.Tensor,
-        padding_mask_videos: Optional[torch.Tensor] = None,
+        padding_mask_videos: torch.Tensor | None = None,
         **kwargs,
     ) -> BaseModelOutputWithPooling:
         inputs_embeds, padding_mask = self.embedder(pixel_values_videos, padding_mask=padding_mask_videos)
@@ -178,9 +177,9 @@ class PeVideoModel(PeVideoPreTrainedModel):
         self,
         input_ids: torch.Tensor,
         pixel_values_videos: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        padding_mask_videos: Optional[torch.Tensor] = None,
-        return_loss: Optional[bool] = None,
+        attention_mask: torch.Tensor | None = None,
+        padding_mask_videos: torch.Tensor | None = None,
+        return_loss: bool | None = None,
         **kwargs,
     ) -> PeVideoOutput:
         video_outputs: BaseModelOutputWithPooling = self.video_encoder(

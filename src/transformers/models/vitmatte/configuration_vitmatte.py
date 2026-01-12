@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """VitMatte model configuration"""
-
-from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
@@ -81,7 +78,7 @@ class VitMatteConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        backbone_config: Optional[PreTrainedConfig] = None,
+        backbone_config: PreTrainedConfig | None = None,
         backbone=None,
         use_pretrained_backbone=False,
         use_timm_backbone=False,

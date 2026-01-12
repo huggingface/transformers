@@ -2987,17 +2987,6 @@
         ],
         "sha": "47c7a75a1e650dae60ff6e9bbab0f2386946670c"
     },
-    "LEDForSequenceClassification": {
-        "tokenizer_classes": [
-            "LEDTokenizer",
-            "LEDTokenizerFast"
-        ],
-        "processor_classes": [],
-        "model_classes": [
-            "LEDForSequenceClassification"
-        ],
-        "sha": "3571e2c9d9f2f2ec0b8fe47090330b128be05126"
-    },
     "LEDModel": {
         "tokenizer_classes": [
             "LEDTokenizer",

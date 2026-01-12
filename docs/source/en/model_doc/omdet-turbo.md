@@ -164,6 +164,7 @@ Detected statue with confidence 0.2 at location [428.1, 205.5, 767.3, 759.5] in 
 ## OmDetTurboProcessor
 
 [[autodoc]] OmDetTurboProcessor
+    - __call__
     - post_process_grounded_object_detection
 
 ## OmDetTurboForObjectDetection

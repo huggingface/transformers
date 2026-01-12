@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_qwen2_5_vl.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 The Qwen Team and The HuggingFace Inc. team. All rights reserved.
 #
 # This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
@@ -23,9 +22,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import inspect
-from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...modeling_rope_utils import RopeParameters
@@ -170,27 +167,27 @@ class Qwen2_5_VLTextConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 152064,
-        hidden_size: Optional[int] = 8192,
-        intermediate_size: Optional[int] = 29568,
-        num_hidden_layers: Optional[int] = 80,
-        num_attention_heads: Optional[int] = 64,
-        num_key_value_heads: Optional[int] = 8,
-        hidden_act: Optional[str] = "silu",
-        max_position_embeddings: Optional[int] = 32768,
-        initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[int] = 1e-05,
-        use_cache: Optional[bool] = True,
-        tie_word_embeddings: Optional[bool] = False,
-        use_sliding_window: Optional[bool] = False,
-        sliding_window: Optional[int] = 4096,
-        max_window_layers: Optional[int] = 80,
-        layer_types: Optional[list[str]] = None,
-        attention_dropout: Optional[float] = 0.0,
-        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        bos_token_id: Optional[int] = 151643,
-        eos_token_id: Optional[int] = 151645,
-        pad_token_id: Optional[int] = None,
+        vocab_size: int | None = 152064,
+        hidden_size: int | None = 8192,
+        intermediate_size: int | None = 29568,
+        num_hidden_layers: int | None = 80,
+        num_attention_heads: int | None = 64,
+        num_key_value_heads: int | None = 8,
+        hidden_act: str | None = "silu",
+        max_position_embeddings: int | None = 32768,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: int | None = 1e-05,
+        use_cache: bool | None = True,
+        tie_word_embeddings: bool | None = False,
+        use_sliding_window: bool | None = False,
+        sliding_window: int | None = 4096,
+        max_window_layers: int | None = 80,
+        layer_types: list[str] | None = None,
+        attention_dropout: float | None = 0.0,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        bos_token_id: int | None = 151643,
+        eos_token_id: int | None = 151645,
+        pad_token_id: int | None = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -234,7 +231,7 @@ class Qwen2_5_VLTextConfig(PreTrainedConfig):
             **kwargs,
         )
 
-    def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation: Optional[set] = None, **kwargs):
+    def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation: set | None = None, **kwargs):
         rope_scaling = kwargs.pop("rope_scaling", None)
         self.rope_parameters = rope_scaling or self.rope_parameters
         self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else {}

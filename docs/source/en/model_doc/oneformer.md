@@ -85,6 +85,7 @@ The resource should ideally demonstrate something new instead of duplicating an 
 ## OneFormerProcessor
 
 [[autodoc]] OneFormerProcessor
+    - __call__
 
 ## OneFormerModel
 

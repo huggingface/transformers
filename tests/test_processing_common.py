@@ -277,8 +277,13 @@ class ProcessorTesterMixin:
         # Get the appropriate Auto mapping for this component type
         if mapping_name == "tokenizer":
             from transformers.models.auto.tokenization_auto import TOKENIZER_MAPPING
+            from transformers.utils import is_tokenizers_available
 
             component_class = TOKENIZER_MAPPING.get(config_class, None)
+            if component_class is None and is_tokenizers_available():
+                from transformers.tokenization_utils_tokenizers import TokenizersBackend
+
+                component_class = TokenizersBackend
         elif mapping_name == "image_processor":
             from transformers.models.auto.image_processing_auto import IMAGE_PROCESSOR_MAPPING
 

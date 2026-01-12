@@ -133,7 +133,6 @@ _import_structure = {
         "is_wandb_available",
     ],
     "loss": [],
-    "modelcard": ["ModelCard"],
     "pipelines": [
         "AnyToAnyPipeline",
         "AudioClassificationPipeline",
@@ -363,15 +362,6 @@ else:
         "StaticSlidingWindowLayer",
         "QuantoQuantizedLayer",
         "HQQQuantizedLayer",
-        "SlidingWindowLayer",
-        "ChunkedSlidingLayer",
-        "HQQQuantizedCache",
-        "HybridCache",
-        "HybridChunkedCache",
-        "OffloadedCache",
-        "OffloadedStaticCache",
-        "QuantoQuantizedCache",
-        "SlidingWindowCache",
         "Cache",
         "DynamicCache",
         "EncoderDecoderCache",
@@ -482,20 +472,12 @@ else:
 if TYPE_CHECKING:
     # All modeling imports
     from .cache_utils import Cache as Cache
-    from .cache_utils import ChunkedSlidingLayer as ChunkedSlidingLayer
     from .cache_utils import DynamicCache as DynamicCache
     from .cache_utils import DynamicLayer as DynamicLayer
     from .cache_utils import EncoderDecoderCache as EncoderDecoderCache
-    from .cache_utils import HQQQuantizedCache as HQQQuantizedCache
     from .cache_utils import HQQQuantizedLayer as HQQQuantizedLayer
-    from .cache_utils import HybridCache as HybridCache
-    from .cache_utils import OffloadedCache as OffloadedCache
-    from .cache_utils import OffloadedStaticCache as OffloadedStaticCache
     from .cache_utils import QuantizedCache as QuantizedCache
-    from .cache_utils import QuantoQuantizedCache as QuantoQuantizedCache
     from .cache_utils import QuantoQuantizedLayer as QuantoQuantizedLayer
-    from .cache_utils import SlidingWindowCache as SlidingWindowCache
-    from .cache_utils import SlidingWindowLayer as SlidingWindowLayer
     from .cache_utils import StaticCache as StaticCache
     from .cache_utils import StaticLayer as StaticLayer
     from .cache_utils import StaticSlidingWindowLayer as StaticSlidingWindowLayer
@@ -632,8 +614,7 @@ if TYPE_CHECKING:
     from .masking_utils import AttentionMaskInterface as AttentionMaskInterface
     from .model_debugging_utils import model_addition_debugger_context as model_addition_debugger_context
 
-    # Model Cards
-    from .modelcard import ModelCard as ModelCard
+    # Models
     from .modeling_layers import GradientCheckpointingLayer as GradientCheckpointingLayer
     from .modeling_rope_utils import ROPE_INIT_FUNCTIONS as ROPE_INIT_FUNCTIONS
     from .modeling_rope_utils import RopeParameters as RopeParameters

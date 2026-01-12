@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -109,14 +108,14 @@ class SamImageProcessorFast(BaseImageProcessorFast):
 
     def _further_process_kwargs(
         self,
-        size: Optional[SizeDict] = None,
-        pad_size: Optional[SizeDict] = None,
-        mask_size: Optional[SizeDict] = None,
-        mask_pad_size: Optional[SizeDict] = None,
-        default_to_square: Optional[bool] = None,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
-        data_format: Optional[ChannelDimension] = None,
+        size: SizeDict | None = None,
+        pad_size: SizeDict | None = None,
+        mask_size: SizeDict | None = None,
+        mask_pad_size: SizeDict | None = None,
+        default_to_square: bool | None = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        data_format: ChannelDimension | None = None,
         **kwargs,
     ) -> dict:
         """
@@ -163,7 +162,7 @@ class SamImageProcessorFast(BaseImageProcessorFast):
     def preprocess(
         self,
         images: ImageInput,
-        segmentation_maps: Optional[ImageInput] = None,
+        segmentation_maps: ImageInput | None = None,
         **kwargs: Unpack[SamImageProcessorKwargs],
     ) -> BatchFeature:
         r"""
@@ -175,10 +174,10 @@ class SamImageProcessorFast(BaseImageProcessorFast):
     def _preprocess_image_like_inputs(
         self,
         images: ImageInput,
-        segmentation_maps: Optional[ImageInput],
+        segmentation_maps: ImageInput | None,
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
-        device: Optional[Union[str, "torch.device"]] = None,
+        device: Union[str, "torch.device"] | None = None,
         **kwargs: Unpack[SamImageProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -232,12 +231,12 @@ class SamImageProcessorFast(BaseImageProcessorFast):
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        do_pad: Optional[bool],
-        pad_size: Optional[SizeDict],
-        disable_grouping: Optional[bool],
-        return_tensors: Optional[Union[str, TensorType]],
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        do_pad: bool | None,
+        pad_size: SizeDict | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         # Group images by size for batched resizing
@@ -278,8 +277,8 @@ class SamImageProcessorFast(BaseImageProcessorFast):
         target_size,
         crop_n_layers: int = 0,
         overlap_ratio: float = 512 / 1500,
-        points_per_crop: Optional[int] = 32,
-        crop_n_points_downscale_factor: Optional[list[int]] = 1,
+        points_per_crop: int | None = 32,
+        crop_n_points_downscale_factor: list[int] | None = 1,
         device: Optional["torch.device"] = None,
     ):
         """
@@ -598,8 +597,8 @@ def _generate_crop_boxes(
     target_size: int,  # Is it tuple here?
     crop_n_layers: int = 0,
     overlap_ratio: float = 512 / 1500,
-    points_per_crop: Optional[int] = 32,
-    crop_n_points_downscale_factor: Optional[list[int]] = 1,
+    points_per_crop: int | None = 32,
+    crop_n_points_downscale_factor: list[int] | None = 1,
 ) -> tuple[list[list[int]], list[int]]:
     """
     Generates a list of crop boxes of different sizes. Each layer has (2**i)**2 boxes for the ith layer.

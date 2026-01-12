@@ -145,8 +145,8 @@ class TorchAoHfQuantizer(HfQuantizer):
         """
         We flatten the state dict of tensor subclasses so that it is compatible with the safetensors format.
         """
-        if TORCHAO_VERSION >= version.parse("0.15.0"):
-            return flatten_tensor_state_dict(model.state_dict()), {}
+        if version.parse("0.15.0") <= TORCHAO_VERSION:
+            return flatten_tensor_state_dict(model.state_dict())
         else:
             raise RuntimeError(
                 f"In order to use safetensors with torchao, please use torchao version >= 0.15.0. Current version: {TORCHAO_VERSION}"
@@ -229,8 +229,8 @@ class TorchAoHfQuantizer(HfQuantizer):
         return
 
     def is_serializable(self) -> bool:
-        _is_torchao_serializable = TORCHAO_VERSION >= version.parse("0.15.0")
-        if not TORCHAO_VERSION >= version.parse("0.15.0"):
+        _is_torchao_serializable = version.parse("0.15.0") <= TORCHAO_VERSION
+        if not version.parse("0.15.0") <= TORCHAO_VERSION:
             logger.warning(
                 "torchao quantized model only supports serialization for torchao version >= 0.15.0, please upgrade "
                 "your version to save the quantized model"

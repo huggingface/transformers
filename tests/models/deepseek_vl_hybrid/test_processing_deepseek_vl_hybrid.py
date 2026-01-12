@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -29,8 +28,8 @@ class DeepseekVLHybridProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @classmethod
     def _setup_tokenizer(cls):
         tokenizer_class = cls._get_component_class_from_processor("tokenizer")
-        return tokenizer_class(
-            vocab_file=SAMPLE_VOCAB,
+        return tokenizer_class.from_pretrained(
+            SAMPLE_VOCAB,
             extra_special_tokens={
                 "pad_token": "<｜end▁of▁sentence｜>",
                 "image_token": "<image_placeholder>",

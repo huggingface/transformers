@@ -14,7 +14,6 @@
 """PyTorch xLSTM Model."""
 
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import torch
 import torch.nn.functional as F
@@ -50,7 +49,7 @@ else:
 
     external_xlstm = False
 
-    def soft_cap(values: torch.Tensor, cap_value: Optional[Union[float, torch.Tensor]] = None) -> torch.Tensor:
+    def soft_cap(values: torch.Tensor, cap_value: float | torch.Tensor | None = None) -> torch.Tensor:
         """
         Soft caps a tensor to a value.
 
@@ -74,13 +73,13 @@ else:
         matV: torch.Tensor,
         vecB: torch.Tensor,
         vecI: torch.Tensor,
-        matC_states: Optional[torch.Tensor] = None,
-        vecN_states: Optional[torch.Tensor] = None,
-        scaMinter_states: Optional[torch.Tensor] = None,
-        matC_initial: Optional[torch.Tensor] = None,
-        vecN_initial: Optional[torch.Tensor] = None,
-        scaMinter_initial: Optional[torch.Tensor] = None,
-        qk_scale: Optional[float] = None,
+        matC_states: torch.Tensor | None = None,
+        vecN_states: torch.Tensor | None = None,
+        scaMinter_states: torch.Tensor | None = None,
+        matC_initial: torch.Tensor | None = None,
+        vecN_initial: torch.Tensor | None = None,
+        scaMinter_initial: torch.Tensor | None = None,
+        qk_scale: float | None = None,
         chunk_size: int = 64,
         num_chunks: int = 1,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
@@ -242,10 +241,10 @@ else:
         value: torch.Tensor,
         igate: torch.Tensor,
         fgate: torch.Tensor,
-        cstate: Optional[torch.Tensor] = None,
-        nstate: Optional[torch.Tensor] = None,
-        mstate: Optional[torch.Tensor] = None,
-        qk_scale: Optional[float] = None,
+        cstate: torch.Tensor | None = None,
+        nstate: torch.Tensor | None = None,
+        mstate: torch.Tensor | None = None,
+        qk_scale: float | None = None,
         return_last_states: bool = False,
         return_all_states: bool = False,
         chunk_size: int = 64,
@@ -254,8 +253,8 @@ else:
         torch.Tensor,
         torch.Tensor,
         torch.Tensor,
-        Optional[tuple[torch.Tensor, torch.Tensor, torch.Tensor]],
-        Optional[tuple[torch.Tensor, torch.Tensor, torch.Tensor]],
+        tuple[torch.Tensor, torch.Tensor, torch.Tensor] | None,
+        tuple[torch.Tensor, torch.Tensor, torch.Tensor] | None,
     ]:
         batch_size, nh, sequence_length, dhqk = query.shape
         if sequence_length % chunk_size != 0:
@@ -323,14 +322,14 @@ else:
         value: torch.Tensor,
         igate: torch.Tensor,
         fgate: torch.Tensor,
-        c_initial: Optional[torch.Tensor] = None,
-        n_initial: Optional[torch.Tensor] = None,
-        m_initial: Optional[torch.Tensor] = None,
+        c_initial: torch.Tensor | None = None,
+        n_initial: torch.Tensor | None = None,
+        m_initial: torch.Tensor | None = None,
         return_last_states: bool = False,
         eps: float = 1e-6,
         chunk_size: int = 64,
         **kwargs,
-    ) -> Union[torch.Tensor, tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor, torch.Tensor]]]:
+    ) -> torch.Tensor | tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
         batch_size, nh, sequence_length, dhqk = query.shape
         if sequence_length % chunk_size != 0:
             raise ValueError(f"Sequence length {sequence_length} is not divisible by chunk size {chunk_size}.")
@@ -451,9 +450,9 @@ else:
         value: torch.Tensor,
         igate: torch.Tensor,
         fgate: torch.Tensor,
-        c_initial: Optional[torch.Tensor] = None,
-        n_initial: Optional[torch.Tensor] = None,
-        m_initial: Optional[torch.Tensor] = None,
+        c_initial: torch.Tensor | None = None,
+        n_initial: torch.Tensor | None = None,
+        m_initial: torch.Tensor | None = None,
         return_last_states: bool = False,
         eps: float = 1e-6,
         dtype_state: torch.dtype = torch.float32,
@@ -462,8 +461,8 @@ else:
         torch.Tensor,
         torch.Tensor,
         torch.Tensor,
-        Optional[tuple[torch.Tensor, torch.Tensor, torch.Tensor]],
-        Optional[tuple[torch.Tensor, torch.Tensor, torch.Tensor]],
+        tuple[torch.Tensor, torch.Tensor, torch.Tensor] | None,
+        tuple[torch.Tensor, torch.Tensor, torch.Tensor] | None,
     ]:
         batch_size, nh, sequence_length, dhqk = query.shape
         dhv = value.shape[-1]
@@ -525,15 +524,15 @@ else:
         value: torch.Tensor,
         fgate: torch.Tensor,
         igate: torch.Tensor,
-        c_initial: Optional[torch.Tensor] = None,
-        n_initial: Optional[torch.Tensor] = None,
-        m_initial: Optional[torch.Tensor] = None,
+        c_initial: torch.Tensor | None = None,
+        n_initial: torch.Tensor | None = None,
+        m_initial: torch.Tensor | None = None,
         return_last_states: bool = False,
         eps: float = 1e-6,
         autocast_kernel_dtype: torch.dtype = torch.bfloat16,
         chunk_size: int = 64,
         **kwargs,
-    ) -> Union[torch.Tensor, tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor, torch.Tensor]]]:
+    ) -> torch.Tensor | tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
         if return_last_states:
             raise ValueError(
                 "We are padding zeros, so we cannot return last states,",
@@ -589,15 +588,15 @@ else:
         value: torch.Tensor,
         fgate: torch.Tensor,
         igate: torch.Tensor,
-        c_initial: Optional[torch.Tensor] = None,
-        n_initial: Optional[torch.Tensor] = None,
-        m_initial: Optional[torch.Tensor] = None,
+        c_initial: torch.Tensor | None = None,
+        n_initial: torch.Tensor | None = None,
+        m_initial: torch.Tensor | None = None,
         return_last_states: bool = True,
         eps: float = 1e-6,
         autocast_kernel_dtype: torch.dtype = torch.bfloat16,
         chunk_size: int = 64,
         enable_logging: bool = False,
-    ) -> Union[torch.Tensor, tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor, torch.Tensor]]]:
+    ) -> torch.Tensor | tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
         """This function computes the last hidden state and matH outputs of the mLSTM, independently of the sequence length.
 
         For this it uses three kernels:
@@ -778,12 +777,12 @@ else:
             value: torch.Tensor,
             igate: torch.Tensor,
             fgate: torch.Tensor,
-            c_initial: Optional[torch.Tensor] = None,
-            n_initial: Optional[torch.Tensor] = None,
-            m_initial: Optional[torch.Tensor] = None,
+            c_initial: torch.Tensor | None = None,
+            n_initial: torch.Tensor | None = None,
+            m_initial: torch.Tensor | None = None,
             return_last_states: bool = False,
-            mode: Optional[Literal["train", "inference"]] = None,
-        ) -> Union[torch.Tensor, tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor, torch.Tensor]]]:
+            mode: Literal["train", "inference"] | None = None,
+        ) -> torch.Tensor | tuple[torch.Tensor, tuple[torch.Tensor, torch.Tensor, torch.Tensor]]:
             """Forward pass of the mLSTM backend.
 
             Depending on the configured mode, this method will call the appropriate kernel function.
@@ -978,7 +977,7 @@ else:
             batch_size, sequence_length, nh, DH = x.shape
             if nh != self.num_heads:
                 raise ValueError(f"Expected {self.num_heads} heads, got {nh}, input shape: {x.shape}")
-            if DH != self.head_dim:
+            if self.head_dim != DH:
                 raise ValueError(f"Expected {self.head_dim} head dimension, got {DH}, input shape: {x.shape}")
 
             x = self._layer_normalize(x)
@@ -1103,8 +1102,8 @@ else:
             )
 
         def forward(
-            self, x: torch.Tensor, state: Optional[mLSTMLayerStateType] = None
-        ) -> tuple[torch.Tensor, Optional[mLSTMLayerStateType]]:
+            self, x: torch.Tensor, state: mLSTMLayerStateType | None = None
+        ) -> tuple[torch.Tensor, mLSTMLayerStateType | None]:
             if x.ndim != 3:
                 raise ValueError(f"Input must have shape [batch_size, sequence_length, HD], got {x.shape}")
             batch_size, sequence_length, _ = x.shape
@@ -1190,9 +1189,7 @@ else:
             )
             self.ffn = xLSTMFeedForward(config)
 
-        def forward(
-            self, x: torch.Tensor, state: Optional[mLSTMStateType] = None
-        ) -> tuple[torch.Tensor, mLSTMStateType]:
+        def forward(self, x: torch.Tensor, state: mLSTMStateType | None = None) -> tuple[torch.Tensor, mLSTMStateType]:
             x_mlstm = self.norm_mlstm(x)
             x_mlstm, state = self.mlstm_layer(x_mlstm, state)
             x = x + x_mlstm
@@ -1344,7 +1341,7 @@ class xLSTMCache:
         config: xLSTMConfig,
         max_batch_size: int,
         dtype: torch.dtype = torch.bfloat16,
-        device: Optional[str] = None,
+        device: str | None = None,
         **kwargs,
     ):
         self.seqlen_offset = 0
@@ -1383,9 +1380,9 @@ class xLSTMOutput(ModelOutput):
         avoid providing the old `input_ids`.
     """
 
-    last_hidden_state: Optional[torch.FloatTensor]
-    cache_params: Optional[xLSTMCache] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    last_hidden_state: torch.FloatTensor | None
+    cache_params: xLSTMCache | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
 
 
 @auto_docstring
@@ -1410,13 +1407,13 @@ class xLSTMModel(xLSTMPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.LongTensor] = None,
-        cache_params: Optional[xLSTMCache] = None,
-        use_cache: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        input_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.LongTensor | None = None,
+        cache_params: xLSTMCache | None = None,
+        use_cache: bool | None = None,
+        output_hidden_states: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, xLSTMOutput]:
+    ) -> tuple | xLSTMOutput:
         r"""
         cache_params (`xLSTMCache`, *optional*):
             The xLSTMCache that carries the RNN states.
@@ -1514,10 +1511,10 @@ class xLSTMCausalLMOutput(ModelOutput):
         avoid providing the old `input_ids`.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    logits: Optional[torch.FloatTensor] = None
-    cache_params: Optional[xLSTMCache] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    loss: torch.FloatTensor | None = None
+    logits: torch.FloatTensor | None = None
+    cache_params: xLSTMCache | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
 
 
 @auto_docstring
@@ -1547,7 +1544,7 @@ class xLSTMForCausalLM(xLSTMPreTrainedModel, GenerationMixin):
         attention_mask=None,  # not used but needed, otherwise generate complains when passing tokenizer inputs
         inputs_embeds=None,
         use_cache=None,
-        cache_params: Optional[xLSTMCache] = None,
+        cache_params: xLSTMCache | None = None,
         **kwargs,
     ):
         if use_cache and cache_params is not None:
@@ -1577,14 +1574,14 @@ class xLSTMForCausalLM(xLSTMPreTrainedModel, GenerationMixin):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        cache_params: Optional[xLSTMCache] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        input_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        cache_params: xLSTMCache | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        output_hidden_states: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, xLSTMCausalLMOutput]:
+    ) -> tuple | xLSTMCausalLMOutput:
         r"""
         cache_params (`xLSTMCache`, *optional*):
             The xLSTMCache that carries the RNN states.

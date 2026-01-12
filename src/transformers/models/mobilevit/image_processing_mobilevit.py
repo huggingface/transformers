@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Image processor class for MobileViT."""
-
-from typing import Optional, Union
 
 import numpy as np
 
@@ -79,7 +76,7 @@ class MobileViTImageProcessor(BaseImageProcessor):
         size (`dict[str, int]` *optional*, defaults to `{"shortest_edge": 224}`):
             Controls the size of the output image after resizing. Can be overridden by the `size` parameter in the
             `preprocess` method.
-        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BILINEAR`):
+        resample (`PILImageResampling`, *optional*, defaults to `Resampling.BICUBIC`):
             Defines the resampling filter to use if resizing the image. Can be overridden by the `resample` parameter
             in the `preprocess` method.
         do_rescale (`bool`, *optional*, defaults to `True`):
@@ -111,12 +108,12 @@ class MobileViTImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Optional[dict[str, int]] = None,
-        resample: PILImageResampling = PILImageResampling.BILINEAR,
+        size: dict[str, int] | None = None,
+        resample: PILImageResampling = PILImageResampling.BICUBIC,
         do_rescale: bool = True,
-        rescale_factor: Union[int, float] = 1 / 255,
+        rescale_factor: int | float = 1 / 255,
         do_center_crop: bool = True,
-        crop_size: Optional[dict[str, int]] = None,
+        crop_size: dict[str, int] | None = None,
         do_flip_channel_order: bool = True,
         do_reduce_labels: bool = False,
         **kwargs,
@@ -137,14 +134,14 @@ class MobileViTImageProcessor(BaseImageProcessor):
         self.do_flip_channel_order = do_flip_channel_order
         self.do_reduce_labels = do_reduce_labels
 
-    # Copied from transformers.models.mobilenet_v1.image_processing_mobilenet_v1.MobileNetV1ImageProcessor.resize with PILImageResampling.BICUBIC->PILImageResampling.BILINEAR
+    # Copied from transformers.models.mobilenet_v1.image_processing_mobilenet_v1.MobileNetV1ImageProcessor.resize
     def resize(
         self,
         image: np.ndarray,
         size: dict[str, int],
-        resample: PILImageResampling = PILImageResampling.BILINEAR,
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        resample: PILImageResampling = PILImageResampling.BICUBIC,
+        data_format: str | ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -156,7 +153,7 @@ class MobileViTImageProcessor(BaseImageProcessor):
                 Image to resize.
             size (`dict[str, int]`):
                 Size of the output image.
-            resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BILINEAR`):
+            resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
                 Resampling filter to use when resiizing the image.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
@@ -190,8 +187,8 @@ class MobileViTImageProcessor(BaseImageProcessor):
     def flip_channel_order(
         self,
         image: np.ndarray,
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        data_format: str | ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
     ) -> np.ndarray:
         """
         Flip the color channels from RGB to BGR or vice versa.
@@ -232,11 +229,11 @@ class MobileViTImageProcessor(BaseImageProcessor):
         do_rescale: bool,
         do_center_crop: bool,
         do_flip_channel_order: bool,
-        size: Optional[dict[str, int]] = None,
-        resample: Optional[PILImageResampling] = None,
-        rescale_factor: Optional[float] = None,
-        crop_size: Optional[dict[str, int]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        size: dict[str, int] | None = None,
+        resample: PILImageResampling | None = None,
+        rescale_factor: float | None = None,
+        crop_size: dict[str, int] | None = None,
+        input_data_format: str | ChannelDimension | None = None,
     ):
         if do_reduce_labels:
             image = self.reduce_label(image)
@@ -258,16 +255,16 @@ class MobileViTImageProcessor(BaseImageProcessor):
     def _preprocess_image(
         self,
         image: ImageInput,
-        do_resize: Optional[bool] = None,
-        size: Optional[dict[str, int]] = None,
-        resample: Optional[PILImageResampling] = None,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[float] = None,
-        do_center_crop: Optional[bool] = None,
-        crop_size: Optional[dict[str, int]] = None,
-        do_flip_channel_order: Optional[bool] = None,
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        do_resize: bool | None = None,
+        size: dict[str, int] | None = None,
+        resample: PILImageResampling | None = None,
+        do_rescale: bool | None = None,
+        rescale_factor: float | None = None,
+        do_center_crop: bool | None = None,
+        crop_size: dict[str, int] | None = None,
+        do_flip_channel_order: bool | None = None,
+        data_format: str | ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
     ) -> np.ndarray:
         """Preprocesses a single image."""
         # All transformations expect numpy arrays.
@@ -301,12 +298,12 @@ class MobileViTImageProcessor(BaseImageProcessor):
     def _preprocess_mask(
         self,
         segmentation_map: ImageInput,
-        do_reduce_labels: Optional[bool] = None,
-        do_resize: Optional[bool] = None,
-        size: Optional[dict[str, int]] = None,
-        do_center_crop: Optional[bool] = None,
-        crop_size: Optional[dict[str, int]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        do_reduce_labels: bool | None = None,
+        do_resize: bool | None = None,
+        size: dict[str, int] | None = None,
+        do_center_crop: bool | None = None,
+        crop_size: dict[str, int] | None = None,
+        input_data_format: str | ChannelDimension | None = None,
     ) -> np.ndarray:
         """Preprocesses a single mask."""
         segmentation_map = to_numpy_array(segmentation_map)
@@ -342,19 +339,19 @@ class MobileViTImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        segmentation_maps: Optional[ImageInput] = None,
-        do_resize: Optional[bool] = None,
-        size: Optional[dict[str, int]] = None,
-        resample: Optional[PILImageResampling] = None,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[float] = None,
-        do_center_crop: Optional[bool] = None,
-        crop_size: Optional[dict[str, int]] = None,
-        do_flip_channel_order: Optional[bool] = None,
-        do_reduce_labels: Optional[bool] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        segmentation_maps: ImageInput | None = None,
+        do_resize: bool | None = None,
+        size: dict[str, int] | None = None,
+        resample: PILImageResampling | None = None,
+        do_rescale: bool | None = None,
+        rescale_factor: float | None = None,
+        do_center_crop: bool | None = None,
+        crop_size: dict[str, int] | None = None,
+        do_flip_channel_order: bool | None = None,
+        do_reduce_labels: bool | None = None,
+        return_tensors: str | TensorType | None = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: str | ChannelDimension | None = None,
     ) -> PIL.Image.Image:
         """
         Preprocess an image or batch of images.
@@ -481,7 +478,7 @@ class MobileViTImageProcessor(BaseImageProcessor):
         return BatchFeature(data=data, tensor_type=return_tensors)
 
     # Copied from transformers.models.beit.image_processing_beit.BeitImageProcessor.post_process_semantic_segmentation with Beit->MobileViT
-    def post_process_semantic_segmentation(self, outputs, target_sizes: Optional[list[tuple]] = None):
+    def post_process_semantic_segmentation(self, outputs, target_sizes: list[tuple] | None = None):
         """
         Converts the output of [`MobileViTForSemanticSegmentation`] into semantic segmentation maps.
 

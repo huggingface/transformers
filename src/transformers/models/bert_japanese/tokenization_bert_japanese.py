@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 The Google AI Language Team Authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,7 +17,7 @@ import collections
 import copy
 import os
 import unicodedata
-from typing import Any, Optional
+from typing import Any
 
 from ...tokenization_python import PreTrainedTokenizer, _is_control, _is_punctuation, _is_whitespace
 from ...utils import is_sentencepiece_available, is_sudachi_projection_available, logging
@@ -261,7 +260,7 @@ class BertJapaneseTokenizer(PreTrainedTokenizer):
         out_string = " ".join(tokens).replace(" ##", "").strip()
         return out_string
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: str | None = None) -> tuple[str]:
         if os.path.isdir(save_directory):
             if self.subword_tokenizer_type == "sentencepiece":
                 vocab_file = os.path.join(
@@ -302,8 +301,8 @@ class MecabTokenizer:
         do_lower_case=False,
         never_split=None,
         normalize_text=True,
-        mecab_dic: Optional[str] = "unidic_lite",
-        mecab_option: Optional[str] = None,
+        mecab_dic: str | None = "unidic_lite",
+        mecab_option: str | None = None,
     ):
         """
         Constructs a MecabTokenizer.
@@ -842,7 +841,7 @@ class SentencepieceTokenizer:
         do_lower_case=False,
         remove_space=True,
         keep_accents=True,
-        sp_model_kwargs: Optional[dict[str, Any]] = None,
+        sp_model_kwargs: dict[str, Any] | None = None,
     ):
         self.vocab = vocab
         self.unk_token = unk_token

@@ -54,7 +54,7 @@ else:
     from builtins import object as DeepSpeedConfig
 
 
-class HfDeepSpeedConfig(DeepSpeedConfig):
+class HfDeepSpeedConfig(DeepSpeedConfig):  # noqa UP004
     """
     This object contains a DeepSpeed configuration dictionary and can be quickly queried for things like zero stage.
 
@@ -304,6 +304,15 @@ def _load_state_dict_into_zero3_model(model_to_load, state_dict):
         state_dict._metadata = metadata
 
     error_msgs = []
+    meta_model_state_dict = model_to_load.state_dict()
+    missing_keys = set(meta_model_state_dict.keys())
+
+    prefix_model = getattr(model_to_load, "base_model_prefix", None)
+    # take care of the case where in the checkpoint we don't have the prefix
+    state_dict = {
+        (f"{prefix_model}.{k}" if meta_model_state_dict.get(f"{prefix_model}.{k}") is not None else k): v
+        for k, v in state_dict.items()
+    }
 
     # PyTorch's `_load_from_state_dict` does not copy parameters in a module's descendants
     # so we need to apply the function recursively.
@@ -320,7 +329,14 @@ def _load_state_dict_into_zero3_model(model_to_load, state_dict):
             # In sharded models, each shard has only part of the full state_dict, so only gather
             # parameters that are in the current state_dict.
             named_parameters = dict(module.named_parameters(prefix=prefix[:-1], recurse=False))
-            params_to_gather = [named_parameters[k] for k in named_parameters if k in state_dict]
+            params_to_gather = []
+            for k in named_parameters:
+                if k in state_dict:
+                    param = named_parameters[k]
+                    # crutial to not init the weight again
+                    param._is_hf_initialized = True
+                    params_to_gather.append(param)
+                    missing_keys.discard(k)
 
             if len(params_to_gather) > 0:
                 # because zero3 puts placeholders in model params, this context
@@ -333,11 +349,10 @@ def _load_state_dict_into_zero3_model(model_to_load, state_dict):
         for name, child in module._modules.items():
             if child is not None:
                 load(child, state_dict, prefix + name + ".", assign_to_params_buffers)
-                child._is_hf_initialized = True
 
     load(model_to_load, state_dict, assign_to_params_buffers=False)
 
-    return error_msgs
+    return error_msgs, missing_keys
 
 
 def deepspeed_optim_sched(trainer, hf_deepspeed_config, args, num_training_steps, model_parameters):

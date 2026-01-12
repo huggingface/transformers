@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Jingze Shi and the HuggingFace Inc. team. All rights reserved.
 #
 # The Doge family of small language models is trained by SmallDoge Team.
@@ -18,7 +17,7 @@
 
 import math
 from collections.abc import Callable
-from typing import Optional, Union
+from typing import Union
 
 import torch
 import torch.nn.functional as F
@@ -161,31 +160,31 @@ class DogeConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 32768,
-        hidden_size: Optional[int] = 1024,
-        intermediate_size: Optional[int] = 2048,
-        num_hidden_layers: Optional[int] = 32,
-        hidden_dropout: Optional[float] = 0.0,
-        hidden_act: Optional[str] = "silu",
-        initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[int] = 1e-06,
-        use_cache: Optional[bool] = True,
-        tie_word_embeddings: Optional[bool] = False,
-        max_position_embeddings: Optional[int] = 2048,
-        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        num_attention_heads: Optional[int] = 8,
-        num_key_value_heads: Optional[int] = None,
-        attention_bias: Optional[bool] = False,
-        attention_dropout: Optional[float] = 0.0,
-        mlp_bias: Optional[bool] = False,
-        sliding_window: Optional[int] = None,
-        keep_window_size: Optional[int] = 2048,
-        is_moe: Optional[bool] = False,
-        num_experts: Optional[int] = 16384,
-        num_experts_per_tok: Optional[int] = 64,
-        norm_topk_prob: Optional[bool] = False,
-        output_router_logits: Optional[bool] = False,
-        router_aux_loss_coef: Optional[float] = 0.001,
+        vocab_size: int | None = 32768,
+        hidden_size: int | None = 1024,
+        intermediate_size: int | None = 2048,
+        num_hidden_layers: int | None = 32,
+        hidden_dropout: float | None = 0.0,
+        hidden_act: str | None = "silu",
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: int | None = 1e-06,
+        use_cache: bool | None = True,
+        tie_word_embeddings: bool | None = False,
+        max_position_embeddings: int | None = 2048,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        num_attention_heads: int | None = 8,
+        num_key_value_heads: int | None = None,
+        attention_bias: bool | None = False,
+        attention_dropout: float | None = 0.0,
+        mlp_bias: bool | None = False,
+        sliding_window: int | None = None,
+        keep_window_size: int | None = 2048,
+        is_moe: bool | None = False,
+        num_experts: int | None = 16384,
+        num_experts_per_tok: int | None = 64,
+        norm_topk_prob: bool | None = False,
+        output_router_logits: bool | None = False,
+        router_aux_loss_coef: float | None = 0.001,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -239,8 +238,8 @@ def flex_attention_forward(
     key: torch.Tensor,
     value: torch.Tensor,
     attention_mask: Union[torch.Tensor, "BlockMask"],
-    scaling: Optional[float] = None,
-    softcap: Optional[float] = None,
+    scaling: float | None = None,
+    softcap: float | None = None,
     **kwargs,
 ) -> tuple[torch.Tensor, torch.Tensor]:
     block_mask = None
@@ -284,7 +283,7 @@ ALL_ATTENTION_FUNCTIONS["doge_flex_attention"] = flex_attention_forward
 
 
 class DogeAttention(nn.Module):
-    def __init__(self, config: DogeConfig, layer_idx: Optional[int] = None):
+    def __init__(self, config: DogeConfig, layer_idx: int | None = None):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -318,11 +317,11 @@ class DogeAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Cache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        attention_mask: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        cache_position: torch.LongTensor | None = None,
         **kwargs,
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -375,7 +374,7 @@ class DogeAttention(nn.Module):
         hidden_states: torch.Tensor,
         dt_states: torch.Tensor,
         keep_window_size: int = 2048,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
     ):
         """
         The core idea of DMA is to calculate the dynamic attention mask to mask the tokens that should be masked, so as to form sparse attention.
@@ -470,7 +469,7 @@ class DogeCDMoE(nn.Module):
 
 
 class DogeDecoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: DogeConfig, layer_idx: Optional[int] = None):
+    def __init__(self, config: DogeConfig, layer_idx: int | None = None):
         super().__init__()
         self.hidden_dropout = config.hidden_dropout
 
@@ -485,14 +484,14 @@ class DogeDecoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        use_cache: Optional[bool] = False,
-        cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        use_cache: bool | None = False,
+        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
+    ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
         # sequence transformation
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
@@ -547,12 +546,12 @@ class DogeModel(MixtralModel):
 
 
 def load_balancing_loss_func(
-    gate_logits: Union[torch.Tensor, tuple[torch.Tensor], None],
-    num_experts: Optional[int] = None,
-    num_keys: Optional[int] = None,
+    gate_logits: torch.Tensor | tuple[torch.Tensor] | None,
+    num_experts: int | None = None,
+    num_keys: int | None = None,
     top_k: int = 2,
-    attention_mask: Optional[torch.Tensor] = None,
-) -> Union[torch.Tensor, int]:
+    attention_mask: torch.Tensor | None = None,
+) -> torch.Tensor | int:
     r"""
     Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
 
@@ -660,16 +659,16 @@ class DogeForCausalLM(MixtralForCausalLM):
 
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
-        output_router_logits: Optional[bool] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
+        output_router_logits: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeCausalLMOutputWithPast:
         r"""

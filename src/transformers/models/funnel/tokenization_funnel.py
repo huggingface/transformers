@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization class for Funnel Transformer."""
-
-from typing import Optional, Union
 
 from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import WordPiece
@@ -93,7 +90,7 @@ class FunnelTokenizer(TokenizersBackend):
 
     def __init__(
         self,
-        vocab: Optional[Union[str, dict[str, int]]] = None,
+        vocab: str | dict[str, int] | None = None,
         do_lower_case: bool = True,
         unk_token: str = "<unk>",
         sep_token: str = "<sep>",
@@ -104,7 +101,7 @@ class FunnelTokenizer(TokenizersBackend):
         eos_token: str = "</s>",
         clean_text: bool = True,
         tokenize_chinese_chars: bool = True,
-        strip_accents: Optional[bool] = None,
+        strip_accents: bool | None = None,
         wordpieces_prefix: str = "##",
         **kwargs,
     ):

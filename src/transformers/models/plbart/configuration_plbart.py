@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022, UCLA NLP, The Facebook AI Research Team and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -151,6 +150,7 @@ class PLBartConfig(PreTrainedConfig):
         self.use_cache = use_cache
         self.num_hidden_layers = encoder_layers
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
+
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,

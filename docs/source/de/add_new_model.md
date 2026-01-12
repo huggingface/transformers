@@ -22,7 +22,7 @@ Auf dem Weg dorthin, werden Sie:
 - Einblicke in bewährte Open-Source-Verfahren erhalten
 - die Konstruktionsprinzipien hinter einer der beliebtesten Deep-Learning-Bibliotheken verstehen
 - lernen Sie, wie Sie große Modelle effizient testen können
-- lernen Sie, wie Sie Python-Hilfsprogramme wie `black`, `ruff` und `make fix-copies` integrieren, um sauberen und lesbaren Code zu gewährleisten
+- lernen Sie, wie Sie Python-Hilfsprogramme wie `black`, `ruff` und `make fix-repo` integrieren, um sauberen und lesbaren Code zu gewährleisten
 
 Ein Mitglied des Hugging Face-Teams wird Ihnen dabei zur Seite stehen, damit Sie nicht alleine sind. 🤗 ❤️
 
@@ -839,7 +839,7 @@ make style
 und überprüfen Sie, ob Ihr Kodierungsstil die Qualitätsprüfung besteht:
 
 ```bash
-make quality
+make check-repo
 ```
 
 Es gibt noch ein paar andere sehr strenge Designtests in 🤗 Transformers, die möglicherweise noch fehlschlagen, was sich in den

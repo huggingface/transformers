@@ -160,3 +160,4 @@ print(output)
 ## PixtralProcessor
 
 [[autodoc]] PixtralProcessor
+    - __call__

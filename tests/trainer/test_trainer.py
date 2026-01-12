@@ -858,7 +858,7 @@ class TrainerIntegrationPrerunTest(TestCasePlus, TrainerIntegrationCommon):
             )
             # train with base loss
             set_seed(42)
-            model = AutoModelForCausalLM.from_pretrained(model_name)
+            model = AutoModelForCausalLM.from_pretrained(model_name, dtype=torch.float32)
             base_loss_callback = StoreLossCallback()
             trainer = Trainer(
                 model,
@@ -1541,9 +1541,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         tiny_model = get_peft_model(tiny_model, peft_config, "adapter1")
         tiny_model.add_adapter("adapter2", peft_config)
 
-        max_len_single_sentence = self.model_max_length - self.num_special_tokens_to_add(pair=False)
-
-        train_dataset = get_dataset(PATH_SAMPLE_TEXT, tokenizer, max_len_single_sentence)
+        train_dataset = get_dataset(PATH_SAMPLE_TEXT, tokenizer, 100)
 
         tokenizer.pad_token = tokenizer.eos_token
 
@@ -3733,9 +3731,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
         model = AutoModelForCausalLM.from_pretrained(MODEL_ID)
 
-        max_len_single_sentence = self.model_max_length - self.num_special_tokens_to_add(pair=False)
-
-        dataset = get_dataset(PATH_SAMPLE_TEXT, tokenizer, max_len_single_sentence)
+        dataset = get_dataset(PATH_SAMPLE_TEXT, tokenizer, 100)
         with tempfile.TemporaryDirectory() as tmp_dir:
             training_args = TrainingArguments(
                 output_dir=tmp_dir,
@@ -3759,8 +3755,7 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
     def test_trainer_eval_lm(self):
         MODEL_ID = "distilbert/distilroberta-base"
         tokenizer = AutoTokenizer.from_pretrained(MODEL_ID)
-        max_len_single_sentence = self.model_max_length - self.num_special_tokens_to_add(pair=False)
-        dataset = get_dataset(PATH_SAMPLE_TEXT, tokenizer, max_len_single_sentence)
+        dataset = get_dataset(PATH_SAMPLE_TEXT, tokenizer, 100)
         self.assertEqual(len(dataset), 31)
 
     def test_training_iterable_dataset(self):
@@ -4942,10 +4937,8 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
 
         tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-LlamaForCausalLM")
         model = BasicTextGenerationModel(vocab_size=tokenizer.vocab_size, hidden_size=32)
-        # Note that this class does not have a config attribute
-        max_len_single_sentence = tokenizer.model_max_length - tokenizer.num_special_tokens_to_add(pair=False)
 
-        train_dataset = get_dataset(PATH_SAMPLE_TEXT, tokenizer, max_len_single_sentence)
+        train_dataset = get_dataset(PATH_SAMPLE_TEXT, tokenizer, 100)
 
         with tempfile.TemporaryDirectory() as tmpdir:
             training_args = TrainingArguments(
@@ -5535,6 +5528,7 @@ class TrainerHyperParameterOptunaIntegrationTestWithFullEval(unittest.TestCase):
 
 @require_torch
 @require_ray
+@unittest.skip("don't work because of a serialization issue")
 class TrainerHyperParameterRayIntegrationTest(unittest.TestCase):
     def setUp(self):
         args = TrainingArguments("..")

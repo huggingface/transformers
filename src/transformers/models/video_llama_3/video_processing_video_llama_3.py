@@ -18,7 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import math
-from typing import Optional, Union
+from typing import Optional
 
 import torch
 import torch.nn.functional as F
@@ -47,7 +47,7 @@ class VideoLlama3VideoProcessorInitKwargs(VideosKwargs, total=False):
     merge_size: int
     min_frames: int
     max_frames: int
-    use_token_compression: Optional[bool]
+    use_token_compression: bool | None
 
 
 @add_start_docstrings(
@@ -112,11 +112,11 @@ class VideoLlama3VideoProcessor(BaseVideoProcessor):
     def sample_frames(
         self,
         metadata: VideoMetadata,
-        temporal_patch_size: Optional[int] = None,
-        min_frames: Optional[int] = None,
-        max_frames: Optional[int] = None,
-        num_frames: Optional[int] = None,
-        fps: Optional[Union[int, float]] = None,
+        temporal_patch_size: int | None = None,
+        min_frames: int | None = None,
+        max_frames: int | None = None,
+        num_frames: int | None = None,
+        fps: int | float | None = None,
         **kwargs,
     ):
         """
@@ -189,15 +189,15 @@ class VideoLlama3VideoProcessor(BaseVideoProcessor):
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        min_pixels: Optional[int] = None,
-        max_pixels: Optional[int] = None,
-        patch_size: Optional[int] = None,
-        temporal_patch_size: Optional[int] = None,
-        merge_size: Optional[int] = None,
-        use_token_compression: Optional[bool] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        min_pixels: int | None = None,
+        max_pixels: int | None = None,
+        patch_size: int | None = None,
+        temporal_patch_size: int | None = None,
+        merge_size: int | None = None,
+        use_token_compression: bool | None = None,
+        return_tensors: str | TensorType | None = None,
         device: Optional["torch.Tensor"] = None,
         **kwargs,
     ):
@@ -331,8 +331,8 @@ class VideoLlama3VideoProcessor(BaseVideoProcessor):
         pixel_values_videos: torch.FloatTensor,
         video_grid_thw: torch.LongTensor,
         video_merge_sizes: torch.LongTensor,
-        threshold: Optional[float] = 0.1,
-        min_tokens: Optional[int] = 1,
+        threshold: float | None = 0.1,
+        min_tokens: int | None = 1,
     ) -> torch.BoolTensor:
         """
         Get the compression mask for video tokens based on pixel differences.

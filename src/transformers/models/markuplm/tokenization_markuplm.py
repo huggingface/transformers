@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, Union
 
 from tokenizers import Tokenizer, decoders, pre_tokenizers, processors
 from tokenizers.models import BPE
@@ -155,8 +153,8 @@ class MarkupLMTokenizer(TokenizersBackend):
     def __init__(
         self,
         tags_dict,
-        vocab: Optional[Union[str, dict[str, int], list[tuple[str, float]]]] = None,
-        merges: Optional[Union[str, list[str]]] = None,
+        vocab: str | dict[str, int] | list[tuple[str, float]] | None = None,
+        merges: str | list[str] | None = None,
         errors="replace",
         bos_token="<s>",
         eos_token="</s>",
@@ -280,21 +278,21 @@ class MarkupLMTokenizer(TokenizersBackend):
     @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, MARKUPLM_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]],
-        text_pair: Optional[Union[PreTokenizedInput, list[PreTokenizedInput]]] = None,
-        xpaths: Optional[Union[list[list[int]], list[list[list[int]]]]] = None,
-        node_labels: Optional[Union[list[int], list[list[int]]]] = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput],
+        text_pair: PreTokenizedInput | list[PreTokenizedInput] | None = None,
+        xpaths: list[list[int]] | list[list[list[int]]] | None = None,
+        node_labels: list[int] | list[list[int]] | None = None,
         add_special_tokens: bool = True,
-        padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = None,
-        max_length: Optional[int] = None,
+        padding: bool | str | PaddingStrategy = False,
+        truncation: bool | str | TruncationStrategy = None,
+        max_length: int | None = None,
         stride: int = 0,
         is_split_into_words: bool = False,
-        pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        return_token_type_ids: Optional[bool] = None,
-        return_attention_mask: Optional[bool] = None,
+        pad_to_multiple_of: int | None = None,
+        padding_side: str | None = None,
+        return_tensors: str | TensorType | None = None,
+        return_token_type_ids: bool | None = None,
+        return_attention_mask: bool | None = None,
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
@@ -455,24 +453,20 @@ class MarkupLMTokenizer(TokenizersBackend):
     @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, MARKUPLM_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def batch_encode_plus(
         self,
-        batch_text_or_text_pairs: Union[
-            list[TextInput],
-            list[TextInputPair],
-            list[PreTokenizedInput],
-        ],
-        is_pair: Optional[bool] = None,
-        xpaths: Optional[list[list[list[int]]]] = None,
-        node_labels: Optional[Union[list[int], list[list[int]]]] = None,
+        batch_text_or_text_pairs: list[TextInput] | list[TextInputPair] | list[PreTokenizedInput],
+        is_pair: bool | None = None,
+        xpaths: list[list[list[int]]] | None = None,
+        node_labels: list[int] | list[list[int]] | None = None,
         add_special_tokens: bool = True,
-        padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = None,
-        max_length: Optional[int] = None,
+        padding: bool | str | PaddingStrategy = False,
+        truncation: bool | str | TruncationStrategy = None,
+        max_length: int | None = None,
         stride: int = 0,
-        pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        return_token_type_ids: Optional[bool] = None,
-        return_attention_mask: Optional[bool] = None,
+        pad_to_multiple_of: int | None = None,
+        padding_side: str | None = None,
+        return_tensors: str | TensorType | None = None,
+        return_token_type_ids: bool | None = None,
+        return_attention_mask: bool | None = None,
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
@@ -513,7 +507,7 @@ class MarkupLMTokenizer(TokenizersBackend):
             **kwargs,
         )
 
-    def tokenize(self, text: str, pair: Optional[str] = None, add_special_tokens: bool = False, **kwargs) -> list[str]:
+    def tokenize(self, text: str, pair: str | None = None, add_special_tokens: bool = False, **kwargs) -> list[str]:
         batched_input = [(text, pair)] if pair else [text]
         encodings = self._tokenizer.encode_batch(
             batched_input, add_special_tokens=add_special_tokens, is_pretokenized=False, **kwargs
@@ -524,20 +518,20 @@ class MarkupLMTokenizer(TokenizersBackend):
     @add_end_docstrings(ENCODE_KWARGS_DOCSTRING, MARKUPLM_ENCODE_PLUS_ADDITIONAL_KWARGS_DOCSTRING)
     def encode_plus(
         self,
-        text: Union[TextInput, PreTokenizedInput],
-        text_pair: Optional[PreTokenizedInput] = None,
-        xpaths: Optional[list[list[int]]] = None,
-        node_labels: Optional[list[int]] = None,
+        text: TextInput | PreTokenizedInput,
+        text_pair: PreTokenizedInput | None = None,
+        xpaths: list[list[int]] | None = None,
+        node_labels: list[int] | None = None,
         add_special_tokens: bool = True,
-        padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Union[bool, str, TruncationStrategy] = None,
-        max_length: Optional[int] = None,
+        padding: bool | str | PaddingStrategy = False,
+        truncation: bool | str | TruncationStrategy = None,
+        max_length: int | None = None,
         stride: int = 0,
-        pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        return_token_type_ids: Optional[bool] = None,
-        return_attention_mask: Optional[bool] = None,
+        pad_to_multiple_of: int | None = None,
+        padding_side: str | None = None,
+        return_tensors: str | TensorType | None = None,
+        return_token_type_ids: bool | None = None,
+        return_attention_mask: bool | None = None,
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
@@ -592,24 +586,20 @@ class MarkupLMTokenizer(TokenizersBackend):
 
     def _batch_encode_plus(
         self,
-        batch_text_or_text_pairs: Union[
-            list[TextInput],
-            list[TextInputPair],
-            list[PreTokenizedInput],
-        ],
-        is_pair: Optional[bool] = None,
-        xpaths: Optional[list[list[list[int]]]] = None,
-        node_labels: Optional[list[list[int]]] = None,
+        batch_text_or_text_pairs: list[TextInput] | list[TextInputPair] | list[PreTokenizedInput],
+        is_pair: bool | None = None,
+        xpaths: list[list[list[int]]] | None = None,
+        node_labels: list[list[int]] | None = None,
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
-        max_length: Optional[int] = None,
+        max_length: int | None = None,
         stride: int = 0,
-        pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
-        return_tensors: Optional[str] = None,
-        return_token_type_ids: Optional[bool] = None,
-        return_attention_mask: Optional[bool] = None,
+        pad_to_multiple_of: int | None = None,
+        padding_side: str | None = None,
+        return_tensors: str | None = None,
+        return_token_type_ids: bool | None = None,
+        return_attention_mask: bool | None = None,
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
@@ -771,20 +761,20 @@ class MarkupLMTokenizer(TokenizersBackend):
 
     def _encode_plus(
         self,
-        text: Union[TextInput, PreTokenizedInput],
-        text_pair: Optional[PreTokenizedInput] = None,
-        xpaths: Optional[list[list[int]]] = None,
-        node_labels: Optional[list[int]] = None,
+        text: TextInput | PreTokenizedInput,
+        text_pair: PreTokenizedInput | None = None,
+        xpaths: list[list[int]] | None = None,
+        node_labels: list[int] | None = None,
         add_special_tokens: bool = True,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
         truncation_strategy: TruncationStrategy = TruncationStrategy.DO_NOT_TRUNCATE,
-        max_length: Optional[int] = None,
+        max_length: int | None = None,
         stride: int = 0,
-        pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
-        return_tensors: Optional[bool] = None,
-        return_token_type_ids: Optional[bool] = None,
-        return_attention_mask: Optional[bool] = None,
+        pad_to_multiple_of: int | None = None,
+        padding_side: str | None = None,
+        return_tensors: bool | None = None,
+        return_token_type_ids: bool | None = None,
+        return_attention_mask: bool | None = None,
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
@@ -863,12 +853,12 @@ class MarkupLMTokenizer(TokenizersBackend):
 
     def _pad(
         self,
-        encoded_inputs: Union[dict[str, EncodedInput], BatchEncoding],
-        max_length: Optional[int] = None,
+        encoded_inputs: dict[str, EncodedInput] | BatchEncoding,
+        max_length: int | None = None,
         padding_strategy: PaddingStrategy = PaddingStrategy.DO_NOT_PAD,
-        pad_to_multiple_of: Optional[int] = None,
-        padding_side: Optional[str] = None,
-        return_attention_mask: Optional[bool] = None,
+        pad_to_multiple_of: int | None = None,
+        padding_side: str | None = None,
+        return_attention_mask: bool | None = None,
     ) -> dict:
         """
         Args:
@@ -960,7 +950,7 @@ class MarkupLMTokenizer(TokenizersBackend):
         return encoded_inputs
 
     def build_inputs_with_special_tokens(
-        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+        self, token_ids_0: list[int], token_ids_1: list[int] | None = None
     ) -> list[int]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
@@ -983,7 +973,7 @@ class MarkupLMTokenizer(TokenizersBackend):
         return cls + token_ids_0 + sep + token_ids_1 + sep
 
     def create_token_type_ids_from_sequences(
-        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+        self, token_ids_0: list[int], token_ids_1: list[int] | None = None
     ) -> list[int]:
         """
         Create a mask from the two sequences passed to be used in a sequence-pair classification task. RoBERTa does not
@@ -1004,7 +994,7 @@ class MarkupLMTokenizer(TokenizersBackend):
             return len(cls + token_ids_0 + sep) * [0]
         return len(cls + token_ids_0 + sep + token_ids_1 + sep) * [0]
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: str | None = None) -> tuple[str]:
         files = self._tokenizer.model.save(save_directory, name=filename_prefix)
         return tuple(files)
 

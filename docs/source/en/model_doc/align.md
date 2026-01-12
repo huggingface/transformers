@@ -166,6 +166,7 @@ for label, score in zip(candidate_labels, probs):
 ## AlignProcessor
 
 [[autodoc]] AlignProcessor
+    - __call__
 
 ## AlignModel
 

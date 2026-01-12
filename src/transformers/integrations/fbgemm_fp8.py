@@ -13,7 +13,6 @@
 # limitations under the License.
 
 from functools import lru_cache
-from typing import Optional
 
 from ..activations import ACT2FN
 from ..core_model_loading import ConversionOps
@@ -49,7 +48,7 @@ class FbgemmFp8Quantize(ConversionOps):
     def convert(
         self,
         input_dict: dict[str, torch.Tensor | list[torch.Tensor]],
-        model: Optional[torch.nn.Module] = None,
+        model: torch.nn.Module | None = None,
         **kwargs,
     ) -> dict[str, torch.Tensor]:
         target_key, value = tuple(input_dict.items())[0]

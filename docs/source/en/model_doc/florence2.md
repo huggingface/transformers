@@ -171,6 +171,7 @@ print(parsed_answer)
 ## Florence2Processor
 
 [[autodoc]] Florence2Processor
+    - __call__
 
 ## Florence2Model
 

@@ -170,7 +170,6 @@ print(output_text)
 
 [[autodoc]] Glm4vConfig
 
-
 ## Glm4vVisionConfig
 
 [[autodoc]] Glm4vVisionConfig
@@ -197,6 +196,7 @@ print(output_text)
 ## Glm4vProcessor
 
 [[autodoc]] Glm4vProcessor
+    - __call__
 
 ## Glm4vVisionModel
 

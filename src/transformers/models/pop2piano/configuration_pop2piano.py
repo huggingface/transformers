@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -122,7 +121,6 @@ class Pop2PianoConfig(PreTrainedConfig):
             is_encoder_decoder=is_encoder_decoder,
             **kwargs,
         )
-        self.tie_encoder_decoder = True  # forcing it
 
 
 __all__ = ["Pop2PianoConfig"]

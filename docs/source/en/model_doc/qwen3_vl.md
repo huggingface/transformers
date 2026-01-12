@@ -92,6 +92,7 @@ print(output_text)
 ## Qwen3VLProcessor
 
 [[autodoc]] Qwen3VLProcessor
+    - __call__
 
 ## Qwen3VLVideoProcessor
 

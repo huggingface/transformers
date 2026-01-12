@@ -28,7 +28,6 @@ Most of those are only useful if you are studying the code of the tokenizers in 
     - __call__
     - all
 
-
 ## Enums and namedtuples
 
 [[autodoc]] tokenization_utils_base.TruncationStrategy

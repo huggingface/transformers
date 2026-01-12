@@ -14,15 +14,11 @@
 
 import unittest
 
-from transformers import is_speech_available
+from transformers.models.gemma3n import Gemma3nProcessor
 from transformers.testing_utils import require_sentencepiece, require_torch, require_torchaudio, require_vision
 
 from ...test_processing_common import ProcessorTesterMixin
 from .test_feature_extraction_gemma3n import floats_list
-
-
-if is_speech_available():
-    from transformers.models.gemma3n import Gemma3nProcessor
 
 
 # TODO: omni-modal processor can't run tests from `ProcessorTesterMixin`

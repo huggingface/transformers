@@ -335,9 +335,8 @@ class BioGptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
 
         num_paddings = inputs_non_padded.shape[-1] - inputs["attention_mask"][-1].long().sum().item()
         inputs_padded = tokenizer(sentences[1], return_tensors="pt").input_ids.to(torch_device)
-        output_padded = model.generate(
-            input_ids=inputs_padded, max_length=model.generation_config.max_length - num_paddings
-        )
+        # 20 is the default max_length in the generation config
+        output_padded = model.generate(input_ids=inputs_padded, max_length=20 - num_paddings)
 
         batch_out_sentence = tokenizer.batch_decode(outputs, skip_special_tokens=True)
         non_padded_sentence = tokenizer.decode(output_non_padded[0], skip_special_tokens=True)

@@ -149,6 +149,7 @@ print(response)
 ## AriaProcessor
 
 [[autodoc]] AriaProcessor
+    - __call__
 
 ## AriaTextConfig
 

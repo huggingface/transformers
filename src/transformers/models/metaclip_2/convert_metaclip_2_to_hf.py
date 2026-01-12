@@ -19,7 +19,6 @@ python convert_metaclip_2_to_hf.py --checkpoint_path /path/to/checkpoint --model
 
 import argparse
 import os
-from typing import Optional
 
 import torch
 from PIL import Image
@@ -293,7 +292,7 @@ def convert_state_dict(metaclip_state_dict: dict[str, torch.Tensor]) -> dict[str
 
 
 def verify_conversion(
-    original_model, hf_model, preprocess, image_processor, tokenizer, test_image_path: Optional[str] = None
+    original_model, hf_model, preprocess, image_processor, tokenizer, test_image_path: str | None = None
 ) -> bool:
     """Verify that the conversion produces the same outputs."""
     print("Verifying conversion...")

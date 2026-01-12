@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,6 +16,7 @@ Image/Text processor class for ALIGN
 """
 
 from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...utils import auto_docstring
 
 
 class AlignProcessorKwargs(ProcessingKwargs, total=False):
@@ -29,36 +29,8 @@ class AlignProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@auto_docstring
 class AlignProcessor(ProcessorMixin):
-    r"""
-    Constructs an ALIGN processor which wraps [`EfficientNetImageProcessor`] and
-    [`BertTokenizer`]/[`BertTokenizerFast`] into a single processor that inherits both the image processor and
-    tokenizer functionalities. See the [`~AlignProcessor.__call__`] and [`~OwlViTProcessor.decode`] for more
-    information.
-    The preferred way of passing kwargs is as a dictionary per modality, see usage example below.
-        ```python
-        from transformers import AlignProcessor
-        from PIL import Image
-        model_id = "kakaobrain/align-base"
-        processor = AlignProcessor.from_pretrained(model_id)
-
-        processor(
-            images=your_pil_image,
-            text=["What is that?"],
-            images_kwargs = {"crop_size": {"height": 224, "width": 224}},
-            text_kwargs = {"padding": "do_not_pad"},
-            common_kwargs = {"return_tensors": "pt"},
-        )
-        ```
-
-    Args:
-        image_processor ([`EfficientNetImageProcessor`]):
-            The image processor is a required input.
-        tokenizer ([`BertTokenizer`, `BertTokenizerFast`]):
-            The tokenizer is a required input.
-
-    """
-
     valid_processor_kwargs = AlignProcessorKwargs
 
     def __init__(self, image_processor, tokenizer):

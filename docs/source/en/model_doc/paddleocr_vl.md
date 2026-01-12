@@ -242,6 +242,7 @@ model = AutoModelForImageTextToText.from_pretrained("PaddlePaddle/PaddleOCR-VL",
 ## PaddleOCRVLProcessor
 
 [[autodoc]] PaddleOCRVLProcessor
+    - __call__
 
 ## PaddleOCRVisionTransformer
 

@@ -24,14 +24,12 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import is_accelerate_available, is_optimum_quanto_available, is_torch_available
+from transformers.utils import is_optimum_quanto_available, is_torch_available
 
 
 if is_torch_available():
     import torch
 
-if is_accelerate_available():
-    from accelerate import init_empty_weights
 
 if is_optimum_quanto_available():
     from optimum.quanto import QLayerNorm, QLinear
@@ -46,7 +44,7 @@ class QuantoTestIntegration(unittest.TestCase):
 
     def setUp(self):
         config = AutoConfig.from_pretrained(self.model_id)
-        with init_empty_weights():
+        with torch.device("meta"):
             self.model = AutoModelForCausalLM.from_config(config)
         self.nb_linear = 0
         self.nb_layernorm = 0

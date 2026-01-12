@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,7 +17,7 @@ the entries in alphabetical order.
 
 Usage (from the root of the repo):
 
-Check that the table of content is properly sorted (used in `make quality`):
+Check that the table of content is properly sorted (used in `make check-repo`):
 
 ```bash
 python utils/check_doc_toc.py

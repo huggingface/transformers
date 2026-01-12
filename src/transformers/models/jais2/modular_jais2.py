@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 the HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional
 
 import torch.nn as nn
 
@@ -94,26 +92,26 @@ class Jais2Config(LlamaConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 150272,
-        hidden_size: Optional[int] = 3328,
-        intermediate_size: Optional[int] = 26624,
-        num_hidden_layers: Optional[int] = 32,
-        num_attention_heads: Optional[int] = 26,
-        num_key_value_heads: Optional[int] = None,
-        hidden_act: Optional[str] = "relu2",
-        max_position_embeddings: Optional[int] = 8192,
-        initializer_range: Optional[float] = 0.02,
-        layer_norm_eps: Optional[float] = 1e-5,
-        use_cache: Optional[bool] = True,
-        pad_token_id: Optional[int] = None,
-        bos_token_id: Optional[int] = 0,
-        eos_token_id: Optional[int] = 150024,
-        tie_word_embeddings: Optional[bool] = False,
-        attention_bias: Optional[bool] = True,
-        attention_dropout: Optional[float] = 0.0,
-        mlp_bias: Optional[bool] = True,
-        head_dim: Optional[int] = None,
-        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
+        vocab_size: int | None = 150272,
+        hidden_size: int | None = 3328,
+        intermediate_size: int | None = 26624,
+        num_hidden_layers: int | None = 32,
+        num_attention_heads: int | None = 26,
+        num_key_value_heads: int | None = None,
+        hidden_act: str | None = "relu2",
+        max_position_embeddings: int | None = 8192,
+        initializer_range: float | None = 0.02,
+        layer_norm_eps: float | None = 1e-5,
+        use_cache: bool | None = True,
+        pad_token_id: int | None = None,
+        bos_token_id: int | None = 0,
+        eos_token_id: int | None = 150024,
+        tie_word_embeddings: bool | None = False,
+        attention_bias: bool | None = True,
+        attention_dropout: float | None = 0.0,
+        mlp_bias: bool | None = True,
+        head_dim: int | None = None,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
         **kwargs,
     ):
         super().__init__(

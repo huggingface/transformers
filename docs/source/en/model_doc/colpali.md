@@ -164,6 +164,7 @@ print(scores)
 ## ColPaliProcessor
 
 [[autodoc]] ColPaliProcessor
+    - __call__
 
 ## ColPaliForRetrieval
 

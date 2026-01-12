@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The Kyutai and HuggingFace Inc. teams. All rights reserved.
 #
 #
@@ -14,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import math
-from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -95,14 +93,14 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
 
 
 class HeliumAttention(GraniteAttention):
-    def __init__(self, config: HeliumConfig, layer_idx: Optional[int] = None):
+    def __init__(self, config: HeliumConfig, layer_idx: int | None = None):
         super().__init__(config, layer_idx)
         self.o_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
         self.scaling = 1 / math.sqrt(self.head_dim)
 
 
 class HeliumDecoderLayer(LlamaDecoderLayer):
-    def __init__(self, config: HeliumConfig, layer_idx: Optional[int] = None):
+    def __init__(self, config: HeliumConfig, layer_idx: int | None = None):
         super().__init__(config, layer_idx)
 
         self.mlp = HeliumMLP(config)

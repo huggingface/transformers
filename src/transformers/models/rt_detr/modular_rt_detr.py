@@ -1,5 +1,5 @@
 import pathlib
-from typing import Optional, Union
+from typing import Optional
 
 import torch
 from torchvision.transforms.v2 import functional as F
@@ -37,7 +37,7 @@ def prepare_coco_detection_annotation(
     image,
     target,
     return_segmentation_masks: bool = False,
-    input_data_format: Optional[Union[ChannelDimension, str]] = None,
+    input_data_format: ChannelDimension | str | None = None,
 ):
     """
     Convert the target in COCO format into the format expected by RT-DETR.
@@ -120,10 +120,10 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast):
         self,
         image: torch.Tensor,
         target: dict,
-        format: Optional[AnnotationFormat] = None,
-        return_segmentation_masks: Optional[bool] = None,
-        masks_path: Optional[Union[str, pathlib.Path]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        format: AnnotationFormat | None = None,
+        return_segmentation_masks: bool | None = None,
+        masks_path: str | pathlib.Path | None = None,
+        input_data_format: str | ChannelDimension | None = None,
     ) -> dict:
         format = format if format is not None else self.format
 
@@ -139,8 +139,8 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast):
     def _preprocess(
         self,
         images: list["torch.Tensor"],
-        annotations: Optional[Union[AnnotationType, list[AnnotationType]]],
-        masks_path: Optional[Union[str, pathlib.Path]],
+        annotations: AnnotationType | list[AnnotationType] | None,
+        masks_path: str | pathlib.Path | None,
         return_segmentation_masks: bool,
         do_resize: bool,
         size: SizeDict,
@@ -149,12 +149,12 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast):
         rescale_factor: float,
         do_normalize: bool,
         do_convert_annotations: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
         do_pad: bool,
-        pad_size: Optional[SizeDict],
-        format: Optional[Union[str, AnnotationFormat]],
-        return_tensors: Optional[Union[str, TensorType]],
+        pad_size: SizeDict | None,
+        format: str | AnnotationFormat | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -246,7 +246,7 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast):
         self,
         outputs,
         threshold: float = 0.5,
-        target_sizes: Union[TensorType, list[tuple]] = None,
+        target_sizes: TensorType | list[tuple] = None,
         use_focal_loss: bool = True,
     ):
         """

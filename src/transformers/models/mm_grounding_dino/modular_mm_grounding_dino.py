@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -293,7 +292,6 @@ class MMGroundingDinoConfig(PreTrainedConfig):
         self.layer_norm_eps = layer_norm_eps
 
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
-        self.tie_encoder_decoder = True
 
 
 class MMGroundingDinoContrastiveEmbedding(GroundingDinoContrastiveEmbedding):

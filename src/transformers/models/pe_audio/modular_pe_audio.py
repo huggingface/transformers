@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -56,8 +55,8 @@ class PeAudioEncoderEmbedder(nn.Module):
     def forward(
         self,
         input_values: torch.Tensor,
-        padding_mask: Optional[torch.Tensor] = None,
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+        padding_mask: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         with torch.no_grad(), torch.backends.cudnn.flags(enabled=False):
             hidden_states = self.dac_encoder(input_values)
             hidden_states = self.bottleneck(hidden_states)
@@ -98,8 +97,8 @@ class PeAudioPreTrainedModel(PeAudioVideoPreTrainedModel):
     """
 )
 class PeAudioEncoderOutput(BaseModelOutputWithPooling):
-    codec_features: Optional[torch.FloatTensor] = None
-    output_mask: Optional[tuple[torch.FloatTensor]] = None
+    codec_features: torch.FloatTensor | None = None
+    output_mask: tuple[torch.FloatTensor] | None = None
 
 
 # TODO: add the capture of codec features?
@@ -116,7 +115,7 @@ class PeAudioEncoder(PeAudioVideoEncoder):
     def forward(
         self,
         input_values: torch.Tensor,
-        padding_mask: Optional[torch.Tensor] = None,
+        padding_mask: torch.Tensor | None = None,
         **kwargs,
     ) -> BaseModelOutputWithPooling:
         inputs_embeds, padding_mask = self.embedder(input_values, padding_mask=padding_mask)
@@ -151,10 +150,10 @@ class PeAudioEncoder(PeAudioVideoEncoder):
 @dataclass
 # @auto_docstring
 class PeAudioOutput(ModelOutput):
-    loss: Optional[torch.FloatTensor] = None
-    logits_audio_text: Optional[torch.FloatTensor] = None
-    text_audio_embeds: Optional[torch.FloatTensor] = None
-    audio_embeds: Optional[torch.FloatTensor] = None
+    loss: torch.FloatTensor | None = None
+    logits_audio_text: torch.FloatTensor | None = None
+    text_audio_embeds: torch.FloatTensor | None = None
+    audio_embeds: torch.FloatTensor | None = None
     text_outputs: BaseModelOutputWithPooling = None
     audio_outputs: BaseModelOutputWithPooling = None
 
@@ -202,9 +201,9 @@ class PeAudioModel(PeAudioPreTrainedModel):
         self,
         input_ids: torch.Tensor,
         input_values: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        padding_mask: Optional[torch.Tensor] = None,
-        return_loss: Optional[bool] = None,
+        attention_mask: torch.Tensor | None = None,
+        padding_mask: torch.Tensor | None = None,
+        return_loss: bool | None = None,
         **kwargs,
     ) -> PeAudioOutput:
         audio_outputs: BaseModelOutputWithPooling = self.audio_encoder(
@@ -257,9 +256,9 @@ class PeAudioFrameLevelModel(PeAudioModel):
         self,
         input_ids: torch.Tensor,
         input_values: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        padding_mask: Optional[torch.Tensor] = None,
-        return_loss: Optional[bool] = None,
+        attention_mask: torch.Tensor | None = None,
+        padding_mask: torch.Tensor | None = None,
+        return_loss: bool | None = None,
         **kwargs,
     ) -> PeAudioOutput:
         audio_outputs: BaseModelOutputWithPooling = self.audio_encoder(

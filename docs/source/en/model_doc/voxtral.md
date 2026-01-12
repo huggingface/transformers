@@ -359,6 +359,7 @@ This model was contributed by [Eustache Le Bihan](https://huggingface.co/eustlb)
 ## VoxtralProcessor
 
 [[autodoc]] VoxtralProcessor
+    - __call__
 
 ## VoxtralEncoder
 

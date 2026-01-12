@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 Microsoft Research and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +14,6 @@
 """Image processor class for Kosmos2_5."""
 
 import math
-from typing import Optional, Union
 
 import numpy as np
 
@@ -112,7 +110,7 @@ class Kosmos2_5ImageProcessor(BaseImageProcessor):
         self,
         do_convert_rgb: bool = True,
         do_normalize: bool = True,
-        patch_size: Optional[dict[str, int]] = None,
+        patch_size: dict[str, int] | None = None,
         max_patches: int = 4096,
         **kwargs,
     ) -> None:
@@ -127,7 +125,7 @@ class Kosmos2_5ImageProcessor(BaseImageProcessor):
         image: np.ndarray,
         max_patches: int,
         patch_size: dict,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: str | ChannelDimension | None = None,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -217,8 +215,8 @@ class Kosmos2_5ImageProcessor(BaseImageProcessor):
     def normalize(
         self,
         image: np.ndarray,
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        data_format: str | ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -253,13 +251,13 @@ class Kosmos2_5ImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        do_convert_rgb: Optional[bool] = None,
-        do_normalize: Optional[bool] = None,
-        max_patches: Optional[int] = None,
-        patch_size: Optional[dict[str, int]] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        do_convert_rgb: bool | None = None,
+        do_normalize: bool | None = None,
+        max_patches: int | None = None,
+        patch_size: dict[str, int] | None = None,
+        return_tensors: str | TensorType | None = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: str | ChannelDimension | None = None,
         **kwargs,
     ) -> ImageInput:
         """

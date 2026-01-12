@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -143,17 +142,17 @@ class ZoeDepthImageProcessorFast(BaseImageProcessorFast):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        keep_aspect_ratio: Optional[bool],
-        ensure_multiple_of: Optional[int],
+        keep_aspect_ratio: bool | None,
+        ensure_multiple_of: int | None,
         interpolation: Optional["F.InterpolationMode"],
         do_pad: bool,
         do_rescale: bool,
-        rescale_factor: Optional[float],
+        rescale_factor: float | None,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        disable_grouping: Optional[bool],
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None = None,
         **kwargs,
     ) -> BatchFeature:
         # Group images by size for batched resizing
@@ -178,10 +177,10 @@ class ZoeDepthImageProcessorFast(BaseImageProcessorFast):
     def post_process_depth_estimation(
         self,
         outputs: "ZoeDepthDepthEstimatorOutput",
-        source_sizes: Optional[Union[TensorType, list[tuple[int, int]], None]] = None,
-        target_sizes: Optional[Union[TensorType, list[tuple[int, int]], None]] = None,
-        outputs_flipped: Optional[Union["ZoeDepthDepthEstimatorOutput", None]] = None,
-        do_remove_padding: Optional[Union[bool, None]] = None,
+        source_sizes: TensorType | list[tuple[int, int]] | None | None = None,
+        target_sizes: TensorType | list[tuple[int, int]] | None | None = None,
+        outputs_flipped: Union["ZoeDepthDepthEstimatorOutput", None] | None = None,
+        do_remove_padding: bool | None | None = None,
     ) -> list[dict[str, TensorType]]:
         """
         Converts the raw output of [`ZoeDepthDepthEstimatorOutput`] into final depth predictions and depth PIL images.

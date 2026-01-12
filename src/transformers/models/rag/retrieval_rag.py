@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020, The RAG Authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,7 +17,6 @@ import os
 import pickle
 import time
 from collections.abc import Iterable
-from typing import Optional
 
 import numpy as np
 
@@ -266,8 +264,8 @@ class CanonicalHFIndex(HFIndexBase):
         vector_size: int,
         dataset_name: str = "wiki_dpr",
         dataset_split: str = "train",
-        index_name: Optional[str] = None,
-        index_path: Optional[str] = None,
+        index_name: str | None = None,
+        index_path: str | None = None,
         use_dummy_dataset=False,
         dataset_revision=None,
     ):

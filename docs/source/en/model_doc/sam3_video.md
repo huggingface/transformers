@@ -228,4 +228,3 @@ For faster inference or lower memory usage:
 [[autodoc]] Sam3VideoModel
     - forward
     - propagate_in_video_iterator
-

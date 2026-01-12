@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -149,6 +148,7 @@ class UdopConfig(PreTrainedConfig):
                 "'gated-gelu' or 'relu'"
             )
 
+        kwargs["tie_word_embeddings"] = True
         super().__init__(
             pad_token_id=pad_token_id,
             eos_token_id=eos_token_id,

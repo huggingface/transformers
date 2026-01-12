@@ -22,7 +22,6 @@ if is_torch_available():
 
 if is_accelerate_available():
     import accelerate
-    from accelerate import init_empty_weights
     from accelerate.hooks import add_hook_to_module, remove_hook_from_module
 
 logger = logging.get_logger(__name__)
@@ -181,7 +180,7 @@ def replace_with_bnb_linear(
         if not should_convert_module(module_name, modules_to_not_convert):
             continue
         new_module = None
-        with init_empty_weights():
+        with torch.device("meta"):
             if isinstance(module, (nn.Linear, Conv1D)):
                 if isinstance(module, Conv1D):
                     in_features, out_features = module.weight.shape
@@ -293,7 +292,7 @@ def dequantize_and_replace(model, quantization_config=None, dtype=None):
     target_cls = bnb.nn.Linear8bitLt if quant_method == "llm_int8" else bnb.nn.Linear4bit
     for module_name, module in model.named_modules():
         if isinstance(module, target_cls):
-            with init_empty_weights():
+            with torch.device("meta"):
                 bias = getattr(module, "bias", None)
                 new_module = torch.nn.Linear(module.in_features, module.out_features, bias=bias is not None)
             state = module.state if quant_method == "llm_int8" else None

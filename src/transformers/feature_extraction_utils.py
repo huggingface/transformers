@@ -19,7 +19,7 @@ import copy
 import json
 import os
 from collections import UserDict
-from typing import TYPE_CHECKING, Any, Optional, TypeVar, Union
+from typing import TYPE_CHECKING, Any, TypeVar, Union
 
 import numpy as np
 from huggingface_hub import create_repo, is_offline_mode
@@ -74,9 +74,9 @@ class BatchFeature(UserDict):
 
     def __init__(
         self,
-        data: Optional[dict[str, Any]] = None,
-        tensor_type: Union[None, str, TensorType] = None,
-        skip_tensor_conversion: Optional[Union[list[str], set[str]]] = None,
+        data: dict[str, Any] | None = None,
+        tensor_type: None | str | TensorType = None,
+        skip_tensor_conversion: list[str] | set[str] | None = None,
     ):
         super().__init__(data)
         self.convert_to_tensors(tensor_type=tensor_type, skip_tensor_conversion=skip_tensor_conversion)
@@ -104,7 +104,7 @@ class BatchFeature(UserDict):
         if "data" in state:
             self.data = state["data"]
 
-    def _get_is_as_tensor_fns(self, tensor_type: Optional[Union[str, TensorType]] = None):
+    def _get_is_as_tensor_fns(self, tensor_type: str | TensorType | None = None):
         if tensor_type is None:
             return None, None
 
@@ -156,8 +156,8 @@ class BatchFeature(UserDict):
 
     def convert_to_tensors(
         self,
-        tensor_type: Optional[Union[str, TensorType]] = None,
-        skip_tensor_conversion: Optional[Union[list[str], set[str]]] = None,
+        tensor_type: str | TensorType | None = None,
+        skip_tensor_conversion: list[str] | set[str] | None = None,
     ):
         """
         Convert the inner content to tensors.
@@ -282,11 +282,11 @@ class FeatureExtractionMixin(PushToHubMixin):
     @classmethod
     def from_pretrained(
         cls: type[SpecificFeatureExtractorType],
-        pretrained_model_name_or_path: Union[str, os.PathLike],
-        cache_dir: Optional[Union[str, os.PathLike]] = None,
+        pretrained_model_name_or_path: str | os.PathLike,
+        cache_dir: str | os.PathLike | None = None,
         force_download: bool = False,
         local_files_only: bool = False,
-        token: Optional[Union[str, bool]] = None,
+        token: str | bool | None = None,
         revision: str = "main",
         **kwargs,
     ) -> SpecificFeatureExtractorType:
@@ -376,7 +376,7 @@ class FeatureExtractionMixin(PushToHubMixin):
 
         return cls.from_dict(feature_extractor_dict, **kwargs)
 
-    def save_pretrained(self, save_directory: Union[str, os.PathLike], push_to_hub: bool = False, **kwargs):
+    def save_pretrained(self, save_directory: str | os.PathLike, push_to_hub: bool = False, **kwargs):
         """
         Save a feature_extractor object to the directory `save_directory`, so that it can be re-loaded using the
         [`~feature_extraction_utils.FeatureExtractionMixin.from_pretrained`] class method.
@@ -426,7 +426,7 @@ class FeatureExtractionMixin(PushToHubMixin):
 
     @classmethod
     def get_feature_extractor_dict(
-        cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs
+        cls, pretrained_model_name_or_path: str | os.PathLike, **kwargs
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         """
         From a `pretrained_model_name_or_path`, resolve to a dictionary of parameters, to be used for instantiating a
@@ -591,7 +591,7 @@ class FeatureExtractionMixin(PushToHubMixin):
         return output
 
     @classmethod
-    def from_json_file(cls, json_file: Union[str, os.PathLike]) -> "FeatureExtractionMixin":
+    def from_json_file(cls, json_file: str | os.PathLike) -> "FeatureExtractionMixin":
         """
         Instantiates a feature extractor of type [`~feature_extraction_utils.FeatureExtractionMixin`] from the path to
         a JSON file of parameters.
@@ -624,7 +624,7 @@ class FeatureExtractionMixin(PushToHubMixin):
 
         return json.dumps(dictionary, indent=2, sort_keys=True) + "\n"
 
-    def to_json_file(self, json_file_path: Union[str, os.PathLike]):
+    def to_json_file(self, json_file_path: str | os.PathLike):
         """
         Save this instance to a JSON file.
 

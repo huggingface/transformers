@@ -32,6 +32,7 @@ from transformers import (
     BertTokenizerFast,
     CTRLTokenizer,
     GPT2Tokenizer,
+    HerbertTokenizer,
     PreTrainedTokenizerFast,
     Qwen2Tokenizer,
     Qwen2TokenizerFast,
@@ -44,6 +45,7 @@ from transformers import (
 from transformers.models.auto.configuration_auto import CONFIG_MAPPING, AutoConfig
 from transformers.models.auto.tokenization_auto import (
     TOKENIZER_MAPPING,
+    TOKENIZER_MAPPING_NAMES,
     get_tokenizer_config,
     tokenizer_class_from_name,
 )
@@ -175,6 +177,22 @@ class AutoTokenizerTest(unittest.TestCase):
         for tokenizer_name in tokenizer_names:
             # must find the right class
             tokenizer_class_from_name(tokenizer_name)
+
+    def test_tokenizer_mapping_names_use_single_entries(self):
+        # this is just to ensure tokenizer mapping names are correct and map to strings!
+        invalid_entries = [
+            model_name
+            for model_name, tokenizer_entry in TOKENIZER_MAPPING_NAMES.items()
+            if isinstance(tokenizer_entry, (tuple, list))
+        ]
+        self.assertListEqual(
+            invalid_entries,
+            [],
+            msg=(
+                "TOKENIZER_MAPPING_NAMES should map model types to single tokenizer class names. "
+                f"Found invalid mappings for: {invalid_entries}"
+            ),
+        )
 
     @require_tokenizers
     def test_from_pretrained_use_fast_toggle(self):
@@ -576,3 +594,25 @@ class NopConfig(PreTrainedConfig):
                     pass
             finally:
                 os.chdir(prev_dir)
+
+    def test_tokenization_class_priority(self):
+        from transformers import AutoProcessor
+
+        tok = AutoTokenizer.from_pretrained("mlx-community/MiniMax-M2.1-4bit")
+        self.assertTrue(tok.__class__ == TokenizersBackend)
+
+        tok = AutoTokenizer.from_pretrained("allegro/herbert-base-cased")
+        self.assertTrue(tok.__class__ == HerbertTokenizer)
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            tok.save_pretrained(tmp_dir)
+            tok2 = AutoTokenizer.from_pretrained(tmp_dir)
+            self.assertTrue(tok2.__class__ == HerbertTokenizer)
+
+        tok = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM2-135M-Instruct")
+        self.assertTrue(tok.__class__ == TokenizersBackend)
+
+        tok = AutoProcessor.from_pretrained("mistralai/Ministral-3-8B-Instruct-2512-BF16").tokenizer
+        self.assertTrue(tok.__class__ == TokenizersBackend)
+
+        tok = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM2-135M-Instruct")
+        self.assertTrue(tok.__class__ == TokenizersBackend)

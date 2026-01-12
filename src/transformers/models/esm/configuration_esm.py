@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 Meta and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +14,6 @@
 """ESM model configuration"""
 
 from dataclasses import asdict, dataclass
-from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
@@ -92,7 +90,7 @@ class TrunkConfig:
     layer_drop: float = 0
     cpu_grad_checkpoint: bool = False
     max_recycles: int = 4
-    chunk_size: Optional[int] = 128
+    chunk_size: int | None = 128
     structure_module: "StructureModuleConfig" = None
 
     def __post_init__(self):
@@ -147,7 +145,7 @@ class TrunkConfig:
 
 @dataclass
 class EsmFoldConfig:
-    esm_type: Optional[str] = None
+    esm_type: str | None = None
     fp16_esm: bool = True
     use_esm_attn_map: bool = False
     esm_ablate_pairwise: bool = False

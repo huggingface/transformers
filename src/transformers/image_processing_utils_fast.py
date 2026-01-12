@@ -73,17 +73,17 @@ logger = logging.get_logger(__name__)
 
 @lru_cache(maxsize=10)
 def validate_fast_preprocess_arguments(
-    do_rescale: Optional[bool] = None,
-    rescale_factor: Optional[float] = None,
-    do_normalize: Optional[bool] = None,
-    image_mean: Optional[Union[float, list[float]]] = None,
-    image_std: Optional[Union[float, list[float]]] = None,
-    do_center_crop: Optional[bool] = None,
-    crop_size: Optional[SizeDict] = None,
-    do_resize: Optional[bool] = None,
-    size: Optional[SizeDict] = None,
+    do_rescale: bool | None = None,
+    rescale_factor: float | None = None,
+    do_normalize: bool | None = None,
+    image_mean: float | list[float] | None = None,
+    image_std: float | list[float] | None = None,
+    do_center_crop: bool | None = None,
+    crop_size: SizeDict | None = None,
+    do_resize: bool | None = None,
+    size: SizeDict | None = None,
     interpolation: Optional["F.InterpolationMode"] = None,
-    return_tensors: Optional[Union[str, TensorType]] = None,
+    return_tensors: str | TensorType | None = None,
     data_format: ChannelDimension = ChannelDimension.FIRST,
 ):
     """
@@ -110,7 +110,7 @@ def validate_fast_preprocess_arguments(
         raise ValueError("Only channel first data format is currently supported.")
 
 
-def safe_squeeze(tensor: "torch.Tensor", axis: Optional[int] = None) -> "torch.Tensor":
+def safe_squeeze(tensor: "torch.Tensor", axis: int | None = None) -> "torch.Tensor":
     """
     Squeezes a tensor, but only if the axis specified has dim 1.
     """
@@ -347,11 +347,11 @@ class BaseImageProcessorFast(BaseImageProcessor):
         self,
         images: list["torch.Tensor"],
         pad_size: SizeDict = None,
-        fill_value: Optional[int] = 0,
-        padding_mode: Optional[str] = "constant",
+        fill_value: int | None = 0,
+        padding_mode: str | None = "constant",
         return_mask: bool = False,
-        disable_grouping: Optional[bool] = False,
-        is_nested: Optional[bool] = False,
+        disable_grouping: bool | None = False,
+        is_nested: bool | None = False,
         **kwargs,
     ) -> Union[tuple["torch.Tensor", "torch.Tensor"], "torch.Tensor"]:
         """
@@ -518,8 +518,8 @@ class BaseImageProcessorFast(BaseImageProcessor):
     def normalize(
         self,
         image: "torch.Tensor",
-        mean: Union[float, Iterable[float]],
-        std: Union[float, Iterable[float]],
+        mean: float | Iterable[float],
+        std: float | Iterable[float],
         **kwargs,
     ) -> "torch.Tensor":
         """
@@ -541,11 +541,11 @@ class BaseImageProcessorFast(BaseImageProcessor):
     @lru_cache(maxsize=10)
     def _fuse_mean_std_and_rescale_factor(
         self,
-        do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[float] = None,
+        do_normalize: bool | None = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        do_rescale: bool | None = None,
+        rescale_factor: float | None = None,
         device: Optional["torch.device"] = None,
     ) -> tuple:
         if do_rescale and do_normalize:
@@ -561,8 +561,8 @@ class BaseImageProcessorFast(BaseImageProcessor):
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Union[float, list[float]],
-        image_std: Union[float, list[float]],
+        image_mean: float | list[float],
+        image_std: float | list[float],
     ) -> "torch.Tensor":
         """
         Rescale and normalize images.
@@ -675,8 +675,8 @@ class BaseImageProcessorFast(BaseImageProcessor):
     def _process_image(
         self,
         image: ImageInput,
-        do_convert_rgb: Optional[bool] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        do_convert_rgb: bool | None = None,
+        input_data_format: str | ChannelDimension | None = None,
         device: Optional["torch.device"] = None,
     ) -> "torch.Tensor":
         image_type = get_image_type(image)
@@ -713,8 +713,8 @@ class BaseImageProcessorFast(BaseImageProcessor):
     def _prepare_image_like_inputs(
         self,
         images: ImageInput,
-        do_convert_rgb: Optional[bool] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        do_convert_rgb: bool | None = None,
+        input_data_format: str | ChannelDimension | None = None,
         device: Optional["torch.device"] = None,
         expected_ndims: int = 3,
     ) -> list["torch.Tensor"]:
@@ -756,13 +756,13 @@ class BaseImageProcessorFast(BaseImageProcessor):
 
     def _further_process_kwargs(
         self,
-        size: Optional[SizeDict] = None,
-        crop_size: Optional[SizeDict] = None,
-        pad_size: Optional[SizeDict] = None,
-        default_to_square: Optional[bool] = None,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
-        data_format: Optional[ChannelDimension] = None,
+        size: SizeDict | None = None,
+        crop_size: SizeDict | None = None,
+        pad_size: SizeDict | None = None,
+        default_to_square: bool | None = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        data_format: ChannelDimension | None = None,
         **kwargs,
     ) -> dict:
         """
@@ -804,18 +804,18 @@ class BaseImageProcessorFast(BaseImageProcessor):
 
     def _validate_preprocess_kwargs(
         self,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[float] = None,
-        do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, tuple[float]]] = None,
-        image_std: Optional[Union[float, tuple[float]]] = None,
-        do_resize: Optional[bool] = None,
-        size: Optional[SizeDict] = None,
-        do_center_crop: Optional[bool] = None,
-        crop_size: Optional[SizeDict] = None,
+        do_rescale: bool | None = None,
+        rescale_factor: float | None = None,
+        do_normalize: bool | None = None,
+        image_mean: float | tuple[float] | None = None,
+        image_std: float | tuple[float] | None = None,
+        do_resize: bool | None = None,
+        size: SizeDict | None = None,
+        do_center_crop: bool | None = None,
+        crop_size: SizeDict | None = None,
         interpolation: Optional["F.InterpolationMode"] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        data_format: Optional[ChannelDimension] = None,
+        return_tensors: str | TensorType | None = None,
+        data_format: ChannelDimension | None = None,
         **kwargs,
     ):
         """
@@ -873,7 +873,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         *args,
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
-        device: Optional[Union[str, "torch.device"]] = None,
+        device: Union[str, "torch.device"] | None = None,
         **kwargs: Unpack[ImagesKwargs],
     ) -> BatchFeature:
         """
@@ -898,12 +898,12 @@ class BaseImageProcessorFast(BaseImageProcessor):
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        do_pad: Optional[bool],
-        pad_size: Optional[SizeDict],
-        disable_grouping: Optional[bool],
-        return_tensors: Optional[Union[str, TensorType]],
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        do_pad: bool | None,
+        pad_size: SizeDict | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         # Group images by size for batched resizing
