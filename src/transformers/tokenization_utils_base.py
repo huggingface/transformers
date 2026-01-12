@@ -1028,7 +1028,6 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 if value is None:
                     continue
                 if isinstance(value, dict):
-                    # Dict format is for model-specific named tokens (e.g., {"image_token": "<img>"})
                     self._set_model_specific_special_tokens(special_tokens=value)
                 elif isinstance(value, (list, tuple)):
                     self._extra_special_tokens = list(value)
@@ -1270,11 +1269,9 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             super().__setattr__(key, value)
 
     def __getattr__(self, key):
-        # Handle _id/_ids suffix (e.g., bos_token_id -> bos_token)
         key_is_special_id = key.endswith("_id") or key.endswith("_ids")
         key_without_id = key[:-4] if key.endswith("_ids") else (key[:-3] if key_is_special_id else key)
 
-        # Named special tokens (bos_token, eos_token, etc.)
         if self.__dict__.get("_special_tokens_map") is not None and key_without_id in self.SPECIAL_TOKENS_ATTRIBUTES:
             token_value = self.__dict__["_special_tokens_map"][key_without_id]
             if token_value is None:
@@ -1285,7 +1282,6 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 return self.convert_tokens_to_ids(str(token_value))
             return str(token_value)
 
-        # Extra special tokens
         if self.__dict__.get("_extra_special_tokens") is not None and key_without_id == "extra_special_tokens":
             tokens = [str(tok) for tok in self.__dict__["_extra_special_tokens"]]
             return self.convert_tokens_to_ids(tokens) if key_is_special_id else tokens
@@ -2049,10 +2045,10 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         # Add tokenizer class to the tokenizer config to be able to reload it with from_pretrained
         tokenizer_class = self.__class__.__name__
 
-        # Tokenizers backend saves these in tokenizer.json, not tokenizer_config.json
+        # tokenizers backend don't need to save added_tokens_decoder and additional_special_tokens
         if any(base.__name__ == "TokenizersBackend" for base in self.__class__.__mro__):
             tokenizer_config.pop("added_tokens_decoder", None)
-            tokenizer_config.pop("additional_special_tokens", None)  # V5: legacy key, kept for defensive cleanup
+            tokenizer_config.pop("additional_special_tokens", None)
 
         # Remove the Fast at the end if we can save the slow tokenizer
         if tokenizer_class.endswith("Fast") and getattr(self, "can_save_slow_tokenizer", False):
