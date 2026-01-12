@@ -425,6 +425,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("vit", "ViTModel"),
         ("vit_mae", "ViTMAEModel"),
         ("vit_msn", "ViTMSNModel"),
+        ("vit_nepa", "ViTNepaModel"),
         ("vitdet", "VitDetModel"),
         ("vits", "VitsModel"),
         ("vivit", "VivitModel"),
@@ -532,6 +533,7 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("vipllava", "VipLlavaForConditionalGeneration"),
         ("visual_bert", "VisualBertForPreTraining"),
         ("vit_mae", "ViTMAEForPreTraining"),
+        ("vit_nepa", "ViTNepaForPreTraining"),
         ("voxtral", "VoxtralForConditionalGeneration"),
         ("wav2vec2", "Wav2Vec2ForPreTraining"),
         ("wav2vec2-conformer", "Wav2Vec2ConformerForPreTraining"),
@@ -831,6 +833,7 @@ MODEL_FOR_IMAGE_MAPPING_NAMES = OrderedDict(
         ("vit", "ViTModel"),
         ("vit_mae", "ViTMAEModel"),
         ("vit_msn", "ViTMSNModel"),
+        ("vit_nepa", "ViTNepaModel"),
         ("vitdet", "VitDetModel"),
         ("vivit", "VivitModel"),
         ("yolos", "YolosModel"),
@@ -912,6 +915,7 @@ MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("timm_wrapper", "TimmWrapperForImageClassification"),
         ("vit", "ViTForImageClassification"),
         ("vit_msn", "ViTMSNForImageClassification"),
+        ("vit_nepa", "ViTNepaForImageClassification"),
     ]
 )
 
