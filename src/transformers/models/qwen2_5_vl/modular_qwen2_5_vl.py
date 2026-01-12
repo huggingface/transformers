@@ -42,7 +42,6 @@ from ..qwen2_vl.modeling_qwen2_vl import (
     PatchEmbed,
     PatchMerger,
     Qwen2RMSNorm,
-    Qwen2VLAttention,
     Qwen2VLCausalLMOutputWithPast,
     Qwen2VLForConditionalGeneration,
     Qwen2VLModel,
@@ -176,17 +175,13 @@ class Qwen2_5_VLPreTrainedModel(Qwen2VLPreTrainedModel):
             init.copy_(module.inv_freq, inv_freq)
 
 
-class Qwen2_5_VLAttention(Qwen2VLAttention):
-    pass
-
-
 class Qwen2_5_VisionTransformerPretrainedModel(Qwen2_5_VLPreTrainedModel):
     config: Qwen2_5_VLVisionConfig
     _no_split_modules = ["Qwen2_5_VLVisionBlock"]
     _input_embed_layer = "patch_embed"
-    _can_record_inputs = {
+    _can_record_outputs = {
         "hidden_states": Qwen2_5_VLVisionBlock,
-        "attentions": Qwen2_5_VLAttention,
+        "attentions": Qwen2_5_VLVisionAttention,
     }
 
     def __init__(self, config, *inputs, **kwargs) -> None:

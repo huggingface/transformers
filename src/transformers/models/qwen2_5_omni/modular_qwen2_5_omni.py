@@ -1944,7 +1944,7 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5_VisionTransformerPretrainedModel):
     input_modalities = ("image", "video")
     _no_split_modules = ["Qwen2_5OmniVisionBlock"]
     _input_embed_layer = "patch_embed"
-    _can_record_inputs = {
+    _can_record_outputs = {
         "hidden_states": Qwen2_5OmniVisionBlock,
         "attentions": Qwen2_5OmniVisionAttention,
     }

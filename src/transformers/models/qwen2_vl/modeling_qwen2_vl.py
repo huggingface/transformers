@@ -680,6 +680,10 @@ class Qwen2VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
     input_modalities = ("image", "video")
     _no_split_modules = ["Qwen2VLVisionBlock"]
     _input_embed_layer = "patch_embed"
+    _can_record_outputs = {
+        "hidden_states": Qwen2VLVisionBlock,
+        "attentions": VisionAttention,
+    }
 
     def __init__(self, config) -> None:
         super().__init__(config)

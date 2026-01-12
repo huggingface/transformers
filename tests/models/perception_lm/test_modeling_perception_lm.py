@@ -367,6 +367,10 @@ class PerceptionLMForConditionalGenerationModelTest(ModelTesterMixin, Generation
     def test_generate_compilation_all_outputs(self):
         pass
 
+    @unittest.skip("Cannot set output_attentions on timm models.")
+    def test_get_image_features_attentions(self):
+        pass
+
 
 TEST_MODEL_PATH = "facebook/Perception-LM-1B"
 
