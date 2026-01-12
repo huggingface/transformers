@@ -4,15 +4,29 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_rf_detr.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+# coding = utf-8
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
 import collections.abc
 import math
 import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Optional, Union
+from typing import Any
 
 import torch
-import torch.nn.functional as F  # noqa: F401
+import torch.nn.functional as F
 from torch import Tensor, nn
 
 from ... import initialization as init
@@ -39,8 +53,6 @@ class RfDetrModelOutput(ModelOutput):
     r"""
     init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
         Initial reference points sent through the Transformer decoder.
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
-        Sequence of hidden-states at the output of the last layer of the decoder of the model.
     intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
         Stacked intermediate hidden states (output of each layer of the decoder).
     intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
@@ -53,12 +65,12 @@ class RfDetrModelOutput(ModelOutput):
         Logits of predicted bounding boxes coordinates in the first stage.
     """
 
-    init_reference_points: Optional[torch.FloatTensor] = None
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    intermediate_hidden_states: Optional[torch.FloatTensor] = None
-    intermediate_reference_points: Optional[torch.FloatTensor] = None
-    enc_outputs_class: Optional[torch.FloatTensor] = None
-    enc_outputs_coord_logits: Optional[torch.FloatTensor] = None
+    init_reference_points: torch.FloatTensor | None = None
+    last_hidden_state: torch.FloatTensor | None = None
+    intermediate_hidden_states: torch.FloatTensor | None = None
+    intermediate_reference_points: torch.FloatTensor | None = None
+    enc_outputs_class: torch.FloatTensor | None = None
+    enc_outputs_coord_logits: torch.FloatTensor | None = None
 
 
 class RfDetrLayerNorm(nn.LayerNorm):
@@ -95,7 +107,7 @@ class RfDetrConvNormLayer(nn.Module):
         out_channels: int,
         kernel_size: int,
         stride: int,
-        activation: Optional[str] = None,
+        activation: str | None = None,
     ):
         super().__init__()
         self.conv = nn.Conv2d(
@@ -117,8 +129,9 @@ class RfDetrConvNormLayer(nn.Module):
 
 
 class RfDetrRepVggBlock(nn.Module):
-    def __init__(self, config: RfDetrConfig, hidden_channels: int):
+    def __init__(self, config: RfDetrConfig):
         super().__init__()
+        hidden_channels = int(config.d_model * config.hidden_expansion)
         self.conv1 = RfDetrConvNormLayer(
             config, hidden_channels, hidden_channels, 3, 1, activation=config.activation_function
         )
@@ -134,17 +147,21 @@ class RfDetrRepVggBlock(nn.Module):
 
 class RfDetrC2FLayer(nn.Module):
     # Inspired by RTDetrCSPRepLayer
-    def __init__(self, config: RfDetrConfig, in_channels: int, out_channels: int):
+    def __init__(self, config: RfDetrConfig, in_channels: int):
         super().__init__()
         num_blocks = config.c2f_num_blocks
         activation = config.activation_function
+        out_channels = config.d_model
 
         self.hidden_channels = int(out_channels * config.hidden_expansion)
+
         conv1_out_channels = 2 * self.hidden_channels
-        conv2_in_channels = (2 + num_blocks) * self.hidden_channels
         self.conv1 = RfDetrConvNormLayer(config, in_channels, conv1_out_channels, 1, 1, activation=activation)
+
+        conv2_in_channels = (2 + num_blocks) * self.hidden_channels
         self.conv2 = RfDetrConvNormLayer(config, conv2_in_channels, out_channels, 1, 1, activation=activation)
-        self.bottlenecks = nn.ModuleList(RfDetrRepVggBlock(config, self.hidden_channels) for _ in range(num_blocks))
+
+        self.bottlenecks = nn.ModuleList(RfDetrRepVggBlock(config) for _ in range(num_blocks))
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         hidden_states = self.conv1(hidden_states)
@@ -204,24 +221,12 @@ class RfDetrScaleProjector(nn.Module):
         return hidden_states
 
 
-def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
-    """
-    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
-    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
-    """
-    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
-    if n_rep == 1:
-        return hidden_states
-    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
-    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
-
-
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
+    attention_mask: torch.Tensor | None,
     scaling: float,
     dropout: float = 0.0,
     **kwargs: Unpack[TransformersKwargs],
@@ -242,18 +247,29 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-class RfDetrAttention(nn.Module):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
+def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
+    """
+    This is the equivalent of torch.repeat_interleave(x, dim=1, repeats=n_rep). The hidden states go from (batch,
+    num_key_value_heads, seqlen, head_dim) to (batch, num_attention_heads, seqlen, head_dim)
+    """
+    batch, num_key_value_heads, slen, head_dim = hidden_states.shape
+    if n_rep == 1:
+        return hidden_states
+    hidden_states = hidden_states[:, :, None, :, :].expand(batch, num_key_value_heads, n_rep, slen, head_dim)
+    return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
+
+class RfDetrAttention(nn.Module):
     def __init__(self, config: RfDetrConfig, layer_idx: int):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
         self.head_dim = getattr(config, "head_dim", config.d_model // config.decoder_self_attention_heads)
-        self.num_key_value_groups = 1
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
         self.is_causal = False
+        self.num_key_value_groups = 1
+
         self.q_proj = nn.Linear(
             config.d_model, config.decoder_self_attention_heads * self.head_dim, bias=config.attention_bias
         )
@@ -270,7 +286,7 @@ class RfDetrAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Optional[torch.Tensor] = None,
+        position_embeddings: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size, seq_len, _ = hidden_states.shape
@@ -408,16 +424,16 @@ class RfDetrMultiscaleDeformableAttention(nn.Module):
 
         self.disable_custom_kernels = config.disable_custom_kernels
 
-    def with_pos_embed(self, tensor: torch.Tensor, position_embeddings: Optional[Tensor]):
+    def with_pos_embed(self, tensor: torch.Tensor, position_embeddings: Tensor | None):
         return tensor if position_embeddings is None else tensor + position_embeddings
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
-        position_embeddings: Optional[torch.Tensor] = None,
+        position_embeddings: torch.Tensor | None = None,
         reference_points=None,
         spatial_shapes=None,
         spatial_shapes_list=None,
@@ -526,13 +542,13 @@ class RfDetrDecoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Optional[torch.Tensor] = None,
+        position_embeddings: torch.Tensor | None = None,
         reference_points=None,
         spatial_shapes=None,
         spatial_shapes_list=None,
         level_start_index=None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
         self_attention_output, self_attn_weights = self.self_attn(
@@ -620,19 +636,13 @@ class RfDetrPreTrainedModel(PreTrainedModel):
 
 
 class RfDetrMultiScaleProjector(nn.Module):
-    def __init__(self, config: RfDetrConfig, intermediate_channel_sizes: list[int]):
+    def __init__(self, config: RfDetrConfig):
         super().__init__()
 
         self.config = config
         scale_factors = config.projector_scale_factors
-        output_channels = config.d_model
 
-        self.scale_layers = nn.ModuleList(
-            [
-                RfDetrScaleProjector(config, intermediate_channel_sizes, scale, output_channels)
-                for scale in scale_factors
-            ]
-        )
+        self.scale_layers = nn.ModuleList([RfDetrScaleProjector(config, scale) for scale in scale_factors])
 
     def forward(self, hidden_states: tuple[torch.Tensor]) -> list[torch.Tensor]:
         output_hidden_states = []
@@ -645,7 +655,7 @@ class RfDetrConvEncoder(nn.Module):
     def __init__(self, config: RfDetrConfig):
         super().__init__()
         self.backbone = RfDetrDinov2Backbone(config.backbone_config)
-        self.projector = RfDetrMultiScaleProjector(config, self.backbone.channels)
+        self.projector = RfDetrMultiScaleProjector(config)
 
     def forward(self, pixel_values: torch.Tensor, pixel_mask: torch.Tensor):
         # send pixel_values through the model to get list of feature maps
@@ -680,12 +690,12 @@ class RfDetrDecoderOutput(ModelOutput):
         used to compute the weighted average in the cross-attention heads.
     """
 
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    intermediate_hidden_states: Optional[torch.FloatTensor] = None
-    intermediate_reference_points: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
-    cross_attentions: Optional[tuple[torch.FloatTensor]] = None
+    last_hidden_state: torch.FloatTensor | None = None
+    intermediate_hidden_states: torch.FloatTensor | None = None
+    intermediate_reference_points: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
+    cross_attentions: tuple[torch.FloatTensor] | None = None
 
 
 # function to generate sine positional embedding for 4d coordinates
@@ -790,14 +800,14 @@ class RfDetrDecoder(RfDetrPreTrainedModel):
 
     def forward(
         self,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        reference_points: Optional[torch.Tensor] = None,
-        spatial_shapes: Optional[torch.Tensor] = None,
-        spatial_shapes_list: Optional[torch.Tensor] = None,
-        level_start_index: Optional[torch.Tensor] = None,
-        valid_ratios: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
+        inputs_embeds: torch.Tensor | None = None,
+        reference_points: torch.Tensor | None = None,
+        spatial_shapes: torch.Tensor | None = None,
+        spatial_shapes_list: torch.Tensor | None = None,
+        level_start_index: torch.Tensor | None = None,
+        valid_ratios: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
         intermediate = ()
@@ -969,12 +979,12 @@ class RfDetrModel(RfDetrPreTrainedModel):
         object_query = object_query.masked_fill(~output_proposals_valid, float(0))
         return object_query, output_proposals
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        pixel_mask: Optional[torch.LongTensor] = None,
+        pixel_mask: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> RfDetrModelOutput:
         r"""
@@ -1143,8 +1153,6 @@ class RfDetrObjectDetectionOutput(ModelOutput):
         `pred_boxes`) for each decoder layer.
     init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
         Initial reference points sent through the Transformer decoder.
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
-        Sequence of hidden-states at the output of the last layer of the decoder of the model.
     intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
         Stacked intermediate hidden states (output of each layer of the decoder).
     intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
@@ -1157,17 +1165,17 @@ class RfDetrObjectDetectionOutput(ModelOutput):
         Logits of predicted bounding boxes coordinates in the first stage.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    loss_dict: Optional[dict] = None
-    logits: Optional[torch.FloatTensor] = None
-    pred_boxes: Optional[torch.FloatTensor] = None
-    auxiliary_outputs: Optional[list[dict]] = None
-    init_reference_points: Optional[torch.FloatTensor] = None
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    intermediate_hidden_states: Optional[torch.FloatTensor] = None
-    intermediate_reference_points: Optional[torch.FloatTensor] = None
+    loss: torch.FloatTensor | None = None
+    loss_dict: dict | None = None
+    logits: torch.FloatTensor | None = None
+    pred_boxes: torch.FloatTensor | None = None
+    auxiliary_outputs: list[dict] | None = None
+    init_reference_points: torch.FloatTensor | None = None
+    last_hidden_state: torch.FloatTensor | None = None
+    intermediate_hidden_states: torch.FloatTensor | None = None
+    intermediate_reference_points: torch.FloatTensor | None = None
     enc_outputs_class: Any = None
-    enc_outputs_coord_logits: Optional[torch.FloatTensor] = None
+    enc_outputs_coord_logits: torch.FloatTensor | None = None
 
 
 @auto_docstring(
@@ -1190,13 +1198,13 @@ class RfDetrForObjectDetection(RfDetrPreTrainedModel):
 
         self.post_init()
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor = None,
-        pixel_mask: Optional[torch.LongTensor] = None,
-        labels: Optional[list[dict]] = None,
+        pixel_mask: torch.LongTensor | None = None,
+        labels: list[dict] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> RfDetrObjectDetectionOutput:
         r"""
@@ -1420,7 +1428,7 @@ class RfDetrDinov2Embeddings(nn.Module):
 
         return torch.cat((class_pos_embed, patch_pos_embed), dim=1)
 
-    def forward(self, pixel_values: torch.Tensor, bool_masked_pos: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward(self, pixel_values: torch.Tensor, bool_masked_pos: torch.Tensor | None = None) -> torch.Tensor:
         batch_size, _, height, width = pixel_values.shape
         target_dtype = self.patch_embeddings.projection.weight.dtype
         embeddings = self.patch_embeddings(pixel_values.to(dtype=target_dtype))
@@ -1552,7 +1560,7 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
 class RfDetrDinov2DropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
-    def __init__(self, drop_prob: Optional[float] = None) -> None:
+    def __init__(self, drop_prob: float | None = None) -> None:
         super().__init__()
         self.drop_prob = drop_prob
 
@@ -1641,7 +1649,7 @@ class RfDetrDinov2Layer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-    ) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, torch.Tensor] | tuple[torch.Tensor]:
         shortcut = hidden_states
         if self.global_attention:
             hidden_states = window_unpartition_before_attention(hidden_states, self.num_windows)
@@ -1707,7 +1715,7 @@ class RfDetrDinov2PreTrainedModel(PreTrainedModel):
     }
 
     @torch.no_grad()
-    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
+    def _init_weights(self, module: nn.Linear | nn.Conv2d | nn.LayerNorm) -> None:
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
             init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
@@ -1777,7 +1785,7 @@ class RfDetrDinov2Backbone(RfDetrDinov2PreTrainedModel, BackboneMixin):
     def forward(
         self,
         pixel_values: torch.Tensor,
-        output_hidden_states: Optional[bool] = None,
+        output_hidden_states: bool | None = None,
         **kwargs,
     ) -> BackboneOutput:
         r"""
