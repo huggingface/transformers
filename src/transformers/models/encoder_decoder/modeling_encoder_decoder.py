@@ -291,27 +291,22 @@ class EncoderDecoderModel(PreTrainedModel, GenerationMixin):
                 decoder_config, kwargs_decoder = AutoConfig.from_pretrained(
                     decoder_pretrained_model_name_or_path, **kwargs_decoder, return_unused_kwargs=True
                 )
+            else:
+                decoder_config = kwargs_decoder["config"]
 
-                if decoder_config.is_decoder is False or decoder_config.add_cross_attention is False:
-                    logger.info(
-                        f"Initializing {decoder_pretrained_model_name_or_path} as a decoder model. Cross attention"
-                        f" layers are added to {decoder_pretrained_model_name_or_path} and randomly initialized if"
-                        f" {decoder_pretrained_model_name_or_path}'s architecture allows for cross attention layers."
-                    )
-                    decoder_config.is_decoder = True
-                    decoder_config.add_cross_attention = True
-
-                kwargs_decoder["config"] = decoder_config
-
-            if kwargs_decoder["config"].is_decoder is False or kwargs_decoder["config"].add_cross_attention is False:
-                logger.warning(
-                    f"Decoder model {decoder_pretrained_model_name_or_path} is not initialized as a decoder. "
-                    f"In order to initialize {decoder_pretrained_model_name_or_path} as a decoder, "
-                    "make sure that the attributes `is_decoder` and `add_cross_attention` of `decoder_config` "
-                    "passed to `.from_encoder_decoder_pretrained(...)` are set to `True` or do not pass a "
-                    "`decoder_config` to `.from_encoder_decoder_pretrained(...)`"
+            if (
+                getattr(decoder_config, "is_decoder", None) is False
+                or getattr(decoder_config, "add_cross_attention", None) is False
+            ):
+                logger.info(
+                    f"Initializing {decoder_pretrained_model_name_or_path} as a decoder model. Cross attention"
+                    f" layers are added to {decoder_pretrained_model_name_or_path} and randomly initialized if"
+                    f" {decoder_pretrained_model_name_or_path}'s architecture allows for cross attention layers."
                 )
+                decoder_config.is_decoder = True
+                decoder_config.add_cross_attention = True
 
+            kwargs_decoder["config"] = decoder_config
             decoder = AutoModelForCausalLM.from_pretrained(decoder_pretrained_model_name_or_path, **kwargs_decoder)
 
         # instantiate config with corresponding kwargs
