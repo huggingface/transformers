@@ -339,18 +339,20 @@ class ViTNepaSelfAttention(ViTSelfAttention):
     def __init__(self, config: ViTNepaConfig):
         super().__init__(config)
         self.is_causal = config.is_causal
-        self.q_norm = nn.LayerNorm(
-            self.attention_head_size,
-            eps=config.layer_norm_eps,
-            elementwise_affine=config.qk_norm_affine,
-            bias=config.qk_norm_bias,
-        )
-        self.k_norm = nn.LayerNorm(
-            self.attention_head_size,
-            eps=config.layer_norm_eps,
-            elementwise_affine=config.qk_norm_affine,
-            bias=config.qk_norm_bias,
-        )
+        self.use_qk_norm = config.qk_norm
+        if self.use_qk_norm:
+            self.q_norm = nn.LayerNorm(
+                self.attention_head_size,
+                eps=config.layer_norm_eps,
+                elementwise_affine=config.qk_norm_affine,
+                bias=config.qk_norm_bias,
+            )
+            self.k_norm = nn.LayerNorm(
+                self.attention_head_size,
+                eps=config.layer_norm_eps,
+                elementwise_affine=config.qk_norm_affine,
+                bias=config.qk_norm_bias,
+            )
 
     def forward(
         self, hidden_states: torch.Tensor, position_embeddings: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
@@ -362,8 +364,9 @@ class ViTNepaSelfAttention(ViTSelfAttention):
         value_layer = self.value(hidden_states).view(*new_shape).transpose(1, 2)
         query_layer = self.query(hidden_states).view(*new_shape).transpose(1, 2)
 
-        query_layer = self.q_norm(query_layer)
-        key_layer = self.k_norm(key_layer)
+        if self.use_qk_norm:
+            query_layer = self.q_norm(query_layer)
+            key_layer = self.k_norm(key_layer)
 
         # Apply RoPE to query and key
         if position_embeddings is not None:

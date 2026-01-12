@@ -397,18 +397,20 @@ class ViTNepaSelfAttention(nn.Module):
         self.query = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
         self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
         self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
-        self.q_norm = nn.LayerNorm(
-            self.attention_head_size,
-            eps=config.layer_norm_eps,
-            elementwise_affine=config.qk_norm_affine,
-            bias=config.qk_norm_bias,
-        )
-        self.k_norm = nn.LayerNorm(
-            self.attention_head_size,
-            eps=config.layer_norm_eps,
-            elementwise_affine=config.qk_norm_affine,
-            bias=config.qk_norm_bias,
-        )
+        self.use_qk_norm = config.qk_norm
+        if self.use_qk_norm:
+            self.q_norm = nn.LayerNorm(
+                self.attention_head_size,
+                eps=config.layer_norm_eps,
+                elementwise_affine=config.qk_norm_affine,
+                bias=config.qk_norm_bias,
+            )
+            self.k_norm = nn.LayerNorm(
+                self.attention_head_size,
+                eps=config.layer_norm_eps,
+                elementwise_affine=config.qk_norm_affine,
+                bias=config.qk_norm_bias,
+            )
 
     def forward(
         self, hidden_states: torch.Tensor, position_embeddings: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
@@ -420,8 +422,9 @@ class ViTNepaSelfAttention(nn.Module):
         value_layer = self.value(hidden_states).view(*new_shape).transpose(1, 2)
         query_layer = self.query(hidden_states).view(*new_shape).transpose(1, 2)
 
-        query_layer = self.q_norm(query_layer)
-        key_layer = self.k_norm(key_layer)
+        if self.use_qk_norm:
+            query_layer = self.q_norm(query_layer)
+            key_layer = self.k_norm(key_layer)
 
         # Apply RoPE to query and key
         if position_embeddings is not None:
