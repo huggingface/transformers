@@ -199,8 +199,8 @@ class GlmImageProcessor(ProcessorMixin):
         token_w: int,
         prev_token_h: int,
         prev_token_w: int,
-        image_grid_thw: torch.Tensor | None = None,
-    ) -> torch.Tensor:
+        image_grid_thw: None,
+    ):
         if image_grid_thw is None:
             return torch.tensor(
                 [

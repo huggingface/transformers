@@ -119,7 +119,6 @@ inputs = processor.apply_chat_template(
     messages,
     target_h=target_h,
     target_w=target_w,
-    add_generation_prompt=True,
     tokenize=True,
     return_dict=True,
     return_tensors="pt",
