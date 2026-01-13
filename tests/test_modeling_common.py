@@ -4514,11 +4514,12 @@ class ModelTesterMixin:
                     for source_pattern in conversion.source_patterns:
                         # Sometimes the mappings specify keys that are tied, so absent from the saved state dict
                         if isinstance(conversion, WeightRenaming):
-                            if any(
-                                re.search(reverse_target_pattern(target_pattern)[0], k)
-                                for k in model.all_tied_weights_keys.keys()
-                                for target_pattern in conversion.target_patterns
-                            ):
+                            # We need to revert the target pattern to make it compatible with regex search
+                            target_pattern_reversed = conversion.target_patterns[0]
+                            captured_group = reverse_target_pattern(source_pattern)[1]
+                            if captured_group:
+                                target_pattern_reversed = target_pattern_reversed.replace(r"\1", captured_group)
+                            if any(re.search(target_pattern_reversed, k) for k in model.all_tied_weights_keys.keys()):
                                 continue
                         num_matches = sum(re.search(source_pattern, key) is not None for key in serialized_keys)
                         self.assertTrue(
