@@ -13,6 +13,8 @@
 # limitations under the License.
 
 
+import inspect
+
 import torch
 import torch.nn as nn
 from torch.nn import BCEWithLogitsLoss, MSELoss
@@ -32,16 +34,16 @@ def fixed_cross_entropy(
     ignore_index: int = -100,
     **kwargs,
 ) -> torch.Tensor:
-    allowed = {"weight", "size_average", "reduce", "label_smoothing"}
-
     reduction = "sum" if num_items_in_batch is not None else "mean"
+
+    ce_params = inspect.signature(nn.functional.cross_entropy).parameters
 
     loss = nn.functional.cross_entropy(
         source,
         target,
         ignore_index=ignore_index,
-        reduction=reduction,
-        **(kwargs & allowed),
+        reduction="sum" if num_items_in_batch else "mean",
+        **{k: v for k, v in kwargs.items() if k in ce_params},
     )
 
     if reduction == "sum":
