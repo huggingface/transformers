@@ -217,7 +217,7 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             num_frames=num_frames,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 5760)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 84392)
 
         # Load with `fps` arg
         fps = 1
@@ -229,7 +229,7 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             fps=fps,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 5760)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 84392)
 
         # Load with `fps` and `num_frames` args, should raise an error
         with self.assertRaises(ValueError):
@@ -250,7 +250,7 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return_dict=True,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 17280)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 253176)
 
         # Load video as a list of frames (i.e. images). NOTE: each frame should have same size
         # because we assume they come from one video
@@ -272,7 +272,7 @@ class Qwen2_5OmniProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             return_dict=True,
         )
         self.assertTrue(self.videos_input_name in out_dict_with_video)
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 2904)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 5704)
 
         # When the inputs are frame URLs/paths we expect that those are already
         # sampled and will raise an error is asked to sample again.
