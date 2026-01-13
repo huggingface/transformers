@@ -58,9 +58,15 @@ class TestBatchGeneration(unittest.TestCase):
         ]
     )
     def test_generate_batch_consistency(self, attn_impl, num_blocks, block_size, max_batch_tokens):
-        if attn_impl in ["paged|flash_attention_2", "paged|flex_attention"] and torch_device == "cpu":
+        if (
+            attn_impl
+            in [
+                "paged|flex_attention",
+            ]
+            and torch_device == "cpu"
+        ):
             self.skipTest(
-                f"CPU only support sdpa/eager paged attention for now, but found {attn_impl}. Skipping test."
+                f"CPU only support flash/sdpa/eager paged attention for now, but found {attn_impl}. Skipping test."
             )
 
         self.model.config.attn_implementation = attn_impl
@@ -111,9 +117,15 @@ class TestBatchGeneration(unittest.TestCase):
     )
     def test_generate_batch_with_sampling(self, attn_impl, num_blocks, block_size, max_batch_tokens):
         """Test batch generation with do_sampling=True to verify sampling works correctly."""
-        if attn_impl in ["paged|flash_attention_2", "paged|flex_attention"] and torch_device == "cpu":
+        if (
+            attn_impl
+            in [
+                "paged|flex_attention",
+            ]
+            and torch_device == "cpu"
+        ):
             self.skipTest(
-                f"CPU only support sdpa/eager paged attention for now, but found {attn_impl}. Skipping test."
+                f"CPU only support flash/sdpa/eager paged attention for now, but found {attn_impl}. Skipping test."
             )
 
         self.model.config.attn_implementation = attn_impl
