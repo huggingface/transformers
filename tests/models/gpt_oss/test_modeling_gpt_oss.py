@@ -47,8 +47,7 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 if is_torch_available():
     import torch
 
-    from transformers import GptOssModel
-    from transformers.utils.quantization_config import Mxfp4Config
+    from transformers import GptOssModel, Mxfp4Config
 
     NUM_GPUS = torch.cuda.device_count()
 
@@ -130,7 +129,7 @@ def distributed_worker(quantized, model_size, kernels, attn_impl, mode):
     """This is the function that will be executed by torchrun workers."""
     import os
 
-    from transformers import AutoModelForCausalLM, AutoTokenizer
+    from transformers import AutoModelForCausalLM, AutoTokenizer, Mxfp4Config
     from transformers.testing_utils import torch_device
 
     def generate_config_key(quantized, model, kernels, attn_impl, mode):
@@ -153,8 +152,9 @@ def distributed_worker(quantized, model_size, kernels, attn_impl, mode):
         dtype="auto",
         tp_plan="auto",  # distributed inference
         use_kernels=kernels,
+        attn_implementation=attn_impl,
+        quantization_config=Mxfp4Config(dequantize=not quantized),
     ).to(torch_device)
-    model.set_attn_implementation(attn_impl)
     tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
 
     # Inference
