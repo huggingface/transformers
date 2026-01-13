@@ -133,7 +133,6 @@ _import_structure = {
         "is_wandb_available",
     ],
     "loss": [],
-    "modelcard": ["ModelCard"],
     "pipelines": [
         "AnyToAnyPipeline",
         "AudioClassificationPipeline",
@@ -179,8 +178,6 @@ _import_structure = {
     "testing_utils": [],
     "tokenization_python": ["PreTrainedTokenizer", "PythonBackend"],
     "tokenization_utils": [],
-    "tokenization_utils_fast": [],
-    "tokenization_utils_sentencepiece": ["SentencePieceBackend"],
     "tokenization_utils_base": [
         "AddedToken",
         "BatchEncoding",
@@ -188,6 +185,8 @@ _import_structure = {
         "PreTrainedTokenizerBase",
         "TokenSpan",
     ],
+    "tokenization_utils_fast": [],
+    "tokenization_utils_sentencepiece": ["SentencePieceBackend"],
     "trainer_callback": [
         "DefaultFlowCallback",
         "EarlyStoppingCallback",
@@ -244,6 +243,8 @@ _import_structure = {
         "is_vision_available",
         "logging",
     ],
+    "utils.import_utils": ["requires_backends"],
+    "utils.kernel_config": ["KernelConfig"],
     "utils.quantization_config": [
         "AqlmConfig",
         "AutoRoundConfig",
@@ -254,20 +255,18 @@ _import_structure = {
         "EetqConfig",
         "FbgemmFp8Config",
         "FineGrainedFP8Config",
+        "FPQuantConfig",
         "GPTQConfig",
         "HiggsConfig",
         "HqqConfig",
         "Mxfp4Config",
         "QuantoConfig",
         "QuarkConfig",
-        "FPQuantConfig",
         "SpQRConfig",
         "TorchAoConfig",
         "VptqConfig",
     ],
     "video_utils": [],
-    "utils.kernel_config": ["KernelConfig"],
-    "utils.import_utils": ["requires_backends"],
 }
 
 # tokenizers-backed objects
@@ -283,8 +282,8 @@ except OptionalDependencyNotAvailable:
 else:
     # Fast tokenizers structure
     _import_structure["tokenization_utils_tokenizers"] = [
-        "TokenizersBackend",
         "PreTrainedTokenizerFast",
+        "TokenizersBackend",
     ]
 
 
@@ -387,6 +386,7 @@ else:
             "EncoderRepetitionPenaltyLogitsProcessor",
             "EosTokenCriteria",
             "EpsilonLogitsWarper",
+            "MinPLogitsWarper",
             "EtaLogitsWarper",
             "ExponentialDecayLengthPenalty",
             "ForcedBOSTokenLogitsProcessor",
@@ -400,7 +400,6 @@ else:
             "MaxTimeCriteria",
             "MinLengthLogitsProcessor",
             "MinNewTokensLengthLogitsProcessor",
-            "MinPLogitsWarper",
             "NoBadWordsLogitsProcessor",
             "NoRepeatNGramLogitsProcessor",
             "PrefixConstrainedLogitsProcessor",
@@ -615,8 +614,7 @@ if TYPE_CHECKING:
     from .masking_utils import AttentionMaskInterface as AttentionMaskInterface
     from .model_debugging_utils import model_addition_debugger_context as model_addition_debugger_context
 
-    # Model Cards
-    from .modelcard import ModelCard as ModelCard
+    # Models
     from .modeling_layers import GradientCheckpointingLayer as GradientCheckpointingLayer
     from .modeling_rope_utils import ROPE_INIT_FUNCTIONS as ROPE_INIT_FUNCTIONS
     from .modeling_rope_utils import RopeParameters as RopeParameters
