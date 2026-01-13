@@ -278,9 +278,7 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
                 msg += f"User message              : {repr(user_message)}\n"
                 msg += f"Continuous batching output: {repr(decoded_continuous_batching_output)}\n"
                 msg += f"Generate output           : {repr(decoded_generate_output)}"
-                # CPU may have different outputs
-                if torch_device != "cpu":
-                    self.fail(msg)
+                self.fail(msg)
 
         del model
         flush_memory(flush_compile=use_compile)
