@@ -303,8 +303,7 @@ class VipLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         image = Image.open(requests.get(url, stream=True).raw)
         prompt = "USER: <image>\nCan you please describe this image?\nASSISTANT:"
 
-        inputs = processor(prompt, image, return_tensors="pt").to(torch_device, torch.float16)
-
+        inputs = processor(text=prompt, images=image, return_tensors="pt").to(torch_device, torch.float16)
         outputs = model.generate(**inputs, max_new_tokens=10)
 
         EXPECTED_OUTPUT = "USER:  \nCan you please describe this image?\nASSISTANT: The image features a brown and white cat sitting on"
