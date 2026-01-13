@@ -78,7 +78,13 @@ def check_file_exists_on_github(file_path: str) -> bool:
 def get_modified_cards() -> list[str]:
     """Get the list of model names from modified files in docs/source/en/model_doc/"""
 
-    result = subprocess.check_output(["git", "diff", "--name-only", "upstream/main"], text=True)
+    current_branch = subprocess.check_output(["git", "branch", "--show-current"], text=True).strip()
+    if current_branch == "main":
+        # On main branch, only uncommitted changes detected
+        result = subprocess.check_output(["git", "diff", "--name-only", "HEAD"], text=True)
+    else:
+        fork_point_sha = subprocess.check_output("git merge-base main HEAD".split()).decode("utf-8")
+        result = subprocess.check_output(f"git diff --name-only {fork_point_sha}".split()).decode("utf-8")
 
     model_names = []
     for line in result.strip().split("\n"):
@@ -343,12 +349,10 @@ def main(all=False, models=None, check_only=False):
     if check_only:
         # Check all model cards for missing dates
         all_model_cards = get_all_model_cards()
-        print(f"Checking all {len(all_model_cards)} model cards for missing dates...")
         missing_dates = check_missing_dates(all_model_cards)
 
         # Check modified model cards for incorrect dates
         modified_cards = get_modified_cards()
-        print(f"Checking {len(modified_cards)} modified model cards for incorrect dates...")
         incorrect_dates = check_incorrect_dates(modified_cards)
 
         if missing_dates or incorrect_dates:
@@ -358,22 +362,17 @@ def main(all=False, models=None, check_only=False):
                 f"Missing or incorrect dates in the following model cards: {' '.join(problematic_cards)}\n"
                 f"Run `python utils/add_dates.py --models {' '.join(model_names)}` to fix them."
             )
-        print("All dates are present and correct!")
         return
 
     # Determine which model cards to process
     if all:
         model_cards = get_all_model_cards()
-        print(f"Processing all {len(model_cards)} model cards from docs directory")
     elif models:
         model_cards = models
-        print(f"Processing specified model cards: {model_cards}")
     else:
         model_cards = get_modified_cards()
         if not model_cards:
-            print("No modified model cards found.")
             return
-        print(f"Processing modified model cards: {model_cards}")
 
     insert_dates(model_cards)
 
