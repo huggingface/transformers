@@ -390,7 +390,7 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         model = AutoModelForCausalLM.from_pretrained(model_id)
 
-        generation_config = GenerationConfig(do_sample=False, block_size=32)
+        generation_config = GenerationConfig(do_sample=False, block_size=32, num_return_sequences=1)
         with model.continuous_batching_context_manager(generation_config=generation_config) as manager:
             manager.logit_processor = LogitsProcessorList()
 

@@ -80,6 +80,7 @@ class TestBatchGeneration(unittest.TestCase):
             num_blocks=num_blocks,
             block_size=block_size,
             max_batch_tokens=max_batch_tokens,
+            num_return_sequences=1,
         )
 
         tokenized = self.tokenizer(_TEST_PROMPTS, truncation=True, max_length=512)
@@ -142,6 +143,7 @@ class TestBatchGeneration(unittest.TestCase):
             num_blocks=num_blocks,
             block_size=block_size,
             max_batch_tokens=max_batch_tokens,
+            num_return_sequences=1,
         )
 
         tokenized = self.tokenizer(_TEST_PROMPTS, truncation=True, max_length=512)  # Use fewer prompts for faster test
