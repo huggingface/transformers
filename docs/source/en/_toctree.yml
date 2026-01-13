@@ -525,6 +525,8 @@
         title: glm4
       - local: model_doc/glm4_moe
         title: glm4_moe
+      - local: model_doc/glm_image
+        title: GlmImage
       - local: model_doc/openai-gpt
         title: GPT
       - local: model_doc/gpt_neo
