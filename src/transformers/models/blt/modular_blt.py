@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,17 +14,17 @@
 """Blt modular model, inheriting from Mllama where appropriate."""
 
 from collections.abc import Callable
-from typing import Optional, Union
 
 import torch
 import torch.distributions
 import torch.nn as nn
 import torch.nn.functional as F
 
+from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
-from ...modeling_rope_utils import dynamic_rope_update
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
@@ -217,7 +216,7 @@ def _prepare_patch_cross_attention_mask(
     return cross_attention_mask
 
 
-def process_patch_lengths(patch_lengths: torch.Tensor, max_patch_length: Optional[int]) -> torch.Tensor:
+def process_patch_lengths(patch_lengths: torch.Tensor, max_patch_length: int | None) -> torch.Tensor:
     """
     Splits patch lengths into smaller segments if they exceed `max_patch_length`.
     Pads the result to uniform length across the batch.
@@ -304,7 +303,7 @@ class BltSelfAttention(MllamaTextSelfAttention):
 class BltCrossAttention(MllamaTextCrossAttention):
     """Cross-attention module for Blt, following transformers style"""
 
-    def __init__(self, config: BltConfig, layer_idx: int, hidden_size: Optional[int] = None):
+    def __init__(self, config: BltConfig, layer_idx: int, hidden_size: int | None = None):
         super().__init__()
         self.is_causal = False
         self.q_norm = BltRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
@@ -313,8 +312,8 @@ class BltCrossAttention(MllamaTextCrossAttention):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        cross_attention_states: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
+        cross_attention_states: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
         bsz, q_len, _ = hidden_states.size()
@@ -382,9 +381,9 @@ class BltPreTrainedModel(MllamaPreTrainedModel):
         # Norms: RMSNorm / LayerNorm
         if isinstance(module, (BltRMSNorm, nn.LayerNorm)) or "RMSNorm" in class_name or "LayerNorm" in class_name:
             if getattr(module, "weight", None) is not None:
-                nn.init.ones_(module.weight)
+                init.ones_(module.weight)
             if getattr(module, "bias", None) is not None:
-                nn.init.zeros_(module.bias)
+                init.zeros_(module.bias)
             return
 
         # Embeddings (encoder / patcher / hash embeddings)
@@ -396,7 +395,7 @@ class BltPreTrainedModel(MllamaPreTrainedModel):
                 hidden_size = module.embedding_dim
 
             std = hidden_size**-0.5
-            nn.init.trunc_normal_(
+            init.trunc_normal_(
                 module.weight,
                 mean=0.0,
                 std=std,
@@ -404,7 +403,7 @@ class BltPreTrainedModel(MllamaPreTrainedModel):
                 b=3 * std,
             )
             if module.padding_idx is not None:
-                nn.init.zeros_(module.weight[module.padding_idx])
+                init.zeros_(module.weight[module.padding_idx])
             return
 
         # Self-attention / cross-attention projections
@@ -430,7 +429,7 @@ class BltPreTrainedModel(MllamaPreTrainedModel):
             for proj_name in ("q_proj", "k_proj", "v_proj"):
                 proj = getattr(module, proj_name, None)
                 if proj is not None and hasattr(proj, "weight"):
-                    nn.init.trunc_normal_(
+                    init.trunc_normal_(
                         proj.weight,
                         mean=0.0,
                         std=std,
@@ -438,12 +437,12 @@ class BltPreTrainedModel(MllamaPreTrainedModel):
                         b=3 * std,
                     )
                     if getattr(proj, "bias", None) is not None:
-                        nn.init.zeros_(proj.bias)
+                        init.zeros_(proj.bias)
 
             # Output projection: o_proj or dense
             o_proj = getattr(module, "o_proj", getattr(module, "dense", None))
             if o_proj is not None and hasattr(o_proj, "weight"):
-                nn.init.trunc_normal_(
+                init.trunc_normal_(
                     o_proj.weight,
                     mean=0.0,
                     std=std,
@@ -451,7 +450,7 @@ class BltPreTrainedModel(MllamaPreTrainedModel):
                     b=3 * std,
                 )
                 if getattr(o_proj, "bias", None) is not None:
-                    nn.init.zeros_(o_proj.bias)
+                    init.zeros_(o_proj.bias)
             return
 
         # MLP / FFN blocks
@@ -475,7 +474,7 @@ class BltPreTrainedModel(MllamaPreTrainedModel):
             for proj in (gate_proj, up_proj):
                 if proj is not None and hasattr(proj, "weight"):
                     std = in_std or (proj.weight.shape[1] ** -0.5)
-                    nn.init.trunc_normal_(
+                    init.trunc_normal_(
                         proj.weight,
                         mean=0.0,
                         std=std,
@@ -483,13 +482,13 @@ class BltPreTrainedModel(MllamaPreTrainedModel):
                         b=3 * std,
                     )
                     if getattr(proj, "bias", None) is not None:
-                        nn.init.zeros_(proj.bias)
+                        init.zeros_(proj.bias)
 
             # output/ down projections
             if down_proj is not None and hasattr(down_proj, "weight"):
                 hidden_dim = down_proj.weight.shape[1]
                 out_std = hidden_dim**-0.5
-                nn.init.trunc_normal_(
+                init.trunc_normal_(
                     down_proj.weight,
                     mean=0.0,
                     std=out_std,
@@ -497,14 +496,14 @@ class BltPreTrainedModel(MllamaPreTrainedModel):
                     b=3 * out_std,
                 )
                 if getattr(down_proj, "bias", None) is not None:
-                    nn.init.zeros_(down_proj.bias)
+                    init.zeros_(down_proj.bias)
             return
 
         # Generic Linear layers (projections, lm_head, etc.)
         if isinstance(module, nn.Linear):
             fan_in = module.in_features
             std = fan_in**-0.5
-            nn.init.trunc_normal_(
+            init.trunc_normal_(
                 module.weight,
                 mean=0.0,
                 std=std,
@@ -512,10 +511,18 @@ class BltPreTrainedModel(MllamaPreTrainedModel):
                 b=3 * std,
             )
             if module.bias is not None:
-                nn.init.zeros_(module.bias)
+                init.zeros_(module.bias)
             return
 
-        return
+        if isinstance(module, BltRotaryEmbedding):
+            rope_fn = (
+                ROPE_INIT_FUNCTIONS[module.rope_type]
+                if module.rope_type != "default"
+                else module.compute_default_rope_parameters
+            )
+            buffer_value, _ = rope_fn(module.config)
+            init.copy_(module.inv_freq, buffer_value)
+            init.copy_(module.original_inv_freq, buffer_value)
 
     def _update_causal_mask(self, module):
         raise AttributeError("No need to inherit it!")
@@ -555,16 +562,16 @@ class BltLocalEncoder(BltPreTrainedModel):
 
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        patch_embeds: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
-        num_patches: Optional[int] = None,
-        patch_ids: Optional[torch.Tensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        patch_embeds: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        cache_position: torch.LongTensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
+        num_patches: int | None = None,
+        patch_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
         if inputs_embeds is None:
@@ -669,14 +676,14 @@ class BltLocalDecoder(BltPreTrainedModel):
     @check_model_inputs
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        patch_embeds: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        patch_embeds: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        cache_position: torch.LongTensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
         batch_size = inputs_embeds.shape[0]
@@ -745,10 +752,10 @@ class BltGlobalTransformer(BltPreTrainedModel):
     def forward(
         self,
         input_embeds: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
         batch_size, seq_len, _ = input_embeds.shape
@@ -792,16 +799,16 @@ class BltPatcher(BltPreTrainedModel):
 
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        patch_size: Optional[int] = None,
-        threshold: Optional[float] = None,
-        max_patch_length: Optional[int] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
+        patch_size: int | None = None,
+        threshold: float | None = None,
+        max_patch_length: int | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -934,14 +941,14 @@ class BltModel(BltPreTrainedModel):
     @check_model_inputs
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        patch_lengths: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        patch_lengths: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -1098,20 +1105,20 @@ class BltForCausalLM(MllamaForCausalLM):
 
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        cross_attention_states: Optional[torch.LongTensor] = None,  # Keep for compatibility
-        cross_attention_mask: Optional[torch.LongTensor] = None,
-        full_text_row_masked_out_mask: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        cross_attention_states: torch.LongTensor | None = None,  # Keep for compatibility
+        cross_attention_mask: torch.LongTensor | None = None,
+        full_text_row_masked_out_mask: tuple[torch.Tensor, torch.Tensor] | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, CausalLMOutputWithPast]:
+    ) -> tuple | CausalLMOutputWithPast:
         # Call parent forward but exclude cross_attention_states from model call
         outputs = self.model(
             input_ids=input_ids,

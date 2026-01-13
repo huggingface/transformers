@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The Fairseq Authors and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """PyTorch Hubert model."""
-
-from typing import Optional, Union
 
 import torch
 import torch.nn as nn
@@ -145,6 +142,10 @@ class HubertPreTrainedModel(PreTrainedModel):
         elif isinstance(module, (nn.LayerNorm, nn.GroupNorm, nn.BatchNorm1d)):
             init.zeros_(module.bias)
             init.ones_(module.weight)
+            if getattr(module, "running_mean", None) is not None:
+                init.zeros_(module.running_mean)
+                init.ones_(module.running_var)
+                init.zeros_(module.num_batches_tracked)
         elif isinstance(module, nn.Conv1d):
             if is_deepspeed_zero3_enabled():
                 import deepspeed
@@ -167,7 +168,7 @@ class HubertPreTrainedModel(PreTrainedModel):
             if hasattr(module, "layer_weights"):
                 init.constant_(module.layer_weights, 1.0 / (self.config.num_hidden_layers + 1))
 
-    def _get_feat_extract_output_lengths(self, input_lengths: Union[torch.LongTensor, int]):
+    def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor | int):
         """
         Computes the output length of the convolutional layers
         """
@@ -220,14 +221,14 @@ class HubertModel(Wav2Vec2Model, HubertPreTrainedModel):
 
     def forward(
         self,
-        input_values: Optional[torch.Tensor],
-        attention_mask: Optional[torch.Tensor] = None,
-        mask_time_indices: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        input_values: torch.Tensor | None,
+        attention_mask: torch.Tensor | None = None,
+        mask_time_indices: torch.FloatTensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, BaseModelOutput]:
+    ) -> tuple | BaseModelOutput:
         r"""
         mask_time_indices (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices to mask extracted features for contrastive loss. When in training mode, model learns to predict

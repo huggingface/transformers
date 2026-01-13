@@ -26,14 +26,11 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import is_accelerate_available, is_torch_available
+from transformers.utils import is_torch_available
 
 
 if is_torch_available():
     import torch
-
-if is_accelerate_available():
-    from accelerate import init_empty_weights
 
 
 class VptqConfigTest(unittest.TestCase):
@@ -162,7 +159,7 @@ class VptqTest(unittest.TestCase):
         layer_configs["model.decoder.project_in"] = value
         quantization_config = VptqConfig(config_for_layers=layer_configs, shared_layer_config=shared_layer_config)
 
-        with init_empty_weights():
+        with torch.device("meta"):
             model = AutoModelForCausalLM.from_config(config)
 
         nb_linears = 0
@@ -179,7 +176,7 @@ class VptqTest(unittest.TestCase):
         self.assertEqual(nb_linears - 1, nb_vptq_linear)
 
         # Try with `linear_weights_not_to_quantize`
-        with init_empty_weights():
+        with torch.device("meta"):
             model = AutoModelForCausalLM.from_config(config)
         quantization_config = VptqConfig(config_for_layers=layer_configs, shared_layer_config=shared_layer_config)
         model, _ = replace_with_vptq_linear(

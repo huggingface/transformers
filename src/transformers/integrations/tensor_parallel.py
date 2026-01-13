@@ -19,6 +19,9 @@ import os
 import re
 from functools import reduce
 
+from ..distributed import DistributedConfig
+from ..utils import is_torch_greater_or_equal, logging
+from ..utils.generic import GeneralInterface
 from ..utils.import_utils import is_torch_available
 
 
@@ -27,16 +30,11 @@ if is_torch_available():
     import torch.distributed as dist
     from torch import nn
 
-from ..distributed import DistributedConfig
-from ..utils import is_torch_greater_or_equal, logging
-from ..utils.generic import GeneralInterface
+    # Cache this result has it's a C FFI call which can be pretty time-consuming
+    _torch_distributed_available = torch.distributed.is_available()
 
 
 logger = logging.get_logger(__name__)
-
-if is_torch_available():
-    # Cache this result has it's a C FFI call which can be pretty time-consuming
-    _torch_distributed_available = torch.distributed.is_available()
 
 
 def initialize_tensor_parallelism(
@@ -930,12 +928,7 @@ class SequenceParallel(TensorParallelLayer):
 
     def shard_tensor(
         self,
-        param,
-        param_type=None,
-        param_casting_dtype=None,
-        to_contiguous=None,
-        rank=None,
-        device_mesh=None,
+        param: torch.Tensor,
         tensor_idx=None,
     ):
         parameter = param[...].to(param_casting_dtype)
@@ -959,23 +952,12 @@ class GroupedGemmParallel(TensorParallelLayer):
         super().__init__(**kwargs)
 
     def shard_tensor(
-        self,
-        param,
-        param_type=None,
-        param_casting_dtype=None,
-        to_contiguous=None,
-        rank=None,
-        device_mesh=None,
-        tensor_idx=None,
-    ):
-        empty_param = self.empty_param
-        ep_rank = self.rank
-        device_mesh = self.device_mesh
-
-        global_num_experts = empty_param.shape[0]
-        if global_num_experts % device_mesh.size() != 0:
+        self, param: torch.Tensor, tensor_idx: int | None = None, device=None, dtype=None
+    ) -> torch.Tensor:
+        global_num_experts = self.empty_param.shape[0]
+        if global_num_experts % self.device_mesh.size() != 0:
             raise ValueError(
-                f"Global number of experts must be divisible by number of devices: {global_num_experts} % {device_mesh.size()} != 0"
+                f"Global number of experts must be divisible by number of devices: {global_num_experts} % {self.device_mesh.size()} != 0"
             )
         local_num_experts = global_num_experts // device_mesh.size()
         parameter = param[ep_rank * local_num_experts : (ep_rank + 1) * local_num_experts].to(param_casting_dtype)

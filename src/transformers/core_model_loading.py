@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,6 +15,7 @@
 
 from __future__ import annotations
 
+import math
 import os
 import re
 from abc import abstractmethod
@@ -25,11 +25,12 @@ from concurrent.futures import Future, ThreadPoolExecutor
 from contextlib import contextmanager
 from copy import deepcopy
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Optional, Union
+from itertools import chain
+from typing import TYPE_CHECKING, Any
 
 import torch
 
-from .integrations.accelerate import offload_weight
+from .integrations.accelerate import get_device, offload_weight
 from .integrations.tensor_parallel import ALL_PARALLEL_STYLES
 from .utils import is_env_variable_true, logging
 
@@ -46,7 +47,7 @@ logger = logging.get_logger(__name__)
 
 
 def build_glob_alternation(
-    globs: list[Union[WeightRenaming, WeightConverter, str]],
+    globs: list[WeightRenaming | WeightConverter | str],
 ) -> tuple[re.Pattern, dict[str, str], dict[str, str]]:
     """
     Build a single alternation regex with one named group per glob.
@@ -141,7 +142,7 @@ class Concatenate(ConversionOps):
     ) -> dict[str, torch.Tensor]:
         target_pattern = self.get_target_pattern(target_patterns)
         all_tensors = []
-        # Very important to keep the relative order of the source patterms here, so we iterate over them not the
+        # Very important to keep the relative order of the source patterns here, so we iterate over them not the
         # input directly as it's unordered!
         for source_pattern in source_patterns:
             tensors = input_dict[source_pattern]
@@ -275,14 +276,174 @@ class PermuteForRope(ConversionOps):
         return output
 
 
+class ErnieFuseAndSplitTextVisionExperts(ConversionOps):
+    r"""
+    Special operation that splits a module list over all keys and fuses over the number of original modules.
+
+    Example with 2 original modules "Gate" and "Up" with 2 target keys "Text" and "Vision":
+
+                 ModuleList 1            ModuleList 2
+                [   Gate    ]            [   Up    ]
+                |           |            |         |
+          [Gate_Text] [Gate_Vision] [Up_Text]   [Up_Vision]
+              \                  \  /                /
+               \                 \ /                /
+                \               /  \               /
+                 \            /     \             /
+                 [GateUp_Text]      [GateUp_Vision]
+
+    The splits are equal and are defined by the amount of target keys.
+    The final fusions are defined by the amount of original module lists.
+    """
+
+    def __init__(self, stack_dim: int = 0, concat_dim: int = 1):
+        self.stack_dim = stack_dim
+        self.concat_dim = concat_dim
+
+    def split_list_into_chunks(self, tensor_list: list[torch.Tensor], chunks: int = 2):
+        split_size = math.ceil(len(tensor_list) / chunks)  # best effort split size
+        return [tensor_list[i * split_size : (i + 1) * split_size] for i in range(chunks)]
+
+    @torch.no_grad()
+    def convert(
+        self,
+        input_dict: dict[str, list[torch.Tensor]],
+        source_patterns: list[str],
+        target_patterns: list[str],
+        config,
+        **kwargs,
+    ) -> dict[str, list[torch.Tensor]]:
+        valid_keys = input_dict.keys()
+        split_and_fused = defaultdict(list)
+        for key in source_patterns:
+            if key not in valid_keys:
+                raise ValueError(
+                    f"Expected pattern {key} in collected tensors but only found tensors for: {valid_keys}"
+                )
+
+            tensors = input_dict.get(key, [])
+            split_tensor_lists = self.split_list_into_chunks(tensors, chunks=len(target_patterns))
+            stacked_tensors = (torch.stack(tensor_group, dim=self.stack_dim) for tensor_group in split_tensor_lists)
+            for idx, tensor_group in enumerate(stacked_tensors):
+                split_and_fused[target_patterns[idx]].append(tensor_group)
+
+        for k, v in split_and_fused.items():
+            split_and_fused[k] = torch.cat(v, dim=self.concat_dim)
+
+        return split_and_fused
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return ErnieSplitAndDecoupleTextVisionExperts(stack_dim=self.stack_dim, concat_dim=self.concat_dim)
+
+
+class ErnieSplitAndDecoupleTextVisionExperts(ConversionOps):
+    r"""
+    Special operation that splits a fused module list over all original modules and
+    then decouples them into a mixed module list each over all keys.
+
+    Example with 2 original modules "Gate" and "Up" with 2 target keys "Text" and "Vision":
+
+                    [GateUp_Text]     [GateUp_Vision]
+                  /              \   /             \
+                 /                \ /               \
+                /                / \                 \
+               /                /   \                 \
+          [Gate_Text] [Gate_Vision] [Up_Text]   [Up_Vision]
+                |           |            |         |
+                [   Gate    ]            [   Up    ]
+                 ModuleList 1            ModuleList 2
+
+    The splits are equal and are defined by the amount of original module lists.
+    The final decoupled module lists are defined by the amount of keys.
+    """
+
+    def __init__(self, stack_dim: int = 0, concat_dim: int = 1):
+        self.stack_dim = stack_dim
+        self.concat_dim = concat_dim
+
+    @torch.no_grad()
+    def convert(
+        self,
+        input_dict: dict[str, list[torch.Tensor]],
+        source_patterns: list[str],
+        target_patterns: list[str],
+        config,
+        **kwargs,
+    ) -> dict[str, list[torch.Tensor]]:
+        fused_modules = len(target_patterns)
+        valid_keys = input_dict.keys()
+        split_tensors = []
+        for key in source_patterns:
+            if key not in valid_keys:
+                raise ValueError(
+                    f"Expected pattern {key} in collected tensors but only found tensors for: {valid_keys}"
+                )
+
+            # Assuming that we get single sized lists here to index with 0
+            split_tensors.append(input_dict[key][0].chunk(fused_modules, dim=self.concat_dim))
+
+        decoupled = {}
+        for idx, key in enumerate(target_patterns):
+            tensor_groups = [
+                list(torch.unbind(tensor_group[idx], dim=self.stack_dim)) for tensor_group in split_tensors
+            ]
+            tensor_list = list(chain.from_iterable(tensor_groups))
+            targets = [key.replace("*", f"{i}") for i in range(len(tensor_list))]
+            decoupled |= dict(zip(targets, tensor_list))
+
+        return decoupled
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return ErnieFuseAndSplitTextVisionExperts(stack_dim=self.stack_dim, concat_dim=self.concat_dim)
+
+
+class Transpose(ConversionOps):
+    """
+    Transposes the given tensor along dim0 and dim1.
+    """
+
+    def __init__(self, dim0: int = 0, dim1: int = 1):
+        self.dim0 = dim0
+        self.dim1 = dim1
+
+    @torch.no_grad()
+    def convert(
+        self,
+        input_dict: dict[str, list[torch.Tensor]],
+        source_patterns: list[str],
+        target_patterns: list[str],
+        config,
+        **kwargs,
+    ) -> dict[str, list[torch.Tensor]]:
+        if len(input_dict) != len(target_patterns):
+            raise ValueError(
+                f"Transpose conversion can only happen on each key ({len(input_dict)}) "
+                f"and should match exact one target ({len(target_patterns)})."
+            )
+
+        output: dict[str, list[torch.Tensor]] = {}
+        for key, target_pattern in zip(input_dict.keys(), target_patterns):
+            tensor = input_dict.get(key, [])
+            if len(tensor) != 1:
+                raise ValueError(f"Transpose conversion requires exactly one tensor, found {len(tensor)}.")
+            output[target_pattern] = torch.transpose(tensor[0], dim0=self.dim0, dim1=self.dim1).contiguous()
+        return output
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return Transpose(dim0=self.dim1, dim1=self.dim0)
+
+
 @dataclass(slots=True)
 class WeightTransform:
-    source_patterns: Union[str, list[str]] = field(init=True)
-    target_patterns: Union[str, list[str]] = field(init=True)
+    source_patterns: str | list[str] = field(init=True)
+    target_patterns: str | list[str] = field(init=True)
     compiled_sources: re.Pattern = field(init=False)
 
-    distributed_operation: Optional[TensorParallelLayer] = None
-    quantization_operation: Optional[ConversionOps] = None
+    distributed_operation: TensorParallelLayer | None = None
+    quantization_operation: ConversionOps | None = None
 
     collected_tensors: dict[str, list[Future]] = field(default_factory=lambda: defaultdict(list), init=False)
     layer_targets: dict[str, set[str]] = field(default_factory=lambda: defaultdict(set), init=False)
@@ -299,8 +460,11 @@ class WeightTransform:
         for i, pattern in enumerate(self.target_patterns):
             # Some mapping contains `^` to notify start of string when matching -> remove it during reverse mapping
             pattern = pattern.removeprefix("^")
-            # Remove negative lookahead if any. This is ugly but needed for reverse mapping of Qwen2.5 and Sam3!
-            pattern = re.sub(r"\(\?!.+\)", "", pattern)
+            # Some mapping contains `$` to notify end of string when matching -> remove it during reverse mapping
+            pattern = pattern.removesuffix("$")
+            # Remove negative lookahead/behind if any. This is ugly but needed for reverse mapping of
+            # Qwen2.5, Sam3, Ernie4.5 VL MoE!
+            pattern = re.sub(r"\(\?.+\)", "", pattern)
             # Allow capturing groups in patterns, i.e. to add/remove a prefix to all keys (e.g. timm_wrapper, sam3)
             if r"(.+)" in pattern:
                 pattern = pattern.replace(r"(.+)", r"\1")
@@ -335,19 +499,19 @@ class WeightTransform:
         match_object = self.compiled_sources.search(source_key)
         if match_object is None:
             return source_key, None
+
         # Find the source that produced the match (it's the first group that matched, as the search stops after first branch match)
         matching_group_name = next(name for name, val in match_object.groupdict().items() if val is not None)
         source_pattern_that_matched = self.source_patterns[int(matching_group_name[1:])]
         # If we matched, we always replace with the first target pattern, in case we have several (one to many transform)
         replacement = self.target_patterns[0]
-        # # Allow capturing groups in patterns, i.e. to add a prefix to all keys (e.g. timm_wrapper, sam3)
+        # Allow capturing groups in patterns, i.e. to add a prefix to all keys (e.g. timm_wrapper, sam3)
         if r"\1" in replacement:
             # The index of the internal group we need to replace is the index of the matched named group as it comes
             # inside that matched named group
             replaced_group_idx = self.compiled_sources.groupindex[matching_group_name] + 1
             replacement = replacement.replace(r"\1", match_object.group(replaced_group_idx))
         renamed_key = source_key.replace(match_object.group(0), replacement)
-
         return renamed_key, source_pattern_that_matched
 
     def reverse_transform(self) -> WeightTransform:
@@ -405,8 +569,8 @@ class WeightRenaming(WeightTransform):
         model=None,
         config=None,
         hf_quantizer=None,
-        missing_keys: Optional[MutableSet[str]] = None,
-        conversion_errors: Optional[MutableMapping[str, str]] = None,
+        missing_keys: MutableSet[str] | None = None,
+        conversion_errors: MutableMapping[str, str] | None = None,
     ):
         # Collect the tensors here - we use a new dictionary to avoid keeping them in memory in the internal
         # attribute during the whole process
@@ -434,6 +598,13 @@ class WeightRenaming(WeightTransform):
         return collected_tensors, conversion_errors
 
 
+# List of classes that are known to be able to use m:n
+_INTERNAL_MANY_TO_MANY_CONVERSIONS = (
+    ErnieFuseAndSplitTextVisionExperts,
+    ErnieSplitAndDecoupleTextVisionExperts,
+)
+
+
 @dataclass(slots=True)
 class WeightConverter(WeightTransform):
     operations: list[ConversionOps] = field(default_factory=list, repr=False)
@@ -441,9 +612,11 @@ class WeightConverter(WeightTransform):
     def __post_init__(self):
         WeightTransform.__post_init__(self)
         if bool(len(self.source_patterns) - 1) + bool(len(self.target_patterns) - 1) >= 2:
-            raise ValueError(
-                f"source keys={self.source_patterns}, target_patterns={self.target_patterns} but you can only have one to many, one to one or many to one."
-            )
+            # We allow many-to-many only if we use an internal operation that can handle it
+            if not any(isinstance(op, _INTERNAL_MANY_TO_MANY_CONVERSIONS) for op in self.operations):
+                raise ValueError(
+                    f"source keys={self.source_patterns}, target_patterns={self.target_patterns} but you can only have one to many, one to one or many to one."
+                )
         if not self.operations:
             raise ValueError("WeightConverter requires at least one operation.")
 
@@ -453,8 +626,8 @@ class WeightConverter(WeightTransform):
         model=None,
         config=None,
         hf_quantizer=None,
-        missing_keys: Optional[MutableSet[str]] = None,
-        conversion_errors: Optional[MutableMapping[str, str]] = None,
+        missing_keys: MutableSet[str] | None = None,
+        conversion_errors: MutableMapping[str, str] | None = None,
     ):
         # Collect the tensors here - we use a new dictionary to avoid keeping them in memory in the internal
         # attribute during the whole process
@@ -535,13 +708,13 @@ def spawn_materialize(
 
 
 def spawn_tp_materialize(
-    thread_pool: ThreadPoolExecutor | None, tensor: torch.Tensor, sharding_method, tensor_idx, dtype=None
+    thread_pool: ThreadPoolExecutor | None, tensor: torch.Tensor, sharding_method, tensor_idx, device=None, dtype=None
 ) -> Future | Callable:
     """Materialize and shard a tensor (according to the TP-plan) from file asynchronously if `thread_pool` is provided, or
     return a Callable that will load the tensor synchronously when called."""
 
     def _job():
-        return sharding_method.shard_tensor(tensor, param_casting_dtype=dtype, tensor_idx=tensor_idx)[0]
+        return sharding_method.shard_tensor(tensor, tensor_idx=tensor_idx, device=device, dtype=dtype)
 
     if thread_pool is not None:
         return thread_pool.submit(_job)
@@ -565,7 +738,7 @@ def log_conversion_errors(
     first_target_key: str,
     conversion_errors: MutableMapping[str, str],
     extras: Any = None,
-    op: Union[list[ConversionOps], ConversionOps, None] = None,
+    op: list[ConversionOps] | ConversionOps | None = None,
 ):
     """Catch all exceptions during `convert` calls, and log the errors for later. Re-raise a `SkipParameters` exception
     that will be catched later to skip the parameters that raised the original Exception."""
@@ -573,7 +746,7 @@ def log_conversion_errors(
         yield
     except Exception as e:
 
-        def _format_op_name(curr_op: Union[list[ConversionOps], ConversionOps, None]) -> Optional[str]:
+        def _format_op_name(curr_op: list[ConversionOps] | ConversionOps | None) -> str | None:
             if curr_op is None:
                 return None
             if isinstance(curr_op, (list, tuple, set)):
@@ -609,7 +782,7 @@ def set_param_for_module(
     mismatch_keys: MutableSet[tuple[str, torch.Size, torch.Size]],
     missing_keys: MutableSet[str],
     unexpected_keys: MutableSet[str],
-    distributed_operation: Optional[TensorParallelLayer],
+    distributed_operation: TensorParallelLayer | None,
     hf_quantizer: HfQuantizer,
 ):
     module_path, _, param_name = target_name.rpartition(".")
@@ -719,6 +892,7 @@ def convert_and_load_state_dict_in_model(
     device_mesh: torch.distributed.device_mesh.DeviceMesh | None = None,
     disk_offload_index: dict | None = None,
     disk_offload_folder: str | None = None,
+    offload_buffers: bool = False,
 ):
     r"""
     We build a mapping from the keys obtained by renaming each of the checkpoint keys according to the weight_mapping rules.
@@ -809,15 +983,12 @@ def convert_and_load_state_dict_in_model(
     prefix = model.base_model_prefix
     tp_plan = tp_plan or {}
     device_map = device_map or {"": "cpu"}
-    # Here, we first sort by number of submodules, then length of the full string, to make sure to match correctly
-    device_map_regex = re.compile(
-        "|".join(rf"({k})" for k in sorted(device_map.keys(), key=lambda x: (x.count("."), len(x)), reverse=True))
-    )
     dtype_plan = dtype_plan or {}
     weight_mapping = weight_mapping or []
     meta_model_state_dict = model.state_dict()
-    missing_keys = set(meta_model_state_dict.keys())
+    model_buffers = {k for k, _ in model.named_buffers()}
 
+    missing_keys = set(meta_model_state_dict.keys())
     conversion_errors = {}
     mismatch_keys = set()
     unexpected_keys = set()
@@ -891,7 +1062,7 @@ def convert_and_load_state_dict_in_model(
                     if getattr(mapping, "distributed_operation", None) is None:
                         tp_layer = ALL_PARALLEL_STYLES[model.tp_plan[matched_tp_pattern]].__class__
                         mapping.distributed_operation = tp_layer(
-                            device_mesh=device_mesh, rank=device_map[""].index, empty_param=empty_param.clone()
+                            device_mesh=device_mesh, rank=device_mesh.get_local_rank(), empty_param=empty_param.clone()
                         )
                     shard_index = len(mapping.collected_tensors.get(original_key, []))
                     future_or_tensor = spawn_tp_materialize(
@@ -899,14 +1070,12 @@ def convert_and_load_state_dict_in_model(
                         tensor,
                         mapping.distributed_operation,
                         shard_index,
+                        device_map[""],
                         _dtype,
                     )
 
             if future_or_tensor is None:
-                device_match = device_map_regex.match(renamed_key)
-                param_device = device_map[device_match.group()] if device_match else device_map.get("", "cpu")
-                # If disk, we need to materialize on cpu first
-                param_device = "cpu" if param_device == "disk" else param_device
+                param_device = get_device(device_map, renamed_key, valid_torch_device=True)
                 future_or_tensor = spawn_materialize(thread_pool, tensor, param_device, _dtype)
 
             mapping.add_tensor(renamed_key, original_key, source_pattern, future_or_tensor)
@@ -935,10 +1104,9 @@ def convert_and_load_state_dict_in_model(
                     )
                     for target_name, param in realized_value.items():
                         param = param[0] if isinstance(param, list) else param
-                        device_match = device_map_regex.match(target_name)
-                        param_device = device_map[device_match.group()] if device_match else device_map.get("", "cpu")
+                        param_device = get_device(device_map, target_name)
                         # Offloading support
-                        if param_device == "disk":
+                        if param_device == "disk" and (target_name not in model_buffers or offload_buffers):
                             disk_offload_index = offload_and_maybe_resave_param(
                                 target_name, param, missing_keys, disk_offload_folder, disk_offload_index, mapping
                             )
