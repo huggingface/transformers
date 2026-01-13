@@ -1538,38 +1538,6 @@ class xLSTMForCausalLM(xLSTMPreTrainedModel, GenerationMixin):
     def set_input_embeddings(self, new_embeddings):
         return self.backbone.set_input_embeddings(new_embeddings)
 
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        attention_mask=None,  # not used but needed, otherwise generate complains when passing tokenizer inputs
-        inputs_embeds=None,
-        use_cache=None,
-        cache_params: xLSTMCache | None = None,
-        **kwargs,
-    ):
-        if use_cache and cache_params is not None:
-            # If the first cache position is non-zero, we assume we are in generation mode.
-            # Thus, the cache_params state is assumed to be the state before the last token
-            # (lastly generated token), and all previous tokens are already ingested.
-            # This should as well support generation from scratch with the [BOS] token inserted first.
-            input_ids = input_ids[:, -1:]
-            if inputs_embeds is not None:
-                inputs_embeds = inputs_embeds[:, -1:]
-
-        if inputs_embeds is not None and cache_params is None:
-            model_inputs = {"inputs_embeds": inputs_embeds}
-        else:
-            model_inputs = {"input_ids": input_ids}
-
-        model_inputs.update({"cache_params": cache_params, "use_cache": use_cache})
-
-        # Forward ALL kwargs that are uninitialized (e.g. `use_cache`).
-        for key, value in kwargs.items():
-            if key not in model_inputs:
-                model_inputs[key] = value
-
-        return model_inputs
-
     @can_return_tuple
     @auto_docstring
     def forward(
