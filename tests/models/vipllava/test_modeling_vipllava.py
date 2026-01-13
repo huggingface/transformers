@@ -299,6 +299,7 @@ class VipLlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         processor = AutoProcessor.from_pretrained(model_id)
 
         url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/diffusers/compel-neg.png"
+
         image = Image.open(requests.get(url, stream=True).raw)
         prompt = "USER: <image>\nCan you please describe this image?\nASSISTANT:"
 
