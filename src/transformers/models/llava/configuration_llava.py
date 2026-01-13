@@ -134,6 +134,12 @@ class LlavaConfig(PreTrainedConfig):
         self.text_config = text_config
         self.multimodal_projector_bias = multimodal_projector_bias
 
+        # The default value is `False` but this config is used with many model types
+        # Attr `tie_word_embeddings` was saved in text config for those models, so we
+        # need an ugly workaround and forward-pass the attr from text config
+        if not tie_word_embeddings and self.text_config.tie_word_embeddings:
+            self.tie_word_embeddings = self.text_config.tie_word_embeddings
+
         super().__init__(**kwargs)
 
 

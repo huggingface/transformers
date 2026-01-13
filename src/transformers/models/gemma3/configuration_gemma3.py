@@ -99,6 +99,8 @@ class Gemma3TextConfig(PreTrainedConfig):
         use_bidirectional_attention (`bool`, *optional*, defaults to `False`):
             If True, the model will attend to all text tokens instead of using a causal mask. This does not change
             behavior for vision tokens.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
     ```python
     >>> from transformers import Gemma3TextModel, Gemma3TextConfig
@@ -155,11 +157,13 @@ class Gemma3TextConfig(PreTrainedConfig):
         attn_logit_softcapping: float | None = None,
         rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
         use_bidirectional_attention: bool | None = False,
+        tie_word_embeddings: bool | None = True,
         **kwargs,
     ):
         self.pad_token_id = pad_token_id
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
