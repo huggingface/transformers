@@ -19,7 +19,7 @@ deps = {
     "filelock": "filelock",
     "ftfy": "ftfy",
     "fugashi": "fugashi>=1.0",
-    "GitPython": "GitPython<3.1.18",
+    "GitPython": "GitPython<3.1.19",
     "hf-doc-builder": "hf-doc-builder>=0.3.0",
     "hf_xet": "hf_xet",
     "huggingface-hub": "huggingface-hub>=1.3.0,<2.0",
