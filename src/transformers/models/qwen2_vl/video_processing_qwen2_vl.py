@@ -107,6 +107,29 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
 
         super().__init__(size=size, min_pixels=min_pixels, max_pixels=max_pixels, **kwargs)
 
+    def _further_process_kwargs(
+        self,
+        size: SizeDict | None = None,
+        min_pixels: int | None = None,
+        max_pixels: int | None = None,
+        **kwargs,
+    ) -> dict:
+        """
+        Update kwargs that need further processing before being validated
+        Can be overridden by subclasses to customize the processing of kwargs.
+        """
+        if min_pixels is not None and max_pixels is not None:
+            size = {"shortest_edge": min_pixels, "longest_edge": max_pixels}
+        elif size is not None:
+            if "shortest_edge" not in size or "longest_edge" not in size:
+                raise ValueError("dictionary `size` must contain 'shortest_edge' and 'longest_edge' keys.")
+            min_pixels = size["shortest_edge"]
+            max_pixels = size["longest_edge"]
+        else:
+            size = {**self.size}
+
+        return super()._further_process_kwargs(size=size, min_pixels=min_pixels, max_pixels=max_pixels, **kwargs)
+
     def sample_frames(
         self,
         metadata: VideoMetadata,
