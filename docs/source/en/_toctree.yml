@@ -745,6 +745,8 @@
         title: XLNet
       - local: model_doc/xlstm
         title: xLSTM
+      - local: model_doc/glm4_moe_lite
+        title: y
       - local: model_doc/yoso
         title: YOSO
       - local: model_doc/youtu_llm
@@ -819,6 +821,8 @@
         title: LeViT
       - local: model_doc/lightglue
         title: LightGlue
+      - local: model_doc/lw_detr
+        title: LW-DETR
       - local: model_doc/mask2former
         title: Mask2Former
       - local: model_doc/maskformer
