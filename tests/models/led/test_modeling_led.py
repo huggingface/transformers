@@ -567,20 +567,20 @@ class LEDModelIntegrationTests(unittest.TestCase):
 
         EXPECTED_LEP = (
             " the physics of @xmath0-boson will again play the central role in the frontier of particle physics if the"
-            " gigaz option of the international linear collider ( ilc ) can be realized in its first phase. \n the"
-            " expected sensitivity to the branching ratio of rare decays, especially its exotic or rare processes,"
-            " should be investigated comprehensively to evaluate their potential in probing new physics. in this work"
-            " \n, we study the rare decay into light higgs boson(s ) in the framework of the minimal supersymmetric"
-            " standard model ( mssm ), where a light cp - odd higgs - boson with singlet - dominant component may"
-            " naturally arise from the spontaneous breaking of some approximate global symmetry. "
+            " gigaz option of the international linear collider ( ilc ) can be realized in its first phase . \n the"
+            " expected sensitivity to the branching ratio of rare decays , especially its exotic or rare processes ,"
+            " should be investigated comprehensively to evaluate their potential in probing new physics . in this work"
+            " \n , we study the rare decay into light higgs boson(s ) in the framework of the minimal supersymmetric"
+            " standard model ( mssm ) , where a light cp - odd higgs - boson with singlet - dominant component may"
+            " naturally arise from the spontaneous breaking of some approximate global symmetry . "
         )
 
         EXPECTED_MAGNET = (
-            " the recent experiment in the surface states of the topological insulator bi@xmath0se @xmath1, however,"
+            " the recent experiment in the surface states of the topological insulator bi@xmath0se @xmath1 , however ,"
             " reported that a large positive magnetoresistance becomes very linear in perpendicular magnetic field"
             " even in an opposite situation where the carrier sheet density is high that all electrons occupy more"
-            " than one landau levels. \n it is striking that this observation is in conflict with abrikosov s model"
-            " and also with the classical parish - littlewood model. "
+            " than one landau levels . \n it is striking that this observation is in conflict with abrikosov s model"
+            " and also with the classical parish - littlewood model . "
         )
 
         generated = tok.decode(hypotheses_batch.tolist(), skip_special_tokens=True)
