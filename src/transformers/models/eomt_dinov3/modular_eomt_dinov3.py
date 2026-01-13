@@ -26,28 +26,42 @@ from ...utils import (
 )
 from ...utils.generic import check_model_inputs
 from ..dinov3_vit.modeling_dinov3_vit import (
-    DINOv3ViTAttention as EomtDinov3Attention,
-)
-from ..dinov3_vit.modeling_dinov3_vit import (
-    DINOv3ViTEmbeddings as EomtDinov3ViTEmbeddings,
-)
-from ..dinov3_vit.modeling_dinov3_vit import (
-    DINOv3ViTLayer as EomtDinov3Layer,
-)
-from ..dinov3_vit.modeling_dinov3_vit import (
-    DINOv3ViTLayerScale as EomtDinov3LayerScale,
-)
-from ..dinov3_vit.modeling_dinov3_vit import (
-    DINOv3ViTRopePositionEmbedding as EomtDinov3RopePositionEmbedding,
+    DINOv3ViTAttention,
+    DINOv3ViTEmbeddings,
+    DINOv3ViTLayer,
+    DINOv3ViTLayerScale,
+    DINOv3ViTRopePositionEmbedding,
 )
 from ..eomt.configuration_eomt import EomtConfig
 from ..eomt.modeling_eomt import (
     EomtForUniversalSegmentation,
     EomtForUniversalSegmentationOutput,
+    EomtLoss,
 )
-from ..eomt.modeling_eomt import (
-    EomtLoss as EomtDinov3Loss,
-)
+
+
+class EomtDinov3Attention(DINOv3ViTAttention):
+    pass
+
+
+class EomtDinov3ViTEmbeddings(DINOv3ViTEmbeddings):
+    pass
+
+
+class EomtDinov3Layer(DINOv3ViTLayer):
+    pass
+
+
+class EomtDinov3LayerScale(DINOv3ViTLayerScale):
+    pass
+
+
+class EomtDinov3RopePositionEmbedding(DINOv3ViTRopePositionEmbedding):
+    pass
+
+
+class EomtDinov3Loss(EomtLoss):
+    pass
 
 
 class EomtDinov3Config(EomtConfig):
@@ -240,10 +254,6 @@ class EomtDinov3PreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = False
     _no_split_modules = ["EomtDinov3Layer"]
     _supports_sdpa = True
-    _can_record_outputs = {
-        "hidden_states": EomtDinov3Layer,
-        "attentions": EomtDinov3Attention,
-    }
 
     def _init_weights(self, module: nn.Module) -> None:
         std = self.config.initializer_range

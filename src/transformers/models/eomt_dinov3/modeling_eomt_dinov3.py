@@ -4,8 +4,7 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_eomt_dinov3.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
-# Copyright 2025 the HuggingFace Team. All rights reserved.
+# Copyright 2026 the HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -48,6 +47,141 @@ if is_accelerate_available():
     from accelerate.utils import reduce
 
 
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
+
+
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
+    dropout: float = 0.0,
+    **kwargs: Unpack[TransformersKwargs],
+):
+    if scaling is None:
+        scaling = query.size(-1) ** -0.5
+
+    # Take the dot product between "query" and "key" to get the raw attention scores.
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+
+    if attention_mask is not None:
+        attention_mask = attention_mask[:, :, :, : key.shape[-2]]
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
+def apply_rotary_pos_emb(
+    q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor, **kwargs
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Applies Rotary Position Embedding to the query and key tensors, but only to the patch tokens,
+    ignoring the prefix tokens (cls token and register tokens).
+
+    Args:
+        q (`torch.Tensor`): The query tensor.
+        k (`torch.Tensor`): The key tensor.
+        cos (`torch.Tensor`): The cosine part of the rotary embedding.
+        sin (`torch.Tensor`): The sine part of the rotary embedding.
+
+    Returns:
+        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+    """
+
+    num_tokens = q.shape[-2]
+    num_patches = sin.shape[-2]
+    num_prefix_tokens = num_tokens - num_patches  # cls token + register tokens
+
+    q_prefix_tokens, q_patches = q.split((num_prefix_tokens, num_patches), dim=-2)
+    k_prefix_tokens, k_patches = k.split((num_prefix_tokens, num_patches), dim=-2)
+
+    # apply rope only to patch tokens
+    q_patches = (q_patches * cos) + (rotate_half(q_patches) * sin)
+    k_patches = (k_patches * cos) + (rotate_half(k_patches) * sin)
+
+    q = torch.cat((q_prefix_tokens, q_patches), dim=-2)
+    k = torch.cat((k_prefix_tokens, k_patches), dim=-2)
+
+    return q, k
+
+
+class EomtDinov3Attention(nn.Module):
+    """
+    Multi-headed attention compatible with ALL_ATTENTION_FUNCTIONS.
+    """
+
+    def __init__(self, config: EomtDinov3Config):
+        super().__init__()
+        self.config = config
+        self.embed_dim = config.hidden_size
+        self.num_heads = config.num_attention_heads
+        self.head_dim = self.embed_dim // self.num_heads
+        self.is_causal = False
+
+        self.scaling = self.head_dim**-0.5
+        self.is_causal = False
+
+        self.dropout = config.attention_dropout
+        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.key_bias)
+        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.value_bias)
+
+        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.query_bias)
+        self.o_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.proj_bias)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        """Input shape: Batch x Time x Channel"""
+
+        batch_size, patches, _ = hidden_states.size()
+
+        query_states = self.q_proj(hidden_states)
+        key_states = self.k_proj(hidden_states)
+        value_states = self.v_proj(hidden_states)
+
+        query_states = query_states.view(batch_size, patches, self.num_heads, self.head_dim).transpose(1, 2)
+        key_states = key_states.view(batch_size, patches, self.num_heads, self.head_dim).transpose(1, 2)
+        value_states = value_states.view(batch_size, patches, self.num_heads, self.head_dim).transpose(1, 2)
+
+        cos, sin = position_embeddings
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
+
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.dropout,
+            scaling=self.scaling,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(batch_size, patches, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+
+        return attn_output, attn_weights
+
+
 class EomtDinov3ViTEmbeddings(nn.Module):
     """
     Construct the CLS token, mask token, position and patch embeddings.
@@ -83,46 +217,226 @@ class EomtDinov3ViTEmbeddings(nn.Module):
         return embeddings
 
 
-@dataclass
-@auto_docstring(
-    custom_intro="""
-    Class for outputs of [`EomtDinov3ForUniversalSegmentationOutput`].
-
-    This output can be directly passed to [`~EomtDinov3ImageProcessor.post_process_semantic_segmentation`] or
-    [`~EomtDinov3ImageProcessor.post_process_instance_segmentation`] or
-    [`~EomtDinov3ImageProcessor.post_process_panoptic_segmentation`] to compute final segmentation maps. Please, see
-    [`~EomtDinov3ImageProcessor] for details regarding usage.
+def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
     """
-)
-class EomtDinov3ForUniversalSegmentationOutput(ModelOutput):
-    r"""
-    loss (`torch.Tensor`, *optional*):
-        The computed loss, returned when labels are present.
-    class_queries_logits (`torch.FloatTensor`):
-        A tensor of shape `(batch_size, num_queries, num_labels + 1)` representing the proposed classes for each
-        query. Note the `+ 1` is needed because we incorporate the null class.
-    masks_queries_logits (`torch.FloatTensor`):
-        A tensor of shape `(batch_size, num_queries, height, width)` representing the proposed masks for each
-        query.
-    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
-        Last hidden states (final feature map) of the last layer.
-    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
-        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
-        shape `(batch_size, sequence_length, hidden_size)`. Hidden-states all layers of the model.
-    attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
-        Tuple of `tuple(torch.FloatTensor)` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
-        sequence_length)`. Self and Cross Attentions weights from transformer decoder.
-    patch_offsets (`list[torch.Tensor]`, *optional*):
-        list of tuples indicating the image index and start and end positions of patches for semantic segmentation.
-    """
+    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
-    loss: torch.FloatTensor | None = None
-    class_queries_logits: torch.FloatTensor | None = None
-    masks_queries_logits: torch.FloatTensor | None = None
-    last_hidden_state: torch.FloatTensor | None = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
-    patch_offsets: list[torch.Tensor] | None = None
+    """
+    if drop_prob == 0.0 or not training:
+        return input
+    keep_prob = 1 - drop_prob
+    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
+    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
+    random_tensor.floor_()  # binarize
+    output = input.div(keep_prob) * random_tensor
+    return output
+
+
+class EomtDinov3DropPath(nn.Module):
+    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
+
+    def __init__(self, drop_prob: float | None = None) -> None:
+        super().__init__()
+        self.drop_prob = drop_prob
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return drop_path(hidden_states, self.drop_prob, self.training)
+
+    def extra_repr(self) -> str:
+        return f"p={self.drop_prob}"
+
+
+class EomtDinov3MLP(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def forward(self, x):
+        return self.down_proj(self.act_fn(self.up_proj(x)))
+
+
+class EomtDinov3GatedMLP(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.hidden_size = config.hidden_size
+        self.intermediate_size = config.intermediate_size
+        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
+        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
+        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
+        self.act_fn = ACT2FN[config.hidden_act]
+
+    def forward(self, x):
+        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
+        return down_proj
+
+
+class EomtDinov3Layer(GradientCheckpointingLayer):
+    """This corresponds to the Block class in the original implementation."""
+
+    def __init__(self, config: EomtDinov3Config):
+        super().__init__()
+
+        self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.attention = EomtDinov3Attention(config)
+        self.layer_scale1 = EomtDinov3LayerScale(config)
+        self.drop_path = EomtDinov3DropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
+
+        self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+
+        if config.use_gated_mlp:
+            self.mlp = EomtDinov3GatedMLP(config)
+        else:
+            self.mlp = EomtDinov3MLP(config)
+        self.layer_scale2 = EomtDinov3LayerScale(config)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+    ) -> torch.Tensor:
+        # Attention with residual connection
+        residual = hidden_states
+        hidden_states = self.norm1(hidden_states)
+        hidden_states, _ = self.attention(
+            hidden_states,
+            attention_mask=attention_mask,
+            position_embeddings=position_embeddings,
+        )
+        hidden_states = self.layer_scale1(hidden_states)
+        hidden_states = self.drop_path(hidden_states) + residual
+
+        # MLP with residual connection
+        residual = hidden_states
+        hidden_states = self.norm2(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = self.layer_scale2(hidden_states)
+        hidden_states = self.drop_path(hidden_states) + residual
+
+        return hidden_states
+
+
+class EomtDinov3LayerScale(nn.Module):
+    def __init__(self, config) -> None:
+        super().__init__()
+        self.lambda1 = nn.Parameter(config.layerscale_value * torch.ones(config.hidden_size))
+
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
+        return hidden_state * self.lambda1
+
+
+@compile_compatible_method_lru_cache(maxsize=32)
+def get_patches_center_coordinates(
+    num_patches_h: int, num_patches_w: int, dtype: torch.dtype, device: torch.device
+) -> torch.Tensor:
+    """
+    Computes the 2D coordinates of the centers of image patches, normalized to the range [-1, +1].
+    The center of each patch is exactly halfway between its top-left and bottom-right corners.
+
+    Args:
+        num_patches_h (int): Number of patches along the vertical (height) axis.
+        num_patches_w (int): Number of patches along the horizontal (width) axis.
+        dtype (torch.dtype): The desired data type of the returned tensor.
+
+    Returns:
+        torch.Tensor: A tensor of shape (height * width, 2), where each row contains the (y, x)
+            coordinates of a patch center, normalized to [-1, +1].
+    """
+    coords_h = torch.arange(0.5, num_patches_h, dtype=dtype, device=device)
+    coords_w = torch.arange(0.5, num_patches_w, dtype=dtype, device=device)
+    coords_h = coords_h / num_patches_h
+    coords_w = coords_w / num_patches_w
+    # (height, width, 2) -> (height * width, 2)
+    coords = torch.stack(torch.meshgrid(coords_h, coords_w, indexing="ij"), dim=-1)
+    coords = coords.flatten(0, 1)
+    # Shift range [0, 1] to [-1, +1]
+    coords = 2.0 * coords - 1.0
+    return coords
+
+
+def augment_patches_center_coordinates(
+    coords: torch.Tensor,
+    shift: float | None = None,
+    jitter: float | None = None,
+    rescale: float | None = None,
+) -> torch.Tensor:
+    # Shift coords by adding a uniform value in [-shift, shift]
+    if shift is not None:
+        shift_hw = torch.empty((1, 2), device=coords.device, dtype=coords.dtype)
+        shift_hw = shift_hw.uniform_(-shift, shift)
+        coords = coords + shift_hw
+
+    # Jitter coords by multiplying the range [-1, 1] by a log-uniform value in [1/jitter, jitter]
+    if jitter is not None:
+        jitter_range = np.log(jitter)
+        jitter_hw = torch.empty((1, 2), device=coords.device, dtype=coords.dtype)
+        jitter_hw = jitter_hw.uniform_(-jitter_range, jitter_range).exp()
+        coords = coords * jitter_hw
+
+    # Rescale coords by multiplying the range [-1, 1] by a log-uniform value in [1/rescale, rescale]
+    if rescale is not None:
+        rescale_range = np.log(rescale)
+        rescale_hw = torch.empty(1, device=coords.device, dtype=coords.dtype)
+        rescale_hw = rescale_hw.uniform_(-rescale_range, rescale_range).exp()
+        coords = coords * rescale_hw
+
+    return coords
+
+
+class EomtDinov3RopePositionEmbedding(nn.Module):
+    inv_freq: torch.Tensor
+
+    def __init__(self, config: EomtDinov3Config):
+        super().__init__()
+
+        self.config = config
+        self.base = config.rope_theta
+        self.head_dim = config.hidden_size // config.num_attention_heads
+        self.num_patches_h = config.image_size // config.patch_size
+        self.num_patches_w = config.image_size // config.patch_size
+
+        inv_freq = 1 / self.base ** torch.arange(0, 1, 4 / self.head_dim, dtype=torch.float32)  # (head_dim / 4,)
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+
+    def forward(self, pixel_values: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        _, _, height, width = pixel_values.shape
+        num_patches_h = height // self.config.patch_size
+        num_patches_w = width // self.config.patch_size
+
+        device = pixel_values.device
+        device_type = device.type if isinstance(device.type, str) and device.type != "mps" else "cpu"
+
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
+            # Although we could precompute static patch_coords from image_size and patch_size in the config,
+            # the model was trained with random_scale, so it can process images of varying sizes.
+            # Therefore, it's better to compute patch_coords dynamically (with lru_cache).
+            patch_coords = get_patches_center_coordinates(
+                num_patches_h, num_patches_w, dtype=torch.float32, device=device
+            )
+            if self.training:
+                patch_coords = augment_patches_center_coordinates(
+                    patch_coords,
+                    shift=self.config.pos_embed_shift,
+                    jitter=self.config.pos_embed_jitter,
+                    rescale=self.config.pos_embed_rescale,
+                )
+
+            # (height * width, 2, head_dim / 4) -> (height * width, head_dim / 2) -> (height * width, head_dim)
+            angles = 2 * math.pi * patch_coords[:, :, None] * self.inv_freq[None, None, :]
+            angles = angles.flatten(1, 2)
+            angles = angles.tile(2)
+
+            cos = torch.cos(angles)
+            sin = torch.sin(angles)
+
+        dtype = pixel_values.dtype
+        return cos.to(dtype=dtype), sin.to(dtype=dtype)
 
 
 # Adapted from https://github.com/facebookresearch/detectron2/blob/main/projects/PointRend/point_rend/point_features.py
@@ -676,377 +990,84 @@ class EomtDinov3Loss(nn.Module):
         return num_masks
 
 
-def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)
+@dataclass
+@auto_docstring(
+    custom_intro="""
+    Class for outputs of [`EomtDinov3ForUniversalSegmentationOutput`].
 
-
-def eager_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: torch.Tensor | None,
-    scaling: float | None = None,
-    dropout: float = 0.0,
-    **kwargs: Unpack[TransformersKwargs],
-):
-    if scaling is None:
-        scaling = query.size(-1) ** -0.5
-
-    # Take the dot product between "query" and "key" to get the raw attention scores.
-    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
-
-    if attention_mask is not None:
-        attention_mask = attention_mask[:, :, :, : key.shape[-2]]
-        attn_weights = attn_weights + attention_mask
-
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-
-    attn_output = torch.matmul(attn_weights, value)
-    attn_output = attn_output.transpose(1, 2).contiguous()
-
-    return attn_output, attn_weights
-
-
-def apply_rotary_pos_emb(
-    q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor, **kwargs
-) -> tuple[torch.Tensor, torch.Tensor]:
-    """Applies Rotary Position Embedding to the query and key tensors, but only to the patch tokens,
-    ignoring the prefix tokens (cls token and register tokens).
-
-    Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-
-    Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+    This output can be directly passed to [`~EomtDinov3ImageProcessor.post_process_semantic_segmentation`] or
+    [`~EomtDinov3ImageProcessor.post_process_instance_segmentation`] or
+    [`~EomtDinov3ImageProcessor.post_process_panoptic_segmentation`] to compute final segmentation maps. Please, see
+    [`~EomtDinov3ImageProcessor] for details regarding usage.
+    """
+)
+class EomtDinov3ForUniversalSegmentationOutput(ModelOutput):
+    r"""
+    loss (`torch.Tensor`, *optional*):
+        The computed loss, returned when labels are present.
+    class_queries_logits (`torch.FloatTensor`):
+        A tensor of shape `(batch_size, num_queries, num_labels + 1)` representing the proposed classes for each
+        query. Note the `+ 1` is needed because we incorporate the null class.
+    masks_queries_logits (`torch.FloatTensor`):
+        A tensor of shape `(batch_size, num_queries, height, width)` representing the proposed masks for each
+        query.
+    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, height, width)`):
+        Last hidden states (final feature map) of the last layer.
+    hidden_states (`tuple(torch.FloatTensor)`, *optional*, returned when `output_hidden_states=True` is passed or when `config.output_hidden_states=True`):
+        Tuple of `torch.FloatTensor` (one for the output of the embeddings + one for the output of each stage) of
+        shape `(batch_size, sequence_length, hidden_size)`. Hidden-states all layers of the model.
+    attentions (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `output_attentions=True` is passed or when `config.output_attentions=True`):
+        Tuple of `tuple(torch.FloatTensor)` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
+        sequence_length)`. Self and Cross Attentions weights from transformer decoder.
+    patch_offsets (`list[torch.Tensor]`, *optional*):
+        list of tuples indicating the image index and start and end positions of patches for semantic segmentation.
     """
 
-    num_tokens = q.shape[-2]
-    num_patches = sin.shape[-2]
-    num_prefix_tokens = num_tokens - num_patches  # cls token + register tokens
-
-    q_prefix_tokens, q_patches = q.split((num_prefix_tokens, num_patches), dim=-2)
-    k_prefix_tokens, k_patches = k.split((num_prefix_tokens, num_patches), dim=-2)
-
-    # apply rope only to patch tokens
-    q_patches = (q_patches * cos) + (rotate_half(q_patches) * sin)
-    k_patches = (k_patches * cos) + (rotate_half(k_patches) * sin)
-
-    q = torch.cat((q_prefix_tokens, q_patches), dim=-2)
-    k = torch.cat((k_prefix_tokens, k_patches), dim=-2)
-
-    return q, k
-
-
-class EomtDinov3Attention(nn.Module):
-    """
-    Multi-headed attention compatible with ALL_ATTENTION_FUNCTIONS.
-    """
-
-    def __init__(self, config: EomtDinov3Config):
-        super().__init__()
-        self.config = config
-        self.embed_dim = config.hidden_size
-        self.num_heads = config.num_attention_heads
-        self.head_dim = self.embed_dim // self.num_heads
-        self.is_causal = False
-
-        self.scaling = self.head_dim**-0.5
-        self.is_causal = False
-
-        self.dropout = config.attention_dropout
-        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.key_bias)
-        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.value_bias)
-
-        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.query_bias)
-        self.o_proj = nn.Linear(self.embed_dim, self.embed_dim, bias=config.proj_bias)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor | None]:
-        """Input shape: Batch x Time x Channel"""
-
-        batch_size, patches, _ = hidden_states.size()
-
-        query_states = self.q_proj(hidden_states)
-        key_states = self.k_proj(hidden_states)
-        value_states = self.v_proj(hidden_states)
-
-        query_states = query_states.view(batch_size, patches, self.num_heads, self.head_dim).transpose(1, 2)
-        key_states = key_states.view(batch_size, patches, self.num_heads, self.head_dim).transpose(1, 2)
-        value_states = value_states.view(batch_size, patches, self.num_heads, self.head_dim).transpose(1, 2)
-
-        cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
-
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
-
-        attn_output, attn_weights = attention_interface(
-            self,
-            query_states,
-            key_states,
-            value_states,
-            attention_mask,
-            dropout=0.0 if not self.training else self.dropout,
-            scaling=self.scaling,
-            **kwargs,
-        )
-
-        attn_output = attn_output.reshape(batch_size, patches, -1).contiguous()
-        attn_output = self.o_proj(attn_output)
-
-        return attn_output, attn_weights
-
-
-class EomtDinov3LayerScale(nn.Module):
-    def __init__(self, config) -> None:
-        super().__init__()
-        self.lambda1 = nn.Parameter(config.layerscale_value * torch.ones(config.hidden_size))
-
-    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
-        return hidden_state * self.lambda1
-
-
-def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
-    """
-    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
-
-    """
-    if drop_prob == 0.0 or not training:
-        return input
-    keep_prob = 1 - drop_prob
-    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
-    random_tensor.floor_()  # binarize
-    output = input.div(keep_prob) * random_tensor
-    return output
-
-
-class EomtDinov3DropPath(nn.Module):
-    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
-
-    def __init__(self, drop_prob: float | None = None) -> None:
-        super().__init__()
-        self.drop_prob = drop_prob
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return drop_path(hidden_states, self.drop_prob, self.training)
-
-    def extra_repr(self) -> str:
-        return f"p={self.drop_prob}"
-
-
-class EomtDinov3MLP(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
-        self.act_fn = ACT2FN[config.hidden_act]
-
-    def forward(self, x):
-        return self.down_proj(self.act_fn(self.up_proj(x)))
-
-
-class EomtDinov3SwiGLUFFN(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
-        self.act_fn = ACT2FN[config.hidden_act]
-
-    def forward(self, x):
-        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
-        return down_proj
-
-
-class EomtDinov3GatedMLP(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.config = config
-        self.hidden_size = config.hidden_size
-        self.intermediate_size = config.intermediate_size
-        self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
-        self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=config.mlp_bias)
-        self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.mlp_bias)
-        self.act_fn = ACT2FN[config.hidden_act]
-
-    def forward(self, x):
-        down_proj = self.down_proj(self.act_fn(self.gate_proj(x)) * self.up_proj(x))
-        return down_proj
-
-
-class EomtDinov3Layer(GradientCheckpointingLayer):
-    """This corresponds to the Block class in the original implementation."""
-
-    def __init__(self, config: EomtDinov3Config):
-        super().__init__()
-
-        self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.attention = EomtDinov3Attention(config)
-        self.layer_scale1 = EomtDinov3LayerScale(config)
-        self.drop_path = EomtDinov3DropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
-
-        self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-
-        if config.use_gated_mlp:
-            self.mlp = EomtDinov3GatedMLP(config)
-        else:
-            self.mlp = EomtDinov3MLP(config)
-        self.layer_scale2 = EomtDinov3LayerScale(config)
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        attention_mask: torch.Tensor | None = None,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-    ) -> torch.Tensor:
-        # Attention with residual connection
-        residual = hidden_states
-        hidden_states = self.norm1(hidden_states)
-        hidden_states, _ = self.attention(
-            hidden_states,
-            attention_mask=attention_mask,
-            position_embeddings=position_embeddings,
-        )
-        hidden_states = self.layer_scale1(hidden_states)
-        hidden_states = self.drop_path(hidden_states) + residual
-
-        # MLP with residual connection
-        residual = hidden_states
-        hidden_states = self.norm2(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = self.layer_scale2(hidden_states)
-        hidden_states = self.drop_path(hidden_states) + residual
-
-        return hidden_states
-
-
-@compile_compatible_method_lru_cache(maxsize=32)
-def get_patches_center_coordinates(
-    num_patches_h: int, num_patches_w: int, dtype: torch.dtype, device: torch.device
-) -> torch.Tensor:
-    """
-    Computes the 2D coordinates of the centers of image patches, normalized to the range [-1, +1].
-    The center of each patch is exactly halfway between its top-left and bottom-right corners.
-
-    Args:
-        num_patches_h (int): Number of patches along the vertical (height) axis.
-        num_patches_w (int): Number of patches along the horizontal (width) axis.
-        dtype (torch.dtype): The desired data type of the returned tensor.
-
-    Returns:
-        torch.Tensor: A tensor of shape (height * width, 2), where each row contains the (y, x)
-            coordinates of a patch center, normalized to [-1, +1].
-    """
-    coords_h = torch.arange(0.5, num_patches_h, dtype=dtype, device=device)
-    coords_w = torch.arange(0.5, num_patches_w, dtype=dtype, device=device)
-    coords_h = coords_h / num_patches_h
-    coords_w = coords_w / num_patches_w
-    # (height, width, 2) -> (height * width, 2)
-    coords = torch.stack(torch.meshgrid(coords_h, coords_w, indexing="ij"), dim=-1)
-    coords = coords.flatten(0, 1)
-    # Shift range [0, 1] to [-1, +1]
-    coords = 2.0 * coords - 1.0
-    return coords
-
-
-def augment_patches_center_coordinates(
-    coords: torch.Tensor,
-    shift: float | None = None,
-    jitter: float | None = None,
-    rescale: float | None = None,
-) -> torch.Tensor:
-    # Shift coords by adding a uniform value in [-shift, shift]
-    if shift is not None:
-        shift_hw = torch.empty((1, 2), device=coords.device, dtype=coords.dtype)
-        shift_hw = shift_hw.uniform_(-shift, shift)
-        coords = coords + shift_hw
-
-    # Jitter coords by multiplying the range [-1, 1] by a log-uniform value in [1/jitter, jitter]
-    if jitter is not None:
-        jitter_range = np.log(jitter)
-        jitter_hw = torch.empty((1, 2), device=coords.device, dtype=coords.dtype)
-        jitter_hw = jitter_hw.uniform_(-jitter_range, jitter_range).exp()
-        coords = coords * jitter_hw
-
-    # Rescale coords by multiplying the range [-1, 1] by a log-uniform value in [1/rescale, rescale]
-    if rescale is not None:
-        rescale_range = np.log(rescale)
-        rescale_hw = torch.empty(1, device=coords.device, dtype=coords.dtype)
-        rescale_hw = rescale_hw.uniform_(-rescale_range, rescale_range).exp()
-        coords = coords * rescale_hw
-
-    return coords
-
-
-class EomtDinov3RopePositionEmbedding(nn.Module):
-    inv_freq: torch.Tensor
-
-    def __init__(self, config: EomtDinov3Config):
-        super().__init__()
-
-        self.config = config
-        self.base = config.rope_theta
-        self.head_dim = config.hidden_size // config.num_attention_heads
-        self.num_patches_h = config.image_size // config.patch_size
-        self.num_patches_w = config.image_size // config.patch_size
-
-        inv_freq = 1 / self.base ** torch.arange(0, 1, 4 / self.head_dim, dtype=torch.float32)  # (head_dim / 4,)
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-
-    def forward(self, pixel_values: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        _, _, height, width = pixel_values.shape
-        num_patches_h = height // self.config.patch_size
-        num_patches_w = width // self.config.patch_size
-
-        device = pixel_values.device
-        device_type = device.type if isinstance(device.type, str) and device.type != "mps" else "cpu"
-
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            # Although we could precompute static patch_coords from image_size and patch_size in the config,
-            # the model was trained with random_scale, so it can process images of varying sizes.
-            # Therefore, it's better to compute patch_coords dynamically (with lru_cache).
-            patch_coords = get_patches_center_coordinates(
-                num_patches_h, num_patches_w, dtype=torch.float32, device=device
-            )
-            if self.training:
-                patch_coords = augment_patches_center_coordinates(
-                    patch_coords,
-                    shift=self.config.pos_embed_shift,
-                    jitter=self.config.pos_embed_jitter,
-                    rescale=self.config.pos_embed_rescale,
-                )
-
-            # (height * width, 2, head_dim / 4) -> (height * width, head_dim / 2) -> (height * width, head_dim)
-            angles = 2 * math.pi * patch_coords[:, :, None] * self.inv_freq[None, None, :]
-            angles = angles.flatten(1, 2)
-            angles = angles.tile(2)
-
-            cos = torch.cos(angles)
-            sin = torch.sin(angles)
-
-        dtype = pixel_values.dtype
-        return cos.to(dtype=dtype), sin.to(dtype=dtype)
+    loss: torch.FloatTensor | None = None
+    class_queries_logits: torch.FloatTensor | None = None
+    masks_queries_logits: torch.FloatTensor | None = None
+    last_hidden_state: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
+    patch_offsets: list[torch.Tensor] | None = None
+
+
+class EomtDinov3PreTrainedModel(PreTrainedModel):
+    config_class = EomtDinov3Config
+    base_model_prefix = "eomt"
+    main_input_name = "pixel_values"
+    supports_gradient_checkpointing = False
+    _no_split_modules = ["EomtDinov3Layer"]
+    _supports_sdpa = True
+
+    def _init_weights(self, module: nn.Module) -> None:
+        std = self.config.initializer_range
+        if isinstance(module, nn.Linear | nn.Conv2d | nn.ConvTranspose2d):
+            init.trunc_normal_(module.weight, mean=0.0, std=std)
+            if module.bias is not None:
+                init.zeros_(module.bias)
+        elif isinstance(module, nn.LayerNorm):
+            init.ones_(module.weight)
+            init.zeros_(module.bias)
+        elif isinstance(module, nn.Embedding):
+            init.normal_(module.weight, mean=0.0, std=1)
+            if module.padding_idx is not None:
+                init.zeros_(module.weight[module.padding_idx])
+        elif isinstance(module, EomtDinov3LayerScale):
+            if hasattr(module, "lambda1"):
+                init.constant_(module.lambda1, self.config.layerscale_value)
+        elif isinstance(module, EomtDinov3ViTEmbeddings):
+            init.trunc_normal_(module.cls_token, mean=0.0, std=std)
+            init.zeros_(module.register_tokens)
+        elif isinstance(module, EomtDinov3Loss):
+            empty_weight = torch.ones(module.num_labels + 1)
+            empty_weight[-1] = module.eos_coef
+            init.copy_(module.empty_weight, empty_weight)
+        elif isinstance(module, EomtDinov3RopePositionEmbedding):
+            inv_freq = 1 / module.base ** torch.arange(0, 1, 4 / module.head_dim, dtype=torch.float32)
+            init.copy_(module.inv_freq, inv_freq)
+        elif isinstance(module, EomtDinov3ForUniversalSegmentation):
+            init.ones_(module.attn_mask_probs)
 
 
 class EomtDinov3LayerNorm2d(nn.LayerNorm):
@@ -1112,48 +1133,6 @@ class EomtDinov3MaskHead(nn.Module):
         hidden_states = self.activation(self.fc2(hidden_states))
         hidden_states = self.fc3(hidden_states)
         return hidden_states
-
-
-class EomtDinov3PreTrainedModel(PreTrainedModel):
-    config_class = EomtDinov3Config
-    base_model_prefix = "eomt"
-    main_input_name = "pixel_values"
-    supports_gradient_checkpointing = False
-    _no_split_modules = ["EomtDinov3Layer"]
-    _supports_sdpa = True
-    _can_record_outputs = {
-        "hidden_states": EomtDinov3Layer,
-        "attentions": EomtDinov3Attention,
-    }
-
-    def _init_weights(self, module: nn.Module) -> None:
-        std = self.config.initializer_range
-        if isinstance(module, nn.Linear | nn.Conv2d | nn.ConvTranspose2d):
-            init.trunc_normal_(module.weight, mean=0.0, std=std)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            init.ones_(module.weight)
-            init.zeros_(module.bias)
-        elif isinstance(module, nn.Embedding):
-            init.normal_(module.weight, mean=0.0, std=1)
-            if module.padding_idx is not None:
-                init.zeros_(module.weight[module.padding_idx])
-        elif isinstance(module, EomtDinov3LayerScale):
-            if hasattr(module, "lambda1"):
-                init.constant_(module.lambda1, self.config.layerscale_value)
-        elif isinstance(module, EomtDinov3ViTEmbeddings):
-            init.trunc_normal_(module.cls_token, mean=0.0, std=std)
-            init.zeros_(module.register_tokens)
-        elif isinstance(module, EomtDinov3Loss):
-            empty_weight = torch.ones(module.num_labels + 1)
-            empty_weight[-1] = module.eos_coef
-            init.copy_(module.empty_weight, empty_weight)
-        elif isinstance(module, EomtDinov3RopePositionEmbedding):
-            inv_freq = 1 / module.base ** torch.arange(0, 1, 4 / module.head_dim, dtype=torch.float32)
-            init.copy_(module.inv_freq, inv_freq)
-        elif isinstance(module, EomtDinov3ForUniversalSegmentation):
-            init.ones_(module.attn_mask_probs)
 
 
 @auto_docstring(
