@@ -1825,6 +1825,7 @@ class PPOCRV5MobileDetModel(PPOCRV5MobileDetPreTrainedModel):
         self.backbone = PPOCRV5MobileDetBackbone(config)
         self.neck = PPOCRV5MobileDetNeck(config, self.backbone.out_channels)
         self.head = PPOCRV5MobileDetHead(config)
+        self.post_init()
 
     def forward(
         self,
