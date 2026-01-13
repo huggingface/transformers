@@ -109,6 +109,7 @@ else:
             ("git", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
             ("glm46v", ("Glm46VImageProcessor", "Glm46VImageProcessorFast")),
             ("glm4v", ("Glm4vImageProcessor", "Glm4vImageProcessorFast")),
+            ("glm_image", ("GlmImageImageProcessor", "GlmImageImageProcessorFast")),
             ("glpn", ("GLPNImageProcessor", "GLPNImageProcessorFast")),
             ("got_ocr2", ("GotOcr2ImageProcessor", "GotOcr2ImageProcessorFast")),
             ("grounding-dino", ("GroundingDinoImageProcessor", "GroundingDinoImageProcessorFast")),
