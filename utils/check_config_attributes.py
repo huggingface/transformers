@@ -124,6 +124,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "IdeficsVisionConfig": True,
     "IdeficsPerceiverConfig": True,
     "GptOssConfig": True,
+    "LwDetrConfig": True,
 }
 
 # Common and important attributes, even if they do not always appear in the modeling files (can be a regex pattern)
