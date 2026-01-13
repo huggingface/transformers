@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import tempfile
 import unittest
 
 import numpy as np
@@ -361,3 +362,20 @@ class Qwen2VLVideoProcessingTest(VideoProcessingTestMixin, unittest.TestCase):
 
             video_grid_thw = video_processed["video_grid_thw"]
             self.assertEqual(video_grid_thw.tolist(), [[2, 2, 2]])
+
+    def test_bc_min_max_pixels(self):
+        for video_processing_class in self.video_processor_list:
+            video_processing = video_processing_class(**self.video_processor_dict)
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                video_processing.save_pretrained(tmpdirname)
+                video_processing_loaded = video_processing_class.from_pretrained(
+                    tmpdirname, max_pixels=56 * 56, min_pixels=28 * 28
+                )
+
+            video_inputs = self.video_processor_tester.prepare_video_inputs(
+                equal_resolution=True,
+                return_tensors="torch",
+            )
+            processed = video_processing_loaded(video_inputs, return_tensors="pt")
+            expected_output_video_shape = [320, 1176]
+            self.assertListEqual(list(processed.pixel_values_videos.shape), expected_output_video_shape)
