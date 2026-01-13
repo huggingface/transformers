@@ -312,7 +312,7 @@ class MixedInt8Test(BaseMixedInt8Test):
         with self.assertRaises(ValueError):
             # Tries to cast the 4-bit model to float16 using `half()`
             self.model_8bit.half()
-        
+
         # works now with 0.48.0 in bnb
         self.model_8bit.to("cpu")
         self.model_8bit.to(torch.device(torch_device))
