@@ -51,8 +51,95 @@ from ..lw_detr.modeling_lw_detr import (
 logger = logging.get_logger(__name__)
 
 
-class RfDetrModelOutput(LwDetrModelOutput):
-    pass
+class RfDetrDinov2Config(Dinov2Config):
+    r"""
+    This is the configuration class to store the configuration of a [`RfDetrDinov2Model`]. It is used to instantiate an
+    RfDetrDinov2 model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    with the defaults will yield a similar configuration to that of the DINOv2
+    [facebook/dinov2-base](https://huggingface.co/facebook/dinov2-base) architecture.
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PretrainedConfig`] for more information.
+
+    Args:
+        hidden_size (`int`, *optional*, defaults to 768):
+            Dimensionality of the encoder layers and the pooler layer.
+        num_hidden_layers (`int`, *optional*, defaults to 12):
+            Number of hidden layers in the Transformer encoder.
+        num_attention_heads (`int`, *optional*, defaults to 12):
+            Number of attention heads for each attention layer in the Transformer encoder.
+        mlp_ratio (`int`, *optional*, defaults to 4):
+            Ratio of the hidden size of the MLPs relative to the `hidden_size`.
+        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"selu"` and `"gelu_new"` are supported.
+        hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
+            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
+        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
+            The epsilon used by the layer normalization layers.
+        image_size (`int`, *optional*, defaults to 224):
+            The size (resolution) of each image.
+        patch_size (`int`, *optional*, defaults to 14):
+            The size (resolution) of each patch.
+        num_channels (`int`, *optional*, defaults to 3):
+            The number of input channels.
+        qkv_bias (`bool`, *optional*, defaults to `True`):
+            Whether to add a bias to the queries, keys and values.
+        layerscale_value (`float`, *optional*, defaults to 1.0):
+           Initial value to use for layer scale.
+        drop_path_rate (`float`, *optional*, defaults to 0.0):
+            Stochastic depth rate per sample (when applied in the main path of residual layers).
+        use_swiglu_ffn (`bool`, *optional*, defaults to `False`):
+            Whether to use the SwiGLU feedforward neural network.
+        out_features (`list[str]`, *optional*):
+            If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
+            (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
+            corresponding stages. If unset and `out_indices` is unset, will default to the last stage. Must be in the
+            same order as defined in the `stage_names` attribute.
+        out_indices (`list[int]`, *optional*):
+            If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
+            many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
+            If unset and `out_features` is unset, will default to the last stage. Must be in the
+            same order as defined in the `stage_names` attribute.
+        apply_layernorm (`bool`, *optional*, defaults to `True`):
+            Whether to apply layer normalization to the feature maps in case the model is used as backbone.
+        reshape_hidden_states (`bool`, *optional*, defaults to `True`):
+            Whether to reshape the feature maps to 4D tensors of shape `(batch_size, hidden_size, height, width)` in
+            case the model is used as backbone. If `False`, the feature maps will be 3D tensors of shape `(batch_size,
+            seq_len, hidden_size)`.
+        use_mask_token (`bool`, *optional*, defaults to `True`):
+            Whether to use mask_token in embeddings.
+        num_windows (`int`, *optional*, defaults to 4):
+            Number of windows to use for windowed attention. If 1, no windowed attention is used.
+    Example:
+
+    ```python
+    >>> from transformers import RfDetrDinov2Config, RfDetrDinov2Backbone
+
+    >>> # Initializing a RfDetrDinov2 base style configuration
+    >>> configuration = RfDetrDinov2Config()
+
+    >>> # Initializing a model (with random weights) from the base style configuration
+    >>> model = RfDetrDinov2Backbone(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
+    model_type = "rf_detr_dinov2"
+
+    def __init__(self, num_windows: int = 4, **super_kwargs):
+        super().__init__(**super_kwargs)
+
+        self.num_windows = num_windows
+        window_block_indexes = set(range(self._out_indices[-1] + 1))
+        window_block_indexes.difference_update(self._out_indices)
+        window_block_indexes = list(window_block_indexes)
+        self.window_block_indexes = window_block_indexes
 
 
 class RfDetrConfig(LwDetrConfig):
@@ -294,320 +381,6 @@ class RfDetrConfig(LwDetrConfig):
         self.focal_alpha = focal_alpha
         self.disable_custom_kernels = disable_custom_kernels
         PreTrainedConfig.__init__(self, **kwargs)
-
-
-class RfDetrLayerNorm(LwDetrLayerNorm):
-    pass
-
-
-class RfDetrConvNormLayer(LwDetrConvNormLayer):
-    def __init__(
-        self,
-        config: RfDetrConfig,
-        in_channels: int,
-        out_channels: int,
-        kernel_size: int,
-        stride: int,
-        activation: Optional[str] = None,
-    ):
-        super().__init__(
-            config,
-            in_channels,
-            out_channels,
-            kernel_size,
-            stride,
-            activation,
-        )
-        self.norm = RfDetrLayerNorm(out_channels, data_format="channels_first", eps=config.layer_norm_eps)
-
-
-class RfDetrC2FLayer(LwDetrC2FLayer):
-    pass
-
-
-class RfDetrSamplingLayer(LwDetrSamplingLayer):
-    def __init__(self, config: RfDetrConfig, channel_size: int, scale: float):
-        nn.Module.__init__(self)
-
-        self.scale = scale
-        self.channel_size = channel_size
-
-        layers = []
-        if scale == 2.0:
-            layers.append(nn.ConvTranspose2d(channel_size, channel_size // 2, 2, 2))
-        elif scale == 0.5:
-            layers.append(RfDetrConvNormLayer(config, channel_size, channel_size, 3, 2, activation="relu"))
-        self.layers = nn.ModuleList(layers)
-
-
-class RfDetrScaleProjector(LwDetrScaleProjector):
-    def __init__(self, config: RfDetrConfig, scale: float):
-        nn.Module.__init__(self)
-
-        intermediate_dims = [config.backbone_config.hidden_size] * len(config.backbone_config.out_indices)
-        sampling_layers = []
-        for channel_size in intermediate_dims:
-            sampling_layers.append(RfDetrSamplingLayer(config, channel_size, scale))
-        self.sampling_layers = nn.ModuleList(sampling_layers)
-
-        intermediate_dim = intermediate_dims[-1]
-        if scale == 2.0:
-            intermediate_dim = intermediate_dim // 2
-        projector_input_dim = intermediate_dim * len(intermediate_dims)
-
-        self.projector_layer = RfDetrC2FLayer(config, projector_input_dim)
-        self.layer_norm = RfDetrLayerNorm(config.d_model, data_format="channels_first")
-
-
-class RfDetrPreTrainedModel(LwDetrPreTrainedModel):
-    pass
-
-
-class RfDetrConvEncoder(LwDetrConvEncoder):
-    def __init__(self, config: RfDetrConfig):
-        super().__init__(config)
-        self.backbone = RfDetrDinov2Backbone(config.backbone_config)
-
-
-class RfDetrModel(LwDetrModel):
-    def forward(
-        self,
-        pixel_values: torch.FloatTensor,
-        pixel_mask: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> RfDetrModelOutput:
-        r"""
-        Examples:
-
-        ```python
-        >>> from transformers import AutoImageProcessor, DeformableDetrModel
-        >>> from PIL import Image
-        >>> import requests
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> image_processor = AutoImageProcessor.from_pretrained("stevenbucaille/RfDetr_small_60e_coco")
-        >>> model = DeformableDetrModel.from_pretrained("stevenbucaille/RfDetr_small_60e_coco")
-
-        >>> inputs = image_processor(images=image, return_tensors="pt")
-
-        >>> outputs = model(**inputs)
-
-        >>> last_hidden_states = outputs.last_hidden_state
-        >>> list(last_hidden_states.shape)
-        [1, 300, 256]
-        ```"""
-        batch_size, num_channels, height, width = pixel_values.shape
-        device = pixel_values.device
-
-        if pixel_mask is None:
-            pixel_mask = torch.ones(((batch_size, height, width)), dtype=torch.long, device=device)
-
-        # Extract multi-scale feature maps of same resolution `config.d_model` (cf Figure 4 in paper)
-        # First, sent pixel_values + pixel_mask through Backbone to obtain the features
-        # which is a list of tuples
-        features = self.backbone(pixel_values, pixel_mask)
-
-        # Then, apply 1x1 convolution to reduce the channel dimension to d_model (256 by default)
-        sources = []
-        masks = []
-        for level, (source, mask) in enumerate(features):
-            sources.append(source)
-            masks.append(mask)
-            if mask is None:
-                raise ValueError("No attention mask was provided")
-
-        if self.training:
-            reference_points = self.reference_point_embed.weight
-            query_feat = self.query_feat.weight
-        else:
-            # only use one group in inference
-            reference_points = self.reference_point_embed.weight[: self.num_queries]
-            query_feat = self.query_feat.weight[: self.num_queries]
-
-        # Prepare encoder inputs (by flattening)
-        source_flatten = []
-        mask_flatten = []
-        spatial_shapes_list = []
-        for source, mask in zip(sources, masks):
-            batch_size, num_channels, height, width = source.shape
-            spatial_shape = (height, width)
-            spatial_shapes_list.append(spatial_shape)
-            source = source.flatten(2).transpose(1, 2)
-            mask = mask.flatten(1)
-            source_flatten.append(source)
-            mask_flatten.append(mask)
-        source_flatten = torch.cat(source_flatten, 1)
-        mask_flatten = torch.cat(mask_flatten, 1)
-        spatial_shapes = torch.as_tensor(spatial_shapes_list, dtype=torch.long, device=source_flatten.device)
-        level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
-        valid_ratios = torch.stack([self.get_valid_ratio(m, dtype=source_flatten.dtype) for m in masks], 1)
-
-        target = query_feat.unsqueeze(0).expand(batch_size, -1, -1)
-        reference_points = reference_points.unsqueeze(0).expand(batch_size, -1, -1)
-
-        object_query_embedding, output_proposals = self.gen_encoder_output_proposals(
-            source_flatten, ~mask_flatten, spatial_shapes_list
-        )
-
-        group_detr = self.group_detr if self.training else 1
-        topk = self.num_queries
-        topk_coords_logits = []
-        topk_coords_logits_undetach = []
-        object_query_undetach = []
-
-        for group_id in range(group_detr):
-            group_object_query = self.enc_output[group_id](object_query_embedding)
-            group_object_query = self.enc_output_norm[group_id](group_object_query)
-
-            group_enc_outputs_class = self.enc_out_class_embed[group_id](group_object_query)
-            group_delta_bbox = self.enc_out_bbox_embed[group_id](group_object_query)
-            group_enc_outputs_coord = refine_bboxes(output_proposals, group_delta_bbox)
-
-            group_topk_proposals = torch.topk(group_enc_outputs_class.max(-1)[0], topk, dim=1)[1]
-            group_topk_coords_logits_undetach = torch.gather(
-                group_enc_outputs_coord,
-                1,
-                group_topk_proposals.unsqueeze(-1).repeat(1, 1, 4),
-            )
-            group_topk_coords_logits = group_topk_coords_logits_undetach.detach()
-            group_object_query_undetach = torch.gather(
-                group_object_query, 1, group_topk_proposals.unsqueeze(-1).repeat(1, 1, self.config.d_model)
-            )
-
-            topk_coords_logits.append(group_topk_coords_logits)
-            topk_coords_logits_undetach.append(group_topk_coords_logits_undetach)
-            object_query_undetach.append(group_object_query_undetach)
-
-        topk_coords_logits = torch.cat(topk_coords_logits, 1)
-        topk_coords_logits_undetach = torch.cat(topk_coords_logits_undetach, 1)
-        object_query_undetach = torch.cat(object_query_undetach, 1)
-
-        enc_outputs_class = object_query_undetach
-        enc_outputs_coord_logits = topk_coords_logits
-
-        two_stage_len = topk_coords_logits.shape[-2]
-        reference_points_two_stage_subset = reference_points[..., :two_stage_len, :]
-        reference_points_subset = reference_points[..., two_stage_len:, :]
-        reference_points_two_stage_subset = refine_bboxes(topk_coords_logits, reference_points_two_stage_subset)
-        reference_points = torch.cat([reference_points_two_stage_subset, reference_points_subset], dim=-2)
-        init_reference_points = reference_points
-        decoder_outputs = self.decoder(
-            inputs_embeds=target,
-            reference_points=reference_points,
-            spatial_shapes=spatial_shapes,
-            spatial_shapes_list=spatial_shapes_list,
-            level_start_index=level_start_index,
-            valid_ratios=valid_ratios,
-            encoder_hidden_states=source_flatten,
-            encoder_attention_mask=mask_flatten,
-            **kwargs,
-        )
-
-        return RfDetrModelOutput(
-            init_reference_points=init_reference_points,
-            last_hidden_state=decoder_outputs.last_hidden_state,
-            intermediate_hidden_states=decoder_outputs.intermediate_hidden_states,
-            intermediate_reference_points=decoder_outputs.intermediate_reference_points,
-            enc_outputs_class=enc_outputs_class,
-            enc_outputs_coord_logits=enc_outputs_coord_logits,
-        )
-
-
-class RfDetrForObjectDetection(LwDetrForObjectDetection):
-    pass
-
-
-class RfDetrDinov2Config(Dinov2Config):
-    r"""
-    This is the configuration class to store the configuration of a [`RfDetrDinov2Model`]. It is used to instantiate an
-    RfDetrDinov2 model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the DINOv2
-    [facebook/dinov2-base](https://huggingface.co/facebook/dinov2-base) architecture.
-
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 768):
-            Dimensionality of the encoder layers and the pooler layer.
-        num_hidden_layers (`int`, *optional*, defaults to 12):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 12):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        mlp_ratio (`int`, *optional*, defaults to 4):
-            Ratio of the hidden size of the MLPs relative to the `hidden_size`.
-        hidden_act (`str` or `function`, *optional*, defaults to `"gelu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` are supported.
-        hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_probs_dropout_prob (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the layer normalization layers.
-        image_size (`int`, *optional*, defaults to 224):
-            The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to 14):
-            The size (resolution) of each patch.
-        num_channels (`int`, *optional*, defaults to 3):
-            The number of input channels.
-        qkv_bias (`bool`, *optional*, defaults to `True`):
-            Whether to add a bias to the queries, keys and values.
-        layerscale_value (`float`, *optional*, defaults to 1.0):
-           Initial value to use for layer scale.
-        drop_path_rate (`float`, *optional*, defaults to 0.0):
-            Stochastic depth rate per sample (when applied in the main path of residual layers).
-        use_swiglu_ffn (`bool`, *optional*, defaults to `False`):
-            Whether to use the SwiGLU feedforward neural network.
-        out_features (`list[str]`, *optional*):
-            If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
-            (depending on how many stages the model has). If unset and `out_indices` is set, will default to the
-            corresponding stages. If unset and `out_indices` is unset, will default to the last stage. Must be in the
-            same order as defined in the `stage_names` attribute.
-        out_indices (`list[int]`, *optional*):
-            If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc. (depending on how
-            many stages the model has). If unset and `out_features` is set, will default to the corresponding stages.
-            If unset and `out_features` is unset, will default to the last stage. Must be in the
-            same order as defined in the `stage_names` attribute.
-        apply_layernorm (`bool`, *optional*, defaults to `True`):
-            Whether to apply layer normalization to the feature maps in case the model is used as backbone.
-        reshape_hidden_states (`bool`, *optional*, defaults to `True`):
-            Whether to reshape the feature maps to 4D tensors of shape `(batch_size, hidden_size, height, width)` in
-            case the model is used as backbone. If `False`, the feature maps will be 3D tensors of shape `(batch_size,
-            seq_len, hidden_size)`.
-        use_mask_token (`bool`, *optional*, defaults to `True`):
-            Whether to use mask_token in embeddings.
-        num_windows (`int`, *optional*, defaults to 4):
-            Number of windows to use for windowed attention. If 1, no windowed attention is used.
-    Example:
-
-    ```python
-    >>> from transformers import RfDetrDinov2Config, RfDetrDinov2Backbone
-
-    >>> # Initializing a RfDetrDinov2 base style configuration
-    >>> configuration = RfDetrDinov2Config()
-
-    >>> # Initializing a model (with random weights) from the base style configuration
-    >>> model = RfDetrDinov2Backbone(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```"""
-
-    model_type = "rf_detr_dinov2"
-
-    def __init__(self, num_windows: int = 4, **super_kwargs):
-        super().__init__(**super_kwargs)
-
-        self.num_windows = num_windows
-        window_block_indexes = set(range(self._out_indices[-1] + 1))
-        window_block_indexes.difference_update(self._out_indices)
-        window_block_indexes = list(window_block_indexes)
-        self.window_block_indexes = window_block_indexes
 
 
 def window_partition(
@@ -866,6 +639,233 @@ class RfDetrDinov2Backbone(Dinov2Backbone):
             feature_maps=feature_maps,
             hidden_states=hidden_states if output_hidden_states else None,
         )
+
+
+class RfDetrLayerNorm(LwDetrLayerNorm):
+    pass
+
+
+class RfDetrConvNormLayer(LwDetrConvNormLayer):
+    def __init__(
+        self,
+        config: RfDetrConfig,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int,
+        stride: int,
+        activation: Optional[str] = None,
+    ):
+        super().__init__(
+            config,
+            in_channels,
+            out_channels,
+            kernel_size,
+            stride,
+            activation,
+        )
+        self.norm = RfDetrLayerNorm(out_channels, data_format="channels_first", eps=config.layer_norm_eps)
+
+
+class RfDetrC2FLayer(LwDetrC2FLayer):
+    pass
+
+
+class RfDetrSamplingLayer(LwDetrSamplingLayer):
+    def __init__(self, config: RfDetrConfig, channel_size: int, scale: float):
+        nn.Module.__init__(self)
+
+        self.scale = scale
+        self.channel_size = channel_size
+
+        layers = []
+        if scale == 2.0:
+            layers.append(nn.ConvTranspose2d(channel_size, channel_size // 2, 2, 2))
+        elif scale == 0.5:
+            layers.append(RfDetrConvNormLayer(config, channel_size, channel_size, 3, 2, activation="relu"))
+        self.layers = nn.ModuleList(layers)
+
+
+class RfDetrScaleProjector(LwDetrScaleProjector):
+    def __init__(self, config: RfDetrConfig, scale: float):
+        nn.Module.__init__(self)
+
+        intermediate_dims = [config.backbone_config.hidden_size] * len(config.backbone_config.out_indices)
+        sampling_layers = []
+        for channel_size in intermediate_dims:
+            sampling_layers.append(RfDetrSamplingLayer(config, channel_size, scale))
+        self.sampling_layers = nn.ModuleList(sampling_layers)
+
+        intermediate_dim = intermediate_dims[-1]
+        if scale == 2.0:
+            intermediate_dim = intermediate_dim // 2
+        projector_input_dim = intermediate_dim * len(intermediate_dims)
+
+        self.projector_layer = RfDetrC2FLayer(config, projector_input_dim)
+        self.layer_norm = RfDetrLayerNorm(config.d_model, data_format="channels_first")
+
+
+class RfDetrConvEncoder(LwDetrConvEncoder):
+    def __init__(self, config: RfDetrConfig):
+        super().__init__(config)
+        self.backbone = RfDetrDinov2Backbone(config.backbone_config)
+
+
+class RfDetrPreTrainedModel(LwDetrPreTrainedModel):
+    pass
+
+
+class RfDetrModelOutput(LwDetrModelOutput):
+    pass
+
+
+class RfDetrModel(LwDetrModel):
+    def forward(
+        self,
+        pixel_values: torch.FloatTensor,
+        pixel_mask: Optional[torch.LongTensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> RfDetrModelOutput:
+        r"""
+        Examples:
+
+        ```python
+        >>> from transformers import AutoImageProcessor, DeformableDetrModel
+        >>> from PIL import Image
+        >>> import requests
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> image_processor = AutoImageProcessor.from_pretrained("stevenbucaille/RfDetr_small_60e_coco")
+        >>> model = DeformableDetrModel.from_pretrained("stevenbucaille/RfDetr_small_60e_coco")
+
+        >>> inputs = image_processor(images=image, return_tensors="pt")
+
+        >>> outputs = model(**inputs)
+
+        >>> last_hidden_states = outputs.last_hidden_state
+        >>> list(last_hidden_states.shape)
+        [1, 300, 256]
+        ```"""
+        batch_size, num_channels, height, width = pixel_values.shape
+        device = pixel_values.device
+
+        if pixel_mask is None:
+            pixel_mask = torch.ones(((batch_size, height, width)), dtype=torch.long, device=device)
+
+        # Extract multi-scale feature maps of same resolution `config.d_model` (cf Figure 4 in paper)
+        # First, sent pixel_values + pixel_mask through Backbone to obtain the features
+        # which is a list of tuples
+        features = self.backbone(pixel_values, pixel_mask)
+
+        # Then, apply 1x1 convolution to reduce the channel dimension to d_model (256 by default)
+        sources = []
+        masks = []
+        for level, (source, mask) in enumerate(features):
+            sources.append(source)
+            masks.append(mask)
+            if mask is None:
+                raise ValueError("No attention mask was provided")
+
+        if self.training:
+            reference_points = self.reference_point_embed.weight
+            query_feat = self.query_feat.weight
+        else:
+            # only use one group in inference
+            reference_points = self.reference_point_embed.weight[: self.num_queries]
+            query_feat = self.query_feat.weight[: self.num_queries]
+
+        # Prepare encoder inputs (by flattening)
+        source_flatten = []
+        mask_flatten = []
+        spatial_shapes_list = []
+        for source, mask in zip(sources, masks):
+            batch_size, num_channels, height, width = source.shape
+            spatial_shape = (height, width)
+            spatial_shapes_list.append(spatial_shape)
+            source = source.flatten(2).transpose(1, 2)
+            mask = mask.flatten(1)
+            source_flatten.append(source)
+            mask_flatten.append(mask)
+        source_flatten = torch.cat(source_flatten, 1)
+        mask_flatten = torch.cat(mask_flatten, 1)
+        spatial_shapes = torch.as_tensor(spatial_shapes_list, dtype=torch.long, device=source_flatten.device)
+        level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
+        valid_ratios = torch.stack([self.get_valid_ratio(m, dtype=source_flatten.dtype) for m in masks], 1)
+
+        target = query_feat.unsqueeze(0).expand(batch_size, -1, -1)
+        reference_points = reference_points.unsqueeze(0).expand(batch_size, -1, -1)
+
+        object_query_embedding, output_proposals = self.gen_encoder_output_proposals(
+            source_flatten, ~mask_flatten, spatial_shapes_list
+        )
+
+        group_detr = self.group_detr if self.training else 1
+        topk = self.num_queries
+        topk_coords_logits = []
+        topk_coords_logits_undetach = []
+        object_query_undetach = []
+
+        for group_id in range(group_detr):
+            group_object_query = self.enc_output[group_id](object_query_embedding)
+            group_object_query = self.enc_output_norm[group_id](group_object_query)
+
+            group_enc_outputs_class = self.enc_out_class_embed[group_id](group_object_query)
+            group_delta_bbox = self.enc_out_bbox_embed[group_id](group_object_query)
+            group_enc_outputs_coord = refine_bboxes(output_proposals, group_delta_bbox)
+
+            group_topk_proposals = torch.topk(group_enc_outputs_class.max(-1)[0], topk, dim=1)[1]
+            group_topk_coords_logits_undetach = torch.gather(
+                group_enc_outputs_coord,
+                1,
+                group_topk_proposals.unsqueeze(-1).repeat(1, 1, 4),
+            )
+            group_topk_coords_logits = group_topk_coords_logits_undetach.detach()
+            group_object_query_undetach = torch.gather(
+                group_object_query, 1, group_topk_proposals.unsqueeze(-1).repeat(1, 1, self.config.d_model)
+            )
+
+            topk_coords_logits.append(group_topk_coords_logits)
+            topk_coords_logits_undetach.append(group_topk_coords_logits_undetach)
+            object_query_undetach.append(group_object_query_undetach)
+
+        topk_coords_logits = torch.cat(topk_coords_logits, 1)
+        topk_coords_logits_undetach = torch.cat(topk_coords_logits_undetach, 1)
+        object_query_undetach = torch.cat(object_query_undetach, 1)
+
+        enc_outputs_class = object_query_undetach
+        enc_outputs_coord_logits = topk_coords_logits
+
+        two_stage_len = topk_coords_logits.shape[-2]
+        reference_points_two_stage_subset = reference_points[..., :two_stage_len, :]
+        reference_points_subset = reference_points[..., two_stage_len:, :]
+        reference_points_two_stage_subset = refine_bboxes(topk_coords_logits, reference_points_two_stage_subset)
+        reference_points = torch.cat([reference_points_two_stage_subset, reference_points_subset], dim=-2)
+        init_reference_points = reference_points
+        decoder_outputs = self.decoder(
+            inputs_embeds=target,
+            reference_points=reference_points,
+            spatial_shapes=spatial_shapes,
+            spatial_shapes_list=spatial_shapes_list,
+            level_start_index=level_start_index,
+            valid_ratios=valid_ratios,
+            encoder_hidden_states=source_flatten,
+            encoder_attention_mask=mask_flatten,
+            **kwargs,
+        )
+
+        return RfDetrModelOutput(
+            init_reference_points=init_reference_points,
+            last_hidden_state=decoder_outputs.last_hidden_state,
+            intermediate_hidden_states=decoder_outputs.intermediate_hidden_states,
+            intermediate_reference_points=decoder_outputs.intermediate_reference_points,
+            enc_outputs_class=enc_outputs_class,
+            enc_outputs_coord_logits=enc_outputs_coord_logits,
+        )
+
+
+class RfDetrForObjectDetection(LwDetrForObjectDetection):
+    pass
 
 
 __all__ = [
