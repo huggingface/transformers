@@ -18,8 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional
-
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 
@@ -123,28 +121,28 @@ class MoonshineConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 32768,
-        hidden_size: Optional[int] = 288,
-        intermediate_size: Optional[int] = 1152,
-        encoder_num_hidden_layers: Optional[int] = 6,
-        decoder_num_hidden_layers: Optional[int] = 6,
-        encoder_num_attention_heads: Optional[int] = 8,
-        decoder_num_attention_heads: Optional[int] = 8,
-        encoder_num_key_value_heads: Optional[int] = None,
-        decoder_num_key_value_heads: Optional[int] = None,
-        pad_head_dim_to_multiple_of: Optional[int] = None,
-        encoder_hidden_act: Optional[str] = "gelu",
-        decoder_hidden_act: Optional[str] = "silu",
-        max_position_embeddings: Optional[int] = 512,
-        initializer_range: Optional[float] = 0.02,
-        decoder_start_token_id: Optional[int] = 1,
-        use_cache: Optional[bool] = True,
-        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        is_encoder_decoder: Optional[bool] = True,
-        attention_bias: Optional[bool] = False,
-        attention_dropout: Optional[float] = 0.0,
-        bos_token_id: Optional[int] = 1,
-        eos_token_id: Optional[int] = 2,
+        vocab_size: int | None = 32768,
+        hidden_size: int | None = 288,
+        intermediate_size: int | None = 1152,
+        encoder_num_hidden_layers: int | None = 6,
+        decoder_num_hidden_layers: int | None = 6,
+        encoder_num_attention_heads: int | None = 8,
+        decoder_num_attention_heads: int | None = 8,
+        encoder_num_key_value_heads: int | None = None,
+        decoder_num_key_value_heads: int | None = None,
+        pad_head_dim_to_multiple_of: int | None = None,
+        encoder_hidden_act: str | None = "gelu",
+        decoder_hidden_act: str | None = "silu",
+        max_position_embeddings: int | None = 512,
+        initializer_range: float | None = 0.02,
+        decoder_start_token_id: int | None = 1,
+        use_cache: bool | None = True,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        is_encoder_decoder: bool | None = True,
+        attention_bias: bool | None = False,
+        attention_dropout: float | None = 0.0,
+        bos_token_id: int | None = 1,
+        eos_token_id: int | None = 2,
         **kwargs,
     ):
         self.vocab_size = vocab_size

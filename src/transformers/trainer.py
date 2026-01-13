@@ -1671,6 +1671,12 @@ class Trainer:
                 optimizer_cls = AdamW8bit
             else:
                 raise ValueError("Invalid optimizer")
+            optimizer_kwargs.update(
+                {
+                    "block_size": optim_args.get("block_size", 256),
+                    "bf16_stochastic_round": strtobool(optim_args.get("bf16_stochastic_round", "False")),
+                }
+            )
             optimizer_kwargs.update(adam_kwargs)
         elif args.optim in [
             OptimizerNames.SCHEDULE_FREE_RADAM,
@@ -2265,8 +2271,7 @@ class Trainer:
                 # nn.DataParallel(model) replicates the model, creating new variables and module
                 # references registered here no longer work on other gpus, breaking the module
                 raise ValueError(
-                    "Currently --debug underflow_overflow is not supported under DP. Please use DDP"
-                    " (torchrun or torch.distributed.launch (deprecated))."
+                    "Currently --debug underflow_overflow is not supported under DP. Please use DDP with torchrun"
                 )
             else:
                 DebugUnderflowOverflow(self.model)
@@ -3050,7 +3055,8 @@ class Trainer:
                 return
 
         with safe_globals():
-            checkpoint_rng_state = torch.load(rng_file)
+            check_torch_load_is_safe()
+            checkpoint_rng_state = torch.load(rng_file, weights_only=True)
         random.setstate(checkpoint_rng_state["python"])
         np.random.set_state(checkpoint_rng_state["numpy"])
         torch.random.set_rng_state(checkpoint_rng_state["cpu"])

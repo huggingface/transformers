@@ -35,7 +35,6 @@ from transformers.testing_utils import (
     require_deterministic_for_xpu,
     require_flash_attn,
     require_flash_attn_3,
-    require_read_token,
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
@@ -158,6 +157,7 @@ class Gemma3TextModelTest(CausalLMModelTest, unittest.TestCase):
     def test_model_rope_scaling_frequencies(self):
         """Tests the frequency properties of the different RoPE scaling types on the model RoPE layer."""
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        config.layer_types = ["full_attention", "sliding_attention"]
 
         # Retrieves the RoPE layer class from the base model class. Uses `.named_modules()` to avoid hardcoding the
         # named location of the RoPE layer class.
@@ -456,7 +456,6 @@ class Gemma3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
 
 @slow
 @require_torch_accelerator
-@require_read_token
 class Gemma3IntegrationTest(unittest.TestCase):
     def setUp(self):
         self.processor = Gemma3Processor.from_pretrained("google/gemma-3-4b-it", padding_side="left")

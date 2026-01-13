@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,7 +13,7 @@
 # limitations under the License.
 """Fast Image processor class for LayoutLMv2."""
 
-from typing import Optional, Union
+from typing import Optional
 
 import torch
 from torchvision.transforms.v2 import functional as F
@@ -60,10 +59,10 @@ class LayoutLMv2ImageProcessorFast(BaseImageProcessorFast):
         size: SizeDict,
         interpolation: Optional["F.InterpolationMode"],
         apply_ocr: bool,
-        ocr_lang: Optional[str],
-        tesseract_config: Optional[str],
-        disable_grouping: Optional[bool],
-        return_tensors: Optional[Union[str, TensorType]],
+        ocr_lang: str | None,
+        tesseract_config: str | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         # Tesseract OCR to get words + normalized bounding boxes

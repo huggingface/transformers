@@ -72,7 +72,6 @@ from transformers.testing_utils import (
     is_staging_test,
     require_accelerate,
     require_non_hpu,
-    require_read_token,
     require_torch,
     require_torch_accelerator,
     require_torch_multi_accelerator,
@@ -133,6 +132,7 @@ if is_torch_available():
         FLASH_ATTN_KERNEL_FALLBACK,
         _find_disjoint,
         _find_identical,
+        get_total_byte_count,
     )
     from transformers.pytorch_utils import isin_mps_friendly
 
@@ -398,6 +398,23 @@ class ModelUtilsTest(TestCasePlus):
         torch.set_default_dtype(self.old_dtype)
         super().tearDown()
 
+    @require_torch
+    def test_get_total_byte_count_does_not_require_process_group(self):
+        model = BaseModel(PreTrainedConfig())
+        model._tp_plan = {"linear.weight": "rowwise"}
+        accelerator_device_map = {"linear.weight": torch.device("cpu")}
+
+        with (
+            patch("transformers.modeling_utils.torch.distributed.is_available", return_value=True),
+            patch("transformers.modeling_utils.torch.distributed.is_initialized", return_value=False),
+            patch("transformers.modeling_utils.torch.distributed.get_world_size") as mock_world_size,
+        ):
+            total_byte_count = get_total_byte_count(model, accelerator_device_map, None)
+
+        mock_world_size.assert_not_called()
+        self.assertIn(torch.device("cpu"), total_byte_count)
+        self.assertGreater(total_byte_count[torch.device("cpu")], 0)
+
     def test_hub_retry(self):
         @hub_retry(max_attempts=2)
         def test_func():
@@ -551,6 +568,8 @@ class ModelUtilsTest(TestCasePlus):
         """
         Test that from_pretrained works with dtype being as a dict per each sub-config in composite config
         Tiny-Llava has saved auto dtype as `torch.float32` for all modules.
+        Note, this is a deprecated feature and we fallback to main dtype in all cases below. This test checks
+        if the dtype fallback works correctly.
         """
         # Load without dtype specified
         model = LlavaForConditionalGeneration.from_pretrained(TINY_LLAVA)
@@ -569,32 +588,32 @@ class ModelUtilsTest(TestCasePlus):
         self.assertEqual(model.model.vision_tower.dtype, torch.float16)
         self.assertIsInstance(model.config.dtype, torch.dtype)
 
-        # should be able to set dtype as a dict for each sub-config
+        # should be able to accept dtype as a dict for each sub-config
         model = LlavaForConditionalGeneration.from_pretrained(
             TINY_LLAVA, dtype={"text_config": "float32", "vision_config": "float16", "": "bfloat16"}
         )
-        self.assertEqual(model.model.language_model.dtype, torch.float32)
-        self.assertEqual(model.model.vision_tower.dtype, torch.float16)
+        self.assertEqual(model.model.language_model.dtype, torch.bfloat16)
+        self.assertEqual(model.model.vision_tower.dtype, torch.bfloat16)
         self.assertEqual(model.model.multi_modal_projector.linear_1.weight.dtype, torch.bfloat16)
         self.assertIsInstance(model.config.dtype, torch.dtype)
 
-        # should be able to set the values as torch.dtype (not str)
+        # should be able to accept the values as torch.dtype (not str)
         model = LlavaForConditionalGeneration.from_pretrained(
             TINY_LLAVA, dtype={"text_config": torch.float32, "vision_config": torch.float16, "": torch.bfloat16}
         )
-        self.assertEqual(model.model.language_model.dtype, torch.float32)
-        self.assertEqual(model.model.vision_tower.dtype, torch.float16)
+        self.assertEqual(model.model.language_model.dtype, torch.bfloat16)
+        self.assertEqual(model.model.vision_tower.dtype, torch.bfloat16)
         self.assertEqual(model.model.multi_modal_projector.linear_1.weight.dtype, torch.bfloat16)
         self.assertIsInstance(model.config.dtype, torch.dtype)
 
-        # should be able to set the values in configs directly and pass it to `from_pretrained`
+        # should be able to accept the values in configs directly and pass it to `from_pretrained`
         config = copy.deepcopy(model.config)
         config.text_config.dtype = torch.float32
         config.vision_config.dtype = torch.bfloat16
         config.dtype = torch.float16
         model = LlavaForConditionalGeneration.from_pretrained(TINY_LLAVA, config=config, dtype="auto")
-        self.assertEqual(model.model.language_model.dtype, torch.float32)
-        self.assertEqual(model.model.vision_tower.dtype, torch.bfloat16)
+        self.assertEqual(model.model.language_model.dtype, torch.float16)
+        self.assertEqual(model.model.vision_tower.dtype, torch.float16)
         self.assertEqual(model.model.multi_modal_projector.linear_1.weight.dtype, torch.float16)
         self.assertIsInstance(model.config.dtype, torch.dtype)
 
@@ -602,9 +621,9 @@ class ModelUtilsTest(TestCasePlus):
         LlavaForConditionalGeneration._keep_in_fp32_modules = ["multi_modal_projector"]
         model = LlavaForConditionalGeneration.from_pretrained(TINY_LLAVA, config=config, dtype="auto")
         self.assertEqual(
-            model.model.language_model.dtype, torch.float32
+            model.model.language_model.dtype, torch.float16
         )  # remember config says float32 for text_config
-        self.assertEqual(model.model.vision_tower.dtype, torch.bfloat16)
+        self.assertEqual(model.model.vision_tower.dtype, torch.float16)
         self.assertEqual(model.model.multi_modal_projector.linear_1.weight.dtype, torch.float32)
         self.assertIsInstance(model.config.dtype, torch.dtype)
 
@@ -1762,7 +1781,7 @@ class ModelUtilsTest(TestCasePlus):
 
         with CaptureLogger(logger) as cl:
             can_generate = DummyBertWithMixin.can_generate()
-        self.assertTrue("" == cl.out)
+        self.assertTrue(cl.out == "")
         self.assertTrue(can_generate)
 
         # 3 - Finally, it can inherit from a model that can generate
@@ -1771,7 +1790,7 @@ class ModelUtilsTest(TestCasePlus):
 
         with CaptureLogger(logger) as cl:
             can_generate = DummyBertWithParent.can_generate()
-        self.assertTrue("" == cl.out)
+        self.assertTrue(cl.out == "")
         self.assertTrue(can_generate)
 
         # 4 - Legacy: models with a custom `prepare_inputs_for_generation` can generate (it was assumed
@@ -1931,7 +1950,6 @@ class ModelUtilsTest(TestCasePlus):
 
     @parameterized.expand([("Qwen/Qwen2.5-3B-Instruct", 10), ("meta-llama/Llama-2-7b-chat-hf", 10)])
     @slow
-    @require_read_token
     @require_torch_accelerator
     def test_loading_is_fast_on_gpu(self, model_id: str, max_loading_time: float):
         """

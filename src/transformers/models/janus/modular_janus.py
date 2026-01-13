@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Deepseek AI and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,12 +15,10 @@
 import copy
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import numpy as np
 import torch
 import torch.nn.functional as F
-import torch.utils.checkpoint
 from torch import nn
 
 from ... import initialization as init
@@ -411,8 +408,8 @@ class JanusVQVAEOutput(ModelOutput):
         Embedding loss.
     """
 
-    decoded_pixel_values: Optional[torch.FloatTensor] = None
-    embedding_loss: Optional[torch.FloatTensor] = None
+    decoded_pixel_values: torch.FloatTensor | None = None
+    embedding_loss: torch.FloatTensor | None = None
 
 
 class JanusBaseModelOutputWithPast(IdeficsBaseModelOutputWithPast):
@@ -475,7 +472,7 @@ class JanusVisionAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
         batch_size, seq_len, _ = hidden_states.size()
@@ -937,15 +934,15 @@ class JanusModel(JanusPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        cache_position: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
         **kwargs,
     ) -> JanusBaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -1013,16 +1010,16 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        cache_position: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> JanusCausalLMOutputWithPast:
         r"""
@@ -1071,6 +1068,7 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         inputs_embeds=None,
         cache_position=None,
         logits_to_keep=None,
+        is_first_iteration=False,
         **kwargs,
     ):
         # Overwritten -- extra custom processing
@@ -1082,12 +1080,15 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
             attention_mask=attention_mask,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
+            is_first_iteration=is_first_iteration,
             **kwargs,
         )
 
-        # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
-        # Otherwise we need pixel values to be passed to model
-        if cache_position[0] == 0:
+        # Pixel values are used only in the first iteration if available
+        # In subsquent iterations, they are already merged with text and cached
+        # NOTE: first iteration doesn't have to be prefill, it can be the first
+        # iteration with a question and cached system prompt (continue generate from cache)
+        if is_first_iteration or not kwargs.get("use_cache", True):
             model_inputs["pixel_values"] = pixel_values
 
         return model_inputs
@@ -1107,9 +1108,9 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
     @torch.no_grad()
     def generate(
         self,
-        inputs: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,
-        logits_processor: Optional[LogitsProcessorList] = None,
+        inputs: torch.Tensor | None = None,
+        attention_mask: torch.LongTensor | None = None,
+        logits_processor: LogitsProcessorList | None = None,
         **kwargs,
     ):
         # 1. Handle generation config and model kwargs
@@ -1351,16 +1352,16 @@ class JanusImageProcessor(BlipImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Optional[dict[str, int]] = None,
+        size: dict[str, int] | None = None,
         min_size: int = 14,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         do_rescale: bool = True,
-        rescale_factor: Union[int, float] = 1 / 255,
+        rescale_factor: int | float = 1 / 255,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
-        do_convert_rgb: Optional[bool] = None,
-        do_pad: Optional[bool] = True,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        do_convert_rgb: bool | None = None,
+        do_pad: bool | None = True,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -1375,9 +1376,9 @@ class JanusImageProcessor(BlipImageProcessor):
     def pad_to_square(
         self,
         image: np.ndarray,
-        background_color: Union[int, tuple[int, int, int]] = 0,
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        background_color: int | tuple[int, int, int] = 0,
+        data_format: str | ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
     ) -> np.ndarray:
         """
         Pads an image to a square based on the longest edge.
@@ -1449,10 +1450,10 @@ class JanusImageProcessor(BlipImageProcessor):
     def resize(
         self,
         image: np.ndarray,
-        size: Union[dict[str, int], int],
+        size: dict[str, int] | int,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        data_format: str | ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -1515,20 +1516,20 @@ class JanusImageProcessor(BlipImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        do_resize: Optional[bool] = None,
-        size: Optional[dict[str, int]] = None,
-        resample: Optional[PILImageResampling] = None,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[float] = None,
-        do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        do_convert_rgb: Optional[bool] = None,
-        background_color: Optional[Union[int, tuple[int, int, int]]] = None,
-        do_pad: Optional[bool] = None,
+        do_resize: bool | None = None,
+        size: dict[str, int] | None = None,
+        resample: PILImageResampling | None = None,
+        do_rescale: bool | None = None,
+        rescale_factor: float | None = None,
+        do_normalize: bool | None = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        return_tensors: str | TensorType | None = None,
+        do_convert_rgb: bool | None = None,
+        background_color: int | tuple[int, int, int] | None = None,
+        do_pad: bool | None = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: str | ChannelDimension | None = None,
     ) -> PIL.Image.Image:
         """
         Preprocess an image or batch of images.
@@ -1665,13 +1666,13 @@ class JanusImageProcessor(BlipImageProcessor):
     def postprocess(
         self,
         images: ImageInput,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[float] = None,
-        do_normalize: Optional[bool] = None,
-        image_mean: Optional[list[float]] = None,
-        image_std: Optional[list[float]] = None,
-        input_data_format: Optional[str] = None,
-        return_tensors: Optional[str] = None,
+        do_rescale: bool | None = None,
+        rescale_factor: float | None = None,
+        do_normalize: bool | None = None,
+        image_mean: list[float] | None = None,
+        image_std: list[float] | None = None,
+        input_data_format: str | None = None,
+        return_tensors: str | None = None,
     ):
         """Applies post-processing to the decoded image tokens by reversing transformations applied during preprocessing."""
         do_rescale = do_rescale if do_rescale is not None else self.do_rescale
@@ -1716,9 +1717,9 @@ class JanusImageProcessor(BlipImageProcessor):
     def unnormalize(
         self,
         image: np.ndarray,
-        image_mean: Union[float, Iterable[float]],
-        image_std: Union[float, Iterable[float]],
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        image_mean: float | Iterable[float],
+        image_std: float | Iterable[float],
+        input_data_format: str | ChannelDimension | None = None,
     ) -> np.ndarray:
         """
         Unnormalizes `image` using the mean and standard deviation specified by `mean` and `std`.

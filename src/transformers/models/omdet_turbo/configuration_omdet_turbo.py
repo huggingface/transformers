@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -68,7 +67,7 @@ class OmDetTurboConfig(PreTrainedConfig):
         class_embed_dim (`int`, *optional*, defaults to 512):
             The dimension of the classes embeddings.
         class_distance_type (`str`, *optional*, defaults to `"cosine"`):
-            The type of of distance to compare predicted classes to projected classes embeddings.
+            The type of distance to compare predicted classes to projected classes embeddings.
             Can be `"cosine"` or `"dot"`.
         num_queries (`int`, *optional*, defaults to 900):
             The number of queries.

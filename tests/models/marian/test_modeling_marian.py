@@ -38,7 +38,6 @@ if is_torch_available():
 
     from transformers import (
         AutoConfig,
-        AutoModelWithLMHead,
         AutoTokenizer,
         MarianModel,
         MarianMTModel,
@@ -411,7 +410,7 @@ class MarianIntegrationTest(unittest.TestCase):
 
     @cached_property
     def model(self):
-        model: MarianMTModel = AutoModelWithLMHead.from_pretrained(self.model_name).to(torch_device)
+        model: MarianMTModel = MarianMTModel.from_pretrained(self.model_name).to(torch_device)
         c = model.config
         self.assertListEqual(c.bad_words_ids, [[c.pad_token_id]])
         self.assertEqual(c.max_length, 512)

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 HuggingFace Inc. team. All rights reserved.
 #
 #
@@ -16,7 +15,6 @@
 
 import math
 from functools import cached_property
-from typing import Optional, Union
 
 import torch
 import torch.nn as nn
@@ -54,12 +52,12 @@ class Emu3DecoderLayer(LlamaDecoderLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        use_cache: Optional[bool] = False,
-        cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        use_cache: bool | None = False,
+        cache_position: torch.LongTensor | None = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
@@ -293,8 +291,8 @@ class Emu3VQVAEResnetBlock(nn.Module):
     def __init__(
         self,
         in_channels: int,
-        out_channels: Optional[int] = None,
-        quant_channels: Optional[int] = None,
+        out_channels: int | None = None,
+        quant_channels: int | None = None,
     ):
         super().__init__()
         self.in_channels = in_channels
@@ -334,7 +332,7 @@ class Emu3VQVAEResnetBlock(nn.Module):
                 padding=0,
             )
 
-    def forward(self, hidden_states: torch.Tensor, quant_channels: Optional[torch.Tensor] = None):
+    def forward(self, hidden_states: torch.Tensor, quant_channels: torch.Tensor | None = None):
         norm_args = () if self.quant_channels is None else (quant_channels,)
 
         residual = hidden_states
@@ -395,7 +393,7 @@ class Emu3VQVAEMiddleBlock(nn.Module):
             quant_channels=quant_channels,
         )
 
-    def forward(self, hidden_states: torch.FloatTensor, quant_states: Optional[torch.FloatTensor] = None):
+    def forward(self, hidden_states: torch.FloatTensor, quant_states: torch.FloatTensor | None = None):
         hidden_states = self.block_1(hidden_states, quant_states)
         residual = hidden_states
         hidden_states = self.attn_norm(hidden_states, quant_states)
@@ -994,17 +992,17 @@ class Emu3Model(Emu3PreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        image_sizes: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        image_sizes: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, CausalLMOutputWithPast]:
+    ) -> tuple | CausalLMOutputWithPast:
         r"""
         image_sizes (`torch.LongTensor` of shape `(batch_size, 2)`):
             The sizes of the images in the batch, being (height, width) for each image. Image sizes can be obtained using
@@ -1073,19 +1071,19 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        image_sizes: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        image_sizes: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, CausalLMOutputWithPast]:
+    ) -> tuple | CausalLMOutputWithPast:
         r"""
         image_sizes (`torch.LongTensor` of shape `(batch_size, 2)`):
             The sizes of the images in the batch, being (height, width) for each image. Image sizes can be obtained using
@@ -1171,6 +1169,7 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
         position_ids=None,
         use_cache=True,
         pixel_values=None,
+        is_first_iteration=False,
         **kwargs,
     ):
         # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
@@ -1184,10 +1183,11 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
             position_ids=position_ids,
             pixel_values=pixel_values,
             use_cache=use_cache,
+            is_first_iteration=is_first_iteration,
             **kwargs,
         )
 
-        if cache_position[0] != 0:
+        if not is_first_iteration and use_cache:
             model_inputs["pixel_values"] = None
 
         return model_inputs

@@ -23,7 +23,6 @@ from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
     Expectations,
     cleanup,
-    require_read_token,
     require_torch,
     require_torch_accelerator,
     run_test_using_subprocess,
@@ -62,7 +61,6 @@ class LlamaModelTest(CausalLMModelTest, unittest.TestCase):
 
 
 @require_torch_accelerator
-@require_read_token
 class LlamaIntegrationTest(unittest.TestCase):
     def setup(self):
         cleanup(torch_device, gc_collect=True)
