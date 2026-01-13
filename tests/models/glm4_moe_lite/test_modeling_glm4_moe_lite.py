@@ -1,4 +1,4 @@
-# Copyright 2025 The ZhipuAI Inc. team and HuggingFace Inc. team. All rights reserved.
+# Copyright 2025 the HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch GLM-4.5, GLM-4.6, GLM-4.7 model."""
+"""Testing suite for the PyTorch GLM-4-MoE-Lite model."""
 
 import unittest
 
@@ -19,9 +19,10 @@ import pytest
 import torch
 from packaging import version
 
-from transformers import is_torch_available
+from transformers import Cache, is_torch_available
 from transformers.testing_utils import (
     cleanup,
+    require_read_token,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -32,38 +33,56 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 
 
 if is_torch_available():
-    from transformers import AutoTokenizer, Glm4MoeForCausalLM, Glm4MoeModel
+    from transformers import AutoTokenizer, Glm4MoeLiteForCausalLM, Glm4MoeLiteModel
 
 
-class Glm4MoeModelTester(CausalLMModelTester):
+class Glm4MoeLiteModelTester(CausalLMModelTester):
     if is_torch_available():
-        base_model_class = Glm4MoeModel
+        base_model_class = Glm4MoeLiteModel
 
     def __init__(
         self,
         parent,
         n_routed_experts=8,
-        n_shared_experts=1,
-        n_group=1,
-        topk_group=1,
-        num_experts_per_tok=8,
+        kv_lora_rank=32,
+        q_lora_rank=16,
+        qk_nope_head_dim=64,
+        qk_rope_head_dim=64,
     ):
-        super().__init__(parent=parent, num_experts_per_tok=num_experts_per_tok)
+        super().__init__(parent=parent)
         self.n_routed_experts = n_routed_experts
-        self.n_shared_experts = n_shared_experts
-        self.n_group = n_group
-        self.topk_group = topk_group
+        self.kv_lora_rank = kv_lora_rank
+        self.q_lora_rank = q_lora_rank
+        self.qk_nope_head_dim = qk_nope_head_dim
+        self.qk_rope_head_dim = qk_rope_head_dim
 
 
 @require_torch
 class Glm4MoeModelTest(CausalLMModelTest, unittest.TestCase):
-    model_tester_class = Glm4MoeModelTester
-    # used in `test_torch_compile_for_training`. Skip as "Dynamic control flow in MoE"
-    _torch_compile_train_cls = None
-    model_split_percents = [0.5, 0.85, 0.9]  # it tries to offload everything with the default value
+    model_tester_class = Glm4MoeLiteModelTester
+    test_all_params_have_gradient = False
+    model_split_percents = [0.5, 0.7, 0.8]
+
+    def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
+        """Needs to be overridden as GLM-Lite has special MLA cache format (though we don't really use the MLA)"""
+        self.assertIsInstance(past_key_values, Cache)
+
+        # (batch, head, seq_length, head_features)
+        expected_common_shape = (
+            batch_size,
+            getattr(config, "num_key_value_heads", config.num_attention_heads),
+            seq_length,
+        )
+        expected_key_shape = expected_common_shape + (config.qk_nope_head_dim + config.qk_rope_head_dim,)
+        expected_value_shape = expected_common_shape + (config.v_head_dim,)
+
+        for layer in past_key_values.layers:
+            self.assertEqual(layer.keys.shape, expected_key_shape)
+            self.assertEqual(layer.values.shape, expected_value_shape)
 
 
 @require_torch_accelerator
+@require_read_token
 @slow
 class Glm4MoeIntegrationTest(unittest.TestCase):
     def tearDown(self):
@@ -73,6 +92,7 @@ class Glm4MoeIntegrationTest(unittest.TestCase):
     @slow
     @require_torch_accelerator
     @pytest.mark.torch_compile_test
+    @require_read_token
     def test_compile_static_cache(self):
         # `torch==2.2` will throw an error on this test (as in other compilation tests), but torch==2.1.2 and torch>2.2
         # work as intended. See https://github.com/pytorch/pytorch/issues/121943
@@ -87,7 +107,9 @@ class Glm4MoeIntegrationTest(unittest.TestCase):
 
         prompts = ["[gMASK]<sop>hello", "[gMASK]<sop>tell me"]
         tokenizer = AutoTokenizer.from_pretrained("zai-org/GLM-4.5")
-        model = Glm4MoeForCausalLM.from_pretrained("zai-org/GLM-4.5", device_map=torch_device, dtype=torch.bfloat16)
+        model = Glm4MoeLiteForCausalLM.from_pretrained(
+            "zai-org/GLM-Lite", device_map=torch_device, dtype=torch.bfloat16
+        )
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 
         # Dynamic Cache
