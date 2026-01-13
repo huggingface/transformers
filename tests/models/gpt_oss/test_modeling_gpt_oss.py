@@ -47,7 +47,9 @@ from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
 if is_torch_available():
     import torch
 
-    from transformers import GptOssModel
+    from transformers import (
+        GptOssModel,
+    )
 
     NUM_GPUS = torch.cuda.device_count()
 
@@ -417,6 +419,7 @@ if __name__ == "__main__":
             self.skipTest("Training test for quantized models is not supported.")
 
         model_id = f"openai/gpt-oss-{model}"
+
         model_obj = AutoModelForCausalLM.from_pretrained(
             model_id,
             dtype=torch.bfloat16,

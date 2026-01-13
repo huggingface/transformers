@@ -97,7 +97,7 @@ class GptOssExperts(nn.Module):
             # we sum on the top_k and on the sequence length to get which experts
             # are hit this time around
             expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
-        for expert_idx in expert_hit[:]:
+        for expert_idx in expert_hit:
             # expert_idx only have 1 element, so we can use scale for fast indexing
             expert_idx = expert_idx[0]
             # skip masking index
