@@ -15,7 +15,7 @@ style:
 	python utils/sort_auto_mappings.py
 
 
-# Check that the repo is in a good state
+# Check that the repo is in a good state (both style and consistency CI checks)
 # Note: each line is run in its own shell, and doing `-` before the command ignores the errors if any, continuing with next command
 check-repo:
 	ruff check $(check_dirs) setup.py conftest.py
@@ -36,7 +36,13 @@ check-repo:
 	-python utils/check_config_attributes.py
 	-python utils/check_doctest_list.py
 	-python utils/update_metadata.py --check-only  
-	-python utils/add_dates.py --check-only 
+	-python utils/add_dates.py --check-only
+	-@{ \
+		md5sum src/transformers/dependency_versions_table.py > md5sum.saved; \
+		python setup.py deps_table_update; \
+		md5sum -c --quiet md5sum.saved || (printf "Error: the version dependency table is outdated.\nPlease run 'make fix-repo' and commit the changes.\n" && exit 1); \
+		rm md5sum.saved; \
+	}
 
 
 # Run all repo checks for which there is an automatic fix, most notably modular conversions
