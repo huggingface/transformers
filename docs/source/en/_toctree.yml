@@ -236,6 +236,10 @@
     title: vLLM
   - local: community_integrations/transformers_as_backend
     title: Building a compatible model backend for inference
+  - sections:
+    - local: community_integrations/llama_cpp
+      title: llama.cpp
+    title: Local deployment
   title: Community integrations
 - isExpanded: false
   sections:
