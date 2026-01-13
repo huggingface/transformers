@@ -2572,6 +2572,7 @@ Hey how are you doing"""  # noqa: W293
                     self.assertEqual(tokens[key].shape[-1], 6)
 
     def test_added_tokens_serialization(self):
+        assert 1 == 1
         new_eos = AddedToken("[NEW_EOS]", rstrip=False, lstrip=True, normalized=False, special=True)
         for tokenizer, pretrained_name, kwargs in self.tokenizers_list:
             with self.subTest(f"{tokenizer.__class__.__name__} ({pretrained_name})"):
