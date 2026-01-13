@@ -9,7 +9,6 @@ from typing import Optional, Union
 
 import cv2
 import numpy as np
-import pyclipper
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils import BaseImageProcessor
@@ -31,8 +30,6 @@ from ...utils.generic import TensorType
 def unclip(box, unclip_ratio):
     """
     Expands (dilates) a detected text bounding box to recover the full text region.
-    The expansion distance is computed based on the contour area and perimeter,
-    and Pyclipper is used to perform smooth contour offsetting.
 
     Args:
         box (np.ndarray): Input contour of shape (N, 2), where N is the number of points.
@@ -41,16 +38,44 @@ def unclip(box, unclip_ratio):
     Returns:
         np.ndarray: Expanded contour of shape (M, 2).
     """
+    box = np.array(box).reshape(-1, 2)
+
     area = cv2.contourArea(box)
     length = cv2.arcLength(box, True)
+    if length == 0:
+        return box
     distance = area * unclip_ratio / length
-    offset = pyclipper.PyclipperOffset()
-    offset.AddPath(box, pyclipper.JT_ROUND, pyclipper.ET_CLOSEDPOLYGON)
-    try:
-        expanded = np.array(offset.Execute(distance))
-    except ValueError:
-        expanded = np.array(offset.Execute(distance)[0])
-    return expanded
+
+    points = np.concatenate([box, box[0:1]], axis=0)
+    new_points = []
+
+    for i in range(len(box)):
+        p1 = points[i]
+        p0 = points[i - 1]
+        p2 = points[i + 1]
+
+        def get_normal(pa, pb):
+            direction = pb - pa
+            norm = np.linalg.norm(direction)
+            if norm == 0:
+                return np.array([0, 0])
+            return np.array([direction[1], -direction[0]]) / norm
+
+        v1 = get_normal(p0, p1)
+        v2 = get_normal(p1, p2)
+        combined_v = v1 + v2
+        cos_theta = np.dot(v1, v2)
+
+        denom = 1 + cos_theta
+        if denom < 1e-6:
+            scale = distance
+        else:
+            scale = distance * np.sqrt(2 / denom)
+
+        new_point = p1 + combined_v * (scale / (np.linalg.norm(combined_v) + 1e-6))
+        new_points.append(new_point)
+
+    return np.array(new_points, dtype=np.float32)
 
 
 def get_mini_boxes(contour):
