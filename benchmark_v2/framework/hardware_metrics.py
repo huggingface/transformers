@@ -65,6 +65,7 @@ def get_amd_gpu_stats() -> tuple[int, float]:
     gpu_stats.sort(key=lambda x: x[1], reverse=True)
     return int(gpu_stats[0][1]), float(gpu_stats[0][2]) / 1024**3
 
+
 def get_intel_xpu_stats() -> tuple[int, float]:
     """Returns the utilization and memory used of an Intel XPU"""
     # xpu-smi outputs CSV format: Timestamp, DeviceId, GPU Memory Utilization (%), GPU Memory Used (MiB)
@@ -87,12 +88,13 @@ def get_intel_xpu_stats() -> tuple[int, float]:
 
     if not xpu_stats:
         return 0, 0.0
- 
+
     # Sort by utilization (descending) and pick the highest
     xpu_stats.sort(key=lambda x: x[1], reverse=True)
     device_id, utilization, memory_used_mib = xpu_stats[0]
     memory_used_gb = memory_used_mib / 1024
     return utilization, memory_used_gb
+
 
 def get_nvidia_gpu_stats() -> tuple[int, float]:
     """Returns the utilization and memory used of an NVIDIA GPU, both in percent"""
@@ -107,6 +109,7 @@ class GPUStatsCollector:
 
     def __init__(self) -> None:
         self.device_name, self.device_memory_total = get_device_name_and_memory_total()
+        device_type = torch.accelerator.current_accelerator().type if is_torch_accelerator_available() else "cuda"
         # Monkey patch the get_utilization_and_memory_used method based on the GPU type
         if "amd" in self.device_name.lower():
             self.get_utilization_and_memory_used = get_amd_gpu_stats

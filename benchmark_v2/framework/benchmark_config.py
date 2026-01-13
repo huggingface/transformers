@@ -5,11 +5,12 @@ import logging
 from functools import lru_cache
 from typing import Any
 
-from transformers.generation.configuration_utils import CompileConfig
-from transformers.utils.import_utils import is_flash_attn_2_available, is_kernels_available
-from transformers.utils import is_torch_accelerator_available
-
 import torch
+
+from transformers.generation.configuration_utils import CompileConfig
+from transformers.utils import is_torch_accelerator_available
+from transformers.utils.import_utils import is_flash_attn_2_available, is_kernels_available
+
 
 KERNELIZATION_AVAILABLE = False
 try:
