@@ -176,12 +176,13 @@ else:
         _device = matQ.device
         nc = num_chunks
         batch_size, nh, dqk, dhv = matC_states.shape
-        matC_k_states = matC_states.view(batch_size, nh, nc, dqk // nc, dhv)
-        vecN_k_states = vecN_states.view(batch_size, nh, nc, dqk // nc)
+        dhqk = dqk // nc
+        matC_k_states = matC_states.view(batch_size, nh, nc, dhqk, dhv)
+        vecN_k_states = vecN_states.view(batch_size, nh, nc, dhqk)
         scaMinter_k_states = scaMinter_states
 
-        matQ = matQ.view(batch_size, nh, nc, chunk_size, dqk // nc)
-        matK = matK.view(batch_size, nh, nc, chunk_size, dqk // nc)
+        matQ = matQ.view(batch_size, nh, nc, chunk_size, dhqk)
+        matK = matK.view(batch_size, nh, nc, chunk_size, dhqk)
         matV = matV.view(batch_size, nh, nc, chunk_size, dhv)
 
         ltr = torch.tril(
