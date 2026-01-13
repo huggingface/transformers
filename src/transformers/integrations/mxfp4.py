@@ -270,7 +270,7 @@ def convert_moe_packed_tensors(
 
     out = out.reshape(*prefix_shape, G, B * 2).view(*prefix_shape, G * B * 2)
     del blocks, scales, lut
-    return out.contiguous()
+    return out.transpose(1, 2).contiguous()
 
 
 class Mxfp4GptOssExperts(nn.Module):

@@ -69,9 +69,11 @@ def batched_mm_experts_forward(
     top_k_weights: torch.Tensor,
 ) -> torch.Tensor:
     device = hidden_states.device
+    hidden_dim = self.hidden_size
     num_top_k = top_k_index.size(-1)
     num_tokens = hidden_states.size(0)
     num_experts = self.gate_up_proj.size(0)
+    intermediate_dim = self.intermediate_size
     final_hidden_states = torch.zeros_like(hidden_states)
 
     # Flatten top_k_index to get expert_ids per selected sample
@@ -99,7 +101,11 @@ def batched_mm_experts_forward(
     selected_down = self.down_proj[expert_ids]  # (S, hidden_dim, intermediate_dim)
 
     # --- Up projection per expert (batched) ---
-    gate_up_out = torch.bmm(selected_gate_up, current_hidden_states.unsqueeze(-1)).squeeze(-1)
+    if selected_gate_up.shape == (num_tokens * num_top_k, hidden_dim, 2 * intermediate_dim):
+        gate_up_out = torch.bmm(current_hidden_states.unsqueeze(1), selected_gate_up).squeeze(1)
+    else:
+        gate_up_out = torch.bmm(selected_gate_up, current_hidden_states.unsqueeze(-1)).squeeze(-1)
+
     if hasattr(self, "gate_up_proj_bias") and self.gate_up_proj_bias is not None:
         gate_up_out = gate_up_out + self.gate_up_proj_bias[expert_ids]
 
@@ -113,7 +119,11 @@ def batched_mm_experts_forward(
         hidden_after_activation = self.act_fn(gate) * up  # (S, intermediate_dim)
 
     # --- Down projection per expert (batched) ---
-    out_per_sample = torch.bmm(selected_down, hidden_after_activation.unsqueeze(-1)).squeeze(-1)
+    if selected_down.shape == (num_tokens * num_top_k, hidden_dim, intermediate_dim):
+        out_per_sample = torch.bmm(hidden_after_activation.unsqueeze(1), selected_down).squeeze(1)
+    else:
+        out_per_sample = torch.bmm(selected_down, hidden_after_activation.unsqueeze(-1)).squeeze(-1)
+
     if hasattr(self, "down_proj_bias") and self.down_proj_bias is not None:
         out_per_sample = out_per_sample + self.down_proj_bias[expert_ids]
 
@@ -138,9 +148,11 @@ def grouped_mm_experts_forward(
         )
 
     device = hidden_states.device
+    hidden_dim = self.hidden_size
     num_top_k = top_k_index.size(-1)
     num_tokens = hidden_states.size(0)
     num_experts = self.gate_up_proj.size(0)
+    intermediate_dim = self.intermediate_size
     final_hidden_states = torch.zeros_like(hidden_states)
 
     # Flatten top_k_index to get expert_ids per selected sample
@@ -179,7 +191,11 @@ def grouped_mm_experts_forward(
     offsets = torch.cumsum(num_tokens_per_expert, dim=0, dtype=torch.int32)
 
     # --- Up projection per expert (grouped_mm) ---
-    gate_up_out = torch._grouped_mm(current_states_g, self.gate_up_proj.transpose(-2, -1), offs=offsets)
+    if self.gate_up_proj.shape == (num_experts, hidden_dim, 2 * intermediate_dim):
+        gate_up_out = torch._grouped_mm(current_states_g, self.gate_up_proj, offs=offsets)
+    else:
+        gate_up_out = torch._grouped_mm(current_states_g, self.gate_up_proj.transpose(-2, -1), offs=offsets)
+
     if hasattr(self, "gate_up_proj_bias") and self.gate_up_proj_bias is not None:
         # we should be able to pass bias to the grouped_mm call, but it's still not fully supported
         gate_up_out = gate_up_out + self.gate_up_proj_bias[expert_ids_g]
@@ -194,7 +210,11 @@ def grouped_mm_experts_forward(
         hidden_after_activation = self.act_fn(gate) * up  # (S, intermediate_dim)
 
     # --- Down projection per expert (grouped_mm) ---
-    out_per_sample_g = torch._grouped_mm(hidden_after_activation, self.down_proj.transpose(-2, -1), offs=offsets)
+    if self.down_proj.shape == (num_experts, hidden_dim, intermediate_dim):
+        out_per_sample_g = torch._grouped_mm(hidden_after_activation, self.down_proj, offs=offsets)
+    else:
+        out_per_sample_g = torch._grouped_mm(hidden_after_activation, self.down_proj.transpose(-2, -1), offs=offsets)
+
     if hasattr(self, "down_proj_bias") and self.down_proj_bias is not None:
         # we should be able to pass bias to the grouped_mm call, but it's still not fully supported
         out_per_sample_g = out_per_sample_g + self.down_proj_bias[expert_ids_g]

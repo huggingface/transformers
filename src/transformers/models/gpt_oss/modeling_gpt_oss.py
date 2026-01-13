@@ -66,18 +66,16 @@ class GptOssRMSNorm(nn.Module):
 
 @use_experts_implementation
 class GptOssExperts(nn.Module):
-    """Collection of expert weights stored as 3D tensors."""
-
     def __init__(self, config):
         super().__init__()
         self.intermediate_size = config.intermediate_size
         self.num_experts = config.num_local_experts
         self.hidden_size = config.hidden_size
         self.expert_dim = self.intermediate_size
-        self.gate_up_proj = nn.Parameter(torch.zeros(self.num_experts, 2 * self.expert_dim, self.hidden_size))
-        self.gate_up_proj_bias = nn.Parameter(torch.zeros(self.num_experts, 2 * self.expert_dim))
-        self.down_proj = nn.Parameter(torch.zeros((self.num_experts, self.hidden_size, self.expert_dim)))
-        self.down_proj_bias = nn.Parameter(torch.zeros(self.num_experts, self.hidden_size))
+        self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_size, 2 * self.expert_dim))
+        self.gate_up_proj_bias = nn.Parameter(torch.empty(self.num_experts, 2 * self.expert_dim))
+        self.down_proj = nn.Parameter(torch.empty((self.num_experts, self.expert_dim, self.hidden_size)))
+        self.down_proj_bias = nn.Parameter(torch.empty(self.num_experts, self.hidden_size))
         self.alpha = 1.702
         self.limit = 7.0
 
@@ -89,35 +87,32 @@ class GptOssExperts(nn.Module):
         gated_output = (up + 1) * glu
         return gated_output
 
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        top_k_index: torch.Tensor,
-        top_k_weights: torch.Tensor,
-    ) -> torch.Tensor:
-        final_hidden_states = torch.zeros_like(hidden_states)
+    def forward(self, hidden_states: torch.Tensor, router_indices=None, routing_weights=None) -> torch.Tensor:
+        next_states = torch.zeros_like(hidden_states, dtype=hidden_states.dtype, device=hidden_states.device)
         with torch.no_grad():
-            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
+            expert_mask = torch.nn.functional.one_hot(
+                router_indices, num_classes=self.num_experts
+            )  # masking is also a class
             expert_mask = expert_mask.permute(2, 1, 0)
+            # we sum on the top_k and on the sequence length to get which experts
+            # are hit this time around
             expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
-
-        for expert_idx in expert_hit:
+        for expert_idx in expert_hit[:]:
+            # expert_idx only have 1 element, so we can use scale for fast indexing
             expert_idx = expert_idx[0]
+            # skip masking index
             if expert_idx == self.num_experts:
                 continue
-            top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
+            with torch.no_grad():
+                top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
             current_state = hidden_states[token_idx]
-            gate_up = nn.functional.linear(
-                current_state, self.gate_up_proj[expert_idx], self.gate_up_proj_bias[expert_idx]
-            )
-            current_hidden_states = self._apply_gate(gate_up)
-            current_hidden_states = nn.functional.linear(
-                current_hidden_states, self.down_proj[expert_idx], self.down_proj_bias[expert_idx]
-            )
-            current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
-            final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
+            gate_up = current_state @ self.gate_up_proj[expert_idx] + self.gate_up_proj_bias[expert_idx]
+            gated_output = self._apply_gate(gate_up)
+            out = gated_output @ self.down_proj[expert_idx] + self.down_proj_bias[expert_idx]
+            weighted_output = out * routing_weights[token_idx, top_k_pos, None]
+            next_states.index_add_(0, token_idx, weighted_output.to(hidden_states.dtype))
 
-        return final_hidden_states
+        return next_states
 
 
 class GptOssTopKRouter(nn.Module):

@@ -48,7 +48,6 @@ if is_torch_available():
     import torch
 
     from transformers import GptOssModel
-    from transformers.utils.quantization_config import Mxfp4Config
 
     NUM_GPUS = torch.cuda.device_count()
 
@@ -118,10 +117,6 @@ class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
     @unittest.skipIf(torch_device == "cpu", "GptOss does not support flex officially")
     def test_generate_compile_model_forward_fullgraph(self):
         return super().test_generate_compile_model_forward_fullgraph()
-
-    @unittest.skip("GptOss's conversion mapping does not rename weights, only transposes them")
-    def test_reverse_loading_mapping(self):
-        pass
 
 
 RESULTS_PATH = Path(__file__).parent.parent.parent / "fixtures/gpt_oss/integration_tests.json"
@@ -346,13 +341,6 @@ if __name__ == "__main__":
     # ------------------------
     @parameterized.expand(PARAMETERS)
     def test_model_outputs(self, quantized, model, kernels, attn_impl, mode):
-        additional_kwargs = {}
-        if not quantized:
-            additional_kwargs = {
-                "quantization_config": Mxfp4Config(dequantize=True),
-                "experts_implementation": "eager",
-            }
-
         model_id = f"openai/gpt-oss-{model}"
         output_texts = self.load_and_forward(
             model_id,
@@ -360,7 +348,6 @@ if __name__ == "__main__":
             self.input_text,
             mode=mode,
             use_kernels=kernels,
-            **additional_kwargs,
         )
 
         # Generate key to look up expected outputs
@@ -429,13 +416,6 @@ if __name__ == "__main__":
         if quantized:
             self.skipTest("Training test for quantized models is not supported.")
 
-        additional_kwargs = {}
-        if not quantized:
-            additional_kwargs = {
-                "quantization_config": Mxfp4Config(dequantize=True),
-                "experts_implementation": "eager",
-            }
-
         model_id = f"openai/gpt-oss-{model}"
         model_obj = AutoModelForCausalLM.from_pretrained(
             model_id,
@@ -443,7 +423,6 @@ if __name__ == "__main__":
             device_map="auto",
             attn_implementation=attn_impl,
             use_kernels=kernels,
-            **additional_kwargs,
         )
         model_obj.train()
 

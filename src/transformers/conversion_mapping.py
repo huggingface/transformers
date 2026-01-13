@@ -163,21 +163,6 @@ def _build_checkpoint_conversion_mapping():
                 operations=[ErnieFuseAndSplitTextVisionExperts(stack_dim=0, concat_dim=1)],
             ),
         ],
-        # we have to create a temorary name to avoid conflicts during reversed conversion
-        "gpt_oss": [
-            WeightRenaming("mlp.gate_up_proj", "mlp.gate_up_proj_tmp"),
-            WeightConverter(
-                source_patterns="mlp.gate_up_proj_tmp",
-                target_patterns="mlp.gate_up_proj",
-                operations=[Transpose(dim0=0, dim1=1)],
-            ),
-            WeightRenaming("mlp.down_proj", "mlp.down_proj_tmp"),
-            WeightConverter(
-                source_patterns="mlp.down_proj_tmp",
-                target_patterns="mlp.down_proj",
-                operations=[Transpose(dim0=0, dim1=1)],
-            ),
-        ],
         "jamba": [
             WeightConverter(
                 source_patterns=[
