@@ -2312,14 +2312,14 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 the `tokenize` method) or a list of integers (tokenized string ids using the `convert_tokens_to_ids`
                 method).
         """
-        padding_strategy, truncation_strategy, max_length, kwargs = self._get_padding_truncation_strategies(
+        padding_strategy, truncation_strategy, max_length, kwargs_updated = self._get_padding_truncation_strategies(
             padding=padding,
             truncation=truncation,
             max_length=max_length,
-            pad_to_multiple_of=kwargs.get("pad_to_multiple_of"),
-            verbose=kwargs.get("verbose", True),
             **kwargs,
         )
+
+        kwargs.update(kwargs_updated)
 
         encoded_inputs = self._encode_plus(
             text,
@@ -3084,7 +3084,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 values are:
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
-            return_dict (`bool`, defaults to `False`):
+            return_dict (`bool`, defaults to `True`):
                 Whether to return a dictionary with named outputs. Has no effect if tokenize is `False`.
             tokenizer_kwargs (`dict[str: Any]`, *optional*): Additional kwargs to pass to the tokenizer.
             return_assistant_tokens_mask (`bool`, defaults to `False`):

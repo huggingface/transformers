@@ -228,12 +228,18 @@
   title: Quantization
 - isExpanded: false
   sections:
-  - local: community_integrations/vllm
-    title: vLLM
-  - local: community_integrations/sglang
-    title: SGLang
-  - local: community_integrations/transformers_as_backend
-    title: Building a compatible model backend for inference
+  - sections:
+    - local: community_integrations/vllm
+      title: vLLM
+    - local: community_integrations/sglang
+      title: SGLang
+    - local: community_integrations/transformers_as_backend
+      title: Building a compatible model backend for inference
+    title: Inference engines
+  - sections:
+    - local: community_integrations/llama_cpp
+      title: llama.cpp
+    title: Local deployment
   title: Community integrations
 - isExpanded: false
   sections:
@@ -601,6 +607,8 @@
         title: MegatronGPT2
       - local: model_doc/minimax
         title: MiniMax
+      - local: model_doc/minimax_m2
+        title: MiniMax-M2
       - local: model_doc/ministral
         title: Ministral
       - local: model_doc/ministral3
@@ -737,6 +745,8 @@
         title: XLNet
       - local: model_doc/xlstm
         title: xLSTM
+      - local: model_doc/glm4_moe_lite
+        title: y
       - local: model_doc/yoso
         title: YOSO
       - local: model_doc/zamba
@@ -809,6 +819,8 @@
         title: LeViT
       - local: model_doc/lightglue
         title: LightGlue
+      - local: model_doc/lw_detr
+        title: LW-DETR
       - local: model_doc/mask2former
         title: Mask2Former
       - local: model_doc/maskformer

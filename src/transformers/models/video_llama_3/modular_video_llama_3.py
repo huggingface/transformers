@@ -1094,20 +1094,6 @@ class VideoLlama3ProcessorKwargs(Qwen2VLProcessorKwargs):
 
 
 class VideoLlama3Processor(Qwen2VLProcessor):
-    r"""
-    Constructs a VideoLLaMA3 processor which wraps a VideoLLaMA3 image processor and a Qwen2 tokenizer into a single processor.
-    [`VideoLlama3Processor`] offers all the functionalities of [`VideoLlama3ImageProcessor`] and [`Qwen2Tokenizer`]. See the
-    [`~VideoLlama3Processor.__call__`] and [`~VideoLlama3Processor.decode`] for more information.
-    Args:
-        image_processor ([`VideoLlama3ImageProcessor`], *optional*):
-            The image processor is a required input.
-        tokenizer ([`Qwen2Tokenizer`], *optional*):
-            The tokenizer is a required input.
-        video_processor ([`VideoLlama3VideoProcessor`], *optional*):
-            The video processor is a required input.
-        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
-    """
-
     def __call__(
         self,
         images: ImageInput = None,
@@ -1486,6 +1472,9 @@ class VideoLlama3VideoProcessor(Qwen2VLVideoProcessor):
     return_metadata = True
     valid_kwargs = VideoLlama3VideoProcessorInitKwargs
     model_input_names = ["pixel_values_videos", "video_grid_thw", "video_merge_sizes", "video_compression_mask"]
+
+    def _further_process_kwargs(self):
+        raise AttributeError("VideoLlama3 never supported min/max pixels, no need to copy from Qwen")
 
     def _get_compression_mask(
         self,

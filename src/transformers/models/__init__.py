@@ -151,6 +151,7 @@ if TYPE_CHECKING:
     from .glm import *
     from .glm4 import *
     from .glm4_moe import *
+    from .glm4_moe_lite import *
     from .glm4v import *
     from .glm4v_moe import *
     from .glm46v import *
@@ -218,6 +219,7 @@ if TYPE_CHECKING:
     from .longformer import *
     from .longt5 import *
     from .luke import *
+    from .lw_detr import *
     from .lxmert import *
     from .m2m_100 import *
     from .mamba import *
@@ -234,6 +236,7 @@ if TYPE_CHECKING:
     from .mgp_str import *
     from .mimi import *
     from .minimax import *
+    from .minimax_m2 import *
     from .ministral import *
     from .ministral3 import *
     from .mistral import *

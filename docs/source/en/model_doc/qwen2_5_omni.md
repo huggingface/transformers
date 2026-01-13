@@ -349,6 +349,7 @@ model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
 ## Qwen2_5OmniProcessor
 
 [[autodoc]] Qwen2_5OmniProcessor
+    - __call__
 
 ## Qwen2_5OmniForConditionalGeneration
 

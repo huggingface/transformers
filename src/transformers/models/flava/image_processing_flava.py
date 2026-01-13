@@ -17,7 +17,7 @@ import math
 import random
 from collections.abc import Iterable
 from functools import lru_cache
-from typing import Any, Optional, Union
+from typing import Any
 
 import numpy as np
 
@@ -132,23 +132,23 @@ class FlavaImageProcessorKwargs(ImagesKwargs, total=False):
     codebook_do_center_crop: bool
     codebook_crop_size: int
     codebook_do_rescale: bool
-    codebook_rescale_factor: Union[int, float]
+    codebook_rescale_factor: int | float
     codebook_do_map_pixels: bool
     codebook_do_normalize: bool
-    codebook_image_mean: Union[float, Iterable[float]]
-    codebook_image_std: Union[float, Iterable[float]]
+    codebook_image_mean: float | Iterable[float]
+    codebook_image_std: float | Iterable[float]
 
 
 # Inspired from https://github.com/microsoft/unilm/blob/master/beit/masking_generator.py
 class FlavaMaskingGenerator:
     def __init__(
         self,
-        input_size: Union[int, tuple[int, int]] = 14,
+        input_size: int | tuple[int, int] = 14,
         total_mask_patches: int = 75,
-        mask_group_max_patches: Optional[int] = None,
+        mask_group_max_patches: int | None = None,
         mask_group_min_patches: int = 16,
-        mask_group_min_aspect_ratio: Optional[float] = 0.3,
-        mask_group_max_aspect_ratio: Optional[float] = None,
+        mask_group_min_aspect_ratio: float | None = 0.3,
+        mask_group_max_aspect_ratio: float | None = None,
     ):
         if not isinstance(input_size, tuple):
             input_size = (input_size,) * 2
@@ -313,36 +313,36 @@ class FlavaImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Optional[dict[str, int]] = None,
+        size: dict[str, int] | None = None,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         do_center_crop: bool = True,
-        crop_size: Optional[dict[str, int]] = None,
+        crop_size: dict[str, int] | None = None,
         do_rescale: bool = True,
-        rescale_factor: Union[int, float] = 1 / 255,
+        rescale_factor: int | float = 1 / 255,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, Iterable[float]]] = None,
-        image_std: Optional[Union[float, Iterable[float]]] = None,
+        image_mean: float | Iterable[float] | None = None,
+        image_std: float | Iterable[float] | None = None,
         # Mask related params
         return_image_mask: bool = False,
         input_size_patches: int = 14,
         total_mask_patches: int = 75,
         mask_group_min_patches: int = 16,
-        mask_group_max_patches: Optional[int] = None,
+        mask_group_max_patches: int | None = None,
         mask_group_min_aspect_ratio: float = 0.3,
-        mask_group_max_aspect_ratio: Optional[float] = None,
+        mask_group_max_aspect_ratio: float | None = None,
         # Codebook related params
         return_codebook_pixels: bool = False,
         codebook_do_resize: bool = True,
-        codebook_size: Optional[bool] = None,
+        codebook_size: bool | None = None,
         codebook_resample: int = PILImageResampling.LANCZOS,
         codebook_do_center_crop: bool = True,
-        codebook_crop_size: Optional[int] = None,
+        codebook_crop_size: int | None = None,
         codebook_do_rescale: bool = True,
-        codebook_rescale_factor: Union[int, float] = 1 / 255,
+        codebook_rescale_factor: int | float = 1 / 255,
         codebook_do_map_pixels: bool = True,
         codebook_do_normalize: bool = True,
-        codebook_image_mean: Optional[Union[float, Iterable[float]]] = None,
-        codebook_image_std: Optional[Union[float, Iterable[float]]] = None,
+        codebook_image_mean: float | Iterable[float] | None = None,
+        codebook_image_std: float | Iterable[float] | None = None,
         **kwargs,
     ) -> None:
         super().__init__(**kwargs)
@@ -427,8 +427,8 @@ class FlavaImageProcessor(BaseImageProcessor):
         image: np.ndarray,
         size: dict[str, int],
         resample: PILImageResampling = PILImageResampling.BICUBIC,
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        data_format: str | ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -476,19 +476,19 @@ class FlavaImageProcessor(BaseImageProcessor):
     def _preprocess_image(
         self,
         image: ImageInput,
-        do_resize: Optional[bool] = None,
-        size: Optional[dict[str, int]] = None,
-        resample: Optional[PILImageResampling] = None,
-        do_center_crop: Optional[bool] = None,
-        crop_size: Optional[dict[str, int]] = None,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[float] = None,
-        do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
-        do_map_pixels: Optional[bool] = None,
-        data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
-        input_data_format: Optional[ChannelDimension] = None,
+        do_resize: bool | None = None,
+        size: dict[str, int] | None = None,
+        resample: PILImageResampling | None = None,
+        do_center_crop: bool | None = None,
+        crop_size: dict[str, int] | None = None,
+        do_rescale: bool | None = None,
+        rescale_factor: float | None = None,
+        do_normalize: bool | None = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        do_map_pixels: bool | None = None,
+        data_format: ChannelDimension | None = ChannelDimension.FIRST,
+        input_data_format: ChannelDimension | None = None,
     ) -> np.ndarray:
         """Preprocesses a single image."""
 
@@ -541,40 +541,40 @@ class FlavaImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        do_resize: Optional[bool] = None,
-        size: Optional[dict[str, int]] = None,
-        resample: Optional[PILImageResampling] = None,
-        do_center_crop: Optional[bool] = None,
-        crop_size: Optional[dict[str, int]] = None,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[float] = None,
-        do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
+        do_resize: bool | None = None,
+        size: dict[str, int] | None = None,
+        resample: PILImageResampling | None = None,
+        do_center_crop: bool | None = None,
+        crop_size: dict[str, int] | None = None,
+        do_rescale: bool | None = None,
+        rescale_factor: float | None = None,
+        do_normalize: bool | None = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
         # Mask related params
-        return_image_mask: Optional[bool] = None,
-        input_size_patches: Optional[int] = None,
-        total_mask_patches: Optional[int] = None,
-        mask_group_min_patches: Optional[int] = None,
-        mask_group_max_patches: Optional[int] = None,
-        mask_group_min_aspect_ratio: Optional[float] = None,
-        mask_group_max_aspect_ratio: Optional[float] = None,
+        return_image_mask: bool | None = None,
+        input_size_patches: int | None = None,
+        total_mask_patches: int | None = None,
+        mask_group_min_patches: int | None = None,
+        mask_group_max_patches: int | None = None,
+        mask_group_min_aspect_ratio: float | None = None,
+        mask_group_max_aspect_ratio: float | None = None,
         # Codebook related params
-        return_codebook_pixels: Optional[bool] = None,
-        codebook_do_resize: Optional[bool] = None,
-        codebook_size: Optional[dict[str, int]] = None,
-        codebook_resample: Optional[int] = None,
-        codebook_do_center_crop: Optional[bool] = None,
-        codebook_crop_size: Optional[dict[str, int]] = None,
-        codebook_do_rescale: Optional[bool] = None,
-        codebook_rescale_factor: Optional[float] = None,
-        codebook_do_map_pixels: Optional[bool] = None,
-        codebook_do_normalize: Optional[bool] = None,
-        codebook_image_mean: Optional[Iterable[float]] = None,
-        codebook_image_std: Optional[Iterable[float]] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        return_codebook_pixels: bool | None = None,
+        codebook_do_resize: bool | None = None,
+        codebook_size: dict[str, int] | None = None,
+        codebook_resample: int | None = None,
+        codebook_do_center_crop: bool | None = None,
+        codebook_crop_size: dict[str, int] | None = None,
+        codebook_do_rescale: bool | None = None,
+        codebook_rescale_factor: float | None = None,
+        codebook_do_map_pixels: bool | None = None,
+        codebook_do_normalize: bool | None = None,
+        codebook_image_mean: Iterable[float] | None = None,
+        codebook_image_std: Iterable[float] | None = None,
+        return_tensors: str | TensorType | None = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: str | ChannelDimension | None = None,
     ) -> PIL.Image.Image:
         """
         Preprocess an image or batch of images.
