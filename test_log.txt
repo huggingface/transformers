@@ -1,0 +1,109 @@
+Traceback (most recent call last):
+  File "/opt/venv/bin/pytest", line 7, in <module>
+    sys.exit(console_main())
+             ^^^^^^^^^^^^^^
+  File "/opt/venv/lib/python3.12/site-packages/_pytest/config/__init__.py", line 201, in console_main
+    code = main()
+           ^^^^^^
+  File "/opt/venv/lib/python3.12/site-packages/_pytest/config/__init__.py", line 156, in main
+    config = _prepareconfig(args, plugins)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/venv/lib/python3.12/site-packages/_pytest/config/__init__.py", line 342, in _prepareconfig
+    config = pluginmanager.hook.pytest_cmdline_parse(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/venv/lib/python3.12/site-packages/pluggy/_hooks.py", line 512, in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/venv/lib/python3.12/site-packages/pluggy/_manager.py", line 120, in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/venv/lib/python3.12/site-packages/pluggy/_callers.py", line 167, in _multicall
+    raise exception
+  File "/opt/venv/lib/python3.12/site-packages/pluggy/_callers.py", line 139, in _multicall
+    teardown.throw(exception)
+  File "/opt/venv/lib/python3.12/site-packages/_pytest/helpconfig.py", line 112, in pytest_cmdline_parse
+    config = yield
+             ^^^^^
+  File "/opt/venv/lib/python3.12/site-packages/pluggy/_callers.py", line 121, in _multicall
+    res = hook_impl.function(*args)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/venv/lib/python3.12/site-packages/_pytest/config/__init__.py", line 1146, in pytest_cmdline_parse
+    self.parse(args)
+  File "/opt/venv/lib/python3.12/site-packages/_pytest/config/__init__.py", line 1527, in parse
+    self._preparse(args, addopts=addopts)
+  File "/opt/venv/lib/python3.12/site-packages/_pytest/config/__init__.py", line 1431, in _preparse
+    self.hook.pytest_load_initial_conftests(
+  File "/opt/venv/lib/python3.12/site-packages/pluggy/_hooks.py", line 512, in __call__
+    return self._hookexec(self.name, self._hookimpls.copy(), kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/venv/lib/python3.12/site-packages/pluggy/_manager.py", line 120, in _hookexec
+    return self._inner_hookexec(hook_name, methods, kwargs, firstresult)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/venv/lib/python3.12/site-packages/pluggy/_callers.py", line 167, in _multicall
+    raise exception
+  File "/opt/venv/lib/python3.12/site-packages/pluggy/_callers.py", line 139, in _multicall
+    teardown.throw(exception)
+  File "/opt/venv/lib/python3.12/site-packages/_pytest/warnings.py", line 129, in pytest_load_initial_conftests
+    return (yield)
+            ^^^^^
+  File "/opt/venv/lib/python3.12/site-packages/pluggy/_callers.py", line 139, in _multicall
+    teardown.throw(exception)
+  File "/opt/venv/lib/python3.12/site-packages/_pytest/capture.py", line 173, in pytest_load_initial_conftests
+    yield
+  File "/opt/venv/lib/python3.12/site-packages/pluggy/_callers.py", line 121, in _multicall
+    res = hook_impl.function(*args)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/venv/lib/python3.12/site-packages/_pytest/config/__init__.py", line 1228, in pytest_load_initial_conftests
+    self.pluginmanager._set_initial_conftests(
+  File "/opt/venv/lib/python3.12/site-packages/_pytest/config/__init__.py", line 583, in _set_initial_conftests
+    self._try_load_conftest(
+  File "/opt/venv/lib/python3.12/site-packages/_pytest/config/__init__.py", line 621, in _try_load_conftest
+    self._loadconftestmodules(
+  File "/opt/venv/lib/python3.12/site-packages/_pytest/config/__init__.py", line 661, in _loadconftestmodules
+    mod = self._importconftest(
+          ^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/venv/lib/python3.12/site-packages/_pytest/config/__init__.py", line 712, in _importconftest
+    mod = import_path(
+          ^^^^^^^^^^^^
+  File "/opt/venv/lib/python3.12/site-packages/_pytest/pathlib.py", line 587, in import_path
+    importlib.import_module(module_name)
+  File "/usr/lib/python3.12/importlib/__init__.py", line 90, in import_module
+    return _bootstrap._gcd_import(name[level:], package, level)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "<frozen importlib._bootstrap>", line 1387, in _gcd_import
+  File "<frozen importlib._bootstrap>", line 1360, in _find_and_load
+  File "<frozen importlib._bootstrap>", line 1331, in _find_and_load_unlocked
+  File "<frozen importlib._bootstrap>", line 935, in _load_unlocked
+  File "/opt/venv/lib/python3.12/site-packages/_pytest/assertion/rewrite.py", line 186, in exec_module
+    exec(co, module.__dict__)
+  File "/workspace/transformers/conftest.py", line 27, in <module>
+    from transformers.testing_utils import (
+  File "/workspace/transformers/src/transformers/__init__.py", line 30, in <module>
+    from . import dependency_versions_check
+  File "/workspace/transformers/src/transformers/dependency_versions_check.py", line 16, in <module>
+    from .utils.versions import require_version, require_version_core
+  File "/workspace/transformers/src/transformers/utils/__init__.py", line 22, in <module>
+    from .auto_docstring import (
+  File "/workspace/transformers/src/transformers/utils/auto_docstring.py", line 30, in <module>
+    from .generic import ModelOutput
+  File "/workspace/transformers/src/transformers/utils/generic.py", line 44, in <module>
+    import torch
+  File "/opt/venv/lib/python3.12/site-packages/torch/__init__.py", line 2785, in <module>
+    from torch import _meta_registrations
+  File "/opt/venv/lib/python3.12/site-packages/torch/_meta_registrations.py", line 3266, in <module>
+    @register_meta(aten.adaptive_max_pool2d_backward)
+     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/venv/lib/python3.12/site-packages/torch/_meta_registrations.py", line 71, in wrapper
+    pytree.tree_map_(register, op)
+  File "/opt/venv/lib/python3.12/site-packages/torch/utils/_pytree.py", line 1570, in tree_map_
+    deque(map(func, *flat_args), maxlen=0)  # consume and exhaust the iterable
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/opt/venv/lib/python3.12/site-packages/torch/_meta_registrations.py", line 69, in register
+    _add_op_to_registry(meta_table, op, fn)
+  File "/opt/venv/lib/python3.12/site-packages/torch/_decomp/__init__.py", line 82, in _add_op_to_registry
+    overloads.append(getattr(op, ol))
+                     ^^^^^^^^^^^^^^^
+  File "/opt/venv/lib/python3.12/site-packages/torch/_ops.py", line 1211, in __getattr__
+    schema = torch._C._get_schema(self._qualified_op_name, use_key)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+KeyboardInterrupt

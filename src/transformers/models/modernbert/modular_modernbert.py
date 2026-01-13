@@ -212,12 +212,11 @@ class ModernBertConfig(PreTrainedConfig):
         self.classifier_dropout = classifier_dropout
         self.classifier_bias = classifier_bias
         self.classifier_activation = classifier_activation
-        self.deterministic_flash_attn = deterministic_flash_attn
         self.sparse_prediction = sparse_prediction
         self.sparse_pred_ignore_index = sparse_pred_ignore_index
         self.reference_compile = reference_compile
 
-        if self.deterministic_flash_attn:
+        if deterministic_flash_attn:
             os.environ["FLASH_ATTENTION_DETERMINISTIC"] = "1"
 
         if self.classifier_pooling not in ["cls", "mean"]:
