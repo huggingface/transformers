@@ -35,7 +35,9 @@ def fixed_cross_entropy(
     **kwargs,
 ) -> torch.Tensor:
     reduction = "sum" if num_items_in_batch is not None else "mean"
-    loss = nn.functional.cross_entropy(source, target, ignore_index=ignore_index, weight=weight, reduction=reduction, label_smoothing=label_smoothing)
+    loss = nn.functional.cross_entropy(
+        source, target, ignore_index=ignore_index, weight=weight, reduction=reduction, label_smoothing=label_smoothing
+    )
     if reduction == "sum":
         # just in case users pass an int for num_items_in_batch, which could be the case for custom trainer
         if torch.is_tensor(num_items_in_batch):
