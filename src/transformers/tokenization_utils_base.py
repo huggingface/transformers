@@ -2435,7 +2435,12 @@ class PreTrainedTokenizerBase(SpecialTokensMixin, PushToHubMixin):
                     return True
             return False
 
-        if _is_local or is_base_mistral(pretrained_model_name_or_path):
+        if is_offline_mode():
+            _is_local = True
+
+        if pretrained_model_name_or_path is not None and (
+            _is_local or (not _is_local and is_base_mistral(pretrained_model_name_or_path))
+        ):
             _config_file = cached_file(
                 pretrained_model_name_or_path,
                 "config.json",
