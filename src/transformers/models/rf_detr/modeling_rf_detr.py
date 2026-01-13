@@ -1613,7 +1613,6 @@ class RfDetrModel(RfDetrPreTrainedModel):
         group_detr = self.group_detr if self.training else 1
         topk = self.num_queries
         topk_coords_logits = []
-        topk_coords_logits_undetach = []
         object_query_undetach = []
 
         for group_id in range(group_detr):
@@ -1636,11 +1635,9 @@ class RfDetrModel(RfDetrPreTrainedModel):
             )
 
             topk_coords_logits.append(group_topk_coords_logits)
-            topk_coords_logits_undetach.append(group_topk_coords_logits_undetach)
             object_query_undetach.append(group_object_query_undetach)
 
         topk_coords_logits = torch.cat(topk_coords_logits, 1)
-        topk_coords_logits_undetach = torch.cat(topk_coords_logits_undetach, 1)
         object_query_undetach = torch.cat(object_query_undetach, 1)
 
         enc_outputs_class = object_query_undetach
