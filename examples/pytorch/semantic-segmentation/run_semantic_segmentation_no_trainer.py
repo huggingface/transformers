@@ -14,7 +14,7 @@
 
 # /// script
 # dependencies = [
-#     "transformers==4.57.4",
+#     "transformers==4.57.5",
 #     "datasets >= 2.0.0",
 #     "torch >= 1.3",
 #     "accelerate",
