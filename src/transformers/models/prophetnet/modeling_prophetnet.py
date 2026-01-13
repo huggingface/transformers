@@ -15,7 +15,6 @@
 
 import copy
 import math
-import warnings
 from dataclasses import dataclass
 
 import torch
@@ -159,15 +158,6 @@ class ProphetNetSeq2SeqLMOutput(ModelOutput):
     encoder_hidden_states: tuple[torch.FloatTensor] | None = None
     encoder_attentions: tuple[torch.FloatTensor] | None = None
 
-    @property
-    def decoder_cross_attentions(self):
-        warnings.warn(
-            "`decoder_cross_attentions` is deprecated and will be removed soon. Please use `cross_attentions`"
-            " instead.",
-            FutureWarning,
-        )
-        return self.cross_attentions
-
 
 @dataclass
 @auto_docstring(
@@ -217,15 +207,6 @@ class ProphetNetSeq2SeqModelOutput(ModelOutput):
     encoder_last_hidden_state: torch.FloatTensor | None = None
     encoder_hidden_states: tuple[torch.FloatTensor] | None = None
     encoder_attentions: tuple[torch.FloatTensor] | None = None
-
-    @property
-    def decoder_cross_attentions(self):
-        warnings.warn(
-            "`decoder_cross_attentions` is deprecated and will be removed soon. Please use `cross_attentions`"
-            " instead.",
-            FutureWarning,
-        )
-        return self.cross_attentions
 
 
 @dataclass
