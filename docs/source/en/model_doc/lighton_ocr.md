@@ -23,7 +23,7 @@ specific language governing permissions and limitations under the License. -->
 
 **Model Overview**
 
-LightOnOcr combines a Vision Transformer encoder(Pixtral-based) with a lightweight text decoder(Qwen3-based) distilled from high-quality open VLMs. It is optimized for document parsing tasks, producing accurate, layout-aware text extraction from high-resolution pages.
+LightOnOcr combines a Vision Transformer encoder (Pixtral-based) with a lightweight text decoder (Qwen3-based) distilled from high-quality open VLMs. It is optimized for document parsing tasks, producing accurate, layout-aware text extraction from high-resolution pages.
 
 ## Usage
 
