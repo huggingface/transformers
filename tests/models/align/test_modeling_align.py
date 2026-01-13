@@ -86,8 +86,6 @@ class AlignVisionModelTester:
         self.is_training = is_training
         self.hidden_act = hidden_act
 
-        self.num_hidden_layers = sum(math.ceil(self.depth_coefficient * repeat) for repeat in self.num_block_repeats)
-
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
         config = self.get_config()
@@ -503,6 +501,12 @@ class AlignModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
             config.save_pretrained(tmp_dir_name)
             text_config = AlignTextConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.text_config.to_dict(), text_config.to_dict())
+
+    def _image_features_get_expected_num_attentions(self, model_tester=None):
+        return sum(
+            math.ceil(self.model_tester.vision_model_tester.depth_coefficient * repeat)
+            for repeat in self.model_tester.vision_model_tester.num_block_repeats
+        )
 
     @slow
     def test_model_from_pretrained(self):
