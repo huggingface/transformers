@@ -759,7 +759,6 @@ def _get_dtype(
     2. Else, use the dtype provided as a dict or str
     """
     is_sharded = sharded_metadata is not None
-    asked_dtype = dtype
 
     if dtype is not None:
         if isinstance(dtype, str):
@@ -806,6 +805,13 @@ def _get_dtype(
     if isinstance(dtype, dict):
         main_dtype = dtype.get("", torch.get_default_dtype())
         main_dtype = getattr(torch, main_dtype) if isinstance(main_dtype, str) else main_dtype
+
+        logger.warning_once(
+            "Using different dtypes per module is deprecated and will be removed in future versions "
+            "Setting different dtypes per backbone model might cause device errors downstream, therefore "
+            f"setting the dtype={main_dtype} for all modules."
+        )
+
     else:
         main_dtype = dtype
 
@@ -813,17 +819,7 @@ def _get_dtype(
     config.dtype = main_dtype
     for sub_config_key in config.sub_configs:
         if (sub_config := getattr(config, sub_config_key)) is not None:
-            # The dtype was "auto" -> try to read the subconfig dtype value if any
-            if asked_dtype == "auto":
-                sub_dtype = getattr(sub_config, "dtype", main_dtype)
-                sub_dtype = getattr(torch, sub_dtype) if isinstance(sub_dtype, str) else sub_dtype
-            # The dtype was provided as a dict, try to see if we match the subconfig name
-            elif isinstance(dtype, dict):
-                sub_dtype = dtype.get(sub_config_key, main_dtype)
-                sub_dtype = getattr(torch, sub_dtype) if isinstance(sub_dtype, str) else sub_dtype
-            else:
-                sub_dtype = main_dtype
-            sub_config.dtype = sub_dtype
+            sub_config.dtype = main_dtype
 
     return config, main_dtype
 
