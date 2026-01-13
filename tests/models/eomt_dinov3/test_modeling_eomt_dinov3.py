@@ -271,7 +271,7 @@ class EomtDinov3ForUniversalSegmentationTest(ModelTesterMixin, PipelineTesterMix
 @require_torch
 class EomtDinov3ForUniversalSegmentationIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.model_id = "tue-mps/coco_panoptic_eomt_dinov3_large_640"
+        self.model_id = "nielsr/eomt-dinov3-coco-panoptic-large-640"
 
     @slow
     def test_inference(self):
@@ -291,9 +291,25 @@ class EomtDinov3ForUniversalSegmentationIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.isfinite(outputs.masks_queries_logits).all())
         self.assertTrue(torch.isfinite(outputs.class_queries_logits).all())
 
-        # TODO: Add expected values check once models are uploaded and verified
-        # expected_class_logits_slice = torch.tensor(...)
-        # self.assertTrue(torch.allclose(outputs.class_queries_logits[0, :3, :3].float(), expected_class_logits_slice, atol=0.1))
+        # fmt: off
+        expected_class_logits_slice = torch.tensor([
+            [-0.3180, -5.6188, -0.7154],
+            [ 0.0837, -6.8066, -2.1033],
+            [-1.4065, -5.9924, -5.4660]
+        ], device=model.device)
+        expected_masks_logits_slice = torch.tensor([
+            [-1.6251, -1.1417, -1.0285],
+            [ 2.5673,  5.3380,  6.2132],
+            [ 3.7562,  7.1667,  8.1707]
+        ], device=model.device)
+        # fmt: on
+
+        torch.testing.assert_close(
+            outputs.class_queries_logits[0, :3, :3].float(), expected_class_logits_slice, rtol=1e-3, atol=1e-3
+        )
+        torch.testing.assert_close(
+            outputs.masks_queries_logits[0, 0, :3, :3].float(), expected_masks_logits_slice, rtol=1e-3, atol=1e-3
+        )
 
     @require_torch_accelerator
     @require_torch_fp16
@@ -314,11 +330,30 @@ class EomtDinov3ForUniversalSegmentationIntegrationTest(unittest.TestCase):
         self.assertTrue(outputs.class_queries_logits.shape == (1, 200, 134))
         self.assertTrue(outputs.masks_queries_logits.shape == (1, 200, 160, 160))
 
-        # TODO: Add expected values check once models are uploaded and verified
+        # fmt: off
+        expected_class_logits_slice = torch.tensor([
+            [-0.3180, -5.6188, -0.7154],
+            [ 0.0837, -6.8066, -2.1033],
+            [-1.4065, -5.9924, -5.4660]
+        ], device=model.device)
+        expected_masks_logits_slice = torch.tensor([
+            [-1.6251, -1.1417, -1.0285],
+            [ 2.5673,  5.3380,  6.2132],
+            [ 3.7562,  7.1667,  8.1707]
+        ], device=model.device)
+        # fmt: on
+
+        torch.testing.assert_close(
+            outputs.class_queries_logits[0, :3, :3].float(), expected_class_logits_slice, rtol=1e-2, atol=1e-2
+        )
+        torch.testing.assert_close(
+            outputs.masks_queries_logits[0, 0, :3, :3].float(), expected_masks_logits_slice, rtol=1e-2, atol=1e-2
+        )
 
     @slow
+    @unittest.skip(reason="No semantic segmentation checkpoint available yet")
     def test_semantic_segmentation_inference(self):
-        model_id = "tue-mps/ade20k_semantic_eomt_dinov3_large_512"
+        model_id = "nielsr/eomt-dinov3-ade20k-semantic-large-512"
         model = EomtDinov3ForUniversalSegmentation.from_pretrained(model_id, device_map="auto")
         processor = AutoImageProcessor.from_pretrained(model_id)
 
@@ -331,8 +366,6 @@ class EomtDinov3ForUniversalSegmentationIntegrationTest(unittest.TestCase):
 
         self.assertTrue(outputs.class_queries_logits.shape == (2, 100, 151))
         self.assertTrue(outputs.masks_queries_logits.shape == (2, 100, 128, 128))
-
-        # TODO: Add expected values check once models are uploaded and verified
 
         preds = processor.post_process_semantic_segmentation(outputs, target_sizes=[(image.size[1], image.size[0])])[0]
 
@@ -371,6 +404,26 @@ class EomtDinov3ForUniversalSegmentationIntegrationTest(unittest.TestCase):
         self.assertTrue(outputs.class_queries_logits.shape == (1, 200, 134))
         self.assertTrue(outputs.masks_queries_logits.shape == (1, 200, 160, 160))
 
+        # fmt: off
+        expected_class_logits_slice = torch.tensor([
+            [-0.3180, -5.6188, -0.7154],
+            [ 0.0837, -6.8066, -2.1033],
+            [-1.4065, -5.9924, -5.4660]
+        ], device=model.device)
+        expected_masks_logits_slice = torch.tensor([
+            [-1.6251, -1.1417, -1.0285],
+            [ 2.5673,  5.3380,  6.2132],
+            [ 3.7562,  7.1667,  8.1707]
+        ], device=model.device)
+        # fmt: on
+
+        torch.testing.assert_close(
+            outputs.class_queries_logits[0, :3, :3].float(), expected_class_logits_slice, rtol=1e-3, atol=1e-3
+        )
+        torch.testing.assert_close(
+            outputs.masks_queries_logits[0, 0, :3, :3].float(), expected_masks_logits_slice, rtol=1e-3, atol=1e-3
+        )
+
         preds = processor.post_process_panoptic_segmentation(outputs, target_sizes=[(image.size[1], image.size[0])])[0]
         segmentation, segments_info = preds["segmentation"], preds["segments_info"]
 
@@ -384,7 +437,7 @@ class EomtDinov3ForUniversalSegmentationIntegrationTest(unittest.TestCase):
 
     @slow
     def test_instance_segmentation_inference(self):
-        model_id = "tue-mps/coco_instance_eomt_dinov3_large_640"
+        model_id = "nielsr/eomt-dinov3-coco-instance-large-640"
         model = EomtDinov3ForUniversalSegmentation.from_pretrained(model_id, device_map="auto")
         processor = AutoImageProcessor.from_pretrained(model_id)
 
@@ -397,6 +450,26 @@ class EomtDinov3ForUniversalSegmentationIntegrationTest(unittest.TestCase):
 
         self.assertEqual(outputs.class_queries_logits.shape, (1, 200, 81))
         self.assertEqual(outputs.masks_queries_logits.shape, (1, 200, 160, 160))
+
+        # fmt: off
+        expected_class_logits_slice = torch.tensor([
+            [-1.3013, -6.0043, -2.2048],
+            [ 1.9109, -2.3819, -3.3945],
+            [-0.9235, -4.5945, -0.4908]
+        ], device=model.device)
+        expected_masks_logits_slice = torch.tensor([
+            [-11.2059, -11.1473, -10.5228],
+            [-10.6254,  -9.2761,  -9.8643],
+            [-10.3746, -11.5448, -10.9008]
+        ], device=model.device)
+        # fmt: on
+
+        torch.testing.assert_close(
+            outputs.class_queries_logits[0, :3, :3].float(), expected_class_logits_slice, rtol=1e-3, atol=1e-3
+        )
+        torch.testing.assert_close(
+            outputs.masks_queries_logits[0, 0, :3, :3].float(), expected_masks_logits_slice, rtol=1e-3, atol=1e-3
+        )
 
         preds = processor.post_process_instance_segmentation(outputs, target_sizes=[(image.size[1], image.size[0])])[0]
         segmentation, segments_info = preds["segmentation"], preds["segments_info"]

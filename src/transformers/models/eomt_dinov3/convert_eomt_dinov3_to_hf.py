@@ -344,9 +344,15 @@ def convert_model(
         processor.save_pretrained(output_dir)
 
     if push_to_hub:
-        model_name = f"eomt-dinov3-{image_size}"
-        model.push_to_hub(repo_id=f"nielsr/{model_name}")
-        processor.push_to_hub(repo_id=f"nielsr/{model_name}")
+        # Extract model name from model_id (e.g. "tue-mps/coco_panoptic_eomt_large_640_dinov3" -> "eomt-dinov3-coco-panoptic-large-640")
+        base_name = model_id.split("/")[-1]  # e.g. "coco_panoptic_eomt_large_640_dinov3"
+        parts = base_name.replace("_dinov3", "").split("_")  # ["coco", "panoptic", "eomt", "large", "640"]
+        # Reorder to: eomt-dinov3-{task}-{dataset}-{size}-{resolution}
+        if "eomt" in parts:
+            parts.remove("eomt")
+        repo_name = "eomt-dinov3-" + "-".join(parts)
+        model.push_to_hub(repo_id=f"nielsr/{repo_name}")
+        processor.push_to_hub(repo_id=f"nielsr/{repo_name}")
 
 
 def _prepare_image(processor: EomtImageProcessorFast) -> torch.Tensor:

@@ -254,6 +254,10 @@ class EomtDinov3PreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = False
     _no_split_modules = ["EomtDinov3Layer"]
     _supports_sdpa = True
+    _can_record_outputs = {
+        "hidden_states": EomtDinov3Layer,
+        "attentions": EomtDinov3Attention,
+    }
 
     def _init_weights(self, module: nn.Module) -> None:
         std = self.config.initializer_range
@@ -321,7 +325,6 @@ class EomtDinov3ForUniversalSegmentation(EomtDinov3PreTrainedModel, EomtForUnive
         patch_offsets (`list[torch.Tensor]`, *optional*):
             list of tuples indicating the image index and start and end positions of patches for semantic segmentation.
         """
-
         masks_queries_logits_per_layer, class_queries_logits_per_layer = (), ()
         attention_mask = None
 
