@@ -47,10 +47,12 @@ def fixed_cross_entropy(
     )
 
     if reduction == "sum":
+        # just in case users pass an int for num_items_in_batch, which could be the case for custom trainer
         if torch.is_tensor(num_items_in_batch):
             num_items_in_batch = num_items_in_batch.to(loss.device)
         loss = loss / num_items_in_batch
     return loss
+
 
 def ForCausalLMLoss(
     logits,
