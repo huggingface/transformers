@@ -160,8 +160,7 @@ class BatchFeature(UserDict):
                         and isinstance(value[0][0], np.ndarray)
                     ):
                         value = np.array(value)
-                else:
-                    return mx.array(value)
+                return mx.array(value)
             
             is_tensor = is_mlx_array
                 
