@@ -30,7 +30,6 @@
 """Finetuning the library models for text classification."""
 # You can also adapt this script on your own text classification task. Pointers for this are left as comments.
 
-import json
 import logging
 import os
 import random
@@ -217,33 +216,6 @@ class DataTrainingArguments:
     test_file: str | None = field(
         default=None,
         metadata={"help": "A csv or a json file containing the test data."},
-    )
-    output_confidence_scores: bool = field(
-        default=False,
-        metadata={
-            "help": (
-                "Output confidence scores instead of binary predictions for multi-label classification. "
-                "Saves results in JSON format following transformers Pipeline API convention."
-            )
-        },
-    )
-    multi_label_threshold: float = field(
-        default=0.5,
-        metadata={
-            "help": (
-                "Threshold for converting probabilities to binary predictions in multi-label classification. "
-                "Only used when output_confidence_scores is False."
-            )
-        },
-    )
-    top_k_labels: int | None = field(
-        default=None,
-        metadata={
-            "help": (
-                "Limit output to top K most confident labels per example in multi-label classification. "
-                "Only used when output_confidence_scores is True."
-            )
-        },
     )
 
     def __post_init__(self):
@@ -714,7 +686,7 @@ def main():
         elif is_multi_label:
             # Convert logits to multi-hot encoding by applying sigmoid then thresholding
             preds = expit(preds)  # Apply sigmoid to convert logits to probabilities
-            threshold = data_args.multi_label_threshold
+            threshold = 0.5
             preds = np.array([np.where(p > threshold, 1, 0) for p in preds])
             # Micro F1 is commonly used in multi-label classification
             result = metric.compute(predictions=preds, references=p.label_ids, average="micro")
@@ -776,63 +748,33 @@ def main():
         if "label" in predict_dataset.features:
             predict_dataset = predict_dataset.remove_columns("label")
         predictions = trainer.predict(predict_dataset, metric_key_prefix="predict").predictions
-
         if is_regression:
             predictions = np.squeeze(predictions)
         elif is_multi_label:
+            # Convert logits to multi-hot encoding by first applying sigmoid and then thresholding.
             # Apply sigmoid to convert logits to probabilities
-            predictions = expit(predictions)
-
-            if data_args.output_confidence_scores:
-                # Output JSON with confidence scores (Pipeline API format)
-                output_predict_file = os.path.join(training_args.output_dir, "predict_results.json")
-                if trainer.is_world_process_zero():
-                    results = []
-                    for index, probs in enumerate(predictions):
-                        # Create list of {label, score} dicts
-                        label_scores = [
-                            {"label": label_list[i], "score": float(probs[i])} for i in range(len(label_list))
-                        ]
-                        # Sort by score descending
-                        label_scores.sort(key=lambda x: x["score"], reverse=True)
-
-                        # Apply top_k if specified
-                        if data_args.top_k_labels is not None:
-                            label_scores = label_scores[: data_args.top_k_labels]
-
-                        results.append({"index": index, "predictions": label_scores})
-
-                    with open(output_predict_file, "w") as writer:
-                        json.dump(results, writer, indent=2)
-                    logger.info(f"Predictions with confidence scores saved at {output_predict_file}")
-            else:
-                # Binary predictions using threshold (backward compatible)
-                threshold = data_args.multi_label_threshold
-                predictions = np.array([np.where(p > threshold, 1, 0) for p in predictions])
-
-                # Original TSV output
-                output_predict_file = os.path.join(training_args.output_dir, "predict_results.txt")
-                if trainer.is_world_process_zero():
-                    with open(output_predict_file, "w") as writer:
-                        logger.info("***** Predict results *****")
-                        writer.write("index\tprediction\n")
-                        for index, item in enumerate(predictions):
-                            # Recover from multi-hot encoding
-                            item = [label_list[i] for i in range(len(item)) if item[i] == 1]
-                            writer.write(f"{index}\t{item}\n")
-                    logger.info(f"Predict results saved at {output_predict_file}")
+            predictions = expit(predictions)  # Apply sigmoid: σ(x) = 1/(1+e^(-x))
+            # Apply threshold (default 0.5) to convert probabilities to binary predictions
+            threshold = 0.5
+            predictions = np.array([np.where(p > threshold, 1, 0) for p in predictions])
         else:
-            # Single-label classification (unchanged)
             predictions = np.argmax(predictions, axis=1)
-            output_predict_file = os.path.join(training_args.output_dir, "predict_results.txt")
-            if trainer.is_world_process_zero():
-                with open(output_predict_file, "w") as writer:
-                    logger.info("***** Predict results *****")
-                    writer.write("index\tprediction\n")
-                    for index, item in enumerate(predictions):
+        output_predict_file = os.path.join(training_args.output_dir, "predict_results.txt")
+        if trainer.is_world_process_zero():
+            with open(output_predict_file, "w") as writer:
+                logger.info("***** Predict results *****")
+                writer.write("index\tprediction\n")
+                for index, item in enumerate(predictions):
+                    if is_regression:
+                        writer.write(f"{index}\t{item:3.3f}\n")
+                    elif is_multi_label:
+                        # recover from multi-hot encoding
+                        item = [label_list[i] for i in range(len(item)) if item[i] == 1]
+                        writer.write(f"{index}\t{item}\n")
+                    else:
                         item = label_list[item]
                         writer.write(f"{index}\t{item}\n")
-                logger.info(f"Predict results saved at {output_predict_file}")
+        logger.info(f"Predict results saved at {output_predict_file}")
     kwargs = {
         "finetuned_from": model_args.model_name_or_path,
         "tasks": "text-classification",
