@@ -991,8 +991,8 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 raise AttributeError(f"{key} conflicts with the method {key} in {self.__class__.__name__}")
 
         # V5: Convert deprecated additional_special_tokens to extra_special_tokens before storing init_kwargs
-        if "additional_special_tokens" in kwargs:
-            kwargs.setdefault("extra_special_tokens", kwargs.pop("additional_special_tokens"))
+        if "additional_special_tokens" in kwargs and "extra_special_tokens" not in kwargs:
+            kwargs["extra_special_tokens"] = kwargs.pop("additional_special_tokens")
 
         self.init_kwargs = copy.deepcopy(kwargs)
         self.name_or_path = kwargs.pop("name_or_path", "")
@@ -1156,8 +1156,8 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         # V5: Allowed keys are SPECIAL_TOKENS_ATTRIBUTES + "extra_special_tokens"
         # Backward compatibility: convert "additional_special_tokens" to "extra_special_tokens"
         special_tokens_dict = dict(special_tokens_dict)
-        if "additional_special_tokens" in special_tokens_dict and "extra_special_tokens" not in special_tokens_dict:
-            special_tokens_dict["extra_special_tokens"] = special_tokens_dict.pop("additional_special_tokens")
+        if "additional_special_tokens" in special_tokens_dict:
+            special_tokens_dict.setdefault("extra_special_tokens", special_tokens_dict.pop("additional_special_tokens"))
 
         allowed_keys = set(self.SPECIAL_TOKENS_ATTRIBUTES) | {"extra_special_tokens"}
         tokens_to_add = []
@@ -1246,17 +1246,17 @@ class PreTrainedTokenizerBase(PushToHubMixin):
     def __setattr__(self, key, value):
         # Handle _id/_ids suffix (e.g., bos_token_id -> bos_token)
         key_is_special_id = key.endswith("_id") or key.endswith("_ids")
-        key_without_id = key[:-4] if key.endswith("_ids") else (key[:-3] if key_is_special_id else key)
+        key_without_id = key.removesuffix("_ids").removesuffix("_id") if key_is_special_id else key
 
         # Named special tokens (bos_token, eos_token, etc.)
-        if self.__dict__.get("_special_tokens_map") is not None and key_without_id in self.SPECIAL_TOKENS_ATTRIBUTES:
+        if "_special_tokens_map" in self.__dict__ and key_without_id in self.SPECIAL_TOKENS_ATTRIBUTES:
             if key_is_special_id and value is not None:
                 value = self.convert_ids_to_tokens(value)
             if value is not None and not isinstance(value, (str, AddedToken)):
                 raise ValueError(f"Cannot set a non-string value as the {key_without_id}")
             self._special_tokens_map[key_without_id] = value
         # Extra special tokens (list only - use model_specific_special_tokens for dict)
-        elif self.__dict__.get("_extra_special_tokens") is not None and key_without_id == "extra_special_tokens":
+        elif "_extra_special_tokens" in self.__dict__ and key_without_id == "extra_special_tokens":
             if key_is_special_id and value is not None:
                 value = [self.convert_ids_to_tokens(val) for val in value]
             if value is None:
@@ -1270,19 +1270,17 @@ class PreTrainedTokenizerBase(PushToHubMixin):
 
     def __getattr__(self, key):
         key_is_special_id = key.endswith("_id") or key.endswith("_ids")
-        key_without_id = key[:-4] if key.endswith("_ids") else (key[:-3] if key_is_special_id else key)
+        key_without_id = key.removesuffix("_ids").removesuffix("_id") if key_is_special_id else key
 
-        if self.__dict__.get("_special_tokens_map") is not None and key_without_id in self.SPECIAL_TOKENS_ATTRIBUTES:
+        if "_special_tokens_map" in self.__dict__ and key_without_id in self.SPECIAL_TOKENS_ATTRIBUTES:
             token_value = self.__dict__["_special_tokens_map"][key_without_id]
             if token_value is None:
                 if self.verbose:
                     logger.error(f"Using {key}, but it is not set yet.")
                 return None
-            if key_is_special_id:
-                return self.convert_tokens_to_ids(str(token_value))
-            return str(token_value)
+            return self.convert_tokens_to_ids(str(token_value)) if key_is_special_id else str(token_value)
 
-        if self.__dict__.get("_extra_special_tokens") is not None and key_without_id == "extra_special_tokens":
+        if "_extra_special_tokens" in self.__dict__ and key_without_id == "extra_special_tokens":
             tokens = [str(tok) for tok in self.__dict__["_extra_special_tokens"]]
             return self.convert_tokens_to_ids(tokens) if key_is_special_id else tokens
 
@@ -1782,14 +1780,12 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 if isinstance(init_kwargs["auto_map"], (tuple, list)):
                     init_kwargs["auto_map"] = {"AutoTokenizer": init_kwargs["auto_map"]}
 
-        # V5: Convert deprecated additional_special_tokens to extra_special_tokens in both sources
-        if "additional_special_tokens" in init_kwargs and "extra_special_tokens" not in init_kwargs:
-            init_kwargs["extra_special_tokens"] = init_kwargs.pop("additional_special_tokens")
-        if "additional_special_tokens" in kwargs and "extra_special_tokens" not in kwargs:
-            kwargs["extra_special_tokens"] = kwargs.pop("additional_special_tokens")
-
         # Update with newly provided kwargs (user overrides take precedence)
         init_kwargs.update(kwargs)
+
+        # V5: Convert deprecated additional_special_tokens to extra_special_tokens
+        if "additional_special_tokens" in init_kwargs:
+            init_kwargs.setdefault("extra_special_tokens", init_kwargs.pop("additional_special_tokens"))
 
         # V5: Collect model-specific tokens (custom *_token keys not in standard attributes)
         default_attrs = set(cls.SPECIAL_TOKENS_ATTRIBUTES)
