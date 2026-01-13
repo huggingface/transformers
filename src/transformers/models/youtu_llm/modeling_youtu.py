@@ -450,8 +450,6 @@ class YoutuPreTrainedModel(PreTrainedModel):
 
 @auto_docstring
 class YoutuModel(YoutuPreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [""]
-
     def __init__(self, config: YoutuConfig):
         super().__init__(config)
         self.padding_idx = config.pad_token_id

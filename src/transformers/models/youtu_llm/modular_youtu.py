@@ -69,7 +69,6 @@ class YoutuPreTrainedModel(LlamaPreTrainedModel):
 
 
 class YoutuModel(LlamaModel):
-    _keys_to_ignore_on_load_unexpected = [""]
 
 
 class YoutuForCausalLM(LlamaForCausalLM):

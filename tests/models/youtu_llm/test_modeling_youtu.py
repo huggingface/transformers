@@ -281,6 +281,7 @@ class YoutuModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         model_sdpa = YoutuForCausalLM.from_pretrained(
             "tencent/Youtu-LLM-2B-Base",
             dtype=torch.float16,
+            attn_implementation="sdpa",
         ).to(torch_device)
 
         self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
@@ -321,11 +322,9 @@ class YoutuIntegrationTest(unittest.TestCase):
         # See LlamaIntegrationTest.tearDown(). Can be removed once LlamaIntegrationTest.tearDown() is removed.
         cleanup(torch_device, gc_collect=False)
 
-    @slow
     @require_torch_accelerator
-    @pytest.mark.torch_compile_test
     @require_read_token
-    def test_compile_static_cache(self):
+    def test_dynamic_cache(self):
         # `torch==2.2` will throw an error on this test (as in other compilation tests), but torch==2.1.2 and torch>2.2
         # work as intended. See https://github.com/pytorch/pytorch/issues/121943
         if version.parse(torch.__version__) < version.parse("2.3.0"):
@@ -355,12 +354,68 @@ class YoutuIntegrationTest(unittest.TestCase):
         dynamic_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, dynamic_text)
 
+    @require_torch_accelerator
+    @require_read_token
+    def test_static_cache(self):
+        # `torch==2.2` will throw an error on this test (as in other compilation tests), but torch==2.1.2 and torch>2.2
+        # work as intended. See https://github.com/pytorch/pytorch/issues/121943
+        if version.parse(torch.__version__) < version.parse("2.3.0"):
+            self.skipTest(reason="This test requires torch >= 2.3 to run.")
+
+        NUM_TOKENS_TO_GENERATE = 40
+        EXPECTED_TEXT_COMPLETION = [
+            "Simply put, the theory of relativity states that , the speed of light is constant in all reference frames. This means that if you are traveling at the speed of light, you will never reach the speed of light. This is because the speed of",
+            "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on burgers, hot dogs, and even on my fries. I also love it on my french fries. I love it on my french fries. I love",
+        ]
+
+        prompts = [
+            "Simply put, the theory of relativity states that ",
+            "My favorite all time favorite condiment is ketchup.",
+        ]
+        tokenizer = AutoTokenizer.from_pretrained("tencent/Youtu-LLM-2B-Base")
+        model = YoutuForCausalLM.from_pretrained(
+            "tencent/Youtu-LLM-2B-Base", device_map=torch_device, dtype=torch.float16
+        )
+        if model.config.tie_word_embeddings:
+            # Youtu-LLM-2B-Base contains extra repeated weights for the tied embeddings, we can tie weights here according to its config
+            model.tie_weights()
+        inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
+
         # Static Cache
         generated_ids = model.generate(
             **inputs, max_new_tokens=NUM_TOKENS_TO_GENERATE, do_sample=False, cache_implementation="static"
         )
         static_text = tokenizer.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertEqual(EXPECTED_TEXT_COMPLETION, static_text)
+
+    @slow
+    @require_torch_accelerator
+    @pytest.mark.torch_compile_test
+    @require_read_token
+    def test_compile_static_cache(self):
+        # `torch==2.2` will throw an error on this test (as in other compilation tests), but torch==2.1.2 and torch>2.2
+        # work as intended. See https://github.com/pytorch/pytorch/issues/121943
+        if version.parse(torch.__version__) < version.parse("2.3.0"):
+            self.skipTest(reason="This test requires torch >= 2.3 to run.")
+
+        NUM_TOKENS_TO_GENERATE = 40
+        EXPECTED_TEXT_COMPLETION = [
+            "Simply put, the theory of relativity states that , the speed of light is constant in all reference frames. This means that if you are traveling at the speed of light, you will never reach the speed of light. This is because the speed of",
+            "My favorite all time favorite condiment is ketchup. I love it on everything. I love it on burgers, hot dogs, and even on my fries. I also love it on my french fries. I love it on my french fries. I love",
+        ]
+
+        prompts = [
+            "Simply put, the theory of relativity states that ",
+            "My favorite all time favorite condiment is ketchup.",
+        ]
+        tokenizer = AutoTokenizer.from_pretrained("tencent/Youtu-LLM-2B-Base")
+        model = YoutuForCausalLM.from_pretrained(
+            "tencent/Youtu-LLM-2B-Base", device_map=torch_device, dtype=torch.float16
+        )
+        if model.config.tie_word_embeddings:
+            # Youtu-LLM-2B-Base contains extra repeated weights for the tied embeddings, we can tie weights here according to its config
+            model.tie_weights()
+        inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 
         # Static Cache + compile
         model._cache = None  # clear cache object, initialized when we pass `cache_implementation="static"`
