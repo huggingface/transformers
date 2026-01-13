@@ -188,8 +188,6 @@ class DetrSegmentationOutput(ModelOutput):
     encoder_attentions: tuple[torch.FloatTensor] | None = None
 
 
-# BELOW: utilities copied from
-# https://github.com/facebookresearch/detr/blob/master/backbone.py
 class DetrFrozenBatchNorm2d(nn.Module):
     """
     BatchNorm2d where the batch statistics and the affine parameters are fixed.
@@ -757,7 +755,6 @@ def _expand(tensor, length: int):
     return tensor.unsqueeze(1).repeat(1, int(length), 1, 1, 1).flatten(0, 1)
 
 
-# taken from https://github.com/facebookresearch/detr/blob/master/models/segmentation.py
 class DetrMaskHeadSmallConv(nn.Module):
     """
     Simple convolutional head, using group norm. Upsampling is done using a FPN approach
@@ -1309,13 +1306,10 @@ class DetrModel(DetrPreTrainedModel):
         )
 
 
-# taken from https://github.com/facebookresearch/detr/blob/master/models/detr.py
 class DetrMLPPredictionHead(nn.Module):
     """
     Very simple multi-layer perceptron (MLP, also called FFN), used to predict the normalized center coordinates,
     height and width of a bounding box w.r.t. an image.
-
-    Copied from https://github.com/facebookresearch/detr/blob/master/models/detr.py
 
     """
 

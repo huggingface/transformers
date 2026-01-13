@@ -20,8 +20,8 @@ from typing import Any
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 from torch import Tensor
+from torch.nn.functional import softmax
 
 from ... import initialization as init
 from ...activations import ACT2FN
@@ -552,7 +552,7 @@ class DeformableDetrMultiscaleDeformableAttention(nn.Module):
         attention_weights = self.attention_weights(hidden_states).view(
             batch_size, num_queries, self.n_heads, self.n_levels * self.n_points
         )
-        attention_weights = F.softmax(attention_weights, -1).view(
+        attention_weights = softmax(attention_weights, -1).view(
             batch_size, num_queries, self.n_heads, self.n_levels, self.n_points
         )
         # batch_size, num_queries, n_heads, n_levels, n_points, 2

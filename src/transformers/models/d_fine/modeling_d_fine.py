@@ -24,6 +24,7 @@ from dataclasses import dataclass
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torch.nn.functional as F_t
 from torch import Tensor
 
 from ... import initialization as init
@@ -476,7 +477,7 @@ class DFineSelfAttention(nn.Module):
     """
     Multi-headed self-attention from 'Attention Is All You Need' paper.
 
-    In RT-DETR, position embeddings are added to both queries and keys (but not values) in self-attention.
+    In D_FINE, position embeddings are added to both queries and keys (but not values) in self-attention.
     """
 
     def __init__(
@@ -806,21 +807,17 @@ class DFineDecoderLayer(nn.Module):
         return hidden_states
 
 
-# taken from https://github.com/facebookresearch/detr/blob/master/models/detr.py
 class DFineMLPPredictionHead(nn.Module):
     """
     Very simple multi-layer perceptron (MLP, also called FFN), used to predict the normalized center coordinates,
     height and width of a bounding box w.r.t. an image.
 
-    Copied from https://github.com/facebookresearch/detr/blob/master/models/detr.py
-    Origin from https://github.com/lyuwenyu/RT-DETR/blob/94f5e16708329d2f2716426868ec89aa774af016/DFine_paddle/ppdet/modeling/transformers/utils.py#L453
-
     """
 
-    def __init__(self, config, input_dim, d_model, output_dim, num_layers):
+    def __init__(self, input_dim, hidden_dim, output_dim, num_layers):
         super().__init__()
         self.num_layers = num_layers
-        h = [d_model] * (num_layers - 1)
+        h = [hidden_dim] * (num_layers - 1)
         self.layers = nn.ModuleList(nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim]))
 
     def forward(self, x):
@@ -971,27 +968,12 @@ class DFineHybridEncoder(DFinePreTrainedModel):
     def forward(
         self,
         inputs_embeds=None,
-        attention_mask=None,
-        position_embeddings=None,
-        spatial_shapes=None,
-        level_start_index=None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         r"""
         Args:
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
                 Flattened feature map (output of the backbone + projection layer) that is passed to the encoder.
-            attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
-                Mask to avoid performing attention on padding pixel features. Mask values selected in `[0, 1]`:
-                - 1 for pixel features that are real (i.e. **not masked**),
-                - 0 for pixel features that are padding (i.e. **masked**).
-                [What are attention masks?](../glossary#attention-mask)
-            position_embeddings (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-                Position embeddings that are added to the queries and keys in each self-attention layer.
-            spatial_shapes (`torch.LongTensor` of shape `(num_feature_levels, 2)`):
-                Spatial shapes of each feature map.
-            level_start_index (`torch.LongTensor` of shape `(num_feature_levels)`):
-                Starting index of each feature map.
         """
         output_hidden_states = kwargs.get("output_hidden_states", self.config.output_hidden_states)
 
@@ -1037,7 +1019,7 @@ class DFineHybridEncoder(DFinePreTrainedModel):
             top_fpn_feature_map = lateral_conv(top_fpn_feature_map)
             fpn_feature_maps[-1] = top_fpn_feature_map
             # apply fpn block
-            top_fpn_feature_map = F.interpolate(top_fpn_feature_map, scale_factor=2.0, mode="nearest")
+            top_fpn_feature_map = F_t.interpolate(top_fpn_feature_map, scale_factor=2.0, mode="nearest")
             fused_feature_map = torch.concat([top_fpn_feature_map, backbone_feature_map], dim=1)
             new_fpn_feature_map = fpn_block(fused_feature_map)
             fpn_feature_maps.append(new_fpn_feature_map)
@@ -1137,7 +1119,7 @@ class DFineDecoder(DFinePreTrainedModel):
             [DFineDecoderLayer(config) for _ in range(config.decoder_layers)]
             + [DFineDecoderLayer(config) for _ in range(config.decoder_layers - self.eval_idx - 1)]
         )
-        self.query_pos_head = DFineMLPPredictionHead(config, 4, 2 * config.d_model, config.d_model, num_layers=2)
+        self.query_pos_head = DFineMLPPredictionHead(4, 2 * config.d_model, config.d_model, num_layers=2)
 
         # hack implementation for iterative bounding box refinement and two-stage Deformable DETR
         self.bbox_embed = None
@@ -1546,7 +1528,7 @@ class DFineModel(DFinePreTrainedModel):
             nn.LayerNorm(config.d_model, eps=config.layer_norm_eps),
         )
         self.enc_score_head = nn.Linear(config.d_model, config.num_labels)
-        self.enc_bbox_head = DFineMLPPredictionHead(config, config.d_model, config.d_model, 4, num_layers=3)
+        self.enc_bbox_head = DFineMLPPredictionHead(config.d_model, config.d_model, 4, num_layers=3)
 
         # init encoder output anchors and valid_mask
         if config.anchor_image_size:
@@ -1635,7 +1617,6 @@ class DFineModel(DFinePreTrainedModel):
         pixel_mask: torch.LongTensor | None = None,
         encoder_outputs: torch.FloatTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
-        decoder_inputs_embeds: torch.FloatTensor | None = None,
         labels: list[dict] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor] | DFineModelOutput:
@@ -1643,9 +1624,6 @@ class DFineModel(DFinePreTrainedModel):
         inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing the flattened feature map (output of the backbone + projection layer), you
             can choose to directly pass a flattened representation of an image.
-        decoder_inputs_embeds (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
-            Optionally, instead of initializing the queries with a tensor of zeros, you can choose to directly pass an
-            embedded representation.
         labels (`list[Dict]` of len `(batch_size,)`, *optional*):
             Labels for computing the bipartite matching loss. List of dicts, each dictionary containing at least the
             following 2 keys: 'class_labels' and 'boxes' (the class labels and bounding boxes of an image in the batch
@@ -1775,7 +1753,7 @@ class DFineModel(DFinePreTrainedModel):
             dim=1, index=topk_ind.unsqueeze(-1).repeat(1, 1, enc_outputs_coord_logits.shape[-1])
         )
 
-        enc_topk_bboxes = F.sigmoid(reference_points_unact)
+        enc_topk_bboxes = F_t.sigmoid(reference_points_unact)
         if denoising_bbox_unact is not None:
             reference_points_unact = torch.concat([denoising_bbox_unact, reference_points_unact], 1)
 
@@ -1960,7 +1938,6 @@ class DFineForObjectDetection(DFinePreTrainedModel):
         pixel_mask: torch.LongTensor | None = None,
         encoder_outputs: torch.FloatTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
-        decoder_inputs_embeds: torch.FloatTensor | None = None,
         labels: list[dict] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.FloatTensor] | DFineObjectDetectionOutput:
@@ -2014,7 +1991,6 @@ class DFineForObjectDetection(DFinePreTrainedModel):
             pixel_mask=pixel_mask,
             encoder_outputs=encoder_outputs,
             inputs_embeds=inputs_embeds,
-            decoder_inputs_embeds=decoder_inputs_embeds,
             labels=labels,
             **kwargs,
         )

@@ -610,7 +610,7 @@ class RTDetrV2ForObjectDetection(RTDetrForObjectDetection, RTDetrV2PreTrainedMod
         )
         self.bbox_embed = nn.ModuleList(
             [
-                RTDetrV2MLPPredictionHead(config, config.d_model, config.d_model, 4, num_layers=3)
+                RTDetrV2MLPPredictionHead(config.d_model, config.d_model, 4, num_layers=3)
                 for _ in range(config.decoder_layers)
             ]
         )
