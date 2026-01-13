@@ -15,7 +15,6 @@
 
 import math
 from collections.abc import Callable
-from dataclasses import dataclass
 from typing import Optional, Union
 
 import numpy as np
@@ -27,7 +26,6 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
-from ...masking_utils import create_bidirectional_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -43,6 +41,7 @@ from ...utils import (
     cached_file,
     check_torch_load_is_safe,
     logging,
+    can_return_tuple,
 )
 from .configuration_omniasr import OmniASRCTCConfig, OmniASREncoderConfig
 
@@ -52,9 +51,6 @@ OMNIASR_ADAPTER_SAFE_FILE = "adapter.{}.safetensors"
 
 
 logger = logging.get_logger(__name__)
-
-
-_HIDDEN_STATES_START_POSITION = 2
 
 
 def _compute_mask_indices(
@@ -260,18 +256,22 @@ class OmniASRPositionalConvEmbedding(nn.Module):
             groups=config.num_conv_pos_embedding_groups,
         )
 
-        self.padding = OmniASRSamePadLayer(config.num_conv_pos_embeddings)
+        # self.padding = OmniASRSamePadLayer(config.num_conv_pos_embeddings)
+        # NOTE (ebezzam) changed to original: https://github.com/facebookresearch/fairseq2/blob/a1f0c565a99d3cd3e3157678b5c48653e3d439f4/src/fairseq2/models/wav2vec2/position_encoder.py#L64
+        self.remove_pad = config.num_conv_pos_embeddings % 2 == 0
         self.activation = ACT2FN[config.feat_extract_activation]
 
     def forward(self, hidden_states):
+        residual = hidden_states
         hidden_states = hidden_states.transpose(1, 2)
-
         hidden_states = self.conv(hidden_states)
-        hidden_states = self.padding(hidden_states)
+        if self.remove_pad:
+            hidden_states = hidden_states[:, :, :-1]
+        # hidden_states = self.padding(hidden_states)
         hidden_states = self.activation(hidden_states)
 
         hidden_states = hidden_states.transpose(1, 2)
-        return hidden_states
+        return hidden_states + residual
 
 
 class OmniASRSamePadLayer(nn.Module):
@@ -305,6 +305,7 @@ class OmniASRFeatureEncoder(nn.Module):
                 f"`config.feat_extract_norm` is {config.feat_extract_norm}, but has to be one of ['group', 'layer']"
             )
         self.conv_layers = nn.ModuleList(conv_layers)
+        self.layer_norm = nn.LayerNorm(config.conv_dim[-1], eps=config.layer_norm_eps)
         self.gradient_checkpointing = False
         self._requires_grad = True
 
@@ -317,23 +318,20 @@ class OmniASRFeatureEncoder(nn.Module):
 
         for conv_layer in self.conv_layers:
             hidden_states = conv_layer(hidden_states)
-
+        hidden_states = self.layer_norm(hidden_states.transpose(1, 2))
         return hidden_states
 
 
 class OmniASRFeatureProjection(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.layer_norm = nn.LayerNorm(config.conv_dim[-1], eps=config.layer_norm_eps)
         self.projection = nn.Linear(config.conv_dim[-1], config.hidden_size)
         self.dropout = nn.Dropout(config.feat_proj_dropout)
 
     def forward(self, hidden_states):
-        # non-projected hidden states are needed for quantization
-        norm_hidden_states = self.layer_norm(hidden_states)
-        hidden_states = self.projection(norm_hidden_states)
+        hidden_states = self.projection(hidden_states)
         hidden_states = self.dropout(hidden_states)
-        return hidden_states, norm_hidden_states
+        return hidden_states
 
 
 # Copied from transformers.models.bert.modeling_bert.eager_attention_forward
@@ -468,17 +466,33 @@ class OmniASREncoderLayer(GradientCheckpointingLayer):
         self.ffn = OmniASRFeedForward(config)
         self.final_layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
 
-    def forward(self, hidden_states, attention_mask=None, output_attentions=False):
+    # NOTE: original: https://github.com/facebookresearch/fairseq2/blob/a1f0c565a99d3cd3e3157678b5c48653e3d439f4/src/fairseq2/models/transformer/encoder_layer.py#L141
+    # can see `Wav2Vec2BertEncoderLayer` from src/transformers/models/wav2vec2_bert/modeling_wav2vec2_bert.py
+    # but here we have no convolution layer, do we need it?
+    def forward(
+        self, 
+        hidden_states,
+        attention_mask=None, 
+        output_attentions=False,
+    ):
+        # Self-attention block with pre-norm (layer_norm_pre=True in config)
         attn_residual = hidden_states
+        # NOTE (ebezzam) add pre-norm flag? So leave option to do pre- or post norm?
+        hidden_states = self.layer_norm(hidden_states)  # Pre-norm: normalize BEFORE attention
         hidden_states, attn_weights, _ = self.self_attn(
-            hidden_states, attention_mask=attention_mask, output_attentions=output_attentions
+            hidden_states, 
+            attention_mask=attention_mask,
+            output_attentions=output_attentions
         )
         hidden_states = self.dropout(hidden_states)
-        hidden_states = attn_residual + hidden_states
+        hidden_states = attn_residual + hidden_states  # Add residual
 
-        hidden_states = self.layer_norm(hidden_states)
-        hidden_states = hidden_states + self.ffn(hidden_states)
-        hidden_states = self.final_layer_norm(hidden_states)
+        # FFN block with pre-norm
+        ffn_residual = hidden_states
+        hidden_states = self.final_layer_norm(hidden_states)  # Pre-norm: normalize BEFORE FFN
+        hidden_states = self.ffn(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        hidden_states = ffn_residual + hidden_states  # Add residual
 
         outputs = (hidden_states,)
 
@@ -580,8 +594,10 @@ class OmniASREncoder(nn.Module):
         super().__init__()
         self.config = config
 
+        # NOTE in fairseq2 (embed_positions, layer_norm, dropout) are in "Frontend" instead of Encoder: https://github.com/facebookresearch/fairseq2/blob/main/src/fairseq2/models/wav2vec2/frontend.py#L209-L216
         # self.pos_conv_embed = OmniASRPositionalConvEmbedding(config)  # Wav2vec2
         # below is like in Wav2Vec2BertEncoder
+        # TODO only keep conv?
         if config.position_embeddings_type == "relative":
             self.embed_positions = OmniASRRelPositionalEmbedding(config)
         elif config.position_embeddings_type == "rotary":
@@ -590,10 +606,9 @@ class OmniASREncoder(nn.Module):
             self.embed_positions = OmniASRPositionalConvEmbedding(config)
         else:
             self.embed_positions = None
-
-        # NOTE (ebezzam) layer_norm was commented before
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)  # Wav2vec2 applies here, while Wav2Vec2Bert applies within layers?
         self.dropout = nn.Dropout(config.hidden_dropout)
+
         self.layers = nn.ModuleList([OmniASREncoderLayer(config) for _ in range(config.num_hidden_layers)])
         self.gradient_checkpointing = False
 
@@ -608,7 +623,6 @@ class OmniASREncoder(nn.Module):
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
-        conv_attention_mask = attention_mask
         if attention_mask is not None:
             # make sure padded tokens output 0
             hidden_states = hidden_states.masked_fill(~attention_mask.bool().unsqueeze(-1), 0.0)
@@ -619,13 +633,14 @@ class OmniASREncoder(nn.Module):
             attention_mask = attention_mask.expand(
                 attention_mask.shape[0], 1, attention_mask.shape[-1], attention_mask.shape[-1]
             )
-
-        hidden_states = self.dropout(hidden_states)
-
+        
+        # NOTE (ebezzam) equivalent code? https://github.com/facebookresearch/fairseq2/blob/main/src/fairseq2/models/wav2vec2/frontend.py#L209-L213
         if self.embed_positions is not None:
-            relative_position_embeddings = self.embed_positions(hidden_states)
-        else:
-            relative_position_embeddings = None
+            hidden_states = self.embed_positions(hidden_states)
+
+        # TODO remove from init if not used?
+        # 
+        # 
 
         synced_gpus = is_deepspeed_zero3_enabled() or is_fsdp_managed_module(self)
 
@@ -635,16 +650,13 @@ class OmniASREncoder(nn.Module):
 
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             dropout_probability = torch.rand([])
-
-            skip_the_layer = self.training and dropout_probability < self.config.layerdrop
+            skip_the_layer = self.training and dropout_probability < self.config.layer_drop_p
             if not skip_the_layer or synced_gpus:
                 # under fsdp or deepspeed zero3 all gpus must run in sync
                 layer_outputs = layer(
                     hidden_states,
                     attention_mask=attention_mask,
-                    relative_position_embeddings=relative_position_embeddings,
                     output_attentions=output_attentions,
-                    conv_attention_mask=conv_attention_mask,
                 )
                 hidden_states = layer_outputs[0]
 
@@ -656,6 +668,10 @@ class OmniASREncoder(nn.Module):
 
         if output_hidden_states:
             all_hidden_states = all_hidden_states + (hidden_states,)
+
+        hidden_states = self.layer_norm(hidden_states)
+        if self.training:
+            hidden_states = self.dropout(hidden_states)
 
         if not return_dict:
             return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
@@ -711,7 +727,6 @@ class OmniASRAdapterLayer(nn.Module):
     def forward(self, hidden_states):
         hidden_states = self.conv(hidden_states)
         hidden_states = nn.functional.glu(hidden_states, dim=1)
-
         return hidden_states
 
 
@@ -1087,26 +1102,6 @@ class OmniASRFeedForward(nn.Module):
 class OmniASRModel(OmniASRPreTrainedModel):
     def __init__(self, config: OmniASREncoderConfig):
         # see Wav2Vec2BertModel
-    #     super().__init__(config)
-    #     self.config = config
-    #     self.feature_projection = OmniASRFeatureProjection(config)
-
-    #     # model only needs masking vector if mask prob is > 0.0
-    #     if config.mask_time_prob > 0.0 or config.mask_feature_prob > 0.0:
-    #         self.masked_spec_embed = nn.Parameter(torch.Tensor(config.hidden_size).uniform_())
-
-    #     self.encoder = OmniASREncoder(config)
-
-    #     # TODO (ebezzam) remove?
-    #     self.adapter = OmniASRAdapter(config) if config.add_adapter else None
-
-    #     # TODO (ebezzam) remove?
-    #     self.intermediate_ffn = None
-    #     if config.use_intermediate_ffn_before_adapter:
-    #         self.intermediate_ffn = OmniASRFeedForward(config)
-
-    #     self.post_init()
-
         super().__init__(config)
         self.config = config
         self.feature_extractor = OmniASRFeatureEncoder(config)
@@ -1119,7 +1114,7 @@ class OmniASRModel(OmniASRPreTrainedModel):
 
         self.encoder = OmniASREncoder(config)
 
-        # TODO (ebezzam) remove?
+        # TODO (ebezzam) remove? as add_adapter=False
         self.adapter = OmniASRAdapter(config) if config.add_adapter else None
 
         self.post_init()
@@ -1170,6 +1165,7 @@ class OmniASRModel(OmniASRPreTrainedModel):
 
         return hidden_states
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1178,7 +1174,6 @@ class OmniASRModel(OmniASRPreTrainedModel):
         mask_time_indices: Optional[torch.FloatTensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         **kwargs,
     ) -> Union[tuple, Wav2Vec2BaseModelOutput]:
         r"""
@@ -1190,42 +1185,37 @@ class OmniASRModel(OmniASRPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        # TODO use @can_return_tuple
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        extract_features = self.feature_extractor(input_values)
-        extract_features = extract_features.transpose(1, 2)
+        hidden_states = self.feature_extractor(input_values)
 
         if attention_mask is not None:
             # compute reduced attention_mask corresponding to feature vectors
             attention_mask = self._get_feature_vector_attention_mask(
-                extract_features.shape[1], attention_mask, add_adapter=False
+                hidden_states.shape[1], attention_mask, add_adapter=False
             )
 
-        hidden_states, extract_features = self.feature_projection(extract_features)
-        hidden_states = self._mask_hidden_states(
-            hidden_states, mask_time_indices=mask_time_indices, attention_mask=attention_mask
-        )
+        hidden_states = self.feature_projection(hidden_states)
+
+        # TODO remove? has to do with specaugment
+        # hidden_states = self._mask_hidden_states(
+        #     hidden_states, mask_time_indices=mask_time_indices, attention_mask=attention_mask
+        # )
 
         encoder_outputs = self.encoder(
             hidden_states,
             attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
         hidden_states = encoder_outputs[0]
 
         if self.adapter is not None:
+            # TODO remove if not used?
             hidden_states = self.adapter(hidden_states)
-
-        if not return_dict:
-            return (hidden_states, extract_features) + encoder_outputs[1:]
 
         return Wav2Vec2BaseModelOutput(
             last_hidden_state=hidden_states,
-            extract_features=extract_features,
             hidden_states=encoder_outputs.hidden_states,
             attentions=encoder_outputs.attentions,
         )
@@ -1310,6 +1300,7 @@ class OmniASRForCTC(OmniASRPreTrainedModel):
         elif target_lang is not None:
             self.load_adapter(target_lang, force_load=True)
 
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
@@ -1317,7 +1308,6 @@ class OmniASRForCTC(OmniASRPreTrainedModel):
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
         labels: Optional[torch.Tensor] = None,
         **kwargs,
     ) -> Union[tuple, CausalLMOutput]:
@@ -1328,7 +1318,6 @@ class OmniASRForCTC(OmniASRPreTrainedModel):
             All labels set to `-100` are ignored (masked), the loss is only computed for labels in `[0, ...,
             config.vocab_size - 1]`.
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
         if labels is not None and labels.max() >= self.config.vocab_size:
             raise ValueError(f"Label values must be <= vocab_size: {self.config.vocab_size}")
@@ -1338,7 +1327,6 @@ class OmniASRForCTC(OmniASRPreTrainedModel):
             attention_mask=attention_mask,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
 
         hidden_states = outputs[0]
@@ -1373,10 +1361,6 @@ class OmniASRForCTC(OmniASRPreTrainedModel):
                     reduction=self.config.ctc_loss_reduction,
                     zero_infinity=self.config.ctc_zero_infinity,
                 )
-
-        if not return_dict:
-            output = (logits,) + outputs[_HIDDEN_STATES_START_POSITION:]
-            return ((loss,) + output) if loss is not None else output
 
         return CausalLMOutput(
             loss=loss, logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions
