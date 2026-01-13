@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_pp_ocrv5_mobile_det.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-
 import math
 from typing import Optional, Union
 
@@ -16,10 +15,7 @@ from torchvision.transforms.v2.functional import InterpolationMode
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast
-from ...image_utils import (
-    PILImageResampling,
-    SizeDict,
-)
+from ...image_utils import PILImageResampling, SizeDict
 from ...utils import auto_docstring
 from ...utils.generic import TensorType
 

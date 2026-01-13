@@ -17,29 +17,6 @@ from ...utils import ModelOutput, auto_docstring
 from .configuration_pp_ocrv5_mobile_det import PPOCRV5MobileDetConfig
 
 
-def make_divisible(v, divisor: int = 16, min_value=None):
-    """
-    Ensures that the input value `v` is rounded to the nearest multiple of `divisor`,
-    with a minimum value constraint. This is used to adjust channel dimensions for
-    hardware-efficient neural network inference (especially on mobile devices).
-
-    Args:
-        v (float): Input value to be adjusted (typically channel count).
-        divisor (int, optional): The divisor to align the value with. Defaults to 16.
-        min_value (int, optional): Minimum allowed value after adjustment. If None,
-            defaults to `divisor`.
-
-    Returns:
-        int: Adjusted value that is a multiple of `divisor` and meets the minimum value requirement.
-    """
-    if min_value is None:
-        min_value = divisor
-    new_v = max(min_value, int(v + divisor / 2) // divisor * divisor)
-    if new_v < 0.9 * v:
-        new_v += divisor
-    return new_v
-
-
 class LearnableAffineBlock(nn.Module):
     """
     Learnable affine transformation block that applies scale and bias to the input tensor.
@@ -356,6 +333,29 @@ class LCNetV3Block(nn.Module):
             hidden_state = self.se(hidden_state)
         hidden_state = self.pw_conv(hidden_state)
         return hidden_state
+
+
+def make_divisible(v, divisor: int = 16, min_value=None):
+    """
+    Ensures that the input value `v` is rounded to the nearest multiple of `divisor`,
+    with a minimum value constraint. This is used to adjust channel dimensions for
+    hardware-efficient neural network inference (especially on mobile devices).
+
+    Args:
+        v (float): Input value to be adjusted (typically channel count).
+        divisor (int, optional): The divisor to align the value with. Defaults to 16.
+        min_value (int, optional): Minimum allowed value after adjustment. If None,
+            defaults to `divisor`.
+
+    Returns:
+        int: Adjusted value that is a multiple of `divisor` and meets the minimum value requirement.
+    """
+    if min_value is None:
+        min_value = divisor
+    new_v = max(min_value, int(v + divisor / 2) // divisor * divisor)
+    if new_v < 0.9 * v:
+        new_v += divisor
+    return new_v
 
 
 class PPOCRV5MobileDetBackbone(nn.Module):

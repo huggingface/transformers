@@ -28,7 +28,12 @@ from ...image_utils import (
 )
 from ...modeling_outputs import BaseModelOutputWithNoAttention
 from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput, auto_docstring, filter_out_non_signature_kwargs, logging
+from ...utils import (
+    ModelOutput,
+    auto_docstring,
+    filter_out_non_signature_kwargs,
+    logging,
+)
 from ...utils.generic import TensorType
 
 
@@ -64,9 +69,6 @@ class PPOCRV5MobileDetConfig(PreTrainedConfig):
         divisor (`int`, *optional*, defaults to 16):
             The divisor for adjusting channel dimensions, ensuring that the number of channels meets hardware
             optimization requirements (e.g., for efficient inference on mobile devices).
-        num_channels (`int`, *optional*, defaults to 3):
-            The number of channels in the input images. Defaults to 3 for RGB color images; set to 1 for grayscale
-            images.
         backbone_out_channels (`int`, *optional*, defaults to 512):
             The number of output channels from the backbone network, which represents the dimension of the final
             feature maps extracted by the backbone.
@@ -89,9 +91,6 @@ class PPOCRV5MobileDetConfig(PreTrainedConfig):
         kernel_list (`List[int]`, *optional*, defaults to `[3, 2, 2]`):
             The list of kernel sizes for convolutional layers in the head network, used for multi-scale feature
             extraction to detect text regions of different sizes.
-        fix_nan (`bool`, *optional*, defaults to `False`):
-            Whether to enable the mechanism to fix NaN values that may occur during model training. Enabling this
-            can stabilize training but may introduce a small amount of additional computational overhead.
 
     Examples:
     ```python
@@ -111,7 +110,6 @@ class PPOCRV5MobileDetConfig(PreTrainedConfig):
         conv_kxk_num: int = 4,
         reduction: int = 4,
         divisor: int = 16,
-        num_channels: int = 3,
         backbone_out_channels: int = 512,
         hidden_act: str = "hswish",
         neck_out_channels: int = 96,
@@ -119,7 +117,6 @@ class PPOCRV5MobileDetConfig(PreTrainedConfig):
         interpolate_mode: str = "nearest",
         k: int = 50,
         kernel_list: list = [3, 2, 2],
-        fix_nan: bool = False,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -130,7 +127,6 @@ class PPOCRV5MobileDetConfig(PreTrainedConfig):
         self.conv_kxk_num = conv_kxk_num
         self.reduction = reduction
         self.divisor = divisor
-        self.num_channels = num_channels
         self.backbone_out_channels = backbone_out_channels
         self.hidden_act = hidden_act
 
@@ -142,7 +138,6 @@ class PPOCRV5MobileDetConfig(PreTrainedConfig):
         # Head
         self.k = k
         self.kernel_list = kernel_list
-        self.fix_nan = fix_nan
 
 
 def unclip(box, unclip_ratio):
@@ -1811,6 +1806,7 @@ class PPOCRV5MobileDetModel(PPOCRV5MobileDetPreTrainedModel):
         hidden_state: torch.FloatTensor,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs,
     ) -> Union[tuple[torch.FloatTensor], PPOCRV5MobileDetModelOutput]:
         """
         Forward pass of the PPOCRV5MobileDetModel, processing input images to generate segmentation logits.
