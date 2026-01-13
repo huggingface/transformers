@@ -85,6 +85,11 @@ CHECKPOINT_CATALOG: tuple[CheckpointSpec, ...] = (
         backbone_repo_id="facebook/dinov3-vitl16-pretrain-lvd1689m",
         image_size=1280,
     ),
+    CheckpointSpec(
+        model_id="tue-mps/ade_semantic_eomt_large_512_dinov3",
+        backbone_repo_id="facebook/dinov3-vitl16-pretrain-lvd1689m",
+        image_size=512,
+    ),
 )
 
 
