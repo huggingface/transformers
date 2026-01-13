@@ -2,7 +2,7 @@ import pathlib
 from typing import Optional
 
 import torch
-from torchvision.transforms.v2 import functional as TVF
+import torchvision.transforms.v2.functional as TVF
 
 from transformers.models.detr.image_processing_detr_fast import DetrImageProcessorFast
 

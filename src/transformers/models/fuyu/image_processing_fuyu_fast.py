@@ -40,7 +40,7 @@ from .image_processing_fuyu import FuyuBatchFeature, FuyuImagesKwargs, make_list
 
 
 if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as TVF
+    import torchvision.transforms.v2.functional as TVF
 
 
 logger = logging.get_logger(__name__)

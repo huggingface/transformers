@@ -17,7 +17,7 @@ from collections.abc import Iterable
 from typing import Optional
 
 import torch
-from torchvision.transforms.v2 import functional as TVF
+import torchvision.transforms.v2.functional as TVF
 
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,

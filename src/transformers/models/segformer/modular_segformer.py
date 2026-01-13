@@ -16,7 +16,7 @@
 from typing import Optional, Union
 
 import torch
-from torchvision.transforms.v2 import functional as TVF
+import torchvision.transforms.v2.functional as TVF
 
 from transformers.models.beit.image_processing_beit_fast import BeitImageProcessorFast
 

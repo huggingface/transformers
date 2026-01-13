@@ -16,8 +16,8 @@ import math
 from typing import Optional
 
 import torch
+import torchvision.transforms.v2.functional as TVF
 from torch import nn
-from torchvision.transforms.v2 import functional as TVF
 
 from transformers.models.llava_next.image_processing_llava_next_fast import LlavaNextImageProcessorFast
 from transformers.models.llava_next_video.modeling_llava_next_video import (

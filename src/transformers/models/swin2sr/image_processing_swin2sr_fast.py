@@ -14,7 +14,7 @@
 """Fast Image processor class for Swin2SR."""
 
 import torch
-from torchvision.transforms.v2 import functional as TVF
+import torchvision.transforms.v2.functional as TVF
 
 from ...image_processing_utils import BatchFeature, ChannelDimension, get_image_size
 from ...image_processing_utils_fast import (

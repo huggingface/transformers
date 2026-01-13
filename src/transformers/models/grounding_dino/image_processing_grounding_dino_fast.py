@@ -27,8 +27,8 @@ import pathlib
 from typing import TYPE_CHECKING, Any, Optional
 
 import torch
+import torchvision.transforms.v2.functional as TVF
 from torchvision.io import read_image
-from torchvision.transforms.v2 import functional as TVF
 
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_processing_utils_fast import (

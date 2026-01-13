@@ -22,8 +22,8 @@ import math
 from typing import Any, Optional, Union
 
 import torch
+import torchvision.transforms.v2.functional as TVF
 from torch import nn
-from torchvision.transforms.v2 import functional as TVF
 
 from transformers.image_transforms import get_size_with_aspect_ratio
 

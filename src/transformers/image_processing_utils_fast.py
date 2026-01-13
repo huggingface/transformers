@@ -60,7 +60,7 @@ if is_torch_available():
     import torch
 
 if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as TVF
+    import torchvision.transforms.v2.functional as TVF
 
     from .image_utils import pil_torch_interpolation_mapping
 

@@ -21,7 +21,7 @@ import math
 from typing import Optional, Union
 
 import torch
-from torchvision.transforms.v2 import functional as TVF
+import torchvision.transforms.v2.functional as TVF
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast, group_images_by_shape, reorder_images

@@ -23,7 +23,7 @@ from ...processing_utils import Unpack
 if TYPE_CHECKING:
     from ...modeling_outputs import DepthEstimatorOutput
 import torch
-from torchvision.transforms.v2 import functional as TVF
+import torchvision.transforms.v2.functional as TVF
 
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,

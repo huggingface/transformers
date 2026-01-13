@@ -22,7 +22,7 @@ import warnings
 from typing import TYPE_CHECKING, Optional
 
 import torch
-from torchvision.transforms.v2 import functional as TVF
+import torchvision.transforms.v2.functional as TVF
 
 from ...image_processing_utils_fast import BaseImageProcessorFast, BatchFeature
 from ...image_transforms import center_to_corners_format, group_images_by_shape, reorder_images

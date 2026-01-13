@@ -20,9 +20,9 @@ from typing import Any, Optional, Union
 
 import numpy as np
 import torch
+import torchvision.transforms.v2.functional as TVF
 from torch.nn import functional as F
 from torchvision.ops.boxes import batched_nms
-from torchvision.transforms.v2 import functional as TVF
 
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_processing_utils_fast import BaseImageProcessorFast
