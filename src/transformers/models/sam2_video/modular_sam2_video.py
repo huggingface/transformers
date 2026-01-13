@@ -1893,7 +1893,7 @@ class Sam2VideoModel(Sam2Model):
         self,
         temporal_positions_and_previous_outputs: list[tuple[int, dict]],
         device: torch.device,
-        dtype: torch.dtype
+        dtype: torch.dtype,
     ) -> tuple[list[torch.Tensor], list[torch.Tensor]]:
         """
         Concatenate memory features and positional embeddings from previous frames.
