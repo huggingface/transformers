@@ -291,6 +291,10 @@ class EomtDinov3ForUniversalSegmentationIntegrationTest(unittest.TestCase):
         self.assertTrue(torch.isfinite(outputs.masks_queries_logits).all())
         self.assertTrue(torch.isfinite(outputs.class_queries_logits).all())
 
+        # TODO: Add expected values check once models are uploaded and verified
+        # expected_class_logits_slice = torch.tensor(...)
+        # self.assertTrue(torch.allclose(outputs.class_queries_logits[0, :3, :3].float(), expected_class_logits_slice, atol=0.1))
+
     @require_torch_accelerator
     @require_torch_fp16
     @slow
@@ -310,6 +314,8 @@ class EomtDinov3ForUniversalSegmentationIntegrationTest(unittest.TestCase):
         self.assertTrue(outputs.class_queries_logits.shape == (1, 200, 134))
         self.assertTrue(outputs.masks_queries_logits.shape == (1, 200, 160, 160))
 
+        # TODO: Add expected values check once models are uploaded and verified
+
     @slow
     def test_semantic_segmentation_inference(self):
         model_id = "tue-mps/ade20k_semantic_eomt_dinov3_large_512"
@@ -325,6 +331,8 @@ class EomtDinov3ForUniversalSegmentationIntegrationTest(unittest.TestCase):
 
         self.assertTrue(outputs.class_queries_logits.shape == (2, 100, 151))
         self.assertTrue(outputs.masks_queries_logits.shape == (2, 100, 128, 128))
+
+        # TODO: Add expected values check once models are uploaded and verified
 
         preds = processor.post_process_semantic_segmentation(outputs, target_sizes=[(image.size[1], image.size[0])])[0]
 

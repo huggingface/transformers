@@ -1,4 +1,4 @@
-# Copyright 2025 the HuggingFace Team. All rights reserved.
+# Copyright 2026 the HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -26,25 +26,27 @@ from ...utils import (
 )
 from ...utils.generic import check_model_inputs
 from ..dinov3_vit.modeling_dinov3_vit import (
-    DINOv3ViTAttention,
-    DINOv3ViTDropPath,
-    DINOv3ViTEmbeddings,
-    DINOv3ViTGatedMLP,
-    DINOv3ViTLayer,
-    DINOv3ViTLayerScale,
-    DINOv3ViTMLP,
-    DINOv3ViTRopePositionEmbedding,
+    DINOv3ViTAttention as EomtDinov3Attention,
+)
+from ..dinov3_vit.modeling_dinov3_vit import (
+    DINOv3ViTEmbeddings as EomtDinov3ViTEmbeddings,
+)
+from ..dinov3_vit.modeling_dinov3_vit import (
+    DINOv3ViTLayer as EomtDinov3Layer,
+)
+from ..dinov3_vit.modeling_dinov3_vit import (
+    DINOv3ViTLayerScale as EomtDinov3LayerScale,
+)
+from ..dinov3_vit.modeling_dinov3_vit import (
+    DINOv3ViTRopePositionEmbedding as EomtDinov3RopePositionEmbedding,
 )
 from ..eomt.configuration_eomt import EomtConfig
 from ..eomt.modeling_eomt import (
     EomtForUniversalSegmentation,
     EomtForUniversalSegmentationOutput,
-    EomtHungarianMatcher,
-    EomtLayerNorm2d,
-    EomtLoss,
-    EomtMaskHead,
-    EomtScaleBlock,
-    EomtScaleLayer,
+)
+from ..eomt.modeling_eomt import (
+    EomtLoss as EomtDinov3Loss,
 )
 
 
@@ -227,63 +229,7 @@ class EomtDinov3Config(EomtConfig):
         self.pos_embed_rescale = pos_embed_rescale
 
 
-class EomtDinov3ViTEmbeddings(DINOv3ViTEmbeddings):
-    pass
-
-
 class EomtDinov3ForUniversalSegmentationOutput(EomtForUniversalSegmentationOutput):
-    pass
-
-
-class EomtDinov3HungarianMatcher(EomtHungarianMatcher):
-    pass
-
-
-class EomtDinov3Loss(EomtLoss):
-    pass
-
-
-class EomtDinov3Attention(DINOv3ViTAttention):
-    pass
-
-
-class EomtDinov3LayerScale(DINOv3ViTLayerScale):
-    pass
-
-
-class EomtDinov3DropPath(DINOv3ViTDropPath):
-    pass
-
-
-class EomtDinov3MLP(DINOv3ViTMLP):
-    pass
-
-
-class EomtDinov3SwiGLUFFN(DINOv3ViTGatedMLP):
-    pass
-
-
-class EomtDinov3Layer(DINOv3ViTLayer):
-    pass
-
-
-class EomtDinov3RopePositionEmbedding(DINOv3ViTRopePositionEmbedding):
-    pass
-
-
-class EomtDinov3LayerNorm2d(EomtLayerNorm2d):
-    pass
-
-
-class EomtDinov3ScaleLayer(EomtScaleLayer):
-    pass
-
-
-class EomtDinov3ScaleBlock(EomtScaleBlock):
-    pass
-
-
-class EomtDinov3MaskHead(EomtMaskHead):
     pass
 
 
