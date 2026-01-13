@@ -23,7 +23,7 @@ Check that the table of content is properly sorted (used in `make check-repo`):
 python utils/check_doc_toc.py
 ```
 
-Auto-sort the table of content if it is not properly sorted (used in `make style`):
+Auto-sort the table of content if it is not properly sorted (used in `make fix-repo`):
 
 ```bash
 python utils/check_doc_toc.py --fix_and_overwrite
