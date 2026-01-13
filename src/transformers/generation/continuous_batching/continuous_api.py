@@ -810,7 +810,11 @@ class ContinuousBatchingManager:
         self.log_prob_generation = getattr(generation_config, "log_prob_generation", False)
         self.do_sample = getattr(generation_config, "do_sample", True)
         self.logit_processor = self.model._get_logits_processor(generation_config)
-        self.num_return_sequences = getattr(generation_config, "num_return_sequences", None) or 1
+        self.num_return_sequences = (
+            generation_config.num_return_sequences
+            if getattr(generation_config, "num_return_sequences", None) is not None
+            else 1
+        )
 
         # self.model.generation_config.top_p = None NOTE: figure out why this was here
 
@@ -1261,7 +1265,10 @@ class ContinuousMixin:
         # Initialize manager with the batch inputs
         results = {}
         gen_cfg = self.generation_config if generation_config is None else generation_config
-        num_requests = len(inputs) * gen_cfg.num_return_sequences
+        num_return_sequences = (
+            gen_cfg.num_return_sequences if getattr(gen_cfg, "num_return_sequences", None) is not None else 1
+        )
+        num_requests = len(inputs) * num_return_sequences
         # Prepare context managers for the main loop
         manager_cm = self.continuous_batching_context_manager(
             generation_config=generation_config,
