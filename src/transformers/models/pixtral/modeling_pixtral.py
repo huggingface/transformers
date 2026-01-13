@@ -27,7 +27,7 @@ from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple, logging
-from ...utils.generic import maybe_autocast
+from ...utils.generic import is_flash_attention_requested, maybe_autocast
 from .configuration_pixtral import PixtralVisionConfig
 
 
@@ -513,7 +513,7 @@ class PixtralVisionModel(PixtralPreTrainedModel):
 
         position_embeddings = self.patch_positional_embedding(patch_embeds, position_ids)
 
-        if "flash" in self.config._attn_implementation:
+        if is_flash_attention_requested(self.config):
             # We only rely on position_ids when using flash attention
             attention_mask = None
         else:

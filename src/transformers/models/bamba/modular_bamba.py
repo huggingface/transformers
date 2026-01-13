@@ -52,6 +52,7 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
+from ...utils.generic import is_flash_attention_requested
 from .configuration_bamba import BambaConfig
 
 
@@ -935,7 +936,7 @@ class BambaModel(BambaPreTrainedModel):
         past_key_values: HybridMambaAttentionDynamicCache,
         output_attentions: bool,
     ):
-        if "flash" in self.config._attn_implementation:
+        if is_flash_attention_requested(self.config):
             if attention_mask is not None and 0.0 in attention_mask:
                 return attention_mask
             return None

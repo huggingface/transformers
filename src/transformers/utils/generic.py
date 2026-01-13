@@ -210,6 +210,27 @@ def is_mlx_array(x):
     return False if not _is_mlx_available else _is_mlx(x)
 
 
+def is_flash_attention_requested(config = None, requested_attention_implementation: str | None = None):
+    """
+    Checks whether some flavor of flash attention is requested or not.
+    Priority order first goes for any explicitly passed value `requested_attention_implementation` and
+    then checks the config's saved value `config._attn_implementation`.
+
+    The different versions of flash attention are usually
+    - Implementations based on the original flash attention repo: https://github.com/Dao-AILab/flash-attention
+    - Kernels implementations such as: https://huggingface.co/kernels-community/vllm-flash-attn3
+    """
+    checked_attention_implementation = requested_attention_implementation
+    if checked_attention_implementation is None:
+        if config and hasattr(config, "_attn_implementation"):
+            checked_attention_implementation = config._attn_implementation
+
+    if checked_attention_implementation is not None:
+        return "flash" in checked_attention_implementation
+
+    return False
+
+
 def to_py_obj(obj):
     """
     Convert a PyTorch tensor, Numpy array or python list to a python list.

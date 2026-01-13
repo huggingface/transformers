@@ -53,6 +53,7 @@ from ..utils import (
     is_torchdynamo_exporting,
     logging,
 )
+from ..utils.generic import is_flash_attention_requested
 from .candidate_generator import (
     AssistantVocabTranslatorCache,
     AssistedCandidateGenerator,
@@ -2173,7 +2174,7 @@ class GenerationMixin(ContinuousMixin):
             os.environ["TOKENIZERS_PARALLELISM"] = "0"
 
             # If we use FA and a static cache, we cannot compile with fullgraph
-            if "flash" in self.config._attn_implementation:
+            if is_flash_attention_requested(self.config):
                 # only raise warning if the user passed an explicit compile-config
                 if generation_config.compile_config is not None and generation_config.compile_config.fullgraph:
                     logger.warning_once(

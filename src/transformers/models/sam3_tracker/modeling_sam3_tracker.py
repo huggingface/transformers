@@ -36,7 +36,7 @@ from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, auto_docstring, logging
-from ...utils.generic import TransformersKwargs, check_model_inputs
+from ...utils.generic import TransformersKwargs, check_model_inputs, is_flash_attention_requested
 from ..auto import AutoModel
 from .configuration_sam3_tracker import Sam3TrackerConfig, Sam3TrackerMaskDecoderConfig, Sam3TrackerPromptEncoderConfig
 
@@ -344,7 +344,7 @@ class Sam3TrackerAttention(nn.Module):
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        if "flash" in self.config._attn_implementation and attention_similarity is not None:
+        if is_flash_attention_requested(self.config) and attention_similarity is not None:
             # Target guided masks are represented as float masks and are incompatible with Flash Attention
             # Fallback to SDPA for this call only so the rest of the model can still benefit from FA
             attention_interface = ALL_ATTENTION_FUNCTIONS["sdpa"]

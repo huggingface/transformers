@@ -35,6 +35,7 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
+from transformers.utils.generic import is_flash_attention_requested
 
 from ...generation.test_utils import GenerationTesterMixin, has_similar_generate_outputs
 from ...test_configuration_common import ConfigTester
@@ -430,7 +431,7 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
     def flash_attn_inference_equivalence(
         self, attn_implementation: str, padding_side: str, atol: float = 4e-2, rtol: float = 4e-2
     ):
-        if "flash" in attn_implementation and attn_implementation != "flash_attention_2":
+        if is_flash_attention_requested(requested_attention_implementation=attn_implementation) and attn_implementation != "flash_attention_2":
             self.skipTest(reason="Model fails for every other FA implementation than FA2 (no attention interface).")
 
         super().flash_attn_inference_equivalence(attn_implementation, padding_side, atol, rtol)
@@ -449,7 +450,7 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
             "flash_attention_2": "_supports_flash_attn",
         }
 
-        if "flash" in attn_implementation and attn_implementation != "flash_attention_2":
+        if is_flash_attention_requested(requested_attention_implementation=attn_implementation) and attn_implementation != "flash_attention_2":
             self.skipTest(reason="Model fails for every other FA implementation than FA2 (no attention interface).")
 
         for model_class in self.all_generative_model_classes:
@@ -472,7 +473,7 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
             # FA doesn't accept masking in the middle of the sequence for now. We usually generate right-padded
             # attention masks at test time and, with generate, the mask will be appended with 1s on the right,
             # resulting in a mask with holes (not supported properly by FA).
-            if "flash" in attn_implementation:
+            if is_flash_attention_requested(requested_attention_implementation=attn_implementation):
                 for input_name in ("attention_mask", "decoder_attention_mask", "encoder_attention_mask"):
                     if input_name in inputs_dict:
                         inputs_dict[input_name] = torch.ones_like(inputs_dict[input_name])

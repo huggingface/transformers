@@ -40,7 +40,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import ModelOutput, auto_docstring, logging
-from ...utils.generic import OutputRecorder, TransformersKwargs
+from ...utils.generic import OutputRecorder, TransformersKwargs, is_flash_attention_requested
 from ..auto import AutoModel
 from .configuration_sam2_video import Sam2VideoConfig, Sam2VideoMaskDecoderConfig, Sam2VideoPromptEncoderConfig
 
@@ -477,7 +477,7 @@ class Sam2VideoAttention(nn.Module):
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        if "flash" in self.config._attn_implementation and attention_similarity is not None:
+        if is_flash_attention_requested(self.config) and attention_similarity is not None:
             # Target guided masks are represented as float masks and are incompatible with Flash Attention
             # Fallback to SDPA for this call only so the rest of the model can still benefit from FA
             attention_interface = ALL_ATTENTION_FUNCTIONS["sdpa"]
