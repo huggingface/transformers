@@ -969,7 +969,6 @@ def find_all_documented_objects() -> list[str]:
 # One good reason for not being documented is to be deprecated. Put in this list deprecated objects.
 DEPRECATED_OBJECTS = [
     "PretrainedConfig",  # deprecated in favor of PreTrainedConfig
-    "AutoModelWithLMHead",
     "BartPretrainedModel",
     "DataCollator",
     "DataCollatorForSOP",
