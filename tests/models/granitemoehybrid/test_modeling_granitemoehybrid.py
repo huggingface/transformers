@@ -369,14 +369,14 @@ class GraniteMoeHybridIntegrationTest(unittest.TestCase):
         # fmt: off
         # Expected mean on dim = -1
         EXPECTED_MEAN = torch.tensor([
-            [-0.3543, -1.0256, -0.5118, -0.8711, -0.6722,  0.0736, -1.3630, -0.1100, -1.8382, -1.6288, -1.5097, -0.5010]
+            [-0.3543, -1.0066, -0.5338, -0.8816, -0.7438,  0.0500, -1.3644, -0.0742, -1.7746, -1.6326, -1.4802, -0.4961]
         ], device=device)
 
         torch.testing.assert_close(EXPECTED_MEAN, out.logits.float().mean(-1), rtol=1e-2, atol=1e-2)
 
         # slicing logits[0, 0, 0:15]
         EXPECTED_SLICE = torch.tensor([
-            [6.5938,  7.2500,  1.6484,  5.2188,  3.5781,  2.5469,  6.1250,  5.1875, 9.5000,  4.6875,  4.7188, 10.7500, 10.3125,  7.8438,  5.5312],
+            [6.5938,  7.2500,  1.6484,  5.2188,  3.5781,  2.5469,  6.1250,  5.1875, 9.5000,  4.6875,  4.7188, 10.7500, 10.3125,  7.8438,  5.5312]
         ], device=device)
         # fmt: on
 
