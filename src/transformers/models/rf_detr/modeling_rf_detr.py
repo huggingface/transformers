@@ -42,34 +42,573 @@ from ...utils.generic import TransformersKwargs, check_model_inputs
 from .configuration_rf_detr import RfDetrConfig, RfDetrDinov2Config
 
 
-@dataclass
-@auto_docstring(
-    custom_intro="""
-    Base class for outputs of the RfDetr backbone-decoder model.
+class RfDetrDinov2PatchEmbeddings(nn.Module):
     """
-)
-class RfDetrModelOutput(ModelOutput):
-    r"""
-    init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
-        Initial reference points sent through the Transformer decoder.
-    intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
-        Stacked intermediate hidden states (output of each layer of the decoder).
-    intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
-        Stacked intermediate reference points (reference points of each layer of the decoder).
-    enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
-        Predicted bounding boxes scores where the top `config.two_stage_num_proposals` scoring bounding boxes are
-        picked as region proposals in the first stage. Output of bounding box binary classification (i.e.
-        foreground and background).
-    enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
-        Logits of predicted bounding boxes coordinates in the first stage.
+    This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
+    `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
+    Transformer.
     """
 
-    init_reference_points: torch.FloatTensor | None = None
-    last_hidden_state: torch.FloatTensor | None = None
-    intermediate_hidden_states: torch.FloatTensor | None = None
-    intermediate_reference_points: torch.FloatTensor | None = None
-    enc_outputs_class: torch.FloatTensor | None = None
-    enc_outputs_coord_logits: torch.FloatTensor | None = None
+    def __init__(self, config):
+        super().__init__()
+        image_size, patch_size = config.image_size, config.patch_size
+        num_channels, hidden_size = config.num_channels, config.hidden_size
+
+        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
+        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
+        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
+        self.image_size = image_size
+        self.patch_size = patch_size
+        self.num_channels = num_channels
+        self.num_patches = num_patches
+
+        self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
+
+    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
+        num_channels = pixel_values.shape[1]
+        if num_channels != self.num_channels:
+            raise ValueError(
+                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
+                f" Expected {self.num_channels} but got {num_channels}."
+            )
+        embeddings = self.projection(pixel_values).flatten(2).transpose(1, 2)
+        return embeddings
+
+
+def window_partition(
+    embeddings: torch.Tensor, num_windows: int, patch_size: int, height: int, width: int
+) -> torch.Tensor:
+    batch_size = embeddings.shape[0]
+    num_h_patches = height // patch_size
+    num_w_patches = width // patch_size
+    cls_token_with_pos_embed = embeddings[:, :1]
+    pixel_tokens_with_pos_embed = embeddings[:, 1:]
+    pixel_tokens_with_pos_embed = pixel_tokens_with_pos_embed.view(batch_size, num_h_patches, num_w_patches, -1)
+    num_w_patches_per_window = num_w_patches // num_windows
+    num_h_patches_per_window = num_h_patches // num_windows
+    windowed_pixel_tokens = pixel_tokens_with_pos_embed.view(
+        batch_size, num_windows, num_h_patches_per_window, num_windows, num_h_patches_per_window, -1
+    )
+    windowed_pixel_tokens = windowed_pixel_tokens.permute(0, 1, 3, 2, 4, 5)
+    windowed_pixel_tokens = windowed_pixel_tokens.reshape(
+        batch_size * num_windows**2, num_h_patches_per_window * num_w_patches_per_window, -1
+    )
+    windowed_cls_token_with_pos_embed = cls_token_with_pos_embed.repeat(num_windows**2, 1, 1)
+    embeddings = torch.cat((windowed_cls_token_with_pos_embed, windowed_pixel_tokens), dim=1)
+    return embeddings
+
+
+class RfDetrDinov2Embeddings(nn.Module):
+    """
+    Construct the CLS token, mask token, position and patch embeddings.
+    """
+
+    def __init__(self, config: RfDetrDinov2Config) -> None:
+        super().__init__()
+
+        self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
+        if config.use_mask_token:
+            self.mask_token = nn.Parameter(torch.zeros(1, config.hidden_size))
+        self.patch_embeddings = RfDetrDinov2PatchEmbeddings(config)
+        num_patches = self.patch_embeddings.num_patches
+        self.position_embeddings = nn.Parameter(torch.randn(1, num_patches + 1, config.hidden_size))
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+        self.patch_size = config.patch_size
+        self.use_mask_token = config.use_mask_token
+        self.config = config
+
+    def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
+        """
+        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher resolution
+        images. This method is also adapted to support torch.jit tracing and interpolation at torch.float32 precision.
+
+        Adapted from:
+        - https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174-L194, and
+        - https://github.com/facebookresearch/dinov2/blob/e1277af2ba9496fbadf7aec6eba56e8d882d1e35/dinov2/models/vision_transformer.py#L179-L211
+        """
+
+        num_patches = embeddings.shape[1] - 1
+        num_positions = self.position_embeddings.shape[1] - 1
+
+        # always interpolate when tracing to ensure the exported model works for dynamic input shapes
+        if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
+            return self.position_embeddings
+
+        class_pos_embed = self.position_embeddings[:, :1]
+        patch_pos_embed = self.position_embeddings[:, 1:]
+
+        dim = embeddings.shape[-1]
+
+        new_height = height // self.patch_size
+        new_width = width // self.patch_size
+
+        sqrt_num_positions = torch_int(num_positions**0.5)
+        patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
+        patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
+        target_dtype = patch_pos_embed.dtype
+        patch_pos_embed = nn.functional.interpolate(
+            patch_pos_embed.to(torch.float32),
+            size=(new_height, new_width),
+            mode="bicubic",
+            align_corners=False,
+            antialias=True,
+        ).to(dtype=target_dtype)
+
+        patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
+
+        return torch.cat((class_pos_embed, patch_pos_embed), dim=1)
+
+    def forward(self, pixel_values: torch.Tensor, bool_masked_pos: torch.Tensor | None = None) -> torch.Tensor:
+        batch_size, _, height, width = pixel_values.shape
+        target_dtype = self.patch_embeddings.projection.weight.dtype
+        embeddings = self.patch_embeddings(pixel_values.to(dtype=target_dtype))
+
+        if bool_masked_pos is not None:
+            embeddings = torch.where(
+                bool_masked_pos.unsqueeze(-1), self.mask_token.to(embeddings.dtype).unsqueeze(0), embeddings
+            )
+
+        # add the [CLS] token to the embedded patch tokens
+        cls_tokens = self.cls_token.expand(batch_size, -1, -1)
+        embeddings = torch.cat((cls_tokens, embeddings), dim=1)
+
+        # add positional encoding to each token
+        embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
+
+        if self.config.num_windows > 1:
+            # reshape for windows
+            embeddings = window_partition(embeddings, self.config.num_windows, self.config.patch_size, height, width)
+        embeddings = self.dropout(embeddings)
+
+        return embeddings
+
+
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
+    dropout: float = 0.0,
+    **kwargs: Unpack[TransformersKwargs],
+):
+    if scaling is None:
+        scaling = query.size(-1) ** -0.5
+
+    # Take the dot product between "query" and "key" to get the raw attention scores.
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+
+    if attention_mask is not None:
+        attention_mask = attention_mask[:, :, :, : key.shape[-2]]
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
+class RfDetrDinov2SelfAttention(nn.Module):
+    def __init__(self, config: RfDetrDinov2Config):
+        super().__init__()
+        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
+            raise ValueError(
+                f"The hidden size {config.hidden_size} is not a multiple of the number of attention "
+                f"heads {config.num_attention_heads}."
+            )
+
+        self.config = config
+        self.num_attention_heads = config.num_attention_heads
+        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
+        self.all_head_size = self.num_attention_heads * self.attention_head_size
+        self.dropout_prob = config.attention_probs_dropout_prob
+        self.scaling = self.attention_head_size**-0.5
+        self.is_causal = False
+
+        self.query = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
+        self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
+        self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
+        self.num_key_value_groups = 1
+
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        batch_size = hidden_states.shape[0]
+        new_shape = batch_size, -1, self.num_attention_heads, self.attention_head_size
+
+        key_layer = self.key(hidden_states).view(*new_shape).transpose(1, 2)
+        value_layer = self.value(hidden_states).view(*new_shape).transpose(1, 2)
+        query_layer = self.query(hidden_states).view(*new_shape).transpose(1, 2)
+
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        context_layer, attention_probs = attention_interface(
+            self,
+            query_layer,
+            key_layer,
+            value_layer,
+            None,
+            is_causal=self.is_causal,
+            scaling=self.scaling,
+            dropout=0.0 if not self.training else self.dropout_prob,
+        )
+
+        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
+        context_layer = context_layer.reshape(new_context_layer_shape)
+
+        return context_layer, attention_probs
+
+
+class RfDetrDinov2SelfOutput(nn.Module):
+    """
+    The residual connection is defined in RfDetrDinov2Layer instead of here (as is the case with other models), due to the
+    layernorm applied before each block.
+    """
+
+    def __init__(self, config: RfDetrDinov2Config):
+        super().__init__()
+        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
+        self.dropout = nn.Dropout(config.hidden_dropout_prob)
+
+    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.dense(hidden_states)
+        hidden_states = self.dropout(hidden_states)
+        return hidden_states
+
+
+class RfDetrDinov2Attention(nn.Module):
+    def __init__(self, config: RfDetrDinov2Config):
+        super().__init__()
+        self.attention = RfDetrDinov2SelfAttention(config)
+        self.output = RfDetrDinov2SelfOutput(config)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        self_attn_output, _ = self.attention(hidden_states)
+        output = self.output(self_attn_output, hidden_states)
+        return output
+
+
+class RfDetrDinov2LayerScale(nn.Module):
+    def __init__(self, config) -> None:
+        super().__init__()
+        self.lambda1 = nn.Parameter(config.layerscale_value * torch.ones(config.hidden_size))
+
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
+        return hidden_state * self.lambda1
+
+
+def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
+    """
+    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
+
+    """
+    if drop_prob == 0.0 or not training:
+        return input
+    keep_prob = 1 - drop_prob
+    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
+    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
+    random_tensor.floor_()  # binarize
+    output = input.div(keep_prob) * random_tensor
+    return output
+
+
+class RfDetrDinov2DropPath(nn.Module):
+    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
+
+    def __init__(self, drop_prob: float | None = None) -> None:
+        super().__init__()
+        self.drop_prob = drop_prob
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return drop_path(hidden_states, self.drop_prob, self.training)
+
+    def extra_repr(self) -> str:
+        return f"p={self.drop_prob}"
+
+
+class RfDetrDinov2MLP(nn.Module):
+    def __init__(self, config) -> None:
+        super().__init__()
+        in_features = out_features = config.hidden_size
+        hidden_features = int(config.hidden_size * config.mlp_ratio)
+        self.fc1 = nn.Linear(in_features, hidden_features, bias=True)
+        if isinstance(config.hidden_act, str):
+            self.activation = ACT2FN[config.hidden_act]
+        else:
+            self.activation = config.hidden_act
+        self.fc2 = nn.Linear(hidden_features, out_features, bias=True)
+
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
+        hidden_state = self.fc1(hidden_state)
+        hidden_state = self.activation(hidden_state)
+        hidden_state = self.fc2(hidden_state)
+        return hidden_state
+
+
+class RfDetrDinov2SwiGLUFFN(nn.Module):
+    def __init__(self, config) -> None:
+        super().__init__()
+        in_features = out_features = config.hidden_size
+        hidden_features = int(config.hidden_size * config.mlp_ratio)
+        hidden_features = (int(hidden_features * 2 / 3) + 7) // 8 * 8
+
+        self.weights_in = nn.Linear(in_features, 2 * hidden_features, bias=True)
+        self.weights_out = nn.Linear(hidden_features, out_features, bias=True)
+
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
+        hidden_state = self.weights_in(hidden_state)
+        x1, x2 = hidden_state.chunk(2, dim=-1)
+        hidden = nn.functional.silu(x1) * x2
+        return self.weights_out(hidden)
+
+
+def window_unpartition_before_attention(hidden_states: torch.Tensor, num_windows: int) -> torch.Tensor:
+    batch_size, seq_len, channels = hidden_states.shape
+    num_windows_squared = num_windows**2
+    hidden_states = hidden_states.view(batch_size // num_windows_squared, num_windows_squared * seq_len, channels)
+    return hidden_states
+
+
+def window_partition_after_attention(
+    hidden_states: torch.Tensor, self_attention_output: torch.Tensor, num_windows: int
+) -> torch.Tensor:
+    batch_size, seq_len, channels = hidden_states.shape
+    num_windows_squared = num_windows**2
+    self_attention_output = self_attention_output.view(
+        batch_size * num_windows_squared, seq_len // num_windows_squared, channels
+    )
+    return self_attention_output
+
+
+class RfDetrDinov2Layer(GradientCheckpointingLayer):
+    """This corresponds to the Block class in the original implementation."""
+
+    def __init__(self, config: RfDetrDinov2Config, layer_idx: int) -> None:
+        super().__init__()
+
+        self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.attention = RfDetrDinov2Attention(config)
+        self.layer_scale1 = RfDetrDinov2LayerScale(config)
+        self.drop_path = RfDetrDinov2DropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
+
+        self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+
+        if config.use_swiglu_ffn:
+            self.mlp = RfDetrDinov2SwiGLUFFN(config)
+        else:
+            self.mlp = RfDetrDinov2MLP(config)
+        self.layer_scale2 = RfDetrDinov2LayerScale(config)
+        self.num_windows = config.num_windows
+        self.global_attention = layer_idx not in config.window_block_indexes
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor] | tuple[torch.Tensor]:
+        shortcut = hidden_states
+        if self.global_attention:
+            hidden_states = window_unpartition_before_attention(hidden_states, self.num_windows)
+
+        hidden_states_norm = self.norm1(hidden_states)
+        self_attention_output = self.attention(hidden_states_norm)
+
+        if self.global_attention:
+            self_attention_output = window_partition_after_attention(
+                hidden_states, self_attention_output, self.num_windows
+            )
+
+        self_attention_output = self.layer_scale1(self_attention_output)
+
+        # first residual connection
+        hidden_states = self.drop_path(self_attention_output) + shortcut
+
+        # in Dinov2, layernorm is also applied after self-attention
+        layer_output = self.norm2(hidden_states)
+        layer_output = self.mlp(layer_output)
+        layer_output = self.layer_scale2(layer_output)
+
+        # second residual connection
+        layer_output = self.drop_path(layer_output) + hidden_states
+
+        return layer_output
+
+
+class RfDetrDinov2Encoder(nn.Module):
+    def __init__(self, config: RfDetrDinov2Config):
+        super().__init__()
+        self.config = config
+        self.layer = nn.ModuleList([RfDetrDinov2Layer(config, i) for i in range(config.num_hidden_layers)])
+        self.gradient_checkpointing = False
+
+    def forward(self, hidden_states: torch.Tensor, output_hidden_states: bool = False) -> BaseModelOutput:
+        all_hidden_states = [hidden_states] if output_hidden_states else None
+        for i, layer_module in enumerate(self.layer):
+            hidden_states = layer_module(hidden_states)
+            if all_hidden_states:
+                all_hidden_states.append(hidden_states)
+
+        return BaseModelOutput(
+            last_hidden_state=hidden_states,
+            hidden_states=tuple(all_hidden_states) if all_hidden_states else None,
+        )
+
+
+@auto_docstring
+class RfDetrDinov2PreTrainedModel(PreTrainedModel):
+    config: RfDetrDinov2Config
+    base_model_prefix = "rf_detr_dinov2"
+    main_input_name = "pixel_values"
+    input_modalities = ("image",)
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["RfDetrDinov2Layer"]
+    _supports_sdpa = True
+    _supports_flash_attn = True
+    _supports_flex_attn = True
+    _supports_attention_backend = True
+    _can_record_outputs = {
+        "attentions": RfDetrDinov2SelfAttention,
+    }
+
+    @torch.no_grad()
+    def _init_weights(self, module: nn.Linear | nn.Conv2d | nn.LayerNorm) -> None:
+        """Initialize the weights"""
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
+            init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                init.zeros_(module.bias)
+        elif isinstance(module, nn.LayerNorm):
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
+        elif isinstance(module, RfDetrDinov2Embeddings):
+            init.trunc_normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
+            init.trunc_normal_(module.cls_token, mean=0.0, std=self.config.initializer_range)
+            if self.config.use_mask_token:
+                init.zeros_(module.mask_token)
+        elif isinstance(module, RfDetrDinov2LayerScale):
+            init.constant_(module.lambda1, self.config.layerscale_value)
+
+
+def window_unpartition(
+    hidden_state: torch.Tensor,
+    num_windows: int,
+    num_h_patches: int,
+    num_w_patches: int,
+) -> torch.Tensor:
+    hidden_batch_size, seq_len, channels = hidden_state.shape
+    num_windows_squared = num_windows**2
+    num_h_patches_per_window = num_h_patches // num_windows
+    num_w_patches_per_window = num_w_patches // num_windows
+    hidden_state = hidden_state.reshape(
+        hidden_batch_size // num_windows_squared, num_windows_squared * seq_len, channels
+    )
+    hidden_state = hidden_state.view(
+        hidden_batch_size // num_windows_squared,
+        num_windows,
+        num_windows,
+        num_h_patches_per_window,
+        num_w_patches_per_window,
+        channels,
+    )
+    hidden_state = hidden_state.permute(0, 1, 3, 2, 4, 5)
+    return hidden_state
+
+
+@auto_docstring(
+    custom_intro="""
+    RfDetrDinov2 backbone, to be used with frameworks like DETR and MaskFormer.
+    """
+)
+class RfDetrDinov2Backbone(RfDetrDinov2PreTrainedModel, BackboneMixin):
+    def __init__(self, config):
+        super().__init__(config)
+        super()._init_backbone(config)
+
+        self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
+        self.embeddings = RfDetrDinov2Embeddings(config)
+        self.encoder = RfDetrDinov2Encoder(config)
+
+        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_input_embeddings(self) -> RfDetrDinov2PatchEmbeddings:
+        return self.embeddings.patch_embeddings
+
+    @check_model_inputs
+    @auto_docstring
+    def forward(
+        self,
+        pixel_values: torch.Tensor,
+        output_hidden_states: bool | None = None,
+        **kwargs,
+    ) -> BackboneOutput:
+        r"""
+        Examples:
+
+        ```python
+        >>> from transformers import AutoImageProcessor, AutoBackbone
+        >>> import torch
+        >>> from PIL import Image
+        >>> import requests
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> processor = AutoImageProcessor.from_pretrained("facebook/dinov2-base")
+        >>> model = AutoBackbone.from_pretrained(
+        ...     "facebook/dinov2-base", out_features=["stage2", "stage5", "stage8", "stage11"]
+        ... )
+
+        >>> inputs = processor(image, return_tensors="pt")
+
+        >>> outputs = model(**inputs)
+        >>> feature_maps = outputs.feature_maps
+        >>> list(feature_maps[-1].shape)
+        [1, 768, 16, 16]
+        ```"""
+        if output_hidden_states is None:
+            output_hidden_states = self.config.output_hidden_states
+
+        embedding_output = self.embeddings(pixel_values)
+
+        output: BaseModelOutput = self.encoder(embedding_output, output_hidden_states=True)
+        hidden_states = output.hidden_states
+
+        feature_maps = ()
+        for stage, hidden_state in zip(self.stage_names, hidden_states):
+            if stage in self.out_features:
+                if self.config.apply_layernorm:
+                    hidden_state = self.layernorm(hidden_state)
+                if self.config.reshape_hidden_states:
+                    hidden_state = hidden_state[:, 1:]
+                    # this was actually a bug in the original implementation that we copied here,
+                    # cause normally the order is height, width
+                    batch_size, _, height, width = pixel_values.shape
+                    patch_size = self.config.patch_size
+
+                    num_h_patches = height // patch_size
+                    num_w_patches = width // patch_size
+                    hidden_batch_size, seq_len, channels = hidden_state.shape
+
+                    if self.config.num_windows > 1:
+                        hidden_state = window_unpartition(
+                            hidden_state, self.config.num_windows, num_h_patches, num_w_patches
+                        )
+
+                    hidden_state = hidden_state.reshape(batch_size, num_h_patches, num_w_patches, -1)
+                    hidden_state = hidden_state.permute(0, 3, 1, 2).contiguous()
+
+                feature_maps += (hidden_state,)
+
+        return BackboneOutput(
+            feature_maps=feature_maps,
+            hidden_states=hidden_states if output_hidden_states else None,
+        )
 
 
 class RfDetrLayerNorm(nn.LayerNorm):
@@ -225,30 +764,38 @@ class RfDetrScaleProjector(nn.Module):
         return hidden_states
 
 
-def eager_attention_forward(
-    module: nn.Module,
-    query: torch.Tensor,
-    key: torch.Tensor,
-    value: torch.Tensor,
-    attention_mask: torch.Tensor | None,
-    scaling: float,
-    dropout: float = 0.0,
-    **kwargs: Unpack[TransformersKwargs],
-):
-    key_states = repeat_kv(key, module.num_key_value_groups)
-    value_states = repeat_kv(value, module.num_key_value_groups)
+class RfDetrMultiScaleProjector(nn.Module):
+    def __init__(self, config: RfDetrConfig):
+        super().__init__()
 
-    attn_weights = torch.matmul(query, key_states.transpose(2, 3)) * scaling
-    if attention_mask is not None:
-        causal_mask = attention_mask[:, :, :, : key_states.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+        self.config = config
+        scale_factors = config.projector_scale_factors
 
-    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
-    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
-    attn_output = torch.matmul(attn_weights, value_states)
-    attn_output = attn_output.transpose(1, 2).contiguous()
+        self.scale_layers = nn.ModuleList([RfDetrScaleProjector(config, scale) for scale in scale_factors])
 
-    return attn_output, attn_weights
+    def forward(self, hidden_states: tuple[torch.Tensor]) -> list[torch.Tensor]:
+        output_hidden_states = []
+        for scale_layer in self.scale_layers:
+            output_hidden_states.append(scale_layer(hidden_states))
+        return output_hidden_states
+
+
+class RfDetrConvEncoder(nn.Module):
+    def __init__(self, config: RfDetrConfig):
+        super().__init__()
+        self.backbone = RfDetrDinov2Backbone(config.backbone_config)
+        self.projector = RfDetrMultiScaleProjector(config)
+
+    def forward(self, pixel_values: torch.Tensor, pixel_mask: torch.Tensor):
+        # send pixel_values through the model to get list of feature maps
+        features = self.backbone(pixel_values).feature_maps
+        features = self.projector(features)
+        out = []
+        for feature_map in features:
+            # downsample pixel_mask to match shape of corresponding feature_map
+            mask = nn.functional.interpolate(pixel_mask[None].float(), size=feature_map.shape[-2:]).to(torch.bool)[0]
+            out.append((feature_map, mask))
+        return out
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -639,38 +1186,34 @@ class RfDetrPreTrainedModel(PreTrainedModel):
             init.constant_(module.bbox_embed.layers[-1].bias, 0)
 
 
-class RfDetrMultiScaleProjector(nn.Module):
-    def __init__(self, config: RfDetrConfig):
-        super().__init__()
+@dataclass
+@auto_docstring(
+    custom_intro="""
+    Base class for outputs of the RfDetr backbone-decoder model.
+    """
+)
+class RfDetrModelOutput(ModelOutput):
+    r"""
+    init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
+        Initial reference points sent through the Transformer decoder.
+    intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
+        Stacked intermediate hidden states (output of each layer of the decoder).
+    intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+        Stacked intermediate reference points (reference points of each layer of the decoder).
+    enc_outputs_class (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.num_labels)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
+        Predicted bounding boxes scores where the top `config.two_stage_num_proposals` scoring bounding boxes are
+        picked as region proposals in the first stage. Output of bounding box binary classification (i.e.
+        foreground and background).
+    enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
+        Logits of predicted bounding boxes coordinates in the first stage.
+    """
 
-        self.config = config
-        scale_factors = config.projector_scale_factors
-
-        self.scale_layers = nn.ModuleList([RfDetrScaleProjector(config, scale) for scale in scale_factors])
-
-    def forward(self, hidden_states: tuple[torch.Tensor]) -> list[torch.Tensor]:
-        output_hidden_states = []
-        for scale_layer in self.scale_layers:
-            output_hidden_states.append(scale_layer(hidden_states))
-        return output_hidden_states
-
-
-class RfDetrConvEncoder(nn.Module):
-    def __init__(self, config: RfDetrConfig):
-        super().__init__()
-        self.backbone = RfDetrDinov2Backbone(config.backbone_config)
-        self.projector = RfDetrMultiScaleProjector(config)
-
-    def forward(self, pixel_values: torch.Tensor, pixel_mask: torch.Tensor):
-        # send pixel_values through the model to get list of feature maps
-        features = self.backbone(pixel_values).feature_maps
-        features = self.projector(features)
-        out = []
-        for feature_map in features:
-            # downsample pixel_mask to match shape of corresponding feature_map
-            mask = nn.functional.interpolate(pixel_mask[None].float(), size=feature_map.shape[-2:]).to(torch.bool)[0]
-            out.append((feature_map, mask))
-        return out
+    init_reference_points: torch.FloatTensor | None = None
+    last_hidden_state: torch.FloatTensor | None = None
+    intermediate_hidden_states: torch.FloatTensor | None = None
+    intermediate_reference_points: torch.FloatTensor | None = None
+    enc_outputs_class: torch.FloatTensor | None = None
+    enc_outputs_coord_logits: torch.FloatTensor | None = None
 
 
 @dataclass
@@ -1314,546 +1857,6 @@ class RfDetrForObjectDetection(RfDetrPreTrainedModel):
             init_reference_points=outputs.init_reference_points,
             enc_outputs_class=enc_outputs_class_logits,
             enc_outputs_coord_logits=enc_outputs_boxes_logits,
-        )
-
-
-class RfDetrDinov2PatchEmbeddings(nn.Module):
-    """
-    This class turns `pixel_values` of shape `(batch_size, num_channels, height, width)` into the initial
-    `hidden_states` (patch embeddings) of shape `(batch_size, seq_length, hidden_size)` to be consumed by a
-    Transformer.
-    """
-
-    def __init__(self, config):
-        super().__init__()
-        image_size, patch_size = config.image_size, config.patch_size
-        num_channels, hidden_size = config.num_channels, config.hidden_size
-
-        image_size = image_size if isinstance(image_size, collections.abc.Iterable) else (image_size, image_size)
-        patch_size = patch_size if isinstance(patch_size, collections.abc.Iterable) else (patch_size, patch_size)
-        num_patches = (image_size[1] // patch_size[1]) * (image_size[0] // patch_size[0])
-        self.image_size = image_size
-        self.patch_size = patch_size
-        self.num_channels = num_channels
-        self.num_patches = num_patches
-
-        self.projection = nn.Conv2d(num_channels, hidden_size, kernel_size=patch_size, stride=patch_size)
-
-    def forward(self, pixel_values: torch.Tensor) -> torch.Tensor:
-        num_channels = pixel_values.shape[1]
-        if num_channels != self.num_channels:
-            raise ValueError(
-                "Make sure that the channel dimension of the pixel values match with the one set in the configuration."
-                f" Expected {self.num_channels} but got {num_channels}."
-            )
-        embeddings = self.projection(pixel_values).flatten(2).transpose(1, 2)
-        return embeddings
-
-
-def window_partition(
-    embeddings: torch.Tensor, num_windows: int, patch_size: int, height: int, width: int
-) -> torch.Tensor:
-    batch_size = embeddings.shape[0]
-    num_h_patches = height // patch_size
-    num_w_patches = width // patch_size
-    cls_token_with_pos_embed = embeddings[:, :1]
-    pixel_tokens_with_pos_embed = embeddings[:, 1:]
-    pixel_tokens_with_pos_embed = pixel_tokens_with_pos_embed.view(batch_size, num_h_patches, num_w_patches, -1)
-    num_w_patches_per_window = num_w_patches // num_windows
-    num_h_patches_per_window = num_h_patches // num_windows
-    windowed_pixel_tokens = pixel_tokens_with_pos_embed.view(
-        batch_size, num_windows, num_h_patches_per_window, num_windows, num_h_patches_per_window, -1
-    )
-    windowed_pixel_tokens = windowed_pixel_tokens.permute(0, 1, 3, 2, 4, 5)
-    windowed_pixel_tokens = windowed_pixel_tokens.reshape(
-        batch_size * num_windows**2, num_h_patches_per_window * num_w_patches_per_window, -1
-    )
-    windowed_cls_token_with_pos_embed = cls_token_with_pos_embed.repeat(num_windows**2, 1, 1)
-    embeddings = torch.cat((windowed_cls_token_with_pos_embed, windowed_pixel_tokens), dim=1)
-    return embeddings
-
-
-class RfDetrDinov2Embeddings(nn.Module):
-    """
-    Construct the CLS token, mask token, position and patch embeddings.
-    """
-
-    def __init__(self, config: RfDetrDinov2Config) -> None:
-        super().__init__()
-
-        self.cls_token = nn.Parameter(torch.randn(1, 1, config.hidden_size))
-        if config.use_mask_token:
-            self.mask_token = nn.Parameter(torch.zeros(1, config.hidden_size))
-        self.patch_embeddings = RfDetrDinov2PatchEmbeddings(config)
-        num_patches = self.patch_embeddings.num_patches
-        self.position_embeddings = nn.Parameter(torch.randn(1, num_patches + 1, config.hidden_size))
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-        self.patch_size = config.patch_size
-        self.use_mask_token = config.use_mask_token
-        self.config = config
-
-    def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
-        """
-        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher resolution
-        images. This method is also adapted to support torch.jit tracing and interpolation at torch.float32 precision.
-
-        Adapted from:
-        - https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174-L194, and
-        - https://github.com/facebookresearch/dinov2/blob/e1277af2ba9496fbadf7aec6eba56e8d882d1e35/dinov2/models/vision_transformer.py#L179-L211
-        """
-
-        num_patches = embeddings.shape[1] - 1
-        num_positions = self.position_embeddings.shape[1] - 1
-
-        # always interpolate when tracing to ensure the exported model works for dynamic input shapes
-        if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
-            return self.position_embeddings
-
-        class_pos_embed = self.position_embeddings[:, :1]
-        patch_pos_embed = self.position_embeddings[:, 1:]
-
-        dim = embeddings.shape[-1]
-
-        new_height = height // self.patch_size
-        new_width = width // self.patch_size
-
-        sqrt_num_positions = torch_int(num_positions**0.5)
-        patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
-        patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
-        target_dtype = patch_pos_embed.dtype
-        patch_pos_embed = nn.functional.interpolate(
-            patch_pos_embed.to(torch.float32),
-            size=(new_height, new_width),
-            mode="bicubic",
-            align_corners=False,
-            antialias=True,
-        ).to(dtype=target_dtype)
-
-        patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
-
-        return torch.cat((class_pos_embed, patch_pos_embed), dim=1)
-
-    def forward(self, pixel_values: torch.Tensor, bool_masked_pos: torch.Tensor | None = None) -> torch.Tensor:
-        batch_size, _, height, width = pixel_values.shape
-        target_dtype = self.patch_embeddings.projection.weight.dtype
-        embeddings = self.patch_embeddings(pixel_values.to(dtype=target_dtype))
-
-        if bool_masked_pos is not None:
-            embeddings = torch.where(
-                bool_masked_pos.unsqueeze(-1), self.mask_token.to(embeddings.dtype).unsqueeze(0), embeddings
-            )
-
-        # add the [CLS] token to the embedded patch tokens
-        cls_tokens = self.cls_token.expand(batch_size, -1, -1)
-        embeddings = torch.cat((cls_tokens, embeddings), dim=1)
-
-        # add positional encoding to each token
-        embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
-
-        if self.config.num_windows > 1:
-            # reshape for windows
-            embeddings = window_partition(embeddings, self.config.num_windows, self.config.patch_size, height, width)
-        embeddings = self.dropout(embeddings)
-
-        return embeddings
-
-
-class RfDetrDinov2SelfAttention(nn.Module):
-    def __init__(self, config: RfDetrDinov2Config):
-        super().__init__()
-        if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
-            raise ValueError(
-                f"The hidden size {config.hidden_size} is not a multiple of the number of attention "
-                f"heads {config.num_attention_heads}."
-            )
-
-        self.config = config
-        self.num_attention_heads = config.num_attention_heads
-        self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
-        self.all_head_size = self.num_attention_heads * self.attention_head_size
-        self.dropout_prob = config.attention_probs_dropout_prob
-        self.scaling = self.attention_head_size**-0.5
-        self.is_causal = False
-
-        self.query = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
-        self.key = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
-        self.value = nn.Linear(config.hidden_size, self.all_head_size, bias=config.qkv_bias)
-        self.num_key_value_groups = 1
-
-    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
-        batch_size = hidden_states.shape[0]
-        new_shape = batch_size, -1, self.num_attention_heads, self.attention_head_size
-
-        key_layer = self.key(hidden_states).view(*new_shape).transpose(1, 2)
-        value_layer = self.value(hidden_states).view(*new_shape).transpose(1, 2)
-        query_layer = self.query(hidden_states).view(*new_shape).transpose(1, 2)
-
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
-
-        context_layer, attention_probs = attention_interface(
-            self,
-            query_layer,
-            key_layer,
-            value_layer,
-            None,
-            is_causal=self.is_causal,
-            scaling=self.scaling,
-            dropout=0.0 if not self.training else self.dropout_prob,
-        )
-
-        new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
-        context_layer = context_layer.reshape(new_context_layer_shape)
-
-        return context_layer, attention_probs
-
-
-class RfDetrDinov2SelfOutput(nn.Module):
-    """
-    The residual connection is defined in RfDetrDinov2Layer instead of here (as is the case with other models), due to the
-    layernorm applied before each block.
-    """
-
-    def __init__(self, config: RfDetrDinov2Config):
-        super().__init__()
-        self.dense = nn.Linear(config.hidden_size, config.hidden_size)
-        self.dropout = nn.Dropout(config.hidden_dropout_prob)
-
-    def forward(self, hidden_states: torch.Tensor, input_tensor: torch.Tensor) -> torch.Tensor:
-        hidden_states = self.dense(hidden_states)
-        hidden_states = self.dropout(hidden_states)
-        return hidden_states
-
-
-class RfDetrDinov2Attention(nn.Module):
-    def __init__(self, config: RfDetrDinov2Config):
-        super().__init__()
-        self.attention = RfDetrDinov2SelfAttention(config)
-        self.output = RfDetrDinov2SelfOutput(config)
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        self_attn_output, _ = self.attention(hidden_states)
-        output = self.output(self_attn_output, hidden_states)
-        return output
-
-
-class RfDetrDinov2LayerScale(nn.Module):
-    def __init__(self, config) -> None:
-        super().__init__()
-        self.lambda1 = nn.Parameter(config.layerscale_value * torch.ones(config.hidden_size))
-
-    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
-        return hidden_state * self.lambda1
-
-
-def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = False) -> torch.Tensor:
-    """
-    Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
-
-    """
-    if drop_prob == 0.0 or not training:
-        return input
-    keep_prob = 1 - drop_prob
-    shape = (input.shape[0],) + (1,) * (input.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
-    random_tensor = keep_prob + torch.rand(shape, dtype=input.dtype, device=input.device)
-    random_tensor.floor_()  # binarize
-    output = input.div(keep_prob) * random_tensor
-    return output
-
-
-class RfDetrDinov2DropPath(nn.Module):
-    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
-
-    def __init__(self, drop_prob: float | None = None) -> None:
-        super().__init__()
-        self.drop_prob = drop_prob
-
-    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return drop_path(hidden_states, self.drop_prob, self.training)
-
-    def extra_repr(self) -> str:
-        return f"p={self.drop_prob}"
-
-
-class RfDetrDinov2MLP(nn.Module):
-    def __init__(self, config) -> None:
-        super().__init__()
-        in_features = out_features = config.hidden_size
-        hidden_features = int(config.hidden_size * config.mlp_ratio)
-        self.fc1 = nn.Linear(in_features, hidden_features, bias=True)
-        if isinstance(config.hidden_act, str):
-            self.activation = ACT2FN[config.hidden_act]
-        else:
-            self.activation = config.hidden_act
-        self.fc2 = nn.Linear(hidden_features, out_features, bias=True)
-
-    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
-        hidden_state = self.fc1(hidden_state)
-        hidden_state = self.activation(hidden_state)
-        hidden_state = self.fc2(hidden_state)
-        return hidden_state
-
-
-class RfDetrDinov2SwiGLUFFN(nn.Module):
-    def __init__(self, config) -> None:
-        super().__init__()
-        in_features = out_features = config.hidden_size
-        hidden_features = int(config.hidden_size * config.mlp_ratio)
-        hidden_features = (int(hidden_features * 2 / 3) + 7) // 8 * 8
-
-        self.weights_in = nn.Linear(in_features, 2 * hidden_features, bias=True)
-        self.weights_out = nn.Linear(hidden_features, out_features, bias=True)
-
-    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
-        hidden_state = self.weights_in(hidden_state)
-        x1, x2 = hidden_state.chunk(2, dim=-1)
-        hidden = nn.functional.silu(x1) * x2
-        return self.weights_out(hidden)
-
-
-def window_unpartition_before_attention(hidden_states: torch.Tensor, num_windows: int) -> torch.Tensor:
-    batch_size, seq_len, channels = hidden_states.shape
-    num_windows_squared = num_windows**2
-    hidden_states = hidden_states.view(batch_size // num_windows_squared, num_windows_squared * seq_len, channels)
-    return hidden_states
-
-
-def window_partition_after_attention(
-    hidden_states: torch.Tensor, self_attention_output: torch.Tensor, num_windows: int
-) -> torch.Tensor:
-    batch_size, seq_len, channels = hidden_states.shape
-    num_windows_squared = num_windows**2
-    self_attention_output = self_attention_output.view(
-        batch_size * num_windows_squared, seq_len // num_windows_squared, channels
-    )
-    return self_attention_output
-
-
-class RfDetrDinov2Layer(GradientCheckpointingLayer):
-    """This corresponds to the Block class in the original implementation."""
-
-    def __init__(self, config: RfDetrDinov2Config, layer_idx: int) -> None:
-        super().__init__()
-
-        self.norm1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.attention = RfDetrDinov2Attention(config)
-        self.layer_scale1 = RfDetrDinov2LayerScale(config)
-        self.drop_path = RfDetrDinov2DropPath(config.drop_path_rate) if config.drop_path_rate > 0.0 else nn.Identity()
-
-        self.norm2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-
-        if config.use_swiglu_ffn:
-            self.mlp = RfDetrDinov2SwiGLUFFN(config)
-        else:
-            self.mlp = RfDetrDinov2MLP(config)
-        self.layer_scale2 = RfDetrDinov2LayerScale(config)
-        self.num_windows = config.num_windows
-        self.global_attention = layer_idx not in config.window_block_indexes
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-    ) -> tuple[torch.Tensor, torch.Tensor] | tuple[torch.Tensor]:
-        shortcut = hidden_states
-        if self.global_attention:
-            hidden_states = window_unpartition_before_attention(hidden_states, self.num_windows)
-
-        hidden_states_norm = self.norm1(hidden_states)
-        self_attention_output = self.attention(hidden_states_norm)
-
-        if self.global_attention:
-            self_attention_output = window_partition_after_attention(
-                hidden_states, self_attention_output, self.num_windows
-            )
-
-        self_attention_output = self.layer_scale1(self_attention_output)
-
-        # first residual connection
-        hidden_states = self.drop_path(self_attention_output) + shortcut
-
-        # in Dinov2, layernorm is also applied after self-attention
-        layer_output = self.norm2(hidden_states)
-        layer_output = self.mlp(layer_output)
-        layer_output = self.layer_scale2(layer_output)
-
-        # second residual connection
-        layer_output = self.drop_path(layer_output) + hidden_states
-
-        return layer_output
-
-
-class RfDetrDinov2Encoder(nn.Module):
-    def __init__(self, config: RfDetrDinov2Config):
-        super().__init__()
-        self.config = config
-        self.layer = nn.ModuleList([RfDetrDinov2Layer(config, i) for i in range(config.num_hidden_layers)])
-        self.gradient_checkpointing = False
-
-    def forward(self, hidden_states: torch.Tensor, output_hidden_states: bool = False) -> BaseModelOutput:
-        all_hidden_states = [hidden_states] if output_hidden_states else None
-        for i, layer_module in enumerate(self.layer):
-            hidden_states = layer_module(hidden_states)
-            if all_hidden_states:
-                all_hidden_states.append(hidden_states)
-
-        return BaseModelOutput(
-            last_hidden_state=hidden_states,
-            hidden_states=tuple(all_hidden_states) if all_hidden_states else None,
-        )
-
-
-@auto_docstring
-class RfDetrDinov2PreTrainedModel(PreTrainedModel):
-    config: RfDetrDinov2Config
-    base_model_prefix = "rf_detr_dinov2"
-    main_input_name = "pixel_values"
-    input_modalities = ("image",)
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["RfDetrDinov2Layer"]
-    _supports_sdpa = True
-    _supports_flash_attn = True
-    _supports_flex_attn = True
-    _supports_attention_backend = True
-    _can_record_outputs = {
-        "attentions": RfDetrDinov2SelfAttention,
-    }
-
-    @torch.no_grad()
-    def _init_weights(self, module: nn.Linear | nn.Conv2d | nn.LayerNorm) -> None:
-        """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
-        elif isinstance(module, RfDetrDinov2Embeddings):
-            init.trunc_normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
-            init.trunc_normal_(module.cls_token, mean=0.0, std=self.config.initializer_range)
-            if self.config.use_mask_token:
-                init.zeros_(module.mask_token)
-        elif isinstance(module, RfDetrDinov2LayerScale):
-            init.constant_(module.lambda1, self.config.layerscale_value)
-
-
-def window_unpartition(
-    hidden_state: torch.Tensor,
-    num_windows: int,
-    num_h_patches: int,
-    num_w_patches: int,
-) -> torch.Tensor:
-    hidden_batch_size, seq_len, channels = hidden_state.shape
-    num_windows_squared = num_windows**2
-    num_h_patches_per_window = num_h_patches // num_windows
-    num_w_patches_per_window = num_w_patches // num_windows
-    hidden_state = hidden_state.reshape(
-        hidden_batch_size // num_windows_squared, num_windows_squared * seq_len, channels
-    )
-    hidden_state = hidden_state.view(
-        hidden_batch_size // num_windows_squared,
-        num_windows,
-        num_windows,
-        num_h_patches_per_window,
-        num_w_patches_per_window,
-        channels,
-    )
-    hidden_state = hidden_state.permute(0, 1, 3, 2, 4, 5)
-    return hidden_state
-
-
-@auto_docstring(
-    custom_intro="""
-    RfDetrDinov2 backbone, to be used with frameworks like DETR and MaskFormer.
-    """
-)
-class RfDetrDinov2Backbone(RfDetrDinov2PreTrainedModel, BackboneMixin):
-    def __init__(self, config):
-        super().__init__(config)
-        super()._init_backbone(config)
-
-        self.num_features = [config.hidden_size for _ in range(config.num_hidden_layers + 1)]
-        self.embeddings = RfDetrDinov2Embeddings(config)
-        self.encoder = RfDetrDinov2Encoder(config)
-
-        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    def get_input_embeddings(self) -> RfDetrDinov2PatchEmbeddings:
-        return self.embeddings.patch_embeddings
-
-    @check_model_inputs
-    @auto_docstring
-    def forward(
-        self,
-        pixel_values: torch.Tensor,
-        output_hidden_states: bool | None = None,
-        **kwargs,
-    ) -> BackboneOutput:
-        r"""
-        Examples:
-
-        ```python
-        >>> from transformers import AutoImageProcessor, AutoBackbone
-        >>> import torch
-        >>> from PIL import Image
-        >>> import requests
-
-        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
-
-        >>> processor = AutoImageProcessor.from_pretrained("facebook/dinov2-base")
-        >>> model = AutoBackbone.from_pretrained(
-        ...     "facebook/dinov2-base", out_features=["stage2", "stage5", "stage8", "stage11"]
-        ... )
-
-        >>> inputs = processor(image, return_tensors="pt")
-
-        >>> outputs = model(**inputs)
-        >>> feature_maps = outputs.feature_maps
-        >>> list(feature_maps[-1].shape)
-        [1, 768, 16, 16]
-        ```"""
-        if output_hidden_states is None:
-            output_hidden_states = self.config.output_hidden_states
-
-        embedding_output = self.embeddings(pixel_values)
-
-        output: BaseModelOutput = self.encoder(embedding_output, output_hidden_states=True)
-        hidden_states = output.hidden_states
-
-        feature_maps = ()
-        for stage, hidden_state in zip(self.stage_names, hidden_states):
-            if stage in self.out_features:
-                if self.config.apply_layernorm:
-                    hidden_state = self.layernorm(hidden_state)
-                if self.config.reshape_hidden_states:
-                    hidden_state = hidden_state[:, 1:]
-                    # this was actually a bug in the original implementation that we copied here,
-                    # cause normally the order is height, width
-                    batch_size, _, height, width = pixel_values.shape
-                    patch_size = self.config.patch_size
-
-                    num_h_patches = height // patch_size
-                    num_w_patches = width // patch_size
-                    hidden_batch_size, seq_len, channels = hidden_state.shape
-
-                    if self.config.num_windows > 1:
-                        hidden_state = window_unpartition(
-                            hidden_state, self.config.num_windows, num_h_patches, num_w_patches
-                        )
-
-                    hidden_state = hidden_state.reshape(batch_size, num_h_patches, num_w_patches, -1)
-                    hidden_state = hidden_state.permute(0, 3, 1, 2).contiguous()
-
-                feature_maps += (hidden_state,)
-
-        return BackboneOutput(
-            feature_maps=feature_maps,
-            hidden_states=hidden_states if output_hidden_states else None,
         )
 
 
