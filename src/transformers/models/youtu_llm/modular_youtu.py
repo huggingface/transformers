@@ -69,6 +69,7 @@ class YoutuPreTrainedModel(LlamaPreTrainedModel):
 
 
 class YoutuModel(LlamaModel):
+    pass
 
 
 class YoutuForCausalLM(LlamaForCausalLM):
