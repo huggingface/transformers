@@ -1246,27 +1246,34 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         return self._pad_token_type_id
 
     def __setattr__(self, key, value):
+        # Handle _id/_ids suffix (eg. bos_token_id -> bos_token)
         key_without_id = key.removesuffix("_ids").removesuffix("_id") if key.endswith(("_id", "_ids")) else key
+
+        # Named special tokens (bos_token, eos_token, etc.)
         if key_without_id in self.SPECIAL_TOKENS_ATTRIBUTES:
             if key != key_without_id and value is not None:
                 value = self.convert_ids_to_tokens(value)
             if value is not None and not isinstance(value, (str, AddedToken)):
                 raise ValueError(f"Cannot set a non-string value as the {key_without_id}")
             self._special_tokens_map[key_without_id] = value
-        elif key_without_id == "extra_special_tokens":
-            if key != key_without_id and value is not None:
-                value = [self.convert_ids_to_tokens(v) for v in value] if isinstance(value, (list, tuple)) else value
-            if value is None:
-                self._extra_special_tokens = []
-            elif isinstance(value, (list, tuple)):
-                self._extra_special_tokens = list(value)
-            else:
+            return
+
+        # Extra special tokens: model-specific special tokens without standard names (eg. <mask_1>)
+        if key_without_id == "extra_special_tokens":
+            if key != key_without_id and value is not None and isinstance(value, (list, tuple)):
+                value = [self.convert_ids_to_tokens(v) for v in value]
+            if not isinstance(value, (list, tuple)) and value is not None:
                 raise ValueError(f"extra_special_tokens must be a list or tuple, got {type(value)}")
-        else:
-            super().__setattr__(key, value)
+            self._extra_special_tokens = [] if value is None else list(value)
+            return
+
+        super().__setattr__(key, value)
 
     def __getattr__(self, key):
+        # Handle _id/_ids suffix (eg. bos_token_id -> bos_token)
         key_without_id = key.removesuffix("_ids").removesuffix("_id") if key.endswith(("_id", "_ids")) else key
+
+        # Named special tokens (bos_token, eos_token, etc.)
         if key_without_id in self.SPECIAL_TOKENS_ATTRIBUTES:
             token_value = self._special_tokens_map.get(key_without_id)
             if token_value is None:
@@ -1274,9 +1281,12 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                     logger.error(f"Using {key}, but it is not set yet.")
                 return None
             return self.convert_tokens_to_ids(str(token_value)) if key != key_without_id else str(token_value)
+
+        # Extra special tokens
         if key_without_id == "extra_special_tokens":
             tokens = [str(tok) for tok in self._extra_special_tokens]
             return self.convert_tokens_to_ids(tokens) if key != key_without_id else tokens
+
         if key not in self.__dict__:
             raise AttributeError(f"{self.__class__.__name__} has no attribute {key}")
         return super().__getattr__(key)
@@ -1773,7 +1783,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 if isinstance(init_kwargs["auto_map"], (tuple, list)):
                     init_kwargs["auto_map"] = {"AutoTokenizer": init_kwargs["auto_map"]}
 
-        # Update with newly provided kwargs (user overrides take precedence)
+        # Update with newly provided kwargs
         init_kwargs.update(kwargs)
 
         # V5: Convert deprecated additional_special_tokens to extra_special_tokens
@@ -1844,9 +1854,10 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                         init_kwargs.pop("extra_special_tokens")
                     )
 
-            # Legacy: convert added_tokens.json to added_tokens_decoder
+            # slow -> slow|fast, legacy: convert the `"added_tokens.json"` file to `added_tokens_decoder`.
+            # this is for legacy purpose. We don't add the tokens after init for efficiency.
             if added_tokens_file is not None:
-                # Collect all known special tokens to mark them correctly
+                # V5: Check both named and extra special tokens
                 special_tokens = {str(init_kwargs[k]) for k in cls.SPECIAL_TOKENS_ATTRIBUTES if init_kwargs.get(k)}
                 special_tokens.update(str(t) for t in (init_kwargs.get("extra_special_tokens") or []))
 
