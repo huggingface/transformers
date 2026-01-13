@@ -16,7 +16,7 @@ import unittest
 
 import httpx
 
-from transformers import MODEL_FOR_VISION_2_SEQ_MAPPING, is_vision_available
+from transformers import MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING, is_vision_available
 from transformers.pipelines import ImageToTextPipeline, pipeline
 from transformers.testing_utils import (
     is_pipeline_test,
@@ -41,7 +41,7 @@ else:
 @is_pipeline_test
 @require_vision
 class ImageToTextPipelineTests(unittest.TestCase):
-    model_mapping = MODEL_FOR_VISION_2_SEQ_MAPPING
+    model_mapping = MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING
 
     def get_test_pipeline(
         self,

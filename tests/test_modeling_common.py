@@ -77,7 +77,6 @@ from transformers.models.auto.modeling_auto import (
     MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES,
     MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES,
     MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES,
-    MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES,
     MODEL_MAPPING_NAMES,
 )
 from transformers.testing_utils import (
@@ -760,7 +759,6 @@ class ModelTesterMixin:
                 *get_values(MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES),
                 *get_values(MODEL_FOR_MASKED_LM_MAPPING_NAMES),
                 *get_values(MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES),
-                *get_values(MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES),
                 *get_values(MODEL_FOR_CTC_MAPPING_NAMES),
             ]:
                 inputs_dict["labels"] = torch.zeros(

@@ -14,8 +14,6 @@
 """PyTorch Blenderbot model."""
 
 import math
-import os
-import warnings
 from collections.abc import Callable
 
 import torch
@@ -44,7 +42,6 @@ from ...utils import (
     is_torchdynamo_compiling,
     logging,
 )
-from ..blenderbot_small import BlenderbotSmallForConditionalGeneration, BlenderbotSmallModel
 from .configuration_blenderbot import BlenderbotConfig
 
 
@@ -854,19 +851,6 @@ class BlenderbotModel(BlenderbotPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: str | os.PathLike | None, *model_args, **kwargs):
-        if pretrained_model_name_or_path == "facebook/blenderbot-90M":
-            warnings.warn(
-                "The checkpoint `facebook/blenderbot-90M` is deprecated. In the future, please use the identical"
-                " checkpoint `facebook/small_blenderbot-90M` with"
-                " `BlenderbotSmallModel.from_pretrained('facebook/small_blenderbot-90M')` instead.",
-                FutureWarning,
-            )
-            return BlenderbotSmallModel.from_pretrained(pretrained_model_name_or_path)
-
-        return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
-
     def get_input_embeddings(self):
         return self.shared
 
@@ -999,19 +983,6 @@ class BlenderbotForConditionalGeneration(BlenderbotPreTrainedModel, GenerationMi
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    @classmethod
-    def from_pretrained(cls, pretrained_model_name_or_path: str | os.PathLike | None, *model_args, **kwargs):
-        if pretrained_model_name_or_path == "facebook/blenderbot-90M":
-            warnings.warn(
-                "The checkpoint `facebook/blenderbot-90M` is deprecated. In the future, please use the identical"
-                " checkpoint `facebook/small_blenderbot-90M` with"
-                " `BlenderbotSmallForConditionalGeneration.from_pretrained('facebook/small_blenderbot-90M')` instead.",
-                FutureWarning,
-            )
-            return BlenderbotSmallForConditionalGeneration.from_pretrained(pretrained_model_name_or_path)
-
-        return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
     def resize_token_embeddings(
         self, new_num_tokens: int, pad_to_multiple_of: int | None = None, mean_resizing: bool = True

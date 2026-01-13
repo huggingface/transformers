@@ -452,21 +452,6 @@ class QuestionAnsweringArgumentHandlerTests(unittest.TestCase):
         self.assertEqual(len(normalized), 2)
         self.assertEqual({type(el) for el in normalized}, {SquadExample})
 
-        normalized = qa(X={"question": Q, "context": C})
-        self.assertEqual(type(normalized), list)
-        self.assertEqual(len(normalized), 1)
-        self.assertEqual({type(el) for el in normalized}, {SquadExample})
-
-        normalized = qa(X=[{"question": Q, "context": C}])
-        self.assertEqual(type(normalized), list)
-        self.assertEqual(len(normalized), 1)
-        self.assertEqual({type(el) for el in normalized}, {SquadExample})
-
-        normalized = qa(data={"question": Q, "context": C})
-        self.assertEqual(type(normalized), list)
-        self.assertEqual(len(normalized), 1)
-        self.assertEqual({type(el) for el in normalized}, {SquadExample})
-
     def test_argument_handler_error_handling(self):
         qa = QuestionAnsweringArgumentHandler()
 

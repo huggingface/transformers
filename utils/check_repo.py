@@ -980,7 +980,6 @@ def find_all_documented_objects() -> list[str]:
 # One good reason for not being documented is to be deprecated. Put in this list deprecated objects.
 DEPRECATED_OBJECTS = [
     "PretrainedConfig",  # deprecated in favor of PreTrainedConfig
-    "AutoModelWithLMHead",
     "BartPretrainedModel",
     "DataCollator",
     "DataCollatorForSOP",
@@ -997,7 +996,6 @@ DEPRECATED_OBJECTS = [
     "SquadFeatures",
     "SquadV1Processor",
     "SquadV2Processor",
-    "Wav2Vec2ForMaskedLM",
     "glue_compute_metrics",
     "glue_convert_examples_to_features",
     "glue_output_modes",
