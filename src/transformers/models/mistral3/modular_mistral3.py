@@ -44,14 +44,18 @@ class Mistral3PatchMerger(nn.Module):
     Learned merging of spatial_merge_size ** 2 patches
     """
 
-    def __init__(self, config: Mistral3Config):
+    def __init__(self, config: Mistral3Config, num_feature_layers: int = 1):
         super().__init__()
         self.config = config
 
         hidden_size = config.vision_config.hidden_size
         self.spatial_merge_size = config.spatial_merge_size
         self.patch_size = self.config.vision_config.patch_size
-        self.merging_layer = nn.Linear(hidden_size * self.spatial_merge_size**2, hidden_size, bias=False)
+        self.merging_layer = nn.Linear(
+            hidden_size * num_feature_layers * self.spatial_merge_size**2,
+            hidden_size * num_feature_layers,
+            bias=False,
+        )
 
     def forward(self, image_features: torch.Tensor, image_sizes: torch.Tensor) -> torch.Tensor:
         image_sizes = [
@@ -80,10 +84,12 @@ class Mistral3PatchMerger(nn.Module):
 class Mistral3MultiModalProjector(nn.Module):
     def __init__(self, config: Mistral3Config):
         super().__init__()
-        self.norm = Mistral3RMSNorm(config.vision_config.hidden_size, eps=config.text_config.rms_norm_eps)
-        self.patch_merger = Mistral3PatchMerger(config)
         # We have hidden_size * the number of vision feature layers
         num_feature_layers = 1 if isinstance(config.vision_feature_layer, int) else len(config.vision_feature_layer)
+        self.norm = Mistral3RMSNorm(
+            config.vision_config.hidden_size * num_feature_layers, eps=config.text_config.rms_norm_eps
+        )
+        self.patch_merger = Mistral3PatchMerger(config, num_feature_layers=num_feature_layers)
         self.linear_1 = nn.Linear(
             config.vision_config.hidden_size * num_feature_layers,
             config.text_config.hidden_size,
