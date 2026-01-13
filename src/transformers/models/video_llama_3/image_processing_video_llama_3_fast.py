@@ -21,7 +21,7 @@ import math
 from typing import Optional, Union
 
 import torch
-import torch.nn.functional as F
+from torchvision.transforms.v2 import functional as TVF
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast, group_images_by_shape, reorder_images
@@ -170,7 +170,7 @@ class VideoLlama3ImageProcessorFast(BaseImageProcessorFast):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["TVF.InterpolationMode"],
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,

@@ -16,7 +16,7 @@
 from typing import Optional
 
 import torch
-from torchvision.transforms.v2 import functional as F
+from torchvision.transforms.v2 import functional as TVF
 
 from ...image_processing_utils_fast import BaseImageProcessorFast, SizeDict
 from ...image_transforms import (
@@ -45,7 +45,7 @@ class LevitImageProcessorFast(BaseImageProcessorFast):
         self,
         image: torch.Tensor,
         size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"] = None,
+        interpolation: Optional["TVF.InterpolationMode"] = None,
         **kwargs,
     ) -> torch.Tensor:
         """
@@ -69,7 +69,7 @@ class LevitImageProcessorFast(BaseImageProcessorFast):
             interpolation (`InterpolationMode`, *optional*, defaults to `InterpolationMode.BICUBIC`):
                 Resampling filter to use when resiizing the image.
         """
-        interpolation = interpolation if interpolation is not None else F.InterpolationMode.BICUBIC
+        interpolation = interpolation if interpolation is not None else TVF.InterpolationMode.BICUBIC
         if size.shortest_edge:
             shortest_edge = int((256 / 224) * size["shortest_edge"])
             new_size = get_resize_output_image_size(
@@ -81,7 +81,7 @@ class LevitImageProcessorFast(BaseImageProcessorFast):
             raise ValueError(
                 f"Size dict must have keys 'height' and 'width' or 'shortest_edge'. Got {size.keys()} {size.keys()}."
             )
-        return F.resize(
+        return TVF.resize(
             image,
             size=new_size,
             interpolation=interpolation,

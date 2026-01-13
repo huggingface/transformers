@@ -16,7 +16,7 @@
 from typing import Optional, Union
 
 import torch
-from torchvision.transforms.v2 import functional as F
+from torchvision.transforms.v2 import functional as TVF
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
@@ -124,7 +124,7 @@ class BeitImageProcessorFast(BaseImageProcessorFast):
         do_reduce_labels: bool,
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["TVF.InterpolationMode"],
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,

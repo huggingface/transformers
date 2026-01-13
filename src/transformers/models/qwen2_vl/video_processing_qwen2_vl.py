@@ -22,7 +22,7 @@ import math
 from typing import Optional
 
 import torch
-from torchvision.transforms.v2 import functional as F
+from torchvision.transforms.v2 import functional as TVF
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import (
@@ -205,7 +205,7 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
         videos: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["TVF.InterpolationMode"],
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,

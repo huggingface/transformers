@@ -15,7 +15,7 @@ from typing import Optional, Union
 
 import torch
 from PIL import Image
-from torchvision.transforms.v2 import functional as F
+from torchvision.transforms.v2 import functional as TVF
 
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
@@ -273,7 +273,7 @@ class MllamaImageProcessorFast(BaseImageProcessorFast):
         padded_width = num_tiles_width * size.width
         pad_size = (0, 0, padded_width - image_width, padded_height - image_height)
 
-        image = F.pad(
+        image = TVF.pad(
             image,
             pad_size,
             fill=0,
@@ -286,7 +286,7 @@ class MllamaImageProcessorFast(BaseImageProcessorFast):
         image: "torch.Tensor",
         size: SizeDict,
         max_image_tiles: int,
-        interpolation: "F.InterpolationMode" = None,
+        interpolation: "TVF.InterpolationMode" = None,
         antialias: bool = True,
     ) -> Union["torch.Tensor", tuple[int, int]]:
         """
@@ -332,7 +332,7 @@ class MllamaImageProcessorFast(BaseImageProcessorFast):
             tile_size=tile_size,
         )
 
-        image = F.resize(image, (new_height, new_width), interpolation=interpolation, antialias=antialias)
+        image = TVF.resize(image, (new_height, new_width), interpolation=interpolation, antialias=antialias)
 
         return image, (num_tiles_height, num_tiles_width)
 
@@ -340,7 +340,7 @@ class MllamaImageProcessorFast(BaseImageProcessorFast):
         self,
         images: list["torch.Tensor"],
         size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["TVF.InterpolationMode"],
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,

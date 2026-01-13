@@ -16,7 +16,7 @@
 from typing import Optional
 
 import torch
-from torchvision.transforms.v2 import functional as F
+from torchvision.transforms.v2 import functional as TVF
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast, group_images_by_shape, reorder_images
@@ -121,7 +121,7 @@ class ConvNextImageProcessorFast(BaseImageProcessorFast):
         do_resize: bool,
         size: dict[str, int],
         crop_pct: float,
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["TVF.InterpolationMode"],
         do_center_crop: bool,
         crop_size: int,
         do_rescale: bool,

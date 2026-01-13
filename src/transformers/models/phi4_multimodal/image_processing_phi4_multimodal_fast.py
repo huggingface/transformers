@@ -16,7 +16,7 @@ import math
 from typing import Optional
 
 import torch
-from torchvision.transforms.v2 import functional as F
+from torchvision.transforms.v2 import functional as TVF
 
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
@@ -132,8 +132,8 @@ class Phi4MultimodalImageProcessorFast(BaseImageProcessorFast):
         if min(new_size[1], target_height) < 10 or min(new_size[0], target_width) < 10:
             raise ValueError(f"the aspect ratio is very extreme {new_size}")
 
-        image = F.resize(image, [new_size[1], new_size[0]])
-        resized_img = F.pad(image, [0, 0, padding_width, padding_height], fill=[255, 255, 255])
+        image = TVF.resize(image, [new_size[1], new_size[0]])
+        resized_img = TVF.pad(image, [0, 0, padding_width, padding_height], fill=[255, 255, 255])
 
         return resized_img, attention_mask
 
@@ -166,7 +166,7 @@ class Phi4MultimodalImageProcessorFast(BaseImageProcessorFast):
         self,
         images: list["torch.Tensor"],
         size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["TVF.InterpolationMode"],
         patch_size: int,
         dynamic_hd: int,
         do_rescale: bool,

@@ -21,7 +21,7 @@
 from typing import Optional
 
 import torch
-from torchvision.transforms.v2 import functional as F
+from torchvision.transforms.v2 import functional as TVF
 
 from ...image_processing_utils import BatchFeature, get_patch_output_size, select_best_resolution
 from ...image_processing_utils_fast import (
@@ -81,7 +81,7 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
         self,
         image: "torch.Tensor",
         target_resolution: tuple,
-        interpolation: "F.InterpolationMode",
+        interpolation: "TVF.InterpolationMode",
         input_data_format: ChannelDimension,
     ) -> "torch.Tensor":
         """
@@ -127,7 +127,7 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
         new_resolution = get_patch_output_size(image, target_resolution, input_data_format)
         padding = self._get_padding_size(new_resolution, target_resolution)
 
-        padded_image = F.pad(image, padding=padding)
+        padded_image = TVF.pad(image, padding=padding)
 
         return padded_image
 
@@ -137,7 +137,7 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
         grid_pinpoints,
         size: tuple,
         patch_size: int,
-        interpolation: "F.InterpolationMode",
+        interpolation: "TVF.InterpolationMode",
     ) -> list["torch.Tensor"]:
         """
         Process an image with variable resolutions by dividing it into patches.
@@ -169,7 +169,7 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
         )
         padded_image = self._pad_for_patching(resized_image, best_resolution, input_data_format=ChannelDimension.FIRST)
         patches = divide_to_patches(padded_image, patch_size=patch_size)
-        resized_original_image = F.resize(image, size=size, interpolation=interpolation)
+        resized_original_image = TVF.resize(image, size=size, interpolation=interpolation)
 
         image_patches = [resized_original_image] + patches
 
@@ -204,7 +204,7 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
         do_resize: bool,
         size: SizeDict,
         image_grid_pinpoints: list[list[int]],
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["TVF.InterpolationMode"],
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
@@ -320,7 +320,7 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
         paste_y_left = (max_dim - height) // 2
         paste_x_right = max_dim - width - paste_x_left
         paste_y_right = max_dim - height - paste_y_left
-        padded_images = F.pad(
+        padded_images = TVF.pad(
             images, padding=[paste_x_left, paste_y_left, paste_x_right, paste_y_right], fill=background_color
         )
 

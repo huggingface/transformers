@@ -40,7 +40,7 @@ from .image_processing_dpt import DPTImageProcessorKwargs
 if TYPE_CHECKING:
     from ...modeling_outputs import DepthEstimatorOutput
 
-from torchvision.transforms.v2 import functional as F
+from torchvision.transforms.v2 import functional as TVF
 
 
 def get_resize_output_image_size(
@@ -105,7 +105,7 @@ class DPTImageProcessorFast(BeitImageProcessorFast):
         self,
         image: "torch.Tensor",
         size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"] = None,
+        interpolation: Optional["TVF.InterpolationMode"] = None,
         antialias: bool = True,
         ensure_multiple_of: int | None = 1,
         keep_aspect_ratio: bool = False,
@@ -169,7 +169,7 @@ class DPTImageProcessorFast(BeitImageProcessorFast):
         pad_top, pad_bottom = _get_pad(height, size_divisor)
         pad_left, pad_right = _get_pad(width, size_divisor)
         padding = (pad_left, pad_top, pad_right, pad_bottom)
-        return F.pad(image, padding)
+        return TVF.pad(image, padding)
 
     def _preprocess(
         self,
@@ -177,7 +177,7 @@ class DPTImageProcessorFast(BeitImageProcessorFast):
         do_reduce_labels: bool,
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["TVF.InterpolationMode"],
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,

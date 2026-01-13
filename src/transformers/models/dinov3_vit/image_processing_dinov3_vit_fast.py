@@ -16,7 +16,7 @@
 from typing import Optional
 
 import torch
-from torchvision.transforms.v2 import functional as F
+from torchvision.transforms.v2 import functional as TVF
 
 from transformers.image_processing_base import BatchFeature
 from transformers.image_processing_utils_fast import BaseImageProcessorFast, group_images_by_shape, reorder_images
@@ -50,7 +50,7 @@ class DINOv3ViTImageProcessorFast(BaseImageProcessorFast):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["TVF.InterpolationMode"],
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,

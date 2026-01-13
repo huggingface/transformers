@@ -60,7 +60,7 @@ if is_torch_available():
     import torch
 
 if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as F
+    from torchvision.transforms.v2 import functional as TVF
 
     from .image_utils import pil_torch_interpolation_mapping
 
@@ -82,7 +82,7 @@ def validate_fast_preprocess_arguments(
     crop_size: SizeDict | None = None,
     do_resize: bool | None = None,
     size: SizeDict | None = None,
-    interpolation: Optional["F.InterpolationMode"] = None,
+    interpolation: Optional["TVF.InterpolationMode"] = None,
     return_tensors: str | TensorType | None = None,
     data_format: ChannelDimension = ChannelDimension.FIRST,
 ):
@@ -398,7 +398,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
                 )
             if image_size != pad_size:
                 padding = (0, 0, padding_width, padding_height)
-                stacked_images = F.pad(stacked_images, padding, fill=fill_value, padding_mode=padding_mode)
+                stacked_images = TVF.pad(stacked_images, padding, fill=fill_value, padding_mode=padding_mode)
             processed_images_grouped[shape] = stacked_images
 
             if return_mask:
@@ -418,7 +418,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         self,
         image: "torch.Tensor",
         size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"] = None,
+        interpolation: Optional["TVF.InterpolationMode"] = None,
         antialias: bool = True,
         **kwargs,
     ) -> "torch.Tensor":
@@ -438,7 +438,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         Returns:
             `torch.Tensor`: The resized image.
         """
-        interpolation = interpolation if interpolation is not None else F.InterpolationMode.BILINEAR
+        interpolation = interpolation if interpolation is not None else TVF.InterpolationMode.BILINEAR
         if size.shortest_edge and size.longest_edge:
             # Resize the image so that the shortest edge or the longest edge is of the given size
             # while maintaining the aspect ratio of the original image.
@@ -468,23 +468,23 @@ class BaseImageProcessorFast(BaseImageProcessor):
         # TODO: remove this once the bug is fixed (detected with torch==2.7.0+git1fee196, torchvision==0.22.0+9eb57cd)
         if is_torchdynamo_compiling() and is_rocm_platform():
             return self.compile_friendly_resize(image, new_size, interpolation, antialias)
-        return F.resize(image, new_size, interpolation=interpolation, antialias=antialias)
+        return TVF.resize(image, new_size, interpolation=interpolation, antialias=antialias)
 
     @staticmethod
     def compile_friendly_resize(
         image: "torch.Tensor",
         new_size: tuple[int, int],
-        interpolation: Optional["F.InterpolationMode"] = None,
+        interpolation: Optional["TVF.InterpolationMode"] = None,
         antialias: bool = True,
     ) -> "torch.Tensor":
         """
-        A wrapper around `F.resize` so that it is compatible with torch.compile when the image is a uint8 tensor.
+        A wrapper around `TVF.resize` so that it is compatible with torch.compile when the image is a uint8 tensor.
         """
         if image.dtype == torch.uint8:
             # 256 is used on purpose instead of 255 to avoid numerical differences
             # see https://github.com/huggingface/transformers/pull/38540#discussion_r2127165652
             image = image.float() / 256
-            image = F.resize(image, new_size, interpolation=interpolation, antialias=antialias)
+            image = TVF.resize(image, new_size, interpolation=interpolation, antialias=antialias)
             image = image * 256
             # torch.where is used on purpose instead of torch.clamp to avoid bug in torch.compile
             # see https://github.com/huggingface/transformers/pull/38540#discussion_r2126888471
@@ -492,7 +492,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
             image = torch.where(image < 0, 0, image)
             image = image.round().to(torch.uint8)
         else:
-            image = F.resize(image, new_size, interpolation=interpolation, antialias=antialias)
+            image = TVF.resize(image, new_size, interpolation=interpolation, antialias=antialias)
         return image
 
     def rescale(
@@ -536,7 +536,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         Returns:
             `torch.Tensor`: The normalized image.
         """
-        return F.normalize(image, mean, std)
+        return TVF.normalize(image, mean, std)
 
     @lru_cache(maxsize=10)
     def _fuse_mean_std_and_rescale_factor(
@@ -615,14 +615,14 @@ class BaseImageProcessorFast(BaseImageProcessor):
                 (crop_width - image_width + 1) // 2 if crop_width > image_width else 0,
                 (crop_height - image_height + 1) // 2 if crop_height > image_height else 0,
             ]
-            image = F.pad(image, padding_ltrb, fill=0)  # PIL uses fill value 0
+            image = TVF.pad(image, padding_ltrb, fill=0)  # PIL uses fill value 0
             image_height, image_width = image.shape[-2:]
             if crop_width == image_width and crop_height == image_height:
                 return image
 
         crop_top = int((image_height - crop_height) / 2.0)
         crop_left = int((image_width - crop_width) / 2.0)
-        return F.crop(image, crop_top, crop_left, crop_height, crop_width)
+        return TVF.crop(image, crop_top, crop_left, crop_height, crop_width)
 
     def convert_to_rgb(
         self,
@@ -687,9 +687,9 @@ class BaseImageProcessorFast(BaseImageProcessor):
             image = self.convert_to_rgb(image)
 
         if image_type == ImageType.PIL:
-            image = F.pil_to_tensor(image)
+            image = TVF.pil_to_tensor(image)
         elif image_type == ImageType.NUMPY:
-            # not using F.to_tensor as it doesn't handle (C, H, W) numpy arrays
+            # not using TVF.to_tensor as it doesn't handle (C, H, W) numpy arrays
             image = torch.from_numpy(image).contiguous()
 
         # If the image is 2D, we need to unsqueeze it to add a channel dimension for processing
@@ -813,7 +813,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         size: SizeDict | None = None,
         do_center_crop: bool | None = None,
         crop_size: SizeDict | None = None,
-        interpolation: Optional["F.InterpolationMode"] = None,
+        interpolation: Optional["TVF.InterpolationMode"] = None,
         return_tensors: str | TensorType | None = None,
         data_format: ChannelDimension | None = None,
         **kwargs,
@@ -892,7 +892,7 @@ class BaseImageProcessorFast(BaseImageProcessor):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["TVF.InterpolationMode"],
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,

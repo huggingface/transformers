@@ -22,7 +22,7 @@ import numpy as np
 import torch
 from torch.nn import functional as F
 from torchvision.ops.boxes import batched_nms
-from torchvision.transforms.v2 import functional as F_t
+from torchvision.transforms.v2 import functional as TVF
 
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_processing_utils_fast import BaseImageProcessorFast
@@ -80,7 +80,7 @@ class SamImageProcessorFast(BaseImageProcessorFast):
         return (newh, neww)
 
     def resize(
-        self, image: "torch.Tensor", size: SizeDict, interpolation: Optional["F_t.InterpolationMode"], **kwargs
+        self, image: "torch.Tensor", size: SizeDict, interpolation: Optional["TVF.InterpolationMode"], **kwargs
     ) -> "torch.Tensor":
         """
         Resize an image to `(size["height"], size["width"])`.
@@ -93,7 +93,7 @@ class SamImageProcessorFast(BaseImageProcessorFast):
                 edge of the image will be resized to the specified size, while the other edge will be resized to
                 maintain the aspect ratio.
             interpolation:
-                `F_t.InterpolationMode` filter to use when resizing the image e.g. `F_t.InterpolationMode.BICUBIC`.
+                `TVF.InterpolationMode` filter to use when resizing the image e.g. `TVF.InterpolationMode.BICUBIC`.
 
         Returns:
             `torch.Tensor`: The resized image.
@@ -208,7 +208,7 @@ class SamImageProcessorFast(BaseImageProcessorFast):
                 {
                     "do_normalize": False,
                     "do_rescale": False,
-                    "interpolation": F_t.InterpolationMode.NEAREST_EXACT,
+                    "interpolation": TVF.InterpolationMode.NEAREST_EXACT,
                     "size": segmentation_maps_kwargs.pop("mask_size"),
                     "pad_size": segmentation_maps_kwargs.pop("mask_pad_size"),
                 }

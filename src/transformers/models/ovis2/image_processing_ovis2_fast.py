@@ -15,7 +15,7 @@
 from typing import Optional
 
 import torch
-from torchvision.transforms.v2 import functional as F
+from torchvision.transforms.v2 import functional as TVF
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
@@ -67,7 +67,7 @@ class Ovis2ImageProcessorFast(BaseImageProcessorFast):
         use_covering_area_grid: bool = True,
         covering_threshold: float = 0.9,
         patch_size: tuple | int | dict | None = None,
-        interpolation: Optional["F.InterpolationMode"] = None,
+        interpolation: Optional["TVF.InterpolationMode"] = None,
     ):
         """
         Crop the images to patches and return a list of cropped images.
@@ -156,7 +156,7 @@ class Ovis2ImageProcessorFast(BaseImageProcessorFast):
         min_patches: int,
         max_patches: int,
         use_covering_area_grid: bool,
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["TVF.InterpolationMode"],
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
