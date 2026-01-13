@@ -125,9 +125,9 @@ class TestTensorParallelProperties(TestCasePlus):
         self.assertEqual(model.tp_plan, expected_plan)
 
         # Test overriding existing entry
-        model.tp_plan.update({"model.layers.*.self_attn.q_proj": "colwise_rep"})
+        model.tp_plan.update({"model.layers.*.self_attn.q_proj": "rowwise"})
         expected_plan = {
-            "model.layers.*.self_attn.q_proj": "colwise_rep",
+            "model.layers.*.self_attn.q_proj": "rowwise",
             "model.layers.*.self_attn.k_proj": "colwise",
         }
         self.assertEqual(model.tp_plan, expected_plan)
@@ -169,7 +169,7 @@ class TestTensorParallelProperties(TestCasePlus):
         valid_plans = [
             {"model.layers.*.self_attn.q_proj": "colwise"},
             {"model.layers.*.self_attn.k_proj": "rowwise"},
-            {"model.layers.*.mlp.gate_proj": "colwise_rep"},
+            {"model.layers.*.mlp.gate_proj": "colwise"},
         ]
 
         for plan in valid_plans:
@@ -294,27 +294,24 @@ def _test_model_dense_backward_pass_impl(rank):
     )
 
     # Compare gradients for matching parameters
-    # Note: TP model may have sharded parameters (DTensors), so we slice the reference gradient to match
+    # Note: TP model may have sharded parameters, so we slice the reference gradient to match
     for (name, param), (name_tp, param_tp) in zip(model.named_parameters(), model_tp.named_parameters()):
         if param.grad is not None and param_tp.grad is not None:
             grad = param.grad
             grad_tp = param_tp.grad
 
-            if isinstance(param_tp.data, dist.tensor.DTensor):
-                placement = param_tp.data.placements[0]
-                if hasattr(placement, "dim") and placement.dim is not None:
-                    dim = placement.dim
-                    world_size = param_tp.data.device_mesh.size()
-                    grad_shard = grad.chunk(world_size, dim=dim)[rank]
-                else:
-                    grad_shard = grad
-            else:
-                grad_shard = grad
+            # Slice reference gradient to match local shard if parameter is sharded
+            if grad.shape != grad_tp.shape:
+                # Find the dimension that differs and slice accordingly
+                for dim in range(grad.ndim):
+                    if grad.size(dim) != grad_tp.size(dim):
+                        shard_size = grad_tp.size(dim)
+                        start = rank * shard_size
+                        grad = grad.narrow(dim, start, shard_size)
+                        break
 
-            grad_tp_local = grad_tp.to_local() if isinstance(grad_tp, dist.tensor.DTensor) else grad_tp
-
-            assert torch.allclose(grad_shard.cpu(), grad_tp_local.cpu(), atol=1e-5, rtol=1e-5), (
-                f"Gradients differ for parameter {name}. Max diff: {(grad_shard.cpu() - grad_tp_local.cpu()).abs().max().item()} | Min diff: {(grad_shard.cpu() - grad_tp_local.cpu()).abs().min().item()}"
+            assert torch.allclose(grad.cpu(), grad_tp.cpu(), atol=1e-5, rtol=1e-5), (
+                f"Gradients differ for parameter {name}. Max diff: {(grad.cpu() - grad_tp.cpu()).abs().max().item()} | Min diff: {(grad.cpu() - grad_tp.cpu()).abs().min().item()}"
             )
 
     dist.barrier()
@@ -533,7 +530,7 @@ def _test_model_moe_forward_impl(rank, mode):
 def _test_model_moe_backward_pass_impl(rank):
     """Implementation for comparing TP and non-TP MoE model backward passes."""
     model_id = "hf-internal-testing/tiny-random-MixtralForCausalLM"
-    
+
     torch.manual_seed(0)
 
     model_tp = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto", tp_plan="auto")
@@ -635,14 +632,14 @@ def _test_model_moe_forward_compile_impl(rank, mode):
 def _test_model_moe_save_impl(rank, tmp_dir):
     """Implementation of test_model_save for MoE model distributed execution."""
     model_id = "hf-internal-testing/tiny-random-MixtralForCausalLM"
-    
+
     if dist.is_initialized():
         kwargs = {"tp_plan": "auto"}
         result_dir = f"{tmp_dir}/tp"
     else:
         kwargs = {}
         result_dir = f"{tmp_dir}/nontp"
-        
+
     model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto", **kwargs)
     model.save_pretrained(result_dir)
 
