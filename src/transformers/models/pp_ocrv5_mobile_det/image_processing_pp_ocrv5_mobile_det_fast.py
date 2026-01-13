@@ -346,6 +346,7 @@ class PPOCRV5MobileDetImageProcessorFast(BaseImageProcessorFast):
     Image processor for PPOCRV5 Mobile Det model, handling preprocessing (resizing, normalization)
     and post-processing (converting model outputs to text boxes).
     """
+
     resample = 2
     image_mean = [0.406, 0.456, 0.485]
     image_std = [0.225, 0.224, 0.229]

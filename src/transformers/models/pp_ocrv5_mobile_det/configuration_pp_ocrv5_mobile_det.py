@@ -15,7 +15,7 @@ logger = logging.get_logger(__name__)
 @auto_docstring(custom_intro="Configuration for the PPOCRV5 Mobile Det model.")
 class PPOCRV5MobileDetConfig(PreTrainedConfig):
     model_type = "pp_ocrv5_mobile_det"
-    
+
     """
     This is the configuration class to store the configuration of a [`PPOCRV5MobileDet`]. It is used to instantiate a
     PPOCRV5 Mobile text detection model according to the specified arguments, defining the model architecture.

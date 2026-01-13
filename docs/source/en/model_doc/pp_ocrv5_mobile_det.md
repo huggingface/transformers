@@ -17,7 +17,7 @@ PP-OCRv5_mobile_det is one of the PP-OCRv5_det series, the latest generation of 
 
 ### Single input inference
 
-The example below demonstrates how to detect text with PP-OCRV5_Mobile_Det using [`Pipeline`] or the [`AutoModel`].
+The example below demonstrates how to detect text with PP-OCRV5_Mobile_Det using the [`AutoModel`].
 
 <hfoptions id="usage">
 <hfoption id="AutoModel">
@@ -47,7 +47,7 @@ for result in results:
 
 ### Batched inference
 
-Here is how you can do it with PP-OCRV5_Mobile_Det using [`Pipeline`] or the [`AutoModel`]:
+Here is how you can do it with PP-OCRV5_Mobile_Det using the [`AutoModel`]:
 
 <hfoptions id="usage">
 <hfoption id="AutoModel">

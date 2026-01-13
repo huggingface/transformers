@@ -38,7 +38,7 @@ logger = logging.get_logger(__name__)
 @auto_docstring(custom_intro="Configuration for the PPOCRV5 Mobile Det model.")
 class PPOCRV5MobileDetConfig(PreTrainedConfig):
     model_type = "pp_ocrv5_mobile_det"
-    
+
     """
     This is the configuration class to store the configuration of a [`PPOCRV5MobileDet`]. It is used to instantiate a
     PPOCRV5 Mobile text detection model according to the specified arguments, defining the model architecture.
@@ -143,30 +143,6 @@ class PPOCRV5MobileDetConfig(PreTrainedConfig):
         self.k = k
         self.kernel_list = kernel_list
         self.fix_nan = fix_nan
-
-
-import math
-from typing import Optional, Union
-
-import cv2
-import numpy as np
-import pyclipper
-
-from ...feature_extraction_utils import BatchFeature
-from ...image_processing_utils import BaseImageProcessor
-from ...image_transforms import flip_channel_order, resize, to_channel_dimension_format
-from ...image_utils import (
-    ChannelDimension,
-    ImageInput,
-    PILImageResampling,
-    infer_channel_dimension_format,
-    make_flat_list_of_images,
-    to_numpy_array,
-    valid_images,
-    validate_preprocess_arguments,
-)
-from ...utils import auto_docstring, filter_out_non_signature_kwargs
-from ...utils.generic import TensorType
 
 
 def unclip(box, unclip_ratio):
@@ -516,6 +492,7 @@ class PPOCRV5MobileDetImageProcessor(BaseImageProcessor):
         image_mean (Union[float, List[float]]): Mean values for image normalization (BGR order, compatible with model).
         image_std (Union[float, List[float]]): Standard deviation values for image normalization (BGR order).
     """
+
     def __init__(
         self,
         limit_side_len: int = 960,
@@ -652,7 +629,7 @@ class PPOCRV5MobileDetImageProcessor(BaseImageProcessor):
         use_dilation=False,
         score_mode="fast",
         box_type="quad",
-    ):  
+    ):
         """
         Converts model outputs into detected text boxes.
 
@@ -808,6 +785,7 @@ class PPOCRV5MobileDetImageProcessorFast(BaseImageProcessorFast):
     Image processor for PPOCRV5 Mobile Det model, handling preprocessing (resizing, normalization)
     and post-processing (converting model outputs to text boxes).
     """
+
     resample = 2
     image_mean = [0.406, 0.456, 0.485]
     image_std = [0.225, 0.224, 0.229]
@@ -1075,6 +1053,7 @@ class LearnableAffineBlock(nn.Module):
     Both scale and bias are trainable parameters, allowing the model to learn optimal
     linear transformations for feature normalization or enhancement.
     """
+
     def __init__(self, scale_value=1.0, bias_value=0.0):
         """
         Initialize the LearnableAffineBlock with initial scale and bias values.
@@ -1105,6 +1084,7 @@ class Act(nn.Module):
     Activation block with a trainable affine transformation applied after the non-linear activation.
     Supports two activation functions: Hardswish (hswish) for mobile-efficient inference and ReLU.
     """
+
     def __init__(self, act="hswish"):
         """
         Initialize the activation block with the specified non-linear activation.
@@ -1139,6 +1119,7 @@ class ConvBNLayer(nn.Module):
     Convolution-Batch Normalization layer block, a fundamental building block for modern CNNs.
     Applies 2D convolution followed by batch normalization, with He Kaiming initialization for the convolution weights.
     """
+
     def __init__(self, in_channels, out_channels, kernel_size, stride, groups=1):
         """
         Initialize the ConvBNLayer with specified convolution and batch normalization parameters.
@@ -1186,6 +1167,7 @@ class LearnableRepLayer(nn.Module):
     (kxk and 1x1) with an optional identity branch. This layer enables structural reparameterization
     for efficient inference while maintaining training flexibility.
     """
+
     def __init__(
         self,
         in_channels: int,
@@ -1273,6 +1255,7 @@ class SELayer(nn.Module):
     This layer adaptively scales channel features based on their importance,
     improving the model's ability to capture informative features.
     """
+
     def __init__(self, channel, reduction=4):
         """
         Initialize the SELayer with channel reduction factor.
@@ -1328,6 +1311,7 @@ class LCNetV3Block(nn.Module):
     Consists of a depthwise LearnableRepLayer, an optional SE Layer, and a pointwise LearnableRepLayer.
     Optimized for mobile devices with low computational complexity and high efficiency.
     """
+
     def __init__(self, in_channels, out_channels, act, dw_size, stride, use_se, conv_kxk_num, reduction):
         """
         Initialize the LCNetV3Block with specified parameters for depthwise and pointwise layers.
@@ -1387,6 +1371,7 @@ class PPOCRV5MobileDetBackbone(nn.Module):
     Extracts multi-scale feature maps from input images, which are passed to the neck network for further fusion.
     Optimized for mobile devices with lightweight, efficient layers and channel scaling.
     """
+
     def __init__(self, config: PPOCRV5MobileDetConfig):
         """
         Initialize the PPOCRV5MobileDetBackbone with the specified model configuration.
@@ -1509,6 +1494,7 @@ class SEModule(nn.Module):
     Simplified Squeeze-and-Excitation (SE) Module for the neck network.
     Applies channel-wise recalibration with a clamped activation to stabilize training.
     """
+
     def __init__(self, in_channels, reduction=4):
         """
         Initialize the SEModule with channel reduction factor.
@@ -1558,6 +1544,7 @@ class RSELayer(nn.Module):
     Residual Squeeze-and-Excitation (RSE) Layer for the neck network.
     Combines a 1x1/3x3 convolution with an SE Module and an optional residual shortcut connection.
     """
+
     def __init__(self, in_channels, out_channels, kernel_size, shortcut=True):
         """
         Initialize the RSELayer with convolution and residual connection parameters.
@@ -1605,6 +1592,7 @@ class PPOCRV5MobileDetNeck(nn.Module):
     Uses RSELayers to process backbone features and upsampling to fuse features at the same spatial scale,
     then concatenates the fused features for input to the head network.
     """
+
     def __init__(self, config: PPOCRV5MobileDetConfig, in_channels: list[int]):
         """
         Initialize the PPOCRV5MobileDetNeck with the specified model configuration and input channels.
@@ -1669,6 +1657,7 @@ class Head(nn.Module):
     Uses two transposed convolutions for upsampling to recover the original image spatial scale,
     and a sigmoid activation to produce binary segmentation logits.
     """
+
     def __init__(self, in_channels, kernel_list=[3, 2, 2]):
         """
         Initialize the Head sub-module with convolution and upsampling parameters.
@@ -1740,6 +1729,7 @@ class PPOCRV5MobileDetHead(nn.Module):
     Head network for PPOCRV5 Mobile Det, wrapping the Head sub-module to generate text segmentation maps.
     Contains the `k` parameter for candidate box selection during post-processing.
     """
+
     def __init__(self, config: PPOCRV5MobileDetConfig):
         """
         Initialize the PPOCRV5MobileDetHead with the specified model configuration.
@@ -1778,6 +1768,7 @@ class PPOCRV5MobileDetModelOutput(ModelOutput):
         hidden_states (tuple[torch.FloatTensor], optional): Tuple of all intermediate hidden states from the backbone,
             if `output_hidden_states` is True.
     """
+
     logits: Optional[torch.FloatTensor] = None
     last_hidden_state: Optional[torch.FloatTensor] = None
     hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
@@ -1788,6 +1779,7 @@ class PPOCRV5MobileDetPreTrainedModel(PreTrainedModel):
     Base class for all PPOCRV5 Mobile Det pre-trained models. Handles model initialization,
     configuration, and loading of pre-trained weights, following the Transformers library conventions.
     """
+
     config: PPOCRV5MobileDetConfig
     base_model_prefix = "pp_ocrv5_mobile_det"
     main_input_name = "pixel_values"
@@ -1800,6 +1792,7 @@ class PPOCRV5MobileDetModel(PPOCRV5MobileDetPreTrainedModel):
     Core PPOCRV5 Mobile Det model, consisting of Backbone, Neck, and Head networks.
     Generates binary text segmentation maps for text detection tasks.
     """
+
     def __init__(self, config: PPOCRV5MobileDetConfig):
         """
         Initialize the PPOCRV5MobileDetModel with the specified configuration.
@@ -1865,6 +1858,7 @@ class PPOCRV5MobileDetForObjectDetectionOutput(BaseModelOutputWithNoAttention):
         hidden_states (tuple[torch.FloatTensor], optional): Tuple of all intermediate hidden states from the backbone,
             if `output_hidden_states` is True.
     """
+
     logits: Optional[torch.FloatTensor] = None
     shape: Optional[torch.FloatTensor] = None
 
@@ -1875,6 +1869,7 @@ class PPOCRV5MobileDetForObjectDetection(PPOCRV5MobileDetPreTrainedModel):
     PPOCRV5 Mobile Det model for object (text) detection tasks. Wraps the core PPOCRV5MobileDetModel
     and returns outputs compatible with the Transformers object detection API.
     """
+
     def __init__(self, config: PPOCRV5MobileDetConfig):
         """
         Initialize the PPOCRV5MobileDetForObjectDetection with the specified configuration.

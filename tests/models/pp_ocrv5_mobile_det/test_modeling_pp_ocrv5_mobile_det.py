@@ -138,13 +138,12 @@ class PPOCRV5MobileDetModelTest(ModelTesterMixin, unittest.TestCase):
             self,
             config_class=PPOCRV5MobileDetConfig,
             has_text_modality=False,
-            common_properties=["num_channels"],
+            common_properties=[],
         )
 
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    # @unittest.skip(reason="PPOCRV5MobileDet does not use inputs_embeds")
     def test_pp_ocrv5_mobile_det_object_detection(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_pp_ocrv5_mobile_det_object_detection(*config_and_inputs)
@@ -287,7 +286,7 @@ class PPOCRV5MobileDetModelTest(ModelTesterMixin, unittest.TestCase):
 
 @require_torch
 @require_vision
-# @slow
+@slow
 class PPOCRV5MobileDetModelIntegrationTest(unittest.TestCase):
     def setUp(self):
         model_path = "/workspace/model_weight_torch/PP-OCRv5_mobile_det"
@@ -305,9 +304,7 @@ class PPOCRV5MobileDetModelIntegrationTest(unittest.TestCase):
         with torch.no_grad():
             outputs = self.model(**inputs)
 
-        results = self.image_processor.post_process_object_detection(
-            outputs.logits, ori_size_list=inputs["target_sizes"]
-        )
+        results = self.image_processor.post_process_object_detection(outputs, target_sizes=inputs["target_sizes"])
 
         expected_shape_logits = torch.Size((bs, c // 3, h, w))
 

@@ -375,6 +375,7 @@ class PPOCRV5MobileDetImageProcessor(BaseImageProcessor):
         image_mean (Union[float, List[float]]): Mean values for image normalization (BGR order, compatible with model).
         image_std (Union[float, List[float]]): Standard deviation values for image normalization (BGR order).
     """
+
     def __init__(
         self,
         limit_side_len: int = 960,
@@ -511,7 +512,7 @@ class PPOCRV5MobileDetImageProcessor(BaseImageProcessor):
         use_dilation=False,
         score_mode="fast",
         box_type="quad",
-    ):  
+    ):
         """
         Converts model outputs into detected text boxes.
 
