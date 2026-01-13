@@ -537,11 +537,9 @@ class AutomaticSpeechRecognitionPipeline(ChunkPipeline):
             if self.type == "seq2seq_whisper":
                 # Try to get attributes from model's generation_config first
                 model_gen_config = None
-                if hasattr(self.model, "generation_config") and self.model.generation_config is not None:
+                if getattr(self.model, "generation_config", None):
                     model_gen_config = self.model.generation_config
-                elif (
-                    hasattr(self.model.config, "generation_config") and self.model.config.generation_config is not None
-                ):
+                elif getattr(self.model.config, "generation_config", None):
                     model_gen_config = self.model.config.generation_config
 
                 # Copy missing attributes from model's generation config
