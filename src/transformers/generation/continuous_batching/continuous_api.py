@@ -356,6 +356,7 @@ class ContinuousBatchProcessor:
         # some NaNs in the output logits even for non-padded tokens.
         if use_padding:
             self.max_seqlen_q = max(self.max_seqlen_q, q_len - self.total_seqlen_q)
+            kwargs["max_seqlen_q"] = self.max_seqlen_q  # Update kwargs with the new value
             self.cumulative_seqlens_q[self.actual_batch_size + 1 :] = q_len
             # FIXME: is there another way to avoid this? It has a very slight impact on performance (~5 tok/s)
 
