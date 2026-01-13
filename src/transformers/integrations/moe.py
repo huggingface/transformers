@@ -103,15 +103,13 @@ def batched_mm_experts_forward(
     if hasattr(self, "gate_up_proj_bias") and self.gate_up_proj_bias is not None:
         gate_up_out = gate_up_out + self.gate_up_proj_bias[expert_ids]
 
-    # Split into gate and up components
-    gate, up = gate_up_out.chunk(2, dim=-1)  # both have shape (S, intermediate_dim)
-
-    # Apply activation
+    # Apply gating
     if hasattr(self, "_apply_gate"):
-        # Applies custom handling of the gating mechanism if defined
-        hidden_after_activation = self._apply_gate(gate, up)  # (S, intermediate_dim)
+        # Custom gating if defined
+        hidden_after_activation = self._apply_gate(gate_up_out)  # (S, intermediate_dim)
     else:
         # Default gating mechanism
+        gate, up = gate_up_out.chunk(2, dim=-1)  # (S, intermediate_dim)
         hidden_after_activation = self.act_fn(gate) * up  # (S, intermediate_dim)
 
     # --- Down projection per expert (batched) ---
@@ -186,15 +184,13 @@ def grouped_mm_experts_forward(
         # we should be able to pass bias to the grouped_mm call, but it's still not fully supported
         gate_up_out = gate_up_out + self.gate_up_proj_bias[expert_ids_g]
 
-    # Split into gate and up components
-    gate, up = gate_up_out.chunk(2, dim=-1)  # both have shape (S, intermediate_dim)
-
-    # Apply activation
+    # Apply gating
     if hasattr(self, "_apply_gate"):
-        # Applies custom handling of the gating mechanism if defined
-        hidden_after_activation = self._apply_gate(gate, up)  # (S, intermediate_dim)
+        # Custom gating if defined
+        hidden_after_activation = self._apply_gate(gate_up_out)  # (S, intermediate_dim)
     else:
         # Default gating mechanism
+        gate, up = gate_up_out.chunk(2, dim=-1)  # (S, intermediate_dim)
         hidden_after_activation = self.act_fn(gate) * up  # (S, intermediate_dim)
 
     # --- Down projection per expert (grouped_mm) ---

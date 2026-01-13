@@ -76,12 +76,13 @@ class GptOssExperts(nn.Module):
         self.expert_dim = self.intermediate_size
         self.gate_up_proj = nn.Parameter(torch.zeros(self.num_experts, 2 * self.expert_dim, self.hidden_size))
         self.gate_up_proj_bias = nn.Parameter(torch.zeros(self.num_experts, 2 * self.expert_dim))
-        self.down_proj = nn.Parameter(torch.empty((self.num_experts, self.hidden_size, self.expert_dim)))
+        self.down_proj = nn.Parameter(torch.zeros((self.num_experts, self.hidden_size, self.expert_dim)))
         self.down_proj_bias = nn.Parameter(torch.zeros(self.num_experts, self.hidden_size))
         self.alpha = 1.702
         self.limit = 7.0
 
-    def _apply_gate(self, gate: torch.Tensor, up: torch.Tensor) -> torch.Tensor:
+    def _apply_gate(self, gate_up: torch.Tensor) -> torch.Tensor:
+        gate, up = gate_up[..., ::2], gate_up[..., 1::2]
         gate = gate.clamp(min=None, max=self.limit)
         up = up.clamp(min=-self.limit, max=self.limit)
         glu = gate * torch.sigmoid(gate * self.alpha)
@@ -106,10 +107,10 @@ class GptOssExperts(nn.Module):
                 continue
             top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
             current_state = hidden_states[token_idx]
-            gate, up = nn.functional.linear(
+            gate_up = nn.functional.linear(
                 current_state, self.gate_up_proj[expert_idx], self.gate_up_proj_bias[expert_idx]
-            ).chunk(2, dim=-1)
-            current_hidden_states = self._apply_gate(gate, up)
+            )
+            current_hidden_states = self._apply_gate(gate_up)
             current_hidden_states = nn.functional.linear(
                 current_hidden_states, self.down_proj[expert_idx], self.down_proj_bias[expert_idx]
             )
