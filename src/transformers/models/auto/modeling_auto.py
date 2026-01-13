@@ -327,6 +327,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("pixtral", "PixtralVisionModel"),
         ("plbart", "PLBartModel"),
         ("poolformer", "PoolFormerModel"),
+        ("pp_doclayout_v3", "PPDocLayoutV3Model"),
         ("prophetnet", "ProphetNetModel"),
         ("pvt", "PvtModel"),
         ("pvt_v2", "PvtV2Model"),

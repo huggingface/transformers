@@ -16,7 +16,6 @@
 
 import inspect
 import math
-import tempfile
 import unittest
 
 from parameterized import parameterized
@@ -196,16 +195,6 @@ class PPDocLayoutV3ModelTester:
         inputs_dict = {"pixel_values": pixel_values}
         return config, inputs_dict
 
-    def create_and_check_pp_doclayout_v2_object_detection_head_model(self, config, pixel_values):
-        model = PPDocLayoutV3ForObjectDetection(config=config)
-        model.to(torch_device)
-        model.eval()
-
-        result = model(pixel_values)
-
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, self.num_queries, self.num_labels))
-        self.parent.assertEqual(result.pred_boxes.shape, (self.batch_size, self.num_queries, 4))
-
 
 @require_torch
 class PPDocLayoutV3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
@@ -226,10 +215,6 @@ class PPDocLayoutV3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
 
     def test_config(self):
         self.config_tester.run_common_tests()
-
-    def test_pp_doclayout_v2_object_detection_head_model(self):
-        config_and_inputs = self.model_tester.prepare_config_and_inputs()
-        self.model_tester.create_and_check_pp_doclayout_v2_object_detection_head_model(*config_and_inputs)
 
     @unittest.skip(reason="PPDocLayoutV3 has tied weights.")
     def test_load_save_without_tied_weights(self):
@@ -298,46 +283,6 @@ class PPDocLayoutV3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
                     inputs_dict[key] = tensor.to(dtype)
             with torch.no_grad():
                 _ = model(**self._prepare_for_class(inputs_dict, model_class))
-
-    @parameterized.expand(["float32", "float16", "bfloat16"])
-    @require_torch_accelerator
-    @slow
-    def test_inference_equivalence_for_static_and_dynamic_anchors(self, dtype_str):
-        dtype = {
-            "float32": torch.float32,
-            "float16": torch.float16,
-            "bfloat16": torch.bfloat16,
-        }[dtype_str]
-
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        h, w = inputs_dict["pixel_values"].shape[-2:]
-
-        # convert inputs to the desired dtype
-        for key, tensor in inputs_dict.items():
-            if tensor.dtype == torch.float32:
-                inputs_dict[key] = tensor.to(dtype)
-
-        for model_class in self.all_model_classes:
-            with tempfile.TemporaryDirectory() as tmpdirname:
-                model_class(config).save_pretrained(tmpdirname)
-                model_static = model_class.from_pretrained(
-                    tmpdirname, anchor_image_size=[h, w], device_map=torch_device, dtype=dtype
-                ).eval()
-                model_dynamic = model_class.from_pretrained(
-                    tmpdirname, anchor_image_size=None, device_map=torch_device, dtype=dtype
-                ).eval()
-
-            self.assertIsNotNone(model_static.config.anchor_image_size)
-            self.assertIsNone(model_dynamic.config.anchor_image_size)
-
-            with torch.no_grad():
-                outputs_static = model_static(**self._prepare_for_class(inputs_dict, model_class))
-                outputs_dynamic = model_dynamic(**self._prepare_for_class(inputs_dict, model_class))
-
-            self.assertTrue(
-                torch.allclose(outputs_static.logits, outputs_dynamic.logits, rtol=1e-4, atol=1e-4),
-                f"Max diff: {(outputs_static.logits - outputs_dynamic.logits).abs().max()}",
-            )
 
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):

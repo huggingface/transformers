@@ -52,6 +52,7 @@ from ...utils import (
 from ...utils.backbone_utils import verify_backbone_config_arguments
 from ...utils.generic import TensorType
 from ..auto import CONFIG_MAPPING, AutoConfig
+from ..resnet.modeling_resnet import ResNetConvLayer
 from ..rt_detr.modeling_rt_detr import (
     RTDetrDecoder,
     RTDetrDecoderOutput,
@@ -139,12 +140,20 @@ class PPDocLayoutV3Config(PreTrainedConfig):
             feed-forward modules.
         hidden_expansion (`float`, *optional*, defaults to 1.0):
             Expansion ratio to enlarge the dimension size of RepVGGBlock and CSPRepLayer.
-        mask_feat_channels (`list[int]`, *optional*, defaults to `[64, 64]):
+        mask_feat_channels (`list[int]`, *optional*, defaults to `[64, 64]`):
             The channels of the multi-level features for mask enhancement.
         x4_feat_dim (`int`, *optional*, defaults to 128):
             The dimension of the x4 feature map.
         d_model (`int`, *optional*, defaults to 256):
             Dimension of the layers exclude hybrid encoder.
+        num_prototypes (`int`, *optional*, defaults to 32):
+            Dimension of the layers exclude mask query head.
+        label_noise_ratio (`float`, *optional*, defaults to 0.4):
+            The fraction of denoising labels to which random noise should be added.
+        box_noise_scale (`float`, *optional*, defaults to 0.4):
+            Scale or magnitude of noise to be added to the bounding boxes.
+        mask_enhanced (`bool`, *optional*, defaults to `True`):
+            Whether to use enhanced masked attention.
         num_queries (`int`, *optional*, defaults to 300):
             Number of object queries.
         decoder_in_channels (`list`, *optional*, defaults to `[256, 256, 256]`):
@@ -166,14 +175,8 @@ class PPDocLayoutV3Config(PreTrainedConfig):
             The dropout ratio for the attention probabilities.
         num_denoising (`int`, *optional*, defaults to 100):
             The total number of denoising tasks or queries to be used for contrastive denoising.
-        label_noise_ratio (`float`, *optional*, defaults to 0.5):
-            The fraction of denoising labels to which random noise should be added.
-        box_noise_scale (`float`, *optional*, defaults to 1.0):
-            Scale or magnitude of noise to be added to the bounding boxes.
         learn_initial_query (`bool`, *optional*, defaults to `False`):
             Indicates whether the initial query embeddings for the decoder should be learned during training
-        mask_enhanced (`bool`, *optional*, defaults to `True`):
-            Whether to use enhanced masked attention.
         anchor_image_size (`tuple[int, int]`, *optional*):
             Height and width of the input image used during evaluation to generate the bounding box anchors. If None, automatic generate anchor is applied.
         disable_custom_kernels (`bool`, *optional*, defaults to `True`):
@@ -182,8 +185,6 @@ class PPDocLayoutV3Config(PreTrainedConfig):
             Whether the architecture has an encoder decoder structure.
         gp_head_size (`int`, *optional*, defaults to 64):
             The size of the global pointer head.
-        id2label (`dict[int, str]`, *optional*):
-            Mapping from class id to class name.
 
     Examples:
 
@@ -200,7 +201,7 @@ class PPDocLayoutV3Config(PreTrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "pp_doclayout_v2"
+    model_type = "pp_doclayout_v3"
     sub_configs = {"backbone_config": AutoConfig}
 
     layer_types = ("basic", "bottleneck")
@@ -261,8 +262,6 @@ class PPDocLayoutV3Config(PreTrainedConfig):
         disable_custom_kernels=True,
         is_encoder_decoder=True,
         gp_head_size=64,
-        # label
-        id2label=None,
         **kwargs,
     ):
         self.initializer_range = initializer_range
@@ -350,25 +349,6 @@ class PPDocLayoutV3Config(PreTrainedConfig):
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
 
-def get_order_seqs(order_logits):
-    order_scores = torch.sigmoid(order_logits)
-    batch_size, sequence_length, _ = order_scores.shape
-
-    one = torch.ones((sequence_length, sequence_length), dtype=order_scores.dtype, device=order_scores.device)
-    upper = torch.triu(one, 1)
-    lower = torch.tril(one, -1)
-
-    Q = order_scores * upper + (1.0 - order_scores.transpose(1, 2)) * lower
-    order_votes = Q.sum(dim=1)
-
-    order_pointers = torch.argsort(order_votes, dim=1)
-    order_seq = torch.full_like(order_pointers, -1)
-    batch = torch.arange(batch_size, device=order_pointers.device)[:, None]
-    order_seq[batch, order_pointers] = torch.arange(sequence_length, device=order_pointers.device)[None, :]
-
-    return order_seq
-
-
 class PPDocLayoutV3ImageProcessor(BaseImageProcessor):
     r"""
     Constructs a PPDocLayoutV3 image processor.
@@ -434,6 +414,23 @@ class PPDocLayoutV3ImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean
         self.image_std = image_std
         self.resample = resample
+
+    def _get_order_seqs(self, order_logits):
+        order_scores = torch.sigmoid(order_logits)
+        batch_size, sequence_length, _ = order_scores.shape
+
+        order_votes = order_scores.triu(diagonal=1).sum(dim=1) + (1.0 - order_scores.transpose(1, 2)).tril(
+            diagonal=-1
+        ).sum(dim=1)
+
+        order_pointers = torch.argsort(order_votes, dim=1)
+        order_seq = torch.empty_like(order_pointers)
+        ranks = torch.arange(sequence_length, device=order_pointers.device, dtype=order_pointers.dtype).expand(
+            batch_size, -1
+        )
+        order_seq.scatter_(1, order_pointers, ranks)
+
+        return order_seq
 
     @filter_out_non_signature_kwargs()
     def preprocess(
@@ -578,10 +575,12 @@ class PPDocLayoutV3ImageProcessor(BaseImageProcessor):
         logits = outputs.logits
         order_logits = outputs.order_logits
 
-        order_seqs = get_order_seqs(order_logits)
+        order_seqs = self._get_order_seqs(order_logits)
 
-        cxcy, wh = torch.split(boxes, 2, dim=-1)
-        boxes = torch.cat([cxcy - 0.5 * wh, cxcy + 0.5 * wh], dim=-1)
+        box_centers, box_dims = torch.split(boxes, 2, dim=-1)
+        top_left_coords = box_centers - 0.5 * box_dims
+        bottom_right_coords = box_centers + 0.5 * box_dims
+        boxes = torch.cat([top_left_coords, bottom_right_coords], dim=-1)
 
         if target_sizes is not None:
             if len(logits) != len(target_sizes):
@@ -633,6 +632,23 @@ class PPDocLayoutV3ImageProcessorFast(BaseImageProcessorFast):
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
 
+    def _get_order_seqs(self, order_logits):
+        order_scores = torch.sigmoid(order_logits)
+        batch_size, sequence_length, _ = order_scores.shape
+
+        order_votes = order_scores.triu(diagonal=1).sum(dim=1) + (1.0 - order_scores.transpose(1, 2)).tril(
+            diagonal=-1
+        ).sum(dim=1)
+
+        order_pointers = torch.argsort(order_votes, dim=1)
+        order_seq = torch.empty_like(order_pointers)
+        ranks = torch.arange(sequence_length, device=order_pointers.device, dtype=order_pointers.dtype).expand(
+            batch_size, -1
+        )
+        order_seq.scatter_(1, order_pointers, ranks)
+
+        return order_seq
+
     def _preprocess(
         self,
         images: list[torch.Tensor],
@@ -674,7 +690,7 @@ class PPDocLayoutV3ImageProcessorFast(BaseImageProcessorFast):
         target_sizes: Optional[Union[TensorType, list[tuple]]] = None,
     ):
         """
-        Converts the raw output of [`DetrForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
+        Converts the raw output of [`PPDocLayoutV3ForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
         bottom_right_x, bottom_right_y) format. Only supports PyTorch.
 
         Args:
@@ -688,10 +704,12 @@ class PPDocLayoutV3ImageProcessorFast(BaseImageProcessorFast):
         logits = outputs.logits
         order_logits = outputs.order_logits
 
-        order_seqs = get_order_seqs(order_logits)
+        order_seqs = self._get_order_seqs(order_logits)
 
-        cxcy, wh = torch.split(boxes, 2, dim=-1)
-        boxes = torch.cat([cxcy - 0.5 * wh, cxcy + 0.5 * wh], dim=-1)
+        box_centers, box_dims = torch.split(boxes, 2, dim=-1)
+        top_left_coords = box_centers - 0.5 * box_dims
+        bottom_right_coords = box_centers + 0.5 * box_dims
+        boxes = torch.cat([top_left_coords, bottom_right_coords], dim=-1)
 
         if target_sizes is not None:
             if len(logits) != len(target_sizes):
@@ -739,15 +757,15 @@ class GlobalPointer(nn.Module):
         self.dropout = nn.Dropout(0.1)
 
     def forward(self, inputs):
-        B, N, _ = inputs.shape
-        proj = self.dense(inputs).reshape([B, N, 2, self.head_size])
-        proj = self.dropout(proj)
-        qw, kw = proj[..., 0, :], proj[..., 1, :]
+        batch_size, sequence_length, _ = inputs.shape
+        query_key_projection = self.dense(inputs).reshape(batch_size, sequence_length, 2, self.head_size)
+        query_key_projection = self.dropout(query_key_projection)
+        queries = query_key_projection[:, :, 0, :]
+        keys = query_key_projection[:, :, 1, :]
 
-        logits = torch.einsum("bmd,bnd->bmn", qw, kw) / (self.head_size**0.5)  # [B, N, N]
-
-        lower = torch.tril(torch.ones([N, N], dtype=torch.float32, device=logits.device))
-        logits = logits - lower.unsqueeze(0).to(logits.dtype) * 1e4
+        logits = (queries @ keys.transpose(-2, -1)) / (self.head_size**0.5)
+        lower = torch.tril(torch.ones([sequence_length, sequence_length], dtype=logits.dtype, device=logits.device))
+        logits = logits - lower.unsqueeze(0) * 1e4
 
         return logits
 
@@ -814,7 +832,7 @@ class PPDocLayoutV3PreTrainedModel(PreTrainedModel):
                 init.zeros_(module.weight.data[module.padding_idx])
 
 
-def mask_to_box_coordinate(mask, dtype=torch.float32):
+def mask_to_box_coordinate(mask, dtype):
     mask = mask.bool()
 
     height, width = mask.shape[-2:]
@@ -938,33 +956,8 @@ class PPDocLayoutV3MLPPredictionHead(RTDetrMLPPredictionHead):
     pass
 
 
-class BaseConv(nn.Module):
-    def __init__(
-        self,
-        in_channels,
-        out_channels,
-        ksize,
-        stride,
-        groups=1,
-        bias=False,
-    ):
-        super().__init__()
-        self.conv = nn.Conv2d(
-            in_channels=in_channels,
-            out_channels=out_channels,
-            kernel_size=ksize,
-            stride=stride,
-            padding=(ksize - 1) // 2,
-            groups=groups,
-            bias=bias,
-        )
-        self.bn = nn.BatchNorm2d(out_channels)
-
-    def forward(self, x):
-        # use 'x * F.sigmoid(x)' replace 'silu'
-        x = self.bn(self.conv(x))
-        y = x * F.sigmoid(x)
-        return y
+class BaseConv(ResNetConvLayer):
+    pass
 
 
 class MaskFeatFPN(nn.Module):
@@ -984,7 +977,7 @@ class MaskFeatFPN(nn.Module):
             f"Got len(in_channels)={len(in_channels)} and len(fpn_strides)={len(fpn_strides)}."
         )
 
-        reorder_index = np.argsort(fpn_strides, axis=0)
+        reorder_index = np.argsort(fpn_strides, axis=0).tolist()
         in_channels = [in_channels[i] for i in reorder_index]
         fpn_strides = [fpn_strides[i] for i in reorder_index]
 
@@ -993,7 +986,7 @@ class MaskFeatFPN(nn.Module):
         self.dropout_ratio = dropout_ratio
         self.align_corners = align_corners
         if self.dropout_ratio > 0:
-            self.dropout = nn.Dropout2D(dropout_ratio)
+            self.dropout = nn.Dropout2d(dropout_ratio)
 
         self.scale_heads = nn.ModuleList()
         for i in range(len(fpn_strides)):
@@ -1001,13 +994,13 @@ class MaskFeatFPN(nn.Module):
             scale_head = []
             for k in range(head_length):
                 in_c = in_channels[i] if k == 0 else feat_channels
-                scale_head.append(nn.Sequential(BaseConv(in_c, feat_channels, 3, 1)))
+                scale_head.append(nn.Sequential(BaseConv(in_c, feat_channels, 3, 1, "silu")))
                 if fpn_strides[i] != fpn_strides[0]:
                     scale_head.append(nn.Upsample(scale_factor=2, mode="bilinear", align_corners=align_corners))
 
             self.scale_heads.append(nn.Sequential(*scale_head))
 
-        self.output_conv = BaseConv(feat_channels, out_channels, 3, 1)
+        self.output_conv = BaseConv(feat_channels, out_channels, 3, 1, "silu")
 
     def forward(self, inputs):
         x = [inputs[i] for i in self.reorder_index]
@@ -1036,9 +1029,9 @@ class PPDocLayoutV3HybridEncoder(RTDetrHybridEncoder):
             feat_channels=mask_feat_channels[0],
             out_channels=mask_feat_channels[1],
         )
-        self.enc_mask_lateral = BaseConv(config.x4_feat_dim, mask_feat_channels[1], 3, 1)
+        self.enc_mask_lateral = BaseConv(config.x4_feat_dim, mask_feat_channels[1], 3, 1, "silu")
         self.enc_mask_output = nn.Sequential(
-            BaseConv(mask_feat_channels[1], mask_feat_channels[1], 3, 1),
+            BaseConv(mask_feat_channels[1], mask_feat_channels[1], 3, 1, "silu"),
             nn.Conv2d(in_channels=mask_feat_channels[1], out_channels=config.num_prototypes, kernel_size=1),
         )
 
@@ -1349,11 +1342,17 @@ class PPDocLayoutV3Decoder(RTDetrDecoder):
         )
 
 
+@auto_docstring(
+    custom_intro="""
+    PP-DocLayoutV3 Model (consisting of a backbone and encoder-decoder) outputting raw hidden states without any head on top.
+    """
+)
 class PPDocLayoutV3Model(RTDetrModel):
     def __init__(self, config: PPDocLayoutV3Config):
         super().__init__(config)
 
-        self.encoder_input_proj = nn.ModuleList(encoder_input_proj_list[1:])  # noqa
+        encoder_input_proj_list = []
+        self.encoder_input_proj = nn.ModuleList(encoder_input_proj_list[1:])
 
         self.dec_order_head = nn.Linear(config.d_model, config.d_model)
         self.dec_global_pointer = GlobalPointer(config)
@@ -1367,13 +1366,12 @@ class PPDocLayoutV3Model(RTDetrModel):
             config, config.d_model, config.d_model, config.num_prototypes, num_layers=3
         )
 
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
         pixel_mask: Optional[torch.LongTensor] = None,
         encoder_outputs: Optional[torch.FloatTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[list[dict]] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1466,7 +1464,7 @@ class PPDocLayoutV3Model(RTDetrModel):
         # Lowest resolution feature maps are obtained via 3x3 stride 2 convolutions on the final stage
         if self.config.num_feature_levels > len(sources):
             _len_sources = len(sources)
-            sources.append(self.decoder_input_proj[_len_sources](encoder_outputs[0])[-1])
+            sources.append(self.decoder_input_proj[_len_sources](encoder_outputs[0][-1]))
             for i in range(_len_sources + 1, self.config.num_feature_levels):
                 sources.append(self.decoder_input_proj[i](encoder_outputs[0][-1]))
 
@@ -1559,7 +1557,7 @@ class PPDocLayoutV3Model(RTDetrModel):
             target = torch.concat([denoising_class, target], 1)
 
         if self.mask_enhanced:
-            reference_points = mask_to_box_coordinate(enc_out_masks > 0)
+            reference_points = mask_to_box_coordinate(enc_out_masks > 0, dtype=reference_points_unact.dtype)
             reference_points_unact = inverse_sigmoid(reference_points)
 
         if denoising_bbox_unact is not None:
@@ -1670,6 +1668,7 @@ class PPDocLayoutV3ForObjectDetectionOutput(ModelOutput):
     denoising_meta_values (`dict`):
         Extra dictionary for the denoising related values
     """
+
     logits: Optional[torch.FloatTensor] = None
     pred_boxes: Optional[torch.FloatTensor] = None
     order_logits: Optional[torch.FloatTensor] = None
@@ -1694,6 +1693,12 @@ class PPDocLayoutV3ForObjectDetectionOutput(ModelOutput):
     denoising_meta_values: Optional[dict] = None
 
 
+@auto_docstring(
+    custom_intro="""
+    PP-DocLayoutV3 Model (consisting of a backbone and encoder-decoder) outputs bounding boxes and logits sorted according to reading order,
+    which are further decoded into scores and classes.
+    """
+)
 class PPDocLayoutV3ForObjectDetection(RTDetrForObjectDetection, PPDocLayoutV3PreTrainedModel):
     _keys_to_ignore_on_load_missing = ["num_batches_tracked", "rel_pos_y_bias", "rel_pos_x_bias"]
     _tied_weights_keys = {
@@ -1719,8 +1724,6 @@ class PPDocLayoutV3ForObjectDetection(RTDetrForObjectDetection, PPDocLayoutV3Pre
         pixel_values: torch.FloatTensor,
         pixel_mask: Optional[torch.LongTensor] = None,
         encoder_outputs: Optional[torch.FloatTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
         labels: Optional[list[dict]] = None,
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
@@ -1794,8 +1797,6 @@ class PPDocLayoutV3ForObjectDetection(RTDetrForObjectDetection, PPDocLayoutV3Pre
             pixel_values,
             pixel_mask=pixel_mask,
             encoder_outputs=encoder_outputs,
-            inputs_embeds=inputs_embeds,
-            decoder_inputs_embeds=decoder_inputs_embeds,
             labels=labels,
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,

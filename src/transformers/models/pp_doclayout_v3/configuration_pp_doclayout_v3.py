@@ -97,12 +97,20 @@ class PPDocLayoutV3Config(PreTrainedConfig):
             feed-forward modules.
         hidden_expansion (`float`, *optional*, defaults to 1.0):
             Expansion ratio to enlarge the dimension size of RepVGGBlock and CSPRepLayer.
-        mask_feat_channels (`list[int]`, *optional*, defaults to `[64, 64]):
+        mask_feat_channels (`list[int]`, *optional*, defaults to `[64, 64]`):
             The channels of the multi-level features for mask enhancement.
         x4_feat_dim (`int`, *optional*, defaults to 128):
             The dimension of the x4 feature map.
         d_model (`int`, *optional*, defaults to 256):
             Dimension of the layers exclude hybrid encoder.
+        num_prototypes (`int`, *optional*, defaults to 32):
+            Dimension of the layers exclude mask query head.
+        label_noise_ratio (`float`, *optional*, defaults to 0.4):
+            The fraction of denoising labels to which random noise should be added.
+        box_noise_scale (`float`, *optional*, defaults to 0.4):
+            Scale or magnitude of noise to be added to the bounding boxes.
+        mask_enhanced (`bool`, *optional*, defaults to `True`):
+            Whether to use enhanced masked attention.
         num_queries (`int`, *optional*, defaults to 300):
             Number of object queries.
         decoder_in_channels (`list`, *optional*, defaults to `[256, 256, 256]`):
@@ -124,14 +132,8 @@ class PPDocLayoutV3Config(PreTrainedConfig):
             The dropout ratio for the attention probabilities.
         num_denoising (`int`, *optional*, defaults to 100):
             The total number of denoising tasks or queries to be used for contrastive denoising.
-        label_noise_ratio (`float`, *optional*, defaults to 0.5):
-            The fraction of denoising labels to which random noise should be added.
-        box_noise_scale (`float`, *optional*, defaults to 1.0):
-            Scale or magnitude of noise to be added to the bounding boxes.
         learn_initial_query (`bool`, *optional*, defaults to `False`):
             Indicates whether the initial query embeddings for the decoder should be learned during training
-        mask_enhanced (`bool`, *optional*, defaults to `True`):
-            Whether to use enhanced masked attention.
         anchor_image_size (`tuple[int, int]`, *optional*):
             Height and width of the input image used during evaluation to generate the bounding box anchors. If None, automatic generate anchor is applied.
         disable_custom_kernels (`bool`, *optional*, defaults to `True`):
@@ -140,8 +142,6 @@ class PPDocLayoutV3Config(PreTrainedConfig):
             Whether the architecture has an encoder decoder structure.
         gp_head_size (`int`, *optional*, defaults to 64):
             The size of the global pointer head.
-        id2label (`dict[int, str]`, *optional*):
-            Mapping from class id to class name.
 
     Examples:
 
@@ -158,7 +158,7 @@ class PPDocLayoutV3Config(PreTrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "pp_doclayout_v2"
+    model_type = "pp_doclayout_v3"
     sub_configs = {"backbone_config": AutoConfig}
 
     layer_types = ("basic", "bottleneck")
@@ -219,8 +219,6 @@ class PPDocLayoutV3Config(PreTrainedConfig):
         disable_custom_kernels=True,
         is_encoder_decoder=True,
         gp_head_size=64,
-        # label
-        id2label=None,
         **kwargs,
     ):
         self.initializer_range = initializer_range

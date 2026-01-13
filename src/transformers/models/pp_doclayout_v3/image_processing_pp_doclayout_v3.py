@@ -39,25 +39,6 @@ from ...utils import filter_out_non_signature_kwargs
 from ...utils.generic import TensorType
 
 
-def get_order_seqs(order_logits):
-    order_scores = torch.sigmoid(order_logits)
-    batch_size, sequence_length, _ = order_scores.shape
-
-    one = torch.ones((sequence_length, sequence_length), dtype=order_scores.dtype, device=order_scores.device)
-    upper = torch.triu(one, 1)
-    lower = torch.tril(one, -1)
-
-    Q = order_scores * upper + (1.0 - order_scores.transpose(1, 2)) * lower
-    order_votes = Q.sum(dim=1)
-
-    order_pointers = torch.argsort(order_votes, dim=1)
-    order_seq = torch.full_like(order_pointers, -1)
-    batch = torch.arange(batch_size, device=order_pointers.device)[:, None]
-    order_seq[batch, order_pointers] = torch.arange(sequence_length, device=order_pointers.device)[None, :]
-
-    return order_seq
-
-
 class PPDocLayoutV3ImageProcessor(BaseImageProcessor):
     r"""
     Constructs a PPDocLayoutV3 image processor.
@@ -123,6 +104,23 @@ class PPDocLayoutV3ImageProcessor(BaseImageProcessor):
         self.image_mean = image_mean
         self.image_std = image_std
         self.resample = resample
+
+    def _get_order_seqs(self, order_logits):
+        order_scores = torch.sigmoid(order_logits)
+        batch_size, sequence_length, _ = order_scores.shape
+
+        order_votes = order_scores.triu(diagonal=1).sum(dim=1) + (1.0 - order_scores.transpose(1, 2)).tril(
+            diagonal=-1
+        ).sum(dim=1)
+
+        order_pointers = torch.argsort(order_votes, dim=1)
+        order_seq = torch.empty_like(order_pointers)
+        ranks = torch.arange(sequence_length, device=order_pointers.device, dtype=order_pointers.dtype).expand(
+            batch_size, -1
+        )
+        order_seq.scatter_(1, order_pointers, ranks)
+
+        return order_seq
 
     @filter_out_non_signature_kwargs()
     def preprocess(
@@ -267,10 +265,12 @@ class PPDocLayoutV3ImageProcessor(BaseImageProcessor):
         logits = outputs.logits
         order_logits = outputs.order_logits
 
-        order_seqs = get_order_seqs(order_logits)
+        order_seqs = self._get_order_seqs(order_logits)
 
-        cxcy, wh = torch.split(boxes, 2, dim=-1)
-        boxes = torch.cat([cxcy - 0.5 * wh, cxcy + 0.5 * wh], dim=-1)
+        box_centers, box_dims = torch.split(boxes, 2, dim=-1)
+        top_left_coords = box_centers - 0.5 * box_dims
+        bottom_right_coords = box_centers + 0.5 * box_dims
+        boxes = torch.cat([top_left_coords, bottom_right_coords], dim=-1)
 
         if target_sizes is not None:
             if len(logits) != len(target_sizes):
