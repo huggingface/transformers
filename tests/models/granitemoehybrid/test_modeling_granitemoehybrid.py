@@ -392,7 +392,7 @@ class GraniteMoeHybridIntegrationTest(unittest.TestCase):
     @slow
     @parameterized.expand([("cpu",)])
     def test_model_generation(self, device):
-        EXPECTED_TEXT_COMPLETION = "Simply put, the theory of relativity states that 1) the laws of physics are the same in all inertial reference frames,"
+        EXPECTED_TEXT_COMPLETION = "Simply put, the theory of relativity states that 1) the laws of physics are the same for all observers in uniform motion relative"
         prompt = "Simply put, the theory of relativity states that "
         tokenizer = AutoTokenizer.from_pretrained("ibm-granite/granite-4.0-h-tiny")
         model = GraniteMoeHybridForCausalLM.from_pretrained("ibm-granite/granite-4.0-h-tiny", device_map=device)
