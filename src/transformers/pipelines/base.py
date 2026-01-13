@@ -239,8 +239,9 @@ def load_model(
                 fallback_tried = False
 
                 # Check if it's a safetensors-related error and retry without safetensors
-                error_msg = str(e).lower()
-                if isinstance(e, OSError) and "safetensors" in error_msg:
+                # Only trigger if the error message explicitly suggests using use_safetensors=False
+                error_msg = str(e)
+                if isinstance(e, OSError) and "use `use_safetensors=False` to load the original model." in error_msg:
                     fallback_tried = True
                     no_safetensors_kwargs = kwargs.copy()
                     no_safetensors_kwargs["use_safetensors"] = False

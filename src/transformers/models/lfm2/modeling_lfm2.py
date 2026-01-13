@@ -604,6 +604,22 @@ class Lfm2PreTrainedModel(PreTrainedModel):
         "attentions": Lfm2Attention,
     }
 
+    def to(self, *args, **kwargs):
+        # Check if dtype conversion is happening
+        dtype_present_in_args = "dtype" in kwargs
+        if not dtype_present_in_args:
+            for arg in args:
+                if isinstance(arg, torch.dtype):
+                    dtype_present_in_args = True
+                    break
+
+        result = super().to(*args, **kwargs)
+        # Clear cached dtype if dtype conversion occurred, so the dtype property
+        # will check actual parameters instead of returning stale cached value
+        if dtype_present_in_args and hasattr(self, "_dtype"):
+            self._dtype = None
+        return result
+
 
 @auto_docstring
 class Lfm2Model(Lfm2PreTrainedModel):
