@@ -771,7 +771,7 @@ class GlmImageModel(Glm4vModel):
             prev_image_end = 0
             curr_position_ids = []
             for start, end, grid in zip(image_start, image_end, image_grid_thw):
-                _, num_height_grid, num_width_grid = grid
+                _, num_width_grid, num_height_grid = grid
 
                 # Create text position ids first if there are text tokens before image
                 llm_pos_length = start - prev_image_end
