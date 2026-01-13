@@ -869,10 +869,10 @@
         title: RegNet
       - local: model_doc/resnet
         title: ResNet
-      - local: model_doc/rt_detr
-        title: RT-DETR
       - local: model_doc/rf_detr
         title: RF-DETR
+      - local: model_doc/rt_detr
+        title: RT-DETR
       - local: model_doc/rt_detr_v2
         title: RT-DETRv2
       - local: model_doc/sam2
