@@ -520,7 +520,7 @@ class RfDetrModelIntegrationTest(unittest.TestCase):
 
         expectations = Expectations(
             {
-                (None, None): [-7.60410, -4.65943, -10.03144, -5.63881, -9.88291],
+                ("cpu", None): [-7.60410, -4.65943, -10.03144, -5.63881, -9.88291],
             }
         )
         expected_logits = torch.tensor(expectations.get_expectation()).to(torch_device)
@@ -531,7 +531,7 @@ class RfDetrModelIntegrationTest(unittest.TestCase):
 
         expectations = Expectations(
             {
-                (None, None): [0.25465, 0.54864, 0.48583, 0.86991, 0.16926],
+                ("cpu", None): [0.25465, 0.54864, 0.48583, 0.86991, 0.16926],
             }
         )
         expected_boxes = torch.tensor(expectations.get_expectation()).to(torch_device)
@@ -544,7 +544,7 @@ class RfDetrModelIntegrationTest(unittest.TestCase):
 
         expectations = Expectations(
             {
-                (None, None): [0.9596, 0.9335, 0.8987, 0.7271],
+                ("cpu", None): [0.9596, 0.9335, 0.8987, 0.7271],
             }
         )
         expected_scores = torch.tensor(expectations.get_expectation()).to(torch_device)
@@ -553,7 +553,7 @@ class RfDetrModelIntegrationTest(unittest.TestCase):
 
         expectations = Expectations(
             {
-                (None, None): [
+                ("cpu", None): [
                     [7.5101, 54.5667, 318.4421, 472.1259],
                     [343.0202, 23.9165, 639.3325, 372.2062],
                     [40.7178, 72.6109, 175.9414, 117.5903],
@@ -587,7 +587,7 @@ class RfDetrModelIntegrationTest(unittest.TestCase):
 
         expectations = Expectations(
             {
-                (None, None): [-7.60888, -4.36906, -4.98865, -8.06598, -5.52970],
+                ("cpu", None): [-7.60888, -4.36906, -4.98865, -8.06598, -5.52970],
             }
         )
         expected_logits = torch.tensor(expectations.get_expectation()).to(torch_device)
@@ -598,7 +598,7 @@ class RfDetrModelIntegrationTest(unittest.TestCase):
 
         expectations = Expectations(
             {
-                (None, None): [0.25576, 0.55051, 0.47765, 0.87141, 0.76966],
+                ("cpu", None): [0.25576, 0.55051, 0.47765, 0.87141, 0.76966],
             }
         )
         expected_boxes = torch.tensor(expectations.get_expectation()).to(torch_device)
@@ -611,7 +611,7 @@ class RfDetrModelIntegrationTest(unittest.TestCase):
 
         expectations = Expectations(
             {
-                (None, None): [0.9558, 0.9538, 0.9465, 0.9084],
+                ("cpu", None): [0.9558, 0.9538, 0.9465, 0.9084],
             }
         )
         expected_scores = torch.tensor(expectations.get_expectation()).to(torch_device)
@@ -620,7 +620,7 @@ class RfDetrModelIntegrationTest(unittest.TestCase):
 
         expectations = Expectations(
             {
-                (None, None): [
+                ("cpu", None): [
                     [40.3736, 73.1451, 175.8807, 117.5796],
                     [345.1129, 24.5076, 640.0582, 373.1581],
                     [10.8431, 55.1121, 316.5317, 473.3869],
