@@ -3318,7 +3318,7 @@ def _get_test_info():
         # check frame's function + if it has `self` as locals; double check if self has the (function) name
         # TODO: Question: How about expanded?
         if (
-            frame.function == test_name
+            test_name.startswith(frame.function)
             and "self" in frame.frame.f_locals
             and hasattr(frame.frame.f_locals["self"], test_name)
         ):
@@ -3346,7 +3346,7 @@ def _get_test_info():
     # Between `the test method being called` and `before entering `patched``.
     for frame in reversed(stack_from_inspect):
         if (
-            frame.function == test_name
+            test_name.startswith(frame.function)
             and "self" in frame.frame.f_locals
             and hasattr(frame.frame.f_locals["self"], test_name)
         ):
