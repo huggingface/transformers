@@ -4117,6 +4117,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             model.load_adapter(
                 _adapter_model_path,
                 adapter_name=adapter_name,
+                ignore_mismatched_sizes=ignore_mismatched_sizes,
+                sharded_metadata=sharded_metadata,
+                device_map=device_map,
+                disk_offload_folder=offload_folder,
+                offload_buffers=offload_buffers,
+                dtype=dtype,
+                hf_quantizer=hf_quantizer,
+                device_mesh=device_mesh,
                 token=token,
                 adapter_kwargs=adapter_kwargs,
             )
