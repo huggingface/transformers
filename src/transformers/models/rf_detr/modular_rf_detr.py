@@ -342,17 +342,22 @@ class RfDetrSamplingLayer(LwDetrSamplingLayer):
 
 
 class RfDetrScaleProjector(LwDetrScaleProjector):
-    def __init__(self, config: RfDetrConfig, intermediate_dims: list[int], scale: float, output_dim: int):
+    def __init__(self, config: RfDetrConfig, scale: float):
         nn.Module.__init__(self)
 
+        intermediate_dims = [config.backbone_config.hidden_size] * len(config.backbone_config.out_indices)
         sampling_layers = []
         for channel_size in intermediate_dims:
             sampling_layers.append(RfDetrSamplingLayer(config, channel_size, scale))
         self.sampling_layers = nn.ModuleList(sampling_layers)
 
-        projector_input_dim = int(sum(intermediate_dim // max(1, scale) for intermediate_dim in intermediate_dims))
-        self.projector_layer = RfDetrC2FLayer(config, projector_input_dim, output_dim)
-        self.layer_norm = RfDetrLayerNorm(output_dim, data_format="channels_first")
+        intermediate_dim = intermediate_dims[-1]
+        if scale == 2.0:
+            intermediate_dim = intermediate_dim // 2
+        projector_input_dim = intermediate_dim * len(intermediate_dims)
+
+        self.projector_layer = RfDetrC2FLayer(config, projector_input_dim)
+        self.layer_norm = RfDetrLayerNorm(config.d_model, data_format="channels_first")
 
 
 class RfDetrPreTrainedModel(LwDetrPreTrainedModel):
