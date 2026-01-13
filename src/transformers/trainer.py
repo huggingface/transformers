@@ -2566,7 +2566,7 @@ class Trainer:
                                 _grad_norm = self.optimizer.clip_master_grads(args.max_grad_norm)
                             else:
                                 grad_norm_context = contextlib.nullcontext
-                                if self.is_tp_enabled and not self.is_fsdp_enabled:
+                                if self.is_tp_enabled:
                                     from torch.distributed._tensor.experimental import implicit_replication
 
                                     grad_norm_context = implicit_replication
@@ -2587,7 +2587,7 @@ class Trainer:
                         self.control = self.callback_handler.on_pre_optimizer_step(args, self.state, self.control)
 
                         context = contextlib.nullcontext
-                        if self.is_tp_enabled and not self.is_fsdp_enabled:
+                        if self.is_tp_enabled:
                             from torch.distributed._tensor.experimental import implicit_replication
 
                             context = implicit_replication
