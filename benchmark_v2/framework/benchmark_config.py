@@ -7,7 +7,9 @@ from typing import Any
 
 from transformers.generation.configuration_utils import CompileConfig
 from transformers.utils.import_utils import is_flash_attn_2_available, is_kernels_available
+from transformers.utils import is_torch_accelerator_available
 
+import torch
 
 KERNELIZATION_AVAILABLE = False
 try:
@@ -87,7 +89,7 @@ class BenchmarkConfig:
         self.kernelize = kernelize
         # Constant parameters
         self.dtype = "torch.bfloat16"
-        self.device = "cuda"
+        self.device = torch.accelerator.current_accelerator().type if is_torch_accelerator_available() else "cuda"
 
         self.check_validity(skip_validity_check)
         self.name = name if name is not None else self.infer_name()
