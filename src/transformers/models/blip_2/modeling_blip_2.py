@@ -28,11 +28,10 @@ from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
+    BaseModelOutputWithPast,
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPooling,
     BaseModelOutputWithPoolingAndCrossAttentions,
-    CausalLMOutputWithPast,
-    Seq2SeqLMOutput,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -1090,7 +1089,7 @@ class Blip2Model(Blip2PreTrainedModel):
         decoder_attention_mask: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutput:
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
@@ -1127,23 +1126,22 @@ class Blip2Model(Blip2PreTrainedModel):
         ```"""
 
         if self.config.use_decoder_only_language_model:
-            text_outputs: CausalLMOutputWithPast = self.language_model(
+            text_outputs: BaseModelOutputWithPast = self.language_model.base_model(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
                 **kwargs,
             )
         else:
-            inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
-            text_outputs: Seq2SeqLMOutput = self.language_model(
-                inputs_embeds=inputs_embeds,
+            text_outputs: BaseModelOutputWithPastAndCrossAttentions = self.language_model.get_encoder()(
+                input_ids=input_ids,
                 attention_mask=attention_mask,
-                decoder_input_ids=decoder_input_ids,
-                decoder_attention_mask=decoder_attention_mask,
-                labels=labels,
                 **kwargs,
             )
-
-        return text_outputs
+        return BaseModelOutputWithPooling(
+            last_hidden_state=text_outputs.last_hidden_state,
+            hidden_states=text_outputs.hidden_states,
+            attentions=text_outputs.attentions,
+        )
 
     @can_return_tuple
     @auto_docstring

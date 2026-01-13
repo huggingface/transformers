@@ -964,13 +964,12 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixi
         inputs_dict = {
             "input_ids": torch.LongTensor([[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]]).to(torch_device),
             "attention_mask": torch.LongTensor([[1, 1, 1, 1, 1, 1, 1, 1, 1, 1]]).to(torch_device),
-            "decoder_input_ids": torch.LongTensor([[1, 2, 3, 4, 5, 6, 7, 8, 9, 10]]).to(torch_device),
         }
 
         model = Blip2Model(config).to(torch_device)
         model.eval()
         text_features = model.get_text_features(**inputs_dict)
-        self.assertEqual(text_features.logits[0].shape, (10, config.text_config.vocab_size))
+        self.assertEqual(text_features[0].shape, (1, 10, config.text_config.hidden_size))
 
     def test_get_image_features(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
