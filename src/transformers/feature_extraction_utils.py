@@ -160,8 +160,6 @@ class BatchFeature(UserDict):
                         and isinstance(value[0][0], np.ndarray)
                     ):
                         value = np.array(value)
-                if isinstance(value, np.ndarray):
-                    return mx.array(value)
                 else:
                     return mx.array(value)
             
