@@ -33,9 +33,6 @@ def fixed_cross_entropy(
     **kwargs,
 ) -> torch.Tensor:
     allowed = {"weight", "size_average", "reduce", "label_smoothing"}
-    unknown = set(kwargs) - allowed
-    if unknown:
-        raise TypeError(f"Unexpected kwargs for nn.functional.cross_entropy: {unknown}")
 
     reduction = "sum" if num_items_in_batch is not None else "mean"
 
@@ -43,7 +40,8 @@ def fixed_cross_entropy(
         source,
         target,
         ignore_index=ignore_index,
-        **kwargs,
+        reduction=reduction,
+        **(kwargs & allowed),
     )
 
     if reduction == "sum":
