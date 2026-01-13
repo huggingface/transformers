@@ -227,8 +227,6 @@ class SolarOpenModel(Glm4MoeModel):
 
 
 class SolarOpenForCausalLM(Glm4MoeForCausalLM):
-    # _tied_weights_keys = {} # head
-    _tied_weights_keys = []  # 4.57.3
     pass
 
 
