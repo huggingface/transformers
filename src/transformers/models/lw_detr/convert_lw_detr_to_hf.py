@@ -155,7 +155,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"backbone.0.encoder.blocks.(\d+).mlp.fc1.(weight|bias)":   r"backbone.backbone.encoder.layer.\1.intermediate.fc1.\2",
     r"backbone.0.encoder.blocks.(\d+).mlp.fc2.(weight|bias)":   r"backbone.backbone.encoder.layer.\1.intermediate.fc2.\2",
 
-    # backbone projector scaling layers, sampling layers are dealt with seperately depending on the config
+    # backbone projector scaling layers, sampling layers are dealt with separately depending on the config
     r"backbone.0.projector.stages.(\d+).0.cv1.conv.(weight|bias)":                                                      r"backbone.projector.scale_layers.\1.projector_layer.conv1.conv.\2",
     r"backbone.0.projector.stages.(\d+).0.cv1.bn.(weight|bias|running_mean|running_var|num_batches_tracked)":           r"backbone.projector.scale_layers.\1.projector_layer.conv1.norm.\2",
     r"backbone.0.projector.stages.(\d+).0.cv2.conv.(weight|bias)":                                                      r"backbone.projector.scale_layers.\1.projector_layer.conv2.conv.\2",
