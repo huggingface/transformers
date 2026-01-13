@@ -431,7 +431,10 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
     def flash_attn_inference_equivalence(
         self, attn_implementation: str, padding_side: str, atol: float = 4e-2, rtol: float = 4e-2
     ):
-        if is_flash_attention_requested(requested_attention_implementation=attn_implementation) and attn_implementation != "flash_attention_2":
+        if (
+            is_flash_attention_requested(requested_attention_implementation=attn_implementation)
+            and attn_implementation != "flash_attention_2"
+        ):
             self.skipTest(reason="Model fails for every other FA implementation than FA2 (no attention interface).")
 
         super().flash_attn_inference_equivalence(attn_implementation, padding_side, atol, rtol)
@@ -450,7 +453,10 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
             "flash_attention_2": "_supports_flash_attn",
         }
 
-        if is_flash_attention_requested(requested_attention_implementation=attn_implementation) and attn_implementation != "flash_attention_2":
+        if (
+            is_flash_attention_requested(requested_attention_implementation=attn_implementation)
+            and attn_implementation != "flash_attention_2"
+        ):
             self.skipTest(reason="Model fails for every other FA implementation than FA2 (no attention interface).")
 
         for model_class in self.all_generative_model_classes:

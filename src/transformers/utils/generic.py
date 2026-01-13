@@ -210,7 +210,7 @@ def is_mlx_array(x):
     return False if not _is_mlx_available else _is_mlx(x)
 
 
-def is_flash_attention_requested(config = None, requested_attention_implementation: str | None = None):
+def is_flash_attention_requested(config=None, requested_attention_implementation: str | None = None):
     """
     Checks whether some flavor of flash attention is requested or not.
     Priority order first goes for any explicitly passed value `requested_attention_implementation` and
