@@ -30,7 +30,7 @@ This guide combines [DINOv3 with ConvNext architecture](https://huggingface.co/f
 Install [trackio](https://github.com/gradio-app/trackio) (>=0.14.0) for experiment tracking and [albumentations](https://albumentations.ai/) for data augmentation. Use the latest transformers version.
 
 ```bash
-pip install -Uq albumentations "trackio>=0.14.0" transformers datasets
+pip install -Uq albumentations "trackio[gpu]>=0.14.0" transformers datasets
 ```
 
 Initialize [`DetrConfig`] with the pre-trained DINOv3 ConvNext backbone. Use `num_labels=1` to detect the license plate bounding boxes. Create [`DetrForObjectDetection`] with this configuration. Freeze the backbone to preserve DINOv3 features without updating weights. Load the [`DetrImageProcessor`].
