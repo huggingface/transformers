@@ -19,7 +19,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
 
@@ -115,7 +114,7 @@ class EomtDinov3Config(PreTrainedConfig):
         hidden_size=1024,
         num_hidden_layers=24,
         num_attention_heads=16,
-        intermediate_size: Optional[int] = None,
+        intermediate_size: int | None = None,
         hidden_act="gelu",
         hidden_dropout_prob=0.0,
         initializer_range=0.02,
@@ -144,9 +143,9 @@ class EomtDinov3Config(PreTrainedConfig):
         proj_bias: bool = True,
         mlp_bias: bool = True,
         use_gated_mlp: bool = False,
-        pos_embed_shift: Optional[float] = None,
-        pos_embed_jitter: Optional[float] = None,
-        pos_embed_rescale: Optional[float] = 2.0,
+        pos_embed_shift: float | None = None,
+        pos_embed_jitter: float | None = None,
+        pos_embed_rescale: float | None = 2.0,
         **kwargs,
     ):
         super().__init__(**kwargs)

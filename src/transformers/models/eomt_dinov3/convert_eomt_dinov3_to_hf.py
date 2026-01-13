@@ -22,7 +22,7 @@ import re
 import sys
 from collections.abc import Iterable
 from pathlib import Path
-from typing import NamedTuple, Optional
+from typing import NamedTuple
 
 import requests
 import torch
@@ -143,7 +143,7 @@ SKIP_KEYS = {
 }
 
 
-def _rename_delta_key(key: str) -> tuple[Optional[str], bool]:
+def _rename_delta_key(key: str) -> tuple[str | None, bool]:
     if key in SKIP_KEYS:
         return None, False
 
@@ -297,7 +297,7 @@ def convert_model(
     model_id: str,
     output_dir: Path,
     verify: bool,
-    original_repo_path: Optional[Path],
+    original_repo_path: Path | None,
     push_to_hub: bool = False,
 ) -> None:
     # resolve checkpoint spec
@@ -553,7 +553,7 @@ def verify_conversion(
     delta_state_dict: dict[str, torch.Tensor],
     backbone_repo_id: str,
     image_size: int,
-    original_repo_path: Optional[Path],
+    original_repo_path: Path | None,
 ) -> None:
     if original_repo_path is None:
         raise ValueError("Original repository path is required for verification")

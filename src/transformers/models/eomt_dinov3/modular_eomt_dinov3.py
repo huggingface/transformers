@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 the HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """PyTorch EoMT model backed by DINOv3."""
-
-from typing import Optional
 
 import torch
 import torch.nn.functional as F
@@ -142,7 +139,7 @@ class EomtDinov3Config(EomtConfig):
         hidden_size=1024,
         num_hidden_layers=24,
         num_attention_heads=16,
-        intermediate_size: Optional[int] = None,
+        intermediate_size: int | None = None,
         hidden_act="gelu",
         hidden_dropout_prob=0.0,
         initializer_range=0.02,
@@ -171,9 +168,9 @@ class EomtDinov3Config(EomtConfig):
         proj_bias: bool = True,
         mlp_bias: bool = True,
         use_gated_mlp: bool = False,
-        pos_embed_shift: Optional[float] = None,
-        pos_embed_jitter: Optional[float] = None,
-        pos_embed_rescale: Optional[float] = 2.0,
+        pos_embed_shift: float | None = None,
+        pos_embed_jitter: float | None = None,
+        pos_embed_rescale: float | None = 2.0,
         **kwargs,
     ):
         super().__init__(
@@ -354,9 +351,9 @@ class EomtDinov3ForUniversalSegmentation(EomtDinov3PreTrainedModel, EomtForUnive
     def forward(
         self,
         pixel_values: Tensor,
-        mask_labels: Optional[list[Tensor]] = None,
-        class_labels: Optional[list[Tensor]] = None,
-        patch_offsets: Optional[list[Tensor]] = None,
+        mask_labels: list[Tensor] | None = None,
+        class_labels: list[Tensor] | None = None,
+        patch_offsets: list[Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> EomtDinov3ForUniversalSegmentationOutput:
         r"""
