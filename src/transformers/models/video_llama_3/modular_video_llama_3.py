@@ -1474,8 +1474,8 @@ class VideoLlama3VideoProcessor(Qwen2VLVideoProcessor):
     model_input_names = ["pixel_values_videos", "video_grid_thw", "video_merge_sizes", "video_compression_mask"]
 
     def _further_process_kwargs(self):
-        raise AttributeError("VideoLlama3 never supported min/max pixels")
-    
+        raise AttributeError("VideoLlama3 never supported min/max pixels, no need to copy from Qwen")
+
     def _get_compression_mask(
         self,
         pixel_values_videos: torch.FloatTensor,
