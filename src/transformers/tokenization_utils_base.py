@@ -1157,7 +1157,9 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         # Backward compatibility: convert "additional_special_tokens" to "extra_special_tokens"
         special_tokens_dict = dict(special_tokens_dict)
         if "additional_special_tokens" in special_tokens_dict:
-            special_tokens_dict.setdefault("extra_special_tokens", special_tokens_dict.pop("additional_special_tokens"))
+            special_tokens_dict.setdefault(
+                "extra_special_tokens", special_tokens_dict.pop("additional_special_tokens")
+            )
 
         allowed_keys = set(self.SPECIAL_TOKENS_ATTRIBUTES) | {"extra_special_tokens"}
         tokens_to_add = []
@@ -1244,21 +1246,16 @@ class PreTrainedTokenizerBase(PushToHubMixin):
         return self._pad_token_type_id
 
     def __setattr__(self, key, value):
-        # Handle _id/_ids suffix (e.g., bos_token_id -> bos_token)
-        key_is_special_id = key.endswith("_id") or key.endswith("_ids")
-        key_without_id = key.removesuffix("_ids").removesuffix("_id") if key_is_special_id else key
-
-        # Named special tokens (bos_token, eos_token, etc.)
-        if "_special_tokens_map" in self.__dict__ and key_without_id in self.SPECIAL_TOKENS_ATTRIBUTES:
-            if key_is_special_id and value is not None:
+        key_without_id = key.removesuffix("_ids").removesuffix("_id") if key.endswith(("_id", "_ids")) else key
+        if key_without_id in self.SPECIAL_TOKENS_ATTRIBUTES:
+            if key != key_without_id and value is not None:
                 value = self.convert_ids_to_tokens(value)
             if value is not None and not isinstance(value, (str, AddedToken)):
                 raise ValueError(f"Cannot set a non-string value as the {key_without_id}")
             self._special_tokens_map[key_without_id] = value
-        # Extra special tokens (list only - use model_specific_special_tokens for dict)
-        elif "_extra_special_tokens" in self.__dict__ and key_without_id == "extra_special_tokens":
-            if key_is_special_id and value is not None:
-                value = [self.convert_ids_to_tokens(val) for val in value]
+        elif key_without_id == "extra_special_tokens":
+            if key != key_without_id and value is not None:
+                value = [self.convert_ids_to_tokens(v) for v in value] if isinstance(value, (list, tuple)) else value
             if value is None:
                 self._extra_special_tokens = []
             elif isinstance(value, (list, tuple)):
@@ -1269,21 +1266,17 @@ class PreTrainedTokenizerBase(PushToHubMixin):
             super().__setattr__(key, value)
 
     def __getattr__(self, key):
-        key_is_special_id = key.endswith("_id") or key.endswith("_ids")
-        key_without_id = key.removesuffix("_ids").removesuffix("_id") if key_is_special_id else key
-
-        if "_special_tokens_map" in self.__dict__ and key_without_id in self.SPECIAL_TOKENS_ATTRIBUTES:
-            token_value = self.__dict__["_special_tokens_map"][key_without_id]
+        key_without_id = key.removesuffix("_ids").removesuffix("_id") if key.endswith(("_id", "_ids")) else key
+        if key_without_id in self.SPECIAL_TOKENS_ATTRIBUTES:
+            token_value = self._special_tokens_map.get(key_without_id)
             if token_value is None:
                 if self.verbose:
                     logger.error(f"Using {key}, but it is not set yet.")
                 return None
-            return self.convert_tokens_to_ids(str(token_value)) if key_is_special_id else str(token_value)
-
-        if "_extra_special_tokens" in self.__dict__ and key_without_id == "extra_special_tokens":
-            tokens = [str(tok) for tok in self.__dict__["_extra_special_tokens"]]
-            return self.convert_tokens_to_ids(tokens) if key_is_special_id else tokens
-
+            return self.convert_tokens_to_ids(str(token_value)) if key != key_without_id else str(token_value)
+        if key_without_id == "extra_special_tokens":
+            tokens = [str(tok) for tok in self._extra_special_tokens]
+            return self.convert_tokens_to_ids(tokens) if key != key_without_id else tokens
         if key not in self.__dict__:
             raise AttributeError(f"{self.__class__.__name__} has no attribute {key}")
         return super().__getattr__(key)
