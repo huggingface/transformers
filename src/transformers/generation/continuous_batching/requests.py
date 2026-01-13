@@ -119,7 +119,7 @@ class RequestState:
 
     # Required fields
     request_id: str
-    initial_tokens: list[int]  # Initial prompt tokens
+    initial_tokens: list[int]  # Initial prompt tokens # TODO: rename this as prefill tokens
     # Optional fields
     record_timestamps: bool = False  # Whether to record timestamps for the generated tokens
     num_children: int = 0  # Number of children requests
@@ -138,6 +138,7 @@ class RequestState:
     lifespan: tuple[float, float] = (-1, -1)  # (time request was no longer pending, time request finished)
     _timestamps: list[float] = field(default_factory=list)  # Timestamps of the generated tokens
     _true_initial_tokens: int = 0  # The true number of initial tokens, useful when soft resetting requests
+    # TODO: remove the attribute above to _num_initial_tokens once initial_tokens is renamed
 
     @property
     def status(self) -> RequestStatus:

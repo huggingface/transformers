@@ -245,7 +245,18 @@ class PagedAttentionCache:
         self._total_prefix_length: int = 0  # a counter to measure the impact of prefix sharing, also used in tests
 
     def will_allocation_be_successful(self, num_requested_blocks: int, allocated_blocks: int) -> bool:
+        """Returns a boolean indicating if the allocation of (num_requested_blocks) blocks will be successful. The
+        number of newly allocated blocks needed is predicted by the following rules:
+        - for full attention groups: since there is no sliding window for full attention layers, one requested block is
+            always equivalent to one newly allocated block for EACH full attention group
+        - for sliding window groups: because of the sliding window, the number of blocks allocated to a request is
+            capped. Using the number of already (allocated_blocks) we can compute the number of new blocks to actually
+            allocate to the request, which can be lower than the number of requested blocks. That number is the same for
+            all sliding window groups, as only one sliding window size is supported.
+        """
+        # This is not in a branch, because it is very rare to have zero full attention layer
         needed_blocks = num_requested_blocks * self.num_full_attention_groups
+        # Only take this branch if the model has sliding window attention layers
         if self.num_sliding_attention_groups:
             blocks_left = max(self.max_sliding_window_blocks_per_request - allocated_blocks, 0)
             needed_blocks += min(blocks_left, num_requested_blocks) * self.num_sliding_attention_groups

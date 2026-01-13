@@ -206,17 +206,12 @@ class BlockManager:
         else:
             self._uninit_block_ids.extend(blocks)
 
-    def uninitialize_redundant_block(self, block_id: int) -> None:
-        """Marks a block as uninitialized, whether it is complete or not. Raises an error if the block has more than one
-        reference."""
-        # Make sure the block has only one reference
+    def uninitialize_unshared_block(self, block_id: int) -> None:
+        """Marks a block as uninitialized. Raises an error if the block has more than one reference."""
+        # Make sure the block has only one reference and remove it from the block table
         block = self._id_to_block.pop(block_id)
         if block.ref_count > 1:
-            raise RuntimeError(f"Block {block_id} has more than one reference")
-        # Make sure the block is really redundant
-        first_block_id = self._hash_to_id[block.hash]
-        if block.id == first_block_id:
-            raise RuntimeError(f"Block {block_id} was marked as redundant with itself")
+            raise RuntimeError(f"Block {block_id} has more than one reference: {block.ref_count = }")
         # Add the block to the uninitialized blocks queue
         self._uninit_block_ids.append(block_id)
 
@@ -255,13 +250,17 @@ class BlockManager:
             block.hash = self.compute_hash(parent_hash, tokens, block.group_id)
 
             existing_block_id = self._hash_to_id.get(block.hash)
-            # If the block hash is already in the hash to id mapping, we reference the existing block instead
+            # If their was a different block with the same hash, we reference the existing block instead
             if existing_block_id is not None:
-                logger.debug(f"Found existing block {existing_block_id} for block {block.id}")
-                allocated_blocks[i] = existing_block_id
-                new_parent_id = existing_block_id
-                self.increase_ref_count(existing_block_id)
-                self.uninitialize_redundant_block(block.id)
+                if existing_block_id == block.id:
+                    # This should not happen, but is not a problem in itself, so we just log a warning
+                    logger.warning(f"Block {block.id} was marked as complete more than once")
+                else:
+                    logger.debug(f"Found existing block {existing_block_id} for block {block.id}")
+                    allocated_blocks[i] = existing_block_id
+                    new_parent_id = existing_block_id
+                    self.increase_ref_count(existing_block_id)
+                    self.uninitialize_unshared_block(block.id)
 
             # Otherwise, we add the completed block to the hash table
             else:

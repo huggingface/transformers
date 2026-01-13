@@ -427,6 +427,7 @@ class ContinuousBatchProcessor:
         self.metrics.record_request_completion(state.created_time, state.request_id)
         self.output_queue.put(state.to_generation_output())
 
+    # TODO: there should be a way to choose the offloading policy: biggest request, oldest request, etc.
     def soft_reset_one_request(self) -> None:
         """Soft resets one active request by removing it from active requests and re-adding it to the waiting queue.
 
@@ -448,6 +449,8 @@ class ContinuousBatchProcessor:
         # Actual offloading of the request
         self.scheduler.finish_request(request_id, evict_from_cache=True)
         self.scheduler.add_waiting_request(new_state)
+        # This flag blocks any new requests from being scheduled until one request is finished. This ensures that we
+        # don't enter an offload / schedule loop
         self.scheduler.block_new_requests = True
 
     @traced
