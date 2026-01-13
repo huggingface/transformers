@@ -1,4 +1,4 @@
-# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -43,7 +43,7 @@ class OmniASRForCTCIntegrationTest(unittest.TestCase):
     @classmethod
     def setUp(cls):
         cls.checkpoint_name = "bezzam/omniasr-ctc-300m-v2"
-        cls.dtype = torch.bfloat16
+        cls.dtype = torch.float32
         cls.processor = AutoProcessor.from_pretrained("bezzam/omniasr-ctc-300m-v2")
 
     def tearDown(self):
@@ -66,8 +66,7 @@ class OmniASRForCTCIntegrationTest(unittest.TestCase):
     @slow
     def test_300m_model_integration(self):
         """
-        bezzam reproducer (creates JSON directly in repo): https://gist.github.com/ebezzam/6382bdabfc64bb2541ca9f77deb7678d#file-reproducer_single-py
-        eustlb reproducer: https://gist.github.com/eustlb/6e9e3aa85de3f7c340ec3c36e65f2fe6
+        reproducer (creates JSON directly in repo): https://gist.github.com/ebezzam/26af2bd40fa207af322de39701179650
         """
         RESULTS_PATH = Path(__file__).parent.parent.parent / "fixtures/omniasr/expected_results_single.json"
         with open(RESULTS_PATH, "r") as f:
@@ -92,26 +91,4 @@ class OmniASRForCTCIntegrationTest(unittest.TestCase):
 
     # @slow
     # def test_300m_model_integration_batched(self):
-    #     """
-    #     bezzam reproducer (creates JSON directly in repo): https://gist.github.com/ebezzam/6382bdabfc64bb2541ca9f77deb7678d#file-reproducer_batched-py
-    #     eustlb reproducer: https://gist.github.com/eustlb/575b5da58de34a70116a1955b1183596
-    #     """
-
-    #     RESULTS_PATH = Path(__file__).parent.parent.parent / "fixtures/parakeet/expected_results_batch.json"
-    #     with open(RESULTS_PATH, "r") as f:
-    #         raw_data = json.load(f)
-    #     EXPECTED_TOKEN_IDS = torch.tensor(raw_data["token_ids"])
-    #     EXPECTED_TRANSCRIPTIONS = raw_data["transcriptions"]
-
-    #     samples = self._load_datasamples(5)
-    #     model = ParakeetForCTC.from_pretrained(self.checkpoint_name, torch_dtype=self.dtype, device_map=torch_device)
-    #     model.eval()
-    #     model.to(torch_device)
-
-    #     # -- apply
-    #     inputs = self.processor(samples)
-    #     inputs.to(torch_device, dtype=self.dtype)
-    #     predicted_ids = model.generate(**inputs)
-    #     torch.testing.assert_close(predicted_ids.cpu(), EXPECTED_TOKEN_IDS)
-    #     predicted_transcripts = self.processor.batch_decode(predicted_ids, skip_special_tokens=True)
-    #     self.assertListEqual(predicted_transcripts, EXPECTED_TRANSCRIPTIONS)
+    #     TODO

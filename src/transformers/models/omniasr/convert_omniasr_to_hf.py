@@ -17,6 +17,7 @@ import argparse
 import json
 import os
 import torch
+import urllib.request
 
 from omnilingual_asr.models.inference.pipeline import ASRInferencePipeline
 from fairseq2.models.wav2vec2.asr.config import Wav2Vec2AsrConfig
@@ -32,10 +33,15 @@ from transformers import (
     OmniASRForCTC,
     OmniASRModel,
     Wav2Vec2CTCTokenizer,
+    ParakeetTokenizerFast,
+    SeamlessM4TTokenizer,
     Wav2Vec2FeatureExtractor,
+    OmniASRFeatureExtractor,
     Wav2Vec2Processor,
+    LasrTokenizer,
     logging,
 )
+from transformers.tokenization_utils_sentencepiece import SentencePieceExtractor
 
 
 logging.set_verbosity_info()
@@ -46,9 +52,9 @@ logger = logging.get_logger(__name__)
 wav2vec_convert_list = [
     # OmniASRFeatureEncoder
     ("encoder_frontend.feature_extractor.layers", "model.feature_extractor.conv_layers"),
+    ("encoder_frontend.post_extract_layer_norm", "model.feature_extractor.layer_norm"),
     # OmniASRFeatureProjection
     ("encoder_frontend.model_dim_proj", "model.feature_projection.projection"),
-    ("encoder_frontend.post_extract_layer_norm", "model.feature_projection.layer_norm"),
     # OmniASREncoder
     ("encoder_frontend.pos_encoder.conv", "model.encoder.embed_positions.conv"),
     ("encoder.layers", "model.encoder.layers"),
@@ -105,21 +111,25 @@ def param_count(model):
 
 
 @torch.no_grad()
-def convert_omniasr_checkpoint(model_card, repo_id=None):
+def convert_omniasr_checkpoint(model_card, repo_id=None, bfloat16=False):
 
     if not torch.cuda.is_available():
         raise ValueError("Conversion requires a GPU for weight norm to removed correctly.")
     device = torch.device("cuda")
+    if not bfloat16:
+        dtype = torch.float32
+    else:
+        dtype = torch.bfloat16
 
     # TODO set dtype? ASRInferencePipeline defaults to bfloat16
 
     # 1) Load original model
     if "W2V" not in model_card:
-        pipeline = ASRInferencePipeline(model_card=model_card, device=device)
+        pipeline = ASRInferencePipeline(model_card=model_card, device=device, dtype=dtype)
         original_model = pipeline.model
         original_tokenizer = pipeline.tokenizer
     else:
-        original_model = load_model(model_card, device=device)
+        original_model = load_model(model_card, device=device, dtype=dtype)
         original_tokenizer = None
 
     resolver = get_dependency_resolver()
@@ -261,6 +271,7 @@ def convert_omniasr_checkpoint(model_card, repo_id=None):
         hf_model = OmniASRModel(config)
     else:
         raise ValueError(f"Unsupported model type, got {model_card}")
+    hf_model.to(device).to(dtype)
 
     # 3) Convert weights
     hf_model.apply_weight_norm()
@@ -270,32 +281,56 @@ def convert_omniasr_checkpoint(model_card, repo_id=None):
     hf_model.remove_weight_norm()
 
     # 4) Prepare processor (feature extraction and tokenizer)
-    feature_extractor = Wav2Vec2FeatureExtractor(
+    feature_extractor = OmniASRFeatureExtractor(
+    # feature_extractor = Wav2Vec2FeatureExtractor(
         # TODO check vals
         feature_size=1,
         sampling_rate=16000,
         padding_value=0,
         do_normalize=True,
+        # TODO always layer or group?
         return_attention_mask=(encoder_config.feat_extract_norm == "layer"),
     )
 
     # -- create Transformers-compatible tokenizer
-    vocab_path = "vocab.json"
-    vocab_dict = {}
-    for idx in range(original_tokenizer.vocab_info.size):
-        token = original_tokenizer._model.index_to_token(idx)
-        vocab_dict[token] = idx
-    with open(vocab_path, "w", encoding="utf-8") as f:
-        json.dump(vocab_dict, f, ensure_ascii=False, indent=2)
-    tokenizer = Wav2Vec2CTCTokenizer(
-        vocab_path,
-        unk_token=original_tokenizer._model.index_to_token(original_tokenizer.vocab_info.unk_idx),
-        pad_token=original_tokenizer._model.index_to_token(original_tokenizer.vocab_info.pad_idx),
-        bos_token=original_tokenizer._model.index_to_token(original_tokenizer.vocab_info.bos_idx),
-        eos_token=original_tokenizer._model.index_to_token(original_tokenizer.vocab_info.eos_idx),
-        word_delimiter_token="|",
-        do_lower_case=False,    # TODO: set to True?
-    )
+    url = "https://dl.fbaipublicfiles.com/mms/omniASR_tokenizer_written_v2.model"
+    download_dir = os.getcwd()
+    filename = os.path.basename(url)
+    tokenizer_path = os.path.join(download_dir, filename)
+    urllib.request.urlretrieve(url, tokenizer_path)
+    vocab_ids, vocab_scores, merges = SentencePieceExtractor(tokenizer_path).extract()
+    # TODO do we also need to overwrite the pad token to be ID 0? (before <s>)
+    vocab_scores[0] = ("<pad>", vocab_scores[0][1])
+    # TODO create own tokenizer like LasrTokenizer but with correct special tokens?
+    tokenizer = LasrTokenizer(vocab=vocab_scores)
+    tokenizer.add_eos_token = False
+
+    # # -- create Transformers-compatible tokenizer
+    # vocab_path = "vocab.json"
+    # vocab_dict = {}
+    # for idx in range(original_tokenizer.vocab_info.size):
+    #     token = original_tokenizer._model.index_to_token(idx)
+    #     vocab_dict[token] = idx
+    # with open(vocab_path, "w", encoding="utf-8") as f:
+    #     json.dump(vocab_dict, f, ensure_ascii=False, indent=2)
+    # # NOTE: For CTC models, pad_token should be the CTC blank token.
+    # # In the original fairseq2 model, token 0 (<s> - BOS) is used as the CTC blank.
+    # # Wav2Vec2CTCTokenizer uses pad_token_id as the blank token for CTC decoding.
+    # tokenizer = Wav2Vec2CTCTokenizer(
+    #     vocab_file=vocab_path,
+    #     unk_token=original_tokenizer._model.index_to_token(original_tokenizer.vocab_info.unk_idx),
+    #     # pad_token=original_tokenizer._model.index_to_token(original_tokenizer.vocab_info.pad_idx),
+    #     pad_token=original_tokenizer._model.index_to_token(original_tokenizer.vocab_info.bos_idx),  # Use BOS as CTC blank
+    #     bos_token=original_tokenizer._model.index_to_token(original_tokenizer.vocab_info.bos_idx),
+    #     eos_token=original_tokenizer._model.index_to_token(original_tokenizer.vocab_info.eos_idx),
+    #     word_delimiter_token="|",
+    #     do_lower_case=False,    # TODO: set to True?
+    # )
+
+    # vocab_file = "/raid/eric/.cache/fairseq2/assets/e7be1a6acb8f76fdbca19dce/omniASR_tokenizer_written_v2.model"
+    # # NOTE or directly use TokenizersBackend?
+    # from ...tokenization_utils_tokenizers import TokenizersBackend
+    # tokenizer = SeamlessM4TTokenizer(vocab_file=vocab_file) # leads to empty transcript
 
     # -- create processor
     processor = Wav2Vec2Processor(feature_extractor=feature_extractor, tokenizer=tokenizer)
@@ -307,8 +342,10 @@ def convert_omniasr_checkpoint(model_card, repo_id=None):
         processor.push_to_hub(repo_id)
 
     # 6) Cleanup
-    if os.path.exists(vocab_path):
-        os.remove(vocab_path)
+    # if os.path.exists(vocab_path):
+    #     os.remove(vocab_path)
+    if os.path.exists(tokenizer_path):
+        os.remove(tokenizer_path)
 
     # TODO try loading model
 
@@ -340,7 +377,7 @@ Example conversion:
 ```python
 python src/transformers/models/omniasr/convert_omniasr_to_hf.py \
     --model_card omniASR_CTC_300M_v2 \
-    --repo_id bezzam/omniasr-ctc-300m-v2
+    --repo_id bezzam/omniasr-ctc-300m-v2 --bfloat16
 
 python src/transformers/models/omniasr/convert_omniasr_to_hf.py \
     --model_card omniASR_W2V_300M \
@@ -353,9 +390,12 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--model_card", default=None, type=str, help="Name of original model in omnilingual-asr")
     parser.add_argument("--repo_id", default=None, type=str, help="The repository ID for pushing the model to the Hub")
+    parser.add_argument("--bfloat16", action="store_true", help="Whether to do bfloat16, otherwise default is float32")
+    # Original defaults to bfloat16: https://github.com/facebookresearch/omnilingual-asr/blob/81f51e224ce9e74b02cc2a3eaf21b2d91d743455/src/omnilingual_asr/models/inference/pipeline.py#L157
     args = parser.parse_args()
 
     convert_omniasr_checkpoint(
         args.model_card,
         args.repo_id,
+        args.bfloat16
     )

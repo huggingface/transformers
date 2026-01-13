@@ -1239,6 +1239,8 @@ class OmniASRForCTC(OmniASRPreTrainedModel):
         super().__init__(config)
 
         self.model = OmniASRModel(config.encoder_config)
+
+        # TODO move dropout into model like in fairseq2?
         self.dropout = nn.Dropout(config.final_dropout)
 
         # TODO (ebezzam) setting target lang here?
