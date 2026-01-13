@@ -1893,6 +1893,7 @@ class Sam2VideoModel(Sam2Model):
         self,
         temporal_positions_and_previous_outputs: list[tuple[int, dict]],
         device: torch.device,
+        dtype: torch.dtype
     ) -> tuple[list[torch.Tensor], list[torch.Tensor]]:
         """
         Concatenate memory features and positional embeddings from previous frames.
@@ -1909,11 +1910,11 @@ class Sam2VideoModel(Sam2Model):
 
             # Load memory features (potentially from CPU to GPU)
             # Features are flattened: (Batch, Channels, H, W) -> (H*W, Batch, Channels)
-            memory_features = prev_output_data["maskmem_features"].to(device, non_blocking=True)
+            memory_features = prev_output_data["maskmem_features"].to(device=device, dtype=dtype, non_blocking=True)
             memories_to_concatenate.append(memory_features)
 
             # Spatial positional encoding (potentially from CPU to GPU)
-            spatial_memory_pos_embed = prev_output_data["maskmem_pos_enc"].to(device, non_blocking=True)
+            spatial_memory_pos_embed = prev_output_data["maskmem_pos_enc"].to(device=device, dtype=dtype, non_blocking=True)
 
             # Add temporal positional encoding
             # self.memory_temporal_positional_encoding shape: (NumMaskMem, 1, 1, MemDim)
@@ -2112,7 +2113,7 @@ class Sam2VideoModel(Sam2Model):
         )
 
         memories_to_concatenate, memory_positional_embeddings_to_concatenate = self._build_memory_attention_inputs(
-            temporal_positions_and_previous_outputs, device
+            temporal_positions_and_previous_outputs, device, dtype=inference_session.dtype
         )
 
         # Step 3: Get and process object pointers
