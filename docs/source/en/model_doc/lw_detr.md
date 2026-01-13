@@ -32,7 +32,7 @@ It enhances the DETR architecture for efficiency and speed using the following c
 3. Faster Decoder: Employs a shallow 3-layer DETR decoder with deformable cross-attention for lower latency and faster convergence.
 4. Optimized Queries: Uses a mixed-query scheme combining learnable content queries and generated spatial queries.
 
-You can find all the available Deformable DETR checkpoints under the [AnnaZhang](https://huggingface.co/AnnaZhang) organization.
+You can find all the available LW DETR checkpoints under the [AnnaZhang](https://huggingface.co/AnnaZhang) organization.
 The original code can be found [here](https://github.com/Atten4Vis/LW-DETR).
 
 > [!TIP]
