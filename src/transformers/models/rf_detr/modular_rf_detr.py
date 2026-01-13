@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -448,7 +447,7 @@ class RfDetrDinov2Embeddings(Dinov2Embeddings):
 
         return torch.cat((class_pos_embed, patch_pos_embed), dim=1)
 
-    def forward(self, pixel_values: torch.Tensor, bool_masked_pos: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward(self, pixel_values: torch.Tensor, bool_masked_pos: torch.Tensor | None = None) -> torch.Tensor:
         batch_size, _, height, width = pixel_values.shape
         target_dtype = self.patch_embeddings.projection.weight.dtype
         embeddings = self.patch_embeddings(pixel_values.to(dtype=target_dtype))
@@ -506,7 +505,7 @@ class RfDetrDinov2Layer(Dinov2Layer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-    ) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, torch.Tensor] | tuple[torch.Tensor]:
         shortcut = hidden_states
         if self.global_attention:
             hidden_states = window_unpartition_before_attention(hidden_states, self.num_windows)
@@ -574,7 +573,7 @@ class RfDetrDinov2Backbone(Dinov2Backbone):
     def forward(
         self,
         pixel_values: torch.Tensor,
-        output_hidden_states: Optional[bool] = None,
+        output_hidden_states: bool | None = None,
         **kwargs,
     ) -> BackboneOutput:
         r"""
@@ -653,7 +652,7 @@ class RfDetrConvNormLayer(LwDetrConvNormLayer):
         out_channels: int,
         kernel_size: int,
         stride: int,
-        activation: Optional[str] = None,
+        activation: str | None = None,
     ):
         super().__init__(
             config,
@@ -722,7 +721,7 @@ class RfDetrModel(LwDetrModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        pixel_mask: Optional[torch.LongTensor] = None,
+        pixel_mask: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> RfDetrModelOutput:
         r"""
