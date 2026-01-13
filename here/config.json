@@ -1,0 +1,12 @@
+{
+  "inf_negative": {
+    "__float__": "-Infinity"
+  },
+  "inf_positive": {
+    "__float__": "Infinity"
+  },
+  "nan": {
+    "__float__": "NaN"
+  },
+  "transformers_version": "5.0.0.dev0"
+}

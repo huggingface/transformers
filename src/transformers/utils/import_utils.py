@@ -1130,6 +1130,11 @@ def is_vision_available() -> bool:
 
 
 @lru_cache
+def is_transformers_app_available() -> bool:
+    return _is_package_available("transformers_app")
+
+
+@lru_cache
 def is_pytesseract_available() -> bool:
     return _is_package_available("pytesseract")[0]
 
