@@ -745,6 +745,8 @@
         title: XLNet
       - local: model_doc/xlstm
         title: xLSTM
+      - local: model_doc/glm4_moe_lite
+        title: y
       - local: model_doc/yoso
         title: YOSO
       - local: model_doc/zamba
