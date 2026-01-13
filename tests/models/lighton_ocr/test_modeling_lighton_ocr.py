@@ -227,9 +227,6 @@ class LightOnOcrForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
     pipeline_model_mapping = {"image-text-to-text": LightOnOcrForConditionalGeneration} if is_torch_available() else {}
 
     _is_composite = True
-    test_head_masking = False
-    test_pruning = False
-    test_torchscript = False
 
     def setUp(self):
         self.model_tester = LightOnOcrVisionText2TextModelTester(self)
@@ -379,27 +376,6 @@ class LightOnOcrForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
             # Check that outputs are deterministic
             if hasattr(outputs1, "last_hidden_state") and hasattr(outputs2, "last_hidden_state"):
                 self.assertTrue(torch.allclose(outputs1.last_hidden_state, outputs2.last_hidden_state, atol=1e-5))
-
-    def test_initialization(self):
-        """
-        Test that model initializes correctly with proper weight initialization.
-        """
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config)
-
-            # Check that model has all expected components
-            if model_class == LightOnOcrForConditionalGeneration:
-                self.assertTrue(hasattr(model, "model"))
-                self.assertTrue(hasattr(model.model, "vision_encoder"))
-                self.assertTrue(hasattr(model.model, "language_model"))
-                self.assertTrue(hasattr(model.model, "vision_projection"))
-                self.assertTrue(hasattr(model, "lm_head"))
-            elif model_class == LightOnOcrModel:
-                self.assertTrue(hasattr(model, "vision_encoder"))
-                self.assertTrue(hasattr(model, "language_model"))
-                self.assertTrue(hasattr(model, "vision_projection"))
 
     def test_vision_projection(self):
         """

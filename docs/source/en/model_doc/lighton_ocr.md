@@ -1,4 +1,4 @@
-<!--Copyright 2025 The HuggingFace Team. All rights reserved.
+<!--Copyright 2026 The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with the
 License. You may obtain a copy of the License at
@@ -36,7 +36,7 @@ from transformers import LightOnOcrForConditionalGeneration, LightOnOcrProcessor
 device = "mps" if torch.backends.mps.is_available() else "cuda" if torch.cuda.is_available() else "cpu"
 dtype = torch.float32 if device == "mps" else torch.bfloat16
 
-model = LightOnOcrForConditionalGeneration.from_pretrained("lightonai/LightOnOCR-1B-1025", torch_dtype=dtype).to(
+model = LightOnOcrForConditionalGeneration.from_pretrained("lightonai/LightOnOCR-1B-1025", dtype=dtype).to(
     device
 )
 processor = LightOnOcrProcessor.from_pretrained("lightonai/LightOnOCR-1B-1025")
