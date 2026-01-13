@@ -21,11 +21,7 @@
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
-from ...utils.backbone_utils import (
-    BackboneConfigMixin,
-    get_aligned_output_features_output_indices,
-    verify_backbone_config_arguments,
-)
+from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
@@ -190,14 +186,6 @@ class RfDetrConfig(PreTrainedConfig):
         backbone_config (`PretrainedConfig` or `dict`, *optional*):
             The configuration of the backbone model. If not provided, will default to `RfDetrDinov2Config`
             with a small ViT architecture optimized for detection tasks.
-        backbone (`str`, *optional*):
-            Name of backbone to use when `backbone_config` is `None`. Only used when `use_timm_backbone` is `True`.
-        use_pretrained_backbone (`bool`, *optional*, defaults to `False`):
-            Whether to use pretrained weights for the backbone.
-        use_timm_backbone (`bool`, *optional*, defaults to `False`):
-            Whether to use the `timm` library for the backbone. If set to `False`, will use the [`AutoBackbone`] API.
-        backbone_kwargs (`dict`, *optional*):
-            Keyword arguments to be passed to AutoBackbone when loading from a checkpoint.
         projector_scale_factors (`list[float]`, *optional*, defaults to `[]`):
             Scale factors for the feature pyramid network. Each scale factor determines the resolution of features
             at different levels. Supported values are 0.5, 1.0, and 2.0.
@@ -284,10 +272,6 @@ class RfDetrConfig(PreTrainedConfig):
         self,
         # backbone
         backbone_config=None,
-        backbone=None,
-        use_pretrained_backbone=False,
-        use_timm_backbone=False,
-        backbone_kwargs=None,
         # projector
         projector_scale_factors: list[float] = [],
         hidden_expansion=0.5,
@@ -327,9 +311,9 @@ class RfDetrConfig(PreTrainedConfig):
         self.layer_norm_eps = layer_norm_eps
 
         # backbone
-        if backbone_config is None and backbone is None:
+        if backbone_config is None:
             logger.info(
-                "`backbone_config` and `backbone` are `None`. Initializing the config with the default `RfDetrDinov2` backbone."
+                "`backbone_config` is `None`. Initializing the config with the default `RfDetrDinov2` backbone."
             )
             backbone_config = RfDetrDinov2Config(
                 attention_probs_dropout_prob=0.0,
@@ -358,19 +342,8 @@ class RfDetrConfig(PreTrainedConfig):
             config_class = CONFIG_MAPPING[backbone_model_type]
             backbone_config = config_class.from_dict(backbone_config)
 
-        verify_backbone_config_arguments(
-            use_timm_backbone=use_timm_backbone,
-            use_pretrained_backbone=use_pretrained_backbone,
-            backbone=backbone,
-            backbone_config=backbone_config,
-            backbone_kwargs=backbone_kwargs,
-        )
-
         self.backbone_config = backbone_config
-        self.backbone = backbone
-        self.use_pretrained_backbone = use_pretrained_backbone
-        self.use_timm_backbone = use_timm_backbone
-        self.backbone_kwargs = backbone_kwargs
+
         # projector
         self.projector_scale_factors = projector_scale_factors
         for scale in projector_scale_factors:
