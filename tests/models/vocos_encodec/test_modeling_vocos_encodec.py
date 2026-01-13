@@ -236,7 +236,7 @@ class VocosEncodecModelTest(ModelTesterMixin, unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdirname:
             model.save_pretrained(tmpdirname)
             _, info = VocosEncodecModel.from_pretrained(tmpdirname, output_loading_info=True)
-        self.assertEqual(info["missing_keys"], [])
+        self.assertEqual(info["missing_keys"], set())
 
     # override because `bandwidth` is passed as a float is not batch dependent.
     def test_batching_equivalence(self, atol=1e-5, rtol=1e-5):

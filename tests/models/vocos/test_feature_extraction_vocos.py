@@ -257,7 +257,8 @@ class VocosFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.Te
             ).input_features
 
         with self.assertRaisesRegex(
-            ValueError, r"Unable to create tensor, you should probably activate padding with 'padding=True'"
+            ValueError,
+            r"Unable to convert output[\s\S]*padding=True",
         ):
             truncated_outputs = feature_extractor(
                 audios, padding=False, sampling_rate=24000, return_tensors="pt"

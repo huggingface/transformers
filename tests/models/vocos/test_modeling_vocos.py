@@ -231,7 +231,7 @@ class VocosModelTest(ModelTesterMixin, unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdirname:
             model.save_pretrained(tmpdirname)
             _, info = VocosModel.from_pretrained(tmpdirname, output_loading_info=True)
-        self.assertEqual(info["missing_keys"], [])
+        self.assertEqual(info["missing_keys"], set())
 
 
 @require_torch
