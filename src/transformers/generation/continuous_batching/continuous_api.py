@@ -810,7 +810,7 @@ class ContinuousBatchingManager:
         self.log_prob_generation = getattr(generation_config, "log_prob_generation", False)
         self.do_sample = getattr(generation_config, "do_sample", True)
         self.logit_processor = self.model._get_logits_processor(generation_config)
-        self.num_return_sequences = getattr(generation_config, "num_return_sequences", 1)
+        self.num_return_sequences = getattr(generation_config, "num_return_sequences", None) or 1
 
         # self.model.generation_config.top_p = None NOTE: figure out why this was here
 

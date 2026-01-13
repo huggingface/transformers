@@ -222,7 +222,6 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
         model.generation_config.max_new_tokens = max_new_tokens
         model.generation_config.do_sample = False
         model.generation_config.use_cuda_graph = use_cuda_graph
-        model.generation_config.num_return_sequences = 1
         if use_compile:
             model.generation_config.compile_config = CompileConfig(fullgraph=True, mode="default")
 
@@ -248,7 +247,6 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
         model.generation_config.max_new_tokens = max_new_tokens
         model.generation_config.do_sample = False
         model.generation_config.use_cuda_graph = use_cuda_graph
-        model.generation_config.num_return_sequences = 1
         if use_compile:
             model.generation_config.compile_config = CompileConfig(fullgraph=True, mode="default")
 
@@ -392,7 +390,7 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         model = AutoModelForCausalLM.from_pretrained(model_id)
 
-        generation_config = GenerationConfig(do_sample=False, block_size=32, num_return_sequences=1)
+        generation_config = GenerationConfig(do_sample=False, block_size=32)
         with model.continuous_batching_context_manager(generation_config=generation_config) as manager:
             manager.logit_processor = LogitsProcessorList()
 

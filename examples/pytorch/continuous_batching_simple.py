@@ -65,7 +65,6 @@ if __name__ == "__main__":
         do_sample=False,
         num_blocks=args.num_blocks,
         max_batch_tokens=args.max_batch_tokens,
-        num_return_sequences=1,
     )
 
     # Warmup iterations
