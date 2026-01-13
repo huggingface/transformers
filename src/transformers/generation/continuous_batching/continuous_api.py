@@ -33,7 +33,7 @@ from ...generation.logits_process import LogitsProcessor
 from ...utils.logging import logging
 from ...utils.metrics import ContinuousBatchProcessorMetrics, attach_tracer, traced
 from .cache import PagedAttentionCache
-from .requests import GenerationOutput, RequestState, RequestStatus, get_device_and_memory_breakdown, logger
+from .requests import GenerationOutput, RequestState, RequestStatus, logger
 from .scheduler import SCHEDULER_MAPPING, FIFOScheduler, Scheduler
 
 
@@ -249,7 +249,7 @@ class ContinuousBatchProcessor:
     def setup_static_tensors(self, num_groups: int) -> None:
         """Setup the static tensors that are used for storage during the generation step. No other tensor will be
         allowed for the inputs or the outputs of the generation step."""
-        num_pages = self.cache.num_blocks * self.cache.block_size
+        self.num_pages = self.cache.num_blocks * self.cache.block_size
         self.tensor_metadata = {"dtype": torch.int32, "device": self.model_device}
 
         # Some tensors always have the same shape regardless of the model
@@ -274,7 +274,7 @@ class ContinuousBatchProcessor:
 
         if attn_mask_is_needed(self.config):
             attn_mask_kwargs = {
-                "size": (1, 1, self.max_batch_tokens, num_pages + self.max_batch_tokens),
+                "size": (1, 1, self.max_batch_tokens, self.num_pages + self.max_batch_tokens),
                 "dtype": self.model_dtype,
                 "device": self.model_device,
             }
@@ -287,7 +287,7 @@ class ContinuousBatchProcessor:
             torch.empty((self.max_batch_tokens,), **self.tensor_metadata) for _ in range(num_groups)
         ]
         self.read_index_storage = [
-            torch.empty((num_pages + self.max_batch_tokens), **self.tensor_metadata) for _ in range(num_groups)
+            torch.empty((self.num_pages + self.max_batch_tokens), **self.tensor_metadata) for _ in range(num_groups)
         ]
         # For read index, the +T is because there are -1 for seqlen_q when model uses a sliding window
 
@@ -427,6 +427,33 @@ class ContinuousBatchProcessor:
         self.metrics.record_request_completion(state.created_time, state.request_id)
         self.output_queue.put(state.to_generation_output())
 
+    # TODO: there should be a way to choose the offloading policy: biggest request, oldest request, etc.
+    # Including a policy to not allow offloading and crashing the generation
+    def soft_reset_one_request(self) -> None:
+        """Soft resets one active request by removing it from active requests and re-adding it to the waiting queue.
+
+        The generated tokens are kept as part of the new request's initial prompt. When `block_new_requests` is False,
+        the oldest request is offloaded; when True, the newest request is offloaded. This method also sets
+        `block_new_requests` to True to prevent infinite loops of offloading and re-scheduling requests.
+        """
+        # The offloaded request is the newest (resp. oldest) if block_new_requests is True (resp. False)
+        if self.scheduler.block_new_requests:
+            request_id, state = self.scheduler.active_requests.popitem()
+        else:
+            request_id, state = next(iter(self.scheduler.active_requests.items()))
+        logger.info(
+            f"Soft resetting request {request_id} with {len(state.initial_tokens)} initial tokens and "
+            f"{len(state.generated_tokens)} generated tokens"
+        )
+        # Create a copy of the offloaded request keeping the generated tokens as addition to the initial prompt
+        new_state = state.create_equivalent_initial_request()
+        # Actual offloading of the request
+        self.scheduler.finish_request(request_id, evict_from_cache=True)
+        self.scheduler.add_waiting_request(new_state)
+        # This flag blocks any new requests from being scheduled until one request is finished. This ensures that we
+        # don't enter an offload / schedule loop
+        self.scheduler.block_new_requests = True
+
     @traced
     def prepare_next_batch(self) -> bool:
         """Prepare tensors and metadata for the next model forward pass. Returns True if there are requests to process,
@@ -440,9 +467,18 @@ class ContinuousBatchProcessor:
         self.metrics.record_queue_metrics(len(self.scheduler.active_requests), len(self.scheduler.waiting_requests))
 
         # Schedule the next batch of requests, stop if there are no requests in the batch
-        self.requests_in_batch = self.scheduler.schedule_batch(self.max_batch_tokens)
+        self.requests_in_batch = self.scheduler.schedule_batch(self.max_batch_tokens, self.num_pages)
+
+        # If requests_in_batch is None, it means we need to offload some requests if possible
+        if self.requests_in_batch is None:
+            if len(self.scheduler.active_requests) > 1:
+                self.soft_reset_one_request()
+            else:
+                raise RuntimeError("No requests can be scheduled and no request can be offloaded.")
+        # If it's an empty list, it means we have no requests to process
         if not self.requests_in_batch:
             return False
+        # Otherwise, we can continue with the non-empty batch
         self.metrics.record_batch_metrics(self.requests_in_batch)
 
         # Reset the static tensors used for storage
@@ -591,6 +627,7 @@ class ContinuousBatchProcessor:
                 if is_finished:
                     self.metrics.record_request_completion(state.created_time, state.request_id)
                     self.scheduler.finish_request(state.request_id, evict_from_cache=(not self.manual_eviction))
+                    self.scheduler.block_new_requests = False
                 self._maybe_send_output(state)
             #  Otherwise, the request is still prefilling, but the prefill has been split
             elif state.status == RequestStatus.PREFILLING_SPLIT:
@@ -619,9 +656,6 @@ class ContinuousBatchProcessor:
         # The copy induced by the fork is done in one go (if it's even needed)
         if copy_source:
             self.cache.copy_cache(copy_source, copy_destination)
-
-        if self.cache.get_num_free_blocks() == 0:
-            raise ValueError("No more free blocks")
 
     @traced
     def has_pending_requests(self) -> bool:
@@ -678,11 +712,8 @@ class ContinuousBatchProcessor:
         if self._pad_inputs:
             padded_q = pad_by_intervals(self.actual_query_length, self.max_batch_tokens, self.q_padding_intervals)
             max_read_index_size = max(self.actual_index_sizes[i][0] for i in range(self.cache.num_groups))
-            padded_read_index_size = pad_by_intervals(
-                max_read_index_size - self.max_batch_tokens,
-                self.cache.num_blocks * self.cache.block_size,
-                self.kv_padding_intervals,
-            )
+            # The space planned for query tokens will be added later, so we remove it from the space planned for KV
+            padded_read_index_size = pad_by_intervals(max_read_index_size, self.num_pages, self.kv_padding_intervals)
         else:
             padded_q, padded_read_index_size = 0, 0
         # Retrieve the model kwargs with or without padding
@@ -810,7 +841,8 @@ class ContinuousBatchingManager:
         self.log_prob_generation = getattr(generation_config, "log_prob_generation", False)
         self.do_sample = getattr(generation_config, "do_sample", True)
         self.logit_processor = self.model._get_logits_processor(generation_config)
-        self.num_return_sequences = getattr(generation_config, "num_return_sequences", 1)
+        num_return_sequences = getattr(generation_config, "num_return_sequences", None)
+        self.num_return_sequences = num_return_sequences if num_return_sequences is not None else 1
 
         # self.model.generation_config.top_p = None NOTE: figure out why this was here
 
@@ -1107,13 +1139,13 @@ class ContinuousBatchingManager:
         # Loop body ends if there is no requests in the batch
         if not batch_processor.prepare_next_batch():
             return
-        # Debug logging of the current memory usage
-        if logger.level <= logging.DEBUG:
-            device, total, reserved, allocated = get_device_and_memory_breakdown()
-            available_memory = total - max(allocated, reserved)
-            logger.debug(
-                f"[Memory] Device: {device}, Total: {total}, Reserved: {reserved}, Allocated: {allocated}, Available: {available_memory}"
-            )
+        # Debug logging of the current memory usage -- commented out because it's often not used even in debug
+        # if logger.level < logging.DEBUG:
+        #     device, total, reserved, allocated = get_device_and_memory_breakdown()
+        #     available_memory = total - max(allocated, reserved)
+        #     logger.debug(
+        # f"[Memory] Device: {device}, Total: {total}, Reserved: {reserved}, Allocated: {allocated}, Available: {available_memory}"
+        #     )
 
         self._generation_step()
         batch_processor.update_batch()
@@ -1261,7 +1293,7 @@ class ContinuousMixin:
         # Initialize manager with the batch inputs
         results = {}
         gen_cfg = self.generation_config if generation_config is None else generation_config
-        num_requests = len(inputs) * gen_cfg.num_return_sequences
+        num_requests = len(inputs) * (gen_cfg.num_return_sequences if gen_cfg.num_return_sequences is not None else 1)
         # Prepare context managers for the main loop
         manager_cm = self.continuous_batching_context_manager(
             generation_config=generation_config,
