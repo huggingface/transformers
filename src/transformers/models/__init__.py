@@ -151,9 +151,11 @@ if TYPE_CHECKING:
     from .glm import *
     from .glm4 import *
     from .glm4_moe import *
+    from .glm4_moe_lite import *
     from .glm4v import *
     from .glm4v_moe import *
     from .glm46v import *
+    from .glm_image import *
     from .glmasr import *
     from .glpn import *
     from .got_ocr2 import *

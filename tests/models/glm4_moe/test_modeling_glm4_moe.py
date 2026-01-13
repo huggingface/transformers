@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch GLM-4-MoE model."""
+"""Testing suite for the PyTorch GLM-4.5, GLM-4.6, GLM-4.7 model."""
 
 import unittest
 
