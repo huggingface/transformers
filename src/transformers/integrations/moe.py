@@ -69,11 +69,9 @@ def batched_mm_experts_forward(
     top_k_weights: torch.Tensor,
 ) -> torch.Tensor:
     device = hidden_states.device
-    hidden_dim = self.hidden_size
     num_top_k = top_k_index.size(-1)
     num_tokens = hidden_states.size(0)
     num_experts = self.gate_up_proj.size(0)
-    intermediate_dim = self.intermediate_size
     final_hidden_states = torch.zeros_like(hidden_states)
 
     # Flatten top_k_index to get expert_ids per selected sample
@@ -101,7 +99,7 @@ def batched_mm_experts_forward(
     selected_down = self.down_proj[expert_ids]  # (S, hidden_dim, intermediate_dim)
 
     # --- Up projection per expert (batched) ---
-    if selected_gate_up.shape == (num_tokens * num_top_k, hidden_dim, 2 * intermediate_dim):
+    if getattr(self, "experts_are_transposed", False):
         gate_up_out = torch.bmm(current_hidden_states.unsqueeze(1), selected_gate_up).squeeze(1)
     else:
         gate_up_out = torch.bmm(selected_gate_up, current_hidden_states.unsqueeze(-1)).squeeze(-1)
@@ -119,7 +117,7 @@ def batched_mm_experts_forward(
         hidden_after_activation = self.act_fn(gate) * up  # (S, intermediate_dim)
 
     # --- Down projection per expert (batched) ---
-    if selected_down.shape == (num_tokens * num_top_k, hidden_dim, intermediate_dim):
+    if getattr(self, "experts_are_transposed", False):
         out_per_sample = torch.bmm(hidden_after_activation.unsqueeze(1), selected_down).squeeze(1)
     else:
         out_per_sample = torch.bmm(selected_down, hidden_after_activation.unsqueeze(-1)).squeeze(-1)
@@ -148,11 +146,9 @@ def grouped_mm_experts_forward(
         )
 
     device = hidden_states.device
-    hidden_dim = self.hidden_size
     num_top_k = top_k_index.size(-1)
     num_tokens = hidden_states.size(0)
     num_experts = self.gate_up_proj.size(0)
-    intermediate_dim = self.intermediate_size
     final_hidden_states = torch.zeros_like(hidden_states)
 
     # Flatten top_k_index to get expert_ids per selected sample
@@ -191,7 +187,7 @@ def grouped_mm_experts_forward(
     offsets = torch.cumsum(num_tokens_per_expert, dim=0, dtype=torch.int32)
 
     # --- Up projection per expert (grouped_mm) ---
-    if self.gate_up_proj.shape == (num_experts, hidden_dim, 2 * intermediate_dim):
+    if getattr(self, "experts_are_transposed", False):
         gate_up_out = torch._grouped_mm(current_states_g, self.gate_up_proj, offs=offsets)
     else:
         gate_up_out = torch._grouped_mm(current_states_g, self.gate_up_proj.transpose(-2, -1), offs=offsets)
@@ -210,7 +206,7 @@ def grouped_mm_experts_forward(
         hidden_after_activation = self.act_fn(gate) * up  # (S, intermediate_dim)
 
     # --- Down projection per expert (grouped_mm) ---
-    if self.down_proj.shape == (num_experts, hidden_dim, intermediate_dim):
+    if getattr(self, "experts_are_transposed", False):
         out_per_sample_g = torch._grouped_mm(hidden_after_activation, self.down_proj, offs=offsets)
     else:
         out_per_sample_g = torch._grouped_mm(hidden_after_activation, self.down_proj.transpose(-2, -1), offs=offsets)
