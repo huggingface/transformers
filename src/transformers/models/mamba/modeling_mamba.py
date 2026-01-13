@@ -492,6 +492,22 @@ class MambaPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _is_stateful = True
 
+    def to(self, *args, **kwargs):
+        # Check if dtype conversion is happening
+        dtype_present_in_args = "dtype" in kwargs
+        if not dtype_present_in_args:
+            for arg in args:
+                if isinstance(arg, torch.dtype):
+                    dtype_present_in_args = True
+                    break
+
+        result = super().to(*args, **kwargs)
+        # Clear cached dtype if dtype conversion occurred, so the dtype property
+        # will check actual parameters instead of returning stale cached value
+        if dtype_present_in_args and hasattr(self, "_dtype"):
+            self._dtype = None
+        return result
+
     @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights."""
