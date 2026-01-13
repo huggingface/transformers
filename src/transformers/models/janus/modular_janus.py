@@ -19,7 +19,6 @@ from dataclasses import dataclass
 import numpy as np
 import torch
 import torch.nn.functional as F
-import torch.utils.checkpoint
 from torch import nn
 
 from ... import initialization as init
