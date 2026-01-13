@@ -12,6 +12,7 @@ style:
 	ruff check $(check_dirs) setup.py conftest.py --fix --exclude $(exclude_folders)
 	ruff format $(check_dirs) setup.py conftest.py --exclude $(exclude_folders)
 	python setup.py deps_table_update
+	python utils/custom_init_isort.py
 	python utils/sort_auto_mappings.py
 	python utils/check_doc_toc.py --fix_and_overwrite
 
@@ -22,6 +23,7 @@ check-repo:
 	ruff check $(check_dirs) setup.py conftest.py
 	ruff format --check $(check_dirs) setup.py conftest.py
 	python -c "from transformers import *" || (echo '🚨 import failed, this means you introduced unprotected imports! 🚨'; exit 1)
+	-python utils/custom_init_isort.py --check_only
 	-python utils/sort_auto_mappings.py --check_only
 	-python utils/check_doc_toc.py
 	-python utils/check_copies.py
