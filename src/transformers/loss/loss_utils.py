@@ -32,15 +32,25 @@ def fixed_cross_entropy(
     ignore_index: int = -100,
     **kwargs,
 ) -> torch.Tensor:
+    allowed = {"weight", "size_average", "reduce", "label_smoothing"}
+    unknown = set(kwargs) - allowed
+    if unknown:
+        raise TypeError(f"Unexpected kwargs for nn.functional.cross_entropy: {unknown}")
+
     reduction = "sum" if num_items_in_batch is not None else "mean"
-    loss = nn.functional.cross_entropy(source, target, ignore_index=ignore_index, reduction=reduction)
+
+    loss = nn.functional.cross_entropy(
+        source,
+        target,
+        ignore_index=ignore_index,
+        **kwargs,
+    )
+
     if reduction == "sum":
-        # just in case users pass an int for num_items_in_batch, which could be the case for custom trainer
         if torch.is_tensor(num_items_in_batch):
             num_items_in_batch = num_items_in_batch.to(loss.device)
         loss = loss / num_items_in_batch
     return loss
-
 
 def ForCausalLMLoss(
     logits,
