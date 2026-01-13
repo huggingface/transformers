@@ -428,6 +428,7 @@ class ContinuousBatchProcessor:
         self.output_queue.put(state.to_generation_output())
 
     # TODO: there should be a way to choose the offloading policy: biggest request, oldest request, etc.
+    # Including a policy to not allow offloading and crashing the generation
     def soft_reset_one_request(self) -> None:
         """Soft resets one active request by removing it from active requests and re-adding it to the waiting queue.
 
