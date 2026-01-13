@@ -242,9 +242,6 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
         num_input_tokens = inputs.input_ids.shape[1]
 
         # Generation without continuous batching
-        if attn_implementation == "flash_attention_2" and torch_device == "cpu":
-            self.skipTest("Flash Attention 2 is not supported on CPU without continuous batching. Skipping test.")
-
         model = AutoModelForCausalLM.from_pretrained(model_id, attn_implementation=attn_implementation, dtype=dtype)
         model = model.to(torch_device).eval()
         model.generation_config.max_new_tokens = max_new_tokens
