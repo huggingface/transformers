@@ -102,6 +102,7 @@ PRIVATE_MODELS = [
     "Glm4vMoeVisionModel",
     "LightOnOcrTextModel",  # Building part of bigger (tested) model.
     "LightOnOcrVisionModel",  # Building part of bigger (tested) model.
+    "GlmImageVisionModel",
     "EvollaSaProtPreTrainedModel",
     "BltLocalEncoder",  # Building part of bigger (tested) model. Tested implicitly through BLTForCausalLM.
     "BltLocalDecoder",  # Building part of bigger (tested) model. Tested implicitly through BLTForCausalLM.
@@ -127,6 +128,7 @@ IGNORE_NON_TESTED = (
         "ErnieMForInformationExtraction",
         "FastSpeech2ConformerHifiGan",  # Already tested by SpeechT5HifiGan (# Copied from)
         "FastSpeech2ConformerWithHifiGan",  # Built with two smaller (tested) models.
+        "GlmImageVQVAE",  # Building part of bigger (tested) model.
         "GraphormerDecoderHead",  # Building part of bigger (tested) model.
         "JukeboxVQVAE",  # Building part of bigger (tested) model.
         "JukeboxPrior",  # Building part of bigger (tested) model.
@@ -194,6 +196,7 @@ IGNORE_NON_TESTED = (
         "Emu3TextModel",  # Building part of bigger (tested) model
         "Glm4vTextModel",  # Building part of bigger (tested) model
         "Glm4vMoeTextModel",  # Building part of bigger (tested) model
+        "GlmImageTextModel",  # Building part of bigger (tested) model
         "Qwen2VLTextModel",  # Building part of bigger (tested) model
         "Qwen2_5_VLTextModel",  # Building part of bigger (tested) model
         "InternVLVisionModel",  # Building part of bigger (tested) model
@@ -312,6 +315,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "FlavaTextModel",
     "FlavaImageModel",
     "FlavaMultimodalModel",
+    "GlmImageForConditionalGeneration",
     "GPT2DoubleHeadsModel",
     "GPTSw3DoubleHeadsModel",
     "InstructBlipVisionModel",
@@ -1234,7 +1238,7 @@ def check_models_have_kwargs():
         if model_dir.is_dir() and (modeling_file := list(model_dir.glob("modeling_*.py"))):
             modeling_file = modeling_file[0]
 
-            with open(modeling_file, "r") as f:
+            with open(modeling_file, "r", encoding="utf-8") as f:
                 tree = ast.parse(f.read())
 
             # Map all classes in the file to their base classes
