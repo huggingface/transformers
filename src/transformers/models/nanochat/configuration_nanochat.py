@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,7 +13,7 @@
 # limitations under the License.
 
 from ...configuration_utils import PretrainedConfig
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 
 
 class NanoChatConfig(PretrainedConfig):
@@ -94,10 +93,10 @@ class NanoChatConfig(PretrainedConfig):
     keys_to_ignore_at_inference = ["past_key_values"]
 
     base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": "colwise_rep",
-        "layers.*.self_attn.k_proj": "colwise_rep",
-        "layers.*.self_attn.v_proj": "colwise_rep",
-        "layers.*.self_attn.o_proj": "rowwise_rep",
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
         "layers.*.mlp.fc1": "colwise",
         "layers.*.mlp.fc2": "rowwise",
     }
@@ -144,6 +143,7 @@ class NanoChatConfig(PretrainedConfig):
         self.use_cache = use_cache
         self.final_logit_softcapping = final_logit_softcapping
         self.attention_bias = attention_bias
+        self.rope_parameters = rope_parameters
 
         super().__init__(
             bos_token_id=bos_token_id,
@@ -152,13 +152,6 @@ class NanoChatConfig(PretrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
-
-        # Validate the correctness of rotary position embeddings parameters
-        # Must be done after super().__init__() to avoid being overridden by kwargs
-        self.rope_parameters = rope_parameters
-        rope_theta = kwargs.get("rope_theta", 10000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
 
 
 __all__ = ["NanoChatConfig"]

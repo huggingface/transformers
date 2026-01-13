@@ -344,14 +344,14 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         self.assertIsNotNone(model)
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @pytest.mark.flash_attn_test
     @slow
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         self.skipTest(reason="ModernBert flash attention does not support right padding")
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @pytest.mark.flash_attn_test
     @slow
     def test_flash_attn_2_conversion(self):
@@ -506,6 +506,10 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             self.skipTest(
                 f"Model architecture does not support {attn_implementation}, or setting its attention dynamically"
             )
+
+    @require_torch_gpu  # modernbert contains triton code which cannot run on CPU, so we only test on GPU
+    def test_all_tensors_are_parameter_or_buffer(self):
+        super().test_all_tensors_are_parameter_or_buffer()
 
 
 @require_torch

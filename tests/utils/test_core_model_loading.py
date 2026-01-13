@@ -1,4 +1,4 @@
-# Copyright 2024 HuggingFace Inc.
+# Copyright 2025 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -18,18 +18,23 @@ import torch
 import torch.nn as nn
 
 from transformers import PretrainedConfig
+from transformers.conversion_mapping import get_checkpoint_conversion_mapping, register_checkpoint_conversion_mapping
 from transformers.core_model_loading import (
     Chunk,
     Concatenate,
+    ErnieFuseAndSplitTextVisionExperts,
     MergeModulelist,
     PermuteForRope,
     WeightConverter,
     WeightRenaming,
     build_glob_alternation,
     convert_and_load_state_dict_in_model,
-    repl,
+    rename_source_key,
+    revert_weight_conversion,
 )
 from transformers.utils.import_utils import is_triton_available
+
+from ..test_modeling_common import compare_state_dicts
 
 
 class TestWeightGlobMatching(unittest.TestCase):
@@ -135,23 +140,24 @@ class TestWeightGlobMatching(unittest.TestCase):
             WeightRenaming("block_sparse_moe.experts.*.w2.weight", "mlp.experts.down_proj"),
             WeightRenaming("model.language_model.*", "language_model"),
         ]
-        rename_alt, _, rename_by_group = build_glob_alternation(renamings)
 
-        def rename(original_key: str) -> str:
-            return rename_alt.sub(lambda m: repl(m, rename_by_group), original_key).replace("\\", "")
-
-        self.assertEqual(rename("foo.block_sparse_moe.experts.3.w1.weight"), "foo.mlp.experts.gate_up_proj")
-        self.assertEqual(rename("foo.block_sparse_moe.experts.3.w2.weight"), "foo.mlp.experts.down_proj")
-        self.assertEqual(rename("model.language_model.lm_head.weight"), "language_model")
+        self.assertEqual(
+            rename_source_key("foo.block_sparse_moe.experts.3.w1.weight", renamings, [])[0],
+            "foo.mlp.experts.gate_up_proj",
+        )
+        self.assertEqual(
+            rename_source_key("foo.block_sparse_moe.experts.3.w2.weight", renamings, [])[0],
+            "foo.mlp.experts.down_proj",
+        )
+        self.assertEqual(rename_source_key("model.language_model.lm_head.weight", renamings, [])[0], "language_model")
 
     def test_sub_key_no_match_returns_original(self):
         renamings = [
             WeightRenaming("block_sparse_moe.experts.*.w1.weight", "*.mlp.experts.gate_up_proj"),
         ]
-        rename_alt, _, rename_by_group = build_glob_alternation(renamings)
 
         key = "unrelated.key"
-        renamed_key = rename_alt.sub(lambda m: repl(m, rename_by_group), key).replace("\\", "")
+        renamed_key, _ = rename_source_key(key, renamings, [])
         self.assertEqual(renamed_key, key)
 
 
@@ -177,16 +183,18 @@ class DummyExperts(nn.Module):
 
 
 class DummyLayer(nn.Module):
-    def __init__(self):
+    def __init__(self, add_extra_moe=False):
         super().__init__()
         self.self_attn = DummySelfAttn()
         self.experts = DummyExperts()
+        if add_extra_moe:
+            self.extra_experts = DummyExperts()
 
 
 class DummyTopModel(nn.Module):
-    def __init__(self):
+    def __init__(self, add_extra_moe=False):
         super().__init__()
-        self.layers = nn.ModuleList([DummyLayer(), DummyLayer()])
+        self.layers = nn.ModuleList([DummyLayer(add_extra_moe), DummyLayer(add_extra_moe)])
 
 
 class DummyMLP(nn.Module):
@@ -198,9 +206,9 @@ class DummyMLP(nn.Module):
 class DummyRoot(nn.Module):
     base_model_prefix = "model"
 
-    def __init__(self):
+    def __init__(self, add_extra_moe=False):
         super().__init__()
-        self.model = DummyTopModel()
+        self.model = DummyTopModel(add_extra_moe)
         self.mlp = DummyMLP()
 
 
@@ -246,7 +254,7 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
                     "model.layers.0.self_attn.k_proj.weight",
                     "model.layers.0.self_attn.v_proj.weight",
                 ],
-                operations=[Chunk(dim=0, chunks=3)],
+                operations=[Chunk(dim=0)],
             ),
             WeightRenaming("mlp.w2.weight", "mlp.down_proj.weight"),
         ]
@@ -314,6 +322,67 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             torch.testing.assert_close(model_state[f"{prefix}.v_proj.weight"], expected_v)
 
         torch.testing.assert_close(model_state["mlp.down_proj.weight"], raw_tensors["mlp.w2.weight"])
+
+    def test_moe_and_qkv_conversion_reversed(self):
+        model = DummyRoot()
+        model.config = PretrainedConfig()
+
+        raw_tensors = {
+            "model.layers.0.experts.0.w1.weight": torch.tensor([[0.0, 1.0], [2.0, 3.0]]),
+            "model.layers.0.experts.1.w1.weight": torch.tensor([[10.0, 11.0], [12.0, 13.0]]),
+            "model.layers.0.experts.0.w3.weight": torch.tensor([[4.0, 5.0], [6.0, 7.0]]),
+            "model.layers.0.experts.1.w3.weight": torch.tensor([[14.0, 15.0], [16.0, 17.0]]),
+            "model.layers.0.experts.0.w2.weight": torch.tensor([[20.0, 21.0], [22.0, 23.0]]),
+            "model.layers.0.experts.1.w2.weight": torch.tensor([[24.0, 25.0], [26.0, 27.0]]),
+            "model.layers.1.experts.0.w1.weight": torch.tensor([[30.0, 31.0], [32.0, 33.0]]),
+            "model.layers.1.experts.1.w1.weight": torch.tensor([[34.0, 35.0], [36.0, 37.0]]),
+            "model.layers.1.experts.0.w3.weight": torch.tensor([[38.0, 39.0], [40.0, 41.0]]),
+            "model.layers.1.experts.1.w3.weight": torch.tensor([[42.0, 43.0], [44.0, 45.0]]),
+            "model.layers.1.experts.0.w2.weight": torch.tensor([[46.0, 47.0], [48.0, 49.0]]),
+            "model.layers.1.experts.1.w2.weight": torch.tensor([[50.0, 51.0], [52.0, 53.0]]),
+            "model.layers.0.self_attn.qkv_proj.weight": torch.tensor([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]]),
+            "model.layers.1.self_attn.qkv_proj.weight": torch.tensor([[7.0, 8.0], [9.0, 10.0], [11.0, 12.0]]),
+            "mlp.w2.weight": torch.tensor([[60.0, 61.0], [62.0, 63.0]]),
+        }
+        state_dict = {k: v.clone() for k, v in raw_tensors.items()}
+
+        weight_mapping = [
+            WeightConverter(
+                ["experts.*.w1.weight", "experts.*.w3.weight"],
+                "experts.gate_up_proj.weight",
+                operations=[MergeModulelist(dim=0), Concatenate(dim=1)],
+            ),
+            WeightConverter(
+                "experts.*.w2.weight",
+                "experts.down_proj.weight",
+                operations=[MergeModulelist(dim=0)],
+            ),
+            WeightConverter(
+                "self_attn.qkv_proj.weight",
+                [
+                    "self_attn.q_proj.weight",
+                    "self_attn.k_proj.weight",
+                    "self_attn.v_proj.weight",
+                ],
+                operations=[Chunk(dim=0)],
+            ),
+            WeightRenaming("mlp.w2.weight", "mlp.down_proj.weight"),
+        ]
+
+        # Use the mapping to load
+        missing, unexpected, mismatch, _, misc = convert_and_load_state_dict_in_model(
+            model, state_dict, weight_mapping, tp_plan=None, hf_quantizer=None
+        )
+        self.assertTrue(len(missing) == 0)
+        self.assertTrue(len(unexpected) == 0)
+        self.assertTrue(len(mismatch) == 0)
+        self.assertTrue(len(misc) == 0)
+
+        # Try to revert the mapping
+        reversed_state_dict = revert_weight_conversion(model, model.state_dict())
+
+        # Make sure both saved state_dict are identical
+        self.assertTrue(compare_state_dicts(reversed_state_dict, state_dict))
 
     def test_qkv_chunk_rope_permute_with_fp8_quantization(self):
         if is_triton_available():
@@ -396,7 +465,7 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
                     "model.layers.*.self_attn.k_proj.weight",
                     "model.layers.*.self_attn.v_proj.weight",
                 ],
-                operations=[Chunk(dim=0, chunks=3), PermuteForRope()],
+                operations=[Chunk(dim=0), PermuteForRope()],
             )
         ]
 
@@ -438,6 +507,239 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             context={"quantization_config": quantizer.quantization_config},
         )
         torch.testing.assert_close(dequantized_q, expected_q, rtol=1e-2, atol=1e-2)
+
+    def test_ernie4_5_vl_moe_conversion(self):
+        model = DummyRoot(add_extra_moe=True)
+        model.config = PretrainedConfig()
+
+        raw_tensors = {
+            "model.layers.0.experts.0.w1.weight": torch.tensor([[0.0, 1.0], [2.0, 3.0]]),
+            "model.layers.0.experts.1.w1.weight": torch.tensor([[10.0, 11.0], [12.0, 13.0]]),
+            "model.layers.0.experts.2.w1.weight": torch.tensor([[11.0, 12.0], [13.0, 14.0]]),
+            "model.layers.0.experts.3.w1.weight": torch.tensor([[12.0, 13.0], [14.0, 15.0]]),
+            "model.layers.0.experts.0.w3.weight": torch.tensor([[4.0, 5.0], [6.0, 7.0]]),
+            "model.layers.0.experts.1.w3.weight": torch.tensor([[14.0, 15.0], [16.0, 17.0]]),
+            "model.layers.0.experts.2.w3.weight": torch.tensor([[15.0, 16.0], [17.0, 18.0]]),
+            "model.layers.0.experts.3.w3.weight": torch.tensor([[16.0, 17.0], [18.0, 19.0]]),
+            "model.layers.0.experts.0.w2.weight": torch.tensor([[20.0, 21.0], [22.0, 23.0]]),
+            "model.layers.0.experts.1.w2.weight": torch.tensor([[24.0, 25.0], [26.0, 27.0]]),
+            "model.layers.0.experts.2.w2.weight": torch.tensor([[25.0, 26.0], [27.0, 28.0]]),
+            "model.layers.0.experts.3.w2.weight": torch.tensor([[26.0, 27.0], [28.0, 29.0]]),
+            "model.layers.1.experts.0.w1.weight": torch.tensor([[30.0, 31.0], [32.0, 33.0]]),
+            "model.layers.1.experts.1.w1.weight": torch.tensor([[34.0, 35.0], [36.0, 37.0]]),
+            "model.layers.1.experts.2.w1.weight": torch.tensor([[35.0, 36.0], [37.0, 38.0]]),
+            "model.layers.1.experts.3.w1.weight": torch.tensor([[36.0, 37.0], [38.0, 39.0]]),
+            "model.layers.1.experts.0.w3.weight": torch.tensor([[38.0, 39.0], [40.0, 41.0]]),
+            "model.layers.1.experts.1.w3.weight": torch.tensor([[42.0, 43.0], [44.0, 45.0]]),
+            "model.layers.1.experts.2.w3.weight": torch.tensor([[43.0, 44.0], [45.0, 46.0]]),
+            "model.layers.1.experts.3.w3.weight": torch.tensor([[44.0, 45.0], [46.0, 47.0]]),
+            "model.layers.1.experts.0.w2.weight": torch.tensor([[46.0, 47.0], [48.0, 49.0]]),
+            "model.layers.1.experts.1.w2.weight": torch.tensor([[50.0, 51.0], [52.0, 53.0]]),
+            "model.layers.1.experts.2.w2.weight": torch.tensor([[51.0, 52.0], [53.0, 54.0]]),
+            "model.layers.1.experts.3.w2.weight": torch.tensor([[52.0, 53.0], [54.0, 55.0]]),
+            "model.layers.0.self_attn.qkv_proj.weight": torch.tensor([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]]),
+            "model.layers.1.self_attn.qkv_proj.weight": torch.tensor([[7.0, 8.0], [9.0, 10.0], [11.0, 12.0]]),
+            "mlp.w2.weight": torch.tensor([[60.0, 61.0], [62.0, 63.0]]),
+        }
+        state_dict = {k: v.clone() for k, v in raw_tensors.items()}
+
+        weight_mapping = [
+            WeightConverter(
+                ["experts.*.w1.weight", "experts.*.w3.weight"],
+                ["experts.gate_up_proj.weight", "extra_experts.gate_up_proj.weight"],
+                operations=[ErnieFuseAndSplitTextVisionExperts(stack_dim=0, concat_dim=1)],
+            ),
+            WeightConverter(
+                "experts.*.w2.weight",
+                ["experts.down_proj.weight", "extra_experts.down_proj.weight"],
+                operations=[ErnieFuseAndSplitTextVisionExperts(stack_dim=0, concat_dim=1)],
+            ),
+            WeightConverter(
+                "self_attn.qkv_proj.weight",
+                [
+                    "self_attn.q_proj.weight",
+                    "self_attn.k_proj.weight",
+                    "self_attn.v_proj.weight",
+                ],
+                operations=[Chunk(dim=0)],
+            ),
+            WeightRenaming("mlp.w2.weight", "mlp.down_proj.weight"),
+        ]
+        missing, unexpected, mismatch, _, misc = convert_and_load_state_dict_in_model(
+            model, state_dict, weight_mapping, tp_plan=None, hf_quantizer=None
+        )
+
+        self.assertEqual(missing, set())
+        self.assertEqual(unexpected, set())
+        self.assertEqual(mismatch, set())
+        self.assertEqual(misc, {})
+
+        model_state = model.state_dict()
+
+        def cat_gate(layer_prefix: str) -> torch.Tensor:
+            moe_1_w1 = [
+                raw_tensors[f"{layer_prefix}.experts.0.w1.weight"],
+                raw_tensors[f"{layer_prefix}.experts.1.w1.weight"],
+            ]
+            moe_2_w1 = [
+                raw_tensors[f"{layer_prefix}.experts.2.w1.weight"],
+                raw_tensors[f"{layer_prefix}.experts.3.w1.weight"],
+            ]
+            moe_1_w3 = [
+                raw_tensors[f"{layer_prefix}.experts.0.w3.weight"],
+                raw_tensors[f"{layer_prefix}.experts.1.w3.weight"],
+            ]
+            moe_2_w3 = [
+                raw_tensors[f"{layer_prefix}.experts.2.w3.weight"],
+                raw_tensors[f"{layer_prefix}.experts.3.w3.weight"],
+            ]
+            moe_1 = torch.cat([torch.stack(moe_1_w1, dim=0), torch.stack(moe_1_w3, dim=0)], dim=1)
+            moe_2 = torch.cat([torch.stack(moe_2_w1, dim=0), torch.stack(moe_2_w3, dim=0)], dim=1)
+            return moe_1, moe_2
+
+        moe_1, moe_2 = cat_gate("model.layers.0")
+        torch.testing.assert_close(model_state["model.layers.0.experts.gate_up_proj.weight"], moe_1)
+        torch.testing.assert_close(model_state["model.layers.0.extra_experts.gate_up_proj.weight"], moe_2)
+
+        moe_1, moe_2 = cat_gate("model.layers.1")
+        torch.testing.assert_close(model_state["model.layers.1.experts.gate_up_proj.weight"], moe_1)
+        torch.testing.assert_close(model_state["model.layers.1.extra_experts.gate_up_proj.weight"], moe_2)
+
+        def stack_down(layer_prefix: str) -> torch.Tensor:
+            moe_1 = torch.stack(
+                [
+                    raw_tensors[f"{layer_prefix}.experts.0.w2.weight"],
+                    raw_tensors[f"{layer_prefix}.experts.1.w2.weight"],
+                ],
+                dim=0,
+            )
+            moe_2 = torch.stack(
+                [
+                    raw_tensors[f"{layer_prefix}.experts.2.w2.weight"],
+                    raw_tensors[f"{layer_prefix}.experts.3.w2.weight"],
+                ],
+                dim=0,
+            )
+            return moe_1, moe_2
+
+        moe_1, moe_2 = stack_down("model.layers.0")
+        torch.testing.assert_close(model_state["model.layers.0.experts.down_proj.weight"], moe_1)
+        torch.testing.assert_close(model_state["model.layers.0.extra_experts.down_proj.weight"], moe_2)
+
+        moe_1, moe_2 = stack_down("model.layers.1")
+        torch.testing.assert_close(model_state["model.layers.1.experts.down_proj.weight"], moe_1)
+        torch.testing.assert_close(model_state["model.layers.1.extra_experts.down_proj.weight"], moe_2)
+
+    def test_ernie4_5_vl_moe_conversion_reversed(self):
+        model = DummyRoot(add_extra_moe=True)
+        model.config = PretrainedConfig()
+
+        raw_tensors = {
+            "model.layers.0.experts.0.w1.weight": torch.tensor([[0.0, 1.0], [2.0, 3.0]]),
+            "model.layers.0.experts.1.w1.weight": torch.tensor([[10.0, 11.0], [12.0, 13.0]]),
+            "model.layers.0.experts.2.w1.weight": torch.tensor([[11.0, 12.0], [13.0, 14.0]]),
+            "model.layers.0.experts.3.w1.weight": torch.tensor([[12.0, 13.0], [14.0, 15.0]]),
+            "model.layers.0.experts.0.w3.weight": torch.tensor([[4.0, 5.0], [6.0, 7.0]]),
+            "model.layers.0.experts.1.w3.weight": torch.tensor([[14.0, 15.0], [16.0, 17.0]]),
+            "model.layers.0.experts.2.w3.weight": torch.tensor([[15.0, 16.0], [17.0, 18.0]]),
+            "model.layers.0.experts.3.w3.weight": torch.tensor([[16.0, 17.0], [18.0, 19.0]]),
+            "model.layers.0.experts.0.w2.weight": torch.tensor([[20.0, 21.0], [22.0, 23.0]]),
+            "model.layers.0.experts.1.w2.weight": torch.tensor([[24.0, 25.0], [26.0, 27.0]]),
+            "model.layers.0.experts.2.w2.weight": torch.tensor([[25.0, 26.0], [27.0, 28.0]]),
+            "model.layers.0.experts.3.w2.weight": torch.tensor([[26.0, 27.0], [28.0, 29.0]]),
+            "model.layers.1.experts.0.w1.weight": torch.tensor([[30.0, 31.0], [32.0, 33.0]]),
+            "model.layers.1.experts.1.w1.weight": torch.tensor([[34.0, 35.0], [36.0, 37.0]]),
+            "model.layers.1.experts.2.w1.weight": torch.tensor([[35.0, 36.0], [37.0, 38.0]]),
+            "model.layers.1.experts.3.w1.weight": torch.tensor([[36.0, 37.0], [38.0, 39.0]]),
+            "model.layers.1.experts.0.w3.weight": torch.tensor([[38.0, 39.0], [40.0, 41.0]]),
+            "model.layers.1.experts.1.w3.weight": torch.tensor([[42.0, 43.0], [44.0, 45.0]]),
+            "model.layers.1.experts.2.w3.weight": torch.tensor([[43.0, 44.0], [45.0, 46.0]]),
+            "model.layers.1.experts.3.w3.weight": torch.tensor([[44.0, 45.0], [46.0, 47.0]]),
+            "model.layers.1.experts.0.w2.weight": torch.tensor([[46.0, 47.0], [48.0, 49.0]]),
+            "model.layers.1.experts.1.w2.weight": torch.tensor([[50.0, 51.0], [52.0, 53.0]]),
+            "model.layers.1.experts.2.w2.weight": torch.tensor([[51.0, 52.0], [53.0, 54.0]]),
+            "model.layers.1.experts.3.w2.weight": torch.tensor([[52.0, 53.0], [54.0, 55.0]]),
+            "model.layers.0.self_attn.qkv_proj.weight": torch.tensor([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]]),
+            "model.layers.1.self_attn.qkv_proj.weight": torch.tensor([[7.0, 8.0], [9.0, 10.0], [11.0, 12.0]]),
+            "mlp.w2.weight": torch.tensor([[60.0, 61.0], [62.0, 63.0]]),
+        }
+        state_dict = {k: v.clone() for k, v in raw_tensors.items()}
+
+        weight_mapping = [
+            WeightConverter(
+                ["experts.*.w1.weight", "experts.*.w3.weight"],
+                ["experts.gate_up_proj.weight", "extra_experts.gate_up_proj.weight"],
+                operations=[ErnieFuseAndSplitTextVisionExperts(stack_dim=0, concat_dim=1)],
+            ),
+            WeightConverter(
+                "experts.*.w2.weight",
+                ["experts.down_proj.weight", "extra_experts.down_proj.weight"],
+                operations=[ErnieFuseAndSplitTextVisionExperts(stack_dim=0, concat_dim=1)],
+            ),
+            WeightConverter(
+                "self_attn.qkv_proj.weight",
+                [
+                    "self_attn.q_proj.weight",
+                    "self_attn.k_proj.weight",
+                    "self_attn.v_proj.weight",
+                ],
+                operations=[Chunk(dim=0)],
+            ),
+            WeightRenaming("mlp.w2.weight", "mlp.down_proj.weight"),
+        ]
+
+        # Use the mapping to load
+        missing, unexpected, mismatch, _, misc = convert_and_load_state_dict_in_model(
+            model, state_dict, weight_mapping, tp_plan=None, hf_quantizer=None
+        )
+        self.assertTrue(len(missing) == 0)
+        self.assertTrue(len(unexpected) == 0)
+        self.assertTrue(len(mismatch) == 0)
+        self.assertTrue(len(misc) == 0)
+
+        # Try to revert the mapping
+        reversed_state_dict = revert_weight_conversion(model, model.state_dict())
+
+        # Make sure both saved state_dict are identical
+        self.assertTrue(compare_state_dicts(reversed_state_dict, state_dict))
+
+
+class TestConversionMapping(unittest.TestCase):
+    def test_register_checkpoint_conversion_mapping(self):
+        register_checkpoint_conversion_mapping(
+            "foobar",
+            [
+                WeightRenaming(".block_sparse_moe.gate", ".mlp.gate"),
+            ],
+        )
+        self.assertEqual(len(get_checkpoint_conversion_mapping("foobar")), 1)
+
+    def test_register_checkpoint_conversion_mapping_overwrites(self):
+        register_checkpoint_conversion_mapping(
+            "foobarbaz",
+            [
+                WeightRenaming(".block_sparse_moe.gate", ".mlp.gate"),
+            ],
+        )
+        with self.assertRaises(ValueError):
+            register_checkpoint_conversion_mapping(
+                "foobarbaz",
+                [
+                    WeightRenaming(".block_sparse_moe.foo", ".mlp.foo"),
+                    WeightRenaming(".block_sparse_moe.bar", ".mlp.bar"),
+                ],
+            )
+
+        register_checkpoint_conversion_mapping(
+            "foobarbaz",
+            [
+                WeightRenaming(".block_sparse_moe.foo", ".mlp.foo"),
+                WeightRenaming(".block_sparse_moe.bar", ".mlp.bar"),
+            ],
+            overwrite=True,
+        )
+
+        self.assertEqual(len(get_checkpoint_conversion_mapping("foobarbaz")), 2)
 
 
 if __name__ == "__main__":

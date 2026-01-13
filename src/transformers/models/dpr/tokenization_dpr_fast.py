@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 The HuggingFace Inc. team, The Hugging Face Team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,11 +14,10 @@
 """Tokenization classes for DPR."""
 
 import collections
-from typing import Optional, Union
 
 from ...tokenization_utils_base import BatchEncoding
 from ...utils import TensorType, add_end_docstrings, add_start_docstrings, logging
-from ..bert.tokenization_bert_fast import BertTokenizerFast
+from ..bert.tokenization_bert import BertTokenizer
 from .tokenization_dpr import DPRContextEncoderTokenizer, DPRQuestionEncoderTokenizer, DPRReaderTokenizer
 
 
@@ -28,28 +26,28 @@ logger = logging.get_logger(__name__)
 VOCAB_FILES_NAMES = {"vocab_file": "vocab.txt", "tokenizer_file": "tokenizer.json"}
 
 
-class DPRContextEncoderTokenizerFast(BertTokenizerFast):
+class DPRContextEncoderTokenizerFast(BertTokenizer):
     r"""
     Construct a "fast" DPRContextEncoder tokenizer (backed by HuggingFace's *tokenizers* library).
 
-    [`DPRContextEncoderTokenizerFast`] is identical to [`BertTokenizerFast`] and runs end-to-end tokenization:
+    [`DPRContextEncoderTokenizerFast`] is identical to [`BertTokenizer`] and runs end-to-end tokenization:
     punctuation splitting and wordpiece.
 
-    Refer to superclass [`BertTokenizerFast`] for usage examples and documentation concerning parameters.
+    Refer to superclass [`BertTokenizer`] for usage examples and documentation concerning parameters.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
     slow_tokenizer_class = DPRContextEncoderTokenizer
 
 
-class DPRQuestionEncoderTokenizerFast(BertTokenizerFast):
+class DPRQuestionEncoderTokenizerFast(BertTokenizer):
     r"""
     Constructs a "fast" DPRQuestionEncoder tokenizer (backed by HuggingFace's *tokenizers* library).
 
-    [`DPRQuestionEncoderTokenizerFast`] is identical to [`BertTokenizerFast`] and runs end-to-end tokenization:
+    [`DPRQuestionEncoderTokenizerFast`] is identical to [`BertTokenizer`] and runs end-to-end tokenization:
     punctuation splitting and wordpiece.
 
-    Refer to superclass [`BertTokenizerFast`] for usage examples and documentation concerning parameters.
+    Refer to superclass [`BertTokenizer`] for usage examples and documentation concerning parameters.
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
@@ -134,13 +132,13 @@ class CustomDPRReaderTokenizerMixin:
     def __call__(
         self,
         questions,
-        titles: Optional[str] = None,
-        texts: Optional[str] = None,
-        padding: Union[bool, str] = False,
-        truncation: Union[bool, str] = False,
-        max_length: Optional[int] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        return_attention_mask: Optional[bool] = None,
+        titles: str | None = None,
+        texts: str | None = None,
+        padding: bool | str = False,
+        truncation: bool | str = False,
+        max_length: int | None = None,
+        return_tensors: str | TensorType | None = None,
+        return_attention_mask: bool | None = None,
         **kwargs,
     ) -> BatchEncoding:
         if titles is None and texts is None:
@@ -300,15 +298,15 @@ class CustomDPRReaderTokenizerMixin:
 
 
 @add_end_docstrings(CUSTOM_DPR_READER_DOCSTRING)
-class DPRReaderTokenizerFast(CustomDPRReaderTokenizerMixin, BertTokenizerFast):
+class DPRReaderTokenizerFast(CustomDPRReaderTokenizerMixin, BertTokenizer):
     r"""
     Constructs a "fast" DPRReader tokenizer (backed by HuggingFace's *tokenizers* library).
 
-    [`DPRReaderTokenizerFast`] is almost identical to [`BertTokenizerFast`] and runs end-to-end tokenization:
+    [`DPRReaderTokenizerFast`] is almost identical to [`BertTokenizer`] and runs end-to-end tokenization:
     punctuation splitting and wordpiece. The difference is that is has three inputs strings: question, titles and texts
     that are combined to be fed to the [`DPRReader`] model.
 
-    Refer to superclass [`BertTokenizerFast`] for usage examples and documentation concerning parameters.
+    Refer to superclass [`BertTokenizer`] for usage examples and documentation concerning parameters.
 
     """
 

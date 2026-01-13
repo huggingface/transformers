@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The Fairseq Authors and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -35,7 +34,7 @@ class BartConfig(PreTrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 50265):
             Vocabulary size of the BART model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`BartModel`] or [`TFBartModel`].
+            `inputs_ids` passed when calling [`BartModel`].
         d_model (`int`, *optional*, defaults to 1024):
             Dimensionality of the layers and the pooler layer.
         encoder_layers (`int`, *optional*, defaults to 12):
@@ -157,7 +156,6 @@ class BartConfig(PreTrainedConfig):
             decoder_start_token_id=decoder_start_token_id,
             **kwargs,
         )
-        self.tie_encoder_decoder = True
 
 
 __all__ = ["BartConfig"]

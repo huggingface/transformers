@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +14,7 @@
 """Fast Image processor class for OWLv2."""
 
 import warnings
-from typing import Optional, Union
+from typing import Optional
 
 import torch
 from torchvision.transforms.v2 import functional as F
@@ -68,7 +67,7 @@ class Owlv2ImageProcessorFast(OwlViTImageProcessorFast):
     def pad(
         self,
         images: list["torch.Tensor"],
-        disable_grouping: Optional[bool],
+        disable_grouping: bool | None,
         constant_value: float = 0.0,
         **kwargs,
     ) -> list["torch.Tensor"]:
@@ -155,10 +154,10 @@ class Owlv2ImageProcessorFast(OwlViTImageProcessorFast):
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        disable_grouping: Optional[bool],
-        return_tensors: Optional[Union[str, TensorType]],
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         # Group images by size for batched resizing
@@ -204,8 +203,6 @@ class Owlv2ImageProcessorFast(OwlViTImageProcessorFast):
             processed_images_grouped[shape] = stacked_images
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
-
-        processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
 
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 

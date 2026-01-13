@@ -21,7 +21,7 @@ import os
 import warnings
 from collections import OrderedDict, UserDict, defaultdict
 from collections.abc import Callable, Iterable, MutableMapping
-from contextlib import AbstractContextManager, ExitStack
+from contextlib import AbstractContextManager, ExitStack, nullcontext
 from dataclasses import dataclass, fields, is_dataclass
 from enum import Enum
 from functools import partial, wraps
@@ -42,6 +42,7 @@ _is_torch_available = False
 if is_torch_available():
     # required for @can_return_tuple decorator to work with torchdynamo
     import torch
+    from torch.types import _dtype
 
     from ..model_debugging_utils import model_addition_debugger_context
 
@@ -152,6 +153,48 @@ def is_torch_dtype(x):
         else:
             return False
     return isinstance(x, torch.dtype)
+
+
+def _is_tensor_or_array_like(value):
+    """
+    Check if a value is array-like (includes ragged arrays)
+    """
+    if is_numpy_array(value):
+        return True
+    if is_torch_tensor(value):
+        return True
+    if isinstance(value, (int, float, bool, np.number)):
+        return True
+
+    if isinstance(value, (list, tuple)):
+        if len(value) == 0:
+            # consider empty list or nested list as array-like
+            return True
+        return _is_tensor_or_array_like(value[0])
+
+    return False
+
+
+def maybe_autocast(
+    device_type: str,
+    dtype: Optional["_dtype"] = None,
+    enabled: bool = True,
+    cache_enabled: bool | None = None,
+):
+    """
+    Context manager that only autocasts if:
+
+    - `autocast` is already enabled in this context
+    - Or this call to `maybe_autocast` has `enabled=True`
+
+    This prevents `autocast` being added to the graph when it is effectively a no-op.
+    Which makes graph splitting in `torch.compile` more flexible as it removes the
+    requirement that partition IDs be monotonically increasing.
+    """
+    if torch.is_autocast_enabled(device_type) or enabled:
+        return torch.autocast(device_type, dtype=dtype, enabled=enabled, cache_enabled=cache_enabled)
+    else:
+        return nullcontext()
 
 
 def _is_mlx(x):
@@ -680,6 +723,8 @@ class TransformersKwargs(TypedDict, total=False):
             Maximum sequence length for query state.
         max_length_k (`int`, *optional*):
             Maximum sequence length for key state.
+        position_ids (`torch.LongTensor`, *optional*)
+            Indices of positions of each input sequence tokens.
     """
 
     num_items_in_batch: Optional["torch.Tensor"]
@@ -690,6 +735,7 @@ class TransformersKwargs(TypedDict, total=False):
     cu_seq_lens_k: Optional["torch.LongTensor"]
     max_length_q: int | None
     max_length_k: int | None
+    position_ids: Optional["torch.LongTensor"]
 
 
 def is_timm_config_dict(config_dict: dict[str, Any]) -> bool:
@@ -788,7 +834,7 @@ class OutputRecorder:
     class_name: str | None = None
 
 
-def check_model_inputs(tie_last_hidden_states=True):
+def check_model_inputs(func=None, *, tie_last_hidden_states=True):
     """
     Decorator to intercept specific layer outputs without using hooks.
     Compatible with torch.compile (Dynamo tracing).
@@ -962,6 +1008,8 @@ def check_model_inputs(tie_last_hidden_states=True):
 
         return wrapper
 
+    if func is not None:
+        return wrapped_fn(func)
     return wrapped_fn
 
 

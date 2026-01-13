@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -28,7 +27,7 @@ from transformers import (
     SpeechT5Tokenizer,
     logging,
 )
-from transformers.tokenization_utils import AddedToken
+from transformers.tokenization_python import AddedToken
 
 
 logging.set_verbosity_info()

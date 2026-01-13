@@ -146,7 +146,9 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        if self.tokenizer is not None and not self.tokenizer.__class__.__name__.endswith("Fast"):
+        if self.tokenizer is not None and not (
+            self.tokenizer.__class__.__name__.endswith("Fast") or self.tokenizer.backend == "tokenizers"
+        ):
             raise ValueError(
                 "`DocumentQuestionAnsweringPipeline` requires a fast tokenizer, but a slow tokenizer "
                 f"(`{self.tokenizer.__class__.__name__}`) is provided."
@@ -199,7 +201,7 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
             postprocess_params["top_k"] = top_k
         if max_answer_len is not None:
             if max_answer_len < 1:
-                raise ValueError(f"max_answer_len parameter should be >= 1 (got {max_answer_len}")
+                raise ValueError(f"max_answer_len parameter should be >= 1 (got {max_answer_len})")
             postprocess_params["max_answer_len"] = max_answer_len
         if handle_impossible_answer is not None:
             postprocess_params["handle_impossible_answer"] = handle_impossible_answer

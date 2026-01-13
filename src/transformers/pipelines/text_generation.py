@@ -110,8 +110,6 @@ class TextGenerationPipeline(Pipeline):
             if prefix is None and self.model.__class__.__name__ in [
                 "XLNetLMHeadModel",
                 "TransfoXLLMHeadModel",
-                "TFXLNetLMHeadModel",
-                "TFTransfoXLLMHeadModel",
             ]:
                 # For XLNet and TransformerXL we add an article to the prompt to give more state to the model.
                 prefix = self.XL_PREFIX
@@ -488,7 +486,7 @@ class TextGenerationPipeline(Pipeline):
                             ]
                         else:
                             # When we're not starting from a prefill, the output is a new assistant message
-                            if self.tokenizer.response_schema:
+                            if getattr(self.tokenizer, "response_schema", False):
                                 assistant_message = self.tokenizer.parse_response(all_text)
                             else:
                                 # If there's no schema, then we have to assume it's all content

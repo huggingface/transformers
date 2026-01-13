@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,11 +17,11 @@ import json
 import os
 from pathlib import Path
 from shutil import copyfile
-from typing import Any, Optional, Union
+from typing import Any
 
 import sentencepiece
 
-from ...tokenization_utils import PreTrainedTokenizer
+from ...tokenization_python import PreTrainedTokenizer
 from ...utils import logging
 from ...utils.import_utils import requires
 
@@ -112,7 +111,7 @@ class Speech2TextTokenizer(PreTrainedTokenizer):
         tgt_lang=None,
         lang_codes=None,
         additional_special_tokens=None,
-        sp_model_kwargs: Optional[dict[str, Any]] = None,
+        sp_model_kwargs: dict[str, Any] | None = None,
         **kwargs,
     ) -> None:
         self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
@@ -211,7 +210,7 @@ class Speech2TextTokenizer(PreTrainedTokenizer):
         return self.prefix_tokens + token_ids_0 + token_ids_1 + [self.eos_token_id]
 
     def get_special_tokens_mask(
-        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None, already_has_special_tokens: bool = False
+        self, token_ids_0: list[int], token_ids_1: list[int] | None = None, already_has_special_tokens: bool = False
     ) -> list[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
@@ -254,7 +253,7 @@ class Speech2TextTokenizer(PreTrainedTokenizer):
 
         self.sp_model = load_spm(self.spm_file, self.sp_model_kwargs)
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: str | None = None) -> tuple[str]:
         save_dir = Path(save_directory)
         assert save_dir.is_dir(), f"{save_directory} should be a directory"
         vocab_save_path = save_dir / (
@@ -282,7 +281,7 @@ def load_spm(path: str, sp_model_kwargs: dict[str, Any]) -> sentencepiece.Senten
     return spm
 
 
-def load_json(path: str) -> Union[dict, list]:
+def load_json(path: str) -> dict | list:
     with open(path, "r") as f:
         return json.load(f)
 
