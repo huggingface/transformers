@@ -14,7 +14,6 @@
 """PyTorch BARK model."""
 
 import math
-import warnings
 
 import numpy as np
 import torch
@@ -1352,24 +1351,12 @@ class BarkModel(BarkPreTrainedModel, GenerationMixin):
 
         Args:
             accelerator_id (`int`, *optional*, defaults to 0):
-                accelerator id on which the sub-models will be loaded and offloaded. This argument is deprecated.
-            kwargs (`dict`, *optional*):
-                additional keyword arguments:
-                    `gpu_id`: accelerator id on which the sub-models will be loaded and offloaded.
+                accelerator id on which the sub-models will be loaded and offloaded.
         """
         if is_accelerate_available():
             from accelerate import cpu_offload_with_hook
         else:
             raise ImportError("`enable_model_cpu_offload` requires `accelerate`.")
-
-        gpu_id = kwargs.get("gpu_id", 0)
-
-        if gpu_id != 0:
-            warnings.warn(
-                "The argument `gpu_id` is deprecated and will be removed in version 4.54.0 of Transformers. Please use `accelerator_id` instead.",
-                FutureWarning,
-            )
-            accelerator_id = gpu_id
 
         device_type = "cuda"
         if is_torch_accelerator_available():
