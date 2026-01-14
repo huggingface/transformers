@@ -31,7 +31,10 @@ if is_torch_available():
 
     if is_vision_available():
         from transformers import Mask2FormerImageProcessor
-        from transformers.models.mask2former.image_processing_mask2former import binary_mask_to_rle
+        from transformers.models.mask2former.image_processing_mask2former import (
+            binary_mask_to_rle,
+            convert_segmentation_map_to_binary_masks_sorted,
+        )
         from transformers.models.mask2former.modeling_mask2former import Mask2FormerForUniversalSegmentationOutput
 
         if is_torchvision_available():
@@ -604,3 +607,72 @@ class Mask2FormerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
             self._assert_slow_fast_tensors_equivalence(mask_label_slow, mask_label_fast)
         for class_label_slow, class_label_fast in zip(encoding_slow.class_labels, encoding_fast.class_labels):
             self._assert_slow_fast_tensors_equivalence(class_label_slow.float(), class_label_fast.float())
+
+    def test_convert_segmentation_map_to_binary_masks_sorted(self):
+        segmentation_map = np.array(
+            [
+                [0, 1, 1, 2, 2, 2],
+                [0, 1, 2, 2, 2, 2],
+                [0, 0, 2, 2, 3, 3],
+            ]
+        )
+
+        masks, labels = convert_segmentation_map_to_binary_masks_sorted(
+            segmentation_map, sort_by_area=True, ignore_index=0
+        )
+
+        self.assertEqual(masks.shape[0], 3)
+        self.assertEqual(len(labels), 3)
+        self.assertEqual(labels[0], 2)
+
+        areas = np.sum(masks, axis=(1, 2))
+        self.assertTrue(all(areas[i] >= areas[i + 1] for i in range(len(areas) - 1)))
+
+    def test_convert_segmentation_map_to_binary_masks_sorted_edge_cases(self):
+        empty_map = np.zeros((3, 3), dtype=np.uint8)
+        masks, labels = convert_segmentation_map_to_binary_masks_sorted(empty_map, ignore_index=0)
+        self.assertEqual(masks.shape[0], 0)
+        self.assertEqual(len(labels), 0)
+
+        single_object_map = np.ones((3, 3), dtype=np.uint8)
+        masks, labels = convert_segmentation_map_to_binary_masks_sorted(single_object_map, ignore_index=0)
+        self.assertEqual(masks.shape[0], 1)
+        self.assertEqual(labels[0], 1)
+
+    def test_convert_segmentation_map_to_binary_masks_sorted_instance_mapping(self):
+        segmentation_map = np.array(
+            [
+                [0, 1, 1, 2],
+                [0, 1, 2, 2],
+                [0, 0, 2, 2],
+            ]
+        )
+
+        instance_id_to_semantic_id = {1: 10, 2: 20}
+
+        masks, labels = convert_segmentation_map_to_binary_masks_sorted(
+            segmentation_map, instance_id_to_semantic_id=instance_id_to_semantic_id, ignore_index=0, sort_by_area=True
+        )
+
+        self.assertEqual(len(labels), 2)
+        self.assertEqual(labels[0], 20)
+        self.assertEqual(labels[1], 10)
+
+    def test_convert_segmentation_map_to_binary_masks_sorted_area_ordering(self):
+        segmentation_map = np.array(
+            [
+                [1, 1, 2, 3, 3, 3],
+                [1, 1, 2, 3, 3, 3],
+                [0, 0, 2, 3, 3, 3],
+            ]
+        )
+
+        masks, labels = convert_segmentation_map_to_binary_masks_sorted(
+            segmentation_map, sort_by_area=True, ignore_index=0
+        )
+
+        areas = [np.sum(mask) for mask in masks]
+        expected_order = [3, 1, 2]
+
+        self.assertEqual(list(labels), expected_order)
+        self.assertTrue(areas[0] >= areas[1] >= areas[2])
