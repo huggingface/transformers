@@ -22,7 +22,6 @@ from transformers import BitsAndBytesConfig, ChameleonConfig, is_torch_available
 from transformers.testing_utils import (
     Expectations,
     require_bitsandbytes,
-    require_read_token,
     require_torch,
     slow,
     torch_device,
@@ -371,7 +370,6 @@ class ChameleonVision2SeqModelTest(ModelTesterMixin, GenerationTesterMixin, Pipe
 class ChameleonIntegrationTest(unittest.TestCase):
     @slow
     @require_bitsandbytes
-    @require_read_token
     def test_model_7b(self):
         model = ChameleonForConditionalGeneration.from_pretrained(
             "facebook/chameleon-7b", quantization_config=BitsAndBytesConfig(load_in_4bit=True), device_map="auto"
@@ -401,7 +399,6 @@ class ChameleonIntegrationTest(unittest.TestCase):
 
     @slow
     @require_bitsandbytes
-    @require_read_token
     def test_model_7b_batched(self):
         model = ChameleonForConditionalGeneration.from_pretrained(
             "facebook/chameleon-7b", quantization_config=BitsAndBytesConfig(load_in_4bit=True), device_map="auto"
@@ -448,7 +445,6 @@ class ChameleonIntegrationTest(unittest.TestCase):
 
     @slow
     @require_bitsandbytes
-    @require_read_token
     def test_model_7b_multi_image(self):
         model = ChameleonForConditionalGeneration.from_pretrained(
             "facebook/chameleon-7b", quantization_config=BitsAndBytesConfig(load_in_4bit=True), device_map="auto"
