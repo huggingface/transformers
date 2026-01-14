@@ -318,6 +318,11 @@ class StaticLayer(CacheLayerMixin):
                 torch._dynamo.mark_static_address(self.keys_map[batch_size])
                 torch._dynamo.mark_static_address(self.values_map[batch_size])
         self.is_initialized = True
+        batch_size = key_states.shape[0]
+
+        # Slice to current batch size
+        self.keys = self.keys_map[batch_size]
+        self.values = self.values_map[batch_size]
 
     def update(
         self,
@@ -349,9 +354,7 @@ class StaticLayer(CacheLayerMixin):
 
         batch_size = key_states.shape[0]
 
-        # Slice to current batch size
-        self.keys = self.keys_map[batch_size]
-        self.values = self.values_map[batch_size]
+        
         self._current_batch_size = batch_size
 
         try:
