@@ -100,8 +100,6 @@ PRIVATE_MODELS = [
     "Phi4MultimodalVisionModel",
     "Glm4vVisionModel",
     "Glm4vMoeVisionModel",
-    "LightOnOcrTextModel",  # Building part of bigger (tested) model.
-    "LightOnOcrVisionModel",  # Building part of bigger (tested) model.
     "GlmImageVisionModel",
     "EvollaSaProtPreTrainedModel",
     "BltLocalEncoder",  # Building part of bigger (tested) model. Tested implicitly through BLTForCausalLM.
@@ -426,8 +424,6 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "Qwen3OmniMoeThinkerTextModel",  # Building part of a bigger model
     "Ernie4_5_VL_MoeTextModel",  # Building part of a bigger model
     "PeAudioFrameLevelModel",
-    "LightOnOcrTextModel",  # Building part of a bigger model
-    "LightOnOcrVisionModel",  # Building part of a bigger model
 ]
 
 
