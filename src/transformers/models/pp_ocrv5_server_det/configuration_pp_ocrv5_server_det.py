@@ -48,8 +48,6 @@ class PPOCRV5ServerDetConfig(PreTrainedConfig):
             The channel reduction factor used in the neck blocks to balance performance and complexity.
         intraclblock_config (`dict`, *optional*, defaults to `None`):
             Configuration for the Intra-Class Block modules, if any, used for enhancing feature representation.
-        head_in_channels (`int`, *optional*, defaults to 1024):
-            The number of input channels for the head network, derived from the fused neck features.
         k (`int`, *optional*, defaults to 50):
             The candidate box number threshold for the head network, controlling the maximum number of text region candidates.
         mode (`str`, *optional*, defaults to `"large"`):
@@ -89,7 +87,6 @@ class PPOCRV5ServerDetConfig(PreTrainedConfig):
         neck_out_channels: int = 256,
         reduce_factor: int = 2,
         intraclblock_config: dict | None = None,
-        head_in_channels: int = 1024,
         k: int = 50,
         mode: str = "large",
         scale_factor: int = 2,
@@ -116,7 +113,6 @@ class PPOCRV5ServerDetConfig(PreTrainedConfig):
         self.reduce_factor = reduce_factor
         self.intraclblock_config = intraclblock_config
 
-        self.head_in_channels = head_in_channels
         self.k = k
         self.scale_factor = scale_factor
         self.hidden_act = hidden_act
