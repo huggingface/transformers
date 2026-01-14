@@ -14,7 +14,8 @@
 import inspect
 import json
 import os
-from typing import Any, Literal, Optional, TYPE_CHECKING
+from dataclasses import fields, replace
+from typing import TYPE_CHECKING, Any, Literal, Optional
 
 from ..conversion_mapping import get_model_conversion_mapping
 from ..core_model_loading import (
@@ -146,7 +147,6 @@ class PeftAdapterMixin:
         self,
         peft_model_id: str | None = None,
         adapter_name: str | None = None,
-        offload_index: int | None = None,
         peft_config: dict[str, Any] | None = None,
         adapter_state_dict: dict[str, "torch.Tensor"] | None = None,
         low_cpu_mem_usage: bool = False,
@@ -155,7 +155,7 @@ class PeftAdapterMixin:
         local_files_only: bool = False,
         adapter_kwargs: dict[str, Any] | None = None,
         load_config: Optional["LoadStateDictConfig"] = None,
-        **download_kwargs: Any,
+        **kwargs,
     ) -> None:
         """
         Load adapter weights from file or remote Hub folder. If you are not familiar with adapters and PEFT methods, we
@@ -171,6 +171,8 @@ class PeftAdapterMixin:
                 The adapter name to use. If not set, will use the name "default".
             load_config (`LoadStateDictConfig`, *optional*):
                 A load configuration to reuse when pulling adapter weights, typically from `from_pretrained`.
+            kwargs (`dict[str, Any]`, *optional*):
+                Additional `LoadStateDictConfig` fields passed as keyword arguments.
             revision (`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
@@ -183,8 +185,6 @@ class PeftAdapterMixin:
                 Whether to use authentication token to load the remote folder. Useful to load private repositories
                 that are on HuggingFace Hub. You might need to call `hf auth login` and paste your tokens to
                 cache it.
-            offload_index (`int`, `optional`):
-                `offload_index` argument to be passed to `accelerate.dispatch_model` method.
             peft_config (`dict[str, Any]`, *optional*):
                 The configuration of the adapter to add, supported adapters are all non-prompt learning configs (LoRA,
                 IA³, etc). This argument is used in case users directly pass PEFT state dicts.
@@ -233,19 +233,21 @@ class PeftAdapterMixin:
                 `find_adapter_config_file` method.
         """
         from peft import PeftType
+        from ..modeling_utils import LoadStateDictConfig, _get_resolved_checkpoint_files
 
-        ignore_mismatched_sizes = False
-        offload_buffers = None
-        hf_quantizer = None
-        device_mesh = None
-        offload_folder = None
-        if load_config is not None:
-            ignore_mismatched_sizes = load_config.ignore_mismatched_sizes
-            offload_buffers = load_config.offload_buffers
-            hf_quantizer = load_config.hf_quantizer
-            device_mesh = load_config.device_mesh
-            offload_folder = load_config.disk_offload_folder
-
+        if local_files_only:
+            kwargs["local_files_only"] = True
+        base_load_config = (
+            {field.name: getattr(load_config, field.name) for field in fields(LoadStateDictConfig)}
+            if load_config is not None
+            else {}
+        )
+        base_load_config.update(kwargs)
+        base_load_config.setdefault("pretrained_model_name_or_path", None)
+        load_config = LoadStateDictConfig(**base_load_config)
+        download_kwargs = {}
+        peft_model_id = peft_model_id or load_config.pretrained_model_name_or_path
+    
         if hotswap == "auto":
             # if user called model.enable_peft_hotswap and this is not the first adapter, enable hotswap
             hotswap_enabled = getattr(self, "_hotswap_enabled", False)
@@ -267,9 +269,7 @@ class PeftAdapterMixin:
         key_mapping = adapter_kwargs.pop("key_mapping", None)
         weight_conversions = get_model_conversion_mapping(self, key_mapping=key_mapping)
         peft_weight_conversions = _build_peft_weight_mapping(weight_conversions, adapter_name)
-        # peft only supports low_cpu_mem_usage starting from v0.13.0
-        peft_load_kwargs = {}
-        peft_load_kwargs["low_cpu_mem_usage"] = low_cpu_mem_usage
+        peft_load_kwargs = {"low_cpu_mem_usage": low_cpu_mem_usage}
 
         from peft import PeftConfig, inject_adapter_in_model
 
@@ -312,8 +312,6 @@ class PeftAdapterMixin:
         if not self._hf_peft_config_loaded:
             self._hf_peft_config_loaded = True
 
-        from ..modeling_utils import LoadStateDictConfig, _get_resolved_checkpoint_files
-
         checkpoint_files, sharded_metadata = _get_resolved_checkpoint_files(
             pretrained_model_name_or_path=peft_model_id,
             variant=None,
@@ -325,17 +323,12 @@ class PeftAdapterMixin:
             download_kwargs=download_kwargs,
         )
 
-        hf_quantizer = getattr(self, "hf_quantizer", None) or hf_quantizer
+        hf_quantizer = getattr(self, "hf_quantizer", None)
         load_device_map = {"": self.device}
-        # the only state dict we are comparing for missing etc is get_peft_model_state_dict !
-        load_config = LoadStateDictConfig(
+        load_config = replace(
+            load_config,
             pretrained_model_name_or_path=peft_model_id,
-            ignore_mismatched_sizes=ignore_mismatched_sizes,
             sharded_metadata=sharded_metadata,
-            device_map=load_device_map,
-            disk_offload_folder=offload_folder or disk_offload_folder,
-            hf_quantizer=hf_quantizer,
-            device_mesh=device_mesh,
             weight_mapping=peft_weight_conversions,
         )
         load_info = self._load_pretrained_model(
@@ -362,7 +355,7 @@ class PeftAdapterMixin:
             mismatched_keys=mismatched_keys,
             mismatched_shapes=mismatched_keys,
             conversion_errors=load_info.conversion_errors,
-            ignore_mismatched_sizes=ignore_mismatched_sizes,
+            ignore_mismatched_sizes=load_config.ignore_mismatched_sizes,
         )
 
     def enable_peft_hotswap(
