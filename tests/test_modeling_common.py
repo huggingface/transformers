@@ -2718,7 +2718,7 @@ class ModelTesterMixin:
     @require_accelerate
     @mark.accelerate_tests
     @require_torch_accelerator
-    def test_disk_offload_bin(self, rtol=1e-5, atol=1e-5):
+    def test_disk_offload_bin(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -2758,16 +2758,16 @@ class ModelTesterMixin:
 
                 if isinstance(base_output[0], tuple) and isinstance(new_output[0], tuple):
                     [
-                        torch.testing.assert_close(a, b, rtol=rtol, atol=atol)
+                        torch.testing.assert_close(a, b, rtol=1e-5, atol=1e-5)
                         for a, b in zip(base_output[0], new_output[0])
                     ]
                 else:
-                    torch.testing.assert_close(base_output[0], new_output[0], rtol=rtol, atol=atol)
+                    torch.testing.assert_close(base_output[0], new_output[0], rtol=1e-5, atol=1e-5)
 
     @require_accelerate
     @mark.accelerate_tests
     @require_torch_accelerator
-    def test_disk_offload_safetensors(self, rtol=1e-5, atol=1e-5):
+    def test_disk_offload_safetensors(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -2798,16 +2798,16 @@ class ModelTesterMixin:
 
                 if isinstance(base_output[0], tuple) and isinstance(new_output[0], tuple):
                     [
-                        torch.testing.assert_close(a, b, rtol=rtol, atol=atol)
+                        torch.testing.assert_close(a, b, rtol=1e-5, atol=1e-5)
                         for a, b in zip(base_output[0], new_output[0])
                     ]
                 else:
-                    torch.testing.assert_close(base_output[0], new_output[0], rtol=rtol, atol=atol)
+                    torch.testing.assert_close(base_output[0], new_output[0], rtol=1e-5, atol=1e-5)
 
     @require_accelerate
     @mark.accelerate_tests
     @require_torch_accelerator
-    def test_cpu_offload(self, rtol=1e-5, atol=1e-5):
+    def test_cpu_offload(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -2840,17 +2840,17 @@ class ModelTesterMixin:
 
                     if isinstance(base_output[0], tuple) and isinstance(new_output[0], tuple):
                         [
-                            torch.testing.assert_close(a, b, rtol=rtol, atol=atol)
+                            torch.testing.assert_close(a, b, rtol=1e-5, atol=1e-5)
                             for a, b in zip(base_output[0], new_output[0])
                         ]
                     else:
-                        torch.testing.assert_close(base_output[0], new_output[0], rtol=rtol, atol=atol)
+                        torch.testing.assert_close(base_output[0], new_output[0], rtol=1e-5, atol=1e-5)
 
     @require_non_hpu
     @require_accelerate
     @mark.accelerate_tests
     @require_torch_multi_accelerator
-    def test_model_parallelism(self, rtol=1e-5, atol=1e-5):
+    def test_model_parallelism(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
@@ -2882,11 +2882,11 @@ class ModelTesterMixin:
 
                     if isinstance(base_output[0], tuple) and isinstance(new_output[0], tuple):
                         [
-                            torch.testing.assert_close(a, b, rtol=rtol, atol=atol)
+                            torch.testing.assert_close(a, b, rtol=1e-5, atol=1e-5)
                             for a, b in zip(base_output[0], new_output[0])
                         ]
                     else:
-                        torch.testing.assert_close(base_output[0], new_output[0], rtol=rtol, atol=atol)
+                        torch.testing.assert_close(base_output[0], new_output[0], rtol=1e-5, atol=1e-5)
 
     def test_problem_types(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
