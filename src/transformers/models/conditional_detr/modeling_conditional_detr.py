@@ -13,20 +13,37 @@
 # limitations under the License.
 """PyTorch Conditional DETR model."""
 
+import contextlib
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
 
 import torch
-from torch import Tensor, nn
+import torch.nn as nn
+from torch import Tensor
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithCrossAttentions, Seq2SeqModelOutput
-from ...modeling_utils import PreTrainedModel
-from ...utils import ModelOutput, auto_docstring, is_timm_available, logging, requires_backends
+from ...modeling_outputs import (
+    BaseModelOutput,
+    BaseModelOutputWithCrossAttentions,
+    Seq2SeqModelOutput,
+)
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
+from ...pytorch_utils import compile_compatible_method_lru_cache
+from ...utils import (
+    ModelOutput,
+    TransformersKwargs,
+    auto_docstring,
+    is_timm_available,
+    logging,
+    requires_backends,
+)
 from ...utils.backbone_utils import load_backbone
+from ...utils.generic import OutputRecorder, can_return_tuple, check_model_inputs
 from .configuration_conditional_detr import ConditionalDetrConfig
 
 
@@ -272,14 +289,21 @@ class ConditionalDetrConvEncoder(nn.Module):
             num_channels = kwargs.pop("in_chans", config.num_channels)
             if config.dilation:
                 kwargs["output_stride"] = kwargs.get("output_stride", 16)
-            backbone = create_model(
-                config.backbone,
-                pretrained=config.use_pretrained_backbone,
-                features_only=True,
-                out_indices=out_indices,
-                in_chans=num_channels,
-                **kwargs,
+
+            # When loading pretrained weights, temporarily exit meta device
+            is_meta = torch.empty(0).device.type == "meta"
+            device_ctx = (
+                torch.device("cpu") if (config.use_pretrained_backbone and is_meta) else contextlib.nullcontext()
             )
+            with device_ctx:
+                backbone = create_model(
+                    config.backbone,
+                    pretrained=config.use_pretrained_backbone,
+                    features_only=True,
+                    out_indices=out_indices,
+                    in_chans=num_channels,
+                    **kwargs,
+                )
         else:
             backbone = load_backbone(config)
 
@@ -320,62 +344,51 @@ class ConditionalDetrConvEncoder(nn.Module):
         return out
 
 
-# Copied from transformers.models.detr.modeling_detr.DetrConvModel with Detr->ConditionalDetr
-class ConditionalDetrConvModel(nn.Module):
-    """
-    This module adds 2D position embeddings to all intermediate feature maps of the convolutional encoder.
-    """
-
-    def __init__(self, conv_encoder, position_embedding):
-        super().__init__()
-        self.conv_encoder = conv_encoder
-        self.position_embedding = position_embedding
-
-    def forward(self, pixel_values, pixel_mask):
-        # send pixel_values and pixel_mask through backbone to get list of (feature_map, pixel_mask) tuples
-        out = self.conv_encoder(pixel_values, pixel_mask)
-        pos = []
-        for feature_map, mask in out:
-            # position encoding
-            pos.append(self.position_embedding(feature_map, mask).to(feature_map.dtype))
-
-        return out, pos
-
-
 class ConditionalDetrSinePositionEmbedding(nn.Module):
     """
     This is a more standard version of the position embedding, very similar to the one used by the Attention is all you
     need paper, generalized to work on images.
     """
 
-    def __init__(self, embedding_dim=64, temperature=10000, normalize=False, scale=None):
+    def __init__(
+        self, num_pos_feats: int = 64, temperature: int = 10000, normalize: bool = False, scale: float | None = None
+    ):
         super().__init__()
-        self.embedding_dim = embedding_dim
-        self.temperature = temperature
-        self.normalize = normalize
         if scale is not None and normalize is False:
             raise ValueError("normalize should be True if scale is passed")
-        if scale is None:
-            scale = 2 * math.pi
-        self.scale = scale
+        self.num_pos_feats = num_pos_feats
+        self.temperature = temperature
+        self.normalize = normalize
+        self.scale = 2 * math.pi if scale is None else scale
 
-    def forward(self, pixel_values, pixel_mask):
-        if pixel_mask is None:
-            raise ValueError("No pixel mask provided")
-        y_embed = pixel_mask.cumsum(1, dtype=torch.float32)
-        x_embed = pixel_mask.cumsum(2, dtype=torch.float32)
+    @compile_compatible_method_lru_cache(maxsize=1)
+    def forward(
+        self,
+        shape: torch.Size,
+        device: torch.device | str,
+        dtype: torch.dtype,
+        mask: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        if mask is None:
+            mask = torch.zeros((shape[0], shape[2], shape[3]), device=device, dtype=torch.bool)
+        y_embed = mask.cumsum(1, dtype=dtype)
+        x_embed = mask.cumsum(2, dtype=dtype)
         if self.normalize:
-            y_embed = y_embed / (y_embed[:, -1:, :] + 1e-6) * self.scale
-            x_embed = x_embed / (x_embed[:, :, -1:] + 1e-6) * self.scale
+            eps = 1e-6
+            y_embed = y_embed / (y_embed[:, -1:, :] + eps) * self.scale
+            x_embed = x_embed / (x_embed[:, :, -1:] + eps) * self.scale
 
-        dim_t = torch.arange(self.embedding_dim, dtype=torch.int64, device=pixel_values.device).float()
-        dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.embedding_dim)
+        dim_t = torch.arange(self.num_pos_feats, dtype=torch.int64, device=device).to(dtype)
+        dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.num_pos_feats)
 
         pos_x = x_embed[:, :, :, None] / dim_t
         pos_y = y_embed[:, :, :, None] / dim_t
         pos_x = torch.stack((pos_x[:, :, :, 0::2].sin(), pos_x[:, :, :, 1::2].cos()), dim=4).flatten(3)
         pos_y = torch.stack((pos_y[:, :, :, 0::2].sin(), pos_y[:, :, :, 1::2].cos()), dim=4).flatten(3)
         pos = torch.cat((pos_y, pos_x), dim=3).permute(0, 3, 1, 2)
+        # Flatten spatial dimensions and permute to (batch_size, sequence_length, hidden_size) format
+        # expected by the encoder
+        pos = pos.flatten(2).permute(0, 2, 1)
         return pos
 
 
@@ -390,31 +403,27 @@ class ConditionalDetrLearnedPositionEmbedding(nn.Module):
         self.row_embeddings = nn.Embedding(50, embedding_dim)
         self.column_embeddings = nn.Embedding(50, embedding_dim)
 
-    def forward(self, pixel_values, pixel_mask=None):
-        height, width = pixel_values.shape[-2:]
-        width_values = torch.arange(width, device=pixel_values.device)
-        height_values = torch.arange(height, device=pixel_values.device)
+    @compile_compatible_method_lru_cache(maxsize=1)
+    def forward(
+        self,
+        shape: torch.Size,
+        device: torch.device | str,
+        dtype: torch.dtype,
+        mask: torch.Tensor | None = None,
+    ):
+        height, width = shape[-2:]
+        width_values = torch.arange(width, device=device)
+        height_values = torch.arange(height, device=device)
         x_emb = self.column_embeddings(width_values)
         y_emb = self.row_embeddings(height_values)
         pos = torch.cat([x_emb.unsqueeze(0).repeat(height, 1, 1), y_emb.unsqueeze(1).repeat(1, width, 1)], dim=-1)
         pos = pos.permute(2, 0, 1)
         pos = pos.unsqueeze(0)
-        pos = pos.repeat(pixel_values.shape[0], 1, 1, 1)
+        pos = pos.repeat(shape[0], 1, 1, 1)
+        # Flatten spatial dimensions and permute to (batch_size, sequence_length, hidden_size) format
+        # expected by the encoder
+        pos = pos.flatten(2).permute(0, 2, 1)
         return pos
-
-
-# Copied from transformers.models.detr.modeling_detr.build_position_encoding with Detr->ConditionalDetr
-def build_position_encoding(config):
-    n_steps = config.d_model // 2
-    if config.position_embedding_type == "sine":
-        # TODO find a better way of exposing other arguments
-        position_embedding = ConditionalDetrSinePositionEmbedding(n_steps, normalize=True)
-    elif config.position_embedding_type == "learned":
-        position_embedding = ConditionalDetrLearnedPositionEmbedding(n_steps)
-    else:
-        raise ValueError(f"Not supported {config.position_embedding_type}")
-
-    return position_embedding
 
 
 # function to generate sine positional embedding for 2d coordinates
@@ -440,277 +449,340 @@ def inverse_sigmoid(x, eps=1e-5):
     return torch.log(x1 / x2)
 
 
-# Copied from transformers.models.detr.modeling_detr.DetrAttention
-class DetrAttention(nn.Module):
-    """
-    Multi-headed attention from 'Attention Is All You Need' paper.
+def eager_attention_forward(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
+    dropout: float = 0.0,
+    **kwargs: Unpack[TransformersKwargs],
+):
+    if scaling is None:
+        scaling = query.size(-1) ** -0.5
 
-    Here, we add position embeddings to the queries and keys (as explained in the DETR paper).
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
+
+    if attention_mask is not None:
+        attention_mask = attention_mask[:, :, :, : key.shape[-2]]
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
+class ConditionalDetrSelfAttention(nn.Module):
+    """
+    Multi-headed self-attention from 'Attention Is All You Need' paper.
+
+    In DETR, position embeddings are added to both queries and keys (but not values) in self-attention.
     """
 
     def __init__(
         self,
-        embed_dim: int,
-        num_heads: int,
+        config: ConditionalDetrConfig,
+        hidden_size: int,
+        num_attention_heads: int,
         dropout: float = 0.0,
-        bias: bool = True,
     ):
         super().__init__()
-        self.embed_dim = embed_dim
-        self.num_heads = num_heads
-        self.dropout = dropout
-        self.head_dim = embed_dim // num_heads
-        if self.head_dim * num_heads != self.embed_dim:
-            raise ValueError(
-                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
-                f" {num_heads})."
-            )
+        self.config = config
+        self.head_dim = hidden_size // num_attention_heads
         self.scaling = self.head_dim**-0.5
+        self.attention_dropout = dropout
+        self.is_causal = False
 
-        self.k_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.v_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.q_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-        self.out_proj = nn.Linear(embed_dim, embed_dim, bias=bias)
-
-    def _shape(self, tensor: torch.Tensor, seq_len: int, batch_size: int):
-        return tensor.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
-
-    def with_pos_embed(self, tensor: torch.Tensor, object_queries: Tensor | None):
-        return tensor if object_queries is None else tensor + object_queries
+        self.k_proj = nn.Linear(hidden_size, hidden_size)
+        self.v_proj = nn.Linear(hidden_size, hidden_size)
+        self.q_proj = nn.Linear(hidden_size, hidden_size)
+        self.o_proj = nn.Linear(hidden_size, hidden_size)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
-        object_queries: torch.Tensor | None = None,
-        key_value_states: torch.Tensor | None = None,
-        spatial_position_embeddings: torch.Tensor | None = None,
-        output_attentions: bool = False,
-    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
-        """Input shape: Batch x Time x Channel"""
-        # if key_value_states are provided this layer is used as a cross-attention layer
-        # for the decoder
-        is_cross_attention = key_value_states is not None
-        batch_size, target_len, embed_dim = hidden_states.size()
+        position_embeddings: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Position embeddings are added to both queries and keys (but not values).
+        """
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
 
-        # add position embeddings to the hidden states before projecting to queries and keys
-        if object_queries is not None:
-            hidden_states_original = hidden_states
-            hidden_states = self.with_pos_embed(hidden_states, object_queries)
+        query_key_input = hidden_states + position_embeddings if position_embeddings is not None else hidden_states
 
-        # add key-value position embeddings to the key value states
-        if spatial_position_embeddings is not None:
-            key_value_states_original = key_value_states
-            key_value_states = self.with_pos_embed(key_value_states, spatial_position_embeddings)
+        query_states = self.q_proj(query_key_input).view(hidden_shape).transpose(1, 2)
+        key_states = self.k_proj(query_key_input).view(hidden_shape).transpose(1, 2)
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        # get query proj
-        query_states = self.q_proj(hidden_states) * self.scaling
-        # get key, value proj
-        if is_cross_attention:
-            # cross_attentions
-            key_states = self._shape(self.k_proj(key_value_states), -1, batch_size)
-            value_states = self._shape(self.v_proj(key_value_states_original), -1, batch_size)
-        else:
-            # self_attention
-            key_states = self._shape(self.k_proj(hidden_states), -1, batch_size)
-            value_states = self._shape(self.v_proj(hidden_states_original), -1, batch_size)
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        proj_shape = (batch_size * self.num_heads, -1, self.head_dim)
-        query_states = self._shape(query_states, target_len, batch_size).view(*proj_shape)
-        key_states = key_states.view(*proj_shape)
-        value_states = value_states.view(*proj_shape)
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            **kwargs,
+        )
 
-        source_len = key_states.size(1)
-
-        attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
-
-        if attn_weights.size() != (batch_size * self.num_heads, target_len, source_len):
-            raise ValueError(
-                f"Attention weights should be of size {(batch_size * self.num_heads, target_len, source_len)}, but is"
-                f" {attn_weights.size()}"
-            )
-
-        if attention_mask is not None:
-            if attention_mask.size() != (batch_size, 1, target_len, source_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(batch_size, 1, target_len, source_len)}, but is"
-                    f" {attention_mask.size()}"
-                )
-            if attention_mask.dtype == torch.bool:
-                attention_mask = torch.zeros_like(attention_mask, dtype=attn_weights.dtype).masked_fill_(
-                    attention_mask, -torch.inf
-                )
-            attn_weights = attn_weights.view(batch_size, self.num_heads, target_len, source_len) + attention_mask
-            attn_weights = attn_weights.view(batch_size * self.num_heads, target_len, source_len)
-
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-
-        if output_attentions:
-            # this operation is a bit awkward, but it's required to
-            # make sure that attn_weights keeps its gradient.
-            # In order to do so, attn_weights have to reshaped
-            # twice and have to be reused in the following
-            attn_weights_reshaped = attn_weights.view(batch_size, self.num_heads, target_len, source_len)
-            attn_weights = attn_weights_reshaped.view(batch_size * self.num_heads, target_len, source_len)
-        else:
-            attn_weights_reshaped = None
-
-        attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
-
-        attn_output = torch.bmm(attn_probs, value_states)
-
-        if attn_output.size() != (batch_size * self.num_heads, target_len, self.head_dim):
-            raise ValueError(
-                f"`attn_output` should be of size {(batch_size, self.num_heads, target_len, self.head_dim)}, but is"
-                f" {attn_output.size()}"
-            )
-
-        attn_output = attn_output.view(batch_size, self.num_heads, target_len, self.head_dim)
-        attn_output = attn_output.transpose(1, 2)
-        attn_output = attn_output.reshape(batch_size, target_len, embed_dim)
-
-        attn_output = self.out_proj(attn_output)
-
-        return attn_output, attn_weights_reshaped
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
 
 
-class ConditionalDetrAttention(nn.Module):
+class ConditionalDetrDecoderSelfAttention(nn.Module):
     """
-    Cross-Attention used in Conditional DETR 'Conditional DETR for Fast Training Convergence' paper.
+    Multi-headed self-attention for Conditional DETR decoder layers.
 
-    The key q_proj, k_proj, v_proj are defined outside the attention. This attention allows the dim of q, k to be
-    different to v.
+    This attention module handles separate content and position projections, which are then combined
+    before applying standard self-attention. Position embeddings are added to both queries and keys.
     """
 
     def __init__(
         self,
-        embed_dim: int,
-        out_dim: int,
-        num_heads: int,
+        config: ConditionalDetrConfig,
+        hidden_size: int,
+        num_attention_heads: int,
         dropout: float = 0.0,
-        bias: bool = True,
     ):
         super().__init__()
-        self.embed_dim = embed_dim
-        self.out_dim = out_dim
-        self.num_heads = num_heads
-        self.dropout = dropout
-        self.head_dim = embed_dim // num_heads
-        if self.head_dim * num_heads != self.embed_dim:
-            raise ValueError(
-                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
-                f" {num_heads})."
-            )
-        # head dimension of values
-        self.v_head_dim = out_dim // num_heads
-        if self.v_head_dim * num_heads != self.out_dim:
-            raise ValueError(
-                f"out_dim must be divisible by num_heads (got `out_dim`: {self.out_dim} and `num_heads`: {num_heads})."
-            )
+        self.config = config
+        self.hidden_size = hidden_size
+        self.head_dim = hidden_size // num_attention_heads
         self.scaling = self.head_dim**-0.5
+        self.attention_dropout = dropout
+        self.is_causal = False
 
-        self.out_proj = nn.Linear(out_dim, out_dim, bias=bias)
-
-    def _qk_shape(self, tensor: torch.Tensor, seq_len: int, batch_size: int):
-        return tensor.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
-
-    def _v_shape(self, tensor: torch.Tensor, seq_len: int, batch_size: int):
-        return tensor.view(batch_size, seq_len, self.num_heads, self.v_head_dim).transpose(1, 2).contiguous()
+        # Content and position projections
+        self.q_content_proj = nn.Linear(hidden_size, hidden_size)
+        self.q_pos_proj = nn.Linear(hidden_size, hidden_size)
+        self.k_content_proj = nn.Linear(hidden_size, hidden_size)
+        self.k_pos_proj = nn.Linear(hidden_size, hidden_size)
+        self.v_proj = nn.Linear(hidden_size, hidden_size)
+        self.o_proj = nn.Linear(hidden_size, hidden_size)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
+        query_position_embeddings: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
-        key_states: torch.Tensor | None = None,
-        value_states: torch.Tensor | None = None,
-        output_attentions: bool = False,
-    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
-        """Input shape: Batch x Time x Channel"""
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Args:
+            hidden_states (`torch.Tensor` of shape `(batch_size, num_queries, hidden_size)`):
+                Input hidden states from the decoder layer.
+            query_position_embeddings (`torch.Tensor` of shape `(batch_size, num_queries, hidden_size)`):
+                Position embeddings for queries and keys. Required (unlike standard attention). Processed through
+                separate position projections (`q_pos_proj`, `k_pos_proj`) and added to content projections.
+            attention_mask (`torch.Tensor` of shape `(batch_size, 1, num_queries, num_queries)`, *optional*):
+                Attention mask to avoid attending to padding tokens.
+        """
+        input_shape = hidden_states.shape[:-1]
+        hidden_shape = (*input_shape, -1, self.head_dim)
 
-        batch_size, target_len, _ = hidden_states.size()
+        query_states = (
+            (self.q_content_proj(hidden_states) + self.q_pos_proj(query_position_embeddings))
+            .view(hidden_shape)
+            .transpose(1, 2)
+        )
+        key_states = (
+            (self.k_content_proj(hidden_states) + self.k_pos_proj(query_position_embeddings))
+            .view(hidden_shape)
+            .transpose(1, 2)
+        )
+        value_states = self.v_proj(hidden_states).view(hidden_shape).transpose(1, 2)
 
-        # get query proj
-        query_states = hidden_states * self.scaling
-        # get key, value proj
-        key_states = self._qk_shape(key_states, -1, batch_size)
-        value_states = self._v_shape(value_states, -1, batch_size)
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        proj_shape = (batch_size * self.num_heads, -1, self.head_dim)
-        v_proj_shape = (batch_size * self.num_heads, -1, self.v_head_dim)
-        query_states = self._qk_shape(query_states, target_len, batch_size).view(*proj_shape)
-        key_states = key_states.view(*proj_shape)
-        value_states = value_states.view(*v_proj_shape)
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            **kwargs,
+        )
 
-        source_len = key_states.size(1)
-
-        attn_weights = torch.bmm(query_states, key_states.transpose(1, 2))
-
-        if attn_weights.size() != (batch_size * self.num_heads, target_len, source_len):
-            raise ValueError(
-                f"Attention weights should be of size {(batch_size * self.num_heads, target_len, source_len)}, but is"
-                f" {attn_weights.size()}"
-            )
-
-        if attention_mask is not None:
-            if attention_mask.size() != (batch_size, 1, target_len, source_len):
-                raise ValueError(
-                    f"Attention mask should be of size {(batch_size, 1, target_len, source_len)}, but is"
-                    f" {attention_mask.size()}"
-                )
-            if attention_mask.dtype == torch.bool:
-                attention_mask = torch.zeros_like(attention_mask, dtype=attn_weights.dtype).masked_fill_(
-                    attention_mask, -torch.inf
-                )
-            attn_weights = attn_weights.view(batch_size, self.num_heads, target_len, source_len) + attention_mask
-            attn_weights = attn_weights.view(batch_size * self.num_heads, target_len, source_len)
-
-        attn_weights = nn.functional.softmax(attn_weights, dim=-1)
-
-        if output_attentions:
-            # this operation is a bit awkward, but it's required to
-            # make sure that attn_weights keeps its gradient.
-            # In order to do so, attn_weights have to reshaped
-            # twice and have to be reused in the following
-            attn_weights_reshaped = attn_weights.view(batch_size, self.num_heads, target_len, source_len)
-            attn_weights = attn_weights_reshaped.view(batch_size * self.num_heads, target_len, source_len)
-        else:
-            attn_weights_reshaped = None
-
-        attn_probs = nn.functional.dropout(attn_weights, p=self.dropout, training=self.training)
-
-        attn_output = torch.bmm(attn_probs, value_states)
-
-        if attn_output.size() != (batch_size * self.num_heads, target_len, self.v_head_dim):
-            raise ValueError(
-                f"`attn_output` should be of size {(batch_size, self.num_heads, target_len, self.v_head_dim)}, but is"
-                f" {attn_output.size()}"
-            )
-
-        attn_output = attn_output.view(batch_size, self.num_heads, target_len, self.v_head_dim)
-        attn_output = attn_output.transpose(1, 2)
-        attn_output = attn_output.reshape(batch_size, target_len, self.out_dim)
-
-        attn_output = self.out_proj(attn_output)
-
-        return attn_output, attn_weights_reshaped
+        attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
 
 
-# Copied from transformers.models.detr.modeling_detr.DetrEncoderLayer with DetrEncoderLayer->ConditionalDetrEncoderLayer,DetrConfig->ConditionalDetrConfig
+class ConditionalDetrDecoderCrossAttention(nn.Module):
+    """
+    Multi-headed cross-attention for Conditional DETR decoder layers.
+
+    This attention module handles the special cross-attention logic in Conditional DETR:
+    - Separate content and position projections for queries and keys
+    - Concatenation of query sine embeddings with queries (doubling query dimension)
+    - Concatenation of key position embeddings with keys (doubling key dimension)
+    - Output dimension remains hidden_size despite doubled input dimensions
+    """
+
+    def __init__(
+        self,
+        config: ConditionalDetrConfig,
+        hidden_size: int,
+        num_attention_heads: int,
+        dropout: float = 0.0,
+    ):
+        super().__init__()
+        self.config = config
+        self.hidden_size = hidden_size
+        self.num_attention_heads = num_attention_heads
+        self.head_dim = hidden_size // num_attention_heads
+        self.attention_dropout = dropout
+        self.is_causal = False
+
+        # Content and position projections
+        self.q_content_proj = nn.Linear(hidden_size, hidden_size)
+        self.q_pos_proj = nn.Linear(hidden_size, hidden_size)
+        self.k_content_proj = nn.Linear(hidden_size, hidden_size)
+        self.k_pos_proj = nn.Linear(hidden_size, hidden_size)
+        self.v_proj = nn.Linear(hidden_size, hidden_size)
+        self.q_pos_sine_proj = nn.Linear(hidden_size, hidden_size)
+
+        # Output projection: input is hidden_size * 2 (from concatenated q/k), output is hidden_size
+        self.o_proj = nn.Linear(hidden_size, hidden_size)
+
+        # Compute scaling for expanded head_dim (q and k have doubled dimensions after concatenation)
+        # This matches the original Conditional DETR implementation where embed_dim * 2 is used
+        expanded_head_dim = (hidden_size * 2) // num_attention_heads
+        self.scaling = expanded_head_dim**-0.5
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        encoder_hidden_states: torch.Tensor,
+        query_sine_embed: torch.Tensor,
+        encoder_position_embeddings: torch.Tensor,
+        query_position_embeddings: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Args:
+            hidden_states (`torch.Tensor` of shape `(batch_size, num_queries, hidden_size)`):
+                Decoder hidden states (queries).
+            encoder_hidden_states (`torch.Tensor` of shape `(batch_size, encoder_seq_len, hidden_size)`):
+                Encoder output hidden states (keys and values).
+            query_sine_embed (`torch.Tensor` of shape `(batch_size, num_queries, hidden_size)`):
+                Sine position embeddings for queries. **Concatenated** (not added) with query content,
+                doubling the query dimension.
+            encoder_position_embeddings (`torch.Tensor` of shape `(batch_size, encoder_seq_len, hidden_size)`):
+                Position embeddings for keys. **Concatenated** (not added) with key content, doubling the key dimension.
+            query_position_embeddings (`torch.Tensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
+                Additional position embeddings. When provided (first layer only), **added** to query content
+                before concatenation with `query_sine_embed`. Also causes `encoder_position_embeddings` to be
+                added to key content before concatenation.
+            attention_mask (`torch.Tensor` of shape `(batch_size, 1, num_queries, encoder_seq_len)`, *optional*):
+                Attention mask to avoid attending to padding tokens.
+        """
+        query_input_shape = hidden_states.shape[:-1]
+        kv_input_shape = encoder_hidden_states.shape[:-1]
+        query_hidden_shape = (*query_input_shape, self.num_attention_heads, self.head_dim)
+        kv_hidden_shape = (*kv_input_shape, self.num_attention_heads, self.head_dim)
+
+        # Apply content and position projections
+        query_input = self.q_content_proj(hidden_states)
+        key_input = self.k_content_proj(encoder_hidden_states)
+        value_states = self.v_proj(encoder_hidden_states)
+        key_pos = self.k_pos_proj(encoder_position_embeddings)
+
+        # Combine content and position embeddings
+        if query_position_embeddings is not None:
+            query_input = query_input + self.q_pos_proj(query_position_embeddings)
+            key_input = key_input + key_pos
+
+        # Reshape and concatenate position embeddings (doubling head_dim)
+        query_input = query_input.view(query_hidden_shape)
+        key_input = key_input.view(kv_hidden_shape)
+        query_sine_embed = self.q_pos_sine_proj(query_sine_embed).view(query_hidden_shape)
+        key_pos = key_pos.view(kv_hidden_shape)
+
+        query_states = torch.cat([query_input, query_sine_embed], dim=-1).view(*query_input_shape, -1)
+        key_states = torch.cat([key_input, key_pos], dim=-1).view(*kv_input_shape, -1)
+
+        # Reshape for attention computation
+        expanded_head_dim = query_states.shape[-1] // self.num_attention_heads
+        query_states = query_states.view(*query_input_shape, self.num_attention_heads, expanded_head_dim).transpose(
+            1, 2
+        )
+        key_states = key_states.view(*kv_input_shape, self.num_attention_heads, expanded_head_dim).transpose(1, 2)
+        value_states = value_states.view(kv_hidden_shape).transpose(1, 2)
+
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            query_states,
+            key_states,
+            value_states,
+            attention_mask,
+            dropout=0.0 if not self.training else self.attention_dropout,
+            scaling=self.scaling,
+            **kwargs,
+        )
+
+        attn_output = attn_output.reshape(*query_input_shape, -1).contiguous()
+        attn_output = self.o_proj(attn_output)
+        return attn_output, attn_weights
+
+
+class ConditionalDetrMLP(nn.Module):
+    """
+    MLP module used in DETR encoder and decoder layers.
+    """
+
+    def __init__(self, config: ConditionalDetrConfig, hidden_size: int, intermediate_size: int):
+        super().__init__()
+        self.fc1 = nn.Linear(hidden_size, intermediate_size)
+        self.fc2 = nn.Linear(intermediate_size, hidden_size)
+        self.activation_fn = ACT2FN[config.activation_function]
+        self.activation_dropout = config.activation_dropout
+        self.dropout = config.dropout
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.activation_fn(self.fc1(hidden_states))
+        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
+        hidden_states = self.fc2(hidden_states)
+        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        return hidden_states
+
+
+# Copied from transformers.models.detr.modeling_detr.DetrEncoderLayer with DetrEncoderLayer->ConditionalDetrEncoderLayer,DetrConfig->ConditionalDetrConfig,ConditionalDetrSelfAttention->ConditionalDetrSelfAttention
 class ConditionalDetrEncoderLayer(nn.Module):
     def __init__(self, config: ConditionalDetrConfig):
         super().__init__()
         self.embed_dim = config.d_model
-        self.self_attn = DetrAttention(
-            embed_dim=self.embed_dim,
-            num_heads=config.encoder_attention_heads,
+        self.self_attn = ConditionalDetrSelfAttention(
+            config=config,
+            hidden_size=self.embed_dim,
+            num_attention_heads=config.encoder_attention_heads,
             dropout=config.attention_dropout,
         )
         self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
         self.dropout = config.dropout
-        self.activation_fn = ACT2FN[config.activation_function]
-        self.activation_dropout = config.activation_dropout
-        self.fc1 = nn.Linear(self.embed_dim, config.encoder_ffn_dim)
-        self.fc2 = nn.Linear(config.encoder_ffn_dim, self.embed_dim)
+        self.mlp = ConditionalDetrMLP(config, self.embed_dim, config.encoder_ffn_dim)
         self.final_layer_norm = nn.LayerNorm(self.embed_dim)
 
     def forward(
@@ -718,8 +790,8 @@ class ConditionalDetrEncoderLayer(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         object_queries: torch.Tensor | None = None,
-        output_attentions: bool = False,
-    ):
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -733,11 +805,11 @@ class ConditionalDetrEncoderLayer(nn.Module):
                 returned tensors for more detail.
         """
         residual = hidden_states
-        hidden_states, attn_weights = self.self_attn(
+        hidden_states, _ = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
-            object_queries=object_queries,
-            output_attentions=output_attentions,
+            position_embeddings=object_queries,
+            **kwargs,
         )
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -745,12 +817,7 @@ class ConditionalDetrEncoderLayer(nn.Module):
         hidden_states = self.self_attn_layer_norm(hidden_states)
 
         residual = hidden_states
-        hidden_states = self.activation_fn(self.fc1(hidden_states))
-        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
-
-        hidden_states = self.fc2(hidden_states)
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
-
+        hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
         hidden_states = self.final_layer_norm(hidden_states)
 
@@ -759,55 +826,35 @@ class ConditionalDetrEncoderLayer(nn.Module):
                 clamp_value = torch.finfo(hidden_states.dtype).max - 1000
                 hidden_states = torch.clamp(hidden_states, min=-clamp_value, max=clamp_value)
 
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (attn_weights,)
-
-        return outputs
+        return hidden_states
 
 
 class ConditionalDetrDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: ConditionalDetrConfig):
         super().__init__()
-        self.embed_dim = config.d_model
+        self.hidden_size = config.d_model
 
-        d_model = config.d_model
-        # Decoder Self-Attention projections
-        self.sa_qcontent_proj = nn.Linear(d_model, d_model)
-        self.sa_qpos_proj = nn.Linear(d_model, d_model)
-        self.sa_kcontent_proj = nn.Linear(d_model, d_model)
-        self.sa_kpos_proj = nn.Linear(d_model, d_model)
-        self.sa_v_proj = nn.Linear(d_model, d_model)
-
-        self.self_attn = ConditionalDetrAttention(
-            embed_dim=self.embed_dim,
-            out_dim=self.embed_dim,
-            num_heads=config.decoder_attention_heads,
+        self.self_attn = ConditionalDetrDecoderSelfAttention(
+            config=config,
+            hidden_size=self.hidden_size,
+            num_attention_heads=config.decoder_attention_heads,
             dropout=config.attention_dropout,
         )
         self.dropout = config.dropout
         self.activation_fn = ACT2FN[config.activation_function]
         self.activation_dropout = config.activation_dropout
 
-        self.self_attn_layer_norm = nn.LayerNorm(self.embed_dim)
+        self.self_attn_layer_norm = nn.LayerNorm(self.hidden_size)
 
-        # Decoder Cross-Attention projections
-        self.ca_qcontent_proj = nn.Linear(d_model, d_model)
-        self.ca_qpos_proj = nn.Linear(d_model, d_model)
-        self.ca_kcontent_proj = nn.Linear(d_model, d_model)
-        self.ca_kpos_proj = nn.Linear(d_model, d_model)
-        self.ca_v_proj = nn.Linear(d_model, d_model)
-        self.ca_qpos_sine_proj = nn.Linear(d_model, d_model)
-
-        self.encoder_attn = ConditionalDetrAttention(
-            self.embed_dim * 2, self.embed_dim, config.decoder_attention_heads, dropout=config.attention_dropout
+        self.encoder_attn = ConditionalDetrDecoderCrossAttention(
+            config=config,
+            hidden_size=self.hidden_size,
+            num_attention_heads=config.decoder_attention_heads,
+            dropout=config.attention_dropout,
         )
-        self.encoder_attn_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.fc1 = nn.Linear(self.embed_dim, config.decoder_ffn_dim)
-        self.fc2 = nn.Linear(config.decoder_ffn_dim, self.embed_dim)
-        self.final_layer_norm = nn.LayerNorm(self.embed_dim)
-        self.nhead = config.decoder_attention_heads
+        self.encoder_attn_layer_norm = nn.LayerNorm(self.hidden_size)
+        self.mlp = ConditionalDetrMLP(config, self.hidden_size, config.decoder_ffn_dim)
+        self.final_layer_norm = nn.LayerNorm(self.hidden_size)
 
     def forward(
         self,
@@ -818,9 +865,9 @@ class ConditionalDetrDecoderLayer(GradientCheckpointingLayer):
         query_sine_embed: torch.Tensor | None = None,
         encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.Tensor | None = None,
-        output_attentions: bool | None = False,
         is_first: bool | None = False,
-    ):
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.Tensor:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(seq_len, batch, embed_dim)`
@@ -844,102 +891,46 @@ class ConditionalDetrDecoderLayer(GradientCheckpointingLayer):
         """
         residual = hidden_states
 
-        # ========== Begin of Self-Attention =============
-        # Apply projections here
-        # shape: num_queries x batch_size x 256
-        q_content = self.sa_qcontent_proj(
-            hidden_states
-        )  # target is the input of the first decoder layer. zero by default.
-        q_pos = self.sa_qpos_proj(query_position_embeddings)
-        k_content = self.sa_kcontent_proj(hidden_states)
-        k_pos = self.sa_kpos_proj(query_position_embeddings)
-        v = self.sa_v_proj(hidden_states)
-
-        _, num_queries, n_model = q_content.shape
-
-        q = q_content + q_pos
-        k = k_content + k_pos
-        hidden_states, self_attn_weights = self.self_attn(
-            hidden_states=q,
+        hidden_states, _ = self.self_attn(
+            hidden_states=hidden_states,
+            query_position_embeddings=query_position_embeddings,
             attention_mask=attention_mask,
-            key_states=k,
-            value_states=v,
-            output_attentions=output_attentions,
+            **kwargs,
         )
-        # ============ End of Self-Attention =============
 
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
         hidden_states = residual + hidden_states
         hidden_states = self.self_attn_layer_norm(hidden_states)
 
-        # ========== Begin of Cross-Attention =============
-        # Apply projections here
-        # shape: num_queries x batch_size x 256
-        q_content = self.ca_qcontent_proj(hidden_states)
-        k_content = self.ca_kcontent_proj(encoder_hidden_states)
-        v = self.ca_v_proj(encoder_hidden_states)
-
-        batch_size, num_queries, n_model = q_content.shape
-        _, source_len, _ = k_content.shape
-
-        k_pos = self.ca_kpos_proj(object_queries)
-
-        # For the first decoder layer, we concatenate the positional embedding predicted from
-        # the object query (the positional embedding) into the original query (key) in DETR.
-        if is_first:
-            q_pos = self.ca_qpos_proj(query_position_embeddings)
-            q = q_content + q_pos
-            k = k_content + k_pos
-        else:
-            q = q_content
-            k = k_content
-
-        q = q.view(batch_size, num_queries, self.nhead, n_model // self.nhead)
-        query_sine_embed = self.ca_qpos_sine_proj(query_sine_embed)
-        query_sine_embed = query_sine_embed.view(batch_size, num_queries, self.nhead, n_model // self.nhead)
-        q = torch.cat([q, query_sine_embed], dim=3).view(batch_size, num_queries, n_model * 2)
-        k = k.view(batch_size, source_len, self.nhead, n_model // self.nhead)
-        k_pos = k_pos.view(batch_size, source_len, self.nhead, n_model // self.nhead)
-        k = torch.cat([k, k_pos], dim=3).view(batch_size, source_len, n_model * 2)
-
-        # Cross-Attention Block
-        cross_attn_weights = None
         if encoder_hidden_states is not None:
             residual = hidden_states
 
-            hidden_states, cross_attn_weights = self.encoder_attn(
-                hidden_states=q,
+            hidden_states, _ = self.encoder_attn(
+                hidden_states=hidden_states,
+                encoder_hidden_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
-                key_states=k,
-                value_states=v,
-                output_attentions=output_attentions,
+                query_sine_embed=query_sine_embed,
+                encoder_position_embeddings=object_queries,
+                # Only pass query_position_embeddings for the first layer
+                query_position_embeddings=query_position_embeddings if is_first else None,
+                **kwargs,
             )
 
             hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
             hidden_states = residual + hidden_states
             hidden_states = self.encoder_attn_layer_norm(hidden_states)
 
-        # ============ End of Cross-Attention =============
-
         # Fully Connected
         residual = hidden_states
-        hidden_states = self.activation_fn(self.fc1(hidden_states))
-        hidden_states = nn.functional.dropout(hidden_states, p=self.activation_dropout, training=self.training)
-        hidden_states = self.fc2(hidden_states)
-        hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+        hidden_states = self.mlp(hidden_states)
         hidden_states = residual + hidden_states
         hidden_states = self.final_layer_norm(hidden_states)
 
-        outputs = (hidden_states,)
-
-        if output_attentions:
-            outputs += (self_attn_weights, cross_attn_weights)
-
-        return outputs
+        return hidden_states
 
 
 # Copied from transformers.models.detr.modeling_detr.DetrMLPPredictionHead with DetrMLPPredictionHead->MLP
-class MLP(nn.Module):
+class ConditionalDetrMLPPredictionHead(nn.Module):
     """
     Very simple multi-layer perceptron (MLP, also called FFN), used to predict the normalized center coordinates,
     height and width of a bounding box w.r.t. an image.
@@ -968,6 +959,13 @@ class ConditionalDetrPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _no_split_modules = [r"ConditionalDetrConvEncoder", r"ConditionalDetrEncoderLayer", r"ConditionalDetrDecoderLayer"]
+    _supports_sdpa = True
+    _supports_flash_attn = True
+    _supports_attention_backend = True
+    _supports_flex_attn = True
+    _keys_to_ignore_on_load_unexpected = [
+        r"detr\.model\.backbone\.model\.layer\d+\.0\.downsample\.1\.num_batches_tracked"
+    ]
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -975,10 +973,10 @@ class ConditionalDetrPreTrainedModel(PreTrainedModel):
         xavier_std = self.config.init_xavier_std
 
         if isinstance(module, ConditionalDetrMHAttentionMap):
-            init.zeros_(module.k_linear.bias)
-            init.zeros_(module.q_linear.bias)
-            init.xavier_uniform_(module.k_linear.weight, gain=xavier_std)
-            init.xavier_uniform_(module.q_linear.weight, gain=xavier_std)
+            init.zeros_(module.k_proj.bias)
+            init.zeros_(module.q_proj.bias)
+            init.xavier_uniform_(module.k_proj.weight, gain=xavier_std)
+            init.xavier_uniform_(module.q_proj.weight, gain=xavier_std)
         elif isinstance(module, ConditionalDetrLearnedPositionEmbedding):
             init.uniform_(module.row_embeddings.weight)
             init.uniform_(module.column_embeddings.weight)
@@ -1012,6 +1010,11 @@ class ConditionalDetrEncoder(ConditionalDetrPreTrainedModel):
         config: ConditionalDetrConfig
     """
 
+    _can_record_outputs = {
+        "hidden_states": ConditionalDetrEncoderLayer,
+        "attentions": OutputRecorder(ConditionalDetrSelfAttention, layer_name="self_attn", index=1),
+    }
+
     def __init__(self, config: ConditionalDetrConfig):
         super().__init__(config)
 
@@ -1025,15 +1028,13 @@ class ConditionalDetrEncoder(ConditionalDetrPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @check_model_inputs()
     def forward(
         self,
         inputs_embeds=None,
         attention_mask=None,
-        object_queries=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        **kwargs,
+        spatial_position_embeddings=None,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         r"""
         Args:
@@ -1048,37 +1049,22 @@ class ConditionalDetrEncoder(ConditionalDetrPreTrainedModel):
 
                 [What are attention masks?](../glossary#attention-mask)
 
-            object_queries (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-                Object queries that are added to the queries in each self-attention layer.
-
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
-                for more detail.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
+            spatial_position_embeddings (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
+                Spatial position embeddings that are added to the queries in each self-attention layer.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         hidden_states = inputs_embeds
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
 
         # expand attention_mask
         if attention_mask is not None:
             # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
-            attention_mask = _prepare_4d_attention_mask(attention_mask, inputs_embeds.dtype)
+            attention_mask = create_bidirectional_mask(
+                self.config,
+                inputs_embeds,
+                attention_mask,
+            )
 
-        encoder_states = () if output_hidden_states else None
-        all_attentions = () if output_attentions else None
-        for i, encoder_layer in enumerate(self.layers):
-            if output_hidden_states:
-                encoder_states = encoder_states + (hidden_states,)
+        for encoder_layer in self.layers:
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             to_drop = False
             if self.training:
@@ -1086,30 +1072,16 @@ class ConditionalDetrEncoder(ConditionalDetrPreTrainedModel):
                 if dropout_probability < self.layerdrop:  # skip the layer
                     to_drop = True
 
-            if to_drop:
-                layer_outputs = (None, None)
-            else:
-                # we add object_queries as extra input to the encoder_layer
-                layer_outputs = encoder_layer(
+            if not to_drop:
+                # we add spatial_position_embeddings as extra input to the encoder_layer
+                hidden_states = encoder_layer(
                     hidden_states,
                     attention_mask,
-                    object_queries=object_queries,
-                    output_attentions=output_attentions,
+                    object_queries=spatial_position_embeddings,
+                    **kwargs,
                 )
 
-                hidden_states = layer_outputs[0]
-
-            if output_attentions:
-                all_attentions = all_attentions + (layer_outputs[1],)
-
-        if output_hidden_states:
-            encoder_states = encoder_states + (hidden_states,)
-
-        if not return_dict:
-            return tuple(v for v in [hidden_states, encoder_states, all_attentions] if v is not None)
-        return BaseModelOutput(
-            last_hidden_state=hidden_states, hidden_states=encoder_states, attentions=all_attentions
-        )
+        return BaseModelOutput(last_hidden_state=hidden_states)
 
 
 class ConditionalDetrDecoder(ConditionalDetrPreTrainedModel):
@@ -1127,6 +1099,12 @@ class ConditionalDetrDecoder(ConditionalDetrPreTrainedModel):
         config: ConditionalDetrConfig
     """
 
+    _can_record_outputs = {
+        "hidden_states": ConditionalDetrDecoderLayer,
+        "attentions": OutputRecorder(ConditionalDetrDecoderSelfAttention, layer_name="self_attn", index=1),
+        "cross_attentions": OutputRecorder(ConditionalDetrDecoderCrossAttention, layer_name="encoder_attn", index=1),
+    }
+
     def __init__(self, config: ConditionalDetrConfig):
         super().__init__(config)
         self.dropout = config.dropout
@@ -1139,26 +1117,25 @@ class ConditionalDetrDecoder(ConditionalDetrPreTrainedModel):
         self.gradient_checkpointing = False
 
         # query_scale is the FFN applied on f to generate transformation T
-        self.query_scale = MLP(d_model, d_model, d_model, 2)
-        self.ref_point_head = MLP(d_model, d_model, 2, 2)
+        self.query_scale = ConditionalDetrMLPPredictionHead(d_model, d_model, d_model, 2)
+        self.ref_point_head = ConditionalDetrMLPPredictionHead(d_model, d_model, 2, 2)
         for layer_id in range(config.decoder_layers - 1):
-            self.layers[layer_id + 1].ca_qpos_proj = None
+            # Set q_pos_proj to None for layers after the first (only first layer uses query position embeddings)
+            self.layers[layer_id + 1].encoder_attn.q_pos_proj = None
 
         # Initialize weights and apply final processing
         self.post_init()
 
+    @check_model_inputs()
     def forward(
         self,
         inputs_embeds=None,
         attention_mask=None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
-        object_queries=None,
-        query_position_embeddings=None,
-        output_attentions=None,
-        output_hidden_states=None,
-        return_dict=None,
-        **kwargs,
+        spatial_position_embeddings=None,
+        object_queries_position_embeddings=None,
+        **kwargs: Unpack[TransformersKwargs],
     ):
         r"""
         Args:
@@ -1182,46 +1159,28 @@ class ConditionalDetrDecoder(ConditionalDetrPreTrainedModel):
                 - 1 for pixels that are real (i.e. **not masked**),
                 - 0 for pixels that are padding (i.e. **masked**).
 
-            object_queries (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
-                Position embeddings that are added to the queries and keys in each cross-attention layer.
-            query_position_embeddings (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
+            spatial_position_embeddings (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
+                Spatial position embeddings that are added to the queries and keys in each cross-attention layer.
+            object_queries_position_embeddings (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
                 , *optional*): Position embeddings that are added to the queries and keys in each self-attention layer.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
-                for more detail.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~utils.ModelOutput`] instead of a plain tuple.
         """
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         if inputs_embeds is not None:
             hidden_states = inputs_embeds
-            input_shape = inputs_embeds.size()[:-1]
 
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
             # [batch_size, seq_len] -> [batch_size, 1, target_seq_len, source_seq_len]
-            encoder_attention_mask = _prepare_4d_attention_mask(
-                encoder_attention_mask, inputs_embeds.dtype, tgt_len=input_shape[-1]
+            encoder_attention_mask = create_bidirectional_mask(
+                self.config,
+                inputs_embeds,
+                encoder_attention_mask,
             )
 
         # optional intermediate hidden states
         intermediate = () if self.config.auxiliary_loss else None
 
-        # decoder layers
-        all_hidden_states = () if output_hidden_states else None
-        all_self_attns = () if output_attentions else None
-        all_cross_attentions = () if (output_attentions and encoder_hidden_states is not None) else None
-
         reference_points_before_sigmoid = self.ref_point_head(
-            query_position_embeddings
+            object_queries_position_embeddings
         )  # [num_queries, batch_size, 2]
         reference_points = reference_points_before_sigmoid.sigmoid().transpose(0, 1)
         obj_center = reference_points[..., :2].transpose(0, 1)
@@ -1229,9 +1188,6 @@ class ConditionalDetrDecoder(ConditionalDetrPreTrainedModel):
         query_sine_embed_before_transformation = gen_sine_position_embeddings(obj_center, self.config.d_model)
 
         for idx, decoder_layer in enumerate(self.layers):
-            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
-            if output_hidden_states:
-                all_hidden_states += (hidden_states,)
             if self.training:
                 dropout_probability = torch.rand([])
                 if dropout_probability < self.layerdrop:
@@ -1243,59 +1199,31 @@ class ConditionalDetrDecoder(ConditionalDetrPreTrainedModel):
             # apply transformation
             query_sine_embed = query_sine_embed_before_transformation * pos_transformation
 
-            layer_outputs = decoder_layer(
+            hidden_states = decoder_layer(
                 hidden_states,
                 None,  # attention_mask
-                object_queries,
-                query_position_embeddings,
+                spatial_position_embeddings,
+                object_queries_position_embeddings,
                 query_sine_embed,
                 encoder_hidden_states,  # as a positional argument for gradient checkpointing
                 encoder_attention_mask=encoder_attention_mask,
-                output_attentions=output_attentions,
                 is_first=(idx == 0),
+                **kwargs,
             )
-
-            hidden_states = layer_outputs[0]
 
             if self.config.auxiliary_loss:
                 hidden_states = self.layernorm(hidden_states)
                 intermediate += (hidden_states,)
 
-            if output_attentions:
-                all_self_attns += (layer_outputs[1],)
-
-                if encoder_hidden_states is not None:
-                    all_cross_attentions += (layer_outputs[2],)
-
         # finally, apply layernorm
         hidden_states = self.layernorm(hidden_states)
-
-        # add hidden states from the last decoder layer
-        if output_hidden_states:
-            all_hidden_states += (hidden_states,)
 
         # stack intermediate decoder activations
         if self.config.auxiliary_loss:
             intermediate = torch.stack(intermediate)
 
-        if not return_dict:
-            return tuple(
-                v
-                for v in [
-                    hidden_states,
-                    all_hidden_states,
-                    all_self_attns,
-                    all_cross_attentions,
-                    intermediate,
-                    reference_points,
-                ]
-                if v is not None
-            )
         return ConditionalDetrDecoderOutput(
             last_hidden_state=hidden_states,
-            hidden_states=all_hidden_states,
-            attentions=all_self_attns,
-            cross_attentions=all_cross_attentions,
             intermediate_hidden_states=intermediate,
             reference_points=reference_points,
         )
@@ -1311,13 +1239,19 @@ class ConditionalDetrModel(ConditionalDetrPreTrainedModel):
     def __init__(self, config: ConditionalDetrConfig):
         super().__init__(config)
 
-        # Create backbone + positional encoding
-        backbone = ConditionalDetrConvEncoder(config)
-        object_queries = build_position_encoding(config)
-        self.backbone = ConditionalDetrConvModel(backbone, object_queries)
+        # Create backbone
+        self.backbone = ConditionalDetrConvEncoder(config)
+
+        # Create positional encoding
+        if config.position_embedding_type == "sine":
+            self.position_embedding = ConditionalDetrSinePositionEmbedding(config.d_model // 2, normalize=True)
+        elif config.position_embedding_type == "learned":
+            self.position_embedding = ConditionalDetrLearnedPositionEmbedding(config.d_model // 2)
+        else:
+            raise ValueError(f"Not supported {config.position_embedding_type}")
 
         # Create projection layer
-        self.input_projection = nn.Conv2d(backbone.intermediate_channel_sizes[-1], config.d_model, kernel_size=1)
+        self.input_projection = nn.Conv2d(self.backbone.intermediate_channel_sizes[-1], config.d_model, kernel_size=1)
 
         self.query_position_embeddings = nn.Embedding(config.num_queries, config.d_model)
 
@@ -1328,14 +1262,15 @@ class ConditionalDetrModel(ConditionalDetrPreTrainedModel):
         self.post_init()
 
     def freeze_backbone(self):
-        for name, param in self.backbone.conv_encoder.model.named_parameters():
+        for name, param in self.backbone.model.named_parameters():
             param.requires_grad_(False)
 
     def unfreeze_backbone(self):
-        for name, param in self.backbone.conv_encoder.model.named_parameters():
+        for name, param in self.backbone.model.named_parameters():
             param.requires_grad_(True)
 
     @auto_docstring
+    @can_return_tuple
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -1344,11 +1279,8 @@ class ConditionalDetrModel(ConditionalDetrPreTrainedModel):
         encoder_outputs: torch.FloatTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         decoder_inputs_embeds: torch.FloatTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> tuple[torch.FloatTensor] | ConditionalDetrModelOutput:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> ConditionalDetrModelOutput:
         r"""
         decoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, num_queries)`, *optional*):
             Not used by default. Can be used to mask object queries.
@@ -1384,12 +1316,6 @@ class ConditionalDetrModel(ConditionalDetrPreTrainedModel):
         >>> list(last_hidden_states.shape)
         [1, 300, 256]
         ```"""
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         batch_size, num_channels, height, width = pixel_values.shape
         device = pixel_values.device
 
@@ -1399,7 +1325,7 @@ class ConditionalDetrModel(ConditionalDetrPreTrainedModel):
         # First, sent pixel_values + pixel_mask through Backbone to obtain the features
         # pixel_values should be of shape (batch_size, num_channels, height, width)
         # pixel_mask should be of shape (batch_size, height, width)
-        features, object_queries_list = self.backbone(pixel_values, pixel_mask)
+        features = self.backbone(pixel_values, pixel_mask)
 
         # get final feature map and downsampled mask
         feature_map, mask = features[-1]
@@ -1410,52 +1336,51 @@ class ConditionalDetrModel(ConditionalDetrPreTrainedModel):
         # Second, apply 1x1 convolution to reduce the channel dimension to d_model (256 by default)
         projected_feature_map = self.input_projection(feature_map)
 
-        # Third, flatten the feature map + object_queries of shape NxCxHxW to NxCxHW, and permute it to NxHWxC
+        # Generate position embeddings
+        spatial_position_embeddings = self.position_embedding(
+            shape=feature_map.shape, device=device, dtype=pixel_values.dtype, mask=mask
+        )
+
+        # Third, flatten the feature map of shape NxCxHxW to NxCxHW, and permute it to NxHWxC
         # In other words, turn their shape into (batch_size, sequence_length, hidden_size)
         flattened_features = projected_feature_map.flatten(2).permute(0, 2, 1)
-        object_queries = object_queries_list[-1].flatten(2).permute(0, 2, 1)
 
         flattened_mask = mask.flatten(1)
 
-        # Fourth, sent flattened_features + flattened_mask + object_queries through encoder
+        # Fourth, sent flattened_features + flattened_mask + spatial_position_embeddings through encoder
         # flattened_features is a Tensor of shape (batch_size, height*width, hidden_size)
         # flattened_mask is a Tensor of shape (batch_size, height*width)
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
                 inputs_embeds=flattened_features,
                 attention_mask=flattened_mask,
-                object_queries=object_queries,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
+                spatial_position_embeddings=spatial_position_embeddings,
+                **kwargs,
             )
-        # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOutput when return_dict=True
-        elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
+        # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOutput
+        elif not isinstance(encoder_outputs, BaseModelOutput):
             encoder_outputs = BaseModelOutput(
                 last_hidden_state=encoder_outputs[0],
                 hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
                 attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
             )
 
-        # Fifth, sent query embeddings + object_queries through the decoder (which is conditioned on the encoder output)
-        query_position_embeddings = self.query_position_embeddings.weight.unsqueeze(0).repeat(batch_size, 1, 1)
-        queries = torch.zeros_like(query_position_embeddings)
+        # Fifth, sent query embeddings through the decoder (which is conditioned on the encoder output)
+        object_queries_position_embeddings = self.query_position_embeddings.weight.unsqueeze(0).repeat(
+            batch_size, 1, 1
+        )
+        queries = torch.zeros_like(object_queries_position_embeddings)
 
         # decoder outputs consists of (dec_features, dec_hidden, dec_attn)
         decoder_outputs = self.decoder(
             inputs_embeds=queries,
             attention_mask=None,
-            object_queries=object_queries,
-            query_position_embeddings=query_position_embeddings,
-            encoder_hidden_states=encoder_outputs[0],
+            spatial_position_embeddings=spatial_position_embeddings,
+            object_queries_position_embeddings=object_queries_position_embeddings,
+            encoder_hidden_states=encoder_outputs.last_hidden_state,
             encoder_attention_mask=flattened_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
-
-        if not return_dict:
-            return decoder_outputs + encoder_outputs
 
         return ConditionalDetrModelOutput(
             last_hidden_state=decoder_outputs.last_hidden_state,
@@ -1468,28 +1393,6 @@ class ConditionalDetrModel(ConditionalDetrPreTrainedModel):
             intermediate_hidden_states=decoder_outputs.intermediate_hidden_states,
             reference_points=decoder_outputs.reference_points,
         )
-
-
-# Copied from transformers.models.detr.modeling_detr.DetrMLPPredictionHead with Detr->ConditionalDetr
-class ConditionalDetrMLPPredictionHead(nn.Module):
-    """
-    Very simple multi-layer perceptron (MLP, also called FFN), used to predict the normalized center coordinates,
-    height and width of a bounding box w.r.t. an image.
-
-    Copied from https://github.com/facebookresearch/detr/blob/master/models/detr.py
-
-    """
-
-    def __init__(self, input_dim, hidden_dim, output_dim, num_layers):
-        super().__init__()
-        self.num_layers = num_layers
-        h = [hidden_dim] * (num_layers - 1)
-        self.layers = nn.ModuleList(nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim]))
-
-    def forward(self, x):
-        for i, layer in enumerate(self.layers):
-            x = nn.functional.relu(layer(x)) if i < self.num_layers - 1 else layer(x)
-        return x
 
 
 @auto_docstring(
@@ -1521,6 +1424,7 @@ class ConditionalDetrForObjectDetection(ConditionalDetrPreTrainedModel):
         return [{"logits": a, "pred_boxes": b} for a, b in zip(outputs_class[:-1], outputs_coord[:-1])]
 
     @auto_docstring
+    @can_return_tuple
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -1530,11 +1434,8 @@ class ConditionalDetrForObjectDetection(ConditionalDetrPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         decoder_inputs_embeds: torch.FloatTensor | None = None,
         labels: list[dict] | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> tuple[torch.FloatTensor] | ConditionalDetrObjectDetectionOutput:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> ConditionalDetrObjectDetectionOutput:
         r"""
         decoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, num_queries)`, *optional*):
             Not used by default. Can be used to mask object queries.
@@ -1584,8 +1485,6 @@ class ConditionalDetrForObjectDetection(ConditionalDetrPreTrainedModel):
         Detected remote with confidence 0.683 at location [334.48, 73.49, 366.37, 190.01]
         Detected couch with confidence 0.535 at location [0.52, 1.19, 640.35, 475.1]
         ```"""
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         # First, sent images through CONDITIONAL_DETR base model to obtain encoder + decoder outputs
         outputs = self.model(
             pixel_values,
@@ -1594,9 +1493,7 @@ class ConditionalDetrForObjectDetection(ConditionalDetrPreTrainedModel):
             encoder_outputs=encoder_outputs,
             inputs_embeds=inputs_embeds,
             decoder_inputs_embeds=decoder_inputs_embeds,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
         sequence_output = outputs[0]
@@ -1604,11 +1501,7 @@ class ConditionalDetrForObjectDetection(ConditionalDetrPreTrainedModel):
         # class logits + predicted bounding boxes
         logits = self.class_labels_classifier(sequence_output)
 
-        # Index [-2] is valid only if `output_attentions` and `output_hidden_states`
-        # are not specified, otherwise it will be another index which is hard to determine.
-        # Leave it as is, because it's not a common case to use
-        # return_dict=False + output_attentions=True / output_hidden_states=True
-        reference = outputs.reference_points if return_dict else outputs[-2]
+        reference = outputs.reference_points
         reference_before_sigmoid = inverse_sigmoid(reference).transpose(0, 1)
 
         hs = sequence_output
@@ -1622,7 +1515,7 @@ class ConditionalDetrForObjectDetection(ConditionalDetrPreTrainedModel):
             outputs_class, outputs_coord = None, None
             if self.config.auxiliary_loss:
                 outputs_coords = []
-                intermediate = outputs.intermediate_hidden_states if return_dict else outputs[4]
+                intermediate = outputs.intermediate_hidden_states
                 outputs_class = self.class_labels_classifier(intermediate)
                 for lvl in range(intermediate.shape[0]):
                     tmp = self.bbox_predictor(intermediate[lvl])
@@ -1633,13 +1526,6 @@ class ConditionalDetrForObjectDetection(ConditionalDetrPreTrainedModel):
             loss, loss_dict, auxiliary_outputs = self.loss_function(
                 logits, labels, self.device, pred_boxes, self.config, outputs_class, outputs_coord
             )
-
-        if not return_dict:
-            if auxiliary_outputs is not None:
-                output = (logits, pred_boxes) + auxiliary_outputs + outputs
-            else:
-                output = (logits, pred_boxes) + outputs
-            return ((loss, loss_dict) + output) if loss is not None else output
 
         return ConditionalDetrObjectDetectionOutput(
             loss=loss,
@@ -1664,6 +1550,11 @@ class ConditionalDetrForObjectDetection(ConditionalDetrPreTrainedModel):
     """
 )
 class ConditionalDetrForSegmentation(ConditionalDetrPreTrainedModel):
+    _checkpoint_conversion_mapping = {
+        "bbox_attention.q_linear": "bbox_attention.q_proj",
+        "bbox_attention.k_linear": "bbox_attention.k_proj",
+    }
+
     def __init__(self, config: ConditionalDetrConfig):
         super().__init__(config)
 
@@ -1672,20 +1563,19 @@ class ConditionalDetrForSegmentation(ConditionalDetrPreTrainedModel):
 
         # segmentation head
         hidden_size, number_of_heads = config.d_model, config.encoder_attention_heads
-        intermediate_channel_sizes = self.conditional_detr.model.backbone.conv_encoder.intermediate_channel_sizes
+        intermediate_channel_sizes = self.conditional_detr.model.backbone.intermediate_channel_sizes
 
         self.mask_head = ConditionalDetrMaskHeadSmallConv(
             hidden_size + number_of_heads, intermediate_channel_sizes[::-1][-3:], hidden_size
         )
 
-        self.bbox_attention = ConditionalDetrMHAttentionMap(
-            hidden_size, hidden_size, number_of_heads, dropout=0.0, std=config.init_xavier_std
-        )
+        self.bbox_attention = ConditionalDetrMHAttentionMap(hidden_size, number_of_heads, dropout=0.0)
 
         # Initialize weights and apply final processing
         self.post_init()
 
     @auto_docstring
+    @can_return_tuple
     def forward(
         self,
         pixel_values: torch.FloatTensor,
@@ -1695,11 +1585,8 @@ class ConditionalDetrForSegmentation(ConditionalDetrPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         decoder_inputs_embeds: torch.FloatTensor | None = None,
         labels: list[dict] | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        **kwargs,
-    ) -> tuple[torch.FloatTensor] | ConditionalDetrSegmentationOutput:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> ConditionalDetrSegmentationOutput:
         r"""
         decoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, num_queries)`, *optional*):
             Not used by default. Can be used to mask object queries.
@@ -1756,67 +1643,64 @@ class ConditionalDetrForSegmentation(ConditionalDetrPreTrainedModel):
         >>> # Get prediction score and segment_id to class_id mapping of each segment
         >>> panoptic_segments_info = result[0]["segments_info"]
         ```"""
-
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         batch_size, num_channels, height, width = pixel_values.shape
         device = pixel_values.device
 
         if pixel_mask is None:
             pixel_mask = torch.ones((batch_size, height, width), device=device)
 
-        # First, get list of feature maps and object_queries
-        features, object_queries_list = self.conditional_detr.model.backbone(pixel_values, pixel_mask=pixel_mask)
+        # First, get list of feature maps
+        features = self.conditional_detr.model.backbone(pixel_values, pixel_mask)
 
         # Second, apply 1x1 convolution to reduce the channel dimension to d_model (256 by default)
         feature_map, mask = features[-1]
         batch_size, num_channels, height, width = feature_map.shape
         projected_feature_map = self.conditional_detr.model.input_projection(feature_map)
 
-        # Third, flatten the feature map + object_queries of shape NxCxHxW to NxCxHW, and permute it to NxHWxC
+        # Generate position embeddings
+        spatial_position_embeddings = self.conditional_detr.model.position_embedding(
+            shape=feature_map.shape, device=device, dtype=pixel_values.dtype, mask=mask
+        )
+
+        # Third, flatten the feature map of shape NxCxHxW to NxCxHW, and permute it to NxHWxC
         # In other words, turn their shape into (batch_size, sequence_length, hidden_size)
         flattened_features = projected_feature_map.flatten(2).permute(0, 2, 1)
-        object_queries = object_queries_list[-1].flatten(2).permute(0, 2, 1)
 
         flattened_mask = mask.flatten(1)
 
-        # Fourth, sent flattened_features + flattened_mask + object_queries through encoder
+        # Fourth, sent flattened_features + flattened_mask + spatial_position_embeddings through encoder
         # flattened_features is a Tensor of shape (batch_size, height*width, hidden_size)
         # flattened_mask is a Tensor of shape (batch_size, height*width)
         if encoder_outputs is None:
             encoder_outputs = self.conditional_detr.model.encoder(
                 inputs_embeds=flattened_features,
                 attention_mask=flattened_mask,
-                object_queries=object_queries,
-                output_attentions=output_attentions,
-                output_hidden_states=output_hidden_states,
-                return_dict=return_dict,
+                spatial_position_embeddings=spatial_position_embeddings,
+                **kwargs,
             )
-        # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOutput when return_dict=True
-        elif return_dict and not isinstance(encoder_outputs, BaseModelOutput):
+        # If the user passed a tuple for encoder_outputs, we wrap it in a BaseModelOutput
+        elif not isinstance(encoder_outputs, BaseModelOutput):
             encoder_outputs = BaseModelOutput(
                 last_hidden_state=encoder_outputs[0],
                 hidden_states=encoder_outputs[1] if len(encoder_outputs) > 1 else None,
                 attentions=encoder_outputs[2] if len(encoder_outputs) > 2 else None,
             )
 
-        # Fifth, sent query embeddings + object_queries through the decoder (which is conditioned on the encoder output)
-        query_position_embeddings = self.conditional_detr.model.query_position_embeddings.weight.unsqueeze(0).repeat(
-            batch_size, 1, 1
-        )
-        queries = torch.zeros_like(query_position_embeddings)
+        # Fifth, sent query embeddings through the decoder (which is conditioned on the encoder output)
+        object_queries_position_embeddings = self.conditional_detr.model.query_position_embeddings.weight.unsqueeze(
+            0
+        ).repeat(batch_size, 1, 1)
+        queries = torch.zeros_like(object_queries_position_embeddings)
 
         # decoder outputs consists of (dec_features, dec_hidden, dec_attn)
         decoder_outputs = self.conditional_detr.model.decoder(
             inputs_embeds=queries,
             attention_mask=None,
-            object_queries=object_queries,
-            query_position_embeddings=query_position_embeddings,
-            encoder_hidden_states=encoder_outputs[0],
+            spatial_position_embeddings=spatial_position_embeddings,
+            object_queries_position_embeddings=object_queries_position_embeddings,
+            encoder_hidden_states=encoder_outputs.last_hidden_state,
             encoder_attention_mask=flattened_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
+            **kwargs,
         )
 
         sequence_output = decoder_outputs[0]
@@ -1831,7 +1715,7 @@ class ConditionalDetrForSegmentation(ConditionalDetrPreTrainedModel):
         # FIXME h_boxes takes the last one computed, keep this in mind
         # important: we need to reverse the mask, since in the original implementation the mask works reversed
         # bbox_mask is of shape (batch_size, num_queries, number_of_attention_heads in bbox_attention, height/32, width/32)
-        bbox_mask = self.bbox_attention(sequence_output, memory, mask=~mask)
+        bbox_mask = self.bbox_attention(sequence_output, memory, attention_mask=~mask)
 
         seg_masks = self.mask_head(projected_feature_map, bbox_mask, [features[2][0], features[1][0], features[0][0]])
 
@@ -1843,19 +1727,12 @@ class ConditionalDetrForSegmentation(ConditionalDetrPreTrainedModel):
         if labels is not None:
             outputs_class, outputs_coord = None, None
             if self.config.auxiliary_loss:
-                intermediate = decoder_outputs.intermediate_hidden_states if return_dict else decoder_outputs[-1]
+                intermediate = decoder_outputs.intermediate_hidden_states
                 outputs_class = self.conditional_detr.class_labels_classifier(intermediate)
                 outputs_coord = self.conditional_detr.bbox_predictor(intermediate).sigmoid()
             loss, loss_dict, auxiliary_outputs = self.loss_function(
                 logits, labels, self.device, pred_boxes, pred_masks, self.config, outputs_class, outputs_coord
             )
-
-        if not return_dict:
-            if auxiliary_outputs is not None:
-                output = (logits, pred_boxes, pred_masks) + auxiliary_outputs + decoder_outputs + encoder_outputs
-            else:
-                output = (logits, pred_boxes, pred_masks) + decoder_outputs + encoder_outputs
-            return ((loss, loss_dict) + output) if loss is not None else output
 
         return ConditionalDetrSegmentationOutput(
             loss=loss,
@@ -1963,29 +1840,60 @@ class ConditionalDetrMaskHeadSmallConv(nn.Module):
 class ConditionalDetrMHAttentionMap(nn.Module):
     """This is a 2D attention module, which only returns the attention softmax (no multiplication by value)"""
 
-    def __init__(self, query_dim, hidden_dim, num_heads, dropout=0.0, bias=True, std=None):
+    def __init__(
+        self,
+        hidden_size: int,
+        num_attention_heads: int,
+        dropout: float = 0.0,
+        bias: bool = True,
+    ):
         super().__init__()
-        self.num_heads = num_heads
-        self.hidden_dim = hidden_dim
+        self.head_dim = hidden_size // num_attention_heads
+        self.scaling = self.head_dim**-0.5
+        self.attention_dropout = dropout
         self.dropout = nn.Dropout(dropout)
 
-        self.q_linear = nn.Linear(query_dim, hidden_dim, bias=bias)
-        self.k_linear = nn.Linear(query_dim, hidden_dim, bias=bias)
+        self.q_proj = nn.Linear(hidden_size, hidden_size, bias=bias)
+        self.k_proj = nn.Linear(hidden_size, hidden_size, bias=bias)
 
-        self.normalize_fact = float(hidden_dim / self.num_heads) ** -0.5
+    def forward(
+        self, query_states: torch.Tensor, key_states: torch.Tensor, attention_mask: torch.Tensor | None = None
+    ):
+        query_hidden_shape = (*query_states.shape[:-1], -1, self.head_dim)
+        key_hidden_shape = (key_states.shape[0], -1, self.head_dim, *key_states.shape[-2:])
 
-    def forward(self, q, k, mask: Tensor | None = None):
-        q = self.q_linear(q)
-        k = nn.functional.conv2d(k, self.k_linear.weight.unsqueeze(-1).unsqueeze(-1), self.k_linear.bias)
-        queries_per_head = q.view(q.shape[0], q.shape[1], self.num_heads, self.hidden_dim // self.num_heads)
-        keys_per_head = k.view(k.shape[0], self.num_heads, self.hidden_dim // self.num_heads, k.shape[-2], k.shape[-1])
-        weights = torch.einsum("bqnc,bnchw->bqnhw", queries_per_head * self.normalize_fact, keys_per_head)
+        query_states = self.q_proj(query_states).view(query_hidden_shape)
+        key_states = nn.functional.conv2d(
+            key_states, self.k_proj.weight.unsqueeze(-1).unsqueeze(-1), self.k_proj.bias
+        ).view(key_hidden_shape)
 
-        if mask is not None:
-            weights = weights.masked_fill(mask.unsqueeze(1).unsqueeze(1), torch.finfo(weights.dtype).min)
-        weights = nn.functional.softmax(weights.flatten(2), dim=-1).view(weights.size())
-        weights = self.dropout(weights)
-        return weights
+        # Compute attention weights: (b, q, n, c) @ (b, n, c, h*w) -> (b, q, n, h, w)
+        batch_size, num_queries, num_heads, head_dim = query_states.shape
+        _, _, _, height, width = key_states.shape
+
+        query = (
+            (query_states * self.scaling)
+            .permute(0, 2, 1, 3)
+            .contiguous()
+            .view(batch_size * num_heads, num_queries, head_dim)
+        )
+        key = key_states.permute(0, 1, 3, 4, 2).contiguous().view(batch_size * num_heads, height * width, head_dim)
+
+        attn_weights = (
+            torch.matmul(query, key.transpose(1, 2))
+            .view(batch_size, num_heads, num_queries, height, width)
+            .permute(0, 2, 1, 3, 4)
+        )
+
+        if attention_mask is not None:
+            attn_weights = attn_weights.masked_fill(
+                attention_mask.unsqueeze(1).unsqueeze(1), torch.finfo(attn_weights.dtype).min
+            )
+
+        attn_weights = nn.functional.softmax(attn_weights.flatten(2), dim=-1).view(attn_weights.size())
+        attn_weights = nn.functional.dropout(attn_weights, p=self.attention_dropout, training=self.training)
+
+        return attn_weights
 
 
 __all__ = [
