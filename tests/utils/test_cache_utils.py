@@ -28,7 +28,6 @@ from transformers.testing_utils import (
     cleanup,
     get_gpu_count,
     is_torch_available,
-    require_read_token,
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
@@ -59,11 +58,13 @@ if is_torch_available():
     from transformers.integrations.executorch import export_with_dynamic_cache
 
 
+# FIXME: offloaded cache is skipped becase it needs `offload_only_non_sliding=False`
+# but we can't configure cache through `generate()`
 TEST_CACHE_IMPLEMENTATIONS = [
     cache_name
     for cache_name in ALL_CACHE_IMPLEMENTATIONS
     # TODO (joao): offloaded_hybrid == offloaded_hybrid_chunked, deprecate one of them
-    if cache_name != "offloaded_hybrid"
+    if cache_name not in ["offloaded_hybrid", "offloaded_static", "offloaded_hybrid_chunked"]
 ]
 
 
@@ -175,7 +176,7 @@ class CacheIntegrationTest(unittest.TestCase):
         """
         _skip_on_failed_cache_prerequisites(self, cache_implementation)
         if cache_implementation == "offloaded_hybrid_chunked":
-            # TODO (joao, cyril): something is off with `offloaded_hybrid_chunked` aka `OffloadedHybridCache`: the
+            # TODO (joao, cyril): something is off with `offloaded_hybrid_chunked`: the
             # output sequence (and the corresponding beam scores, if we add `output_scores=True`) are significantly
             # different from the other caches.
             self.skipTest("`offloaded_hybrid_chunked` fails this test")
@@ -467,10 +468,13 @@ class CacheHardIntegrationTest(unittest.TestCase):
 
         # Check that the caches are the same
         for layer_idx in range(len(no_parallelism_cache)):
-            for kv_idx in range(2):  # 0 = key, 1 = value
-                torch.testing.assert_close(
-                    actual=parallelism_cache[layer_idx][kv_idx], expected=no_parallelism_cache[layer_idx][kv_idx]
-                )
+            torch.testing.assert_close(
+                actual=parallelism_cache.layers[layer_idx].keys, expected=no_parallelism_cache.layers[layer_idx].keys
+            )
+            torch.testing.assert_close(
+                actual=parallelism_cache.layers[layer_idx].values,
+                expected=no_parallelism_cache.layers[layer_idx].values,
+            )
 
     @require_torch_gpu
     def test_static_cache_no_cuda_graph_skips(self):
@@ -492,7 +496,6 @@ class CacheHardIntegrationTest(unittest.TestCase):
 
     @require_torch_multi_accelerator
     @slow
-    @require_read_token
     def test_static_cache_multi_accelerator(self):
         """Regression test for #35164: static cache with multi-accelerator"""
 

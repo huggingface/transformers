@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Meta AI and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -122,7 +121,7 @@ class Sam3VisionConfig(PreTrainedConfig):
     documentation from [`PreTrainedConfig`] for more information.
 
     Args:
-        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*):
+        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `Sam3ViTConfig()`):
             Configuration for the vision backbone. This is used to instantiate the backbone using
             `AutoModel.from_config`.
         fpn_hidden_size (`int`, *optional*, defaults to 256):
@@ -178,6 +177,16 @@ class Sam3VisionConfig(PreTrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.initializer_range = initializer_range
         super().__init__(**kwargs)
+
+    @property
+    def image_size(self):
+        """Image size for the vision encoder."""
+        return self.backbone_config.image_size
+
+    @image_size.setter
+    def image_size(self, value):
+        """Set the image size and propagate to backbone."""
+        self.backbone_config.image_size = value
 
 
 class Sam3GeometryEncoderConfig(PreTrainedConfig):
@@ -505,6 +514,16 @@ class Sam3Config(PreTrainedConfig):
 
         self.initializer_range = initializer_range
         super().__init__(**kwargs)
+
+    @property
+    def image_size(self):
+        """Image size for the SAM3 model."""
+        return self.vision_config.image_size
+
+    @image_size.setter
+    def image_size(self, value):
+        """Set the image size and propagate to vision config."""
+        self.vision_config.image_size = value
 
 
 __all__ = [

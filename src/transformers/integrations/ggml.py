@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The ggml.ai team and The HuggingFace Inc. team. and pygguf author (github.com/99991)
 # https://github.com/99991/pygguf
 #
@@ -310,6 +309,16 @@ GGUF_TOKENIZER_MAPPING = {
         "ggml.eos_token_id": "eos_token_id",
         "ggml.unknown_token_id": "unk_token_id",
         "ggml.padding_token_id": "pad_token_id",
+    },
+}
+
+# We only need to set here the parameters that default to different values between transformers and llamacpp.
+GGUF_CONFIG_DEFAULTS_MAPPING = {
+    "qwen3_moe": {
+        # NOTE: Qwen3MoeConfig defaults to false but llama.cpp needs this to be true.
+        # See: https://github.com/ggml-org/llama.cpp/blob/17f7f4baad8b3a716ee139da7bb56ae984e8c0fa/src/models/qwen3moe.cpp#L85-L96
+        #      (the parameter right after LLM_FFN_SILU corresponds to norm_topk_prob)
+        "norm_topk_prob": True,
     },
 }
 

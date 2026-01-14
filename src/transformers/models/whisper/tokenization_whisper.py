@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,9 +16,7 @@
 import json
 import os
 import re
-import warnings
 from functools import lru_cache
-from typing import Optional
 
 import numpy as np
 from tokenizers import AddedToken, Tokenizer, decoders, pre_tokenizers, processors
@@ -204,10 +201,11 @@ class WhisperTokenizer(TokenizersBackend):
 
     vocab_files_names = VOCAB_FILES_NAMES
     model_input_names = ["input_ids", "attention_mask"]
+    model = BPE
 
     def __init__(
         self,
-        vocab=None,
+        vocab: str | dict[str, int] | None = None,
         merges=None,
         normalizer_file=None,
         unk_token="<|endoftext|>",
@@ -253,7 +251,6 @@ class WhisperTokenizer(TokenizersBackend):
         self._tokenizer.decoder = decoders.ByteLevel()
 
         super().__init__(
-            tokenizer_object=self._tokenizer,
             unk_token=unk_token,
             bos_token=bos_token,
             eos_token=eos_token,
@@ -276,18 +273,7 @@ class WhisperTokenizer(TokenizersBackend):
         self.language = language
         self.task = task
         self.predict_timestamps = predict_timestamps
-
-        self._post_init()
-
-    def _post_init(self):
-        """Post-initialization hook to set up prefix tokens after the tokenizer is fully loaded."""
-        super()._post_init()
-        # Set up prefix tokens if language or task is specified (may be set from config in from_pretrained)
-        if hasattr(self, "language") and hasattr(self, "task") and hasattr(self, "predict_timestamps"):
-            if self.language is not None or self.task is not None:
-                self.set_prefix_tokens(
-                    language=self.language, task=self.task, predict_timestamps=self.predict_timestamps
-                )
+        self.set_prefix_tokens()
 
     # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer._decode_with_timestamps
     def _decode_with_timestamps(
@@ -447,7 +433,7 @@ class WhisperTokenizer(TokenizersBackend):
         self,
         token_ids,
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: Optional[bool] = None,
+        clean_up_tokenization_spaces: bool | None = None,
         output_offsets: bool = False,
         time_precision: float = 0.02,
         decode_with_timestamps: bool = False,
@@ -531,31 +517,14 @@ class WhisperTokenizer(TokenizersBackend):
         text = super()._decode(*args, **kwargs)
 
         if normalize:
-            clean_text = self._normalize(text)
+            clean_text = self.normalize(text)
             return clean_text
         elif basic_normalize:
-            clean_text = self._basic_normalize(text, remove_diacritics=remove_diacritics)
+            clean_text = self.basic_normalize(text, remove_diacritics=remove_diacritics)
             return clean_text
         else:
             return text
 
-    # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer._normalize
-    def _normalize(self, text):
-        warnings.warn(
-            "The private method `_normalize` is deprecated and will be removed in v5 of Transformers."
-            "You can normalize an input string using the Whisper English normalizer using the `normalize` method."
-        )
-        return self.normalize(text)
-
-    # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer._basic_normalize
-    def _basic_normalize(self, text, remove_diacritics=False):
-        warnings.warn(
-            "The private method `_basic_normalize` is deprecated and will be removed in v5 of Transformers."
-            "You can normalize an input string using the Whisper basic normalizer using the `basic_normalize` method."
-        )
-        return self.basic_normalize(text, remove_diacritics=remove_diacritics)
-
-    # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer.normalize
     def normalize(self, text):
         """
         Normalize a given string using the `EnglishTextNormalizer` class, which performs commons transformation on
@@ -565,7 +534,6 @@ class WhisperTokenizer(TokenizersBackend):
         return normalizer(text)
 
     @staticmethod
-    # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer.basic_normalize
     def basic_normalize(text, remove_diacritics=False):
         """
         Normalize a given string using the `BasicTextNormalizer` class, which performs commons transformation on
@@ -574,7 +542,7 @@ class WhisperTokenizer(TokenizersBackend):
         normalizer = BasicTextNormalizer(remove_diacritics=remove_diacritics)
         return normalizer(text)
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: str | None = None) -> tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
@@ -605,7 +573,7 @@ class WhisperTokenizer(TokenizersBackend):
         return (vocab_file, merge_file, normalizer_file)
 
     def set_prefix_tokens(
-        self, language: Optional[str] = None, task: Optional[str] = None, predict_timestamps: Optional[bool] = None
+        self, language: str | None = None, task: str | None = None, predict_timestamps: bool | None = None
     ):
         """
         Override the prefix tokens appended to the start of the label sequence. This method can be used standalone to
@@ -689,7 +657,7 @@ class WhisperTokenizer(TokenizersBackend):
 
     # Copied from transformers.models.whisper.tokenization_whisper.WhisperTokenizer.get_special_tokens_mask
     def get_special_tokens_mask(
-        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None, already_has_special_tokens: bool = False
+        self, token_ids_0: list[int], token_ids_1: list[int] | None = None, already_has_special_tokens: bool = False
     ) -> list[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
@@ -787,7 +755,7 @@ class WhisperTokenizer(TokenizersBackend):
 def _combine_tokens_into_words(
     tokenizer,
     tokens: list[int],
-    language: Optional[str] = None,
+    language: str | None = None,
     prepend_punctuations: str = "\"'“¡¿([{-",
     append_punctuations: str = "\"'.。,，!！?？:：”)]}、",
 ):
@@ -1321,7 +1289,7 @@ def _collate_word_timestamps(tokenizer, tokens, token_timestamps, language, retu
 def _combine_tokens_into_words(
     tokenizer,
     tokens: list[int],
-    language: Optional[str] = None,
+    language: str | None = None,
     prepend_punctuations: str = "\"'“¡¿([{-",
     append_punctuations: str = "\"'.。,，!！?？:：”)]}、",
 ):

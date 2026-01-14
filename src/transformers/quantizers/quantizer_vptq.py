@@ -49,24 +49,15 @@ class VptqHfQuantizer(HfQuantizer):
         if not torch.cuda.is_available():
             raise RuntimeError("GPU is required to run VTPQ quantized model.")
 
-    def update_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
-        if dtype is None:
-            dtype = torch.float16
-            logger.info(
-                "Assuming VPTQ inference on GPU and loading the model in `torch.float16`. To overwrite it, set `dtype` manually."
-            )
-        return dtype
-
     def _process_model_before_weight_loading(
         self,
         model: "PreTrainedModel",
-        keep_in_fp32_modules: list[str] | None = None,
         **kwargs,
     ):
         from ..integrations import replace_with_vptq_linear
 
         self.modules_to_not_convert = self.get_modules_to_not_convert(
-            model, self.quantization_config.modules_to_not_convert, keep_in_fp32_modules
+            model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
         replace_with_vptq_linear(
             model,
@@ -78,5 +69,5 @@ class VptqHfQuantizer(HfQuantizer):
     def is_trainable(self) -> bool:
         return False
 
-    def is_serializable(self, safe_serialization=None):
+    def is_serializable(self):
         return True

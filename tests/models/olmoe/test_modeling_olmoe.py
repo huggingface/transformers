@@ -70,7 +70,7 @@ class OlmoeModelTester:
         norm_topk_prob=False,
         output_router_logits=False,
         router_aux_loss_coef=0.001,
-        intermediate_size=12,
+        intermediate_size=16,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -258,10 +258,10 @@ class OlmoeIntegrationTest(unittest.TestCase):
 
         # Inner spaces showcase
         self.assertEqual(rust_tokenizer.encode("Hi  Hello"), [12764, 50276, 12092])
-        self.assertEqual(rust_tokenizer.decode([12764, 50276, 12092], skip_special_tokens=True), "Hi  Hello")
+        self.assertEqual(rust_tokenizer.decode([12764, 50276, 12092], skip_special_tokens=False), "Hi  Hello")
 
         self.assertEqual(rust_tokenizer.encode("Hi   Hello"), [12764, 50275, 12092])
-        self.assertEqual(rust_tokenizer.decode([12764, 50275, 12092], skip_special_tokens=True), "Hi   Hello")
+        self.assertEqual(rust_tokenizer.decode([12764, 50275, 12092], skip_special_tokens=False), "Hi   Hello")
 
         self.assertEqual(rust_tokenizer.encode(""), [])
 

@@ -50,7 +50,7 @@ class AlbertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
 
         extractor = SentencePieceExtractor(vocab_file)
         vocab_ids, vocab_scores, merges = extractor.extract()
-        tokenizer_from_vocab = AlbertTokenizer(vocab=vocab_ids, merges=merges)
+        tokenizer_from_vocab = AlbertTokenizer(vocab=vocab_scores, merges=merges)
         tokenizer_from_vocab.pad_token = tokenizer_from_vocab.eos_token
 
         cls.tokenizers = [tokenizer, tokenizer_from_vocab]

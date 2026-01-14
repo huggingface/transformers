@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Optional, Union
+from typing import Optional
 
 import torch
 from PIL import Image, ImageDraw
@@ -124,14 +123,14 @@ class SuperGlueImageProcessorFast(BaseImageProcessorFast):
     def _preprocess(
         self,
         images: list["torch.Tensor"],
-        size: Union[dict[str, int], SizeDict],
+        size: dict[str, int] | SizeDict,
         rescale_factor: float,
         do_rescale: bool,
         do_resize: bool,
         interpolation: Optional["F.InterpolationMode"],
         do_grayscale: bool,
         disable_grouping: bool,
-        return_tensors: Union[str, TensorType],
+        return_tensors: str | TensorType,
         **kwargs,
     ) -> BatchFeature:
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
@@ -161,14 +160,13 @@ class SuperGlueImageProcessorFast(BaseImageProcessorFast):
         stacked_pairs = [torch.stack(pair, dim=0) for pair in image_pairs]
 
         # Return in same format as slow processor
-        image_pairs = torch.stack(stacked_pairs, dim=0) if return_tensors else stacked_pairs
 
-        return BatchFeature(data={"pixel_values": image_pairs})
+        return BatchFeature(data={"pixel_values": stacked_pairs}, tensor_type=return_tensors)
 
     def post_process_keypoint_matching(
         self,
         outputs: "SuperGlueKeypointMatchingOutput",
-        target_sizes: Union[TensorType, list[tuple]],
+        target_sizes: TensorType | list[tuple],
         threshold: float = 0.0,
     ) -> list[dict[str, torch.Tensor]]:
         """
