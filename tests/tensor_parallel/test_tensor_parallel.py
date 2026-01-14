@@ -24,8 +24,7 @@ import tempfile
 import warnings
 
 from safetensors import safe_open
-
-from transformers import AutoModelForCausalLM, AutoTokenizer, is_torch_available
+from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, is_torch_available
 from transformers.integrations.tensor_parallel import get_packed_weights, get_tensor_shard, repack_weights
 from transformers.testing_utils import (
     TestCasePlus,
@@ -210,12 +209,16 @@ class TestTensorParallelProperties(TestCasePlus):
 
 
 # ====== TEST FUNCTIONS ======
-def _test_model_dense_forward_impl(rank, mode):
+def _test_model_dense_forward_impl(rank, mode, dtype=torch.float32):
     """Implementation for comparing TP and non-TP model outputs."""
     model_id = "JackFram/llama-68m"
 
     # Ensure same random seed for reproducibility
     torch.manual_seed(0)
+    torch.cuda.manual_seed_all(0)
+
+    # Set tolerance based on dtype
+    atol, rtol = (1e-5, 1e-5) if dtype == torch.float32 else (1e-3, 1e-3)
 
     # Load tokenizer and prepare inputs - same for both models
     tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=False)
@@ -223,7 +226,7 @@ def _test_model_dense_forward_impl(rank, mode):
     inputs = tokenizer(prompt, return_tensors="pt")
 
     # Load TP model first to determine device
-    model_tp = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto", tp_plan="auto")
+    model_tp = AutoModelForCausalLM.from_pretrained(model_id, dtype=dtype, tp_plan="auto")
     dist.barrier()
     if mode == "eval":
         model_tp.eval()
@@ -232,7 +235,7 @@ def _test_model_dense_forward_impl(rank, mode):
 
     # Load non-TP model and move to same device as TP model
     device = model_tp.device
-    model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto")
+    model = AutoModelForCausalLM.from_pretrained(model_id, dtype=dtype)
     model = model.to(device)
 
     if mode == "eval":
@@ -254,32 +257,37 @@ def _test_model_dense_forward_impl(rank, mode):
         logits_tp = outputs_tp.logits
 
     # Compare outputs - they should match
-    assert torch.allclose(logits, logits_tp, atol=1e-5, rtol=1e-5), (
-        f"TP and non-TP model outputs differ. Max diff: {(logits - logits_tp).abs().max().item()} | Min diff: {(logits - logits_tp).abs().min().item()}"
+    assert torch.allclose(logits, logits_tp, atol=atol, rtol=rtol), (
+        f"TP and non-TP model outputs differ (dtype={dtype}). Max diff: {(logits - logits_tp).abs().max().item()} | Min diff: {(logits - logits_tp).abs().min().item()}"
     )
 
     dist.barrier()
 
 
-def _test_model_dense_backward_pass_impl(rank):
+def _test_model_dense_backward_pass_impl(rank, dtype=torch.float32):
     """Implementation for comparing TP and non-TP model backward passes."""
     model_id = "JackFram/llama-68m"
 
     torch.manual_seed(0)
+    torch.cuda.manual_seed_all(0)
 
-    model_tp = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.float32, tp_plan="auto")
+    # Set tolerance based on dtype
+    atol, rtol = (1e-5, 1e-5) if dtype == torch.float32 else (1e-3, 1e-3)
+
+    model_tp = AutoModelForCausalLM.from_pretrained(model_id, dtype=dtype, tp_plan="auto")
     dist.barrier()
     model_tp.train()
 
     device = model_tp.device
-    model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.float32)
+    model = AutoModelForCausalLM.from_pretrained(model_id, dtype=dtype)
     model = model.to(device)
     model.train()
 
     batch_size, seq_length = 2, 10
-    torch.manual_seed(42)  # Different seed for inputs to ensure they're deterministic
-    input_ids = torch.randint(0, model.config.vocab_size, (batch_size, seq_length), device=device)
-    labels = torch.randint(0, model.config.vocab_size, (batch_size, seq_length), device=device)
+    torch.manual_seed(0)
+    torch.cuda.manual_seed_all(0)
+    input_ids = torch.randint(0, model.config.vocab_size, (batch_size, seq_length)).to(device)
+    labels = torch.randint(0, model.config.vocab_size, (batch_size, seq_length)).to(device)
 
     outputs = model(input_ids, labels=labels)
     loss = outputs.loss
@@ -289,8 +297,8 @@ def _test_model_dense_backward_pass_impl(rank):
     loss_tp = outputs_tp.loss
     loss_tp.backward()
 
-    assert torch.allclose(loss, loss_tp, atol=1e-5, rtol=1e-5), (
-        f"TP and non-TP model losses differ. Non-TP loss: {loss.item()}, TP loss: {loss_tp.item()}, Diff: {(loss - loss_tp).abs().item()}"
+    assert torch.allclose(loss, loss_tp, atol=atol, rtol=rtol), (
+        f"TP and non-TP model losses differ (dtype={dtype}). Non-TP loss: {loss.item()}, TP loss: {loss_tp.item()}, Diff: {(loss - loss_tp).abs().item()}"
     )
 
     # Compare gradients for matching parameters
@@ -310,24 +318,28 @@ def _test_model_dense_backward_pass_impl(rank):
                         grad = grad.narrow(dim, start, shard_size)
                         break
 
-            assert torch.allclose(grad.cpu(), grad_tp.cpu(), atol=1e-5, rtol=1e-5), (
-                f"Gradients differ for parameter {name}. Max diff: {(grad.cpu() - grad_tp.cpu()).abs().max().item()} | Min diff: {(grad.cpu() - grad_tp.cpu()).abs().min().item()}"
+            assert torch.allclose(grad.cpu(), grad_tp.cpu(), atol=atol, rtol=rtol), (
+                f"Gradients differ for parameter {name} (dtype={dtype}). Max diff: {(grad.cpu() - grad_tp.cpu()).abs().max().item()} | Min diff: {(grad.cpu() - grad_tp.cpu()).abs().min().item()}"
             )
 
     dist.barrier()
 
 
-def _test_model_dense_forward_compile_impl(rank, mode):
+def _test_model_dense_forward_compile_impl(rank, mode, dtype=torch.float32):
     """Implementation for comparing TP and non-TP model outputs with torch.compile."""
     model_id = "JackFram/llama-68m"
 
     torch.manual_seed(0)
+    torch.cuda.manual_seed_all(0)
+
+    # Set tolerance based on dtype
+    atol, rtol = (1e-5, 1e-5) if dtype == torch.float32 else (1e-3, 1e-3)
 
     tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=False)
     prompt = "Can I help"
     inputs = tokenizer(prompt, return_tensors="pt")
 
-    model_tp = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto", tp_plan="auto")
+    model_tp = AutoModelForCausalLM.from_pretrained(model_id, dtype=dtype, tp_plan="auto")
     dist.barrier()
     if mode == "eval":
         model_tp.eval()
@@ -335,7 +347,7 @@ def _test_model_dense_forward_compile_impl(rank, mode):
         model_tp.train()
 
     device = model_tp.device
-    model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto")
+    model = AutoModelForCausalLM.from_pretrained(model_id, dtype=dtype)
     model = model.to(device)
 
     if mode == "eval":
@@ -356,9 +368,72 @@ def _test_model_dense_forward_compile_impl(rank, mode):
         outputs_tp = model_tp(input_ids)
         logits_tp = outputs_tp.logits
 
-    assert torch.allclose(logits, logits_tp, atol=1e-5, rtol=1e-5), (
-        f"TP and non-TP model outputs differ. Max diff: {(logits - logits_tp).abs().max().item()} | Min diff: {(logits - logits_tp).abs().min().item()}"
+    assert torch.allclose(logits, logits_tp, atol=atol, rtol=rtol), (
+        f"TP and non-TP model outputs differ (dtype={dtype}). Max diff: {(logits - logits_tp).abs().max().item()} | Min diff: {(logits - logits_tp).abs().min().item()}"
     )
+
+    dist.barrier()
+
+
+def _test_model_dense_backward_compile_impl(rank, dtype=torch.float32):
+    """Implementation for comparing TP and non-TP model backward passes with torch.compile."""
+    model_id = "JackFram/llama-68m"
+
+    torch.manual_seed(0)
+    torch.cuda.manual_seed_all(0)
+
+    # Set tolerance based on dtype
+    atol, rtol = (1e-5, 1e-5) if dtype == torch.float32 else (1e-3, 1e-3)
+
+    model_tp = AutoModelForCausalLM.from_pretrained(model_id, dtype=dtype, tp_plan="auto")
+    dist.barrier()
+    model_tp.train()
+
+    device = model_tp.device
+    model = AutoModelForCausalLM.from_pretrained(model_id, dtype=dtype)
+    model = model.to(device)
+    model.train()
+
+    # Compile both models
+    model.forward = torch.compile(model.forward)
+    model_tp.forward = torch.compile(model_tp.forward)
+
+    batch_size, seq_length = 2, 10
+    torch.manual_seed(0)
+    torch.cuda.manual_seed_all(0)
+    input_ids = torch.randint(0, model.config.vocab_size, (batch_size, seq_length)).to(device)
+    labels = torch.randint(0, model.config.vocab_size, (batch_size, seq_length)).to(device)
+
+    outputs = model(input_ids, labels=labels)
+    loss = outputs.loss
+    loss.backward()
+
+    outputs_tp = model_tp(input_ids, labels=labels)
+    loss_tp = outputs_tp.loss
+    loss_tp.backward()
+
+    assert torch.allclose(loss, loss_tp, atol=atol, rtol=rtol), (
+        f"TP and non-TP model losses differ (dtype={dtype}). Non-TP loss: {loss.item()}, TP loss: {loss_tp.item()}, Diff: {(loss - loss_tp).abs().item()}"
+    )
+
+    # Compare gradients for matching parameters
+    for (name, param), (name_tp, param_tp) in zip(model.named_parameters(), model_tp.named_parameters()):
+        if param.grad is not None and param_tp.grad is not None:
+            grad = param.grad
+            grad_tp = param_tp.grad
+
+            # Slice reference gradient to match local shard if parameter is sharded
+            if grad.shape != grad_tp.shape:
+                for dim in range(grad.ndim):
+                    if grad.size(dim) != grad_tp.size(dim):
+                        shard_size = grad_tp.size(dim)
+                        start = rank * shard_size
+                        grad = grad.narrow(dim, start, shard_size)
+                        break
+
+            assert torch.allclose(grad.cpu(), grad_tp.cpu(), atol=atol, rtol=rtol), (
+                f"Gradients differ for parameter {name} (dtype={dtype}). Max diff: {(grad.cpu() - grad_tp.cpu()).abs().max().item()}"
+            )
 
     dist.barrier()
 
@@ -384,53 +459,124 @@ class TestTensorParallelDenseBase(TestCasePlus):
     nproc_per_node = None
 
     @require_torch_multi_accelerator
-    def test_model_dense_forward_eval(self):
-        """Test that TP and non-TP models produce the same outputs in eval mode."""
+    def test_model_dense_forward_eval_float32(self):
+        """Test that TP and non-TP models produce the same outputs in eval mode (float32)."""
         if self.nproc_per_node is None:
             self.skipTest("nproc_per_node not set")
         if backend_device_count(torch_device) < self.nproc_per_node:
             self.skipTest(f"Need at least {self.nproc_per_node} devices, have {backend_device_count(torch_device)}")
 
-        init_distributed(tp=self.nproc_per_node)(_test_model_dense_forward_impl)("eval")
+        init_distributed(tp=self.nproc_per_node)(_test_model_dense_forward_impl)("eval", torch.float32)
 
     @require_torch_multi_accelerator
-    def test_model_dense_forward_train(self):
-        """Test that TP and non-TP models produce the same outputs in train mode."""
+    def test_model_dense_forward_eval_bfloat16(self):
+        """Test that TP and non-TP models produce the same outputs in eval mode (bfloat16)."""
         if self.nproc_per_node is None:
             self.skipTest("nproc_per_node not set")
         if backend_device_count(torch_device) < self.nproc_per_node:
             self.skipTest(f"Need at least {self.nproc_per_node} devices, have {backend_device_count(torch_device)}")
 
-        init_distributed(tp=self.nproc_per_node)(_test_model_dense_forward_impl)("train")
+        init_distributed(tp=self.nproc_per_node)(_test_model_dense_forward_impl)("eval", torch.bfloat16)
 
     @require_torch_multi_accelerator
-    def test_model_dense_backward_pass(self):
+    def test_model_dense_forward_train_float32(self):
+        """Test that TP and non-TP models produce the same outputs in train mode (float32)."""
         if self.nproc_per_node is None:
             self.skipTest("nproc_per_node not set")
         if backend_device_count(torch_device) < self.nproc_per_node:
             self.skipTest(f"Need at least {self.nproc_per_node} devices, have {backend_device_count(torch_device)}")
 
-        init_distributed(tp=self.nproc_per_node)(_test_model_dense_backward_pass_impl)()
+        init_distributed(tp=self.nproc_per_node)(_test_model_dense_forward_impl)("train", torch.float32)
 
     @require_torch_multi_accelerator
-    def test_model_dense_forward_compile_eval(self):
-        """Test that TP and non-TP models produce the same outputs with torch.compile in eval mode."""
+    def test_model_dense_forward_train_bfloat16(self):
+        """Test that TP and non-TP models produce the same outputs in train mode (bfloat16)."""
         if self.nproc_per_node is None:
             self.skipTest("nproc_per_node not set")
         if backend_device_count(torch_device) < self.nproc_per_node:
             self.skipTest(f"Need at least {self.nproc_per_node} devices, have {backend_device_count(torch_device)}")
 
-        init_distributed(tp=self.nproc_per_node)(_test_model_dense_forward_compile_impl)("eval")
+        init_distributed(tp=self.nproc_per_node)(_test_model_dense_forward_impl)("train", torch.bfloat16)
 
     @require_torch_multi_accelerator
-    def test_model_dense_forward_compile_train(self):
-        """Test that TP and non-TP models produce the same outputs with torch.compile in train mode."""
+    def test_model_dense_backward_pass_float32(self):
+        """Test that TP and non-TP models produce the same gradients (float32)."""
         if self.nproc_per_node is None:
             self.skipTest("nproc_per_node not set")
         if backend_device_count(torch_device) < self.nproc_per_node:
             self.skipTest(f"Need at least {self.nproc_per_node} devices, have {backend_device_count(torch_device)}")
 
-        init_distributed(tp=self.nproc_per_node)(_test_model_dense_forward_compile_impl)("train")
+        init_distributed(tp=self.nproc_per_node)(_test_model_dense_backward_pass_impl)(torch.float32)
+
+    @require_torch_multi_accelerator
+    def test_model_dense_backward_pass_bfloat16(self):
+        """Test that TP and non-TP models produce the same gradients (bfloat16)."""
+        if self.nproc_per_node is None:
+            self.skipTest("nproc_per_node not set")
+        if backend_device_count(torch_device) < self.nproc_per_node:
+            self.skipTest(f"Need at least {self.nproc_per_node} devices, have {backend_device_count(torch_device)}")
+
+        init_distributed(tp=self.nproc_per_node)(_test_model_dense_backward_pass_impl)(torch.bfloat16)
+
+    @require_torch_multi_accelerator
+    def test_model_dense_forward_compile_eval_float32(self):
+        """Test that TP and non-TP models produce the same outputs with torch.compile in eval mode (float32)."""
+        if self.nproc_per_node is None:
+            self.skipTest("nproc_per_node not set")
+        if backend_device_count(torch_device) < self.nproc_per_node:
+            self.skipTest(f"Need at least {self.nproc_per_node} devices, have {backend_device_count(torch_device)}")
+
+        init_distributed(tp=self.nproc_per_node)(_test_model_dense_forward_compile_impl)("eval", torch.float32)
+
+    @require_torch_multi_accelerator
+    def test_model_dense_forward_compile_eval_bfloat16(self):
+        """Test that TP and non-TP models produce the same outputs with torch.compile in eval mode (bfloat16)."""
+        if self.nproc_per_node is None:
+            self.skipTest("nproc_per_node not set")
+        if backend_device_count(torch_device) < self.nproc_per_node:
+            self.skipTest(f"Need at least {self.nproc_per_node} devices, have {backend_device_count(torch_device)}")
+
+        init_distributed(tp=self.nproc_per_node)(_test_model_dense_forward_compile_impl)("eval", torch.bfloat16)
+
+    @require_torch_multi_accelerator
+    def test_model_dense_forward_compile_train_float32(self):
+        """Test that TP and non-TP models produce the same outputs with torch.compile in train mode (float32)."""
+        if self.nproc_per_node is None:
+            self.skipTest("nproc_per_node not set")
+        if backend_device_count(torch_device) < self.nproc_per_node:
+            self.skipTest(f"Need at least {self.nproc_per_node} devices, have {backend_device_count(torch_device)}")
+
+        init_distributed(tp=self.nproc_per_node)(_test_model_dense_forward_compile_impl)("train", torch.float32)
+
+    @require_torch_multi_accelerator
+    def test_model_dense_forward_compile_train_bfloat16(self):
+        """Test that TP and non-TP models produce the same outputs with torch.compile in train mode (bfloat16)."""
+        if self.nproc_per_node is None:
+            self.skipTest("nproc_per_node not set")
+        if backend_device_count(torch_device) < self.nproc_per_node:
+            self.skipTest(f"Need at least {self.nproc_per_node} devices, have {backend_device_count(torch_device)}")
+
+        init_distributed(tp=self.nproc_per_node)(_test_model_dense_forward_compile_impl)("train", torch.bfloat16)
+
+    @require_torch_multi_accelerator
+    def test_model_dense_backward_compile_float32(self):
+        """Test that TP and non-TP models produce the same gradients with torch.compile (float32)."""
+        if self.nproc_per_node is None:
+            self.skipTest("nproc_per_node not set")
+        if backend_device_count(torch_device) < self.nproc_per_node:
+            self.skipTest(f"Need at least {self.nproc_per_node} devices, have {backend_device_count(torch_device)}")
+
+        init_distributed(tp=self.nproc_per_node)(_test_model_dense_backward_compile_impl)(torch.float32)
+
+    @require_torch_multi_accelerator
+    def test_model_dense_backward_compile_bfloat16(self):
+        """Test that TP and non-TP models produce the same gradients with torch.compile (bfloat16)."""
+        if self.nproc_per_node is None:
+            self.skipTest("nproc_per_node not set")
+        if backend_device_count(torch_device) < self.nproc_per_node:
+            self.skipTest(f"Need at least {self.nproc_per_node} devices, have {backend_device_count(torch_device)}")
+
+        init_distributed(tp=self.nproc_per_node)(_test_model_dense_backward_compile_impl)(torch.bfloat16)
 
     @require_huggingface_hub_greater_or_equal("0.31.4")
     @require_torch_multi_accelerator
@@ -476,12 +622,16 @@ class TestTensorParallelDense4Proc(TestTensorParallelDenseBase):
 
 
 # ====== MOE MODEL TEST FUNCTIONS ======
-def _test_model_moe_forward_impl(rank, mode):
+def _test_model_moe_forward_impl(rank, mode, dtype=torch.float32):
     """Implementation for comparing TP and non-TP MoE model outputs."""
     model_id = "hf-internal-testing/tiny-random-MixtralForCausalLM"
 
     # Ensure same random seed for reproducibility
     torch.manual_seed(0)
+    torch.cuda.manual_seed_all(0)
+
+    # Set tolerance based on dtype
+    atol, rtol = (1e-5, 1e-5) if dtype == torch.float32 else (1e-3, 1e-3)
 
     # Load tokenizer and prepare inputs - same for both models
     tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=False)
@@ -489,7 +639,7 @@ def _test_model_moe_forward_impl(rank, mode):
     inputs = tokenizer(prompt, return_tensors="pt")
 
     # Load TP model first to determine device
-    model_tp = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.float32, tp_plan="auto")
+    model_tp = AutoModelForCausalLM.from_pretrained(model_id, dtype=dtype, tp_plan="auto")
     dist.barrier()
     if mode == "eval":
         model_tp.eval()
@@ -498,7 +648,7 @@ def _test_model_moe_forward_impl(rank, mode):
 
     # Load non-TP model and move to same device as TP model
     device = model_tp.device
-    model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.float32)
+    model = AutoModelForCausalLM.from_pretrained(model_id, dtype=dtype)
     model = model.to(device)
 
     if mode == "eval":
@@ -520,25 +670,29 @@ def _test_model_moe_forward_impl(rank, mode):
         logits_tp = outputs_tp.logits
 
     # Compare outputs - they should match
-    assert torch.allclose(logits, logits_tp, atol=1e-5, rtol=1e-5), (
-        f"TP and non-TP MoE model outputs differ. Max diff: {(logits - logits_tp).abs().max().item()} | Min diff: {(logits - logits_tp).abs().min().item()}"
+    assert torch.allclose(logits, logits_tp, atol=atol, rtol=rtol), (
+        f"TP and non-TP MoE model outputs differ (dtype={dtype}). Max diff: {(logits - logits_tp).abs().max().item()} | Min diff: {(logits - logits_tp).abs().min().item()}"
     )
 
     dist.barrier()
 
 
-def _test_model_moe_backward_pass_impl(rank):
+def _test_model_moe_backward_pass_impl(rank, dtype=torch.float32):
     """Implementation for comparing TP and non-TP MoE model backward passes."""
     model_id = "hf-internal-testing/tiny-random-MixtralForCausalLM"
 
     torch.manual_seed(0)
+    torch.cuda.manual_seed_all(0)
 
-    model_tp = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto", tp_plan="auto")
+    # Set tolerance based on dtype
+    atol, rtol = (1e-5, 1e-5) if dtype == torch.float32 else (1e-3, 1e-3)
+
+    model_tp = AutoModelForCausalLM.from_pretrained(model_id, dtype=dtype, tp_plan="auto")
     dist.barrier()
     model_tp.train()
 
     device = model_tp.device
-    model = AutoModelForCausalLM.from_pretrained(model_id, dtype="auto")
+    model = AutoModelForCausalLM.from_pretrained(model_id, dtype=dtype)
     model = model.to(device)
     model.train()
 
@@ -555,8 +709,8 @@ def _test_model_moe_backward_pass_impl(rank):
     loss_tp = outputs_tp.loss
     loss_tp.backward()
 
-    assert torch.allclose(loss, loss_tp, atol=1e-5, rtol=1e-5), (
-        f"TP and non-TP MoE model losses differ. Non-TP loss: {loss.item()}, TP loss: {loss_tp.item()}, Diff: {(loss - loss_tp).abs().item()}"
+    assert torch.allclose(loss, loss_tp, atol=atol, rtol=rtol), (
+        f"TP and non-TP MoE model losses differ (dtype={dtype}). Non-TP loss: {loss.item()}, TP loss: {loss_tp.item()}, Diff: {(loss - loss_tp).abs().item()}"
     )
 
     # Compare gradients for matching parameters
@@ -576,24 +730,28 @@ def _test_model_moe_backward_pass_impl(rank):
 
             grad_tp_local = grad_tp.to_local() if isinstance(grad_tp, dist.tensor.DTensor) else grad_tp
 
-            assert torch.allclose(grad_shard.cpu(), grad_tp_local.cpu(), atol=1e-5, rtol=1e-5), (
-                f"Gradients differ for parameter {name}. Max diff: {(grad_shard.cpu() - grad_tp_local.cpu()).abs().max().item()} | Min diff: {(grad_shard.cpu() - grad_tp_local.cpu()).abs().min().item()}"
+            assert torch.allclose(grad_shard.cpu(), grad_tp_local.cpu(), atol=atol, rtol=rtol), (
+                f"Gradients differ for parameter {name} (dtype={dtype}). Max diff: {(grad_shard.cpu() - grad_tp_local.cpu()).abs().max().item()} | Min diff: {(grad_shard.cpu() - grad_tp_local.cpu()).abs().min().item()}"
             )
 
     dist.barrier()
 
 
-def _test_model_moe_forward_compile_impl(rank, mode):
+def _test_model_moe_forward_compile_impl(rank, mode, dtype=torch.float32):
     """Implementation for comparing TP and non-TP MoE model outputs with torch.compile."""
     model_id = "hf-internal-testing/tiny-random-MixtralForCausalLM"
 
     torch.manual_seed(0)
+    torch.cuda.manual_seed_all(0)
+
+    # Set tolerance based on dtype
+    atol, rtol = (1e-5, 1e-5) if dtype == torch.float32 else (1e-3, 1e-3)
 
     tokenizer = AutoTokenizer.from_pretrained(model_id, use_fast=False)
     prompt = "Can I help"
     inputs = tokenizer(prompt, return_tensors="pt")
 
-    model_tp = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.float32, tp_plan="auto")
+    model_tp = AutoModelForCausalLM.from_pretrained(model_id, dtype=dtype, tp_plan="auto")
     dist.barrier()
     if mode == "eval":
         model_tp.eval()
@@ -601,7 +759,7 @@ def _test_model_moe_forward_compile_impl(rank, mode):
         model_tp.train()
 
     device = model_tp.device
-    model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.float32)
+    model = AutoModelForCausalLM.from_pretrained(model_id, dtype=dtype)
     model = model.to(device)
 
     if mode == "eval":
@@ -622,9 +780,75 @@ def _test_model_moe_forward_compile_impl(rank, mode):
         outputs_tp = model_tp(input_ids)
         logits_tp = outputs_tp.logits
 
-    assert torch.allclose(logits, logits_tp, atol=1e-5, rtol=1e-5), (
-        f"TP and non-TP MoE model outputs differ. Max diff: {(logits - logits_tp).abs().max().item()} | Min diff: {(logits - logits_tp).abs().min().item()}"
+    assert torch.allclose(logits, logits_tp, atol=atol, rtol=rtol), (
+        f"TP and non-TP MoE model outputs differ (dtype={dtype}). Max diff: {(logits - logits_tp).abs().max().item()} | Min diff: {(logits - logits_tp).abs().min().item()}"
     )
+
+    dist.barrier()
+
+
+def _test_model_moe_backward_compile_impl(rank, dtype=torch.float32):
+    """Implementation for comparing TP and non-TP MoE model backward passes with torch.compile."""
+    model_id = "hf-internal-testing/tiny-random-MixtralForCausalLM"
+
+    torch.manual_seed(0)
+    torch.cuda.manual_seed_all(0)
+
+    # Set tolerance based on dtype
+    atol, rtol = (1e-5, 1e-5) if dtype == torch.float32 else (1e-3, 1e-3)
+
+    config = AutoConfig.from_pretrained(model_id)
+    config.tie_word_embeddings = False
+
+    model_tp = AutoModelForCausalLM.from_pretrained(model_id, config=config, dtype=dtype, tp_plan="auto")
+    dist.barrier()
+    model_tp.train()
+
+    device = model_tp.device
+    model = AutoModelForCausalLM.from_pretrained(model_id, config=config, dtype=dtype)
+    model = model.to(device)
+    model.train()
+
+    # Compile both models
+    model.forward = torch.compile(model.forward)
+    model_tp.forward = torch.compile(model_tp.forward)
+
+    batch_size, seq_length = 2, 10
+    torch.manual_seed(42)
+    input_ids = torch.randint(0, model.config.vocab_size, (batch_size, seq_length)).to(device)
+    labels = torch.randint(0, model.config.vocab_size, (batch_size, seq_length)).to(device)
+
+    outputs = model(input_ids, labels=labels)
+    loss = outputs.loss
+    loss.backward()
+
+    outputs_tp = model_tp(input_ids, labels=labels)
+    loss_tp = outputs_tp.loss
+    loss_tp.backward()
+
+    assert torch.allclose(loss, loss_tp, atol=atol, rtol=rtol), (
+        f"TP and non-TP MoE model losses differ (dtype={dtype}). Non-TP loss: {loss.item()}, TP loss: {loss_tp.item()}, Diff: {(loss - loss_tp).abs().item()}"
+    )
+
+    # Compare gradients for matching parameters
+    world_size = dist.get_world_size() if dist.is_initialized() else 1
+    for (name, param), (name_tp, param_tp) in zip(model.named_parameters(), model_tp.named_parameters()):
+        if param.grad is not None and param_tp.grad is not None:
+            grad = param.grad
+            grad_tp = param_tp.grad
+
+            # Handle sharded parameters - slice reference gradient to match local shard
+            if grad.shape != grad_tp.shape:
+                for dim in range(grad.ndim):
+                    if grad.size(dim) != grad_tp.size(dim):
+                        shard_size = grad_tp.size(dim)
+                        start = rank * shard_size
+                        grad = grad.narrow(dim, start, shard_size)
+                        break
+
+            assert torch.allclose(grad.cpu(), grad_tp.cpu(), atol=atol, rtol=rtol), (
+                f"Gradients differ for parameter {name} (dtype={dtype}). Max diff: {(grad.cpu() - grad_tp.cpu()).abs().max().item()}"
+            )
 
     dist.barrier()
 
@@ -650,54 +874,124 @@ class TestTensorParallelMoeBase(TestCasePlus):
     nproc_per_node = None
 
     @require_torch_multi_accelerator
-    def test_model_moe_forward_eval(self):
-        """Test that TP and non-TP MoE models produce the same outputs in eval mode."""
+    def test_model_moe_forward_eval_float32(self):
+        """Test that TP and non-TP MoE models produce the same outputs in eval mode (float32)."""
         if self.nproc_per_node is None:
             self.skipTest("nproc_per_node not set")
         if backend_device_count(torch_device) < self.nproc_per_node:
             self.skipTest(f"Need at least {self.nproc_per_node} devices, have {backend_device_count(torch_device)}")
 
-        init_distributed(tp=self.nproc_per_node)(_test_model_moe_forward_impl)("eval")
+        init_distributed(tp=self.nproc_per_node)(_test_model_moe_forward_impl)("eval", torch.float32)
 
     @require_torch_multi_accelerator
-    def test_model_moe_forward_train(self):
-        """Test that TP and non-TP MoE models produce the same outputs in train mode."""
+    def test_model_moe_forward_eval_bfloat16(self):
+        """Test that TP and non-TP MoE models produce the same outputs in eval mode (bfloat16)."""
         if self.nproc_per_node is None:
             self.skipTest("nproc_per_node not set")
         if backend_device_count(torch_device) < self.nproc_per_node:
             self.skipTest(f"Need at least {self.nproc_per_node} devices, have {backend_device_count(torch_device)}")
 
-        init_distributed(tp=self.nproc_per_node)(_test_model_moe_forward_impl)("train")
+        init_distributed(tp=self.nproc_per_node)(_test_model_moe_forward_impl)("eval", torch.bfloat16)
 
     @require_torch_multi_accelerator
-    def test_model_moe_backward_pass(self):
-        """Test that TP and non-TP MoE models produce the same gradients."""
+    def test_model_moe_forward_train_float32(self):
+        """Test that TP and non-TP MoE models produce the same outputs in train mode (float32)."""
         if self.nproc_per_node is None:
             self.skipTest("nproc_per_node not set")
         if backend_device_count(torch_device) < self.nproc_per_node:
             self.skipTest(f"Need at least {self.nproc_per_node} devices, have {backend_device_count(torch_device)}")
 
-        init_distributed(tp=self.nproc_per_node)(_test_model_moe_backward_pass_impl)()
+        init_distributed(tp=self.nproc_per_node)(_test_model_moe_forward_impl)("train", torch.float32)
 
     @require_torch_multi_accelerator
-    def test_model_moe_forward_compile_eval(self):
-        """Test that TP and non-TP MoE models produce the same outputs with torch.compile in eval mode."""
+    def test_model_moe_forward_train_bfloat16(self):
+        """Test that TP and non-TP MoE models produce the same outputs in train mode (bfloat16)."""
         if self.nproc_per_node is None:
             self.skipTest("nproc_per_node not set")
         if backend_device_count(torch_device) < self.nproc_per_node:
             self.skipTest(f"Need at least {self.nproc_per_node} devices, have {backend_device_count(torch_device)}")
 
-        init_distributed(tp=self.nproc_per_node)(_test_model_moe_forward_compile_impl)("eval")
+        init_distributed(tp=self.nproc_per_node)(_test_model_moe_forward_impl)("train", torch.bfloat16)
 
     @require_torch_multi_accelerator
-    def test_model_moe_forward_compile_train(self):
-        """Test that TP and non-TP MoE models produce the same outputs with torch.compile in train mode."""
+    def test_model_moe_backward_pass_float32(self):
+        """Test that TP and non-TP MoE models produce the same gradients (float32)."""
         if self.nproc_per_node is None:
             self.skipTest("nproc_per_node not set")
         if backend_device_count(torch_device) < self.nproc_per_node:
             self.skipTest(f"Need at least {self.nproc_per_node} devices, have {backend_device_count(torch_device)}")
 
-        init_distributed(tp=self.nproc_per_node)(_test_model_moe_forward_compile_impl)("train")
+        init_distributed(tp=self.nproc_per_node)(_test_model_moe_backward_pass_impl)(torch.float32)
+
+    @require_torch_multi_accelerator
+    def test_model_moe_backward_pass_bfloat16(self):
+        """Test that TP and non-TP MoE models produce the same gradients (bfloat16)."""
+        if self.nproc_per_node is None:
+            self.skipTest("nproc_per_node not set")
+        if backend_device_count(torch_device) < self.nproc_per_node:
+            self.skipTest(f"Need at least {self.nproc_per_node} devices, have {backend_device_count(torch_device)}")
+
+        init_distributed(tp=self.nproc_per_node)(_test_model_moe_backward_pass_impl)(torch.bfloat16)
+
+    @require_torch_multi_accelerator
+    def test_model_moe_forward_compile_eval_float32(self):
+        """Test that TP and non-TP MoE models produce the same outputs with torch.compile in eval mode (float32)."""
+        if self.nproc_per_node is None:
+            self.skipTest("nproc_per_node not set")
+        if backend_device_count(torch_device) < self.nproc_per_node:
+            self.skipTest(f"Need at least {self.nproc_per_node} devices, have {backend_device_count(torch_device)}")
+
+        init_distributed(tp=self.nproc_per_node)(_test_model_moe_forward_compile_impl)("eval", torch.float32)
+
+    @require_torch_multi_accelerator
+    def test_model_moe_forward_compile_eval_bfloat16(self):
+        """Test that TP and non-TP MoE models produce the same outputs with torch.compile in eval mode (bfloat16)."""
+        if self.nproc_per_node is None:
+            self.skipTest("nproc_per_node not set")
+        if backend_device_count(torch_device) < self.nproc_per_node:
+            self.skipTest(f"Need at least {self.nproc_per_node} devices, have {backend_device_count(torch_device)}")
+
+        init_distributed(tp=self.nproc_per_node)(_test_model_moe_forward_compile_impl)("eval", torch.bfloat16)
+
+    @require_torch_multi_accelerator
+    def test_model_moe_forward_compile_train_float32(self):
+        """Test that TP and non-TP MoE models produce the same outputs with torch.compile in train mode (float32)."""
+        if self.nproc_per_node is None:
+            self.skipTest("nproc_per_node not set")
+        if backend_device_count(torch_device) < self.nproc_per_node:
+            self.skipTest(f"Need at least {self.nproc_per_node} devices, have {backend_device_count(torch_device)}")
+
+        init_distributed(tp=self.nproc_per_node)(_test_model_moe_forward_compile_impl)("train", torch.float32)
+
+    @require_torch_multi_accelerator
+    def test_model_moe_forward_compile_train_bfloat16(self):
+        """Test that TP and non-TP MoE models produce the same outputs with torch.compile in train mode (bfloat16)."""
+        if self.nproc_per_node is None:
+            self.skipTest("nproc_per_node not set")
+        if backend_device_count(torch_device) < self.nproc_per_node:
+            self.skipTest(f"Need at least {self.nproc_per_node} devices, have {backend_device_count(torch_device)}")
+
+        init_distributed(tp=self.nproc_per_node)(_test_model_moe_forward_compile_impl)("train", torch.bfloat16)
+
+    @require_torch_multi_accelerator
+    def test_model_moe_backward_compile_float32(self):
+        """Test that TP and non-TP MoE models produce the same gradients with torch.compile (float32)."""
+        if self.nproc_per_node is None:
+            self.skipTest("nproc_per_node not set")
+        if backend_device_count(torch_device) < self.nproc_per_node:
+            self.skipTest(f"Need at least {self.nproc_per_node} devices, have {backend_device_count(torch_device)}")
+
+        init_distributed(tp=self.nproc_per_node)(_test_model_moe_backward_compile_impl)(torch.float32)
+
+    @require_torch_multi_accelerator
+    def test_model_moe_backward_compile_bfloat16(self):
+        """Test that TP and non-TP MoE models produce the same gradients with torch.compile (bfloat16)."""
+        if self.nproc_per_node is None:
+            self.skipTest("nproc_per_node not set")
+        if backend_device_count(torch_device) < self.nproc_per_node:
+            self.skipTest(f"Need at least {self.nproc_per_node} devices, have {backend_device_count(torch_device)}")
+
+        init_distributed(tp=self.nproc_per_node)(_test_model_moe_backward_compile_impl)(torch.bfloat16)
 
     @require_huggingface_hub_greater_or_equal("0.31.4")
     @require_torch_multi_accelerator

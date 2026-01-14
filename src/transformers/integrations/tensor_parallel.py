@@ -995,7 +995,7 @@ class RouterParallel(TensorParallelLayer):
         return inputs[0] if inputs else inputs
 
     @staticmethod
-    def _prepare_output_fn(output_layouts, use_local_output, mod, outputs, device_mesh):
+    def _prepare_output_fn(mod, outputs, device_mesh):
         """
         Imagine if you had 4 tokens, top_k = 4, and 128experts.
         With EP = 8. The num_local_expert should be 128/8 = 16
