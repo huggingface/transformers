@@ -123,10 +123,6 @@
     - local: open_webui
       title: Open WebUI
     title: Serving
-  - local: agents
-    title: Agents
-  - local: tools
-    title: Tools
   title: Inference
 - isExpanded: false
   sections:
