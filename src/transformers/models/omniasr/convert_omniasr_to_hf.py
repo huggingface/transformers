@@ -20,6 +20,7 @@ import torch
 import urllib.request
 
 from omnilingual_asr.models.inference.pipeline import ASRInferencePipeline
+from fairseq2.models.llama import LLaMAConfig
 from fairseq2.models.wav2vec2.asr.config import Wav2Vec2AsrConfig
 from fairseq2.models.wav2vec2.config import Wav2Vec2Config
 from fairseq2.models.hub import load_model
@@ -65,8 +66,17 @@ wav2vec_convert_list = [
     ("output_proj", "output_dense"),
     ("encoder.layer_norm", "model.encoder.layer_norm"),
     # lm head
-    ("final_proj", "lm_head"),
+    ("final_proj", "ctc_head"),
 ]
+
+
+"""
+LLM model also has:
+(encoder_proj): Linear(input_dim=1024, output_dim=4096, bias=True)                                                                           
+(text_frontend): StandardEmbedding(num_embeddings=10289, embed_dim=4096)
+(llama_decoder): StandardTransformerLMDecoder(
+(lang_embeddings): StandardEmbedding(num_embeddings=1694, embed_dim=4096)  
+"""
 
 
 def _convert_model(
@@ -121,9 +131,8 @@ def convert_omniasr_checkpoint(model_card, repo_id=None, bfloat16=False):
     else:
         dtype = torch.bfloat16
 
-    # TODO set dtype? ASRInferencePipeline defaults to bfloat16
-
     # 1) Load original model
+    assert model_card is not None, "Must specify original model name in omnilingual-asr"
     if "W2V" not in model_card:
         pipeline = ASRInferencePipeline(model_card=model_card, device=device, dtype=dtype)
         original_model = pipeline.model
@@ -133,7 +142,7 @@ def convert_omniasr_checkpoint(model_card, repo_id=None, bfloat16=False):
         original_tokenizer = None
 
     resolver = get_dependency_resolver()
-    if "CTC" in model_card:
+    if "CTC" in model_card or "LLM" in model_card:
         # https://github.com/facebookresearch/omnilingual-asr/blob/9b95719b482d755c8dc9ec1aff7b477f4dd89d6c/src/omnilingual_asr/models/wav2vec2_asr/config.py#L13
         if "300" in model_card:
             encoder_config_name = "large_lv60k"
@@ -159,9 +168,50 @@ def convert_omniasr_checkpoint(model_card, repo_id=None, bfloat16=False):
         original_config.max_spatial_mask_prob = 0.0
         original_config.target_vocab_size = original_tokenizer.vocab_info.size 
 
-    elif "LLM" in model_card:
-        # https://github.com/facebookresearch/omnilingual-asr/blob/main/src/omnilingual_asr/models/wav2vec2_llama/config.py
-        raise NotImplementedError("LLM models are not supported yet.")
+        if "LLM" in model_card:
+            # load additional configuration for LLM, beam search, streaming
+            
+            # v2 llama config: https://github.com/facebookresearch/omnilingual-asr/blob/81f51e224ce9e74b02cc2a3eaf21b2d91d743455/src/omnilingual_asr/models/wav2vec2_llama/config.py#L257
+            # v1 llama config: https://github.com/facebookresearch/omnilingual-asr/blob/81f51e224ce9e74b02cc2a3eaf21b2d91d743455/src/omnilingual_asr/models/wav2vec2_llama/config.py#L229
+            
+            if "v2" in model_card:
+
+                llama_config = LLaMAConfig(
+                    model_dim=4096,
+                    max_seq_len=8192,
+                    vocab_size=original_config.target_vocab_size,
+                    pad_idx=1,
+                    num_layers=12,
+                    num_attn_heads=8,
+                    num_key_value_heads=8,
+                    ffn_inner_dim=4096,
+                    rope_theta=10_000.0,
+                    dropout_p=0.1,
+                )
+
+                import pudb; pudb.set_trace()
+
+                config = Wav2Vec2LlamaConfig(
+                    wav2vec2_asr_config=original_config, llama_config=llama_config
+                )
+                config.lang_embeddings_p = 0.5
+                config.n_special_tokens = 1
+                config.model_type = ModelType.LLM_ASR_LID
+
+
+            elif "v1" in model_card:
+
+                raise ValueError("Not suppoerted yet")
+
+            else:
+                raise ValueError("Unrecognized model card : ", model_card)
+
+
+            import pudb; pudb.set_trace()
+
+    # elif "LLM" in model_card:
+    #     # https://github.com/facebookresearch/omnilingual-asr/blob/main/src/omnilingual_asr/models/wav2vec2_llama/config.py
+    #     raise NotImplementedError("LLM models are not supported yet.")
     
     elif "W2V" in model_card:
         # https://github.com/facebookresearch/omnilingual-asr/blob/main/src/omnilingual_asr/models/wav2vec2_ssl/config.py
@@ -222,8 +272,7 @@ def convert_omniasr_checkpoint(model_card, repo_id=None, bfloat16=False):
         sample_fbank_every_k=original_config.encoder_config.sample_fbank_every_k, 
         pos_encoder_depth=original_config.encoder_config.pos_encoder_depth, 
         use_conformer=original_config.encoder_config.use_conformer, 
-        dropout_p=original_config.encoder_config.dropout_p, 
-        layer_drop_p=original_config.encoder_config.layer_drop_p,
+        # dropout_p=original_config.encoder_config.dropout_p, 
         depthwise_conv_kernel_size=original_config.encoder_config.depthwise_conv_kernel_size,
         # NOTE (ebezzam): below are modified to Transformer convention
         hidden_size=original_config.encoder_config.model_dim,
@@ -242,6 +291,8 @@ def convert_omniasr_checkpoint(model_card, repo_id=None, bfloat16=False):
         activation_dropout=original_config.encoder_config.ffn_inner_dropout_p,
         intermediate_size=original_config.encoder_config.ffn_inner_dim,
         position_embeddings_type=original_config.encoder_config.pos_encoder_type, 
+        final_dropout=original_config.final_dropout_p,
+        layerdrop=original_config.encoder_config.layer_drop_p,
         # NOTE (ebezzam) do we keep specaugment params?
         apply_spec_augment=original_config.use_masking,
         mask_time_length=original_config.temporal_mask_span_len,
@@ -254,15 +305,24 @@ def convert_omniasr_checkpoint(model_card, repo_id=None, bfloat16=False):
 
     if "CTC" in model_card:
         config = OmniASRCTCConfig(
-            vocab_size=original_config.target_vocab_size,
-            final_dropout=original_config.final_dropout_p,
             encoder_config=encoder_config,
+            vocab_size=original_config.target_vocab_size,
             pad_token_id=pipeline.tokenizer.vocab_info.pad_idx,
             bos_token_id=pipeline.tokenizer.vocab_info.bos_idx,
             eos_token_id=pipeline.tokenizer.vocab_info.eos_idx,
             unk_token_id=pipeline.tokenizer.vocab_info.unk_idx,
         )
         hf_model = OmniASRForCTC(config)
+    elif "LLM" in model_card:
+        config = OmniASRLLMConfig(
+            encoder_config=encoder_config,
+            text_config=text_config,
+            pad_token_id=pipeline.tokenizer.vocab_info.pad_idx,
+            bos_token_id=pipeline.tokenizer.vocab_info.bos_idx,
+            eos_token_id=pipeline.tokenizer.vocab_info.eos_idx,
+            unk_token_id=pipeline.tokenizer.vocab_info.unk_idx,
+        )
+        hf_model = OmniASRForConditionalGeneration(config)
     elif "W2V" in model_card:
         # TODO not working
         config = OmniASREncoderConfig(
@@ -293,11 +353,17 @@ def convert_omniasr_checkpoint(model_card, repo_id=None, bfloat16=False):
     )
 
     # -- create Transformers-compatible tokenizer
-    url = "https://dl.fbaipublicfiles.com/mms/omniASR_tokenizer_written_v2.model"
+    # Release v1: https://github.com/facebookresearch/omnilingual-asr/blob/main/src/omnilingual_asr/cards/models/rc_models_v1.yaml
+    # Release v2: https://github.com/facebookresearch/omnilingual-asr/blob/main/src/omnilingual_asr/cards/models/rc_models_v2.yaml
+    if "v2" in model_card:
+        tokenizer_url = "https://dl.fbaipublicfiles.com/mms/omniASR_tokenizer_written_v2.model"
+    elif model_card in ["omniASR_LLM_7B"]:
+        tokenizer_url = "https://dl.fbaipublicfiles.com/mms/omniASR_tokenizer_v7.model"
+    else:
+        tokenizer_url = "https://dl.fbaipublicfiles.com/mms/omniASR_tokenizer.model"
     download_dir = os.getcwd()
-    filename = os.path.basename(url)
-    tokenizer_path = os.path.join(download_dir, filename)
-    urllib.request.urlretrieve(url, tokenizer_path)
+    tokenizer_path = os.path.join(download_dir, os.path.basename(tokenizer_url))
+    urllib.request.urlretrieve(tokenizer_url, tokenizer_path)
     vocab_ids, vocab_scores, merges = SentencePieceExtractor(tokenizer_path).extract()
     # TODO do we also need to overwrite the pad token to be ID 0? (before <s>)
     vocab_scores[0] = ("<pad>", vocab_scores[0][1])
@@ -377,8 +443,20 @@ Example conversion:
 ```python
 python src/transformers/models/omniasr/convert_omniasr_to_hf.py \
     --model_card omniASR_CTC_300M_v2 \
-    --repo_id bezzam/omniasr-ctc-300m-v2 --bfloat16
+    --repo_id bezzam/omniasr-ctc-300m-v2
 
+
+python src/transformers/models/omniasr/convert_omniasr_to_hf.py \
+--model_card omniASR_LLM_300M_v2 \
+--repo_id bezzam/omniasr-llm-300m-v2
+
+
+## release v1
+python src/transformers/models/omniasr/convert_omniasr_to_hf.py \
+    --model_card omniASR_CTC_300M \
+    --repo_id bezzam/omniasr-ctc-300m
+
+    
 python src/transformers/models/omniasr/convert_omniasr_to_hf.py \
     --model_card omniASR_W2V_300M \
     --repo_id bezzam/omniasr-w2v-300m

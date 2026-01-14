@@ -24,6 +24,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...generation import GenerationMixin
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
@@ -43,7 +44,7 @@ from ...utils import (
     logging,
     can_return_tuple,
 )
-from .configuration_omniasr import OmniASRCTCConfig, OmniASREncoderConfig
+from .configuration_omniasr import OmniASRCTCConfig, OmniASRLLMConfig, OmniASREncoderConfig
 
 
 OMNIASR_ADAPTER_PT_FILE = "adapter.{}.bin"
@@ -638,10 +639,6 @@ class OmniASREncoder(nn.Module):
         if self.embed_positions is not None:
             hidden_states = self.embed_positions(hidden_states)
 
-        # TODO remove from init if not used?
-        # 
-        # 
-
         synced_gpus = is_deepspeed_zero3_enabled() or is_fsdp_managed_module(self)
 
         for i, layer in enumerate(self.layers):
@@ -650,7 +647,7 @@ class OmniASREncoder(nn.Module):
 
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             dropout_probability = torch.rand([])
-            skip_the_layer = self.training and dropout_probability < self.config.layer_drop_p
+            skip_the_layer = self.training and dropout_probability < self.config.layerdrop
             if not skip_the_layer or synced_gpus:
                 # under fsdp or deepspeed zero3 all gpus must run in sync
                 layer_outputs = layer(
@@ -869,7 +866,9 @@ class OmniASRPreTrainedModel(PreTrainedModel):
         attention_mask = attention_mask.flip([-1]).cumsum(-1).flip([-1]).bool()
         return attention_mask
 
+    # TODO remove?
     def _get_adapters(self):
+        raise ValueError("TODO remove")
         if self.config.adapter_attn_dim is None:
             raise ValueError(f"{self.__class__} has no adapter layers. Make sure to define `config.adapter_attn_dim`.")
 
@@ -885,10 +884,13 @@ class OmniASRPreTrainedModel(PreTrainedModel):
 
         return adapter_weights
 
+    # TODO remove?
     def init_adapter_layers(self):
         """
         (Re-)initialize attention adapter layers and lm head for adapter-only fine-tuning
         """
+        raise ValueError("TODO remove")
+
         # init attention adapters
         for module in self.modules():
             if isinstance(module, OmniASRAttnAdapterLayer):
@@ -898,6 +900,7 @@ class OmniASRPreTrainedModel(PreTrainedModel):
         if isinstance(self, OmniASRForCTC):
             self._init_weights(self.lm_head)
 
+    # TODO remove?
     def load_adapter(self, target_lang: str, force_load=True, **kwargs):
         r"""
         Load a language adapter model from a pre-trained adapter model.
@@ -958,6 +961,8 @@ class OmniASRPreTrainedModel(PreTrainedModel):
         >>> model.load_adapter("spa")
         ```
         """
+        raise ValueError("TODO remove")
+
         if self.config.adapter_attn_dim is None:
             raise ValueError(f"Cannot load_adapter for {target_lang} if `config.adapter_attn_dim` is not defined.")
 
@@ -1113,6 +1118,7 @@ class OmniASRModel(OmniASRPreTrainedModel):
             self.masked_spec_embed = nn.Parameter(torch.Tensor(config.hidden_size).uniform_())
 
         self.encoder = OmniASREncoder(config)
+        self.dropout = nn.Dropout(config.final_dropout)
 
         # TODO (ebezzam) remove? as add_adapter=False
         self.adapter = OmniASRAdapter(config) if config.add_adapter else None
@@ -1214,6 +1220,9 @@ class OmniASRModel(OmniASRPreTrainedModel):
             # TODO remove if not used?
             hidden_states = self.adapter(hidden_states)
 
+        if self.training:
+            hidden_states = self.dropout(hidden_states)
+
         return Wav2Vec2BaseModelOutput(
             last_hidden_state=hidden_states,
             hidden_states=encoder_outputs.hidden_states,
@@ -1223,32 +1232,16 @@ class OmniASRModel(OmniASRPreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    OmniASR Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).
+    OmniASR Model with a head for Connectionist Temporal Classification (CTC).
     """
 )
 class OmniASRForCTC(OmniASRPreTrainedModel):
     config: OmniASRCTCConfig
 
-    def __init__(self, config: OmniASRCTCConfig, target_lang: Optional[str] = None):
-        r"""
-        target_lang (`str`, *optional*):
-            Language id of adapter weights. Adapter weights are stored in the format adapter.<lang>.safetensors or
-            adapter.<lang>.bin. Only relevant when using an instance of [`OmniASRForCTC`] with adapters. Uses 'eng' by
-            default.
-        """
+    def __init__(self, config: OmniASRCTCConfig):
         super().__init__(config)
-
         self.model = OmniASRModel(config.encoder_config)
-
-        # TODO move dropout into model like in fairseq2?
-        self.dropout = nn.Dropout(config.final_dropout)
-
-        # TODO (ebezzam) setting target lang here?
-        self.target_lang = target_lang
-        output_hidden_size = (
-            config.output_hidden_size if hasattr(config, "add_adapter") and config.add_adapter else config.hidden_size
-        )
-        self.lm_head = nn.Linear(output_hidden_size, config.vocab_size)
+        self.ctc_head = nn.Linear(config.hidden_size, config.vocab_size)
         self.post_init()
 
     def apply_weight_norm(self, legacy=True):
@@ -1281,27 +1274,6 @@ class OmniASRForCTC(OmniASRPreTrainedModel):
         # TODO deepspeed zero3 case
         remove_weight_norm(self.model.encoder.embed_positions.conv, name="weight")
 
-    def tie_weights(self, **kwargs):
-        """
-        This method overwrites [`~PreTrainedModel.tie_weights`] so that adapter weights can be correctly loaded when
-        passing `target_lang=...` to `from_pretrained(...)`.
-
-        This method is **not** supposed to be called by the user and is prone to be changed in the future.
-        """
-
-        # Note that `tie_weights` is usually used to tie input and output embedding weights. The method is re-purposed to
-        # correctly load adapter layers for the model so that we do not have to introduce a new API to
-        # [`PreTrainedModel`]. While slightly hacky, OmniASR never has to tie input and output embeddings, so that it is
-        # ok to repurpose this function here.
-        target_lang = self.target_lang
-
-        if target_lang is not None and getattr(self.config, "adapter_attn_dim", None) is None:
-            raise ValueError(f"Cannot pass `target_lang`: {target_lang} if `config.adapter_attn_dim` is not defined.")
-        elif target_lang is None and getattr(self.config, "adapter_attn_dim", None) is not None:
-            logger.info("By default `target_lang` is set to 'eng'.")
-        elif target_lang is not None:
-            self.load_adapter(target_lang, force_load=True)
-
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -1332,9 +1304,7 @@ class OmniASRForCTC(OmniASRPreTrainedModel):
         )
 
         hidden_states = outputs[0]
-        hidden_states = self.dropout(hidden_states)
-
-        logits = self.lm_head(hidden_states)
+        logits = self.ctc_head(hidden_states)
 
         loss = None
         if labels is not None:
@@ -1369,8 +1339,28 @@ class OmniASRForCTC(OmniASRPreTrainedModel):
         )
 
 
+@auto_docstring(
+    custom_intro="""
+    OmniASR model, which consists of a Wav2Vec2, a multi-modal projector and a LLama language model.
+    """
+)
+class OmniASRForConditionalGeneration(OmniASRPreTrainedModel, GenerationMixin):
+    config: OmniASRLLMConfig
+    # below is from Voxtral
+    # _keep_in_fp32_modules_strict = ["embed_positions"]
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.vocab_size = config.text_config.vocab_size
+        self.audio_tower = AutoModel.from_config(config.encoder_config)
+        self.language_model = AutoModelForCausalLM.from_config(config.text_config)
+        self.multi_modal_projector = VoxtralMultiModalProjector(config)
+        self.post_init()
+
+
 __all__ = [
     "OmniASRForCTC",
+    "OmniASRForConditionalGeneration",
     "OmniASRModel",
     "OmniASRPreTrainedModel",
 ]
