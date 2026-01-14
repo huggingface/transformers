@@ -1264,11 +1264,7 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         return objectness_logits
 
     # Copied from transformers.models.owlvit.modeling_owlvit.OwlViTForObjectDetection.compute_box_bias
-    def compute_box_bias(
-        self, num_patches_height: int, num_patches_width: int, feature_map: torch.FloatTensor | None = None
-    ) -> torch.Tensor:
-        if feature_map is not None:
-            raise ValueError("feature_map has been deprecated as an input. Please pass in num_patches instead")
+    def compute_box_bias(self, num_patches_height: int, num_patches_width: int) -> torch.Tensor:
         # The box center is biased to its position on the feature grid
         box_coordinates = self.normalize_grid_corner_coordinates(num_patches_height, num_patches_width)
         box_coordinates = torch.clip(box_coordinates, 0.0, 1.0)
