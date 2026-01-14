@@ -72,24 +72,21 @@ class VipLlavaPreTrainedModel(LlavaPreTrainedModel):
 
 class VipLlavaModel(LlavaModel):
     @can_return_tuple
+    @auto_docstring(
+        custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
+    )
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         vision_feature_layers: int | list[int] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        """
-        Obtains image last hidden states from the vision tower and apply multimodal projection.
-
-        Args:
-            pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`)
-               The tensors corresponding to the input images.
-            vision_feature_layers (`Union[int, list[int]]`):
-                The vision feature layer, or the list of indexes of the layers to select
-                the vision feature.
-
-        Returns:
-            image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
+        r"""
+        pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`)
+            The tensors corresponding to the input images.
+        vision_feature_layers (`Union[int, list[int]]`):
+            The vision feature layer, or the list of indexes of the layers to select
+            the vision feature.
         """
         vision_feature_layers = (
             vision_feature_layers if vision_feature_layers is not None else self.config.vision_feature_layers
@@ -181,6 +178,7 @@ class VipLlavaModel(LlavaModel):
 
 
 class VipLlavaForConditionalGeneration(LlavaForConditionalGeneration):
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,

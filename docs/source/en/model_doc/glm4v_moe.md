@@ -70,8 +70,12 @@ The model also introduces a **Thinking Mode** switch, allowing users to balance 
 
 [[autodoc]] Glm4vMoeModel
     - forward
+    - get_video_features
+    - get_image_features
 
 ## Glm4vMoeForConditionalGeneration
 
 [[autodoc]] Glm4vMoeForConditionalGeneration
     - forward
+    - get_video_features
+    - get_image_features

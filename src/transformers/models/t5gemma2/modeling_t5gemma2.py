@@ -810,12 +810,10 @@ class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
         self.post_init()
 
     @can_return_tuple
+    @auto_docstring
     def get_image_features(
         self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
-        """
-        Convert pixel image to image features via the encoder and projector.
-        """
         # pixel_values: (batch_size, channels, height, width)
         # image_features: Image feature tensor of shape (num_images, image_length, embed_dim).
         vision_outputs = self.vision_tower(pixel_values=pixel_values, **kwargs)
@@ -1227,6 +1225,7 @@ class T5Gemma2ForConditionalGeneration(T5Gemma2PreTrainedModel, GenerationMixin)
     def get_decoder(self):
         return self.model.get_decoder()
 
+    @auto_docstring
     def get_image_features(
         self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:

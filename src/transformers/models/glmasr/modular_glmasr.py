@@ -25,7 +25,7 @@ from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPa
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, is_torch_available, logging
-from ...utils.generic import check_model_inputs
+from ...utils.generic import can_return_tuple, check_model_inputs
 from ..audioflamingo3.modeling_audioflamingo3 import (
     AudioFlamingo3ForConditionalGeneration,
     AudioFlamingo3MultiModalProjector,
@@ -355,6 +355,10 @@ class GlmAsrMultiModalProjector(AudioFlamingo3MultiModalProjector):
     """
 )
 class GlmAsrForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
+    @can_return_tuple
+    @auto_docstring(
+        custom_intro="Compute audio embeddings from log-mel input features using the audio encoder and multi-modal projector."
+    )
     def get_audio_features(
         self,
         input_features: torch.FloatTensor,

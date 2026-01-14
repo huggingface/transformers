@@ -437,3 +437,4 @@ SAM3 uses the following label conventions:
 
 [[autodoc]] Sam3Model
     - forward
+    - get_text_features

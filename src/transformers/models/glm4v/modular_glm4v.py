@@ -1157,14 +1157,11 @@ class Glm4vModel(Qwen2_5_VLModel):
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        """
-        Encodes videos into continuous embeddings that can be forwarded to the language model.
-
-        Args:
-            pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-                The tensors corresponding to the input videos.
-            video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-                The temporal, height and width of feature shape of each video in LLM.
+        r"""
+        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input videos.
+        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+            The temporal, height and width of feature shape of each video in LLM.
         """
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
         # reshape video_grid_thw -> [b, 3] -> [1, h, w] * frames

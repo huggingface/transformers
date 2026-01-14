@@ -180,6 +180,9 @@ class AyaVisionModel(AyaVisionPreTrainedModel):
         self.language_model.set_input_embeddings(value)
 
     @can_return_tuple
+    @auto_docstring(
+        custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
+    )
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
@@ -187,22 +190,16 @@ class AyaVisionModel(AyaVisionPreTrainedModel):
         vision_feature_select_strategy: str | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        """
-        Obtains image last hidden states from the vision tower and apply multimodal projection.
-
-        Args:
-            pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`):
-               The tensors corresponding to the input images.
-            vision_feature_layer (`Union[int, list[int]]`, *optional*):
-                The index of the layer to select the vision feature. If multiple indices are provided,
-                the vision feature of the corresponding indices will be concatenated to form the
-                vision features.
-            vision_feature_select_strategy (`str`, *optional*):
-                The feature selection strategy used to select the vision feature from the vision backbone.
-                Can be one of `"default"` or `"full"`
-
-        Returns:
-            image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
+        r"""
+        pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`):
+            The tensors corresponding to the input images.
+        vision_feature_layer (`Union[int, list[int]]`, *optional*):
+            The index of the layer to select the vision feature. If multiple indices are provided,
+            the vision feature of the corresponding indices will be concatenated to form the
+            vision features.
+        vision_feature_select_strategy (`str`, *optional*):
+            The feature selection strategy used to select the vision feature from the vision backbone.
+            Can be one of `"default"` or `"full"`
         """
         vision_feature_layer = (
             vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
@@ -354,6 +351,7 @@ class AyaVisionForConditionalGeneration(AyaVisionPreTrainedModel, GenerationMixi
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
 
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,

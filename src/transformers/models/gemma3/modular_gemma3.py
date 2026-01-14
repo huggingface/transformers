@@ -799,18 +799,13 @@ class Gemma3Model(PaliGemmaModel):
         del self.text_config_dtype
 
     @can_return_tuple
+    @auto_docstring(custom_intro="Projects the last hidden state from the vision model into language model space.")
     def get_image_features(
         self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
-        """
-        Projects the last hidden state from the vision model into language model space.
-
-        Args:
-            pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`)
-               The tensors corresponding to the input images.
-
-        Returns:
-            image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
+        r"""
+        pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`)
+            The tensors corresponding to the input images.
         """
         vision_outputs = self.vision_tower(pixel_values=pixel_values, **kwargs)
         last_hidden_state = vision_outputs.last_hidden_state

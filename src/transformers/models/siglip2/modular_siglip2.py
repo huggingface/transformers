@@ -373,10 +373,6 @@ class Siglip2Model(SiglipModel):
         spatial_shapes (`torch.LongTensor` of shape `(batch_size, 2)`):
             Tensor containing the spatial dimensions (height, width) of the input images.
 
-        Returns:
-            image_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
-            applying the projection layer to the pooled output of [`Siglip2VisionModel`].
-
         Examples:
 
         ```python

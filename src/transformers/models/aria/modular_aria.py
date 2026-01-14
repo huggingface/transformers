@@ -1268,7 +1268,9 @@ class AriaModel(LlavaModel):
         return (patches_subgrid.sum(dim=(-1, -2)) > 0).bool()
 
     @can_return_tuple
-    @auto_docstring
+    @auto_docstring(
+        custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
+    )
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
@@ -1276,12 +1278,6 @@ class AriaModel(LlavaModel):
         vision_feature_layer: int = -1,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        Obtains image last hidden states from the vision tower and apply multimodal projection.
-
-        Returns:
-            image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
-        """
         vision_feature_layer = (
             vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
         )
@@ -1364,6 +1360,7 @@ class AriaModel(LlavaModel):
 class AriaForConditionalGeneration(LlavaForConditionalGeneration):
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,

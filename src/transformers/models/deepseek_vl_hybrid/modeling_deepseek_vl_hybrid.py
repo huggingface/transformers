@@ -293,6 +293,7 @@ class DeepseekVLHybridModel(DeepseekVLHybridPreTrainedModel):
         self.language_model.set_input_embeddings(value)
 
     @can_return_tuple
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,

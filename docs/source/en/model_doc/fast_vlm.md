@@ -171,3 +171,4 @@ Flash Attention 2 is an even faster, optimized version of the previous optimizat
 
 [[autodoc]] FastVlmForConditionalGeneration
     - forward
+    - get_image_features

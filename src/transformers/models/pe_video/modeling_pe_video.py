@@ -571,6 +571,7 @@ class PeVideoModel(PeVideoPreTrainedModel):
         self.post_init()
 
         @can_return_tuple
+        @auto_docstring
         def get_text_features(
             self,
             input_ids: torch.Tensor,
@@ -586,6 +587,7 @@ class PeVideoModel(PeVideoPreTrainedModel):
             return text_outputs
 
         @can_return_tuple
+        @auto_docstring
         def get_video_features(
             self,
             pixel_values_videos: torch.Tensor,

@@ -2237,20 +2237,15 @@ class Gemma3nModel(PaliGemmaModel):
         self.embed_audio = Gemma3nMultimodalEmbedder(config.audio_config, config.text_config)
 
     @can_return_tuple
+    @auto_docstring(custom_intro="Projects the last hidden state from the vision model into language model space.")
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         """
-        Projects the last hidden state from the vision model into language model space.
-
-        Args:
-            pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`)
-               The tensors corresponding to the input images.
-
-        Returns:
-            image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
+        pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`)
+            The tensors corresponding to the input images.
         """
         vision_outputs = self.vision_tower(pixel_values=pixel_values, do_pooling=False, **kwargs)
         last_hidden_state = vision_outputs.last_hidden_state
@@ -2453,23 +2448,19 @@ class Gemma3nModel(PaliGemmaModel):
             audio_hidden_states=audio_features if input_features is not None else None,
         )
 
+    @can_return_tuple
+    @auto_docstring(custom_intro="Projects the last hidden state from the audio encoder into language model space.")
     def get_audio_features(
         self,
         input_features: torch.Tensor,
         input_features_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | Gemma3nAudioEncoderModelOutput:
-        """
-        Projects the last hidden state from the audio encoder into language model space.
-
-        Args:
-            input_features (`torch.FloatTensor]` of shape `(num_images, seq_length, num_features)`):
-               The tensors corresponding to the input audio.
-            input_features_mask (`torch.FloatTensor]` of shape `(num_images, seq_length)`):
-               The attention mask for the input audio.
-
-        Returns:
-            audio_features (`torch.Tensor`): Audio feature tensor of shape `(num_images, audio_length, embed_dim)`).
+        r"""
+        input_features (`torch.FloatTensor]` of shape `(num_images, seq_length, num_features)`):
+            The tensors corresponding to the input audio.
+        input_features_mask (`torch.FloatTensor]` of shape `(num_images, seq_length)`):
+            The attention mask for the input audio.
         """
         audio_outputs: Gemma3nAudioEncoderModelOutput = self.audio_tower(input_features, input_features_mask)
         audio_embeds = self.embed_audio(inputs_embeds=audio_outputs.last_hidden_state)

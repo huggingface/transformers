@@ -485,6 +485,9 @@ class InternVLModel(LlavaModel):
         return vision_features
 
     @can_return_tuple
+    @auto_docstring(
+        custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
+    )
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
@@ -492,17 +495,11 @@ class InternVLModel(LlavaModel):
         vision_feature_select_strategy: str | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        """
-        Obtains image last hidden states from the vision tower and apply multimodal projection.
-
-        Args:
-            pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`)
-               The tensors corresponding to the input images.
-            vision_feature_layer (`int` or `list[int]`):
-                Layer index or list of layer indices to extract features from.
-
-        Returns:
-            vision_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`.
+        r"""
+        pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`)
+            The tensors corresponding to the input images.
+        vision_feature_layer (`int` or `list[int]`):
+            Layer index or list of layer indices to extract features from.
         """
         vision_feature_layer = (
             vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer

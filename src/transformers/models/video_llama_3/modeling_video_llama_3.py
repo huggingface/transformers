@@ -547,6 +547,7 @@ class VideoLlama3Model(VideoLlama3PreTrainedModel):
         self.language_model.set_input_embeddings(value)
 
     @can_return_tuple
+    @auto_docstring
     def get_video_features(
         self,
         pixel_values_videos: torch.FloatTensor,
@@ -554,16 +555,13 @@ class VideoLlama3Model(VideoLlama3PreTrainedModel):
         video_merge_sizes: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        """
-        Encodes videos into continuous embeddings that can be forwarded to the language model.
-
-        Args:
-            pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-                The tensors corresponding to the input videos.
-            video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-                The temporal, height and width of feature shape of each video in LLM.
-            video_merge_sizes (`torch.Tensor` of shape `(num_videos,)`):
-                The spatial downsampling ratio of each video feature.
+        r"""
+        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input videos.
+        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+            The temporal, height and width of feature shape of each video in LLM.
+        video_merge_sizes (`torch.Tensor` of shape `(num_videos,)`):
+            The spatial downsampling ratio of each video feature.
         """
         return self.get_image_features(
             pixel_values=pixel_values_videos,
@@ -573,6 +571,7 @@ class VideoLlama3Model(VideoLlama3PreTrainedModel):
         )
 
     @can_return_tuple
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
@@ -580,16 +579,13 @@ class VideoLlama3Model(VideoLlama3PreTrainedModel):
         image_merge_sizes: torch.LongTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        """
-        Encodes images into continuous embeddings that can be forwarded to the language model.
-
-        Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-                The tensors corresponding to the input images.
-            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-                The temporal, height and width of feature shape of each image in LLM.
-            image_merge_sizes (`torch.Tensor` of shape `(num_images,)`):
-                The spatial downsampling ratio of each image feature.
+        r"""
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input images.
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of feature shape of each image in LLM.
+        image_merge_sizes (`torch.Tensor` of shape `(num_images,)`):
+            The spatial downsampling ratio of each image feature.
         """
         vision_outputs = self.vision_model(
             pixel_values=pixel_values,
@@ -779,6 +775,7 @@ class VideoLlama3ForConditionalGeneration(VideoLlama3PreTrainedModel, Generation
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
 
+    @auto_docstring
     def get_video_features(
         self,
         pixel_values_videos: torch.FloatTensor,
@@ -789,6 +786,7 @@ class VideoLlama3ForConditionalGeneration(VideoLlama3PreTrainedModel, Generation
             pixel_values_videos=pixel_values_videos, video_grid_thw=video_grid_thw, **kwargs
         )
 
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,

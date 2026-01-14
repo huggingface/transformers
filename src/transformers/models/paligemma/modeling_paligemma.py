@@ -259,18 +259,15 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel):
         self.language_model.set_input_embeddings(value)
 
     @can_return_tuple
+    @auto_docstring(
+        custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
+    )
     def get_image_features(
         self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
-        """
-        Obtains image last hidden states from the vision tower and apply multimodal projection.
-
-        Args:
-            pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`)
-               The tensors corresponding to the input images.
-
-        Returns:
-            image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
+        r"""
+        pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`)
+            The tensors corresponding to the input images.
         """
         image_outputs = self.vision_tower(pixel_values, **kwargs)
         selected_image_feature = image_outputs.last_hidden_state
@@ -451,6 +448,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
 
+    @auto_docstring
     def get_image_features(self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]):
         return self.model.get_image_features(pixel_values, **kwargs)
 

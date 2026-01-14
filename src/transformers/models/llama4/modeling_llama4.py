@@ -1204,23 +1204,20 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.language_model.get_decoder()
 
+    @can_return_tuple
+    @auto_docstring(custom_intro="Obtains image last hidden states from the vision tower and apply al projection.")
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         vision_feature_select_strategy: str,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        """
-        Obtains image last hidden states from the vision tower and apply al projection.
-
-        Args:
-            pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`)
-               The tensors corresponding to the input images.
-            vision_feature_select_strategy (`str`):
-                The feature selection strategy used to select the vision feature from the vision backbone.
-                Can be one of `"default"` or `"full"`
-        Returns:
-            image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
+        r"""
+        pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`)
+            The tensors corresponding to the input images.
+        vision_feature_select_strategy (`str`):
+            The feature selection strategy used to select the vision feature from the vision backbone.
+            Can be one of `"default"` or `"full"`
         """
         if vision_feature_select_strategy not in ["default", "full"]:
             raise ValueError(f"Unexpected select feature strategy: {vision_feature_select_strategy}")

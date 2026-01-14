@@ -354,6 +354,9 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
         return new_image_features, feature_lens
 
     @can_return_tuple
+    @auto_docstring(
+        custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
+    )
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
@@ -364,26 +367,20 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
         batch_num_images: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        """
-        Obtains image last hidden states from the vision tower and apply multimodal projection.
-
-        Args:
-            pixel_values (`torch.FloatTensor]` of shape `(batch_size, num_patches, channels, height, width)`)
-               The tensors corresponding to the input images.
-            image_sizes (`torch.Tensor` of shape `(num_images, 2)`)
-                Actual image size of each images (H, W).
-            vision_feature_layer (`Union[int, list[int]]`):
-                The index of the layer to select the vision feature. If multiple indices are provided,
-                the vision feature of the corresponding indices will be concatenated to form the
-                vision features.
-            vision_feature_select_strategy (`str`):
-                The feature selection strategy used to select the vision feature from the vision backbone.
-                Can be one of `"default"` or `"full"`
-            batch_num_images (`torch.LongTensor`, *optional*):
-                Number of images in each sample.
-        Returns:
-            image_features (list[`torch.Tensor`]): List of image feature tensor, each contains all the visual feature of all patches
-            and are of shape `(num_patches, image_length, embed_dim)`).
+        r"""
+        pixel_values (`torch.FloatTensor]` of shape `(batch_size, num_patches, channels, height, width)`)
+            The tensors corresponding to the input images.
+        image_sizes (`torch.Tensor` of shape `(num_images, 2)`)
+            Actual image size of each images (H, W).
+        vision_feature_layer (`Union[int, list[int]]`):
+            The index of the layer to select the vision feature. If multiple indices are provided,
+            the vision feature of the corresponding indices will be concatenated to form the
+            vision features.
+        vision_feature_select_strategy (`str`):
+            The feature selection strategy used to select the vision feature from the vision backbone.
+            Can be one of `"default"` or `"full"`
+        batch_num_images (`torch.LongTensor`, *optional*):
+            Number of images in each sample.
         """
         vision_feature_layer = (
             vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
@@ -600,6 +597,9 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
         )
 
     @can_return_tuple
+    @auto_docstring(
+        custom_intro="Obtains video last hidden states from the vision tower, apply multimodal projection and pooling."
+    )
     def get_video_features(
         self,
         pixel_values: torch.FloatTensor,
@@ -607,23 +607,16 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
         vision_feature_select_strategy: str | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        """
-        Obtains video last hidden states from the vision tower, apply multimodal projection and pooling.
-
-        Args:
-            pixel_values (`torch.FloatTensor]` of shape `(batch_size, num_frames, channels, height, width)`)
-               The tensors corresponding to the input video.
-            vision_feature_layer (`Union[int, list[int]], *optional*, defaults to -2`):
-                The index of the layer to select the vision feature. If multiple indices are provided,
-                the vision feature of the corresponding indices will be concatenated to form the
-                vision features.
-            vision_feature_select_strategy (`str`):
-                The feature selection strategy used to select the vision feature from the vision backbone.
-                Can be one of `"default"` or `"full"`
-
-        Returns:
-            video_features (list[`torch.Tensor`]): List of video feature tensor, each contains all the visual feature of all patches
-            and are of shape `(num_videos, video_length, embed_dim)`).
+        r"""
+        pixel_values (`torch.FloatTensor]` of shape `(batch_size, num_frames, channels, height, width)`)
+            The tensors corresponding to the input video.
+        vision_feature_layer (`Union[int, list[int]], *optional*, defaults to -2`):
+            The index of the layer to select the vision feature. If multiple indices are provided,
+            the vision feature of the corresponding indices will be concatenated to form the
+            vision features.
+        vision_feature_select_strategy (`str`):
+            The feature selection strategy used to select the vision feature from the vision backbone.
+            Can be one of `"default"` or `"full"`
         """
         vision_feature_layer = (
             vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
@@ -710,6 +703,7 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
             image_newline=image_newline,
         )
 
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
@@ -950,6 +944,7 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
 
         return causal_mask
 
+    @auto_docstring
     def get_video_features(
         self,
         pixel_values: torch.FloatTensor,

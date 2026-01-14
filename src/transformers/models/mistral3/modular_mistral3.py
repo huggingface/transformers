@@ -20,7 +20,7 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import Unpack
-from ...utils import logging
+from ...utils import auto_docstring, can_return_tuple, logging
 from ..llava.modeling_llava import (
     LlavaCausalLMOutputWithPast,
     LlavaForConditionalGeneration,
@@ -117,6 +117,10 @@ class Mistral3PreTrainedModel(LlavaPreTrainedModel):
 
 
 class Mistral3Model(LlavaModel):
+    @can_return_tuple
+    @auto_docstring(
+        custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
+    )
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
@@ -124,21 +128,15 @@ class Mistral3Model(LlavaModel):
         vision_feature_layer: int | list[int] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        """
-        Obtains image last hidden states from the vision tower and apply multimodal projection.
-
-        Args:
-            pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`):
-               The tensors corresponding to the input images.
-            vision_feature_layer (`Union[int, list[int]]`, *optional*):
-                The index of the layer to select the vision feature. If multiple indices are provided,
-                the vision feature of the corresponding indices will be concatenated to form the
-                vision features.
-            image_sizes (`torch.Tensor`, *optional*):
-                Tensor containing the image sizes as returned by the processor.
-
-        Returns:
-            image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
+        r"""
+        pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`):
+            The tensors corresponding to the input images.
+        vision_feature_layer (`Union[int, list[int]]`, *optional*):
+            The index of the layer to select the vision feature. If multiple indices are provided,
+            the vision feature of the corresponding indices will be concatenated to form the
+            vision features.
+        image_sizes (`torch.Tensor`, *optional*):
+            Tensor containing the image sizes as returned by the processor.
         """
         vision_feature_layer = (
             vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
@@ -234,6 +232,7 @@ class Mistral3Model(LlavaModel):
 
 
 class Mistral3ForConditionalGeneration(LlavaForConditionalGeneration):
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,

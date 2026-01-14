@@ -274,3 +274,4 @@ print(processor.tokenizer.decode(generated[0], skip_special_tokens=True))
 
 [[autodoc]] AyaVisionForConditionalGeneration
     - forward
+    - get_image_features

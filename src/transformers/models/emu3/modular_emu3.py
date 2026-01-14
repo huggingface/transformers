@@ -951,16 +951,15 @@ class Emu3Model(Emu3PreTrainedModel):
         return bpe_tokens
 
     @can_return_tuple
+    @auto_docstring(
+        custom_intro="Tokenizes images into discrete tokens with VQGAN module and embeds them with text embeddings layer"
+    )
     def get_image_features(
         self, pixel_values: torch.FloatTensor, image_sizes: torch.LongTensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | Emu3VQVAEModelOutput:
         """
-        Tokenizes images into discrete tokens with VQGAN module and embeds
-        them with text embeddings layer
-
-        Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
-                The tensors corresponding to the input images.
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
+            The tensors corresponding to the input images.
         """
         vqmodel_outputs: Emu3VQVAEModelOutput = self.vqmodel.encode(pixel_values, image_sizes, **kwargs)
         split_sizes = [

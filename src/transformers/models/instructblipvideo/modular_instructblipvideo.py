@@ -35,7 +35,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...models.auto.modeling_auto import MODEL_FOR_CAUSAL_LM_MAPPING_NAMES
 from ...processing_utils import Unpack
-from ...utils import can_return_tuple, logging
+from ...utils import auto_docstring, can_return_tuple, logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
@@ -286,6 +286,7 @@ class InstructBlipVideoModel(InstructBlipModel):
 
 class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGeneration):
     @can_return_tuple
+    @auto_docstring
     def get_video_features(
         self,
         pixel_values: torch.FloatTensor,
@@ -294,12 +295,9 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipForConditionalGenera
         interpolate_pos_encoding: bool | None = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithVisionQformerOutputs:
-        """
-        Encodes images into continuous embeddings that can be forwarded to the language model.
-
-        Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-                The tensors corresponding to the input images.
+        r"""
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input images.
         """
         # step 1: forward the images through the vision encoder,
         # we process in a batched way, later unbatch it back (video has frames=4 always)

@@ -2218,24 +2218,15 @@ class EdgeTamVideoModel(EdgeTamVideoPreTrainedModel):
         )
 
     @can_return_tuple
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | EdgeTamVideoVisionEncoderOutput:
         r"""
-        Extract and preprocess image features using the vision encoder.
-
-        Args:
-            pixel_values (`torch.FloatTensor`):
-                Input pixel values of shape `(batch_size, num_channels, height, width)`.
-
-        Returns:
-            `tuple`: A tuple containing:
-                - feature_maps (`list[torch.Tensor]`): List of feature maps from different levels.
-                - feature_maps_position_embeddings (`list[torch.Tensor]`): List of positional embeddings for each feature level.
-                - vision_hidden_states (`tuple[torch.FloatTensor]`, *optional*): Hidden states from the vision encoder.
-                - vision_attentions (`tuple[torch.FloatTensor]`, *optional*): Attention weights from the vision encoder.
+        pixel_values (`torch.FloatTensor`):
+            Input pixel values of shape `(batch_size, num_channels, height, width)`.
         """
         vision_outputs: EdgeTamVideoVisionEncoderOutput = self.vision_encoder(pixel_values, **kwargs)
 

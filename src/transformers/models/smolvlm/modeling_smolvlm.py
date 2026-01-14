@@ -519,20 +519,20 @@ class SmolVLMModel(SmolVLMPreTrainedModel):
         return merged_embeds
 
     @can_return_tuple
+    @auto_docstring(
+        custom_intro="Encodes images into continuous embeddings that can be forwarded to the language model."
+    )
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         pixel_attention_mask: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        """
-        Encodes images into continuous embeddings that can be forwarded to the language model.
-
-        Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-                The tensors corresponding to the input images.
-            pixel_attention_mask (`torch.LongTensor`, *optional*):
-                The attention mask indicating padded regions in the image.
+        r"""
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input images.
+        pixel_attention_mask (`torch.LongTensor`, *optional*):
+            The attention mask indicating padded regions in the image.
         """
         batch_size, num_images, num_channels, height, width = pixel_values.shape
         pixel_values = pixel_values.to(dtype=self.dtype)  # fp16 compatibility
@@ -736,6 +736,7 @@ class SmolVLMForConditionalGeneration(SmolVLMPreTrainedModel, GenerationMixin):
     def set_input_embeddings(self, value):
         self.model.text_model.set_input_embeddings(value)
 
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,

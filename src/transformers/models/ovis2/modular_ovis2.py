@@ -256,6 +256,9 @@ class Ovis2Model(LlavaModel):
         del self.multi_modal_projector
 
     @can_return_tuple
+    @auto_docstring(
+        custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
+    )
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
@@ -373,6 +376,7 @@ class Ovis2ForConditionalGeneration(LlavaForConditionalGeneration, GenerationMix
         super().__init__(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
 
+    @auto_docstring
     def get_image_features(
         self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithVisualIndicatorFeatures:

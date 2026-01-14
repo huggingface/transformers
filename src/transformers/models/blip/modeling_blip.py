@@ -572,10 +572,6 @@ class BlipModel(BlipPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        Returns:
-            text_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The text embeddings obtained by
-            applying the projection layer to the pooled output of [`BlipTextModel`].
-
         Examples:
 
         ```python
@@ -607,10 +603,6 @@ class BlipModel(BlipPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        Returns:
-            image_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
-            applying the projection layer to the pooled output of [`BlipVisionModel`].
-
         Examples:
 
         ```python

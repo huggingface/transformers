@@ -1263,20 +1263,18 @@ class Ernie4_5_VL_MoeModel(Ernie4_5_VL_MoePreTrainedModel):
             return position_ids, mrope_position_deltas
 
     @can_return_tuple
+    @auto_docstring
     def get_video_features(
         self,
         pixel_values_videos: torch.FloatTensor,
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        """
-        Encodes videos into continuous embeddings that can be forwarded to the language model.
-
-        Args:
-            pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-                The tensors corresponding to the input videos.
-            video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-                The temporal, height and width of feature shape of each video in LLM.
+        r"""
+        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input videos.
+        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+            The temporal, height and width of feature shape of each video in LLM.
         """
         video_outputs = self.vision_tower(pixel_values_videos, video_grid_thw, **kwargs)
         video_embeds = self.resampler_model(video_outputs.last_hidden_state, video_grid_thw)
@@ -1290,20 +1288,18 @@ class Ernie4_5_VL_MoeModel(Ernie4_5_VL_MoePreTrainedModel):
         return video_outputs
 
     @can_return_tuple
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        """
-        Encodes images into continuous embeddings that can be forwarded to the language model.
-
-        Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-                The tensors corresponding to the input images.
-            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-                The temporal, height and width of feature shape of each image in LLM.
+        r"""
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input images.
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of feature shape of each image in LLM.
         """
         image_outputs = self.vision_tower(pixel_values, image_grid_thw, **kwargs)
         image_embeds = self.resampler_model(image_outputs.last_hidden_state, image_grid_thw)
@@ -1608,6 +1604,7 @@ class Ernie4_5_VL_MoeForConditionalGeneration(Ernie4_5_VL_MoePreTrainedModel, Ge
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
 
+    @auto_docstring
     def get_video_features(
         self,
         pixel_values_videos: torch.FloatTensor,
@@ -1618,6 +1615,7 @@ class Ernie4_5_VL_MoeForConditionalGeneration(Ernie4_5_VL_MoePreTrainedModel, Ge
             pixel_values_videos=pixel_values_videos, video_grid_thw=video_grid_thw, **kwargs
         )
 
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,

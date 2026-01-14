@@ -1382,14 +1382,11 @@ class Glm4vMoeModel(Glm4vMoePreTrainedModel):
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        """
-        Encodes videos into continuous embeddings that can be forwarded to the language model.
-
-        Args:
-            pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-                The tensors corresponding to the input videos.
-            video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-                The temporal, height and width of feature shape of each video in LLM.
+        r"""
+        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input videos.
+        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+            The temporal, height and width of feature shape of each video in LLM.
         """
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
         # reshape video_grid_thw -> [b, 3] -> [1, h, w] * frames
@@ -1406,20 +1403,18 @@ class Glm4vMoeModel(Glm4vMoePreTrainedModel):
         return vision_outputs
 
     @can_return_tuple
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        """
-        Encodes images into continuous embeddings that can be forwarded to the language model.
-
-        Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-                The tensors corresponding to the input images.
-            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-                The temporal, height and width of feature shape of each image in LLM.
+        r"""
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input images.
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of feature shape of each image in LLM.
         """
         pixel_values = pixel_values.type(self.visual.dtype)
         vision_outputs = self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
@@ -1679,6 +1674,7 @@ class Glm4vMoeForConditionalGeneration(Glm4vMoePreTrainedModel, GenerationMixin)
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
 
+    @auto_docstring
     def get_video_features(
         self,
         pixel_values_videos: torch.FloatTensor,
@@ -1689,6 +1685,7 @@ class Glm4vMoeForConditionalGeneration(Glm4vMoePreTrainedModel, GenerationMixin)
             pixel_values_videos=pixel_values_videos, video_grid_thw=video_grid_thw, **kwargs
         )
 
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,

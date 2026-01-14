@@ -1563,10 +1563,6 @@ class ClapModel(ClapPreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        Returns:
-            text_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The text embeddings obtained by
-            applying the projection layer to the pooled output of [`ClapTextModel`].
-
         Examples:
 
         ```python
@@ -1604,10 +1600,6 @@ class ClapModel(ClapPreTrainedModel):
         is_longer (`torch.FloatTensor`, of shape `(batch_size, 1)`, *optional*):
             Whether the audio clip is longer than `max_length`. If `True`, a feature fusion will be enabled to enhance
             the features.
-
-        Returns:
-            audio_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The audio embeddings obtained by
-            applying the projection layer to the pooled output of [`ClapAudioModel`].
 
         Examples:
 

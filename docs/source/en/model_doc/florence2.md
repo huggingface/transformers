@@ -177,11 +177,13 @@ print(parsed_answer)
 
 [[autodoc]] Florence2Model
     - forward
+    - get_image_features
 
 ## Florence2ForConditionalGeneration
 
 [[autodoc]] Florence2ForConditionalGeneration
     - forward
+    - get_image_features
 
 ## Florence2VisionBackbone
 

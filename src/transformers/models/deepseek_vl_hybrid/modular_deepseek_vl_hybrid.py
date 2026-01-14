@@ -303,6 +303,7 @@ class DeepseekVLHybridModel(DeepseekVLModel):
         return high_res_outputs
 
     @can_return_tuple
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,

@@ -1452,6 +1452,7 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipVideoPreTrainedModel
         return outputs
 
     @can_return_tuple
+    @auto_docstring
     def get_video_features(
         self,
         pixel_values: torch.FloatTensor,
@@ -1460,12 +1461,9 @@ class InstructBlipVideoForConditionalGeneration(InstructBlipVideoPreTrainedModel
         interpolate_pos_encoding: bool | None = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithVisionQformerOutputs:
-        """
-        Encodes images into continuous embeddings that can be forwarded to the language model.
-
-        Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-                The tensors corresponding to the input images.
+        r"""
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input images.
         """
         # step 1: forward the images through the vision encoder,
         # we process in a batched way, later unbatch it back (video has frames=4 always)

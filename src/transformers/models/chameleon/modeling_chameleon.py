@@ -889,16 +889,15 @@ class ChameleonModel(ChameleonPreTrainedModel):
         return bpe_toks
 
     @can_return_tuple
+    @auto_docstring(
+        custom_intro="Tokenizes images into discrete tokens with VQGAN module and embeds them with text embeddings layer."
+    )
     def get_image_features(
         self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
-        """
-        Tokenizes images into discrete tokens with VQGAN module and embeds
-        them with text embeddings layer
-
-        Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-                The tensors corresponding to the input images.
+        r"""
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input images.
         """
         vqmodel_outputs: ChameleonVQVAEModelOutput = self.vqmodel.encode(pixel_values, **kwargs)
         vqmodel_outputs.pooler_output = self.get_input_embeddings()(vqmodel_outputs.image_tokens)
@@ -1060,6 +1059,7 @@ class ChameleonForConditionalGeneration(ChameleonPreTrainedModel, GenerationMixi
     def get_image_tokens(self, pixel_values):
         return self.model.get_image_tokens(pixel_values)
 
+    @auto_docstring
     def get_image_features(
         self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:

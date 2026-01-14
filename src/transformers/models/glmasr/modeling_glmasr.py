@@ -30,8 +30,8 @@ from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPa
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_available
-from ...utils.generic import check_model_inputs, maybe_autocast
+from ...utils import TransformersKwargs, auto_docstring, is_torch_available
+from ...utils.generic import can_return_tuple, check_model_inputs, maybe_autocast
 from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_glmasr import GlmAsrConfig, GlmAsrEncoderConfig
 
@@ -387,27 +387,24 @@ class GlmAsrForConditionalGeneration(GlmAsrPreTrainedModel, GenerationMixin):
         return self.language_model.get_decoder()
 
     @can_return_tuple
+    @auto_docstring(
+        custom_intro="Compute audio embeddings from log-mel input features using the audio encoder and multi-modal projector."
+    )
     def get_audio_features(
         self,
         input_features: torch.FloatTensor,
         input_features_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        """
-        This method is used to get the audio embeddings from input features (a log mel spectrogram), meaning inferring the audio encoder and the multi-modal projector.
-        Args:
-            input_features (`torch.FloatTensor`):
-                Float values of mel features extracted from the raw speech waveform. Raw speech waveform can be
-                obtained by loading a `.flac` or `.wav` audio file into an array of type `list[float]` or a
-                `numpy.ndarray`, *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array into
-                `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the mel features, padding
-                and conversion into a tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`]
-            input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
-                Mask to avoid performing attention on padded feature indices.
-
-        Returns:
-            `torch.FloatTensor`:
-                The audio embeddings.
+        r"""
+        input_features (`torch.FloatTensor`):
+            Float values of mel features extracted from the raw speech waveform. Raw speech waveform can be
+            obtained by loading a `.flac` or `.wav` audio file into an array of type `list[float]` or a
+            `numpy.ndarray`, *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array into
+            `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the mel features, padding
+            and conversion into a tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`]
+        input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
+            Mask to avoid performing attention on padded feature indices.
         """
         audio_outputs = self.audio_tower(input_features, **kwargs)
         audio_hidden_states = audio_outputs.last_hidden_state

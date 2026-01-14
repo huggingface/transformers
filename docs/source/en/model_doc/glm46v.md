@@ -45,8 +45,12 @@ rendered properly in your Markdown viewer.
 
 [[autodoc]] Glm46VModel
     - forward
+    - get_video_features
+    - get_image_features
 
 ## Glm46VForConditionalGeneration
 
 [[autodoc]] Glm46VForConditionalGeneration
     - forward
+    - get_video_features
+    - get_image_features

@@ -1187,6 +1187,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
             self.language_model._hf_hook.io_same_device = True  # For `generate` compatibility
 
     @can_return_tuple
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
@@ -1195,12 +1196,9 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
         interpolate_pos_encoding: bool | None = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithVisionQformerOutputs:
-        """
-        Encodes images into continuous embeddings that can be forwarded to the language model.
-
-        Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-                The tensors corresponding to the input images.
+        r"""
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input images.
         """
         # step 1: forward the images through the vision encoder,
         # to get image embeddings of shape (batch_size, seq_len, hidden_size)

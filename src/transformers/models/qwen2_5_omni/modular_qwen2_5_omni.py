@@ -2103,44 +2103,41 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         self.model.set_input_embeddings(value)
 
     @can_return_tuple
+    @auto_docstring
     def get_video_features(
         self,
         pixel_values_videos: torch.FloatTensor,
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        """
-        Encodes videos into continuous embeddings that can be forwarded to the language model.
-
-        Args:
-            pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-                The tensors corresponding to the input videos.
-            video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-                The temporal, height and width of feature shape of each video in LLM.
+        r"""
+        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input videos.
+        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+            The temporal, height and width of feature shape of each video in LLM.
         """
         pixel_values_videos = pixel_values_videos.type(self.visual.dtype)
         return self.visual(pixel_values_videos, grid_thw=video_grid_thw, **kwargs)
 
     @can_return_tuple
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        """
-        Encodes images into continuous embeddings that can be forwarded to the language model.
-
-        Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-                The tensors corresponding to the input images.
-            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-                The temporal, height and width of feature shape of each image in LLM.
+        r"""
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input images.
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of feature shape of each image in LLM.
         """
         pixel_values = pixel_values.type(self.visual.dtype)
         return self.visual(pixel_values, grid_thw=image_grid_thw, **kwargs)
 
     @can_return_tuple
+    @auto_docstring
     def get_audio_features(
         self,
         input_features: torch.FloatTensor,
@@ -2148,16 +2145,13 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
         audio_feature_lengths: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        """
-        Encodes audios into continuous embeddings that can be forwarded to the language model.
-
-        Args:
-            input_features (`torch.FloatTensor`):
-                The tensors corresponding to the input audios.
-            feature_attention_mask (`torch.LongTensor`, *optional*):
-                Mask to avoid performing attention on padding feature indices. Mask values selected in `[0, 1]`:
-            audio_feature_lengths (`torch.LongTensor` of shape `(num_audios)`, *optional*):
-                The length of feature shape of each audio in LLM.
+        r"""
+        input_features (`torch.FloatTensor`):
+            The tensors corresponding to the input audios.
+        feature_attention_mask (`torch.LongTensor`, *optional*):
+            Mask to avoid performing attention on padding feature indices. Mask values selected in `[0, 1]`:
+        audio_feature_lengths (`torch.LongTensor` of shape `(num_audios)`, *optional*):
+            The length of feature shape of each audio in LLM.
         """
         if feature_attention_mask is not None:
             audio_feature_lengths = torch.sum(feature_attention_mask, dim=1)

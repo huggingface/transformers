@@ -313,8 +313,12 @@ model = Qwen2VLForConditionalGeneration.from_pretrained(
 
 [[autodoc]] Qwen2VLModel
     - forward
+    - get_video_features
+    - get_image_features
 
 ## Qwen2VLForConditionalGeneration
 
 [[autodoc]] Qwen2VLForConditionalGeneration
     - forward
+    - get_video_features
+    - get_image_features

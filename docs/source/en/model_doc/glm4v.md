@@ -212,8 +212,12 @@ print(output_text)
 
 [[autodoc]] Glm4vModel
     - forward
+    - get_video_features
+    - get_image_features
 
 ## Glm4vForConditionalGeneration
 
 [[autodoc]] Glm4vForConditionalGeneration
     - forward
+    - get_video_features
+    - get_image_features

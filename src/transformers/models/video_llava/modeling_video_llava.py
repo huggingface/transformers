@@ -171,6 +171,9 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
         self.language_model.set_input_embeddings(value)
 
     @can_return_tuple
+    @auto_docstring(
+        custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
+    )
     def get_image_features(
         self,
         pixel_values_images: torch.FloatTensor,
@@ -178,22 +181,16 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
         vision_feature_select_strategy: str | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        """
-        Obtains image last hidden states from the vision tower and apply multimodal projection.
-
-        Args:
-            pixel_values_images (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`)
-               The tensors corresponding to the input images.
-            vision_feature_layer (`Union[int, list[int]]`, *optional*):
-                The index of the layer to select the vision feature. If multiple indices are provided,
-                the vision feature of the corresponding indices will be concatenated to form the
-                vision features.
-            vision_feature_select_strategy (`str`, *optional*):
-                The feature selection strategy used to select the vision feature from the vision backbone.
-                Can be one of `"default"` or `"full"`
-
-        Returns:
-            image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
+        r"""
+        pixel_values_images (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`)
+            The tensors corresponding to the input images.
+        vision_feature_layer (`Union[int, list[int]]`, *optional*):
+            The index of the layer to select the vision feature. If multiple indices are provided,
+            the vision feature of the corresponding indices will be concatenated to form the
+            vision features.
+        vision_feature_select_strategy (`str`, *optional*):
+            The feature selection strategy used to select the vision feature from the vision backbone.
+            Can be one of `"default"` or `"full"`
         """
         vision_feature_layer = (
             vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
@@ -229,26 +226,22 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
         return image_outputs
 
     @can_return_tuple
+    @auto_docstring(
+        custom_intro="Obtains video last hidden states from the vision tower and apply multimodal projection."
+    )
     def get_video_features(
         self,
         pixel_values_videos: torch.FloatTensor,
         vision_feature_layer: int | list[int] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        """
-        Obtains video last hidden states from the vision tower and apply multimodal projection.
-
-        Args:
-            pixel_values_videos (`torch.FloatTensor]` of shape `(batch_size, num_frames, channels, height, width)`)
-               The tensors corresponding to the input videos.
-            vision_feature_layer (`Union[int, list[int]]`, *optional*):
-                The index of the layer to select the vision feature. If multiple indices are provided,
-                the vision feature of the corresponding indices will be concatenated to form the
-                vision features.
-
-        Returns:
-            video_features (`torch.Tensor`): Video feature tensor of shape `(num_videos * num_frames, image_length, embed_dim)`).
-            frames (`int`): Number of frames the videos have.
+        r"""
+        pixel_values_videos (`torch.FloatTensor]` of shape `(batch_size, num_frames, channels, height, width)`)
+            The tensors corresponding to the input videos.
+        vision_feature_layer (`Union[int, list[int]]`, *optional*):
+            The index of the layer to select the vision feature. If multiple indices are provided,
+            the vision feature of the corresponding indices will be concatenated to form the
+            vision features.
         """
         vision_feature_layer = (
             vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
@@ -435,6 +428,7 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
 
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values_images: torch.FloatTensor,
@@ -490,7 +484,6 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
         >>> import av
         >>> from huggingface_hub import hf_hub_download
         >>> from transformers import VideoLlavaProcessor, VideoLlavaForConditionalGeneration
-
 
         >>> def read_video_pyav(container, indices):
         ...     '''

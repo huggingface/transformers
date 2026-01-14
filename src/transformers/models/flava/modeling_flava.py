@@ -1018,10 +1018,6 @@ class FlavaModel(FlavaPreTrainedModel):
             - 1 corresponds to a *sentence B* token.
             [What are token type IDs?](../glossary#token-type-ids)
 
-        Returns:
-            text_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The text embeddings obtained by
-            applying the projection layer to the pooled output of [`FlavaTextModel`].
-
         Examples:
 
         ```python
@@ -1063,10 +1059,6 @@ class FlavaModel(FlavaPreTrainedModel):
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, image_num_patches)`):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
-
-        Returns:
-            image_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
-            applying the projection layer to the pooled output of [`FlavaImageModel`].
 
         Examples:
 

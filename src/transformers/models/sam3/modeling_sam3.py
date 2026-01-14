@@ -2149,10 +2149,6 @@ class Sam3Model(Sam3PreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        Returns:
-            text_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-                Text embeddings that can be passed as `text_embeds` to the forward method.
-
         Example:
 
         ```python
@@ -2187,10 +2183,6 @@ class Sam3Model(Sam3PreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> Sam3VisionEncoderOutput:
         r"""
-        Returns:
-            vision_embeds (`Sam3VisionEncoderOutput`):
-                Vision embeddings that can be passed as `vision_embeds` to the forward method.
-
         Example:
 
         ```python

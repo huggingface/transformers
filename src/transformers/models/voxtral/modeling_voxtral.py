@@ -399,23 +399,19 @@ class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
         return self.language_model.get_decoder()
 
     @can_return_tuple
+    @auto_docstring(
+        custom_intro="This method is used to get the audio embeddings from input features (a log mel spectrogram), meaning inferring the audio encoder and the multi-modal projector."
+    )
     def get_audio_features(
         self, input_features: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
-        """
-        This method is used to get the audio embeddings from input features (a log mel spectrogram), meaning inferring the audio encoder and the multi-modal projector.
-
-        Args:
-            input_features (`torch.FloatTensor`):
-                Float values of mel features extracted from the raw speech waveform. Raw speech waveform can be
-                obtained by loading a `.flac` or `.wav` audio file into an array of type `list[float]` or a
-                `numpy.ndarray`, *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array into
-                `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the mel features, padding
-                and conversion into a tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`]
-
-        Returns:
-            `torch.FloatTensor`:
-                The audio embeddings.
+        r"""
+        input_features (`torch.FloatTensor`):
+            Float values of mel features extracted from the raw speech waveform. Raw speech waveform can be
+            obtained by loading a `.flac` or `.wav` audio file into an array of type `list[float]` or a
+            `numpy.ndarray`, *e.g.* via the soundfile library (`pip install soundfile`). To prepare the array into
+            `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the mel features, padding
+            and conversion into a tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`]
         """
         audio_outputs = self.audio_tower(input_features, **kwargs)
         audio_hidden_states = audio_outputs.last_hidden_state

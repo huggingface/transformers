@@ -170,6 +170,9 @@ class FastVlmModel(LlavaModel):
         super().__init__(config)
 
     @can_return_tuple
+    @auto_docstring(
+        custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
+    )
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
@@ -177,19 +180,14 @@ class FastVlmModel(LlavaModel):
         vision_feature_select_strategy: str | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        """
-        Obtains image last hidden states from the vision tower and apply multimodal projection.
-
-        Args:
-            pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`):
-               The tensors corresponding to the input images.
-            vision_feature_layer (`Union[int, list[int]]`, *optional*):
-                The index/indices of the layer to select the vision feature. Only -1 supported.
-            vision_feature_select_strategy (`str`, *optional*):
-                The feature selection strategy used to select the vision feature from the vision backbone.
-                Only "full" supported.
-        Returns:
-            image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
+        r"""
+        pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`):
+            The tensors corresponding to the input images.
+        vision_feature_layer (`Union[int, list[int]]`, *optional*):
+            The index/indices of the layer to select the vision feature. Only -1 supported.
+        vision_feature_select_strategy (`str`, *optional*):
+            The feature selection strategy used to select the vision feature from the vision backbone.
+            Only "full" supported.
         """
         vision_feature_layer = (
             vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer

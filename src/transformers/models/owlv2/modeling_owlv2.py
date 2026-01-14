@@ -988,10 +988,6 @@ class Owlv2Model(Owlv2PreTrainedModel):
             [`PreTrainedTokenizer.encode`] and [`PreTrainedTokenizer.__call__`] for details. [What are input
             IDs?](../glossary#input-ids)
 
-        Returns:
-            text_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The text embeddings obtained by
-            applying the projection layer to the pooled output of [`Owlv2TextModel`].
-
         Examples:
         ```python
         >>> import torch
@@ -1025,10 +1021,6 @@ class Owlv2Model(Owlv2PreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        Returns:
-            image_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
-            applying the projection layer to the pooled output of [`Owlv2VisionModel`].
-
         Examples:
         ```python
         >>> import torch

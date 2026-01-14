@@ -162,6 +162,9 @@ class Lfm2VlModel(Lfm2VlPreTrainedModel):
         self.language_model.set_input_embeddings(value)
 
     @can_return_tuple
+    @auto_docstring(
+        custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
+    )
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
@@ -169,19 +172,13 @@ class Lfm2VlModel(Lfm2VlPreTrainedModel):
         pixel_attention_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        """
-        Obtains image last hidden states from the vision tower and apply multimodal projection.
-
-        Args:
-            pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`):
-               The tensors corresponding to the input images.
-            spatial_shapes (`torch.Tensor` of shape `(batch_size, 2)`):
-                The spatial shapes of the input images.
-            pixel_attention_mask (`torch.Tensor` of shape `(batch_size, height, width)`):
-                The pixel attention mask of the input images.
-
-        Returns:
-            image_features (`list[torch.Tensor]`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
+        r"""
+        pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`):
+            The tensors corresponding to the input images.
+        spatial_shapes (`torch.Tensor` of shape `(batch_size, 2)`):
+            The spatial shapes of the input images.
+        pixel_attention_mask (`torch.Tensor` of shape `(batch_size, height, width)`):
+            The pixel attention mask of the input images.
         """
         image_outputs = self.vision_tower(
             pixel_values=pixel_values,
@@ -324,6 +321,7 @@ class Lfm2VlForConditionalGeneration(Lfm2VlPreTrainedModel, GenerationMixin):
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
 
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
