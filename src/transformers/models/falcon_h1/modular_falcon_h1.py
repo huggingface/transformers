@@ -52,7 +52,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
+from ...utils import auto_docstring, can_return_tuple, logging
 from ...utils.import_utils import is_causal_conv1d_available, is_mamba_2_ssm_available
 from .configuration_falcon_h1 import FalconH1Config
 
@@ -1316,6 +1316,7 @@ class FalconH1ForCausalLM(LlamaForCausalLM):
                 ],
             )
 
+        kwargs["logits_to_keep"] = self.config.num_logits_to_keep
         model_inputs = super().prepare_inputs_for_generation(
             input_ids,
             past_key_values=past_key_values,
@@ -1325,7 +1326,6 @@ class FalconH1ForCausalLM(LlamaForCausalLM):
             position_ids=position_ids,
             use_cache=use_cache,
             is_first_iteration=is_first_iteration,
-            logits_to_keep=self.config.num_logits_to_keep,
             **kwargs,
         )
 

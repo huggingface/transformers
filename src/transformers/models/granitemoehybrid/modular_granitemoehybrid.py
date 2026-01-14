@@ -331,4 +331,5 @@ class GraniteMoeHybridForCausalLM(GraniteMoeSharedForCausalLM):
 
         return model_inputs
 
+
 __all__ = ["GraniteMoeHybridForCausalLM", "GraniteMoeHybridModel", "GraniteMoeHybridPreTrainedModel"]

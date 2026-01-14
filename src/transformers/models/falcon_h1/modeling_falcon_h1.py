@@ -1609,6 +1609,7 @@ class FalconH1ForCausalLM(FalconH1PreTrainedModel, GenerationMixin):
                 ],
             )
 
+        kwargs["logits_to_keep"] = self.config.num_logits_to_keep
         model_inputs = super().prepare_inputs_for_generation(
             input_ids,
             past_key_values=past_key_values,
@@ -1618,7 +1619,6 @@ class FalconH1ForCausalLM(FalconH1PreTrainedModel, GenerationMixin):
             position_ids=position_ids,
             use_cache=use_cache,
             is_first_iteration=is_first_iteration,
-            logits_to_keep=self.config.num_logits_to_keep,
             **kwargs,
         )
 
