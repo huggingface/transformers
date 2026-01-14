@@ -212,7 +212,6 @@ class ContinuousBatchingNonGenerationTest(unittest.TestCase):
             (2, 0, 1, 1, 3, 4, True),
         ]
     )
-    @require_torch_accelerator
     def test_continuous_batching_will_allocation_be_successful(
         self,
         num_requested_blocks: int,
@@ -410,7 +409,6 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
         self._test_continuous_batching_parity(model_id, True, "flash_attention_2", True, True, max_new_tokens=80)
 
-    @require_torch_accelerator
     def test_continuous_batching_few_blocks(self) -> None:
         """This test verifies that generation works with a very small number of blocks, ie. small enough that we need to
         offload a request at some point. To add more complexity, we repeat the same prompt 4 times and enable prefix
