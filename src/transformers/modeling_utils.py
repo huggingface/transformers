@@ -4153,14 +4153,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             model.load_adapter(
                 _adapter_model_path,
                 adapter_name=adapter_name,
-                ignore_mismatched_sizes=ignore_mismatched_sizes,
-                sharded_metadata=sharded_metadata,
-                device_map=device_map,
-                disk_offload_folder=offload_folder,
-                offload_buffers=offload_buffers,
-                dtype=dtype,
-                hf_quantizer=hf_quantizer,
-                device_mesh=device_mesh,
+                load_config=load_config,
                 token=token,
                 adapter_kwargs=adapter_kwargs,
             )
@@ -4278,8 +4271,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             conversion_errors=conversion_errors,
         )
 
+    @staticmethod
     def _finalize_load_state_dict(
-        self,
         model,
         load_config: LoadStateDictConfig,
         load_info: LoadStateDictInfo,

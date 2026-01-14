@@ -14,7 +14,7 @@
 import inspect
 import json
 import os
-from typing import Any, Literal
+from typing import Any, Literal, Optional, TYPE_CHECKING
 
 from ..conversion_mapping import get_model_conversion_mapping
 from ..core_model_loading import (
@@ -50,6 +50,9 @@ MIN_PEFT_VERSION = "0.18.0"
 
 
 logger = logging.get_logger(__name__)
+
+if TYPE_CHECKING:
+    from ..modeling_utils import LoadStateDictConfig
 
 
 class PeftConcatenate(Concatenate):
@@ -143,14 +146,6 @@ class PeftAdapterMixin:
         self,
         peft_model_id: str | None = None,
         adapter_name: str | None = None,
-        ignore_mismatched_sizes=False,
-        sharded_metadata=None,
-        offload_buffers=None,
-        hf_quantizer=None,
-        device_mesh=None,
-        device_map: str = "auto",
-        disk_offload_folder: str | None = None,
-        offload_folder: str | None = None,
         offload_index: int | None = None,
         peft_config: dict[str, Any] | None = None,
         adapter_state_dict: dict[str, "torch.Tensor"] | None = None,
@@ -159,6 +154,7 @@ class PeftAdapterMixin:
         hotswap: bool | Literal["auto"] = "auto",
         local_files_only: bool = False,
         adapter_kwargs: dict[str, Any] | None = None,
+        load_config: Optional["LoadStateDictConfig"] = None,
         **download_kwargs: Any,
     ) -> None:
         """
@@ -173,6 +169,8 @@ class PeftAdapterMixin:
                 and adapter weights.
             adapter_name (`str`, *optional*):
                 The adapter name to use. If not set, will use the name "default".
+            load_config (`LoadStateDictConfig`, *optional*):
+                A load configuration to reuse when pulling adapter weights, typically from `from_pretrained`.
             revision (`str`, *optional*, defaults to `"main"`):
                 The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
                 git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
@@ -185,21 +183,6 @@ class PeftAdapterMixin:
                 Whether to use authentication token to load the remote folder. Useful to load private repositories
                 that are on HuggingFace Hub. You might need to call `hf auth login` and paste your tokens to
                 cache it.
-            device_map (`str` or `dict[str, Union[int, str, torch.device]]` or `int` or `torch.device`, *optional*):
-                A map that specifies where each submodule should go. It doesn't need to be refined to each
-                parameter/buffer name, once a given module name is inside, every submodule of it will be sent to the
-                same device. If we only pass the device (*e.g.*, `"cpu"`, `"cuda:1"`, `"mps"`, or a GPU ordinal rank
-                like `1`) on which the model will be allocated, the device map will map the entire model to this
-                device. Passing `device_map = 0` means put the whole model on GPU 0.
-
-                To have Accelerate compute the most optimized `device_map` automatically, set `device_map="auto"`. For
-                more information about each option see [designing a device
-                map](https://hf.co/docs/accelerate/main/en/usage_guides/big_modeling#designing-a-device-map).
-            max_memory (`Dict`, *optional*):
-                A dictionary device identifier to maximum memory. Will default to the maximum memory available for each
-                GPU and the available CPU RAM if unset.
-            offload_folder (`str` or `os.PathLike`, `optional`):
-                If the `device_map` contains any value `"disk"`, the folder where we will offload weights.
             offload_index (`int`, `optional`):
                 `offload_index` argument to be passed to `accelerate.dispatch_model` method.
             peft_config (`dict[str, Any]`, *optional*):
@@ -250,6 +233,18 @@ class PeftAdapterMixin:
                 `find_adapter_config_file` method.
         """
         from peft import PeftType
+
+        ignore_mismatched_sizes = False
+        offload_buffers = None
+        hf_quantizer = None
+        device_mesh = None
+        offload_folder = None
+        if load_config is not None:
+            ignore_mismatched_sizes = load_config.ignore_mismatched_sizes
+            offload_buffers = load_config.offload_buffers
+            hf_quantizer = load_config.hf_quantizer
+            device_mesh = load_config.device_mesh
+            offload_folder = load_config.disk_offload_folder
 
         if hotswap == "auto":
             # if user called model.enable_peft_hotswap and this is not the first adapter, enable hotswap
@@ -330,7 +325,7 @@ class PeftAdapterMixin:
             download_kwargs=download_kwargs,
         )
 
-        hf_quantizer = getattr(self, "hf_quantizer", None)
+        hf_quantizer = getattr(self, "hf_quantizer", None) or hf_quantizer
         load_device_map = {"": self.device}
         # the only state dict we are comparing for missing etc is get_peft_model_state_dict !
         load_config = LoadStateDictConfig(
@@ -338,16 +333,15 @@ class PeftAdapterMixin:
             ignore_mismatched_sizes=ignore_mismatched_sizes,
             sharded_metadata=sharded_metadata,
             device_map=load_device_map,
-            disk_offload_folder=offload_folder,
-            offload_buffers=offload_buffers,
+            disk_offload_folder=offload_folder or disk_offload_folder,
             hf_quantizer=hf_quantizer,
             device_mesh=device_mesh,
             weight_mapping=peft_weight_conversions,
         )
         load_info = self._load_pretrained_model(
             model=self,
-            checkpoint_files=checkpoint_files,
             state_dict=None,
+            checkpoint_files=checkpoint_files,
             load_config=load_config,
         )
 

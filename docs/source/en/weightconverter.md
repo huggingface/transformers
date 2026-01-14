@@ -117,3 +117,26 @@ This worst case only occurs when all other parameters have loaded before the dem
 For example, a MoE model using [`MergeModulelist`] for experts on each layer, the theoretical worst-case memory peak is model size plus experts on one layer.
 
 These worst-case scenarios are uncommon. The actual memory peak tends to stay close to the model size.
+
+## Reusing the dynamic loading building blocks
+
+Dynamic weight loading is not limited to full model checkpoints. The same building blocks let you load *any* set of
+weights as long as you can describe how checkpoint keys map to parameters and ensure the target modules exist.
+
+At a high level, the contract looks like this:
+
+1. **Prepare the model namespace.** Make sure the modules/parameters you want to load are present and named the way your
+   mapping will target them. For adapters, that means calling `inject_adapter_in_model(...)` so adapter modules exist
+   before loading. For custom heads or extra modules, instantiate them on the model first.
+2. **Describe how to map weights.** Build a conversion/renaming list (for example, in a helper like
+   `_build_peft_weight_mapping(...)`) using [`WeightConverter`] or [`WeightRenaming`]. This is where you express how
+   checkpoint keys should be converted, split, merged, or renamed to match your model namespace.
+3. **Load + finalize + report.** Use the core loader to perform the conversion and populate tensors, then finalize and
+   log results. Concretely, this flow is:
+   - `LoadStateDictConfig(...)` + `_load_pretrained_model(...)` to load and convert.
+   - `_finalize_load_state_dict(...)` to move any missing/mismatched tensors off `meta`, initialize them, and tie weights.
+   - `log_state_dict_report(...)` to report missing/unexpected/mismatched keys (and conversion errors).
+
+Because the loader understands conversion dependencies, it can stream and schedule tensor materialization efficiently.
+That means you can mix and match operations (chunk, concatenate, split, reshape, permute, etc.) and still benefit from
+the same performance and memory properties described in this guide.
