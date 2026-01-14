@@ -15,8 +15,6 @@
 Speech processor class for Speech2Text
 """
 
-import warnings
-
 from ...processing_utils import ProcessorMixin
 from ...utils import auto_docstring
 
@@ -28,11 +26,7 @@ class Speech2TextProcessor(ProcessorMixin):
 
     @auto_docstring
     def __call__(self, *args, **kwargs):
-        if "raw_speech" in kwargs:
-            warnings.warn("Using `raw_speech` as a keyword argument is deprecated. Use `audio` instead.")
-            audio = kwargs.pop("raw_speech")
-        else:
-            audio = kwargs.pop("audio", None)
+        audio = kwargs.pop("audio", None)
         sampling_rate = kwargs.pop("sampling_rate", None)
         text = kwargs.pop("text", None)
         if len(args) > 0:
