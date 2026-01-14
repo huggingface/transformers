@@ -500,7 +500,7 @@ class TopPLogitsWarper(LogitsProcessor):
     ```
     """
 
-    def __init__(self, top_p: float, filter_value: float = -float("Inf"), min_tokens_to_keep: int = 1):
+    def __init__(self, top_p: float, filter_value: float = -1e9, min_tokens_to_keep: int = 1):
         top_p = float(top_p)
         if top_p < 0 or top_p > 1.0:
             raise ValueError(f"`top_p` has to be a float > 0 and < 1, but is {top_p}")
