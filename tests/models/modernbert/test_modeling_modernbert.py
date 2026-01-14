@@ -19,21 +19,25 @@ import unittest
 
 import pytest
 from packaging import version
+from pytest import mark
 
 from transformers import AutoTokenizer, ModernBertConfig, PreTrainedModel, is_torch_available
 from transformers.modeling_utils import FLASH_ATTN_KERNEL_FALLBACK
 from transformers.models.auto import get_values
 from transformers.testing_utils import (
     CaptureLogger,
+    force_serialization_as_bin_files,
     require_accelerate,
     require_flash_attn,
     require_non_hpu,
     require_torch,
     require_torch_accelerator,
+    require_torch_gpu,
     require_torch_multi_accelerator,
     slow,
     torch_device,
 )
+from transformers.utils import CONFIG_NAME, GENERATION_CONFIG_NAME
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, ids_tensor, random_attention_mask
@@ -45,6 +49,8 @@ if is_torch_available():
 
     from transformers import (
         MODEL_FOR_PRETRAINING_MAPPING,
+        AutoModel,
+        AutoModelForSequenceClassification,
         ModernBertForMaskedLM,
         ModernBertForMultipleChoice,
         ModernBertForQuestionAnswering,
@@ -53,6 +59,8 @@ if is_torch_available():
         ModernBertModel,
         logging,
     )
+    from transformers.integrations.accelerate import compute_module_sizes
+    from transformers.models.auto.modeling_auto import MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES
 
 
 class ModernBertModelTester:
@@ -147,6 +155,8 @@ class ModernBertModelTester:
             type_vocab_size=self.type_vocab_size,
             is_decoder=False,
             initializer_range=self.initializer_range,
+            # Use SDPA as the default attention implementation for testing
+            attn_implementation="sdpa",
         )
         if test := os.environ.get("PYTEST_CURRENT_TEST", None):
             test_name = test.split(":")[-1].split(" ")[0]
@@ -161,7 +171,7 @@ class ModernBertModelTester:
             if test_name in ("test_retain_grad_hidden_states_attentions", "test_inputs_embeds_matches_input_ids"):
                 config.reference_compile = False
             # Some tests require attentions to be outputted, in that case we'll set the attention implementation to eager
-            # as the others don't support outputted attentions.
+            # as the others don't support outputted attentions
             if test_name in (
                 "test_attention_outputs",
                 "test_hidden_states_output",
@@ -267,19 +277,6 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
     model_split_percents = [0.5, 0.8, 0.9]
 
-    @classmethod
-    def setUpClass(cls):
-        # Flash Attention requires bf16/fp16, set default dtype to bfloat16 for all tests
-        if is_torch_available():
-            cls._original_dtype = torch.get_default_dtype()
-            torch.set_default_dtype(torch.bfloat16)
-
-    @classmethod
-    def tearDownClass(cls):
-        # Restore original default dtype
-        if is_torch_available() and hasattr(cls, "_original_dtype"):
-            torch.set_default_dtype(cls._original_dtype)
-
     # special case for ForPreTraining model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
@@ -349,125 +346,6 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             model(input_ids, attention_mask=None)
         self.assertIn("We strongly recommend passing in an `attention_mask`", cl.out)
 
-    def test_can_init_all_missing_weights(self):
-        # Override to temporarily restore float32 default dtype for this test
-        # The bfloat16 default dtype affects initialization determinism
-        original_dtype = torch.get_default_dtype()
-        try:
-            torch.set_default_dtype(torch.float32)
-            super().test_can_init_all_missing_weights()
-        finally:
-            torch.set_default_dtype(original_dtype)
-
-    def test_problem_types(self):
-        # Override to use bfloat16 labels to match model dtype (FlashAttention requires bf16/fp16)
-        import warnings
-
-        from transformers.models.auto.modeling_auto import (
-            MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES,
-            MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES,
-        )
-
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        problem_types = [
-            {"title": "multi_label_classification", "num_labels": 2, "dtype": torch.bfloat16},
-            {"title": "single_label_classification", "num_labels": 1, "dtype": torch.long},
-            {"title": "regression", "num_labels": 1, "dtype": torch.bfloat16},
-        ]
-
-        for model_class in self.all_model_classes:
-            if model_class.__name__ not in [
-                *get_values(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES),
-                *get_values(MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES),
-            ]:
-                continue
-
-            for problem_type in problem_types:
-                with self.subTest(msg=f"Testing {model_class} with {problem_type['title']}"):
-                    config.problem_type = problem_type["title"]
-                    config.num_labels = problem_type["num_labels"]
-
-                    model = model_class(config)
-                    model.to(torch_device)
-                    model.train()
-
-                    inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
-
-                    if problem_type["num_labels"] > 1:
-                        inputs["labels"] = inputs["labels"].unsqueeze(1).repeat(1, problem_type["num_labels"])
-
-                    inputs["labels"] = inputs["labels"].to(problem_type["dtype"])
-
-                    with warnings.catch_warnings(record=True) as warning_list:
-                        loss = model(**inputs).loss
-                    for w in warning_list:
-                        if "Using a target size that is different to the input size" in str(w.message):
-                            raise ValueError(
-                                f"Something is going wrong in the regression problem: intercepted {w.message}"
-                            )
-
-                    loss.backward()
-
-    def test_determinism(self):
-        # Override to handle bfloat16 -> numpy conversion (numpy doesn't support bf16)
-        import numpy as np
-
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        def check_determinism(first, second):
-            if torch.all(torch.isnan(first)) and torch.all(torch.isnan(second)):
-                return
-            # Convert to float32 before numpy conversion since numpy doesn't support bfloat16
-            out_1 = first.float().cpu().numpy()
-            out_2 = second.float().cpu().numpy()
-            out_1 = out_1[~np.isnan(out_1)]
-            out_2 = out_2[~np.isnan(out_2)]
-            out_1 = out_1[~np.isneginf(out_1)]
-            out_2 = out_2[~np.isneginf(out_2)]
-            max_diff = np.amax(np.abs(out_1 - out_2))
-            self.assertLessEqual(max_diff, 1e-5)
-
-        for model_class in self.all_model_classes:
-            model = model_class(copy.deepcopy(config))
-            model.to(torch_device)
-            model.eval()
-            with torch.no_grad():
-                first = model(**self._prepare_for_class(inputs_dict, model_class))[0]
-                second = model(**self._prepare_for_class(inputs_dict, model_class))[0]
-
-            if isinstance(first, tuple) and isinstance(second, tuple):
-                for tensor1, tensor2 in zip(first, second):
-                    check_determinism(tensor1, tensor2)
-            else:
-                check_determinism(first, second)
-
-    # bf16 ↓
-    @require_accelerate
-    @pytest.mark.accelerate_tests
-    @require_torch_accelerator
-    def test_cpu_offload(self, rtol=2e-3, atol=2e-3):
-        super().test_cpu_offload(rtol=rtol, atol=atol)
-
-    @require_accelerate
-    @pytest.mark.accelerate_tests
-    @require_torch_accelerator
-    def test_disk_offload_bin(self, rtol=2e-3, atol=2e-3):
-        super().test_disk_offload_bin(rtol=rtol, atol=atol)
-
-    @require_accelerate
-    @pytest.mark.accelerate_tests
-    @require_torch_accelerator
-    def test_disk_offload_safetensors(self, rtol=2e-3, atol=2e-3):
-        super().test_disk_offload_safetensors(rtol=rtol, atol=atol)
-
-    @require_non_hpu
-    @require_accelerate
-    @pytest.mark.accelerate_tests
-    @require_torch_multi_accelerator
-    def test_model_parallelism(self, rtol=2e-3, atol=2e-3):
-        super().test_model_parallelism(rtol=rtol, atol=atol)
-
     @unittest.skip("ModernBert doesn't use separate classes for SDPA, but a function instead.")
     def test_sdpa_can_dispatch_non_composite_models(self):
         pass
@@ -477,13 +355,6 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         model_name = "google-bert/bert-base-uncased"
         model = ModernBertModel.from_pretrained(model_name)
         self.assertIsNotNone(model)
-
-    @require_flash_attn
-    @require_torch_accelerator
-    @pytest.mark.flash_attn_test
-    @slow
-    def test_flash_attn_2_inference_equivalence_right_padding(self):
-        self.skipTest(reason="ModernBert flash attention does not support right padding")
 
     @require_flash_attn
     @require_torch_accelerator
@@ -507,6 +378,7 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     def test_flash_attention_dispatches_by_default(self):
         "ModernBert should dispatch to FA2 by default, not SDPA"
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        config._attn_implementation = None  # Let the model choose the default attention implementation
         for model_class in self.all_model_classes:
             model = model_class(config=config)
             # If flash_attn is not available, fallback to kernels loading mechanism
@@ -644,7 +516,289 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
                 f"Model architecture does not support {attn_implementation}, or setting its attention dynamically"
             )
 
-    @require_torch_accelerator  # modernbert contains triton code which cannot run on CPU, so we only test on GPU
+    # Override tests that use from_pretrained to ensure SDPA attention is used instead of FlashAttention
+    def test_save_load(self):
+        for model_class in self.all_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            model = model_class(config)
+            model.to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                first = model(**self._prepare_for_class(inputs_dict, model_class))[0]
+
+            with tempfile.TemporaryDirectory() as tmpdirname:
+                model.save_pretrained(tmpdirname)
+
+                # the config file (and the generation config file, if it can generate) should be saved
+                self.assertTrue(os.path.exists(os.path.join(tmpdirname, CONFIG_NAME)))
+                self.assertEqual(
+                    model.can_generate(), os.path.exists(os.path.join(tmpdirname, GENERATION_CONFIG_NAME))
+                )
+
+                # Force SDPA attention to avoid FlashAttention fp32 error
+                model = model_class.from_pretrained(tmpdirname, attn_implementation="sdpa")
+                model.to(torch_device)
+                with torch.no_grad():
+                    second = model(**self._prepare_for_class(inputs_dict, model_class))[0]
+
+                # Save and load second time because `from_pretrained` adds a bunch of new config fields
+                # so we need to make sure those fields can be loaded back after saving
+                # Simply init as `model(config)` doesn't add those fields
+                model.save_pretrained(tmpdirname)
+                model = model_class.from_pretrained(tmpdirname, attn_implementation="sdpa")
+
+            if isinstance(first, tuple) and isinstance(second, tuple):
+                for tensor1, tensor2 in zip(first, second):
+                    torch.testing.assert_close(
+                        tensor1, tensor2, msg="Running save/load and forward yields different results"
+                    )
+            else:
+                torch.testing.assert_close(first, second, msg="Running save/load and forward yields different results")
+
+    def test_load_with_mismatched_shapes(self):
+        if not self.test_mismatched_shapes:
+            self.skipTest(reason="test_mismatched_shapes is set to False")
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            if model_class.__name__ not in get_values(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES):
+                continue
+
+            with self.subTest(msg=f"Testing {model_class}"):
+                with tempfile.TemporaryDirectory() as tmp_dir:
+                    model = model_class(config)
+                    model.save_pretrained(tmp_dir)
+                    # Fails when we don't set ignore_mismatched_sizes=True
+                    # Force SDPA attention to avoid FlashAttention fp32 error
+                    with self.assertRaises(RuntimeError):
+                        new_model = AutoModelForSequenceClassification.from_pretrained(
+                            tmp_dir, num_labels=42, attn_implementation="sdpa"
+                        )
+                    with self.assertRaises(RuntimeError):
+                        new_model_without_prefix = AutoModel.from_pretrained(
+                            tmp_dir, vocab_size=10, attn_implementation="sdpa"
+                        )
+
+                    logger = logging.get_logger("transformers.modeling_utils")
+
+                    with CaptureLogger(logger) as cl:
+                        new_model = AutoModelForSequenceClassification.from_pretrained(
+                            tmp_dir, num_labels=42, ignore_mismatched_sizes=True, attn_implementation="sdpa"
+                        )
+                    self.assertIn("Reinit due to size mismatch", cl.out)
+                    new_model.to(torch_device)
+                    inputs = self._prepare_for_class(inputs_dict, model_class)
+                    logits = new_model(**inputs).logits
+                    self.assertEqual(logits.shape[1], 42)
+
+                    with CaptureLogger(logger) as cl:
+                        new_model_without_prefix = AutoModel.from_pretrained(
+                            tmp_dir, vocab_size=10, ignore_mismatched_sizes=True, attn_implementation="sdpa"
+                        )
+                    self.assertIn("Reinit due to size mismatch", cl.out)
+                    input_ids = ids_tensor((2, 8), 10)
+                    new_model_without_prefix.to(torch_device)
+                    if self.is_encoder_decoder:
+                        new_model_without_prefix(input_ids, decoder_input_ids=input_ids)
+                    else:
+                        new_model_without_prefix(input_ids)
+
+    @require_accelerate
+    @mark.accelerate_tests
+    @require_torch_accelerator
+    def test_cpu_offload(self, rtol=1e-5, atol=1e-5):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            if model_class._no_split_modules is None:
+                continue
+
+            inputs_dict_class = self._prepare_for_class(inputs_dict, model_class)
+            model = model_class(copy.deepcopy(config)).eval()
+            model = model.to(torch_device)
+
+            torch.manual_seed(0)
+            base_output = model(**inputs_dict_class)
+
+            model_size = compute_module_sizes(model)[0][""]
+            # We test several splits of sizes to make sure it works.
+            max_gpu_sizes = [int(p * model_size) for p in self.model_split_percents[1:]]
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                model.cpu().save_pretrained(tmp_dir)
+
+                for max_size in max_gpu_sizes:
+                    max_memory = {0: max_size, "cpu": model_size * 2}
+                    # Force SDPA attention to avoid FlashAttention fp32 error
+                    new_model = model_class.from_pretrained(
+                        tmp_dir, device_map="auto", max_memory=max_memory, attn_implementation="sdpa"
+                    )
+                    # Making sure part of the model will actually end up offloaded
+                    self.assertSetEqual(set(new_model.hf_device_map.values()), {0, "cpu"})
+
+                    self.check_device_map_is_respected(new_model, new_model.hf_device_map)
+
+                    torch.manual_seed(0)
+                    new_output = new_model(**inputs_dict_class)
+
+                    if isinstance(base_output[0], tuple) and isinstance(new_output[0], tuple):
+                        [
+                            torch.testing.assert_close(a, b, rtol=rtol, atol=atol)
+                            for a, b in zip(base_output[0], new_output[0])
+                        ]
+                    else:
+                        torch.testing.assert_close(base_output[0], new_output[0], rtol=rtol, atol=atol)
+
+    @require_accelerate
+    @mark.accelerate_tests
+    @require_torch_accelerator
+    def test_disk_offload_bin(self, rtol=1e-5, atol=1e-5):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            if model_class._no_split_modules is None:
+                continue
+
+            inputs_dict_class = self._prepare_for_class(inputs_dict, model_class)
+            model = model_class(copy.deepcopy(config)).eval()
+            model = model.to(torch_device)
+            torch.manual_seed(0)
+            base_output = model(**inputs_dict_class)
+
+            model_size = compute_module_sizes(model)[0][""]
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                # Since we don't support saving with bins files anymore, but still support loading we use this context
+                # to easily create the bins files and try to load them
+                with force_serialization_as_bin_files():
+                    model.cpu().save_pretrained(tmp_dir)
+
+                with self.assertRaises(ValueError):
+                    max_size = int(self.model_split_percents[0] * model_size)
+                    max_memory = {0: max_size, "cpu": max_size}
+                    # This errors out cause it's missing an offload folder
+                    # Force SDPA attention to avoid FlashAttention fp32 error
+                    new_model = model_class.from_pretrained(
+                        tmp_dir,
+                        device_map="auto",
+                        max_memory=max_memory,
+                        use_safetensors=False,
+                        attn_implementation="sdpa",
+                    )
+
+                max_size = int(self.model_split_percents[1] * model_size)
+                max_memory = {0: max_size, "cpu": max_size}
+                # Force SDPA attention to avoid FlashAttention fp32 error
+                new_model = model_class.from_pretrained(
+                    tmp_dir,
+                    device_map="auto",
+                    max_memory=max_memory,
+                    offload_folder=tmp_dir,
+                    use_safetensors=False,
+                    attn_implementation="sdpa",
+                )
+
+                self.check_device_map_is_respected(new_model, new_model.hf_device_map)
+                torch.manual_seed(0)
+                new_output = new_model(**inputs_dict_class)
+
+                if isinstance(base_output[0], tuple) and isinstance(new_output[0], tuple):
+                    [
+                        torch.testing.assert_close(a, b, rtol=rtol, atol=atol)
+                        for a, b in zip(base_output[0], new_output[0])
+                    ]
+                else:
+                    torch.testing.assert_close(base_output[0], new_output[0], rtol=rtol, atol=atol)
+
+    @require_accelerate
+    @mark.accelerate_tests
+    @require_torch_accelerator
+    def test_disk_offload_safetensors(self, rtol=1e-5, atol=1e-5):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            if model_class._no_split_modules is None:
+                continue
+
+            inputs_dict_class = self._prepare_for_class(inputs_dict, model_class)
+            model = model_class(copy.deepcopy(config)).eval()
+            model = model.to(torch_device)
+            torch.manual_seed(0)
+            base_output = model(**inputs_dict_class)
+
+            model_size = compute_module_sizes(model)[0][""]
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                model.cpu().save_pretrained(tmp_dir)
+
+                max_size = int(self.model_split_percents[1] * model_size)
+                max_memory = {0: max_size, "cpu": max_size}
+
+                # This doesn't error out as it's in safetensors and doesn't need an offload folder
+                # Force SDPA attention to avoid FlashAttention fp32 error
+                new_model = model_class.from_pretrained(
+                    tmp_dir,
+                    device_map="auto",
+                    max_memory=max_memory,
+                    offload_folder=tmp_dir,
+                    attn_implementation="sdpa",
+                )
+
+                self.check_device_map_is_respected(new_model, new_model.hf_device_map)
+                torch.manual_seed(0)
+                new_output = new_model(**inputs_dict_class)
+
+                if isinstance(base_output[0], tuple) and isinstance(new_output[0], tuple):
+                    [
+                        torch.testing.assert_close(a, b, rtol=rtol, atol=atol)
+                        for a, b in zip(base_output[0], new_output[0])
+                    ]
+                else:
+                    torch.testing.assert_close(base_output[0], new_output[0], rtol=rtol, atol=atol)
+
+    @require_non_hpu
+    @require_accelerate
+    @mark.accelerate_tests
+    @require_torch_multi_accelerator
+    def test_model_parallelism(self, rtol=1e-5, atol=1e-5):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            if model_class._no_split_modules is None:
+                continue
+
+            inputs_dict_class = self._prepare_for_class(inputs_dict, model_class)
+            model = model_class(config).eval()
+            model = model.to(torch_device)
+
+            torch.manual_seed(0)
+            base_output = model(**inputs_dict_class)
+
+            model_size = compute_module_sizes(model)[0][""]
+            # We test several splits of sizes to make sure it works.
+            max_gpu_sizes = [int(p * model_size) for p in self.model_split_percents[1:]]
+            with tempfile.TemporaryDirectory() as tmp_dir:
+                model.cpu().save_pretrained(tmp_dir)
+
+                for max_size in max_gpu_sizes:
+                    max_memory = {0: max_size, 1: model_size * 2, "cpu": model_size * 2}
+                    # Force SDPA attention to avoid FlashAttention fp32 error
+                    new_model = model_class.from_pretrained(
+                        tmp_dir, device_map="auto", max_memory=max_memory, attn_implementation="sdpa"
+                    )
+                    # Making sure part of the model will actually end up offloaded
+                    self.assertSetEqual(set(new_model.hf_device_map.values()), {0, 1})
+                    self.check_device_map_is_respected(new_model, new_model.hf_device_map)
+
+                    torch.manual_seed(0)
+                    new_output = new_model(**inputs_dict_class)
+
+                    if isinstance(base_output[0], tuple) and isinstance(new_output[0], tuple):
+                        [
+                            torch.testing.assert_close(a, b, rtol=rtol, atol=atol)
+                            for a, b in zip(base_output[0], new_output[0])
+                        ]
+                    else:
+                        torch.testing.assert_close(base_output[0], new_output[0], rtol=rtol, atol=atol)
+
+    @require_torch_gpu  # modernbert contains triton code which cannot run on CPU, so we only test on GPU
     def test_all_tensors_are_parameter_or_buffer(self):
         super().test_all_tensors_are_parameter_or_buffer()
 

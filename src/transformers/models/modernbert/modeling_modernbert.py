@@ -268,12 +268,15 @@ class ModernBertAttention(nn.Module):
             )
 
         self.attention_dropout = config.attention_dropout
+        self.deterministic_flash_attn = config.deterministic_flash_attn
         self.head_dim = config.hidden_size // config.num_attention_heads
-        self.Wqkv = nn.Linear(config.hidden_size, 3 * config.hidden_size, bias=config.attention_bias)
+        self.Wqkv = nn.Linear(
+            config.hidden_size, 3 * self.head_dim * config.num_attention_heads, bias=config.attention_bias
+        )
 
         if layer_idx % config.global_attn_every_n_layers != 0:
             # +1 is needed because flash attention sets inclusive boundaries (see modeling_flash_attention_utils.py)
-            # i.e., window_size=(w-1, w-1) attends to 2*w-1 tokens total. To get a total window of 2*sliding_window+1,
+            # i.e., window_size=(w-1, w-1) attends to 2*(w-1)+1=2*w-1 tokens total. To get a total window of 2*sliding_window+1,
             # we need to pass sliding_window+1 here so it becomes (sliding_window, sliding_window).
             self.sliding_window = config.sliding_window + 1
         else:
@@ -317,6 +320,7 @@ class ModernBertAttention(nn.Module):
             dropout=self.attention_dropout if self.training else 0.0,
             scaling=self.head_dim**-0.5,
             sliding_window=self.sliding_window,
+            deterministic=self.deterministic_flash_attn,
             **kwargs,
         )
 
@@ -548,13 +552,10 @@ class ModernBertModel(ModernBertPreTrainedModel):
             self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
 
         if inputs_embeds is not None:
-            batch_size, seq_len = inputs_embeds.shape[:2]
+            seq_len = inputs_embeds.shape[1]
         else:
-            batch_size, seq_len = input_ids.shape[:2]
+            seq_len = input_ids.shape[1]
         device = input_ids.device if input_ids is not None else inputs_embeds.device
-
-        if attention_mask is None:
-            attention_mask = torch.ones((batch_size, seq_len), device=device, dtype=torch.bool)
 
         if position_ids is None:
             position_ids = torch.arange(seq_len, device=device).unsqueeze(0)
@@ -724,15 +725,6 @@ class ModernBertForSequenceClassification(ModernBertPreTrainedModel):
         if input_ids is not None:
             self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
 
-        if inputs_embeds is not None:
-            batch_size, seq_len = inputs_embeds.shape[:2]
-        else:
-            batch_size, seq_len = input_ids.shape[:2]
-        device = input_ids.device if input_ids is not None else inputs_embeds.device
-
-        if attention_mask is None:
-            attention_mask = torch.ones((batch_size, seq_len), device=device, dtype=torch.bool)
-
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -746,6 +738,10 @@ class ModernBertForSequenceClassification(ModernBertPreTrainedModel):
         if self.config.classifier_pooling == "cls":
             last_hidden_state = last_hidden_state[:, 0]
         elif self.config.classifier_pooling == "mean":
+            if attention_mask is None:
+                attention_mask = torch.ones(
+                    last_hidden_state.shape[:2], device=last_hidden_state.device, dtype=torch.bool
+                )
             last_hidden_state = (last_hidden_state * attention_mask.unsqueeze(-1)).sum(dim=1) / attention_mask.sum(
                 dim=1, keepdim=True
             )

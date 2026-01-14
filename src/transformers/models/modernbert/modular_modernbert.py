@@ -14,7 +14,6 @@
 # limitations under the License.
 
 import math
-import os
 from typing import Literal, Optional
 
 import torch
@@ -102,8 +101,8 @@ class ModernBertConfig(PreTrainedConfig):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
-        sliding_window (`int`, *optional*, defaults to 128):
-            The window size for sliding window attention.
+        local_attention (`int`, *optional*, defaults to 128):
+            The window size for local attention.
         embedding_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the embeddings.
         mlp_bias (`bool`, *optional*, defaults to `False`):
@@ -150,7 +149,7 @@ class ModernBertConfig(PreTrainedConfig):
 
     model_type = "modernbert"
     keys_to_ignore_at_inference = ["past_key_values"]
-    attribute_map = {"local_attention": "sliding_window"}
+    attribute_map = {"sliding_window": "local_attention"}
     default_theta = {"global": 160_000.0, "local": 10_000.0}
 
     def __init__(
@@ -175,7 +174,7 @@ class ModernBertConfig(PreTrainedConfig):
         attention_dropout: float | None = 0.0,
         layer_types: list[str] | None = None,
         rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        sliding_window: int | None = 128,
+        local_attention: int | None = 128,
         embedding_dropout: float | None = 0.0,
         mlp_bias: bool | None = False,
         mlp_dropout: float | None = 0.0,
@@ -203,7 +202,7 @@ class ModernBertConfig(PreTrainedConfig):
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.hidden_activation = hidden_activation
-        self.sliding_window = sliding_window
+        self.local_attention = local_attention
         self.embedding_dropout = embedding_dropout
         self.mlp_bias = mlp_bias
         self.mlp_dropout = mlp_dropout
@@ -212,12 +211,10 @@ class ModernBertConfig(PreTrainedConfig):
         self.classifier_dropout = classifier_dropout
         self.classifier_bias = classifier_bias
         self.classifier_activation = classifier_activation
+        self.deterministic_flash_attn = deterministic_flash_attn
         self.sparse_prediction = sparse_prediction
         self.sparse_pred_ignore_index = sparse_pred_ignore_index
         self.reference_compile = reference_compile
-
-        if deterministic_flash_attn:
-            os.environ["FLASH_ATTENTION_DETERMINISTIC"] = "1"
 
         if self.classifier_pooling not in ["cls", "mean"]:
             raise ValueError(
@@ -362,12 +359,15 @@ class ModernBertAttention(nn.Module):
             )
 
         self.attention_dropout = config.attention_dropout
+        self.deterministic_flash_attn = config.deterministic_flash_attn
         self.head_dim = config.hidden_size // config.num_attention_heads
-        self.Wqkv = nn.Linear(config.hidden_size, 3 * config.hidden_size, bias=config.attention_bias)
+        self.Wqkv = nn.Linear(
+            config.hidden_size, 3 * self.head_dim * config.num_attention_heads, bias=config.attention_bias
+        )
 
         if layer_idx % config.global_attn_every_n_layers != 0:
             # +1 is needed because flash attention sets inclusive boundaries (see modeling_flash_attention_utils.py)
-            # i.e., window_size=(w-1, w-1) attends to 2*w-1 tokens total. To get a total window of 2*sliding_window+1,
+            # i.e., window_size=(w-1, w-1) attends to 2*(w-1)+1=2*w-1 tokens total. To get a total window of 2*sliding_window+1,
             # we need to pass sliding_window+1 here so it becomes (sliding_window, sliding_window).
             self.sliding_window = config.sliding_window + 1
         else:
@@ -411,6 +411,7 @@ class ModernBertAttention(nn.Module):
             dropout=self.attention_dropout if self.training else 0.0,
             scaling=self.head_dim**-0.5,
             sliding_window=self.sliding_window,
+            deterministic=self.deterministic_flash_attn,
             **kwargs,
         )
 
@@ -642,13 +643,10 @@ class ModernBertModel(ModernBertPreTrainedModel):
             self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
 
         if inputs_embeds is not None:
-            batch_size, seq_len = inputs_embeds.shape[:2]
+            seq_len = inputs_embeds.shape[1]
         else:
-            batch_size, seq_len = input_ids.shape[:2]
+            seq_len = input_ids.shape[1]
         device = input_ids.device if input_ids is not None else inputs_embeds.device
-
-        if attention_mask is None:
-            attention_mask = torch.ones((batch_size, seq_len), device=device, dtype=torch.bool)
 
         if position_ids is None:
             position_ids = torch.arange(seq_len, device=device).unsqueeze(0)
@@ -818,15 +816,6 @@ class ModernBertForSequenceClassification(ModernBertPreTrainedModel):
         if input_ids is not None:
             self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
 
-        if inputs_embeds is not None:
-            batch_size, seq_len = inputs_embeds.shape[:2]
-        else:
-            batch_size, seq_len = input_ids.shape[:2]
-        device = input_ids.device if input_ids is not None else inputs_embeds.device
-
-        if attention_mask is None:
-            attention_mask = torch.ones((batch_size, seq_len), device=device, dtype=torch.bool)
-
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -840,6 +829,10 @@ class ModernBertForSequenceClassification(ModernBertPreTrainedModel):
         if self.config.classifier_pooling == "cls":
             last_hidden_state = last_hidden_state[:, 0]
         elif self.config.classifier_pooling == "mean":
+            if attention_mask is None:
+                attention_mask = torch.ones(
+                    last_hidden_state.shape[:2], device=last_hidden_state.device, dtype=torch.bool
+                )
             last_hidden_state = (last_hidden_state * attention_mask.unsqueeze(-1)).sum(dim=1) / attention_mask.sum(
                 dim=1, keepdim=True
             )

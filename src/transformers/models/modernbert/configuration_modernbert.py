@@ -19,7 +19,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
 from typing import Literal
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
@@ -81,8 +80,8 @@ class ModernBertConfig(PreTrainedConfig):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
-        sliding_window (`int`, *optional*, defaults to 128):
-            The window size for sliding window attention.
+        local_attention (`int`, *optional*, defaults to 128):
+            The window size for local attention.
         embedding_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the embeddings.
         mlp_bias (`bool`, *optional*, defaults to `False`):
@@ -129,7 +128,7 @@ class ModernBertConfig(PreTrainedConfig):
 
     model_type = "modernbert"
     keys_to_ignore_at_inference = ["past_key_values"]
-    attribute_map = {"local_attention": "sliding_window"}
+    attribute_map = {"sliding_window": "local_attention"}
     default_theta = {"global": 160_000.0, "local": 10_000.0}
 
     def __init__(
@@ -154,7 +153,7 @@ class ModernBertConfig(PreTrainedConfig):
         attention_dropout: float | None = 0.0,
         layer_types: list[str] | None = None,
         rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        sliding_window: int | None = 128,
+        local_attention: int | None = 128,
         embedding_dropout: float | None = 0.0,
         mlp_bias: bool | None = False,
         mlp_dropout: float | None = 0.0,
@@ -182,7 +181,7 @@ class ModernBertConfig(PreTrainedConfig):
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.hidden_activation = hidden_activation
-        self.sliding_window = sliding_window
+        self.local_attention = local_attention
         self.embedding_dropout = embedding_dropout
         self.mlp_bias = mlp_bias
         self.mlp_dropout = mlp_dropout
@@ -191,12 +190,10 @@ class ModernBertConfig(PreTrainedConfig):
         self.classifier_dropout = classifier_dropout
         self.classifier_bias = classifier_bias
         self.classifier_activation = classifier_activation
+        self.deterministic_flash_attn = deterministic_flash_attn
         self.sparse_prediction = sparse_prediction
         self.sparse_pred_ignore_index = sparse_pred_ignore_index
         self.reference_compile = reference_compile
-
-        if deterministic_flash_attn:
-            os.environ["FLASH_ATTENTION_DETERMINISTIC"] = "1"
 
         if self.classifier_pooling not in ["cls", "mean"]:
             raise ValueError(
