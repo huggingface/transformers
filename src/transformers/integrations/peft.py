@@ -54,32 +54,6 @@ MIN_PEFT_VERSION = "0.18.0"
 logger = logging.get_logger(__name__)
 
 
-_LORA_A_SUFFIX = ".lora_A.weight"
-_LORA_B_SUFFIX = ".lora_B.weight"
-_LORA_BIAS_SUFFIX = ".lora_B.bias"
-
-class PeftMergeModulelist(MergeModulelist):
-    """Merge module list along a given dimension, adapted for PEFT LoRA weights."""
-
-    def __init__(self, dim: int = 0):
-        super().__init__(dim=dim)
-
-    @torch.no_grad
-    def convert(
-        self,
-        input_dict: dict[str, list[torch.Tensor]],
-        source_patterns: list[str],
-        target_patterns: list[str],
-        full_layer_name: str ,
-        **kwargs,
-    ) -> dict[str, torch.Tensor]:
-        merged: dict[str, torch.Tensor] = {}
-        for source_pattern, tensors in input_dict.items():
-            target_pattern = self.get_target_pattern(input_dict, source_pattern, target_patterns)
-            merged[target_pattern] = torch.stack(tensors, dim=self.dim)
-        return merged
-
-
 class PeftConcatenate(Concatenate):
     """Convert per-expert LoRA weights to merged MoE weights using SVD."""
     @torch.no_grad
@@ -121,9 +95,7 @@ def _build_peft_weight_mapping(
             continue
         peft_weight_conversions = []
         for i, op in enumerate(conversion.operations):
-            if isinstance(op, MergeModulelist):
-                peft_weight_conversions.append(PeftMergeModulelist(dim=op.dim))
-            elif isinstance(op, Concatenate):
+            if isinstance(op, Concatenate):
                 peft_weight_conversions.append(
                     PeftConcatenate(dim=op.dim)
                 )
@@ -273,8 +245,6 @@ class PeftAdapterMixin:
                 Additional keyword arguments passed along to the `from_pretrained` method of the adapter config and
                 `find_adapter_config_file` method.
         """
-        check_peft_version(min_version=MIN_PEFT_VERSION)
-
         from peft import PeftType
 
         if hotswap == "auto":
