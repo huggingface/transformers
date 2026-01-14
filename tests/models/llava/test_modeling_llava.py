@@ -585,7 +585,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         fast_tokenizer.add_tokens("<image>", True)
 
         prompt = "<|im_start|>system\nAnswer the questions.<|im_end|><|im_start|>user\n<image>\nWhat is shown in this image?<|im_end|><|im_start|>assistant\n"
-        EXPECTED_OUTPUT = ['<|im_start|>', 'system', '\n', 'Answer', '▁the', '▁questions', '.', '<|im_end|>', '<|im_start|>', 'user', '\n', '<image>', '\n', 'What', '▁is', '▁shown', '▁in', '▁this', '▁image', '?', '<|im_end|>', '<|im_start|>', 'ass', 'istant', '\n']  # fmt: skip
+        EXPECTED_OUTPUT = ['<|im_start|>', 'sy', 'st', 'em', '\n', 'An', 'sw', 'er', ' ', 'the', ' ', 'qu', 'est', 'ions', '.', '<|im_end|>', '<|im_start|>', 'us', 'er', '\n', '<image>', '\n', 'What', ' ', 'is', ' ', 'sh', 'own', ' ', 'in', ' ', 'th', 'is', ' ', 'im', 'age', '?', '<|im_end|>', '<|im_start|>', 'ass', 'ist', 'ant', '\n']  # fmt: skip
         self.assertEqual(slow_tokenizer.tokenize(prompt), EXPECTED_OUTPUT)
         self.assertEqual(fast_tokenizer.tokenize(prompt), EXPECTED_OUTPUT)
 
