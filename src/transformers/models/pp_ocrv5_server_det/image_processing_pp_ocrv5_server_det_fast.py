@@ -371,7 +371,7 @@ def process(
 @auto_docstring(custom_intro="ImageProcessorFast for the PPOCRV5 Server Det model.")
 class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
     """
-    Image processor for PPOCRV5 Mobile Det model, handling preprocessing (resizing, normalization)
+    Image processor for PPOCRV5 Server Det model, handling preprocessing (resizing, normalization)
     and post-processing (converting model outputs to text boxes).
     """
 
@@ -405,7 +405,7 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
         **kwargs,
     ) -> BatchFeature:
         """
-        Preprocesses a list of images for input to the PPOCRV5 Mobile Det model.
+        Preprocesses a list of images for input to the PPOCRV5 Server Det model.
 
         Args:
             images (list[torch.Tensor]): List of input images.

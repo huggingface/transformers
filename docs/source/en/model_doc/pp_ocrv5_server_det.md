@@ -94,3 +94,4 @@ for result in results:
 ## PPOCRV5ServerDetImageProcessor
 
 [[autodoc]] PPOCRV5ServerDetImageProcessor
+ 

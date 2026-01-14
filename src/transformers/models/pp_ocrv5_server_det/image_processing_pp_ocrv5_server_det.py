@@ -381,10 +381,10 @@ def process(
 class PPOCRV5ServerDetImageProcessor(BaseImageProcessor):
     model_input_names = ["pixel_values"]
     """
-    Image Processor for the PPOCRV5 Mobile Det text detection model.
+    Image Processor for the PPOCRV5 Server Det text detection model.
 
     This class handles all image preprocessing (resizing, rescaling, normalization, channel flipping)
-    and post-processing (converting model logits to detected text boxes) required for the PPOCRV5 Mobile Det model.
+    and post-processing (converting model logits to detected text boxes) required for the PPOCRV5 Server Det model.
     It ensures input images are formatted correctly for model inference and converts model outputs into human-interpretable
     text bounding boxes.
 

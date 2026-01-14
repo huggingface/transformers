@@ -502,10 +502,10 @@ def process(
 class PPOCRV5ServerDetImageProcessor(BaseImageProcessor):
     model_input_names = ["pixel_values"]
     """
-    Image Processor for the PPOCRV5 Mobile Det text detection model.
+    Image Processor for the PPOCRV5 Server Det text detection model.
 
     This class handles all image preprocessing (resizing, rescaling, normalization, channel flipping)
-    and post-processing (converting model logits to detected text boxes) required for the PPOCRV5 Mobile Det model.
+    and post-processing (converting model logits to detected text boxes) required for the PPOCRV5 Server Det model.
     It ensures input images are formatted correctly for model inference and converts model outputs into human-interpretable
     text bounding boxes.
 
@@ -819,7 +819,7 @@ class PPOCRV5ServerDetImageProcessor(BaseImageProcessor):
 @auto_docstring(custom_intro="ImageProcessorFast for the PPOCRV5 Server Det model.")
 class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
     """
-    Image processor for PPOCRV5 Mobile Det model, handling preprocessing (resizing, normalization)
+    Image processor for PPOCRV5 Server Det model, handling preprocessing (resizing, normalization)
     and post-processing (converting model outputs to text boxes).
     """
 
@@ -853,7 +853,7 @@ class PPOCRV5ServerDetImageProcessorFast(BaseImageProcessorFast):
         **kwargs,
     ) -> BatchFeature:
         """
-        Preprocesses a list of images for input to the PPOCRV5 Mobile Det model.
+        Preprocesses a list of images for input to the PPOCRV5 Server Det model.
 
         Args:
             images (list[torch.Tensor]): List of input images.
@@ -2245,6 +2245,7 @@ class PPOCRV5ServerDetModel(PPOCRV5ServerDetPreTrainedModel):
         hidden_state: torch.FloatTensor,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
+        **kwargs
     ) -> Union[tuple[torch.FloatTensor], PPOCRV5ServerDetModelOutput]:
         """
         Forward pass of the PPOCRV5ServerDetModel.
