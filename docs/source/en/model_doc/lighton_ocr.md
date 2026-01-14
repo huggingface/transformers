@@ -64,28 +64,10 @@ print(output_text)
 
 [[autodoc]] LightOnOcrConfig
 
-## LightOnOcrTextConfig
-
-[[autodoc]] LightOnOcrTextConfig
-
-## LightOnOcrVisionConfig
-
-[[autodoc]] LightOnOcrVisionConfig
-
 ## LightOnOcrProcessor
 
 [[autodoc]] LightOnOcrProcessor
     - __call__
-
-## LightOnOcrTextModel
-
-[[autodoc]] LightOnOcrTextModel
-    - forward
-
-## LightOnOcrVisionModel
-
-[[autodoc]] LightOnOcrVisionModel
-    - forward
 
 ## LightOnOcrModel
 

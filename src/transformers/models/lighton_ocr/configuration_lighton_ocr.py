@@ -19,237 +19,8 @@
 # limitations under the License.
 from typing import Any
 
-from ...configuration_utils import PreTrainedConfig, PretrainedConfig, layer_type_validation
-from ...modeling_rope_utils import RopeParameters
-
-
-class LightOnOcrVisionConfig(PreTrainedConfig):
-    r"""
-    This is the configuration class to store the configuration of a [`LightOnOcrVisionModel`]. It is used to instantiate an
-    LightOnOcr vision encoder according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to the vision encoder used by LightOnOcr-12B.
-
-    e.g. [lighton_ocr-hf/lighton_ocr-9b](https://huggingface.co/lighton_ocr-hf/lighton_ocr-9b)
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        hidden_size (`int`, *optional*, defaults to 1024):
-            Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 4096):
-            Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 24):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 16):
-            Number of attention heads in the Transformer encoder.
-        num_channels (`int`, *optional*, defaults to 3):
-            Number of input channels in the input images.
-        image_size (`int`, *optional*, defaults to 1024):
-            Max dimension of the input images.
-        patch_size (`int`, *optional*, defaults to 16):
-            Size of the image patches.
-        hidden_act (`str`, *optional*, defaults to `"gelu"`):
-            Activation function used in the hidden layers.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            Dropout probability for the attention layers.
-        rope_parameters (`RopeParameters`, *optional*):
-            The RopeParameters
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-
-    Example:
-
-    ```python
-    >>> from transformers import LightOnOcrVisionModel, LightOnOcrVisionConfig
-
-    >>> # Initializing a LightOnOcr-12B style configuration
-    >>> config = LightOnOcrVisionConfig()
-
-    >>> # Initializing a model (with randomly initialized weights) from the configuration
-    >>> model = LightOnOcrVisionModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```"""
-
-    model_type = "lighton_ocr_vision"
-
-    def __init__(
-        self,
-        hidden_size: int | None = 1024,
-        intermediate_size: int | None = 4096,
-        num_hidden_layers: int | None = 24,
-        num_attention_heads: int | None = 16,
-        num_channels: int | None = 3,
-        image_size: int | None = 1024,
-        patch_size: int | None = 16,
-        hidden_act: str | None = "gelu",
-        attention_dropout: float | None = 0.0,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        initializer_range: float | None = 0.02,
-        **kwargs,
-    ):
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.num_channels = num_channels
-        self.patch_size = patch_size
-        self.image_size = image_size
-        self.attention_dropout = attention_dropout
-        self.hidden_act = hidden_act
-        self.head_dim = hidden_size // num_attention_heads
-        self.initializer_range = initializer_range
-        self.rope_parameters = rope_parameters
-
-        super().__init__(**kwargs)
-
-
-class LightOnOcrTextConfig(PreTrainedConfig):
-    r"""
-    This is the configuration class to store the configuration of a [`LightOnOcrTextModel`]. It is used to instantiate a
-    LightOnOcrText model according to the specified arguments, defining the model architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 151936):
-            Vocabulary size of the LightOnOcrText model. Defines the number of different tokens that can be represented
-            by the `inputs_ids` passed when calling [`LightOnOcrTextModel`].
-        hidden_size (`int`, *optional*, defaults to 4096):
-            Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 22016):
-            Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 32):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 32):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        num_key_value_heads (`int`, *optional*, defaults to 32):
-            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
-            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
-            `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used.
-        head_dim (`int`, *optional*, defaults to 128):
-            The attention head dimension.
-        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-            The non-linear activation function (function or string) in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to 32768):
-            The maximum sequence length that this model might ever be used with.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the rms normalization layers.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
-        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
-            Whether the model's input and output word embeddings should be tied.
-        rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings.
-        attention_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use a bias in the query, key, value and output projection layers during self-attention.
-        sliding_window (`int`, *optional*):
-            Sliding window attention (SWA) window size. If not specified, sliding window attention is not used.
-        layer_types (`list`, *optional*):
-            Attention pattern for each layer.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-
-    Example:
-
-    ```python
-    >>> from transformers import LightOnOcrTextModel, LightOnOcrTextConfig
-
-    >>> # Initializing a LightOnOcrText configuration
-    >>> configuration = LightOnOcrTextConfig()
-
-    >>> # Initializing a model from the configuration
-    >>> model = LightOnOcrTextModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```
-    """
-
-    model_type = "lighton_ocr_text"
-    keys_to_ignore_at_inference = ["past_key_values"]
-
-    # Default tensor parallel plan for base model `LightOnOcrText`
-    base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": "colwise",
-        "layers.*.self_attn.k_proj": "colwise",
-        "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.gate_proj": "colwise",
-        "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise",
-    }
-    base_model_pp_plan = {
-        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
-        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
-        "norm": (["hidden_states"], ["hidden_states"]),
-    }
-
-    def __init__(
-        self,
-        vocab_size: int | None = 151936,
-        hidden_size: int | None = 4096,
-        intermediate_size: int | None = 22016,
-        num_hidden_layers: int | None = 32,
-        num_attention_heads: int | None = 32,
-        num_key_value_heads: int | None = 32,
-        head_dim: int | None = 128,
-        hidden_act: str | None = "silu",
-        max_position_embeddings: int | None = 32768,
-        initializer_range: float | None = 0.02,
-        rms_norm_eps: float | None = 1e-6,
-        use_cache: bool | None = True,
-        tie_word_embeddings: bool | None = True,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        attention_bias: bool | None = False,
-        sliding_window: int | None = None,
-        layer_types: list[str] | None = None,
-        attention_dropout: float | None = 0.0,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-        self.sliding_window = sliding_window
-
-        # for backward compatibility
-        if num_key_value_heads is None:
-            num_key_value_heads = num_attention_heads
-
-        self.num_key_value_heads = num_key_value_heads
-        self.head_dim = head_dim
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.use_cache = use_cache
-        self.attention_bias = attention_bias
-        self.attention_dropout = attention_dropout
-
-        self.layer_types = layer_types
-        if self.layer_types is None:
-            self.layer_types = [
-                "sliding_attention"
-                if self.sliding_window is not None and i >= self.max_window_layers
-                else "full_attention"
-                for i in range(self.num_hidden_layers)
-            ]
-        layer_type_validation(self.layer_types, self.num_hidden_layers)
-
-        self.rope_parameters = rope_parameters
-
-        super().__init__(
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+from ...configuration_utils import PretrainedConfig
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 class LightOnOcrConfig(PretrainedConfig):
@@ -290,7 +61,7 @@ class LightOnOcrConfig(PretrainedConfig):
     """
 
     model_type = "lighton_ocr"
-    sub_configs = {"text_config": LightOnOcrTextConfig, "vision_config": LightOnOcrVisionConfig}
+    sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
 
     def __init__(
         self,
@@ -306,7 +77,7 @@ class LightOnOcrConfig(PretrainedConfig):
         self.tie_word_embeddings = tie_word_embeddings
 
         if vision_config is None:
-            self.vision_config = LightOnOcrVisionConfig(
+            self.vision_config = CONFIG_MAPPING["pixtral"](
                 attention_dropout=0,
                 head_dim=64,
                 hidden_act="silu",
@@ -324,10 +95,11 @@ class LightOnOcrConfig(PretrainedConfig):
         elif isinstance(vision_config, PretrainedConfig):
             self.vision_config = vision_config
         else:
-            self.vision_config = LightOnOcrVisionConfig(**vision_config)
+            vision_config["model_type"] = vision_config.get("model_type", "pixtral")
+            self.vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
 
         if text_config is None:
-            self.text_config = LightOnOcrTextConfig(
+            self.text_config = CONFIG_MAPPING["qwen3"](
                 attention_dropout=0,
                 head_dim=128,
                 hidden_act="silu",
@@ -347,9 +119,10 @@ class LightOnOcrConfig(PretrainedConfig):
         elif isinstance(text_config, PretrainedConfig):
             self.text_config = text_config
         else:
-            self.text_config = LightOnOcrTextConfig(**text_config)
+            text_config["model_type"] = text_config.get("model_type", "qwen3")
+            self.text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
 
         super().__init__(**kwargs)
 
 
-__all__ = ["LightOnOcrConfig", "LightOnOcrTextConfig", "LightOnOcrVisionConfig"]
+__all__ = ["LightOnOcrConfig"]

@@ -11,18 +11,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 import torch
 from torch import nn
 
+from ...cache_utils import Cache
 from ...configuration_utils import PretrainedConfig
 from ...feature_extraction_utils import BatchFeature
-from ...generation import GenerationMixin
 from ...image_utils import ImageInput
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
-from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import (
     MultiModalData,
@@ -31,143 +29,15 @@ from ...processing_utils import (
     Unpack,
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import auto_docstring
-from ...utils.generic import TransformersKwargs, check_model_inputs
-from ..pixtral.configuration_pixtral import PixtralVisionConfig
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
+from ..mistral3.modeling_mistral3 import (
+    Mistral3ForConditionalGeneration,
+    Mistral3Model,
+    Mistral3ModelOutputWithPast,
+    Mistral3MultiModalProjector,
+)
 from ..pixtral.image_processing_pixtral import get_resize_output_image_size
-from ..pixtral.modeling_pixtral import (
-    PixtralAttention,
-    PixtralPreTrainedModel,
-    PixtralRMSNorm,
-    PixtralRotaryEmbedding,
-    PixtralVisionModel,
-)
-from ..qwen3.configuration_qwen3 import Qwen3Config
-from ..qwen3.modeling_qwen3 import (
-    Qwen3Model,
-    eager_attention_forward,  # noqa - we need to force the implementation from Qwen3 here to keep GQA support, otherwise modular naturally imports from Pixtral
-)
-
-
-class LightOnOcrVisionConfig(PixtralVisionConfig):
-    model_type = "lighton_ocr_vision"
-
-
-class LightOnOcrTextConfig(Qwen3Config):
-    r"""
-    This is the configuration class to store the configuration of a [`LightOnOcrTextModel`]. It is used to instantiate a
-    LightOnOcrText model according to the specified arguments, defining the model architecture.
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 151936):
-            Vocabulary size of the LightOnOcrText model. Defines the number of different tokens that can be represented
-            by the `inputs_ids` passed when calling [`LightOnOcrTextModel`].
-        hidden_size (`int`, *optional*, defaults to 4096):
-            Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 22016):
-            Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 32):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 32):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        num_key_value_heads (`int`, *optional*, defaults to 32):
-            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
-            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
-            `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used.
-        head_dim (`int`, *optional*, defaults to 128):
-            The attention head dimension.
-        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-            The non-linear activation function (function or string) in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to 32768):
-            The maximum sequence length that this model might ever be used with.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-06):
-            The epsilon used by the rms normalization layers.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
-        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
-            Whether the model's input and output word embeddings should be tied.
-        rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings.
-        attention_bias (`bool`, *optional*, defaults to `False`):
-            Whether to use a bias in the query, key, value and output projection layers during self-attention.
-        sliding_window (`int`, *optional*):
-            Sliding window attention (SWA) window size. If not specified, sliding window attention is not used.
-        layer_types (`list`, *optional*):
-            Attention pattern for each layer.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-
-    Example:
-
-    ```python
-    >>> from transformers import LightOnOcrTextModel, LightOnOcrTextConfig
-
-    >>> # Initializing a LightOnOcrText configuration
-    >>> configuration = LightOnOcrTextConfig()
-
-    >>> # Initializing a model from the configuration
-    >>> model = LightOnOcrTextModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```
-    """
-
-    model_type = "lighton_ocr_text"
-
-    def __init__(
-        self,
-        vocab_size: int | None = 151936,
-        hidden_size: int | None = 4096,
-        intermediate_size: int | None = 22016,
-        num_hidden_layers: int | None = 32,
-        num_attention_heads: int | None = 32,
-        num_key_value_heads: int | None = 32,
-        head_dim: int | None = 128,
-        hidden_act: str | None = "silu",
-        max_position_embeddings: int | None = 32768,
-        initializer_range: float | None = 0.02,
-        rms_norm_eps: float | None = 1e-6,
-        use_cache: bool | None = True,
-        tie_word_embeddings: bool | None = True,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        attention_bias: bool | None = False,
-        sliding_window: int | None = None,
-        layer_types: list[str] | None = None,
-        attention_dropout: float | None = 0.0,
-        **kwargs,
-    ):
-        super().__init__(
-            vocab_size,
-            hidden_size,
-            intermediate_size,
-            num_hidden_layers,
-            num_attention_heads,
-            num_key_value_heads,
-            head_dim,
-            hidden_act,
-            max_position_embeddings,
-            initializer_range,
-            rms_norm_eps,
-            use_cache,
-            rope_parameters,
-            attention_bias,
-            False,  # use_sliding_window
-            sliding_window,
-            None,  # max_window_layers
-            layer_types,
-            attention_dropout,
-            **kwargs,
-        )
-        del self.use_sliding_window
-        del self.max_window_layers
-        self.sliding_window = sliding_window
 
 
 class LightOnOcrConfig(PretrainedConfig):
@@ -208,7 +78,7 @@ class LightOnOcrConfig(PretrainedConfig):
     """
 
     model_type = "lighton_ocr"
-    sub_configs = {"text_config": LightOnOcrTextConfig, "vision_config": LightOnOcrVisionConfig}
+    sub_configs = {"text_config": AutoConfig, "vision_config": AutoConfig}
 
     def __init__(
         self,
@@ -224,7 +94,7 @@ class LightOnOcrConfig(PretrainedConfig):
         self.tie_word_embeddings = tie_word_embeddings
 
         if vision_config is None:
-            self.vision_config = LightOnOcrVisionConfig(
+            self.vision_config = CONFIG_MAPPING["pixtral"](
                 attention_dropout=0,
                 head_dim=64,
                 hidden_act="silu",
@@ -242,10 +112,11 @@ class LightOnOcrConfig(PretrainedConfig):
         elif isinstance(vision_config, PretrainedConfig):
             self.vision_config = vision_config
         else:
-            self.vision_config = LightOnOcrVisionConfig(**vision_config)
+            vision_config["model_type"] = vision_config.get("model_type", "pixtral")
+            self.vision_config = CONFIG_MAPPING[vision_config["model_type"]](**vision_config)
 
         if text_config is None:
-            self.text_config = LightOnOcrTextConfig(
+            self.text_config = CONFIG_MAPPING["qwen3"](
                 attention_dropout=0,
                 head_dim=128,
                 hidden_act="silu",
@@ -265,7 +136,8 @@ class LightOnOcrConfig(PretrainedConfig):
         elif isinstance(text_config, PretrainedConfig):
             self.text_config = text_config
         else:
-            self.text_config = LightOnOcrTextConfig(**text_config)
+            text_config["model_type"] = text_config.get("model_type", "qwen3")
+            self.text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
 
         super().__init__(**kwargs)
 
@@ -408,160 +280,30 @@ class LightOnOcrProcessor(ProcessorMixin):
         return MultiModalData(**vision_data)
 
 
-class LightOnOcrVisionRMSNorm(PixtralRMSNorm):
-    pass
-
-
-class LightOnOcrVisionAttention(PixtralAttention):
-    """Multi-headed attention for vision encoder."""
-
-    def __init__(self, config):
-        super().__init__(config)
-        self.num_key_value_groups = 1  # needed for eager_attention_forward compatibility
-
-
-# We need to redefine this class as Pixtral does not respect Vision-suffix at all...
-class LightOnOcrVisionRotaryEmbedding(PixtralRotaryEmbedding):
-    def __init__(self, config: LightOnOcrVisionConfig, device=None, layer_type=None):
-        super().__init__(config, device, layer_type)
-
-    def compute_default_rope_parameters(
-        config: LightOnOcrVisionConfig | None = None,
-        device: Optional["torch.device"] = None,
-        seq_len: int | None = None,
-    ) -> tuple["torch.Tensor", float]:
-        super().compute_default_rope_parameters(config, device, seq_len)
-
-
-# We need to redefine this class as Pixtral does not respect Vision-suffix at all...
-class LightOnOcrVisionPreTrainedModel(PixtralPreTrainedModel):
-    config: LightOnOcrVisionConfig
-
-
-@auto_docstring(
-    custom_intro="""
-    The vision encoder of LightOnOcr, based on Pixtral vision architecture.
-    """
-)
-class LightOnOcrVisionModel(PixtralVisionModel):
-    pass
-
-
-@auto_docstring(
-    custom_intro="""
-    The language model of LightOnOcr, based on Qwen3 architecture.
-    """
-)
-class LightOnOcrTextModel(Qwen3Model):
-    config_class = LightOnOcrTextConfig
-
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
-
-
-class LightOnOcrPatchMerger(nn.Module):
-    """
-    Learned merging of spatial_merge_size ** 2 patches.
-    """
-
+class LightOnOcrMultiModalProjector(Mistral3MultiModalProjector):
     def __init__(self, config: LightOnOcrConfig):
-        super().__init__()
         self.config = config
-        self.hidden_size = config.vision_config.hidden_size
-        self.spatial_merge_size = config.spatial_merge_size
-
-        self.patch_size = config.vision_config.patch_size
-
-        self.merging_layer = nn.Linear(self.hidden_size * self.spatial_merge_size**2, self.hidden_size, bias=False)
-
-    def forward(self, image_features: torch.Tensor, image_sizes: torch.Tensor | list) -> torch.Tensor:
-        image_sizes_in_patches = [
-            (image_size[0] // self.patch_size, image_size[1] // self.patch_size) for image_size in image_sizes
-        ]
-
-        tokens_per_image = [patch_height * patch_width for patch_height, patch_width in image_sizes_in_patches]
-        hidden_dim = image_features.shape[-1]
-
-        permuted_tensor = []
-        for image_index, image_tokens in enumerate(image_features.split(tokens_per_image)):
-            # reshape image_tokens into a 2D grid
-            patch_height, patch_width = image_sizes_in_patches[image_index]
-            # shape [num_patches, hidden_dim] -> [1, hidden_dim, patch_height, patch_width]
-            image_grid = image_tokens.view(patch_height, patch_width, hidden_dim).permute(2, 0, 1).unsqueeze(0)
-            # shape [1, hidden_dim, patch_height, patch_width] -> [patch_height // sms * patch_width // sms, hidden_dim * sms**2]
-            # sms = spatial_merge_size
-            # Note: patch_height and patch_width are guaranteed to be divisible by sms because the image processor
-            # resizes images to multiples of effective_patch_size (patch_size * spatial_merge_size)
-            grid = torch.nn.functional.unfold(
-                image_grid,
-                kernel_size=self.spatial_merge_size,
-                stride=self.spatial_merge_size,
-            )
-            # shape [patch_height // sms * patch_width // sms, hidden_dim * sms**2] -> [patch_height // sms * patch_width // sms, hidden_dim * sms**2]
-            grid = grid.view(hidden_dim * self.spatial_merge_size**2, -1).t()
-            permuted_tensor.append(grid)
-
-        image_features = torch.cat(permuted_tensor, dim=0)
-        image_features = self.merging_layer(image_features)
-        return image_features
-
-
-class LightOnOcrVisionProjector(nn.Module):
-    def __init__(self, config: LightOnOcrConfig):
         super().__init__()
-        self.config = config
-
-        self.norm = LightOnOcrVisionRMSNorm(config.vision_config.hidden_size, eps=1e-6)
-        self.patch_merger = LightOnOcrPatchMerger(config)
         self.act = nn.GELU()
-        self.linear_1 = nn.Linear(
-            config.vision_config.hidden_size,
-            config.text_config.hidden_size,
-            bias=False,
-        )
+        self.linear_1 = nn.Linear(config.vision_config.hidden_size, config.text_config.hidden_size, bias=False)
         self.linear_2 = nn.Linear(config.text_config.hidden_size, config.text_config.hidden_size, bias=False)
-
-    def forward(self, image_features: torch.Tensor, image_sizes: torch.Tensor | list):
-        image_features = self.norm(image_features)
-        image_features = self.patch_merger(image_features, image_sizes)
-        hidden_states = self.linear_1(image_features)
-        hidden_states = self.act(hidden_states)
-        hidden_states = self.linear_2(hidden_states)
-        return hidden_states
+        del self.num_feature_layers
 
 
-class LightOnOcrPreTrainedModel(PreTrainedModel):
-    config_class = LightOnOcrConfig
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["LightOnOcrVisionProjector", "LightOnOcrVisionAttentionLayer"]
-    _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn = True
-    _supports_sdpa = True
-    _can_compile_fullgraph = True
-    _supports_flex_attn = True
-    _supports_attention_backend = True
+class LightOnOcrModelOutputWithPast(Mistral3ModelOutputWithPast):
+    pass
 
 
-class LightOnOcrModel(LightOnOcrPreTrainedModel):
-    # Reference: fix gemma3 grad acc #37208
-    accepts_loss_kwargs = False
-    config: LightOnOcrConfig
+class LightOnOcrModel(Mistral3Model):
+    base_model_prefix = ""
+    _checkpoint_conversion_mapping = {}
 
     def __init__(self, config: LightOnOcrConfig):
-        super().__init__(config)
-        self.vision_encoder = LightOnOcrVisionModel._from_config(config.vision_config)
-        self.vision_projection = LightOnOcrVisionProjector(config)
-        self.language_model = LightOnOcrTextModel._from_config(config.text_config)
+        PreTrainedModel.__init__(self, config)
+        self.vision_encoder = AutoModel.from_config(config.vision_config)
+        self.vision_projection = LightOnOcrMultiModalProjector(config)
+        self.language_model = AutoModel.from_config(config.text_config)
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.language_model.get_input_embeddings()
-
-    def set_input_embeddings(self, value):
-        self.language_model.set_input_embeddings(value)
 
     def get_image_features(self, pixel_values: torch.Tensor, image_sizes: torch.Tensor | list):
         """
@@ -585,162 +327,77 @@ class LightOnOcrModel(LightOnOcrPreTrainedModel):
 
         return image_features
 
-    def get_placeholder_mask(
-        self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
-    ):
-        """
-        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
-        equal to the length of multimodal features. If the lengths are different, an error is raised.
-        """
-        if input_ids is None:
-            special_image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-            )
-            special_image_mask = special_image_mask.all(-1)
-        else:
-            special_image_mask = input_ids == self.config.image_token_id
-
-        n_image_tokens = special_image_mask.sum()
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-        n_image_features = image_features.shape[0]
-        if inputs_embeds[special_image_mask].numel() != image_features.numel():
-            raise ValueError(
-                f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
-            )
-        return special_image_mask
-
-    @check_model_inputs
+    @can_return_tuple
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.Tensor | None = None,
-        pixel_values: torch.Tensor | None = None,
-        image_sizes: torch.Tensor | list | None = None,
-        inputs_embeds: torch.Tensor | None = None,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
-        past_key_values: torch.Tensor | None = None,
-        cache_position: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
         use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
+        image_sizes: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPast:
+    ) -> tuple | LightOnOcrModelOutputWithPast:
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
         if inputs_embeds is None:
-            if input_ids is None:
-                raise ValueError("Either input_ids or inputs_embeds must be provided")
-            inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
+            inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None:
-            # Note: image_sizes is automatically expanded by the generation framework during beam search
-            image_features_list = self.get_image_features(pixel_values, image_sizes)
-            image_features = torch.cat(image_features_list, dim=0)
-            image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
-            image_mask = self.get_placeholder_mask(input_ids, inputs_embeds, image_features)
-            inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_features)
+            image_features = self.get_image_features(pixel_values=pixel_values, image_sizes=image_sizes)
+            image_features = torch.cat(image_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            special_image_mask = self.get_placeholder_mask(
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_features
+            )
+            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
+
         outputs = self.language_model(
-            input_ids=None,
-            inputs_embeds=inputs_embeds,
+            attention_mask=attention_mask,
             position_ids=position_ids,
             past_key_values=past_key_values,
-            cache_position=cache_position,
+            inputs_embeds=inputs_embeds,
             use_cache=use_cache,
+            output_attentions=output_attentions,
+            output_hidden_states=output_hidden_states,
+            return_dict=True,
+            cache_position=cache_position,
             **kwargs,
         )
 
-        return outputs
-
-
-class LightOnOcrForConditionalGeneration(LightOnOcrPreTrainedModel, GenerationMixin):
-    config_class = LightOnOcrConfig
-    base_model_prefix = "model"
-    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
-
-    def __init__(self, config: LightOnOcrConfig):
-        super().__init__(config)
-        self.model = LightOnOcrModel(config)
-        self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
-        self.post_init()
-
-    @check_model_inputs
-    @auto_docstring
-    def forward(
-        self,
-        input_ids: torch.Tensor | None = None,
-        pixel_values: torch.Tensor | None = None,
-        image_sizes: torch.Tensor | list | None = None,
-        inputs_embeds: torch.Tensor | None = None,
-        position_ids: torch.LongTensor | None = None,
-        past_key_values: torch.Tensor | None = None,
-        cache_position: torch.LongTensor | None = None,
-        use_cache: bool | None = None,
-        labels: torch.Tensor | None = None,
-        **kwargs: Unpack[TransformersKwargs],
-    ) -> CausalLMOutputWithPast:
-        outputs: BaseModelOutputWithPast = self.model(
-            input_ids=input_ids,
-            pixel_values=pixel_values,
-            image_sizes=image_sizes,
-            inputs_embeds=inputs_embeds,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            cache_position=cache_position,
-            use_cache=use_cache,
-            **kwargs,
-        )
-
-        hidden_states = outputs.last_hidden_state if hasattr(outputs, "last_hidden_state") else outputs[0]
-        logits: torch.Tensor = self.lm_head(hidden_states)
-
-        loss = None
-        if labels is not None:
-            loss = self.loss_function(logits, labels, self.config.text_config.vocab_size)
-
-        return CausalLMOutputWithPast(
-            loss=loss,
-            logits=logits,
+        return LightOnOcrModelOutputWithPast(
+            last_hidden_state=outputs.last_hidden_state,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            image_hidden_states=image_features if pixel_values is not None else None,
         )
 
-    def prepare_inputs_for_generation(
-        self,
-        input_ids,
-        past_key_values=None,
-        inputs_embeds=None,
-        pixel_values=None,
-        attention_mask=None,
-        cache_position=None,
-        **kwargs,
-    ):
-        # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
 
-        model_inputs = super().prepare_inputs_for_generation(
-            input_ids,
-            past_key_values=past_key_values,
-            inputs_embeds=inputs_embeds,
-            attention_mask=attention_mask,
-            cache_position=cache_position,
-            **kwargs,
-        )
+class LightOnOcrForConditionalGeneration(Mistral3ForConditionalGeneration):
+    _checkpoint_conversion_mapping = {}
 
-        if cache_position[0] == 0:
-            # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
-            # Otherwise we need pixel values to be passed to model
-            model_inputs["pixel_values"] = pixel_values
-            model_inputs["image_sizes"] = kwargs.get("image_sizes")
-
-        return model_inputs
+    def get_image_features(self, pixel_values: torch.FloatTensor, image_sizes: torch.Tensor, **kwargs):
+        return self.model.get_image_features(pixel_values=pixel_values, image_sizes=image_sizes)
 
 
 __all__ = [
-    "LightOnOcrPreTrainedModel",
-    "LightOnOcrVisionModel",
-    "LightOnOcrTextModel",
-    "LightOnOcrVisionPreTrainedModel",
-    "LightOnOcrTextPreTrainedModel",  # noqa: F822
+    "LightOnOcrPreTrainedModel",  # noqa
     "LightOnOcrForConditionalGeneration",
     "LightOnOcrModel",
     "LightOnOcrConfig",
-    "LightOnOcrTextConfig",
-    "LightOnOcrVisionConfig",
     "LightOnOcrProcessor",
 ]

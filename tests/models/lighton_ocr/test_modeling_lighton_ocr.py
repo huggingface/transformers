@@ -53,7 +53,7 @@ class LightOnOcrVisionText2TextModelTester:
         spatial_merge_size=2,
         seq_length=7,
         text_config={
-            "model_type": "lighton_ocr_text",
+            "model_type": "qwen3",
             "seq_length": 7,
             "is_training": True,
             "use_input_mask": True,
