@@ -70,6 +70,7 @@ class PeftMergeModulelist(MergeModulelist):
         input_dict: dict[str, list[torch.Tensor]],
         source_patterns: list[str],
         target_patterns: list[str],
+        full_layer_name: str ,
         **kwargs,
     ) -> dict[str, torch.Tensor]:
         tensors_to_merge = []
@@ -82,7 +83,7 @@ class PeftMergeModulelist(MergeModulelist):
             raise ValueError("Peft MergeModulelist conversion found no tensors to merge.")
 
         merged_tensor = torch.cat(tensors_to_merge, dim=self.dim)
-        return {target_patterns[0]: [merged_tensor]}
+        return {full_layer_name: [merged_tensor]}
 
 
 class PeftConcatenate(Concatenate):
@@ -91,6 +92,9 @@ class PeftConcatenate(Concatenate):
     def convert(
         self, input_dict: dict[str, list[torch.Tensor]], source_patterns: list[str], target_patterns: list[str], **kwargs
     ) -> dict[str, list[torch.Tensor]]:
+        model = kwargs.get("model", None)
+        # we need the model to extract the value of the `default_layer` which are not in the ckpts!
+
         base_order = []
         lora_groups: dict[str, dict[str, list[torch.Tensor]]] = {}
         for source_pattern in source_patterns:
@@ -238,15 +242,14 @@ def _build_peft_weight_mapping(
             else:
                 peft_weight_conversions.append(op)
         # For source, we capture the orignal weights + the lora weights
-        conversion.source_patterns = [
-            pat.rsplit(".", 1)[0] for pat in list(conversion.source_patterns)
-        ]
-        # For target, we don't really know in advance which patterns will be used (lora_A, lora_B), so we just strip to the base pattern
-        conversion.target_patterns = [
-            pat.rsplit(".", 1)[0] + "*" for pat in list(conversion.target_patterns)
-        ]
+        new_source_patterns = []
+        for pat in list(conversion.source_patterns):
+            pat = pat.rsplit(".", 1)[0]
+            new_source_patterns.append(pat)
+            new_source_patterns.append(f"{pat}.lora_A")
+            new_source_patterns.append(f"{pat}.lora_B")
+        conversion.source_patterns = new_source_patterns
         conversion.operations = peft_weight_conversions
-    weight_conversions = [WeightRenaming(r"lora_(.*)\.", r"lora_\1.default.")] + weight_conversions
     weight_conversions = [WeightRenaming("base_model.model.model", "model")] + weight_conversions
     return weight_conversions
 
