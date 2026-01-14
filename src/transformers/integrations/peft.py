@@ -73,17 +73,11 @@ class PeftMergeModulelist(MergeModulelist):
         full_layer_name: str ,
         **kwargs,
     ) -> dict[str, torch.Tensor]:
-        tensors_to_merge = []
-        for source_pattern in source_patterns:
-            if source_pattern not in input_dict:
-                continue
-            tensors_to_merge.extend(input_dict[source_pattern])
-
-        if not tensors_to_merge:
-            raise ValueError("Peft MergeModulelist conversion found no tensors to merge.")
-
-        merged_tensor = torch.cat(tensors_to_merge, dim=self.dim)
-        return {full_layer_name: [merged_tensor]}
+        merged: dict[str, torch.Tensor] = {}
+        for source_pattern, tensors in input_dict.items():
+            target_pattern = self.get_target_pattern(input_dict, source_pattern, target_patterns)
+            merged[target_pattern] = torch.stack(tensors, dim=self.dim)
+        return merged
 
 
 class PeftConcatenate(Concatenate):
@@ -92,127 +86,21 @@ class PeftConcatenate(Concatenate):
     def convert(
         self, input_dict: dict[str, list[torch.Tensor]], source_patterns: list[str], target_patterns: list[str], **kwargs
     ) -> dict[str, list[torch.Tensor]]:
-        model = kwargs.get("model", None)
-        # we need the model to extract the value of the `default_layer` which are not in the ckpts!
-
-        base_order = []
-        lora_groups: dict[str, dict[str, list[torch.Tensor]]] = {}
-        for source_pattern in source_patterns:
-            if source_pattern not in input_dict:
-                continue
-            base_pattern, lora_kind = self._split_lora_pattern(source_pattern)
-            if base_pattern is None:
-                continue
-            if base_pattern not in lora_groups:
-                lora_groups[base_pattern] = {}
-                base_order.append(base_pattern)
-            lora_groups[base_pattern][lora_kind] = input_dict[source_pattern]
-
-        if not lora_groups:
-            raise ValueError("Peft LoRA conversion expects lora_A and lora_B tensors.")
-
-        for base_pattern, tensors in lora_groups.items():
-            if "A" not in tensors or "B" not in tensors:
-                raise ValueError(f"Missing LoRA tensors for {base_pattern}.")
-            if len(tensors["A"]) != len(tensors["B"]):
-                raise ValueError(f"Mismatched LoRA tensor counts for {base_pattern}.")
-
-        num_experts = len(next(iter(lora_groups.values()))["A"])
-        if num_experts == 0:
-            raise ValueError("Empty LoRA tensor list encountered during conversion.")
-
-        if self.concat_dim is None and len(base_order) == 1:
-            base_pattern = base_order[0]
-            lora_a_list = lora_groups[base_pattern]["A"]
-            lora_b_list = lora_groups[base_pattern]["B"]
-            if self.stack_dim is None:
-                return {
-                    target_patterns[0]: lora_a_list[0],
-                    target_patterns[1]: lora_b_list[0],
-                }
-            return {
-                target_patterns[0]: torch.stack(lora_a_list, dim=self.stack_dim),
-                target_patterns[1]: torch.stack(lora_b_list, dim=self.stack_dim),
-            }
-
-        merge_before_concat = self.merge_before_concat and self.stack_dim is not None and self.concat_dim is not None
-        concat_dim = self.concat_dim
-        if merge_before_concat and self.concat_dim > self.stack_dim:
-            concat_dim = self.concat_dim - 1
-
         lora_a_out = []
         lora_b_out = []
-        for expert_idx in range(num_experts):
-            deltas = []
-            total_rank = 0
-            layout = None
-            for base_pattern in base_order:
-                lora_a = lora_groups[base_pattern]["A"][expert_idx]
-                lora_b = lora_groups[base_pattern]["B"][expert_idx]
-                delta, current_layout = self._compute_delta(lora_a, lora_b, base_pattern)
-                if layout is None:
-                    layout = current_layout
-                elif layout != current_layout:
-                    raise ValueError("Inconsistent LoRA tensor layouts during conversion.")
-                total_rank += self._infer_rank(lora_a, lora_b, layout)
-                deltas.append(delta)
-            if concat_dim is not None and len(deltas) > 1:
-                fused_delta = torch.cat(deltas, dim=concat_dim)
-            else:
-                fused_delta = deltas[0]
-
-            lora_a, lora_b = self._svd_decompose(fused_delta, total_rank, layout)
-            lora_a_out.append(lora_a)
-            lora_b_out.append(lora_b)
-
-        if self.stack_dim is None:
-            return {target_patterns[0]: lora_a_out[0], target_patterns[1]: lora_b_out[0]}
+        for k,v in input_dict.items():
+            if "lora_A" in k:
+                lora_a_out.append(v)
+            elif "lora_B" in k:
+                lora_b_out.append(v)
+        lora_a_out = torch.cat(lora_a_out, dim=0)
+        for i in range(len(lora_b_out)):
+            lora_b_out.append(torch.block_diag(lora_b_out[0][i], lora_b_out[1][i]))
+        lora_b_out = torch.stack(lora_b_out[2:], dim=0)
         return {
-            target_patterns[0]: torch.stack(lora_a_out, dim=self.stack_dim),
-            target_patterns[1]: torch.stack(lora_b_out, dim=self.stack_dim),
+            target_patterns[0]+".lora_A.weight": [lora_a_out],
+            target_patterns[0]+".lora_B.weight": [lora_b_out],
         }
-
-    def _split_lora_pattern(self, pattern: str) -> tuple[str | None, str | None]:
-        if ".lora_A." in pattern and pattern.endswith(".weight"):
-            base, _, _ = pattern.rpartition(".lora_A.")
-            return base, "A"
-        if ".lora_B." in pattern and pattern.endswith(".weight"):
-            base, _, _ = pattern.rpartition(".lora_B.")
-            return base, "B"
-        if pattern.endswith(_LORA_A_SUFFIX):
-            return pattern[: -len(_LORA_A_SUFFIX)], "A"
-        if pattern.endswith(_LORA_B_SUFFIX):
-            return pattern[: -len(_LORA_B_SUFFIX)], "B"
-        return None, None
-
-    def _compute_delta(self, lora_a: torch.Tensor, lora_b: torch.Tensor, base_pattern: str) -> tuple[torch.Tensor, str]:
-        if lora_b.shape[-1] == lora_a.shape[0]:
-            return lora_b @ lora_a, "BA"
-        if lora_a.shape[-1] == lora_b.shape[0]:
-            return lora_a @ lora_b, "AB"
-        raise ValueError(f"Cannot infer LoRA layout for {base_pattern}.")
-
-    def _infer_rank(self, lora_a: torch.Tensor, lora_b: torch.Tensor, layout: str) -> int:
-        if layout == "BA":
-            return lora_a.shape[0]
-        return lora_a.shape[-1]
-
-    def _svd_decompose(self, delta: torch.Tensor, rank: int, layout: str) -> tuple[torch.Tensor, torch.Tensor]:
-        orig_dtype = delta.dtype
-        if orig_dtype in {torch.float16, torch.bfloat16}:
-            delta = delta.float()
-        u, s, vh = torch.linalg.svd(delta, full_matrices=False)
-        rank = min(rank, s.shape[0])
-        if layout == "BA":
-            lora_b = u[:, :rank] * s[:rank]
-            lora_a = vh[:rank, :]
-        else:
-            lora_a = u[:, :rank] * s[:rank]
-            lora_b = vh[:rank, :]
-        if lora_a.dtype != orig_dtype:
-            lora_a = lora_a.to(dtype=orig_dtype)
-            lora_b = lora_b.to(dtype=orig_dtype)
-        return lora_a, lora_b
 
     @property
     def reverse_op(self) -> ConversionOps:
@@ -245,9 +133,8 @@ def _build_peft_weight_mapping(
         new_source_patterns = []
         for pat in list(conversion.source_patterns):
             pat = pat.rsplit(".", 1)[0]
-            new_source_patterns.append(pat)
-            new_source_patterns.append(f"{pat}.lora_A")
-            new_source_patterns.append(f"{pat}.lora_B")
+            new_source_patterns.append(f"{pat}.lora_A.*")
+            new_source_patterns.append(f"{pat}.lora_B.*")
         conversion.source_patterns = new_source_patterns
         conversion.operations = peft_weight_conversions
     weight_conversions = [WeightRenaming("base_model.model.model", "model")] + weight_conversions

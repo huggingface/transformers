@@ -867,11 +867,14 @@ def rename_source_key(
 
     # 2. apply renaming through weight conversions on the key if we have any WeightConverter (here we stop after
     # the first match, as we assume only 1 converter can match any source key)
-    source_pattern = None
+    source_pattern = ""
     for converter in weight_converters:
-        renamed_key, source_pattern = converter.rename_source_key(renamed_key)
-        if source_pattern is not None:
-            break
+        renamed_key, _source_pattern = converter.rename_source_key(renamed_key)
+        if _source_pattern is not None:
+            if len(_source_pattern) >= len(source_pattern):
+                source_pattern = _source_pattern
+    if source_pattern == "":
+        source_pattern = None
 
     # 3. check if we need to add or remove prefix if necesary (only during loading, not saving)
     if prefix is not None and meta_state_dict is not None:
