@@ -233,6 +233,7 @@ class PeftAdapterMixin:
                 `find_adapter_config_file` method.
         """
         from peft import PeftType
+
         from ..modeling_utils import LoadStateDictConfig, _get_resolved_checkpoint_files
 
         if local_files_only:
@@ -247,7 +248,7 @@ class PeftAdapterMixin:
         load_config = LoadStateDictConfig(**base_load_config)
         download_kwargs = {}
         peft_model_id = peft_model_id or load_config.pretrained_model_name_or_path
-    
+
         if hotswap == "auto":
             # if user called model.enable_peft_hotswap and this is not the first adapter, enable hotswap
             hotswap_enabled = getattr(self, "_hotswap_enabled", False)
@@ -323,8 +324,6 @@ class PeftAdapterMixin:
             download_kwargs=download_kwargs,
         )
 
-        hf_quantizer = getattr(self, "hf_quantizer", None)
-        load_device_map = {"": self.device}
         load_config = replace(
             load_config,
             pretrained_model_name_or_path=peft_model_id,
@@ -338,12 +337,16 @@ class PeftAdapterMixin:
             load_config=load_config,
         )
 
-        def keep(k):
-            return ("lora" in k) or ("default" in k) or ("adapter" in k)
+        adapter_key_markers = {adapter_name}
+        if peft_config is not None and getattr(peft_config, "peft_type", None) is not None:
+            adapter_key_markers.add(peft_config.peft_type.value.lower())
 
-        unexpected_keys = list(filter(keep, load_info.unexpected_keys))
-        missing_keys = list(filter(keep, load_info.missing_keys))
-        mismatched_keys = list(filter(keep, load_info.mismatched_keys))
+        def is_adapter_key(key: str) -> bool:
+            return any(marker in key for marker in adapter_key_markers)
+
+        unexpected_keys = [key for key in load_info.unexpected_keys if is_adapter_key(key)]
+        missing_keys = [key for key in load_info.missing_keys if is_adapter_key(key)]
+        mismatched_keys = [item for item in load_info.mismatched_keys if is_adapter_key(item[0])]
 
         log_state_dict_report(
             model=self,
