@@ -787,6 +787,10 @@ class IsaacModel(PreTrainedModel):
             self.text_model.config.vocab_size = vocab_size
 
     @property
+    def final_norm(self) -> nn.Module:
+        return self.text_model.norm
+
+    @property
     def embed_tokens(self) -> nn.Module:
         return self.text_model.embed_tokens
 
@@ -1024,7 +1028,7 @@ class IsaacModel(PreTrainedModel):
 
             hidden_states = layer_outputs[0] if isinstance(layer_outputs, tuple) else layer_outputs
 
-        hidden_states = self.text_model.norm(hidden_states)
+        hidden_states = self.final_norm(hidden_states)
 
         return BaseModelOutputWithPast(
             last_hidden_state=hidden_states,
