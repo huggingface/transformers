@@ -4150,11 +4150,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         if _adapter_model_path is not None:
             adapter_kwargs["key_mapping"] = key_mapping
+            if token is not None:
+                adapter_kwargs["token"] = token
             model.load_adapter(
                 _adapter_model_path,
                 adapter_name=adapter_name,
                 load_config=load_config,
-                token=token,
                 adapter_kwargs=adapter_kwargs,
             )
 
@@ -4245,16 +4246,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 convert_and_load_state_dict_in_model(
                     model=model,
                     state_dict=merged_state_dict,
-                    weight_mapping=load_config.weight_mapping,
+                    load_config=load_config,
                     tp_plan=model._tp_plan,
-                    hf_quantizer=load_config.hf_quantizer,
-                    dtype=load_config.dtype,
-                    device_map=load_config.device_map,
                     dtype_plan=model.dtype_plan,
-                    device_mesh=load_config.device_mesh,
                     disk_offload_index=disk_offload_index,
-                    disk_offload_folder=load_config.disk_offload_folder,
-                    offload_buffers=load_config.offload_buffers,
                 )
             )
 
@@ -4303,7 +4298,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         log_state_dict_report(
             model=model,
-            pretrained_model_name_or_path=load_config.pretrained_model_name_or_path,
+            load_config=load_config,
             logger=logger,
             error_msgs=load_info.error_msgs,
             unexpected_keys=unexpected_keys,
@@ -4311,7 +4306,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             mismatched_keys=load_info.mismatched_keys,
             mismatched_shapes=load_info.mismatched_keys,
             conversion_errors=load_info.conversion_errors,
-            ignore_mismatched_sizes=load_config.ignore_mismatched_sizes,
         )
 
         return replace(load_info, missing_keys=missing_keys, unexpected_keys=unexpected_keys)

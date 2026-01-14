@@ -173,18 +173,6 @@ class PeftAdapterMixin:
                 A load configuration to reuse when pulling adapter weights, typically from `from_pretrained`.
             kwargs (`dict[str, Any]`, *optional*):
                 Additional `LoadStateDictConfig` fields passed as keyword arguments.
-            revision (`str`, *optional*, defaults to `"main"`):
-                The specific model version to use. It can be a branch name, a tag name, or a commit id, since we use a
-                git-based system for storing models and other artifacts on huggingface.co, so `revision` can be any
-                identifier allowed by git.
-
-                > [!TIP]
-                > To test a pull request you made on the Hub, you can pass `revision="refs/pr/<pr_number>"`.
-
-            token (`str`, `optional`):
-                Whether to use authentication token to load the remote folder. Useful to load private repositories
-                that are on HuggingFace Hub. You might need to call `hf auth login` and paste your tokens to
-                cache it.
             peft_config (`dict[str, Any]`, *optional*):
                 The configuration of the adapter to add, supported adapters are all non-prompt learning configs (LoRA,
                 IA³, etc). This argument is used in case users directly pass PEFT state dicts.
@@ -350,7 +338,7 @@ class PeftAdapterMixin:
 
         log_state_dict_report(
             model=self,
-            pretrained_model_name_or_path=peft_model_id,
+            load_config=load_config,
             logger=logger,
             error_msgs=load_info.error_msgs,
             unexpected_keys=unexpected_keys,
@@ -358,7 +346,6 @@ class PeftAdapterMixin:
             mismatched_keys=mismatched_keys,
             mismatched_shapes=mismatched_keys,
             conversion_errors=load_info.conversion_errors,
-            ignore_mismatched_sizes=load_config.ignore_mismatched_sizes,
         )
 
     def enable_peft_hotswap(

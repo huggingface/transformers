@@ -892,16 +892,10 @@ def rename_source_key(
 def convert_and_load_state_dict_in_model(
     model: PreTrainedModel,
     state_dict: dict[str, Any],
-    weight_mapping: list[WeightConverter | WeightRenaming] | None,
+    load_config: Any,
     tp_plan: dict[str, str] | None,
-    hf_quantizer: HfQuantizer | None,
-    dtype: torch.dtype | None = None,
-    device_map: dict | None = None,
     dtype_plan: dict | None = None,
-    device_mesh: torch.distributed.device_mesh.DeviceMesh | None = None,
     disk_offload_index: dict | None = None,
-    disk_offload_folder: str | None = None,
-    offload_buffers: bool = False,
 ):
     r"""
     We build a mapping from the keys obtained by renaming each of the checkpoint keys according to the weight_mapping rules.
@@ -991,9 +985,14 @@ def convert_and_load_state_dict_in_model(
     """
     prefix = model.base_model_prefix
     tp_plan = tp_plan or {}
-    device_map = device_map or {"": "cpu"}
+    device_map = load_config.device_map or {"": "cpu"}
+    hf_quantizer = load_config.hf_quantizer
+    dtype = load_config.dtype
+    device_mesh = load_config.device_mesh
+    disk_offload_folder = load_config.disk_offload_folder
+    offload_buffers = load_config.offload_buffers
     dtype_plan = dtype_plan or {}
-    weight_mapping = weight_mapping or []
+    weight_mapping = load_config.weight_mapping or []
     meta_model_state_dict = model.state_dict()
     model_buffers = {k for k, _ in model.named_buffers()}
 
