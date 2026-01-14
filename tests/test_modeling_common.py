@@ -560,13 +560,8 @@ def _test_eager_matches_batched_and_grouped_inference(self, name, dtype):
     for model_class in self.all_model_classes:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         set_config_for_less_flaky_test(config)
-        model = model_class(config)
+        model = model_class(config).eval().to(torch_device).to(dtype)
         set_model_for_less_flaky_test(model)
-
-        # Load with dtype
-        with tempfile.TemporaryDirectory() as tmpdirname:
-            model.save_pretrained(tmpdirname)
-            model = model_class.from_pretrained(tmpdirname, dtype=dtype).eval().to(torch_device)
 
         with torch.no_grad():
             inputs_dict = {k: v.to(dtype) if torch.is_floating_point(v) else v for k, v in inputs_dict.items()}
@@ -840,6 +835,7 @@ class ModelTesterMixin:
 
                 model = model_class.from_pretrained(tmpdirname)
                 model.to(torch_device)
+                model.eval()
                 with torch.no_grad():
                     second = model(**self._prepare_for_class(inputs_dict, model_class))[0]
 
