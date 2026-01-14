@@ -64,7 +64,7 @@ class GptOssRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-@use_experts_implementation
+@use_experts_implementation(transposed_experts=True)
 class GptOssExperts(nn.Module):
     def __init__(self, config):
         super().__init__()
