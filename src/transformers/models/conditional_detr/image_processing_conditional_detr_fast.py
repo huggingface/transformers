@@ -4,11 +4,12 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_conditional_detr.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+
 import pathlib
 from typing import Any, Optional
 
 import torch
-from torch import nn
+import torch.nn as nn
 from torchvision.io import read_image
 from torchvision.transforms.v2 import functional as F
 
