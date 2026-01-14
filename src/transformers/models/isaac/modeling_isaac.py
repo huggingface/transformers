@@ -23,11 +23,11 @@
 import copy
 from collections.abc import Callable
 from enum import IntEnum
-from typing import Any, Optional, Union
+from typing import Any, Optional
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
-from ...configuration_utils import PretrainedConfig
 from ...generation.utils import GenerationMixin
 from ...image_processing_utils_fast import ImagesKwargs
 from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, use_kernelized_func
@@ -35,16 +35,16 @@ from ...masking_utils import ALL_MASK_ATTENTION_FUNCTIONS, create_masks_for_gene
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
-from ...models.qwen3.modeling_qwen3 import Qwen3Model, Qwen3PreTrainedModel
+from ...models.qwen3.modeling_qwen3 import Qwen3Attention, Qwen3Model, Qwen3PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring
-from ...utils.generic import OutputRecorder, TransformersKwargs, can_return_tuple, check_model_inputs
+from ...utils.generic import OutputRecorder, TransformersKwargs, can_return_tuple, check_model_inputs, maybe_autocast
 from ...utils.import_utils import (
     is_torch_available,
     is_torchdynamo_compiling,
 )
-from ..qwen2_5_vl import modeling_qwen2_5_vl as qwen2_5_vl_modeling
 from .configuration_isaac import IsaacConfig, IsaacVisionConfig
 
 
@@ -95,7 +95,14 @@ class IsaacVisionEmbeddings(nn.Module):
 
         self.num_patches = config.num_patches
         self.position_embedding_size = int(self.num_patches**0.5)
-        self.position_embedding = nn.Embedding(self.num_patches, self.embed_dim)
+        self.position_embedding = nn.Parameter(
+            torch.empty(
+                self.position_embedding_size,
+                self.position_embedding_size,
+                self.embed_dim,
+            )
+        )
+        nn.init.normal_(self.position_embedding)
 
     @staticmethod
     def resize_positional_embeddings(
@@ -174,11 +181,7 @@ class IsaacVisionEmbeddings(nn.Module):
         target_dtype = self.patch_embedding.weight.dtype
         patch_embeds = self.patch_embedding(packed_pixel_values.to(dtype=target_dtype))
 
-        positional_embeddings = self.position_embedding.weight.reshape(
-            self.position_embedding_size,
-            self.position_embedding_size,
-            -1,
-        )
+        positional_embeddings = self.position_embedding
         resized_positional_embeddings = self.resize_positional_embeddings(
             positional_embeddings, spatial_shapes, max_length=packed_pixel_values.shape[1]
         )
@@ -221,7 +224,7 @@ class IsaacVisionEmbeddings(nn.Module):
 
 
 class IsaacVisionAttention(nn.Module):
-    """Custom attention that supports variable-length sequences with flash attention."""
+    """Custom attention that supports variable-length sequences with flash/SDPA backends."""
 
     def __init__(self, config):
         super().__init__()
@@ -248,14 +251,9 @@ class IsaacVisionAttention(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
         output_attentions: bool = False,
-        cu_seqlens: Optional[torch.Tensor] = None,
-        max_seqlen: Optional[int] = None,
         **kwargs,
     ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
         """Input shape: Batch x Time x Channel"""
-        kwargs.pop("output_hidden_states", None)
-        kwargs.pop("return_dict", None)
-
         batch_size, seq_length, embed_dim = hidden_states.shape
         queries = self.q_proj(hidden_states)
         keys = self.k_proj(hidden_states)
@@ -270,35 +268,47 @@ class IsaacVisionAttention(nn.Module):
         if attn_impl != "sdpa":
             attention_interface = ALL_ATTENTION_FUNCTIONS[attn_impl]
 
+        seq_sizes = kwargs.pop("seq_sizes", None)
+
         attention_kwargs: dict[str, Any] = {
             "is_causal": False,
             "scaling": self.scale,
         }
 
-        supports_varlen = cu_seqlens is not None and attn_impl in {
-            "flash_attention_2",
-            "flash_attention_3",
-            "flex_attention",
-            "paged|flash_attention_2",
-            "paged|flash_attention_3",
-        }
-        if supports_varlen:
-            if max_seqlen is not None:
-                max_q = max_k = int(max_seqlen)
-            elif cu_seqlens.numel() >= 2:
-                lengths = cu_seqlens[1:] - cu_seqlens[:-1]
-                max_q = max_k = lengths.max() if lengths.numel() > 0 else seq_length
+        if seq_sizes is not None and seq_sizes.numel() > 0:
+            if attn_impl in {"flash_attention_2", "flash_attention_3"}:
+                cu_seqlens = F.pad(seq_sizes.cumsum(0).to(torch.int32), (1, 0))
+                max_len = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
+                attention_kwargs.update(
+                    {
+                        "cu_seq_lens_q": cu_seqlens,
+                        "cu_seq_lens_k": cu_seqlens,
+                        "max_length_q": max_len,
+                        "max_length_k": max_len,
+                    }
+                )
             else:
-                max_q = max_k = seq_length
-
-            attention_kwargs.update(
-                {
-                    "cu_seq_lens_q": cu_seqlens,
-                    "cu_seq_lens_k": cu_seqlens,
-                    "max_length_q": max_q,
-                    "max_length_k": max_k,
-                }
-            )
+                seg_ids = torch.repeat_interleave(
+                    torch.arange(seq_sizes.numel(), device=seq_sizes.device), seq_sizes
+                ).view(1, -1)
+                mask_function = packed_sequence_mask_function(seg_ids)
+                cache_position = torch.arange(seq_length, device=hidden_states.device, dtype=torch.long)
+                mask_interface = ALL_MASK_ATTENTION_FUNCTIONS[attn_impl]
+                attention_mask = mask_interface(
+                    batch_size=batch_size,
+                    cache_position=cache_position,
+                    kv_length=seq_length,
+                    kv_offset=0,
+                    mask_function=mask_function,
+                    attention_mask=attention_mask,
+                    allow_is_causal_skip=False,
+                    allow_is_bidirectional_skip=False,
+                    dtype=hidden_states.dtype,
+                    config=self.config,
+                    use_vmap=False,
+                )
+        else:
+            attention_mask = None
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -345,18 +355,11 @@ class IsaacVisionEncoderLayer(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         attention_mask: Optional[torch.Tensor] = None,
-        cu_seqlens: Optional[torch.Tensor] = None,
-        max_seqlen: Optional[int] = None,
         output_attentions: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.FloatTensor:
         r"""
-        cu_seqlens (`torch.Tensor`, *optional*):
-            Prefix-sum tensor whose length equals the number of documents + 1. The difference between successive
-            entries gives each document's token count and enables block-diagonal attention masking for packed batches.
-        max_seqlen (`int`, *optional*):
-            Maximum document length referenced by `cu_seqlens`. Passed to FlashAttention so it can size temporary
-            buffers for packed variable-length attention.
+        Variable-length metadata (e.g., `seq_sizes`) flows via `**kwargs` to attention for backend-specific handling.
         """
         # Run attention directly so variable-length metadata reaches FlashAttention.
         residual = hidden_states
@@ -364,10 +367,10 @@ class IsaacVisionEncoderLayer(GradientCheckpointingLayer):
         attn_output, _ = self.self_attn(
             hidden_states,
             attention_mask=attention_mask,
-            cu_seqlens=cu_seqlens,
-            max_seqlen=max_seqlen,
+            output_attentions=output_attentions,
             **kwargs,
         )
+
         hidden_states = residual + attn_output
 
         residual = hidden_states
@@ -404,48 +407,6 @@ class IsaacVisionEncoder(nn.Module):
             )
 
         return BaseModelOutput(last_hidden_state=hidden_states)
-
-
-def create_document_attention_mask(
-    config: PretrainedConfig,
-    input_embeds: torch.Tensor,
-    cu_seqlens: Optional[torch.Tensor],
-) -> Optional[Union[torch.Tensor, Any]]:
-    """
-    Materialize a backend-specific block-diagonal attention mask from packed cu_seqlens.
-
-    Returns None if cu_seqlens is missing/degenerate.
-    """
-    if cu_seqlens is None or cu_seqlens.numel() < 2:
-        return None  # Degenerate input: nothing to mask
-
-    seq_sizes = (cu_seqlens[1:] - cu_seqlens[:-1]).long()
-    if seq_sizes.numel() == 0 or int(seq_sizes.sum()) == 0:
-        return None  # All-empty segments produce no attention blocks
-
-    seg_ids = torch.repeat_interleave(
-        torch.arange(seq_sizes.numel(), device=cu_seqlens.device),
-        seq_sizes,
-    )
-    mask_function = packed_sequence_mask_function(seg_ids.view(1, -1))
-
-    seq_len = input_embeds.shape[1]
-    cache_position = torch.arange(seq_len, device=input_embeds.device, dtype=torch.long)
-
-    mask_interface = ALL_MASK_ATTENTION_FUNCTIONS[config._attn_implementation]
-    return mask_interface(
-        batch_size=input_embeds.shape[0],
-        cache_position=cache_position,
-        kv_length=seq_len,
-        kv_offset=0,
-        mask_function=mask_function,
-        attention_mask=None,
-        allow_is_causal_skip=False,
-        allow_is_bidirectional_skip=False,
-        dtype=input_embeds.dtype,
-        config=config,
-        use_vmap=False,
-    )
 
 
 def create_pixel_shuffle_index_map(
@@ -560,7 +521,7 @@ def pixel_shuffle_varlen(
     return out
 
 
-class IsaacVisionTransformer(nn.Module):
+class IsaacVisionTransformer(PreTrainedModel):
     """Vision tower that packs variable-resolution patches, applies varlen attention, and pixel-shuffles outputs.
 
     Args:
@@ -575,14 +536,21 @@ class IsaacVisionTransformer(nn.Module):
     """
 
     _supports_sdpa = True
+    _supports_flash_attn = True
 
     def __init__(self, config: IsaacVisionConfig):
-        super().__init__()
+        super().__init__(config)
         self.config = config
         self.embeddings = IsaacVisionEmbeddings(config)
         self.encoder = IsaacVisionEncoder(config)
         self.post_layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.pixel_shuffle_scale_factor = config.pixel_shuffle_scale_factor
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, IsaacVisionEmbeddings):
+            init.zeros_(module.position_embedding)
 
     def forward(self, packed_seq_patches: tuple[torch.Tensor, torch.Tensor]):
         seq_patches, token_grids = packed_seq_patches
@@ -592,19 +560,14 @@ class IsaacVisionTransformer(nn.Module):
         hidden_states = self.embeddings(seq_patches, token_grids)
 
         # Add a pseudo batch dimension so we can reuse the batch-first encoder stack
-        # while still driving per-image cu_seqlens through the varlen attention path.
+        # while still driving per-image sequence metadata through the varlen attention path.
         hidden_states = hidden_states.unsqueeze(0)
 
-        # Generate cumulative sequence lengths for variable-length attention
-        cu_seqlens = F.pad(seq_sizes.cumsum(0).to(torch.int32), (1, 0))
-
-        attention_mask = create_document_attention_mask(self.config, hidden_states, cu_seqlens)
-
-        # Pass through encoder with variable-length attention parameters
+        # Pass through encoder with variable-length metadata for attention
         encoder_outputs = self.encoder(
             inputs_embeds=hidden_states,
-            attention_mask=attention_mask,
-            cu_seqlens=cu_seqlens,
+            attention_mask=None,
+            seq_sizes=seq_sizes,
         )
         hidden_states = encoder_outputs.last_hidden_state
 
@@ -644,8 +607,6 @@ class IsaacMultiModalProjector(nn.Module):
 
 
 class IsaacVisionEmbedding(nn.Module):
-    _supports_sdpa = True
-
     def __init__(self, config: IsaacConfig):
         super().__init__()
         vision_cfg = config.vision_config
@@ -658,36 +619,66 @@ class IsaacVisionEmbedding(nn.Module):
         return self.multimodal_projector(hidden_states)
 
 
-class IsaacRotaryEmbedding(qwen2_5_vl_modeling.Qwen2_5_VLRotaryEmbedding):
+class IsaacRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
     def __init__(self, config: IsaacConfig, device=None):
+        super().__init__()
         rope_source_cfg = config.get_text_config() if hasattr(config, "get_text_config") else config
         rope_scaling = getattr(rope_source_cfg, "rope_scaling", None) or {}
         config_for_rope = copy.copy(rope_source_cfg)
         config_for_rope.rope_scaling = rope_scaling
 
         init_device = device if device is not None and getattr(device, "type", None) != "meta" else None
-        super().__init__(config_for_rope, device=init_device)
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
+
+        self.config = config
+
+        self.rope_type = self.config.rope_parameters["rope_type"]
+        rope_init_fn: Callable = self.compute_default_rope_parameters
+        if self.rope_type != "default":
+            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
         rotary_half_dim = self.inv_freq.shape[0]
         self.mrope_section = self._resolve_mrope_section(rope_scaling.get("mrope_section"), rotary_half_dim)
         self.hidden_size = getattr(rope_source_cfg, "hidden_size", None) or config.hidden_size
 
     @staticmethod
-    def _resolve_mrope_section(section: Optional[list[int]], rotary_half_dim: int) -> list[int]:
-        if section is None:
-            weights = (2, 1, 1)
-            base = [rotary_half_dim * w // sum(weights) for w in weights]
-            base[0] += rotary_half_dim - sum(base)
-            return base
+    def compute_default_rope_parameters(
+        config: Optional[IsaacConfig] = None,
+        device: Optional["torch.device"] = None,
+        seq_len: Optional[int] = None,
+    ) -> tuple["torch.Tensor", float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+            device (`torch.device`):
+                The device to use for initialization of the inverse frequencies.
+            seq_len (`int`, *optional*):
+                The current sequence length. Unused for this type of RoPE.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        base = config.rope_parameters["rope_theta"]
+        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
 
-        section = [int(v) for v in section]
-        return section
+        attention_factor = 1.0  # Unused in this type of RoPE
 
-    def _combine_axes(self, tensor: torch.Tensor) -> torch.Tensor:
-        split_sections = tuple(self.mrope_section * 2)
-        chunks = tensor.split(split_sections, dim=-1)
-        return torch.cat([chunk[i % 3] for i, chunk in enumerate(chunks)], dim=-1)
+        # Compute the inverse frequencies
+        inv_freq = 1.0 / (
+            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
+        )
+        return inv_freq, attention_factor
 
+    # Ignore copy
     def forward(
         self,
         position_ids: torch.Tensor,
@@ -706,16 +697,45 @@ class IsaacRotaryEmbedding(qwen2_5_vl_modeling.Qwen2_5_VLRotaryEmbedding):
 
         with torch.no_grad():
             pos = position_ids.clone()
-            not_spatial = modality_tensor != ModalityType.image.value
+            not_spatial = modality_tensor == 1
             data_1d = pos[not_spatial][..., 0].unsqueeze(-1)  # Collapse non-vision modalities to 1D positions
             pos[not_spatial] = data_1d.expand(-1, pos.shape[-1])
             pos_axes = pos.permute(2, 0, 1).contiguous()
 
-        cos_axes, sin_axes = super().forward(hidden_states, pos_axes)
-        cos_axes, sin_axes = cos_axes.to(hidden_states.dtype), sin_axes.to(hidden_states.dtype)
+        inv_freq_expanded = self.inv_freq[None, None, :, None].float().expand(3, pos_axes.shape[1], -1, 1)
+        pos_axes_expanded = pos_axes[:, :, None, :].float()  # shape (3, bs, 1, positions)
+
+        device_type = (
+            hidden_states.device.type
+            if isinstance(hidden_states.device.type, str) and hidden_states.device.type != "mps"
+            else "cpu"
+        )
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
+            freqs = (inv_freq_expanded.float() @ pos_axes_expanded.float()).transpose(2, 3)
+            emb = torch.cat((freqs, freqs), dim=-1)
+            cos = emb.cos() * self.attention_scaling
+            sin = emb.sin() * self.attention_scaling
+
+        cos_axes, sin_axes = cos.to(hidden_states.dtype), sin.to(hidden_states.dtype)
         cos_combined, sin_combined = self._combine_axes(cos_axes), self._combine_axes(sin_axes)
 
         return cos_combined, sin_combined
+
+    @staticmethod
+    def _resolve_mrope_section(section: Optional[list[int]], rotary_half_dim: int) -> list[int]:
+        if section is None:
+            weights = (2, 1, 1)
+            base = [rotary_half_dim * w // sum(weights) for w in weights]
+            base[0] += rotary_half_dim - sum(base)
+            return base
+
+        section = [int(v) for v in section]
+        return section
+
+    def _combine_axes(self, tensor: torch.Tensor) -> torch.Tensor:
+        split_sections = tuple(self.mrope_section * 2)
+        chunks = tensor.split(split_sections, dim=-1)
+        return torch.cat([chunk[i % 3] for i, chunk in enumerate(chunks)], dim=-1)
 
 
 @auto_docstring
@@ -730,7 +750,10 @@ class IsaacModel(PreTrainedModel):
     _supports_flex_attn = False
     _can_compile_fullgraph = False
     _supports_attention_backend = True
-    _can_record_outputs = {"attentions": OutputRecorder(IsaacVisionAttention, index=1)}
+    _can_record_outputs = {
+        "attentions": OutputRecorder(Qwen3Attention, index=1),
+        "vision_attentions": OutputRecorder(IsaacVisionAttention, index=1),
+    }
     all_tied_weights_keys: dict[str, str] = {}
 
     def __init__(self, config: IsaacConfig):
@@ -744,17 +767,12 @@ class IsaacModel(PreTrainedModel):
         self.rotary_emb = IsaacRotaryEmbedding(config, device=self.device)
 
         self.vision_embedding = IsaacVisionEmbedding(config)
-        self.vision_embedding._supports_sdpa = True
         self.max_sequence_length = config.max_sequence_length
         self.vision_rescale_factor = config.vision_rescale_factor
         self.vision_token = config.vision_token
         self.rope_deltas = None
 
         self.post_init()
-
-        # Respect config-specified gradient checkpointing
-        if getattr(config, "gradient_checkpointing", False):
-            self.gradient_checkpointing_enable()
 
     def get_input_embeddings(self) -> nn.Module:
         return self.text_model.get_input_embeddings()
@@ -862,7 +880,14 @@ class IsaacModel(PreTrainedModel):
         inputs_embeds: torch.Tensor,
         cache_position: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor]:
-        """Build 3D position ids and per-batch RoPE deltas."""
+        """Prepare multimodal RoPE positions and carry forward per-batch offsets.
+
+        Unlike vanilla 1D RoPE, Isaac builds 3-axis indices for text and vision tokens.
+        If callers do not supply positions, we synthesize them from `cache_position` and
+        use `attention_mask` to strip left padding so pad tokens never consume RoPE slots.
+        The returned `rope_deltas` capture any custom offset (i.e., prefill length) and
+        are reused across generation steps so newly decoded tokens keep counting forward
+        after the cached prefix."""
 
         device = inputs_embeds.device
         batch_size, seq_len = inputs_embeds.shape[:2]
@@ -982,7 +1007,6 @@ class IsaacModel(PreTrainedModel):
 
         is_mask_dict = isinstance(attention_mask, dict)
         hidden_states = inputs_embeds
-        all_attentions = [] if output_attentions else None
 
         for layer in self.text_model.layers:
             layer_mask = attention_mask[layer.attention_type] if is_mask_dict else attention_mask
@@ -998,10 +1022,7 @@ class IsaacModel(PreTrainedModel):
                 **kwargs,
             )
 
-            layer_outputs_is_tuple = isinstance(layer_outputs, tuple)
-            hidden_states = layer_outputs[0] if layer_outputs_is_tuple else layer_outputs
-            if output_attentions and layer_outputs_is_tuple:
-                all_attentions.append(layer_outputs[1])
+            hidden_states = layer_outputs[0] if isinstance(layer_outputs, tuple) else layer_outputs
 
         hidden_states = self.text_model.norm(hidden_states)
 
@@ -1009,7 +1030,7 @@ class IsaacModel(PreTrainedModel):
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
             hidden_states=(hidden_states,),
-            attentions=tuple(all_attentions) if output_attentions else None,
+            attentions=None,
         )
 
 

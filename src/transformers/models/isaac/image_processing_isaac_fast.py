@@ -299,18 +299,14 @@ class IsaacImageProcessorFast(BaseImageProcessorFast):
             )
             grouped_outputs[shape] = (patches, token_grid, virtual_dim, real_dim)
 
-        def _reorder_grouped_item(  # reorder an item of tuple payloads using the same grouped_images_index
-            grouped: dict[tuple[int, ...], tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]],
-            grouped_index: dict[tuple[int, ...], list[int]],
-            item_idx: int,
-        ) -> list[torch.Tensor]:
-            return reorder_images({k: v[item_idx] for k, v in grouped.items()}, grouped_index)
-
         keys = ("patches", "token_grids", "virtual_pixel_size", "real_pixel_size")
         tensors: dict[str, torch.Tensor] = {}
 
         for i, key in enumerate(keys):
-            slices = _reorder_grouped_item(grouped_outputs, grouped_images_index, i)
+            slices = reorder_images(
+                {shape: values[i] for shape, values in grouped_outputs.items()},
+                grouped_images_index,
+            )
             tensors[key] = torch.stack(slices, dim=0)
 
         return BatchFeature(data=tensors, tensor_type=return_tensors)

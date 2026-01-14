@@ -123,6 +123,8 @@ class IsaacConfig(PretrainedConfig):
         self.hidden_act = self.text_config.hidden_act
         self.use_cache = self.text_config.use_cache
         self.rope_theta = self.rope_parameters["rope_theta"]
+        self.max_position_embeddings = getattr(self.text_config, "max_position_embeddings", max_sequence_length)
+        self.text_config.max_position_embeddings = self.max_position_embeddings
 
         self.layer_types = getattr(self.text_config, "layer_types", None)
         layer_type_validation(self.layer_types, self.num_hidden_layers)
