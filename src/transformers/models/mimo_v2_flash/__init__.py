@@ -27,7 +27,7 @@ try:
 except OptionalDependencyNotAvailable:
     pass
 else:
-    _import_structure["modeling_mimo_v2_flash"] = [
+    _import_structure["modular_mimo_v2_flash"] = [
         "MiMoV2FlashForCausalLM",
         "MiMoV2FlashModel",
         "MiMoV2FlashPreTrainedModel",
@@ -42,9 +42,11 @@ if TYPE_CHECKING:
     except OptionalDependencyNotAvailable:
         pass
     else:
-        from .modeling_mimo_v2_flash import (MiMoV2FlashForCausalLM,
-                                             MiMoV2FlashModel,
-                                             MiMoV2FlashPreTrainedModel)
+        from .modular_mimo_v2_flash import (
+            MiMoV2FlashForCausalLM,
+            MiMoV2FlashModel,
+            MiMoV2FlashPreTrainedModel,
+        )
 
 else:
     import sys
