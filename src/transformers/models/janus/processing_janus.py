@@ -15,8 +15,6 @@
 Processor class for Janus.
 """
 
-from typing import Optional, Union
-
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
@@ -70,8 +68,8 @@ class JanusProcessor(ProcessorMixin):
     @auto_docstring
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        images: Optional[ImageInput] = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
+        images: ImageInput | None = None,
         **kwargs: Unpack[JanusProcessorKwargs],
     ) -> BatchFeature:
         r"""
