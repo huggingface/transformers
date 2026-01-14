@@ -18,10 +18,10 @@ import unittest
 from difflib import SequenceMatcher
 
 from transformers import (
-    AutoProcessor,
     LightOnOcrConfig,
     LightOnOcrForConditionalGeneration,
     LightOnOcrModel,
+    LightOnOcrProcessor,
     is_torch_available,
     is_vision_available,
 )
@@ -449,7 +449,7 @@ class LightOnOcrForConditionalGenerationIntegrationTest(unittest.TestCase):
         model_id = "lightonai/LightOnOCR-1B-1025"
 
         # Load processor and model from Hub
-        processor = AutoProcessor.from_pretrained(model_id)
+        processor = LightOnOcrProcessor.from_pretrained(model_id)
         model = LightOnOcrForConditionalGeneration.from_pretrained(model_id, device_map=torch_device)
         model.eval()
 
@@ -472,7 +472,7 @@ class LightOnOcrForConditionalGenerationIntegrationTest(unittest.TestCase):
 
         inputs = processor.apply_chat_template(
             chat, add_generation_prompt=True, tokenize=True, return_dict=True, return_tensors="pt"
-        ).to(torch_device)
+        ).to(torch_device, dtype=torch.bfloat16)
 
         # Generate OCR output
         with torch.no_grad():
