@@ -46,7 +46,6 @@ if is_torch_available():
         invert_mask,
         shift_tokens_right,
     )
-    from transformers.pipelines import TranslationPipeline
 
 
 class FSMTModelTester:
@@ -525,14 +524,6 @@ class FSMTModelIntegrationTests(unittest.TestCase):
         outputs = model.generate(input_ids)
         decoded = tokenizer.decode(outputs[0], skip_special_tokens=True)
         assert decoded == tgt_text, f"\n\ngot: {decoded}\nexp: {tgt_text}\n"
-
-    @parameterized.expand(pairs)
-    @slow
-    def test_translation_pipeline(self, pair):
-        tokenizer, model, src_text, tgt_text = self.translation_setup(pair)
-        pipeline = TranslationPipeline(model, tokenizer, device=torch_device)
-        output = pipeline([src_text])
-        self.assertEqual([tgt_text], [x["translation_text"] for x in output])
 
 
 @require_torch
