@@ -13,12 +13,11 @@
 # limitations under the License.
 
 
-from typing import Optional
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from ... import initialization as init
 from ...utils import auto_docstring, can_return_tuple
 from ..vocos.modeling_vocos import VocosConvNeXtBlock, VocosModel, VocosOutput, VocosPreTrainedModel
 from .configuration_vocos_encodec import VocosEncodecConfig
@@ -51,7 +50,7 @@ class VocosEncodecConvNeXtBlock(VocosConvNeXtBlock):
         super().__init__(config)
         self.norm = VocosEncodecAdaptiveLayerNorm(config)
 
-    def forward(self, hidden_states: torch.Tensor, bandwidth_id: Optional[torch.LongTensor]) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, bandwidth_id: torch.LongTensor | None) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.dwconv(hidden_states)
         hidden_states = hidden_states.transpose(1, 2)
@@ -71,11 +70,16 @@ class VocosEncodecPreTrainedModel(VocosPreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, nn.Linear):
+
+        if type(module).__name__ == "VocosEncodecISTFTHead":
+            window = torch.hann_window(module.win_length)
+            init.copy_(module.window, window)
+
+        elif isinstance(module, nn.Linear):
             std = getattr(self.config, "initializer_range", 0.02)
             module.weight.data.normal_(mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, nn.LayerNorm):
             module.bias.data.zero_()
             module.weight.data.fill_(1.0)
@@ -110,9 +114,9 @@ class VocosEncodecModel(VocosModel):
     @auto_docstring
     def forward(
         self,
-        input_features: Optional[torch.FloatTensor],
-        attention_mask: Optional[torch.Tensor] = None,
-        bandwidth: Optional[float] = None,
+        input_features: torch.FloatTensor | None,
+        attention_mask: torch.Tensor | None = None,
+        bandwidth: float | None = None,
     ) -> VocosEncodecOutput:
         r"""
         input_features (`torch.FloatTensor` of shape `(batch_size, feature_dim, time_dim)`):

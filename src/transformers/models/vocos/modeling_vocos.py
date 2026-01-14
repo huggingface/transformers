@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,14 +13,12 @@
 # limitations under the License.
 
 from dataclasses import dataclass
-from typing import Optional
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 from ... import initialization as init
-
 from ...activations import ACT2FN
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, can_return_tuple
@@ -43,7 +40,7 @@ class VocosOutput(ModelOutput):
     """
 
     audio: torch.FloatTensor
-    attention_mask: Optional[torch.Tensor] = None
+    attention_mask: torch.Tensor | None = None
 
 
 def custom_istft(input, n_fft: int, padding=None, **kwargs) -> "torch.Tensor":
@@ -266,8 +263,8 @@ class VocosModel(VocosPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_features: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
+        input_features: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
     ) -> VocosOutput:
         r"""
         input_features (`torch.FloatTensor` of shape `(batch_size, num_mel_bins, num_frames)`):

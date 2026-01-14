@@ -20,14 +20,12 @@
 
 
 from dataclasses import dataclass
-from typing import Optional
 
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 from ... import initialization as init
-
 from ...activations import ACT2FN
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, can_return_tuple
@@ -48,7 +46,7 @@ class VocosEncodecOutput(ModelOutput):
     """
 
     audio: torch.FloatTensor
-    attention_mask: Optional[torch.Tensor] = None
+    attention_mask: torch.Tensor | None = None
 
 
 class VocosEncodecAdaptiveLayerNorm(nn.Module):
@@ -89,7 +87,7 @@ class VocosEncodecConvNeXtBlock(nn.Module):
             config.layer_scale_init_value * torch.ones(config.hidden_size), requires_grad=True
         )
 
-    def forward(self, hidden_states: torch.Tensor, bandwidth_id: Optional[torch.LongTensor]) -> torch.Tensor:
+    def forward(self, hidden_states: torch.Tensor, bandwidth_id: torch.LongTensor | None) -> torch.Tensor:
         residual = hidden_states
         hidden_states = self.dwconv(hidden_states)
         hidden_states = hidden_states.transpose(1, 2)
@@ -296,9 +294,9 @@ class VocosEncodecModel(VocosEncodecPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_features: Optional[torch.FloatTensor],
-        attention_mask: Optional[torch.Tensor] = None,
-        bandwidth: Optional[float] = None,
+        input_features: torch.FloatTensor | None,
+        attention_mask: torch.Tensor | None = None,
+        bandwidth: float | None = None,
     ) -> VocosEncodecOutput:
         r"""
         input_features (`torch.FloatTensor` of shape `(batch_size, feature_dim, time_dim)`):
