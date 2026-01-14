@@ -4,7 +4,7 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_pp_doclayout_v3.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# Copyright 2025 The PaddlePaddle Team and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The PaddlePaddle Team and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -55,8 +55,8 @@ class GlobalPointer(nn.Module):
         keys = query_key_projection[:, :, 1, :]
 
         logits = (queries @ keys.transpose(-2, -1)) / (self.head_size**0.5)
-        lower = torch.tril(torch.ones([sequence_length, sequence_length], dtype=logits.dtype, device=logits.device))
-        logits = logits - lower.unsqueeze(0) * 1e4
+        mask = torch.tril(torch.ones(sequence_length, sequence_length, device=logits.device)).bool()
+        logits = logits.masked_fill(mask.unsqueeze(0), -1e4)
 
         return logits
 
@@ -1970,7 +1970,7 @@ class PPDocLayoutV3ForObjectDetectionOutput(ModelOutput):
     pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
         Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
         values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
-        possible padding). You can use [`~RTDetrImageProcessor.post_process_object_detection`] to retrieve the
+        possible padding). You can use [`~PPDocLayoutV3ImageProcessor.post_process_object_detection`] to retrieve the
         unnormalized (absolute) bounding boxes.
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
         Sequence of hidden-states at the output of the last layer of the decoder of the model.

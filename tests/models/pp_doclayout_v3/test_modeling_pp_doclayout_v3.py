@@ -24,7 +24,6 @@ from transformers import (
     PPDocLayoutV3Config,
     PPDocLayoutV3ForObjectDetection,
     is_torch_available,
-    is_vision_available,
 )
 from transformers.testing_utils import (
     require_torch,
@@ -40,9 +39,6 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 
 if is_torch_available():
     import torch
-
-if is_vision_available():
-    pass
 
 
 class PPDocLayoutV3ModelTester:
@@ -279,8 +275,7 @@ class PPDocLayoutV3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
             model.to(torch_device).to(dtype)
             model.eval()
             for key, tensor in inputs_dict.items():
-                if tensor.dtype == torch.float32:
-                    inputs_dict[key] = tensor.to(dtype)
+                inputs_dict[key] = tensor.to(dtype)
             with torch.no_grad():
                 _ = model(**self._prepare_for_class(inputs_dict, model_class))
 

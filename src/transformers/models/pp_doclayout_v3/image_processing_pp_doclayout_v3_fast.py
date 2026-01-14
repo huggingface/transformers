@@ -4,7 +4,7 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_pp_doclayout_v3.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# Copyright 2025 The PaddlePaddle Team and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The PaddlePaddle Team and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -26,6 +26,7 @@ from torchvision.transforms.v2.functional import InterpolationMode
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast, SizeDict
 from ...image_utils import PILImageResampling
+from ...utils import requires_backends
 from ...utils.generic import TensorType
 
 
@@ -42,6 +43,20 @@ class PPDocLayoutV3ImageProcessorFast(BaseImageProcessorFast):
         super().__init__(**kwargs)
 
     def _get_order_seqs(self, order_logits):
+        """
+        Computes the order sequences for a batch of inputs based on logits.
+
+        This function takes in the order logits, calculates order scores using a sigmoid activation,
+        and determines the order sequences by ranking the votes derived from the scores.
+
+        Args:
+            order_logits (`torch.FloatTensor` of shape `(batch_size, num_queries, num_queries)`):
+                Stacked order logits.
+
+        Returns:
+            torch.Tensor: A tensor of shape `(batch_size, num_queries)`:
+                Containing the computed order sequences for each input in the batch. Each row represents the ranked order of elements for the corresponding input in the batch.
+        """
         order_scores = torch.sigmoid(order_logits)
         batch_size, sequence_length, _ = order_scores.shape
 
@@ -109,6 +124,7 @@ class PPDocLayoutV3ImageProcessorFast(BaseImageProcessorFast):
             `list[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
             in the batch as predicted by the model.
         """
+        requires_backends(self, ["torch"])
         boxes = outputs.pred_boxes
         logits = outputs.logits
         order_logits = outputs.order_logits

@@ -1,4 +1,4 @@
-# Copyright 2025 The PaddlePaddle Team and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The PaddlePaddle Team and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -48,6 +48,7 @@ from ...utils import (
     auto_docstring,
     filter_out_non_signature_kwargs,
     logging,
+    requires_backends,
 )
 from ...utils.backbone_utils import verify_backbone_config_arguments
 from ...utils.generic import TensorType
@@ -90,7 +91,7 @@ class PPDocLayoutV3Config(PreTrainedConfig):
             The epsilon used by the layer normalization layers.
         batch_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the batch normalization layers.
-        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `RTDetrResNetConfig()`):
+        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*):
             The configuration of the backbone model.
         backbone (`str`, *optional*):
             Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
@@ -416,6 +417,20 @@ class PPDocLayoutV3ImageProcessor(BaseImageProcessor):
         self.resample = resample
 
     def _get_order_seqs(self, order_logits):
+        """
+        Computes the order sequences for a batch of inputs based on logits.
+
+        This function takes in the order logits, calculates order scores using a sigmoid activation,
+        and determines the order sequences by ranking the votes derived from the scores.
+
+        Args:
+            order_logits (`torch.FloatTensor` of shape `(batch_size, num_queries, num_queries)`):
+                Stacked order logits.
+
+        Returns:
+            torch.Tensor: A tensor of shape `(batch_size, num_queries)`:
+                Containing the computed order sequences for each input in the batch. Each row represents the ranked order of elements for the corresponding input in the batch.
+        """
         order_scores = torch.sigmoid(order_logits)
         batch_size, sequence_length, _ = order_scores.shape
 
@@ -571,6 +586,7 @@ class PPDocLayoutV3ImageProcessor(BaseImageProcessor):
             `list[Dict]`: An ordered list of dictionaries, each dictionary containing the scores, labels and boxes for an image
             in the batch as predicted by the model.
         """
+        requires_backends(self, ["torch"])
         boxes = outputs.pred_boxes
         logits = outputs.logits
         order_logits = outputs.order_logits
@@ -633,6 +649,20 @@ class PPDocLayoutV3ImageProcessorFast(BaseImageProcessorFast):
         super().__init__(**kwargs)
 
     def _get_order_seqs(self, order_logits):
+        """
+        Computes the order sequences for a batch of inputs based on logits.
+
+        This function takes in the order logits, calculates order scores using a sigmoid activation,
+        and determines the order sequences by ranking the votes derived from the scores.
+
+        Args:
+            order_logits (`torch.FloatTensor` of shape `(batch_size, num_queries, num_queries)`):
+                Stacked order logits.
+
+        Returns:
+            torch.Tensor: A tensor of shape `(batch_size, num_queries)`:
+                Containing the computed order sequences for each input in the batch. Each row represents the ranked order of elements for the corresponding input in the batch.
+        """
         order_scores = torch.sigmoid(order_logits)
         batch_size, sequence_length, _ = order_scores.shape
 
@@ -700,6 +730,7 @@ class PPDocLayoutV3ImageProcessorFast(BaseImageProcessorFast):
             `list[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
             in the batch as predicted by the model.
         """
+        requires_backends(self, ["torch"])
         boxes = outputs.pred_boxes
         logits = outputs.logits
         order_logits = outputs.order_logits
@@ -764,8 +795,8 @@ class GlobalPointer(nn.Module):
         keys = query_key_projection[:, :, 1, :]
 
         logits = (queries @ keys.transpose(-2, -1)) / (self.head_size**0.5)
-        lower = torch.tril(torch.ones([sequence_length, sequence_length], dtype=logits.dtype, device=logits.device))
-        logits = logits - lower.unsqueeze(0) * 1e4
+        mask = torch.tril(torch.ones(sequence_length, sequence_length, device=logits.device)).bool()
+        logits = logits.masked_fill(mask.unsqueeze(0), -1e4)
 
         return logits
 
@@ -1639,7 +1670,7 @@ class PPDocLayoutV3ForObjectDetectionOutput(ModelOutput):
     pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
         Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
         values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
-        possible padding). You can use [`~RTDetrImageProcessor.post_process_object_detection`] to retrieve the
+        possible padding). You can use [`~PPDocLayoutV3ImageProcessor.post_process_object_detection`] to retrieve the
         unnormalized (absolute) bounding boxes.
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
         Sequence of hidden-states at the output of the last layer of the decoder of the model.
