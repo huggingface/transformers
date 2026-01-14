@@ -20,7 +20,6 @@ import torch
 from transformers import is_torch_available
 from transformers.testing_utils import (
     cleanup,
-    require_read_token,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -71,7 +70,6 @@ class SolarOpenModelTest(CausalLMModelTest, unittest.TestCase):
 
 
 @require_torch_accelerator
-@require_read_token
 @slow
 class SolarOpenIntegrationTest(unittest.TestCase):
     def tearDown(self):
