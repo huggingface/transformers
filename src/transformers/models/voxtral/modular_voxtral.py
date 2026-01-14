@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import warnings
 
 import torch
 from torch import nn
@@ -180,12 +179,6 @@ class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
         audio_hidden_states = audio_hidden_states.reshape(-1, self.config.audio_config.intermediate_size)
         audio_embeds = self.multi_modal_projector(audio_hidden_states)
         return audio_embeds
-
-    def get_audio_embeds(self, input_features: torch.FloatTensor):
-        warnings.warn(
-            "The method `get_audio_embeds` is deprecated. Please use `get_audio_features` instead.", FutureWarning
-        )
-        return self.get_audio_features(input_features)
 
     @can_return_tuple
     @auto_docstring
