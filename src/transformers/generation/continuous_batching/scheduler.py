@@ -195,7 +195,7 @@ class Scheduler(ABC):
         token_budget: int,
         cache_budget: int,
         request_ids_to_remove_from_waiting: set[str],
-        safety_margin: float | None = None,
+        safety_margin: float = 0.0,
     ) -> tuple[list[RequestState], bool]:
         """Schedules candidate requests for the current batch.
 
@@ -205,18 +205,17 @@ class Scheduler(ABC):
         """
         scheduled_requests = []
         one_allocation_failed = False
-        safety_margins = safety_margin * self.cache.num_blocks if safety_margin is not None else None
+        safety_margins = safety_margin * self.cache.num_blocks
 
         for state in candidates:
             num_free_blocks = self.cache.get_num_free_blocks()
-            if safety_margins is not None:
-                # If we are out the safety margin, we only accept decoding requests or the first prefill request
-                outside_safety_margin = num_free_blocks < safety_margins
-                if outside_safety_margin and scheduled_requests and state.status != RequestStatus.DECODING:
-                    logger.info(
-                        f"Outside safety margin, breaking out of scheduling loop. {num_free_blocks = } {safety_margins = }"
-                    )
-                    break
+            # If we are out the safety margin, we only accept decoding requests or the first prefill request
+            outside_safety_margin = num_free_blocks < safety_margins
+            if outside_safety_margin and scheduled_requests and state.status != RequestStatus.DECODING:
+                logger.info(
+                    f"Outside safety margin, breaking out of scheduling loop. {num_free_blocks = } {safety_margins = }"
+                )
+                break
 
             # Check cache budget
             cache_needed = state.current_len()
@@ -360,7 +359,7 @@ class PrefillFirstScheduler(Scheduler):
             token_budget,
             cache_budget,
             request_ids_to_remove_from_waiting,
-            safety_margin=None,
+            safety_margin=0.0,
         )
 
         # We remove waiting requests before checking requests were scheduled, because there might have been prefill matches
