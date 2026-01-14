@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The Google Research Team Authors and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,7 +16,7 @@
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Optional, Union
+from typing import Any
 
 import torch
 from torch import nn
@@ -52,9 +51,9 @@ class AlignVisionModelOutput(ModelOutput):
         The image embeddings obtained by applying the projection layer to the pooler_output.
     """
 
-    image_embeds: Optional[torch.FloatTensor] = None
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    image_embeds: torch.FloatTensor | None = None
+    last_hidden_state: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
 
 
 @dataclass
@@ -69,10 +68,10 @@ class AlignTextModelOutput(ModelOutput):
         The text embeddings obtained by applying the projection layer to the pooler_output.
     """
 
-    text_embeds: Optional[torch.FloatTensor] = None
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
+    text_embeds: torch.FloatTensor | None = None
+    last_hidden_state: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
 
 
 @dataclass
@@ -97,11 +96,11 @@ class AlignOutput(ModelOutput):
         The output of the [`AlignVisionModel`].
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    logits_per_image: Optional[torch.FloatTensor] = None
-    logits_per_text: Optional[torch.FloatTensor] = None
-    text_embeds: Optional[torch.FloatTensor] = None
-    image_embeds: Optional[torch.FloatTensor] = None
+    loss: torch.FloatTensor | None = None
+    logits_per_image: torch.FloatTensor | None = None
+    logits_per_text: torch.FloatTensor | None = None
+    text_embeds: torch.FloatTensor | None = None
+    image_embeds: torch.FloatTensor | None = None
     text_model_output: BaseModelOutputWithPooling = None
     vision_model_output: BaseModelOutputWithPoolingAndNoAttention = None
 
@@ -141,7 +140,7 @@ def round_filters(config: AlignVisionConfig, num_channels: int):
 
 
 # Copied from transformers.models.efficientnet.modeling_efficientnet.correct_pad
-def correct_pad(kernel_size: Union[int, tuple], adjust: bool = True):
+def correct_pad(kernel_size: int | tuple, adjust: bool = True):
     r"""
     Utility function to get the tuple padding value for the depthwise convolution.
 
@@ -490,8 +489,8 @@ class AlignVisionEncoder(nn.Module):
     def forward(
         self,
         hidden_states: torch.FloatTensor,
-        output_hidden_states: Optional[bool] = False,
-        return_dict: Optional[bool] = True,
+        output_hidden_states: bool | None = False,
+        return_dict: bool | None = True,
     ) -> BaseModelOutputWithPoolingAndNoAttention:
         all_hidden_states = (hidden_states,) if output_hidden_states else None
 
@@ -530,10 +529,10 @@ class AlignTextEmbeddings(nn.Module):
 
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        token_type_ids: torch.LongTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
     ) -> torch.Tensor:
         if input_ids is not None:
             input_shape = input_ids.size()
@@ -574,7 +573,7 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
+    attention_mask: torch.Tensor | None,
     scaling: float,
     dropout: float = 0.0,
     **kwargs,
@@ -617,8 +616,8 @@ class AlignTextSelfAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = False,
+        attention_mask: torch.FloatTensor | None = None,
+        output_attentions: bool | None = False,
         **kwargs,
     ) -> tuple[torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -672,8 +671,8 @@ class AlignTextAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = False,
+        attention_mask: torch.FloatTensor | None = None,
+        output_attentions: bool | None = False,
         **kwargs,
     ) -> tuple[torch.Tensor]:
         self_outputs = self.self(
@@ -730,8 +729,8 @@ class AlignTextLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = False,
+        attention_mask: torch.FloatTensor | None = None,
+        output_attentions: bool | None = False,
         **kwargs,
     ) -> tuple[torch.Tensor]:
         self_attention_outputs = self.attention(
@@ -767,12 +766,12 @@ class AlignTextEncoder(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = False,
-        output_hidden_states: Optional[bool] = False,
-        return_dict: Optional[bool] = True,
+        attention_mask: torch.FloatTensor | None = None,
+        output_attentions: bool | None = False,
+        output_hidden_states: bool | None = False,
+        return_dict: bool | None = True,
         **kwargs,
-    ) -> Union[tuple[torch.Tensor], BaseModelOutput]:
+    ) -> tuple[torch.Tensor] | BaseModelOutput:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
@@ -889,16 +888,16 @@ class AlignTextModel(AlignPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        token_type_ids: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, BaseModelOutputWithPooling]:
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
         Examples:
 
@@ -1007,11 +1006,11 @@ class AlignVisionModel(AlignPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        pixel_values: torch.FloatTensor | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, BaseModelOutputWithPoolingAndNoAttention]:
+    ) -> tuple | BaseModelOutputWithPoolingAndNoAttention:
         r"""
         Examples:
 
@@ -1097,11 +1096,11 @@ class AlignModel(AlignPreTrainedModel):
     @auto_docstring
     def get_text_features(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        token_type_ids: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
     ) -> torch.FloatTensor:
         r"""
         Returns:
@@ -1166,18 +1165,18 @@ class AlignModel(AlignPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        return_loss: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        token_type_ids: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        return_loss: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, AlignOutput]:
+    ) -> tuple | AlignOutput:
         r"""
         return_loss (`bool`, *optional*):
             Whether or not to return the contrastive loss.

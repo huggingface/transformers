@@ -44,7 +44,6 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_flash_attn_3,
     require_optimum_quanto,
-    require_read_token,
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
@@ -1207,7 +1206,7 @@ class GenerationTesterMixin:
 
             input_ids = inputs_dict.pop("input_ids")
 
-            model.config.use_cache = True
+            model.generation_config.use_cache = True
             model.config.is_decoder = True
             batch_size = input_ids.shape[0]
             max_new_tokens = 10
@@ -1676,10 +1675,10 @@ class GenerationTesterMixin:
                 self.skipTest(reason="This model does not support `logits_to_keep` argument.")
 
             config, inputs_dict = self.prepare_config_and_inputs_for_generate()
-            config.use_cache = True
             config.is_decoder = True
 
             model = model_class(config).to(torch_device).eval()
+            model.generation_config.use_cache = True
             # All generation methods (except assisted decoding) rely on always extracting the last token logits of the
             # full logits matrix, so testing out only greedy search and assisted decoding is enough (if it works,
             # other methods will work as well)
@@ -2685,6 +2684,13 @@ class GenerationIntegrationTests(unittest.TestCase):
 
         out = model.generate(input_ids, generation_config=generation_config)
         self.assertTrue(len(out[0]) == 20)  # generated max_length=20 tokens, not 50!
+
+        # Lastly try saving to make sure no errors are raised about
+        # "generation params in config" or during config validation (#43175)
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            model.generation_config.cache_implementation = "dynamic"
+            model.generation_config.use_cache = None
+            model.save_pretrained(tmpdirname)
 
     # TODO joao, manuel: remove in v4.62.0
     @slow
@@ -3936,7 +3942,6 @@ class GenerationIntegrationTests(unittest.TestCase):
         gen_out = compiled_generate(**model_inputs, generation_config=generation_config)
         self.assertTrue(gen_out.shape[1] > model_inputs["input_ids"].shape[1])  # some text was generated
 
-    @require_read_token
     @slow
     def test_assisted_generation_early_exit(self):
         """
@@ -4464,7 +4469,6 @@ class GenerationIntegrationTests(unittest.TestCase):
         # test that we can generate without inputs, i.e. from BOS
         _ = model.generate()
 
-    @require_read_token
     @slow
     @require_torch_accelerator
     def test_cache_device_map_with_vision_layer_device_map(self):
