@@ -136,9 +136,6 @@ class MptConfig(PreTrainedConfig):
             If not None, scale the logits by this value.
         no_bias (`bool`, *optional*, defaults to `True`):
             Whether to use bias in all linear layers.
-        verbose (`int`, *optional*, defaults to 0):
-            The verbosity level to use for logging. Used in the previous versions of MPT models for logging. This
-            argument is deprecated.
         embedding_fraction (`float`, *optional*, defaults to 1.0):
             The fraction to scale the gradients of the embedding layer by.
         norm_type (`str`, *optional*, defaults to `"low_precision_layernorm"`):
@@ -189,7 +186,6 @@ class MptConfig(PreTrainedConfig):
         init_device: str = "cpu",
         logit_scale: float | str | None = None,
         no_bias: bool = True,
-        verbose: int = 0,
         embedding_fraction: float = 1.0,
         norm_type: str = "low_precision_layernorm",
         use_cache: bool = False,
@@ -214,7 +210,6 @@ class MptConfig(PreTrainedConfig):
         self.init_device = init_device
         self.logit_scale = logit_scale
         self.no_bias = no_bias
-        self.verbose = verbose
         self.embedding_fraction = embedding_fraction
         self.norm_type = norm_type
         self.layer_norm_epsilon = layer_norm_epsilon
