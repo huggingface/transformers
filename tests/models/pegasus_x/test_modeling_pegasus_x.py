@@ -626,7 +626,7 @@ class PegasusXModelIntegrationTests(unittest.TestCase):
         ]
 
         # The below article tests that we don't add any hypotheses outside of the top n_beams
-        dct = tok.batch_encode_plus(
+        dct = tok(
             batch_input,
             max_length=512,
             padding="max_length",
@@ -642,13 +642,11 @@ class PegasusXModelIntegrationTests(unittest.TestCase):
         )
 
         EXPECTED = [
-            "we investigate the performance of a new pretrained model for long input summarization. <n> the model is a"
+            "we investigate the performance of a new pretrained model for long input summarization . <n> the model is a"
             " superposition of two well -"
         ]
 
-        generated = tok.batch_decode(
-            hypotheses_batch.tolist(), clean_up_tokenization_spaces=True, skip_special_tokens=True
-        )
+        generated = tok.decode(hypotheses_batch.tolist(), skip_special_tokens=True)
         assert generated == EXPECTED
 
 

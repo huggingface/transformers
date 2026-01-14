@@ -41,7 +41,6 @@ if is_torch_available():
         AutoTokenizer,
         MarianModel,
         MarianMTModel,
-        TranslationPipeline,
     )
     from transformers.models.marian.modeling_marian import (
         MarianDecoder,
@@ -590,13 +589,6 @@ class TestMarian_en_ROMANCE(MarianIntegrationTest):
     @slow
     def test_batch_generation_en_ROMANCE_multi(self):
         self._assert_generated_batch_equal_expected()
-
-    @slow
-    @require_torch
-    def test_pipeline(self):
-        pipeline = TranslationPipeline(self.model, self.tokenizer, device=torch_device)
-        output = pipeline(self.src_text)
-        self.assertEqual(self.expected_text, [x["translation_text"] for x in output])
 
 
 @require_sentencepiece

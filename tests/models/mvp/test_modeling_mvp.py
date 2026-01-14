@@ -564,14 +564,14 @@ class MvpModelIntegrationTests(unittest.TestCase):
         tok = self.default_tokenizer
         PGE_ARTICLE = """ Listen to local radio broadcasts for advertisements that reference casinos in your area.\nIf none are in your area, listen to national radio broadcasts for advertisements of casinos in other areas.\nNote the location that is mentioned in each advertisement that involves a casino.\nIf no locations are mentioned, note any additional contact information, such as a website or phone number. Use that information to find out where the casinos are.;\n,\n\nIf you learn about more than 1 casino on the radio, use the Internet to search the distance between your location and each casino. Sites such as maps.google.com or mapquest.com will help you in this search.'"""  # fmt: skip
         EXPECTED_SUMMARY = "Listen to the radio.\nUse the Internet."
-        dct = tok.batch_encode_plus(
+        dct = tok(
             [PGE_ARTICLE],
             return_tensors="pt",
         ).to(torch_device)
 
         hypotheses_batch = model.generate(**dct)
 
-        decoded = tok.batch_decode(hypotheses_batch, skip_special_tokens=True)
+        decoded = tok.decode(hypotheses_batch, skip_special_tokens=True)
         self.assertEqual(EXPECTED_SUMMARY, decoded[0])
 
 

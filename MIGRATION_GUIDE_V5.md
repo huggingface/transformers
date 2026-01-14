@@ -576,7 +576,28 @@ Linked PRs:
 
 - `use_cache` in the model config will be set to `False`. You can still change the cache value through `TrainingArguments` `usel_cache` argument if needed. 
 
-## Pipeline
+## Pipelines
+
+`Text2TextPipeline`, as well as the related `SummarizationPipeline` and `TranslationPipeline`, were deprecated and will now be removed.
+`pipeline` classes are intended as a high-level, beginner-friendly API, but for almost all text-to-text tasks, a modern chat model 
+and `TextGenerationPipeline` will provide much higher quality output. As a result, we felt it was misleading for beginners to offer the older pipelines.
+
+If you were using these pipelines before, try using `TextGenerationPipeline` with a chat model instead. For example, for summarization:
+
+```python
+import torch
+from transformers import pipeline
+
+# Any other chat model will also work - if you're low on memory you can use a smaller one
+summarizer = pipeline("text-generation", model="Qwen/Qwen3-4B-Instruct-2507")  
+message_history = [
+    {
+        "role": "user",
+        "content": "Summarize the following text:\n\n[TEXT_TO_SUMMARIZE]"
+    }
+]
+print(summarizer(message_history)[0]["generated_text"][-1]["content"])
+```
 
 - Image text to text pipelines will no longer accept images as a separate argument along with conversation chats. Image data has to be embedded in the chat's "content" field. See [#42359](https://github.com/huggingface/transformers/pull/42359)
 
