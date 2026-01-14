@@ -262,7 +262,7 @@ class Qwen3OmniMoeThinkerForConditionalGenerationModelTest(ModelTesterMixin, Gen
 
     all_model_classes = (Qwen3OmniMoeThinkerForConditionalGeneration,) if is_torch_available() else ()
     all_generative_model_classes = (Qwen3OmniMoeThinkerForConditionalGeneration,) if is_torch_available() else ()
-
+    skip_test_audio_features_output_shape = True  # Qwen3OmniMoe merges batch_size and audio_output_lengths in index 0
     _is_composite = True
     model_split_percents = [0.5, 0.9]
 

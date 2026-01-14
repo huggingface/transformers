@@ -4852,26 +4852,50 @@ class ModelTesterMixin:
                     "get_image_features() must return a BaseModelOutput with attentions",
                 )
 
+            if getattr(self, "skip_test_image_features_output_shape", False):
+                return
+
             last_hidden_state_shape = outputs.last_hidden_state.shape
+            batch_size = (
+                inputs_dict["pixel_values"].shape[0]
+                if "pixel_values" in inputs_dict
+                else inputs_dict["pixel_values_images"].shape[0]
+            )
+            self.assertEqual(
+                last_hidden_state_shape[0], batch_size, f"batch_size mismatch, full shape: {last_hidden_state_shape}"
+            )
+
             vision_config = config.vision_config if hasattr(config, "vision_config") else config
-            if hasattr(vision_config, "backbone_config"):
-                if "embed_dim_per_stage" in vision_config.backbone_config:
-                    hidden_size = vision_config.backbone_config.embed_dim_per_stage[-1]
-                elif "hidden_size" in vision_config.backbone_config:
-                    hidden_size = vision_config.backbone_config.hidden_size
-                else:
-                    hidden_size = vision_config.backbone_config.model_args["embed_dim"][-1]
-            elif hasattr(vision_config, "hidden_size"):
-                hidden_size = vision_config.hidden_size
-            elif hasattr(vision_config, "hidden_dim"):
-                hidden_size = vision_config.hidden_dim
-            elif hasattr(vision_config, "embed_dim"):
-                hidden_size = vision_config.embed_dim[-1]
-            elif hasattr(vision_config, "model_args"):
-                hidden_size = vision_config.model_args["embed_dim"]
-            elif hasattr(vision_config, "vq_config"):
-                hidden_size = vision_config.vq_config.hidden_size
-            self.assertEqual(last_hidden_state_shape[-1], hidden_size, "hidden_size mismatch")
+            vision_config = (
+                vision_config.backbone_config if hasattr(vision_config, "backbone_config") else vision_config
+            )
+            vision_config = vision_config.vq_config if hasattr(vision_config, "vq_config") else vision_config
+            vision_config = vision_config.model_args if hasattr(vision_config, "model_args") else vision_config
+            attribute_candidates = [
+                "embed_dim_per_stage",
+                "embed_dim",
+                "embed_dims",
+                "out_hidden_size",
+                "hidden_size",
+                "hidden_dim",
+            ]
+            hidden_size = None
+            for attr in attribute_candidates:
+                if hasattr(vision_config, attr):
+                    hidden_size = getattr(vision_config, attr)
+                    break
+                elif isinstance(vision_config, dict) and attr in vision_config:
+                    hidden_size = vision_config[attr]
+                    break
+            else:
+                raise ValueError("Cannot find the hidden size attribute in vision_config")
+            if isinstance(hidden_size, (list, tuple)):
+                hidden_size = hidden_size[-1]
+            self.assertEqual(
+                last_hidden_state_shape[-1],
+                hidden_size,
+                f"hidden_size mismatch, full shape: {last_hidden_state_shape}",
+            )
 
     def test_get_image_features_hidden_states(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
@@ -4975,9 +4999,14 @@ class ModelTesterMixin:
                     "get_audio_features() must return a BaseModelOutput with attentions",
                 )
 
+            if getattr(self, "skip_test_audio_features_output_shape", False):
+                return
+
             last_hidden_state_shape = outputs.last_hidden_state.shape
             batch_size = inputs_dict["input_features"].shape[0]
-            self.assertEqual(last_hidden_state_shape[0], batch_size, "batch_size mismatch")
+            self.assertEqual(
+                last_hidden_state_shape[0], batch_size, f"batch_size mismatch, full shape: {last_hidden_state_shape}"
+            )
 
             audio_config = config.audio_config if hasattr(config, "audio_config") else config
             if hasattr(audio_config, "projection_dim"):
@@ -4988,7 +5017,11 @@ class ModelTesterMixin:
                 hidden_size = audio_config.encoder_config.hidden_dim
             elif hasattr(audio_config, "encoder_ffn_dim"):
                 hidden_size = audio_config.encoder_ffn_dim
-            self.assertEqual(last_hidden_state_shape[-1], hidden_size, "hidden_size mismatch")
+            self.assertEqual(
+                last_hidden_state_shape[-1],
+                hidden_size,
+                f"hidden_size mismatch, full shape: {last_hidden_state_shape}",
+            )
 
     def test_get_audio_features_hidden_states(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
@@ -5090,19 +5123,31 @@ class ModelTesterMixin:
                     "get_video_features() must return a BaseModelOutput with attentions",
                 )
 
+            if getattr(self, "skip_test_video_features_output_shape", False):
+                return
+
             last_hidden_state_shape = outputs.last_hidden_state.shape
             if "pixel_values_videos" in inputs_dict:
                 batch_size = inputs_dict["pixel_values_videos"].shape[0]
             elif "pixel_values" in inputs_dict:
                 batch_size = inputs_dict["pixel_values"].shape[0]
-            self.assertEqual(last_hidden_state_shape[0], batch_size, "batch_size mismatch")
+            self.assertEqual(
+                last_hidden_state_shape[0], batch_size, f"batch_size mismatch, full shape: {last_hidden_state_shape}"
+            )
             video_config = config
             if hasattr(config, "video_config"):
                 video_config = config.video_config
             elif hasattr(config, "vision_config"):
                 video_config = config.vision_config
-            hidden_size = video_config.hidden_size
-            self.assertEqual(last_hidden_state_shape[-1], hidden_size, "hidden_size mismatch")
+            if hasattr(video_config, "out_hidden_size"):
+                hidden_size = video_config.out_hidden_size
+            else:
+                hidden_size = video_config.hidden_size
+            self.assertEqual(
+                last_hidden_state_shape[-1],
+                hidden_size,
+                f"hidden_size mismatch, full shape: {last_hidden_state_shape}",
+            )
 
     def test_get_video_features_hidden_states(self):
         def check_hidden_states_output(inputs_dict, config, model_class):

@@ -200,6 +200,10 @@ class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, Generati
         if is_torch_available()
         else {}
     )
+    # LlavaOnevision merges batch_size and num_patches in the first output dimension
+    skip_test_image_features_output_shape = True
+    # LlavaOnevision merges batch_size and num_frames in the first output dimension
+    skip_test_video_features_output_shape = True
 
     # MP works but offload doesn't work when the MultiheadAttention is offloaded
     # TODO: One potential solution would be to add to set preload_module_classes = ["Siglip2MultiheadAttentionPoolingHead"]

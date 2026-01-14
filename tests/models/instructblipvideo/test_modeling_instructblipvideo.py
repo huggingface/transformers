@@ -489,6 +489,8 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyTest(
         (InstructBlipVideoForConditionalGeneration, InstructBlipVideoModel) if is_torch_available() else ()
     )
     additional_model_inputs = ["qformer_input_ids", "input_ids"]
+    # InstructBlipVideo merges batch_size and num_frames in the first output dimension
+    skip_test_video_features_output_shape = True
 
     test_resize_embeddings = True
     test_attention_outputs = False

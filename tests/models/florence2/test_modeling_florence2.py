@@ -238,6 +238,7 @@ class Florence2ForConditionalGenerationModelTest(
         if is_torch_available()
         else {}
     )
+    skip_test_image_features_output_shape = True  # Florence2 uses index -3 for hidden_size instead of -1
 
     has_attentions = False
     _is_composite = True

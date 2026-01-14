@@ -205,6 +205,10 @@ class LlavaNextVideoForConditionalGenerationModelTest(ModelTesterMixin, Generati
         if is_torch_available()
         else ()
     )
+    # LlavaNextVideo merges batch_size and num_patches in the first output dimension
+    skip_test_image_features_output_shape = True
+    # LlavaNextVideo merges batch_size and num_frames in the first output dimension
+    skip_test_video_features_output_shape = True
 
     _is_composite = True
 

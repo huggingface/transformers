@@ -168,7 +168,7 @@ class SmolVLMModelTest(ModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (SmolVLMModel,) if is_torch_available() else ()
-
+    skip_test_image_features_output_shape = True  # SmolVLM merges batch_size with num_images in index 0
     test_resize_embeddings = True
 
     def setUp(self):
@@ -339,6 +339,7 @@ class SmolVLMForConditionalGenerationModelTest(
         if is_torch_available()
         else ()
     )
+    skip_test_image_features_output_shape = True  # SmolVLM merges batch_size with num_images in index 0
     test_resize_embeddings = True
 
     def setUp(self):

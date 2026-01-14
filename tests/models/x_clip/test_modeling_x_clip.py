@@ -515,7 +515,8 @@ class XCLIPModelTester:
 class XCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (XCLIPModel,) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": XCLIPModel} if is_torch_available() else {}
-
+    # XCLIP merges batch_size and num_frames in the first output dimension
+    skip_test_video_features_output_shape = True
     test_resize_embeddings = False
     test_attention_outputs = False
     maxdiff = None

@@ -443,6 +443,7 @@ class AlignModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     test_attention_outputs = False
     has_attentions = False
+    skip_test_image_features_output_shape = True  # Align uses index -3 for hidden_size instead of -1
 
     def setUp(self):
         self.model_tester = AlignModelTester(self)
