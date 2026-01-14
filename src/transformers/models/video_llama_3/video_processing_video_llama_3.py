@@ -79,8 +79,6 @@ class VideoLlama3VideoProcessor(BaseVideoProcessor):
     do_rescale = True
     do_normalize = True
     do_convert_rgb = True
-    min_pixels = 128 * 28 * 28
-    max_pixels = 28 * 28 * 768
     patch_size = 14
     temporal_patch_size = 1
     merge_size = 2
@@ -107,7 +105,7 @@ class VideoLlama3VideoProcessor(BaseVideoProcessor):
         if "shortest_edge" not in size or "longest_edge" not in size:
             raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
 
-        super().__init__(size=size, min_pixels=min_pixels, max_pixels=max_pixels, **kwargs)
+        super().__init__(size=size, **kwargs)
 
     def sample_frames(
         self,
