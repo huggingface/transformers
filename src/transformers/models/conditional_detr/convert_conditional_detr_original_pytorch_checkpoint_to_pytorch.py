@@ -94,10 +94,16 @@ for i in range(6):
     # q, k, v projections in self/cross-attention in decoder for conditional DETR
     # Self-attention projections moved into self_attn module
     rename_keys.append(
-        (f"transformer.decoder.layers.{i}.sa_qcontent_proj.weight", f"decoder.layers.{i}.self_attn.q_content_proj.weight")
+        (
+            f"transformer.decoder.layers.{i}.sa_qcontent_proj.weight",
+            f"decoder.layers.{i}.self_attn.q_content_proj.weight",
+        )
     )
     rename_keys.append(
-        (f"transformer.decoder.layers.{i}.sa_kcontent_proj.weight", f"decoder.layers.{i}.self_attn.k_content_proj.weight")
+        (
+            f"transformer.decoder.layers.{i}.sa_kcontent_proj.weight",
+            f"decoder.layers.{i}.self_attn.k_content_proj.weight",
+        )
     )
     rename_keys.append(
         (f"transformer.decoder.layers.{i}.sa_qpos_proj.weight", f"decoder.layers.{i}.self_attn.q_pos_proj.weight")
@@ -105,21 +111,34 @@ for i in range(6):
     rename_keys.append(
         (f"transformer.decoder.layers.{i}.sa_kpos_proj.weight", f"decoder.layers.{i}.self_attn.k_pos_proj.weight")
     )
-    rename_keys.append((f"transformer.decoder.layers.{i}.sa_v_proj.weight", f"decoder.layers.{i}.self_attn.v_proj.weight"))
+    rename_keys.append(
+        (f"transformer.decoder.layers.{i}.sa_v_proj.weight", f"decoder.layers.{i}.self_attn.v_proj.weight")
+    )
     # Cross-attention projections moved into encoder_attn module
     rename_keys.append(
-        (f"transformer.decoder.layers.{i}.ca_qcontent_proj.weight", f"decoder.layers.{i}.encoder_attn.q_content_proj.weight")
+        (
+            f"transformer.decoder.layers.{i}.ca_qcontent_proj.weight",
+            f"decoder.layers.{i}.encoder_attn.q_content_proj.weight",
+        )
     )
     # rename_keys.append((f"transformer.decoder.layers.{i}.ca_qpos_proj.weight", f"decoder.layers.{i}.encoder_attn.q_pos_proj.weight"))
     rename_keys.append(
-        (f"transformer.decoder.layers.{i}.ca_kcontent_proj.weight", f"decoder.layers.{i}.encoder_attn.k_content_proj.weight")
+        (
+            f"transformer.decoder.layers.{i}.ca_kcontent_proj.weight",
+            f"decoder.layers.{i}.encoder_attn.k_content_proj.weight",
+        )
     )
     rename_keys.append(
         (f"transformer.decoder.layers.{i}.ca_kpos_proj.weight", f"decoder.layers.{i}.encoder_attn.k_pos_proj.weight")
     )
-    rename_keys.append((f"transformer.decoder.layers.{i}.ca_v_proj.weight", f"decoder.layers.{i}.encoder_attn.v_proj.weight"))
     rename_keys.append(
-        (f"transformer.decoder.layers.{i}.ca_qpos_sine_proj.weight", f"decoder.layers.{i}.encoder_attn.q_pos_sine_proj.weight")
+        (f"transformer.decoder.layers.{i}.ca_v_proj.weight", f"decoder.layers.{i}.encoder_attn.v_proj.weight")
+    )
+    rename_keys.append(
+        (
+            f"transformer.decoder.layers.{i}.ca_qpos_sine_proj.weight",
+            f"decoder.layers.{i}.encoder_attn.q_pos_sine_proj.weight",
+        )
     )
 
     rename_keys.append(
@@ -128,20 +147,37 @@ for i in range(6):
     rename_keys.append(
         (f"transformer.decoder.layers.{i}.sa_kcontent_proj.bias", f"decoder.layers.{i}.self_attn.k_content_proj.bias")
     )
-    rename_keys.append((f"transformer.decoder.layers.{i}.sa_qpos_proj.bias", f"decoder.layers.{i}.self_attn.q_pos_proj.bias"))
-    rename_keys.append((f"transformer.decoder.layers.{i}.sa_kpos_proj.bias", f"decoder.layers.{i}.self_attn.k_pos_proj.bias"))
+    rename_keys.append(
+        (f"transformer.decoder.layers.{i}.sa_qpos_proj.bias", f"decoder.layers.{i}.self_attn.q_pos_proj.bias")
+    )
+    rename_keys.append(
+        (f"transformer.decoder.layers.{i}.sa_kpos_proj.bias", f"decoder.layers.{i}.self_attn.k_pos_proj.bias")
+    )
     rename_keys.append((f"transformer.decoder.layers.{i}.sa_v_proj.bias", f"decoder.layers.{i}.self_attn.v_proj.bias"))
     rename_keys.append(
-        (f"transformer.decoder.layers.{i}.ca_qcontent_proj.bias", f"decoder.layers.{i}.encoder_attn.q_content_proj.bias")
+        (
+            f"transformer.decoder.layers.{i}.ca_qcontent_proj.bias",
+            f"decoder.layers.{i}.encoder_attn.q_content_proj.bias",
+        )
     )
     # rename_keys.append((f"transformer.decoder.layers.{i}.ca_qpos_proj.bias", f"decoder.layers.{i}.encoder_attn.q_pos_proj.bias"))
     rename_keys.append(
-        (f"transformer.decoder.layers.{i}.ca_kcontent_proj.bias", f"decoder.layers.{i}.encoder_attn.k_content_proj.bias")
+        (
+            f"transformer.decoder.layers.{i}.ca_kcontent_proj.bias",
+            f"decoder.layers.{i}.encoder_attn.k_content_proj.bias",
+        )
     )
-    rename_keys.append((f"transformer.decoder.layers.{i}.ca_kpos_proj.bias", f"decoder.layers.{i}.encoder_attn.k_pos_proj.bias"))
-    rename_keys.append((f"transformer.decoder.layers.{i}.ca_v_proj.bias", f"decoder.layers.{i}.encoder_attn.v_proj.bias"))
     rename_keys.append(
-        (f"transformer.decoder.layers.{i}.ca_qpos_sine_proj.bias", f"decoder.layers.{i}.encoder_attn.q_pos_sine_proj.bias")
+        (f"transformer.decoder.layers.{i}.ca_kpos_proj.bias", f"decoder.layers.{i}.encoder_attn.k_pos_proj.bias")
+    )
+    rename_keys.append(
+        (f"transformer.decoder.layers.{i}.ca_v_proj.bias", f"decoder.layers.{i}.encoder_attn.v_proj.bias")
+    )
+    rename_keys.append(
+        (
+            f"transformer.decoder.layers.{i}.ca_qpos_sine_proj.bias",
+            f"decoder.layers.{i}.encoder_attn.q_pos_sine_proj.bias",
+        )
     )
 
 # convolutional projection + query embeddings + layernorm of decoder + class and bounding box heads
