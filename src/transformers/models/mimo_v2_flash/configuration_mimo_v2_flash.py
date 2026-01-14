@@ -60,16 +60,15 @@ class MiMoV2FlashConfig(PretrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        rope_theta (`float`, *optional*, defaults to 5000000.0):
-            The base period of the RoPE embeddings.
-        partial_rotary_factor (`float`, *optional*, defaults to 0.334):
-            Percentage of the hidden dimension to apply RoPE to.
+        rope_parameters (`dict`, *optional*):
+            A dictionary containing parameters for the Rotary Position Embedding (RoPE). Expected keys are `rope_theta`
+            (defaults to 5000000.0) and `partial_rotary_factor` (defaults to 0.334).
         sliding_window (`int`, *optional*, defaults to 128):
             Sliding window attention window size.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
-        hybrid_layer_pattern (`List[int]`, *optional*):
-            Pattern defining which layers use full attention (0) and which use sliding window attention (1).
+        layer_types (`List[str]`, *optional*):
+            List of strings defining the type of attention for each layer (e.g., "full_attention" or "sliding_attention").
         num_experts_per_tok (`int`, *optional*, defaults to 8):
             The number of active experts per token.
         n_routed_experts (`int`, *optional*, defaults to 256):
@@ -84,12 +83,12 @@ class MiMoV2FlashConfig(PretrainedConfig):
     """
 
     model_type = "mimo_v2_flash"
-    keys_to_ignore_at_inference = {"past_key_value"}
+    keys_to_ignore_at_inference = ["past_key_values"]
 
     def __init__(
         self,
         vocab_size=152576,
-        hidden_size=4086,
+        hidden_size=4096,
         intermediate_size=16384,
         num_hidden_layers=48,
         num_attention_heads=64,
@@ -101,11 +100,10 @@ class MiMoV2FlashConfig(PretrainedConfig):
         initializer_range=0.02,
         rms_norm_eps=1e-5,
         use_cache=True,
-        rope_theta=5000000.0,
-        partial_rotary_factor=0.334,
+        rope_parameters=None,
         sliding_window=128,
         attention_dropout=0.0,
-        hybrid_layer_pattern=None,
+        layer_types=None,
         num_experts_per_tok=8,
         n_routed_experts=256,
         moe_intermediate_size=2048,
@@ -119,18 +117,30 @@ class MiMoV2FlashConfig(PretrainedConfig):
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
+
         self.head_dim = head_dim
+        self.qk_head_dim = head_dim
         self.v_head_dim = v_head_dim
+
         self.num_key_value_heads = num_key_value_heads
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
-        self.partial_rotary_factor = partial_rotary_factor
         self.sliding_window = sliding_window
         self.attention_dropout = attention_dropout
-        self.hybrid_layer_pattern = hybrid_layer_pattern
+
+        # RoPE Parameters
+        if rope_parameters is None:
+            self.rope_parameters = {
+                "rope_theta": 5000000.0,
+                "partial_rotary_factor": 0.334,
+            }
+        else:
+            self.rope_parameters = rope_parameters
+
+        # Layer Types
+        self.layer_types = layer_types
 
         # MoE Config
         self.num_experts_per_tok = num_experts_per_tok
