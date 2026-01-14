@@ -228,14 +228,14 @@
   title: Quantization
 - isExpanded: false
   sections:
-  - sections:
-    - local: community_integrations/vllm
-      title: vLLM
-    - local: community_integrations/sglang
-      title: SGLang
-    - local: community_integrations/transformers_as_backend
-      title: Building a compatible model backend for inference
-    title: Inference engines
+  - local: community_integrations/sglang
+    title: SGLang
+  - local: community_integrations/tensorrt-llm
+    title: TensorRT-LLM
+  - local: community_integrations/vllm
+    title: vLLM
+  - local: community_integrations/transformers_as_backend
+    title: Building a compatible model backend for inference
   - sections:
     - local: community_integrations/llama_cpp
       title: llama.cpp
