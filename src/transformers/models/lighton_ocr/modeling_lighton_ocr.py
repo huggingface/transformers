@@ -1176,6 +1176,7 @@ __all__ = [
     "LightOnOcrPreTrainedModel",
     "LightOnOcrVisionModel",
     "LightOnOcrTextModel",
+    "LightOnOcrVisionPreTrainedModel",
     "LightOnOcrTextPreTrainedModel",
     "LightOnOcrForConditionalGeneration",
     "LightOnOcrModel",
