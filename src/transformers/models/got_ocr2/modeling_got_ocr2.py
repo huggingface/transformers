@@ -558,9 +558,6 @@ class GotOcr2Model(GotOcr2PreTrainedModel):
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        """
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, channels, height, width)`)
-        """
         image_outputs = self.vision_tower(pixel_values, **kwargs)
         last_hidden_state = image_outputs.last_hidden_state
         image_outputs.pooler_output = self.multi_modal_projector(last_hidden_state)

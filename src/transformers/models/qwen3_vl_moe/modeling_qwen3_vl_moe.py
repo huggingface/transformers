@@ -551,7 +551,7 @@ class Qwen3VLMoeVisionBlock(GradientCheckpointingLayer):
 @dataclass
 @auto_docstring
 class BaseModelOutputWithDeepstackFeatures(BaseModelOutputWithPooling):
-    """
+    r"""
     deepstack_features (`List[torch.FloatTensor]`, *optional*):
         List of hidden-states (feature maps) from deepstack layers.
     """

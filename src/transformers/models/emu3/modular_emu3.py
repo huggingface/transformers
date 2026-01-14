@@ -45,7 +45,7 @@ logger = logging.get_logger(__name__)
 @auto_docstring
 class Emu3VQVAEModelOutput(BaseModelOutputWithPooling):
     r"""
-    image_tokens (`torch.FloatTensor` of shape `(batch_size, config.vocab_size`):`
+    image_tokens (`torch.FloatTensor` of shape `(batch_size, config.vocab_size`):
         Indices of the image tokens predicted by the VQ-VAE model.
     """
 

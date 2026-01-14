@@ -49,7 +49,7 @@ from .configuration_emu3 import Emu3Config, Emu3TextConfig, Emu3VQVAEConfig
 @auto_docstring
 class Emu3VQVAEModelOutput(BaseModelOutputWithPooling):
     r"""
-    image_tokens (`torch.FloatTensor` of shape `(batch_size, config.vocab_size`):`
+    image_tokens (`torch.FloatTensor` of shape `(batch_size, config.vocab_size`):
         Indices of the image tokens predicted by the VQ-VAE model.
     """
 
@@ -1405,7 +1405,7 @@ class Emu3Model(Emu3PreTrainedModel):
     def get_image_features(
         self, pixel_values: torch.FloatTensor, image_sizes: torch.LongTensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | Emu3VQVAEModelOutput:
-        """
+        r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
             The tensors corresponding to the input images.
         """

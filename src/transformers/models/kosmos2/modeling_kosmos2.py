@@ -77,7 +77,7 @@ def _make_causal_mask(
 @dataclass
 @auto_docstring
 class BaseModelOutputWithProjectionAttentions(BaseModelOutputWithPooling):
-    """
+    r"""
     projection_attentions (`tuple(torch.FloatTensor)`):
         Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
         sequence_length)`.

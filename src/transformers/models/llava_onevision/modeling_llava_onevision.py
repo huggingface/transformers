@@ -372,10 +372,6 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
             The tensors corresponding to the input images.
         image_sizes (`torch.Tensor` of shape `(num_images, 2)`):
             Actual image size of each images (H, W).
-        vision_feature_layer (`Union[int, list[int]]`):
-            The index of the layer to select the vision feature. If multiple indices are provided,
-            the vision feature of the corresponding indices will be concatenated to form the
-            vision features.
         vision_feature_select_strategy (`str`):
             The feature selection strategy used to select the vision feature from the vision backbone.
             Can be one of `"default"` or `"full"`

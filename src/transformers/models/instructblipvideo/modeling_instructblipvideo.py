@@ -1123,7 +1123,7 @@ class InstructBlipVideoModel(InstructBlipVideoPreTrainedModel):
 @dataclass
 @auto_docstring
 class BaseModelOutputWithVisionQformerOutputs(BaseModelOutputWithPooling):
-    """
+    r"""
     vision_outputs (`BaseModelOutputWithPooling`):
         Outputs of the vision encoder.
     qformer_outputs (`BaseModelOutputWithPoolingAndCrossAttentions`):

@@ -188,10 +188,6 @@ class PerceptionLMModel(PerceptionLMPreTrainedModel):
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values (`torch.FloatTensor]` of shape `(batch_size, num_tiles, channels, height, width)`)
-            The tensors corresponding to the input images.
-        """
         image_outputs = self.vision_tower(pixel_values.flatten(0, 1), **kwargs)
         last_hidden_state = image_outputs.last_hidden_state
         if self.config.vision_use_cls_token:
