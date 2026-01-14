@@ -302,7 +302,7 @@ class SummarizationPipeline(Text2TextGenerationPipeline):
             return True
 
         if max_new_tokens < min_length:
-            logger.warning(f"Your min_length={min_length} must be inferior than your max_new_tokens={max_new_tokens}.")
+            logger.warning(f"Your min_length={min_length} must be less than your max_new_tokens={max_new_tokens}.")
 
         if input_length < max_new_tokens:
             logger.warning(
