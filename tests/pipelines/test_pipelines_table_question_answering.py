@@ -14,6 +14,8 @@
 
 import unittest
 
+from huggingface_hub import TableQuestionAnsweringOutputElement
+
 from transformers import (
     MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING,
     AutoModelForTableQuestionAnswering,
@@ -22,6 +24,7 @@ from transformers import (
     pipeline,
 )
 from transformers.testing_utils import (
+    compare_pipeline_output_to_hub_spec,
     is_pipeline_test,
     require_torch,
     slow,
@@ -52,6 +55,7 @@ class TQAPipelineTests(unittest.TestCase):
             },
             query="how many movies has george clooney played in?",
         )
+        compare_pipeline_output_to_hub_spec(outputs, TableQuestionAnsweringOutputElement)
         self.assertEqual(
             outputs,
             {"answer": "AVERAGE > ", "coordinates": [], "cells": [], "aggregator": "AVERAGE"},
@@ -73,6 +77,8 @@ class TQAPipelineTests(unittest.TestCase):
                 {"answer": "AVERAGE > ", "coordinates": [], "cells": [], "aggregator": "AVERAGE"},
             ],
         )
+        for output in outputs:
+            compare_pipeline_output_to_hub_spec(output, TableQuestionAnsweringOutputElement)
         outputs = table_querier(
             table={
                 "Repository": ["Transformers", "Datasets", "Tokenizers"],
@@ -99,6 +105,8 @@ class TQAPipelineTests(unittest.TestCase):
                 {"answer": "AVERAGE > ", "coordinates": [], "cells": [], "aggregator": "AVERAGE"},
             ],
         )
+        for output in outputs:
+            compare_pipeline_output_to_hub_spec(output, TableQuestionAnsweringOutputElement)
 
         with self.assertRaises(ValueError):
             table_querier(query="What does it do with empty context ?", table=None)
