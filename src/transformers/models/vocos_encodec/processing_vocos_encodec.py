@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +14,6 @@
 """Processor class for VocosEncodec"""
 
 from collections.abc import Sequence
-from typing import Optional
 
 from ...audio_utils import AudioInput, make_list_of_audio
 from ...processing_utils import AudioKwargs, BatchFeature, ProcessingKwargs, ProcessorMixin, Unpack
@@ -71,11 +69,11 @@ class VocosEncodecProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        audio: Optional[AudioInput] = None,
+        audio: AudioInput | None = None,
         codes=None,
-        bandwidth: Optional[float] = None,
+        bandwidth: float | None = None,
         return_tensors: str = "pt",
-        device: Optional[str] = None,
+        device: str | None = None,
         **kwargs: Unpack[VocosProcessorKwargs],
     ) -> BatchFeature:
         """

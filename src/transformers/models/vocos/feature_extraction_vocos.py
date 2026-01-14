@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Feature extractor class for Vocos"""
-
-from typing import Optional, Union
 
 import numpy as np
 
@@ -44,7 +41,7 @@ class VocosFeatureExtractor(SequenceFeatureExtractor):
     This feature extractor inherits from [`~feature_extraction_sequence_utils.SequenceFeatureExtractor`] which contains
     most of the main methods. Users should refer to this superclass for more information regarding those methods.
 
-    This class extracts mel-filter bank features from raw speech using `torchaudio.transforms.MelSpectrogram` which 
+    This class extracts mel-filter bank features from raw speech using `torchaudio.transforms.MelSpectrogram` which
     performs a Short-Time Fourier Transform (STFT) and then applies a Mel filter bank, computed as in original
     [Vocos](https://github.com/gemelo-ai/vocos/blob/c859e3b7b534f3776a357983029d34170ddd6fc3/vocos/feature_extractors.py#L28)
 
@@ -112,7 +109,7 @@ class VocosFeatureExtractor(SequenceFeatureExtractor):
     def _torch_extract_fbank_features(self, batched_audio, device=None):
         """Extract mel-spectrogram features from audio using torchaudio spectrogram implementation."""
 
-        audio = batched_audio['input_features']
+        audio = batched_audio["input_features"]
 
         if device is None:
             if isinstance(audio[0], torch.Tensor):
@@ -137,18 +134,16 @@ class VocosFeatureExtractor(SequenceFeatureExtractor):
 
         return batched_audio
 
-
-
     def __call__(
         self,
         audio: AudioInput,
-        padding: Optional[Union[bool, str, PaddingStrategy]] = True,
-        max_length: Optional[int] = None,
-        pad_to_multiple_of: Optional[int] = None,
-        truncation: Optional[bool] = False,
-        sampling_rate: Optional[int] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        device: Optional[str] = None,
+        padding: bool | str | PaddingStrategy | None = True,
+        max_length: int | None = None,
+        pad_to_multiple_of: int | None = None,
+        truncation: bool | None = False,
+        sampling_rate: int | None = None,
+        return_tensors: str | TensorType | None = None,
+        device: str | None = None,
         **kwargs,
     ) -> BatchFeature:
         """
