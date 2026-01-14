@@ -239,14 +239,15 @@ def _build_peft_weight_mapping(
                 peft_weight_conversions.append(op)
         # For source, we capture the orignal weights + the lora weights
         conversion.source_patterns = [
-            pat.replace(pat.rsplit(".", 1)[1], "lora_") for pat in list(conversion.source_patterns)
+            pat.rsplit(".", 1)[0] for pat in list(conversion.source_patterns)
         ]
         # For target, we don't really know in advance which patterns will be used (lora_A, lora_B), so we just strip to the base pattern
         conversion.target_patterns = [
-            pat.replace(pat.rsplit(".", 1)[1], "lora_") for pat in list(conversion.target_patterns)
+            pat.rsplit(".", 1)[0] + "*" for pat in list(conversion.target_patterns)
         ]
         conversion.operations = peft_weight_conversions
-    weight_conversions = [WeightRenaming("", "")] + weight_conversions
+    weight_conversions = [WeightRenaming(r"lora_(.*)\.", r"lora_\1.default.")] + weight_conversions
+    weight_conversions = [WeightRenaming("base_model.model.model", "model")] + weight_conversions
     return weight_conversions
 
 

@@ -451,47 +451,51 @@ class WeightTransform:
     collected_tensors: dict[str, list[Future]] = field(default_factory=lambda: defaultdict(list), init=False)
     layer_targets: dict[str, set[str]] = field(default_factory=lambda: defaultdict(set), init=False)
 
-    def __post_init__(self):
-        if isinstance(self.source_patterns, str):
-            self.source_patterns = [self.source_patterns]
-        if isinstance(self.target_patterns, str):
-            self.target_patterns = [self.target_patterns]
+    def __setattr__(self, name: str, value: Any):
+        if name == "source_patterns":
+            if isinstance(value, str):
+                value = [value]
+            normalized = []
+            for pattern in value:
+                if r"\1" in pattern:
+                    pattern = pattern.replace(r"\1", r"(.+)")
+                normalized.append(pattern)
+            object.__setattr__(self, name, normalized)
+            self._rebuild_compiled_sources()
+            return
+        if name == "target_patterns":
+            if isinstance(value, str):
+                value = [value]
+            normalized = []
+            for pattern in value:
+                # Some mapping contains `^` to notify start of string when matching -> remove it during reverse mapping
+                pattern = pattern.removeprefix("^")
+                # Some mapping contains `$` to notify end of string when matching -> remove it during reverse mapping
+                pattern = pattern.removesuffix("$")
+                # Remove negative lookahead/behind if any. This is ugly but needed for reverse mapping of
+                # Qwen2.5, Sam3, Ernie4.5 VL MoE!
+                pattern = re.sub(r"\(\?.+\)", "", pattern)
+                # Allow capturing groups in patterns, i.e. to add/remove a prefix to all keys (e.g. timm_wrapper, sam3)
+                if r"(.+)" in pattern:
+                    pattern = pattern.replace(r"(.+)", r"\1")
+                normalized.append(pattern)
+            object.__setattr__(self, name, normalized)
+            return
+        object.__setattr__(self, name, value)
 
-        # Due to how our `_checkpoint_conversion_mapping` mappings are written, we need a few exceptions here
-        # when instantiating the reverse mapping (i.e. the targets become sources, and sources become targets)
-        # The issues lie in the sources usually, so here we need to check the targets for the reversed mapping
-        for i, pattern in enumerate(self.target_patterns):
-            # Some mapping contains `^` to notify start of string when matching -> remove it during reverse mapping
-            pattern = pattern.removeprefix("^")
-            # Some mapping contains `$` to notify end of string when matching -> remove it during reverse mapping
-            pattern = pattern.removesuffix("$")
-            # Remove negative lookahead/behind if any. This is ugly but needed for reverse mapping of
-            # Qwen2.5, Sam3, Ernie4.5 VL MoE!
-            pattern = re.sub(r"\(\?.+\)", "", pattern)
-            # Allow capturing groups in patterns, i.e. to add/remove a prefix to all keys (e.g. timm_wrapper, sam3)
-            if r"(.+)" in pattern:
-                pattern = pattern.replace(r"(.+)", r"\1")
-            self.target_patterns[i] = pattern
-
-        # We also need to check capturing groups in the sources during reverse mapping (e.g. timm_wrapper, sam3)
-        for i, pattern in enumerate(self.source_patterns):
-            if r"\1" in pattern:
-                pattern = pattern.replace(r"\1", r"(.+)")
-            self.source_patterns[i] = pattern
-
-        # Construct the regex we will use to rename keys from the sources to the targets
+    def _rebuild_compiled_sources(self):
         branches = []
         for i, source_pattern in enumerate(self.source_patterns):
             group_name = f"g{i}"
             pattern = source_pattern.replace(".*.", r"\..*\.")
             branches.append(f"(?P<{group_name}>{pattern})")
-        self.compiled_sources = re.compile("|".join(branches))
+        object.__setattr__(self, "compiled_sources", re.compile("|".join(branches)))
 
     def add_tensor(self, target_key: str, source_key: str, source_pattern: str, future: Future):
         self.collected_tensors[source_pattern].append(future)
         self.layer_targets[target_key].add(source_key)
 
-    def rename_source_key(self, source_key: str) -> tuple[str, str | None]:
+    def rename_source_key(self, source_key: str) -> tuple[str, str | re.Pattern]:
         """
         Return a tuple (renamed_key, source_pattern_producing_the_match).
         Try renaming `source_key` according to the source and target patterns of the current WeightTransform.
@@ -613,7 +617,6 @@ class WeightConverter(WeightTransform):
     operations: list[ConversionOps] = field(default_factory=list, repr=False)
 
     def __post_init__(self):
-        WeightTransform.__post_init__(self)
         if bool(len(self.source_patterns) - 1) + bool(len(self.target_patterns) - 1) >= 2:
             # We allow many-to-many only if we use an internal operation that can handle it
             if not any(isinstance(op, _INTERNAL_MANY_TO_MANY_CONVERSIONS) for op in self.operations):
