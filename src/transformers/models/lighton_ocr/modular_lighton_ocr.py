@@ -90,6 +90,8 @@ class LightOnOcrTextConfig(Qwen3Config):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether the model's input and output word embeddings should be tied.
         rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings.
         attention_bias (`bool`, *optional*, defaults to `False`):
@@ -133,6 +135,7 @@ class LightOnOcrTextConfig(Qwen3Config):
         initializer_range: float | None = 0.02,
         rms_norm_eps: float | None = 1e-6,
         use_cache: bool | None = True,
+        tie_word_embeddings: bool | None = True,
         rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
         attention_bias: bool | None = False,
         sliding_window: int | None = None,
