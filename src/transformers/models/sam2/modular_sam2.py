@@ -101,15 +101,6 @@ class Sam2ImageProcessorFast(SamImageProcessorFast):
     def __init__(self, **kwargs: Unpack[Sam2FastImageProcessorKwargs]):
         BaseImageProcessorFast.__init__(self, **kwargs)
 
-    def pad_image(self):
-        raise NotImplementedError("No pad_image for SAM 2.")
-
-    def _get_preprocess_shape(self):
-        raise NotImplementedError("No _get_preprocess_shape for SAM 2.")
-
-    def resize(self):
-        raise NotImplementedError("No need to override resize for SAM 2.")
-
     def _preprocess(
         self,
         images: list["torch.Tensor"],
@@ -117,6 +108,19 @@ class Sam2ImageProcessorFast(SamImageProcessorFast):
         **kwargs,
     ) -> "torch.Tensor":
         return BaseImageProcessorFast._preprocess(self, images, return_tensors=return_tensors, **kwargs).pixel_values
+
+    @auto_docstring
+    def preprocess(
+        self,
+        images: ImageInput,
+        segmentation_maps: Optional[ImageInput] = None,
+        **kwargs: Unpack[Sam2FastImageProcessorKwargs],
+    ) -> BatchFeature:
+        r"""
+        segmentation_maps (`ImageInput`, *optional*):
+            The segmentation maps to preprocess.
+        """
+        return super().preprocess(images, segmentation_maps, **kwargs)
 
     def _preprocess_image_like_inputs(
         self,
@@ -136,11 +140,9 @@ class Sam2ImageProcessorFast(SamImageProcessorFast):
         original_sizes = [image.shape[-2:] for image in images]
         images_kwargs = kwargs.copy()
         pixel_values = self._preprocess(images, **images_kwargs)
-        reshaped_input_sizes = [image.shape[-2:] for image in images]
         data = {
             "pixel_values": pixel_values,
             "original_sizes": original_sizes,
-            "reshaped_input_sizes": reshaped_input_sizes,
         }
 
         if segmentation_maps is not None:
@@ -283,6 +285,12 @@ class Sam2ImageProcessorFast(SamImageProcessorFast):
             output_masks.append(interpolated_mask)
 
         return output_masks
+
+    def _get_preprocess_shape(self):
+        raise NotImplementedError("No _get_preprocess_shape for SAM 2.")
+
+    def resize(self):
+        raise NotImplementedError("No need to override resize for SAM 2.")
 
 
 @dataclass
@@ -875,7 +883,7 @@ class Sam2PromptEncoder(SamPromptEncoder):
 
     def _embed_boxes(self, boxes: torch.Tensor) -> torch.Tensor:
         """Embeds box prompts."""
-        boxes += 0.5  # Shift to center of pixel
+        boxes = boxes + 0.5  # Shift to center of pixel
         coords = boxes.view(*boxes.shape[:2], 2, 2)
         # add padding point for consistency with the original implementation
         coords = torch.nn.functional.pad(coords, (0, 0, 0, 1), mode="constant", value=0)
