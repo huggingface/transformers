@@ -384,6 +384,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("smollm3", "SmolLM3Model"),
         ("smolvlm", "SmolVLMModel"),
         ("smolvlm_vision", "SmolVLMVisionTransformer"),
+        ("solar_open", "SolarOpenModel"),
         ("speech_to_text", "Speech2TextModel"),
         ("speecht5", "SpeechT5Model"),
         ("splinter", "SplinterModel"),
