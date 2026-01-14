@@ -143,8 +143,6 @@ class LightOnOcrTextConfig(PreTrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
-            Whether the model's input and output word embeddings should be tied.
         rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings.
         attention_bias (`bool`, *optional*, defaults to `False`):
@@ -205,7 +203,6 @@ class LightOnOcrTextConfig(PreTrainedConfig):
         initializer_range: float | None = 0.02,
         rms_norm_eps: float | None = 1e-6,
         use_cache: bool | None = True,
-        tie_word_embeddings: bool | None = True,
         rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
         attention_bias: bool | None = False,
         sliding_window: int | None = None,
@@ -266,6 +263,8 @@ class LightOnOcrConfig(PretrainedConfig):
             The size of spatial merging for image patches.
         image_token_id (`int`, *optional*, defaults to 151655):
             The id of the image token in the vocabulary.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether the model's input and output word embeddings should be tied.
         vision_config (`dict` or `LightOnOcrVisionConfig`, *optional*):
             Custom vision configuration or dictionary with vision configuration values.
         text_config (`dict` or `LightOnOcrTextConfig`, *optional*):
@@ -294,12 +293,14 @@ class LightOnOcrConfig(PretrainedConfig):
         self,
         spatial_merge_size: int = 2,
         image_token_id: int = 151655,
+        tie_word_embeddings: bool = True,
         vision_config: dict[str, Any] | None = None,
         text_config: dict[str, Any] | None = None,
         **kwargs,
     ):
         self.spatial_merge_size = spatial_merge_size
         self.image_token_id = image_token_id
+        self.tie_word_embeddings = tie_word_embeddings
 
         if vision_config is None:
             self.vision_config = LightOnOcrVisionConfig(
