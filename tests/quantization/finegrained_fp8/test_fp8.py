@@ -24,7 +24,6 @@ from transformers.testing_utils import (
     backend_empty_cache,
     get_device_properties,
     require_accelerate,
-    require_read_token,
     require_torch_accelerator,
     require_torch_multi_accelerator,
     slow,
@@ -74,7 +73,6 @@ class FineGrainedFP8ConfigTest(unittest.TestCase):
 
 @slow
 @require_accelerate
-@require_read_token
 @require_torch_accelerator
 @unittest.skipIf(
     get_device_properties()[0] == "cuda"
@@ -376,7 +374,6 @@ class FP8QuantizerTest(unittest.TestCase):
         # we should at least have 1.5 times memory reduction in total
         assert model_size[""] > quantized_model_size[""] * 1.5
 
-    @unittest.skip(reason="Dependent on #42028, will be removed alongside that PR")
     def test_quantized_moe_forward(self):
         """
         Checks implicitly if the moe implementation is correct, i.e. it does not crash for cases
