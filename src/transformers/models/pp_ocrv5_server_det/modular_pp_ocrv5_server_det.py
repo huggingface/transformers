@@ -2245,7 +2245,7 @@ class PPOCRV5ServerDetModel(PPOCRV5ServerDetPreTrainedModel):
         hidden_state: torch.FloatTensor,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-        **kwargs
+        **kwargs,
     ) -> Union[tuple[torch.FloatTensor], PPOCRV5ServerDetModelOutput]:
         """
         Forward pass of the PPOCRV5ServerDetModel.
