@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Fast Image processor class for Swin2SR."""
-
-from typing import Optional, Union
 
 import torch
 from torchvision.transforms.v2 import functional as F
@@ -84,8 +81,8 @@ class Swin2SRImageProcessorFast(BaseImageProcessorFast):
         rescale_factor: float,
         do_pad: bool,
         size_divisor: int,
-        disable_grouping: Optional[bool],
-        return_tensors: Optional[Union[str, TensorType]],
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)

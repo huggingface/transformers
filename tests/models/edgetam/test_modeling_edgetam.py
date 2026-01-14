@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -359,10 +358,6 @@ class EdgeTamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
 
     @unittest.skip(reason="vision_hidden_states from TimmWrapperModel")
     def test_hidden_states_output(self):
-        pass
-
-    @unittest.skip(reason="Timm weights cannot be fully constructed in _init_weights")
-    def test_can_init_all_missing_weights(self):
         pass
 
     @unittest.skip(

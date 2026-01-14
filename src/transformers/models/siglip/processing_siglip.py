@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,22 +16,11 @@ Image/Text processor class for SigLIP.
 """
 
 from ...processing_utils import ProcessorMixin
+from ...utils import auto_docstring
 
 
+@auto_docstring
 class SiglipProcessor(ProcessorMixin):
-    r"""
-    Constructs a Siglip processor which wraps a Siglip image processor and a Siglip tokenizer into a single processor.
-
-    [`SiglipProcessor`] offers all the functionalities of [`SiglipImageProcessor`] and [`SiglipTokenizer`]. See the
-    [`~SiglipProcessor.__call__`] and [`~SiglipProcessor.decode`] for more information.
-
-    Args:
-        image_processor ([`SiglipImageProcessor`]):
-            The image processor is a required input.
-        tokenizer ([`SiglipTokenizer`]):
-            The tokenizer is a required input.
-    """
-
     def __init__(self, image_processor, tokenizer):
         super().__init__(image_processor, tokenizer)
 

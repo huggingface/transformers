@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -44,7 +43,7 @@ class RTDetrConfig(PreTrainedConfig):
             The epsilon used by the layer normalization layers.
         batch_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the batch normalization layers.
-        backbone_config (`Dict`, *optional*, defaults to `RTDetrResNetConfig()`):
+        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `RTDetrResNetConfig()`):
             The configuration of the backbone model.
         backbone (`str`, *optional*):
             Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this

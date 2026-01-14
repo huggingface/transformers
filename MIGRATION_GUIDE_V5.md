@@ -197,7 +197,7 @@ This tokenizer will behave as a Llama-like tokenizer, with an updated vocabulary
 
 **Simplified file loading:** Support is added for passing`vocab` and `merges` as file paths directly to tokenizer initialization. The tokenizer will automatically detect the format (SentencePiece `.model`, Tekken `tekken.json`, or plain vocab/merges files) for loading. For BPE tokenizers, if a vocab is provided but no merges, merges will be automatically generated (excluding special tokens).
 
-Note: Loading from file paths with `vocab="<path_to_a_file>"`'s primary goal is to allow you to do some quick testing, but for `BPE` models for example we don't check wether you properly passed the merges or not. 
+Note: Loading from file paths with `vocab="<path_to_a_file>"`'s primary goal is to allow you to do some quick testing, but for `BPE` models for example we don't check whether you properly passed the merges or not. 
 
 #### 2. Simplified decoding API
 
@@ -417,6 +417,20 @@ There is a tracker for that here: https://github.com/huggingface/transformers/is
 
 ## Library-wide changes with lesser impact
 
+### Drop support for `safe_serialization=False`
+
+Safetensors is a simple format for storing tensors safely (as opposed to pickle) and that is still fast (zero-copy). It is the preferred file format to store transformers's weights. Prior to transformers `v5`, it was still possible to pass `safe_serialization=False` to fall back to torch's default (and unsafe) file format. This is no longer possible in `v5`. The `safe_serialization` parameter has been removed from all `save_pretrained` and `push_to_hub` methods.
+
+If you really want to export weights to another file format, you must save the `model.state_dict()` by yourself.
+
+Linked PR: https://github.com/huggingface/transformers/issues/42556
+
+### 50GB default shard size
+
+The default shard size went up from `5GB` to `50GB`. Main benefit will be to avoid having tens or hundreds of weight files for large models. This change was made possible thanks to the Xet backend allowing us to efficiently serve very large files. Increasing default shard size was a decision that was only taken after *very careful considerations* around optimizations and load speed. Check out the linked PR for benchmark details.
+
+Linked PR: https://github.com/huggingface/transformers/issues/42556
+
 ### `use_auth_token`
 
 The `use_auth_token` argument/parameter is deprecated in favor of `token` everywhere.
@@ -510,7 +524,7 @@ Linked PRs:
 - Old, deprecated output type aliases were removed (e.g. `GreedySearchEncoderDecoderOutput`). We now only have 4 output classes built from the following matrix: decoder-only vs encoder-decoder, uses beams vs doesn't use beams (https://github.com/huggingface/transformers/pull/40998)
 - Removed deprecated classes regarding decoding methods that were moved to the Hub due to low usage (constraints and beam scores) (https://github.com/huggingface/transformers/pull/41223)
 - If `generate` doesn't receive any KV Cache argument, the default cache class used is now defined by the model (as opposed to always being `DynamicCache`) (https://github.com/huggingface/transformers/pull/41505)
-- Generation parameters are no longer accessible via model's config. If generation paramaters are serialized in `config.json` for any old model, it will be loaded back into model's generation config. Users are expected to access or modify generation parameters only with `model.generation_config.do_sample = True`. 
+- Generation parameters are no longer accessible via model's config. If generation parameters are serialized in `config.json` for any old model, it will be loaded back into model's generation config. Users are expected to access or modify generation parameters only with `model.generation_config.do_sample = True`. 
 
 ## Trainer
 

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 The Open AI Team Authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization classes for RoBERTa."""
-
-from typing import Optional, Union
 
 from tokenizers import Tokenizer, decoders, pre_tokenizers, processors
 from tokenizers.models import BPE
@@ -114,8 +111,8 @@ class RobertaTokenizer(TokenizersBackend):
 
     def __init__(
         self,
-        vocab: Optional[Union[str, dict[str, int]]] = None,
-        merges: Optional[Union[str, list[str]]] = None,
+        vocab: str | dict[str, int] | None = None,
+        merges: str | list[str] | None = None,
         errors: str = "replace",
         bos_token: str = "<s>",
         eos_token: str = "</s>",

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023, HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -206,6 +205,7 @@ class NllbMoeConfig(PreTrainedConfig):
         self.moe_eval_capacity_token_fraction = moe_eval_capacity_token_fraction
         self.moe_token_dropout = moe_token_dropout
         self.output_router_logits = output_router_logits
+
         super().__init__(
             pad_token_id=pad_token_id,
             bos_token_id=bos_token_id,

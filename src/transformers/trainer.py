@@ -1671,6 +1671,12 @@ class Trainer:
                 optimizer_cls = AdamW8bit
             else:
                 raise ValueError("Invalid optimizer")
+            optimizer_kwargs.update(
+                {
+                    "block_size": optim_args.get("block_size", 256),
+                    "bf16_stochastic_round": strtobool(optim_args.get("bf16_stochastic_round", "False")),
+                }
+            )
             optimizer_kwargs.update(adam_kwargs)
         elif args.optim in [
             OptimizerNames.SCHEDULE_FREE_RADAM,
@@ -2349,7 +2355,8 @@ class Trainer:
         if self.is_fsdp_enabled:
             self.model = self.model_wrapped = model
             # Fix `got mixed torch.Tensor and DTensor` error in model.generate() for FSDP2 with LoRA
-            dist.fsdp.register_fsdp_forward_method(self.model, "generate")
+            if hasattr(self.model, "generate"):
+                dist.fsdp.register_fsdp_forward_method(self.model, "generate")
 
         # for the rest of this function `model` is the outside model, whether it was wrapped or not
         if model is not self.model:
@@ -3049,7 +3056,8 @@ class Trainer:
                 return
 
         with safe_globals():
-            checkpoint_rng_state = torch.load(rng_file)
+            check_torch_load_is_safe()
+            checkpoint_rng_state = torch.load(rng_file, weights_only=True)
         random.setstate(checkpoint_rng_state["python"])
         np.random.set_state(checkpoint_rng_state["numpy"])
         torch.random.set_rng_state(checkpoint_rng_state["cpu"])

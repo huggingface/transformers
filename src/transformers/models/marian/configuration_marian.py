@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The Marian Team Authors and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -147,7 +146,7 @@ class MarianConfig(PreTrainedConfig):
         self.num_hidden_layers = encoder_layers
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
         self.share_encoder_decoder_embeddings = share_encoder_decoder_embeddings
-        kwargs["tie_encoder_decoder"] = share_encoder_decoder_embeddings
+        kwargs["tie_word_embeddings"] = share_encoder_decoder_embeddings
         super().__init__(
             pad_token_id=pad_token_id,
             eos_token_id=eos_token_id,
