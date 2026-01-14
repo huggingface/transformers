@@ -140,12 +140,6 @@ class GitVisionModelTest(ModelTesterMixin, unittest.TestCase):
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(
-        reason="GIT cannot continue from past-kv due to image tokens merged into cache. Not wroth fixing, rarely used model"
-    )
-    def test_generate_continue_from_past_key_values(self):
-        pass
-
     def test_model_get_set_embeddings(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -486,6 +480,12 @@ class GitModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
 
     @unittest.skip(reason="GIT input and output sequence lengths are not equal due to pixel values additional input")
     def test_forward_with_logits_to_keep(self):
+        pass
+
+    @unittest.skip(
+        reason="GIT cannot continue from past-kv due to image tokens merged into cache. Not wroth fixing, rarely used model"
+    )
+    def test_generate_continue_from_past_key_values(self):
         pass
 
 
