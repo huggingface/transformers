@@ -110,13 +110,10 @@ class CTRLModelTester:
 
         config = self.get_config()
 
-        head_mask = ids_tensor([self.num_hidden_layers, self.num_attention_heads], 2)
-
         return (
             config,
             input_ids,
             input_mask,
-            head_mask,
             token_type_ids,
             mc_token_ids,
             sequence_labels,
@@ -140,18 +137,18 @@ class CTRLModelTester:
             pad_token_id=self.pad_token_id,
         )
 
-    def create_and_check_ctrl_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
+    def create_and_check_ctrl_model(self, config, input_ids, input_mask, token_type_ids, *args):
         model = CTRLModel(config=config)
         model.to(torch_device)
         model.eval()
 
-        model(input_ids, token_type_ids=token_type_ids, head_mask=head_mask)
+        model(input_ids, token_type_ids=token_type_ids)
         model(input_ids, token_type_ids=token_type_ids)
         result = model(input_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertEqual(len(result.past_key_values), config.n_layer)
 
-    def create_and_check_lm_head_model(self, config, input_ids, input_mask, head_mask, token_type_ids, *args):
+    def create_and_check_lm_head_model(self, config, input_ids, input_mask, token_type_ids, *args):
         model = CTRLLMHeadModel(config)
         model.to(torch_device)
         model.eval()
@@ -167,7 +164,6 @@ class CTRLModelTester:
             config,
             input_ids,
             input_mask,
-            head_mask,
             token_type_ids,
             mc_token_ids,
             sequence_labels,
@@ -175,7 +171,7 @@ class CTRLModelTester:
             choice_labels,
         ) = config_and_inputs
 
-        inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids, "head_mask": head_mask}
+        inputs_dict = {"input_ids": input_ids, "token_type_ids": token_type_ids}
 
         return config, inputs_dict
 
@@ -193,9 +189,7 @@ class CTRLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
         if is_torch_available()
         else {}
     )
-    test_pruning = True
     test_resize_embeddings = False
-    test_head_masking = False
 
     # TODO: Fix the failed tests
     def is_pipeline_test_to_skip(
@@ -280,5 +274,6 @@ class CTRLModelLanguageGenerationTest(unittest.TestCase):
             5,
         ]  # Legal the president is a good guy and I don't want to lose my job. \n \n I have a
 
-        output_ids = model.generate(input_ids, do_sample=False)
+        # We limit the generation output to (max_length - input_length) while by default 20 new tokens will be generated.
+        output_ids = model.generate(input_ids, do_sample=False, max_length=20)
         self.assertListEqual(output_ids[0].tolist(), expected_output_ids)

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,13 +13,12 @@
 # limitations under the License.
 """Classes to support Speech-Encoder-Text-Decoder architectures"""
 
-from typing import Optional, Union
-
 import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
-from ...configuration_utils import PretrainedConfig
+from ...cache_utils import Cache
+from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...modeling_outputs import BaseModelOutput, Seq2SeqLMOutput
 from ...modeling_utils import PreTrainedModel
@@ -64,16 +62,16 @@ class SpeechEncoderDecoderModel(PreTrainedModel, GenerationMixin):
     config: SpeechEncoderDecoderConfig
     base_model_prefix = "speech_encoder_decoder"
     main_input_name = "inputs"
+    input_modalities = "audio"
     supports_gradient_checkpointing = True
-    _supports_param_buffer_assignment = False
     _supports_flash_attn = True
     _supports_sdpa = True
 
     def __init__(
         self,
-        config: Optional[PretrainedConfig] = None,
-        encoder: Optional[PreTrainedModel] = None,
-        decoder: Optional[PreTrainedModel] = None,
+        config: PreTrainedConfig | None = None,
+        encoder: PreTrainedModel | None = None,
+        decoder: PreTrainedModel | None = None,
     ):
         r"""
         encoder (`PreTrainedModel`, *optional*):
@@ -144,11 +142,7 @@ class SpeechEncoderDecoderModel(PreTrainedModel, GenerationMixin):
                 f"The encoder {self.encoder} should not have a LM Head. Please use a model without LM Head"
             )
 
-    def get_encoder(self):
-        return self.encoder
-
-    def get_decoder(self):
-        return self.decoder
+        self.post_init()
 
     def get_input_embeddings(self):
         return self.decoder.get_input_embeddings()
@@ -169,8 +163,8 @@ class SpeechEncoderDecoderModel(PreTrainedModel, GenerationMixin):
     @classmethod
     def from_encoder_decoder_pretrained(
         cls,
-        encoder_pretrained_model_name_or_path: Optional[str] = None,
-        decoder_pretrained_model_name_or_path: Optional[str] = None,
+        encoder_pretrained_model_name_or_path: str | None = None,
+        decoder_pretrained_model_name_or_path: str | None = None,
         *model_args,
         **kwargs,
     ) -> PreTrainedModel:
@@ -189,10 +183,6 @@ class SpeechEncoderDecoderModel(PreTrainedModel, GenerationMixin):
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
                     - A path to a *directory* containing model weights saved using
                       [`~PreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
-                    - A path or url to a *tensorflow index checkpoint file* (e.g, `./tf_model/model.ckpt.index`). In
-                      this case, `from_tf` should be set to `True` and a configuration object should be provided as
-                      `config` argument. This loading path is slower than converting the TensorFlow checkpoint in a
-                      PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
 
             decoder_pretrained_model_name_or_path (`str`, *optional*, defaults to `None`):
                 Information necessary to initiate the decoder. Can be either:
@@ -200,10 +190,6 @@ class SpeechEncoderDecoderModel(PreTrainedModel, GenerationMixin):
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
                     - A path to a *directory* containing model weights saved using
                       [`~PreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
-                    - A path or url to a *tensorflow index checkpoint file* (e.g, `./tf_model/model.ckpt.index`). In
-                      this case, `from_tf` should be set to `True` and a configuration object should be provided as
-                      `config` argument. This loading path is slower than converting the TensorFlow checkpoint in a
-                      PyTorch model using the provided conversion scripts and loading the PyTorch model afterwards.
 
             model_args (remaining positional arguments, *optional*):
                 All remaining positional arguments will be passed to the underlying model's `__init__` method.
@@ -266,7 +252,7 @@ class SpeechEncoderDecoderModel(PreTrainedModel, GenerationMixin):
                 if encoder_config.is_decoder is True or encoder_config.add_cross_attention is True:
                     logger.info(
                         f"Initializing {encoder_pretrained_model_name_or_path} as a encoder model "
-                        "from a decoder model. Cross-attention and casual mask are disabled."
+                        "from a decoder model. Cross-attention and causal mask are disabled."
                     )
                     encoder_config.is_decoder = False
                     encoder_config.add_cross_attention = False
@@ -320,22 +306,22 @@ class SpeechEncoderDecoderModel(PreTrainedModel, GenerationMixin):
     @auto_docstring
     def forward(
         self,
-        inputs: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.BoolTensor] = None,
-        encoder_outputs: Optional[tuple[torch.FloatTensor]] = None,
-        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        input_values: Optional[torch.FloatTensor] = None,
-        input_features: Optional[torch.FloatTensor] = None,
-        return_dict: Optional[bool] = None,
+        inputs: torch.FloatTensor | None = None,
+        attention_mask: torch.FloatTensor | None = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.BoolTensor | None = None,
+        encoder_outputs: tuple[torch.FloatTensor] | None = None,
+        past_key_values: Cache | None = None,
+        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        input_values: torch.FloatTensor | None = None,
+        input_features: torch.FloatTensor | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple[torch.FloatTensor], Seq2SeqLMOutput]:
+    ) -> tuple[torch.FloatTensor] | Seq2SeqLMOutput:
         r"""
         inputs (`torch.FloatTensor` of shape `(batch_size, sequence_length)` or `(batch_size, sequence_length, feature_dim)`, *optional*):
             Float values of input raw speech waveform or speech features. Values can be obtained by loading a `.flac`

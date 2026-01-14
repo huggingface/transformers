@@ -55,7 +55,7 @@ from PIL import Image
 import requests
 
 processor = ChameleonProcessor.from_pretrained("facebook/chameleon-7b")
-model = ChameleonForConditionalGeneration.from_pretrained("facebook/chameleon-7b", torch_dtype=torch.bfloat16, device_map="cuda")
+model = ChameleonForConditionalGeneration.from_pretrained("facebook/chameleon-7b", dtype=torch.bfloat16, device_map="cuda")
 
 # 이미지와 텍스트 프롬프트 준비
 url = 'http://images.cocodataset.org/val2017/000000039769.jpg'
@@ -81,7 +81,7 @@ import requests
 
 processor = ChameleonProcessor.from_pretrained("facebook/chameleon-7b")
 
-model = ChameleonForConditionalGeneration.from_pretrained("facebook/chameleon-7b", torch_dtype=torch.bfloat16, device_map="cuda")
+model = ChameleonForConditionalGeneration.from_pretrained("facebook/chameleon-7b", dtype=torch.bfloat16, device_map="cuda")
 
 # 세 가지 다른 이미지 가져오기
 url = "https://www.ilankelman.org/stopsigns/australia.jpg"
@@ -147,7 +147,7 @@ from transformers import ChameleonForConditionalGeneration
 model_id = "facebook/chameleon-7b"
 model = ChameleonForConditionalGeneration.from_pretrained(
     model_id,
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     attn_implementation="flash_attention_2"
 ).to(0)
 ```

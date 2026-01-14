@@ -265,12 +265,6 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
     )
     is_encoder_decoder = True
     test_missing_keys = False
-    test_pruning = False
-    test_head_masking = False
-
-    # torchscript tests are not passing for now.
-    # Also torchscript is not an important feature to have in the beginning.
-    test_torchscript = False
 
     # TODO: Fix the failed tests
     def is_pipeline_test_to_skip(
@@ -303,7 +297,7 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
-            self.assertEqual(info["missing_keys"], [])
+            self.assertEqual(info["missing_keys"], set())
 
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -666,6 +660,7 @@ class BigBirdPegasusStandaloneDecoderModelTester:
             vocab_size=self.vocab_size,
             d_model=self.d_model,
             decoder_layers=self.decoder_layers,
+            num_hidden_layers=self.decoder_layers,
             decoder_ffn_dim=self.decoder_ffn_dim,
             encoder_attention_heads=self.encoder_attention_heads,
             decoder_attention_heads=self.decoder_attention_heads,
@@ -783,7 +778,7 @@ class BigBirdPegasusStandaloneDecoderModelTester:
 @require_torch
 class BigBirdPegasusStandaloneDecoderModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
     all_model_classes = (BigBirdPegasusDecoder, BigBirdPegasusForCausalLM) if is_torch_available() else ()
-    test_pruning = False
+
     is_encoder_decoder = False
 
     def setUp(

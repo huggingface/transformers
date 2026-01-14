@@ -128,7 +128,7 @@ pip install -q transformers accelerate
 ...     "text-generation",
 ...     model=model,
 ...     tokenizer=tokenizer,
-...     torch_dtype=torch.bfloat16,
+...     dtype=torch.bfloat16,
 ...     device_map="auto",
 ... )
 ```

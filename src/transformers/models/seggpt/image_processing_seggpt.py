@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,8 +13,6 @@
 # limitations under the License.
 """Image processor class for SegGPT."""
 
-from typing import Optional, Union
-
 import numpy as np
 
 from ...image_processing_utils import BaseImageProcessor, BatchFeature, get_size_dict
@@ -28,7 +25,7 @@ from ...image_utils import (
     PILImageResampling,
     infer_channel_dimension_format,
     is_scaled_image,
-    make_list_of_images,
+    make_flat_list_of_images,
     to_numpy_array,
     valid_images,
 )
@@ -65,7 +62,7 @@ def build_palette(num_labels: int) -> list[tuple[int, int]]:
 
 
 def mask_to_rgb(
-    mask: np.ndarray, palette: Optional[list[tuple[int, int]]] = None, data_format: Optional[ChannelDimension] = None
+    mask: np.ndarray, palette: list[tuple[int, int]] | None = None, data_format: ChannelDimension | None = None
 ) -> np.ndarray:
     data_format = data_format if data_format is not None else ChannelDimension.FIRST
 
@@ -131,13 +128,13 @@ class SegGptImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Optional[dict[str, int]] = None,
+        size: dict[str, int] | None = None,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         do_rescale: bool = True,
-        rescale_factor: Union[int, float] = 1 / 255,
+        rescale_factor: int | float = 1 / 255,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
         do_convert_rgb: bool = True,
         **kwargs,
     ) -> None:
@@ -169,8 +166,8 @@ class SegGptImageProcessor(BaseImageProcessor):
     def mask_to_rgb(
         self,
         image: np.ndarray,
-        palette: Optional[list[tuple[int, int]]] = None,
-        data_format: Optional[Union[str, ChannelDimension]] = None,
+        palette: list[tuple[int, int]] | None = None,
+        data_format: str | ChannelDimension | None = None,
     ) -> np.ndarray:
         """Converts a segmentation map to RGB format.
 
@@ -197,8 +194,8 @@ class SegGptImageProcessor(BaseImageProcessor):
         image: np.ndarray,
         size: dict[str, int],
         resample: PILImageResampling = PILImageResampling.BICUBIC,
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        data_format: str | ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -243,18 +240,18 @@ class SegGptImageProcessor(BaseImageProcessor):
     def _preprocess_step(
         self,
         images: ImageInput,
-        do_resize: Optional[bool] = None,
-        size: Optional[dict[str, int]] = None,
-        resample: PILImageResampling = None,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[float] = None,
-        do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
-        data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        do_convert_rgb: Optional[bool] = None,
-        num_labels: Optional[int] = None,
+        do_resize: bool | None = None,
+        size: dict[str, int] | None = None,
+        resample: PILImageResampling | None = None,
+        do_rescale: bool | None = None,
+        rescale_factor: float | None = None,
+        do_normalize: bool | None = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        data_format: str | ChannelDimension = ChannelDimension.FIRST,
+        input_data_format: str | ChannelDimension | None = None,
+        do_convert_rgb: bool | None = None,
+        num_labels: int | None = None,
         **kwargs,
     ):
         """
@@ -285,10 +282,8 @@ class SegGptImageProcessor(BaseImageProcessor):
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                 - Unset: Return a list of `np.ndarray`.
-                - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
                 - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                 - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format for the output image. Can be one of:
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
@@ -323,13 +318,10 @@ class SegGptImageProcessor(BaseImageProcessor):
         size_dict = get_size_dict(size)
 
         # If segmentation map is passed we expect 2D images
-        images = make_list_of_images(images, expected_ndims=2 if do_convert_rgb else 3)
+        images = make_flat_list_of_images(images, expected_ndims=2 if do_convert_rgb else 3)
 
         if not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
+            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
 
         if do_resize and size is None:
             raise ValueError("Size must be specified if do_resize is True.")
@@ -387,22 +379,22 @@ class SegGptImageProcessor(BaseImageProcessor):
 
     def preprocess(
         self,
-        images: Optional[ImageInput] = None,
-        prompt_images: Optional[ImageInput] = None,
-        prompt_masks: Optional[ImageInput] = None,
-        do_resize: Optional[bool] = None,
-        size: Optional[dict[str, int]] = None,
-        resample: PILImageResampling = None,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[float] = None,
-        do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
-        do_convert_rgb: Optional[bool] = None,
-        num_labels: Optional[int] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        images: ImageInput | None = None,
+        prompt_images: ImageInput | None = None,
+        prompt_masks: ImageInput | None = None,
+        do_resize: bool | None = None,
+        size: dict[str, int] | None = None,
+        resample: PILImageResampling | None = None,
+        do_rescale: bool | None = None,
+        rescale_factor: float | None = None,
+        do_normalize: bool | None = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        do_convert_rgb: bool | None = None,
+        num_labels: int | None = None,
+        return_tensors: str | TensorType | None = None,
+        data_format: str | ChannelDimension = ChannelDimension.FIRST,
+        input_data_format: str | ChannelDimension | None = None,
         **kwargs,
     ):
         """
@@ -453,10 +445,8 @@ class SegGptImageProcessor(BaseImageProcessor):
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                 - Unset: Return a list of `np.ndarray`.
-                - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
                 - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                 - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format for the output image. Can be one of:
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
@@ -537,7 +527,7 @@ class SegGptImageProcessor(BaseImageProcessor):
         return BatchFeature(data=data, tensor_type=return_tensors)
 
     def post_process_semantic_segmentation(
-        self, outputs, target_sizes: Optional[list[tuple[int, int]]] = None, num_labels: Optional[int] = None
+        self, outputs, target_sizes: list[tuple[int, int]] | None = None, num_labels: int | None = None
     ):
         """
         Converts the output of [`SegGptImageSegmentationOutput`] into segmentation maps. Only supports

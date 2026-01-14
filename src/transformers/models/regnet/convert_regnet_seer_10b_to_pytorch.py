@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,7 +24,6 @@ from dataclasses import dataclass, field
 from functools import partial
 from pathlib import Path
 from pprint import pprint
-from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -159,16 +157,14 @@ def get_from_to_our_keys(model_name: str) -> dict[str, str]:
     return from_to_ours_keys
 
 
-def convert_weights_and_push(save_directory: Path, model_name: Optional[str] = None, push_to_hub: bool = True):
+def convert_weights_and_push(save_directory: Path, model_name: str | None = None, push_to_hub: bool = True):
     filename = "imagenet-1k-id2label.json"
     num_labels = 1000
 
     repo_id = "huggingface/label-files"
-    num_labels = num_labels
     id2label = json.loads(Path(hf_hub_download(repo_id, filename, repo_type="dataset")).read_text())
     id2label = {int(k): v for k, v in id2label.items()}
 
-    id2label = id2label
     label2id = {v: k for k, v in id2label.items()}
 
     ImageNetPreTrainedConfig = partial(RegNetConfig, num_labels=num_labels, id2label=id2label, label2id=label2id)
@@ -259,18 +255,12 @@ def convert_weights_and_push(save_directory: Path, model_name: Optional[str] = N
         )
         logger.info("Finally, pushing!")
         # push it to hub
-        our_model.push_to_hub(
-            repo_path_or_name=save_directory / model_name,
-            commit_message="Add model",
-            output_dir=save_directory / model_name,
-        )
+        our_model.push_to_hub(repo_id=model_name, commit_message="Add model", output_dir=save_directory / model_name)
         size = 384
         # we can use the convnext one
         image_processor = AutoImageProcessor.from_pretrained("facebook/convnext-base-224-22k-1k", size=size)
         image_processor.push_to_hub(
-            repo_path_or_name=save_directory / model_name,
-            commit_message="Add image processor",
-            output_dir=save_directory / model_name,
+            repo_id=model_name, commit_message="Add image processor", output_dir=save_directory / model_name
         )
 
 

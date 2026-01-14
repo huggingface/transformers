@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,12 +14,11 @@
 """PyTorch VideoLlava model."""
 
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
@@ -45,8 +43,7 @@ logger = logging.get_logger(__name__)
 class VideoLlavaModelOutputWithPast(ModelOutput):
     r"""
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-        `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
         `past_key_values` input) to speed up sequential decoding.
@@ -58,12 +55,12 @@ class VideoLlavaModelOutputWithPast(ModelOutput):
         video_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
-    last_hidden_state: torch.FloatTensor = None
-    past_key_values: Optional[list[torch.FloatTensor]] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
-    image_hidden_states: Optional[torch.FloatTensor] = None
-    video_hidden_states: Optional[torch.FloatTensor] = None
+    last_hidden_state: torch.FloatTensor | None = None
+    past_key_values: Cache | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
+    image_hidden_states: torch.FloatTensor | None = None
+    video_hidden_states: torch.FloatTensor | None = None
 
 
 @dataclass
@@ -79,8 +76,7 @@ class VideoLlavaCausalLMOutputWithPast(ModelOutput):
     logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, config.vocab_size)`):
         Prediction scores of the language modeling head (scores for each vocabulary token before SoftMax).
     past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-        `(batch_size, num_heads, sequence_length, embed_size_per_head)`)
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks) that can be used (see
         `past_key_values` input) to speed up sequential decoding.
@@ -92,13 +88,13 @@ class VideoLlavaCausalLMOutputWithPast(ModelOutput):
         video_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    logits: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[list[torch.FloatTensor]] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
-    image_hidden_states: Optional[torch.FloatTensor] = None
-    video_hidden_states: Optional[torch.FloatTensor] = None
+    loss: torch.FloatTensor | None = None
+    logits: torch.FloatTensor | None = None
+    past_key_values: Cache | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
+    image_hidden_states: torch.FloatTensor | None = None
+    video_hidden_states: torch.FloatTensor | None = None
 
 
 # Copied from transformers.models.llava.modeling_llava.LlavaMultiModalProjector with Llava->VideoLlava
@@ -127,35 +123,26 @@ class VideoLlavaMultiModalProjector(nn.Module):
 @auto_docstring
 class VideoLlavaPreTrainedModel(PreTrainedModel):
     config: VideoLlavaConfig
-    base_model_prefix = ""
+    base_model_prefix = "model"
+    input_modalities = ("image", "video", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["VideoLlavaVisionAttention"]
     _skip_keys_device_placement = "past_key_values"
-
     _supports_flash_attn = True
     _supports_sdpa = True
-
     _can_compile_fullgraph = True
     _supports_attention_backend = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
+        super()._init_weights(module)
         std = (
             self.config.initializer_range
             if hasattr(self.config, "initializer_range")
             else self.config.text_config.initializer_range
         )
-
         if hasattr(module, "class_embedding"):
-            module.class_embedding.data.normal_(mean=0.0, std=std)
-
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+            init.normal_(module.class_embedding, mean=0.0, std=std)
 
 
 @auto_docstring(
@@ -183,17 +170,11 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
-    def set_decoder(self, decoder):
-        self.language_model = decoder
-
-    def get_decoder(self):
-        return self.language_model
-
     def get_image_features(
         self,
         pixel_values_images: torch.FloatTensor,
-        vision_feature_layer: Optional[Union[int, list[int]]] = None,
-        vision_feature_select_strategy: Optional[str] = None,
+        vision_feature_layer: int | list[int] | None = None,
+        vision_feature_select_strategy: str | None = None,
     ):
         """
         Obtains image last hidden states from the vision tower and apply multimodal projection.
@@ -245,7 +226,7 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
     def get_video_features(
         self,
         pixel_values_videos: torch.FloatTensor,
-        vision_feature_layer: Optional[Union[int, list[int]]] = None,
+        vision_feature_layer: int | list[int] | None = None,
     ):
         """
         Obtains video last hidden states from the vision tower and apply multimodal projection.
@@ -286,11 +267,11 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
         self,
         input_ids: torch.LongTensor,
         inputs_embeds: torch.FloatTensor,
-        image_features: torch.FloatTensor = None,
-        video_features: torch.FloatTensor = None,
+        image_features: torch.FloatTensor | None = None,
+        video_features: torch.FloatTensor | None = None,
     ):
         """
-        Obtains multimodal placeholdr mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
+        Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
         equal to the length of multimodal features. If the lengths are different, an error is raised.
         """
         if input_ids is None:
@@ -326,22 +307,22 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        pixel_values_images: torch.FloatTensor = None,
-        pixel_values_videos: torch.FloatTensor = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        vision_feature_layer: Optional[Union[int, list[int]]] = None,
-        vision_feature_select_strategy: Optional[str] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values_images: torch.FloatTensor | None = None,
+        pixel_values_videos: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        vision_feature_layer: int | list[int] | None = None,
+        vision_feature_select_strategy: str | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Union[tuple, VideoLlavaModelOutputWithPast]:
+    ) -> tuple | VideoLlavaModelOutputWithPast:
         r"""
         pixel_values_images (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
             The tensors corresponding to the input images. Pixel values can be obtained using
@@ -426,7 +407,7 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
         "^multi_modal_projector": "model.multi_modal_projector",
         "^language_model.lm_head": "lm_head",
     }
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
     def __init__(self, config: VideoLlavaConfig):
         super().__init__(config)
@@ -443,17 +424,11 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
 
-    def set_decoder(self, decoder):
-        self.model.set_decoder(decoder)
-
-    def get_decoder(self):
-        return self.model.get_decoder()
-
     def get_image_features(
         self,
         pixel_values_images: torch.FloatTensor,
-        vision_feature_layer: Optional[Union[int, list[int]]] = None,
-        vision_feature_select_strategy: Optional[str] = None,
+        vision_feature_layer: int | list[int] | None = None,
+        vision_feature_select_strategy: str | None = None,
     ):
         return self.model.get_image_features(
             pixel_values_images=pixel_values_images,
@@ -461,45 +436,28 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
             vision_feature_select_strategy=vision_feature_select_strategy,
         )
 
-    # Make modules available throught conditional class for BC
-    @property
-    def language_model(self):
-        return self.model.language_model
-
-    @property
-    def video_tower(self):
-        return self.model.video_tower
-
-    @property
-    def image_tower(self):
-        return self.model.image_tower
-
-    @property
-    def multi_modal_projector(self):
-        return self.model.multi_modal_projector
-
     @can_return_tuple
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        pixel_values_images: torch.FloatTensor = None,
-        pixel_values_videos: torch.FloatTensor = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        vision_feature_layer: Optional[Union[int, list[int]]] = None,
-        vision_feature_select_strategy: Optional[str] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values_images: torch.FloatTensor | None = None,
+        pixel_values_videos: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        vision_feature_layer: int | list[int] | None = None,
+        vision_feature_select_strategy: str | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, VideoLlavaCausalLMOutputWithPast]:
+    ) -> tuple | VideoLlavaCausalLMOutputWithPast:
         r"""
         pixel_values_images (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
             The tensors corresponding to the input images. Pixel values can be obtained using
@@ -639,6 +597,7 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
         attention_mask=None,
         cache_position=None,
         logits_to_keep=None,
+        is_first_iteration=False,
         **kwargs,
     ):
         # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
@@ -650,12 +609,15 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
             attention_mask=attention_mask,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
+            is_first_iteration=is_first_iteration,
             **kwargs,
         )
 
-        if cache_position[0] == 0:
-            # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
-            # Otherwise we need pixel values to be passed to model
+        if is_first_iteration or not kwargs.get("use_cache", True):
+            # Pixel values are used only in the first iteration if available
+            # In subsquent iterations, they are already merged with text and cached
+            # NOTE: first iteration doesn't have to be prefill, it can be the first
+            # iteration with a question and cached system prompt (continue generate from cache)
             model_inputs["pixel_values_images"] = pixel_values_images
             model_inputs["pixel_values_videos"] = pixel_values_videos
 

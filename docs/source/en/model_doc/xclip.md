@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2022-08-04 and added to Hugging Face Transformers on 2023-06-20.*
 
 # X-CLIP
 
@@ -52,11 +53,11 @@ If you're interested in submitting a resource to be included here, please feel f
 ## XCLIPProcessor
 
 [[autodoc]] XCLIPProcessor
+    - __call__
 
 ## XCLIPConfig
 
 [[autodoc]] XCLIPConfig
-    - from_text_vision_configs
 
 ## XCLIPTextConfig
 

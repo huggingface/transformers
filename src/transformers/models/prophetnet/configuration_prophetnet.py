@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The Microsoft Authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,24 +13,24 @@
 # limitations under the License.
 """ProphetNet model configuration"""
 
-from typing import Callable, Optional, Union
+from collections.abc import Callable
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class ProphetNetConfig(PretrainedConfig):
+class ProphetNetConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ProphetNetModel`]. It is used to instantiate a
     ProphetNet model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the ProphetNet
     [microsoft/prophetnet-large-uncased](https://huggingface.co/microsoft/prophetnet-large-uncased) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         activation_dropout (`float`, *optional*, defaults to 0.1):
@@ -101,32 +100,32 @@ class ProphetNetConfig(PretrainedConfig):
 
     def __init__(
         self,
-        activation_dropout: Optional[float] = 0.1,
-        activation_function: Optional[Union[str, Callable]] = "gelu",
-        vocab_size: Optional[int] = 30522,
-        hidden_size: Optional[int] = 1024,
-        encoder_ffn_dim: Optional[int] = 4096,
-        num_encoder_layers: Optional[int] = 12,
-        num_encoder_attention_heads: Optional[int] = 16,
-        decoder_ffn_dim: Optional[int] = 4096,
-        num_decoder_layers: Optional[int] = 12,
-        num_decoder_attention_heads: Optional[int] = 16,
-        attention_dropout: Optional[float] = 0.1,
-        dropout: Optional[float] = 0.1,
-        max_position_embeddings: Optional[int] = 512,
-        init_std: Optional[float] = 0.02,
-        is_encoder_decoder: Optional[bool] = True,
-        add_cross_attention: Optional[bool] = True,
-        decoder_start_token_id: Optional[int] = 0,
-        ngram: Optional[int] = 2,
-        num_buckets: Optional[int] = 32,
-        relative_max_distance: Optional[int] = 128,
-        disable_ngram_loss: Optional[bool] = False,
-        eps: Optional[float] = 0.0,
-        use_cache: Optional[bool] = True,
-        pad_token_id: Optional[int] = 0,
-        bos_token_id: Optional[int] = 1,
-        eos_token_id: Optional[int] = 2,
+        activation_dropout: float | None = 0.1,
+        activation_function: str | Callable | None = "gelu",
+        vocab_size: int | None = 30522,
+        hidden_size: int | None = 1024,
+        encoder_ffn_dim: int | None = 4096,
+        num_encoder_layers: int | None = 12,
+        num_encoder_attention_heads: int | None = 16,
+        decoder_ffn_dim: int | None = 4096,
+        num_decoder_layers: int | None = 12,
+        num_decoder_attention_heads: int | None = 16,
+        attention_dropout: float | None = 0.1,
+        dropout: float | None = 0.1,
+        max_position_embeddings: int | None = 512,
+        init_std: float | None = 0.02,
+        is_encoder_decoder: bool | None = True,
+        add_cross_attention: bool | None = True,
+        decoder_start_token_id: int | None = 0,
+        ngram: int | None = 2,
+        num_buckets: int | None = 32,
+        relative_max_distance: int | None = 128,
+        disable_ngram_loss: bool | None = False,
+        eps: float | None = 0.0,
+        use_cache: bool | None = True,
+        pad_token_id: int | None = 0,
+        bos_token_id: int | None = 1,
+        eos_token_id: int | None = 2,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -167,7 +166,7 @@ class ProphetNetConfig(PretrainedConfig):
 
     @property
     def num_hidden_layers(self) -> int:
-        return self.num_encoder_layers + self.num_decoder_layers
+        return self.num_encoder_layers
 
     @num_hidden_layers.setter
     def num_hidden_layers(self, value):

@@ -44,10 +44,6 @@
     title: 聊天模型的模板
   - local: serialization
     title: 导出为 ONNX
-  - local: tflite
-    title: 导出为 TFLite
-  - local: torchscript
-    title: 导出为 TorchScript
   - local: gguf
     title: 与 GGUF 格式的互操作性
   - local: tiktoken
@@ -76,8 +72,6 @@
     title: 实例化大模型
   - local: debugging
     title: 问题定位及解决
-  - local: tf_xla
-    title: TensorFlow模型的XLA集成
   - local: perf_torch_compile
     title: 使用 `torch.compile()` 优化推理
   title: 性能和可扩展性
@@ -107,16 +101,12 @@
       title: Configuration
     - local: main_classes/data_collator
       title: Data Collator
-    - local: main_classes/keras_callbacks
-      title: Keras callbacks
     - local: main_classes/logging
       title: Logging
     - local: main_classes/model
       title: 模型
     - local: main_classes/text_generation
       title: 文本生成
-    - local: main_classes/onnx
-      title: ONNX
     - local: main_classes/optimizer_schedules
       title: Optimization
     - local: main_classes/output

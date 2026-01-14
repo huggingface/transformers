@@ -20,6 +20,7 @@ from ...utils.import_utils import define_import_structure
 if TYPE_CHECKING:
     from .configuration_fuyu import *
     from .image_processing_fuyu import *
+    from .image_processing_fuyu_fast import *
     from .modeling_fuyu import *
     from .processing_fuyu import *
 else:

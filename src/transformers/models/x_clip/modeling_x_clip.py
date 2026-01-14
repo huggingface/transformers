@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 Microsoft Research and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,13 +14,14 @@
 """PyTorch X-CLIP model."""
 
 import copy
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Optional, Union
+from typing import Any
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_attn_mask_utils import _create_4d_causal_attention_mask, _prepare_4d_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
@@ -31,6 +31,7 @@ from ...utils import (
     ModelOutput,
     auto_docstring,
     can_return_tuple,
+    filter_out_non_signature_kwargs,
     logging,
     torch_int,
 )
@@ -78,11 +79,11 @@ class XCLIPOutput(ModelOutput):
         The output of `XCLIPMultiframeIntegrationTransformer` (MIT for short).
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    logits_per_video: Optional[torch.FloatTensor] = None
-    logits_per_text: Optional[torch.FloatTensor] = None
-    text_embeds: Optional[torch.FloatTensor] = None
-    video_embeds: Optional[torch.FloatTensor] = None
+    loss: torch.FloatTensor | None = None
+    logits_per_video: torch.FloatTensor | None = None
+    logits_per_text: torch.FloatTensor | None = None
+    text_embeds: torch.FloatTensor | None = None
+    video_embeds: torch.FloatTensor | None = None
     text_model_output: BaseModelOutputWithPooling = None
     vision_model_output: BaseModelOutputWithPooling = None
     mit_output: BaseModelOutputWithPooling = None
@@ -196,9 +197,9 @@ class XCLIPTextEmbeddings(nn.Module):
 
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
     ) -> torch.Tensor:
         seq_length = input_ids.shape[-1] if input_ids is not None else inputs_embeds.shape[-2]
         max_position_embedding = self.position_embedding.weight.shape[0]
@@ -227,7 +228,7 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
+    attention_mask: torch.Tensor | None,
     scaling: float,
     dropout: float = 0.0,
     **kwargs,
@@ -271,10 +272,10 @@ class XCLIPAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        causal_attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+        attention_mask: torch.Tensor | None = None,
+        causal_attention_mask: torch.Tensor | None = None,
+        output_attentions: bool | None = False,
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
 
         batch_size, seq_length, embed_dim = hidden_states.shape
@@ -298,13 +299,7 @@ class XCLIPAttention(nn.Module):
 
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
-            if self.config._attn_implementation == "sdpa" and output_attentions:
-                logger.warning_once(
-                    "`torch.nn.functional.scaled_dot_product_attention` does not support `output_attentions=True`. Falling back to "
-                    'eager attention. This warning can be removed using the argument `attn_implementation="eager"` when loading the model.'
-                )
-            else:
-                attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -355,7 +350,7 @@ class XCLIPEncoderLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         causal_attention_mask: torch.Tensor,
-        output_attentions: Optional[bool] = False,
+        output_attentions: bool | None = False,
     ) -> tuple[torch.FloatTensor]:
         """
         Args:
@@ -396,11 +391,6 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
     """
     Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
 
-    Comment by Ross Wightman: This is the same as the DropConnect impl I created for EfficientNet, etc networks,
-    however, the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
-    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the
-    layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as the
-    argument.
     """
     if drop_prob == 0.0 or not training:
         return input
@@ -416,7 +406,7 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
 class XCLIPDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
-    def __init__(self, drop_prob: Optional[float] = None) -> None:
+    def __init__(self, drop_prob: float | None = None) -> None:
         super().__init__()
         self.drop_prob = drop_prob
 
@@ -453,7 +443,7 @@ class XCLIPVisionEncoderLayer(GradientCheckpointingLayer):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         causal_attention_mask: torch.Tensor,
-        output_attentions: Optional[bool] = False,
+        output_attentions: bool | None = False,
     ) -> tuple[torch.FloatTensor]:
         """
         Args:
@@ -511,54 +501,58 @@ class XCLIPVisionEncoderLayer(GradientCheckpointingLayer):
 class XCLIPPreTrainedModel(PreTrainedModel):
     config: XCLIPConfig
     base_model_prefix = "x_clip"
+    input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         factor = self.config.initializer_factor
         if isinstance(module, XCLIPTextEmbeddings):
-            module.token_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
-            module.position_embedding.weight.data.normal_(mean=0.0, std=factor * 0.02)
+            init.normal_(module.token_embedding.weight, mean=0.0, std=factor * 0.02)
+            init.normal_(module.position_embedding.weight, mean=0.0, std=factor * 0.02)
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
         elif isinstance(module, XCLIPVisionEmbeddings):
             factor = self.config.initializer_factor
-            nn.init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
-            nn.init.normal_(module.patch_embedding.weight, std=module.config.initializer_range * factor)
-            nn.init.normal_(module.position_embedding.weight, std=module.config.initializer_range * factor)
+            init.normal_(module.class_embedding, mean=0.0, std=module.embed_dim**-0.5 * factor)
+            init.normal_(module.patch_embedding.weight, std=module.config.initializer_range * factor)
+            init.normal_(module.position_embedding.weight, std=module.config.initializer_range * factor)
+            init.copy_(module.position_ids, torch.arange(module.position_ids.shape[-1]).expand((1, -1)))
         elif isinstance(module, XCLIPAttention):
             factor = self.config.initializer_factor
             in_proj_std = (module.embed_dim**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             out_proj_std = (module.embed_dim**-0.5) * factor
-            nn.init.normal_(module.q_proj.weight, std=in_proj_std)
-            nn.init.normal_(module.k_proj.weight, std=in_proj_std)
-            nn.init.normal_(module.v_proj.weight, std=in_proj_std)
-            nn.init.normal_(module.out_proj.weight, std=out_proj_std)
+            init.normal_(module.q_proj.weight, std=in_proj_std)
+            init.normal_(module.k_proj.weight, std=in_proj_std)
+            init.normal_(module.v_proj.weight, std=in_proj_std)
+            init.normal_(module.out_proj.weight, std=out_proj_std)
         elif isinstance(module, XCLIPMLP):
             factor = self.config.initializer_factor
             in_proj_std = (module.config.hidden_size**-0.5) * ((2 * module.config.num_hidden_layers) ** -0.5) * factor
             fc_std = (2 * module.config.hidden_size) ** -0.5 * factor
-            nn.init.normal_(module.fc1.weight, std=fc_std)
-            nn.init.normal_(module.fc2.weight, std=in_proj_std)
+            init.normal_(module.fc1.weight, std=fc_std)
+            init.normal_(module.fc2.weight, std=in_proj_std)
         elif isinstance(module, XCLIPModel):
             factor = self.config.initializer_factor
-            nn.init.normal_(
+            init.normal_(
                 module.text_projection.weight,
                 std=module.text_embed_dim**-0.5 * factor,
             )
-            nn.init.normal_(
+            init.normal_(
                 module.visual_projection.weight,
                 std=module.vision_embed_dim**-0.5 * factor,
             )
-            nn.init.normal_(module.prompts_visual_projection, mean=0.0, std=module.vision_embed_dim**-0.5 * factor)
+            init.normal_(module.prompts_visual_projection, mean=0.0, std=module.vision_embed_dim**-0.5 * factor)
         elif isinstance(module, XCLIPMultiframeIntegrationTransformer):
-            nn.init.normal_(module.position_embedding, std=self.config.initializer_factor)
+            init.normal_(module.position_embedding, std=self.config.initializer_factor)
 
         if isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
         if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_factor)
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_factor)
             if module.bias is not None:
-                module.bias.data.zero_()
+                init.zeros_(module.bias)
 
 
 # Copied from transformers.models.altclip.modeling_altclip.AltCLIPEncoder with AltCLIP->XCLIP
@@ -581,12 +575,12 @@ class XCLIPEncoder(nn.Module):
     def forward(
         self,
         inputs_embeds,
-        attention_mask: Optional[torch.Tensor] = None,
-        causal_attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, BaseModelOutput]:
+        attention_mask: torch.Tensor | None = None,
+        causal_attention_mask: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+    ) -> tuple | BaseModelOutput:
         r"""
         Args:
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -661,13 +655,13 @@ class XCLIPTextTransformer(nn.Module):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, BaseModelOutputWithPooling]:
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+    ) -> tuple | BaseModelOutputWithPooling:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -721,6 +715,7 @@ class XCLIPTextTransformer(nn.Module):
 
 class XCLIPTextModel(XCLIPPreTrainedModel):
     config: XCLIPTextConfig
+    input_modalities = ("text",)
 
     def __init__(self, config: XCLIPTextConfig):
         super().__init__(config)
@@ -737,13 +732,14 @@ class XCLIPTextModel(XCLIPPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, BaseModelOutputWithPooling]:
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
         Examples:
 
@@ -787,12 +783,12 @@ class XCLIPVisionEncoder(nn.Module):
     def forward(
         self,
         inputs_embeds,
-        attention_mask: Optional[torch.Tensor] = None,
-        causal_attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, BaseModelOutput]:
+        attention_mask: torch.Tensor | None = None,
+        causal_attention_mask: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+    ) -> tuple | BaseModelOutput:
         r"""
         Args:
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -876,11 +872,11 @@ class XCLIPVisionTransformer(nn.Module):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
         interpolate_pos_encoding: bool = False,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, BaseModelOutputWithPooling]:
+        return_dict: bool | None = None,
+    ) -> tuple | BaseModelOutputWithPooling:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -915,6 +911,7 @@ class XCLIPVisionTransformer(nn.Module):
 class XCLIPVisionModel(XCLIPPreTrainedModel):
     config: XCLIPVisionConfig
     main_input_name = "pixel_values"
+    input_modalities = ("image",)
 
     def __init__(self, config: XCLIPVisionConfig):
         super().__init__(config)
@@ -928,11 +925,12 @@ class XCLIPVisionModel(XCLIPPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, BaseModelOutputWithPooling]:
+        pixel_values: torch.FloatTensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
         Examples:
 
@@ -1029,10 +1027,10 @@ class XCLIPMultiframeIntegrationTransformer(nn.Module):
     def forward(
         self,
         hidden_states,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, BaseModelOutput]:
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+    ) -> tuple | BaseModelOutput:
         residual = hidden_states
 
         # add position embeddings
@@ -1203,15 +1201,13 @@ class XCLIPModel(XCLIPPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
+    @filter_out_non_signature_kwargs()
     @auto_docstring
     def get_text_features(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
     ) -> torch.FloatTensor:
         r"""
         Returns:
@@ -1221,42 +1217,29 @@ class XCLIPModel(XCLIPPreTrainedModel):
         Examples:
 
         ```python
+        >>> import torch
         >>> from transformers import AutoTokenizer, AutoModel
 
         >>> tokenizer = AutoTokenizer.from_pretrained("microsoft/xclip-base-patch32")
         >>> model = AutoModel.from_pretrained("microsoft/xclip-base-patch32")
 
         >>> inputs = tokenizer(["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
-        >>> text_features = model.get_text_features(**inputs)
+        >>> with torch.inference_mode():
+        ...     text_features = model.get_text_features(**inputs)
         ```"""
-        # Use X_CLIP model's config for some fields (if specified) instead of those of vision & text components.
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        text_outputs = self.text_model(
+        text_outputs: BaseModelOutputWithPooling = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
         )
+        text_features = self.text_projection(text_outputs.pooler_output)
+        return text_features
 
-        text_embeds = text_outputs[1]
-        text_embeds = self.text_projection(text_embeds)
-
-        return text_embeds
-
+    @filter_out_non_signature_kwargs()
     @auto_docstring
     def get_video_features(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        pixel_values: torch.Tensor,
     ) -> torch.FloatTensor:
         r"""
         Returns:
@@ -1333,51 +1316,35 @@ class XCLIPModel(XCLIPPreTrainedModel):
 
         >>> video_features = model.get_video_features(**inputs)
         ```"""
-        # Use X_CLIP model's config for some fields (if specified) instead of those of vision & text components.
-        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
-        output_hidden_states = (
-            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
-        )
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
         batch_size, num_frames, num_channels, height, width = pixel_values.shape
         pixel_values = pixel_values.reshape(-1, num_channels, height, width)
 
-        vision_outputs = self.vision_model(
-            pixel_values=pixel_values,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
+        vision_outputs: BaseModelOutputWithPooling = self.vision_model(pixel_values=pixel_values)
 
-        video_embeds = vision_outputs[1]
+        video_embeds = vision_outputs.pooler_output
         video_embeds = self.visual_projection(video_embeds)
 
         cls_features = video_embeds.view(batch_size, num_frames, -1)
 
-        mit_outputs = self.mit(
-            cls_features,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-        video_embeds = mit_outputs[1]
+        mit_outputs: BaseModelOutputWithPooling = self.mit(cls_features)
+        video_embeds = mit_outputs.pooler_output
 
         return video_embeds
 
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        return_loss: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        return_loss: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
         interpolate_pos_encoding: bool = False,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, XCLIPOutput]:
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple | XCLIPOutput:
         r"""
         return_loss (`bool`, *optional*):
             Whether or not to return the contrastive loss.

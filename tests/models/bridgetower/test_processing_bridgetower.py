@@ -11,8 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-import shutil
-import tempfile
 import unittest
 
 from transformers.testing_utils import require_torch, require_vision
@@ -23,10 +21,7 @@ from ...test_processing_common import ProcessorTesterMixin
 
 if is_vision_available():
     from transformers import (
-        AutoProcessor,
-        BridgeTowerImageProcessor,
         BridgeTowerProcessor,
-        RobertaTokenizerFast,
     )
 
 
@@ -35,33 +30,14 @@ class BridgeTowerProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = BridgeTowerProcessor
 
     @classmethod
-    def setUpClass(cls):
-        cls.tmpdirname = tempfile.mkdtemp()
-
-        image_processor = BridgeTowerImageProcessor()
-        tokenizer = RobertaTokenizerFast.from_pretrained("BridgeTower/bridgetower-large-itm-mlm-itc")
-
-        processor = BridgeTowerProcessor(image_processor, tokenizer)
-
-        processor.save_pretrained(cls.tmpdirname)
-
-    def get_tokenizer(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
-
-    def get_image_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
-
-    @classmethod
-    def tearDownClass(cls):
-        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
-
-    # Some kwargs tests are overridden from common tests to handle shortest_edge
-    # and size_divisor behaviour
+    def _setup_tokenizer(cls):
+        tokenizer_class = cls._get_component_class_from_processor("tokenizer")
+        return tokenizer_class.from_pretrained("BridgeTower/bridgetower-large-itm-mlm-itc")
 
     @require_torch
     @require_vision
     def test_image_processor_defaults_preserved_by_image_kwargs(self):
-        if "image_processor" not in self.processor_class.attributes:
+        if "image_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component(
             "image_processor",
@@ -81,7 +57,7 @@ class BridgeTowerProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @require_torch
     @require_vision
     def test_structured_kwargs_nested_from_dict(self):
-        if "image_processor" not in self.processor_class.attributes:
+        if "image_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
 
         image_processor = self.get_component("image_processor")
@@ -109,7 +85,7 @@ class BridgeTowerProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @require_torch
     @require_vision
     def test_kwargs_overrides_default_image_processor_kwargs(self):
-        if "image_processor" not in self.processor_class.attributes:
+        if "image_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor", crop_size={"shortest_edge": 234})
         tokenizer = self.get_component("tokenizer", max_length=117)
@@ -126,7 +102,7 @@ class BridgeTowerProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @require_torch
     @require_vision
     def test_unstructured_kwargs_batched(self):
-        if "image_processor" not in self.processor_class.attributes:
+        if "image_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor")
         tokenizer = self.get_component("tokenizer")
@@ -152,7 +128,7 @@ class BridgeTowerProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @require_torch
     @require_vision
     def test_unstructured_kwargs(self):
-        if "image_processor" not in self.processor_class.attributes:
+        if "image_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor")
         tokenizer = self.get_component("tokenizer")
@@ -178,7 +154,7 @@ class BridgeTowerProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @require_torch
     @require_vision
     def test_structured_kwargs_nested(self):
-        if "image_processor" not in self.processor_class.attributes:
+        if "image_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor")
         tokenizer = self.get_component("tokenizer")

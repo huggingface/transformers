@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,10 +15,12 @@
 
 from typing import Optional, Union
 
+import torch
+from torchvision.transforms.v2 import functional as F
+
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
     group_images_by_shape,
     reorder_images,
 )
@@ -31,37 +32,13 @@ from ...image_utils import (
     PILImageResampling,
     SizeDict,
     is_torch_tensor,
-    pil_torch_interpolation_mapping,
 )
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
     auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
-    is_torchvision_v2_available,
 )
-
-
-if is_torch_available():
-    import torch
-
-if is_torchvision_available():
-    if is_torchvision_v2_available():
-        from torchvision.transforms.v2 import functional as F
-    else:
-        from torchvision.transforms import functional as F
-
-
-class MobileNetV2FastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """
-    do_reduce_labels (`bool`, *optional*, defaults to `self.do_reduce_labels`):
-        Whether or not to reduce all label values of segmentation maps by 1. Usually used for datasets where 0
-        is used for background, and background itself is not included in all classes of a dataset (e.g.
-        ADE20k). The background label will be replaced by 255.
-    """
-
-    do_reduce_labels: Optional[bool]
+from .image_processing_mobilenet_v2 import MobileNetV2ImageProcessorKwargs
 
 
 @auto_docstring
@@ -77,9 +54,9 @@ class MobileNetV2ImageProcessorFast(BaseImageProcessorFast):
     do_rescale = True
     do_normalize = True
     do_reduce_labels = False
-    valid_kwargs = MobileNetV2FastImageProcessorKwargs
+    valid_kwargs = MobileNetV2ImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[MobileNetV2FastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[MobileNetV2ImageProcessorKwargs]):
         super().__init__(**kwargs)
 
     # Copied from transformers.models.beit.image_processing_beit_fast.BeitImageProcessorFast.reduce_label
@@ -97,8 +74,8 @@ class MobileNetV2ImageProcessorFast(BaseImageProcessorFast):
     def preprocess(
         self,
         images: ImageInput,
-        segmentation_maps: Optional[ImageInput] = None,
-        **kwargs: Unpack[MobileNetV2FastImageProcessorKwargs],
+        segmentation_maps: ImageInput | None = None,
+        **kwargs: Unpack[MobileNetV2ImageProcessorKwargs],
     ) -> BatchFeature:
         r"""
         segmentation_maps (`ImageInput`, *optional*):
@@ -109,11 +86,11 @@ class MobileNetV2ImageProcessorFast(BaseImageProcessorFast):
     def _preprocess_image_like_inputs(
         self,
         images: ImageInput,
-        segmentation_maps: Optional[ImageInput],
+        segmentation_maps: ImageInput | None,
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
-        device: Optional[Union[str, "torch.device"]] = None,
-        **kwargs: Unpack[MobileNetV2FastImageProcessorKwargs],
+        device: Union[str, "torch.device"] | None = None,
+        **kwargs: Unpack[MobileNetV2ImageProcessorKwargs],
     ) -> BatchFeature:
         """
         Preprocess image-like inputs.
@@ -139,7 +116,7 @@ class MobileNetV2ImageProcessorFast(BaseImageProcessorFast):
                     "do_normalize": False,
                     "do_rescale": False,
                     # Nearest interpolation is used for segmentation maps instead of BILINEAR.
-                    "interpolation": pil_torch_interpolation_mapping[PILImageResampling.NEAREST],
+                    "interpolation": F.InterpolationMode.NEAREST_EXACT,
                 }
             )
 
@@ -158,14 +135,14 @@ class MobileNetV2ImageProcessorFast(BaseImageProcessorFast):
         do_rescale: bool,
         do_center_crop: bool,
         do_normalize: bool,
-        size: Optional[SizeDict],
+        size: SizeDict | None,
         interpolation: Optional["F.InterpolationMode"],
-        rescale_factor: Optional[float],
-        crop_size: Optional[SizeDict],
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
+        rescale_factor: float | None,
+        crop_size: SizeDict | None,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
         disable_grouping: bool,
-        return_tensors: Optional[Union[str, TensorType]],
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         processed_images = []
@@ -202,14 +179,13 @@ class MobileNetV2ImageProcessorFast(BaseImageProcessorFast):
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
 
         # Stack all processed images if return_tensors is specified
-        processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
 
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
     # Copied from transformers.models.beit.image_processing_beit_fast.BeitImageProcessorFast.post_process_semantic_segmentation with Beit->MobileNetV2
-    def post_process_semantic_segmentation(self, outputs, target_sizes: Optional[list[tuple]] = None):
+    def post_process_semantic_segmentation(self, outputs, target_sizes: list[tuple] | None = None):
         """
-        Converts the output of [`MobileNetV2ForSemanticSegmentation`] into semantic segmentation maps. Only supports PyTorch.
+        Converts the output of [`MobileNetV2ForSemanticSegmentation`] into semantic segmentation maps.
 
         Args:
             outputs ([`MobileNetV2ForSemanticSegmentation`]):
@@ -223,7 +199,6 @@ class MobileNetV2ImageProcessorFast(BaseImageProcessorFast):
             segmentation map of shape (height, width) corresponding to the target_sizes entry (if `target_sizes` is
             specified). Each entry of each `torch.Tensor` correspond to a semantic class id.
         """
-        # TODO: add support for other frameworks
         logits = outputs.logits
 
         # Resize logits and compute semantic segmentation maps

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,16 +15,14 @@
 Processor class for Grounding DINO.
 """
 
-import pathlib
 import warnings
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING
 
-from ...image_processing_utils import BatchFeature
 from ...image_transforms import center_to_corners_format
-from ...image_utils import AnnotationFormat, ImageInput
-from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
+from ...image_utils import ImageInput
+from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
-from ...utils import TensorType, is_torch_available
+from ...utils import TensorType, auto_docstring, is_torch_available
 
 
 if is_torch_available():
@@ -35,7 +32,7 @@ if TYPE_CHECKING:
     from .modeling_grounding_dino import GroundingDinoObjectDetectionOutput
 
 
-AnnotationType = dict[str, Union[int, str, list[dict]]]
+AnnotationType = dict[str, int | str | list[dict]]
 
 
 def get_phrases_from_posmap(posmaps, input_ids):
@@ -100,16 +97,7 @@ class DictWithDeprecationWarning(dict):
         return super().get(key, *args, **kwargs)
 
 
-class GroundingDinoImagesKwargs(ImagesKwargs, total=False):
-    annotations: Optional[Union[AnnotationType, list[AnnotationType]]]
-    return_segmentation_masks: Optional[bool]
-    masks_path: Optional[Union[str, pathlib.Path]]
-    do_convert_annotations: Optional[bool]
-    format: Optional[Union[str, AnnotationFormat]]
-
-
 class GroundingDinoProcessorKwargs(ProcessingKwargs, total=False):
-    images_kwargs: GroundingDinoImagesKwargs
     _defaults = {
         "text_kwargs": {
             "add_special_tokens": True,
@@ -125,78 +113,23 @@ class GroundingDinoProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@auto_docstring
 class GroundingDinoProcessor(ProcessorMixin):
-    r"""
-    Constructs a Grounding DINO processor which wraps a Deformable DETR image processor and a BERT tokenizer into a
-    single processor.
-
-    [`GroundingDinoProcessor`] offers all the functionalities of [`GroundingDinoImageProcessor`] and
-    [`AutoTokenizer`]. See the docstring of [`~GroundingDinoProcessor.__call__`] and [`~GroundingDinoProcessor.decode`]
-    for more information.
-
-    Args:
-        image_processor (`GroundingDinoImageProcessor`):
-            An instance of [`GroundingDinoImageProcessor`]. The image processor is a required input.
-        tokenizer (`AutoTokenizer`):
-            An instance of ['PreTrainedTokenizer`]. The tokenizer is a required input.
-    """
-
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "GroundingDinoImageProcessor"
-    tokenizer_class = "AutoTokenizer"
+    valid_processor_kwargs = GroundingDinoProcessorKwargs
 
     def __init__(self, image_processor, tokenizer):
         super().__init__(image_processor, tokenizer)
 
+    @auto_docstring
     def __call__(
         self,
-        images: ImageInput = None,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        audio=None,
-        videos=None,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         **kwargs: Unpack[GroundingDinoProcessorKwargs],
     ) -> BatchEncoding:
-        """
-        This method uses [`GroundingDinoImageProcessor.__call__`] method to prepare image(s) for the model, and
-        [`BertTokenizerFast.__call__`] to prepare text for the model.
-
-        Args:
-            images (`ImageInput`, `list[ImageInput]`, *optional*):
-                The image or batch of images to be processed. The image might be either PIL image, numpy array or a torch tensor.
-            text (`TextInput`, `PreTokenizedInput`, `list[TextInput]`, `list[PreTokenizedInput]`, *optional*):
-                Candidate labels to be detected on the image. The text might be one of the following:
-                - A list of candidate labels (strings) to be detected on the image (e.g. ["a cat", "a dog"]).
-                - A batch of candidate labels to be detected on the batch of images (e.g. [["a cat", "a dog"], ["a car", "a person"]]).
-                - A merged candidate labels string to be detected on the image, separated by "." (e.g. "a cat. a dog.").
-                - A batch of merged candidate labels text to be detected on the batch of images (e.g. ["a cat. a dog.", "a car. a person."]).
-        """
-        if images is None and text is None:
-            raise ValueError("You must specify either text or images.")
-
-        output_kwargs = self._merge_kwargs(
-            GroundingDinoProcessorKwargs,
-            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
-            **kwargs,
-        )
-
-        # Get only text
-        if images is not None:
-            encoding_image_processor = self.image_processor(images, **output_kwargs["images_kwargs"])
-        else:
-            encoding_image_processor = BatchFeature()
-
         if text is not None:
             text = self._preprocess_input_text(text)
-            text_encoding = self.tokenizer(
-                text=text,
-                **output_kwargs["text_kwargs"],
-            )
-        else:
-            text_encoding = BatchEncoding()
-
-        text_encoding.update(encoding_image_processor)
-
-        return text_encoding
+        return super().__call__(images=images, text=text, **kwargs)
 
     def _preprocess_input_text(self, text):
         """
@@ -215,37 +148,14 @@ class GroundingDinoProcessor(ProcessorMixin):
 
         return text
 
-    # Copied from transformers.models.blip.processing_blip.BlipProcessor.batch_decode with BertTokenizerFast->PreTrainedTokenizer
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    # Copied from transformers.models.blip.processing_blip.BlipProcessor.decode with BertTokenizerFast->PreTrainedTokenizer
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to PreTrainedTokenizer's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
-
-    @property
-    # Copied from transformers.models.blip.processing_blip.BlipProcessor.model_input_names
-    def model_input_names(self):
-        tokenizer_input_names = self.tokenizer.model_input_names
-        image_processor_input_names = self.image_processor.model_input_names
-        return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
-
     def post_process_grounded_object_detection(
         self,
         outputs: "GroundingDinoObjectDetectionOutput",
-        input_ids: Optional[TensorType] = None,
+        input_ids: TensorType | None = None,
         threshold: float = 0.25,
         text_threshold: float = 0.25,
-        target_sizes: Optional[Union[TensorType, list[tuple]]] = None,
-        text_labels: Optional[list[list[str]]] = None,
+        target_sizes: TensorType | list[tuple] | None = None,
+        text_labels: list[list[str]] | None = None,
     ):
         """
         Converts the raw output of [`GroundingDinoForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,

@@ -14,7 +14,9 @@
 """Testing suite for the PyTorch BEiT model."""
 
 import unittest
+from functools import cached_property
 
+import pytest
 from datasets import load_dataset
 
 from transformers import BeitConfig
@@ -26,14 +28,13 @@ from transformers.testing_utils import (
     torch_device,
 )
 from transformers.utils import (
-    cached_property,
     is_torch_available,
     is_vision_available,
 )
 
 from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -259,9 +260,7 @@ class BeitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else {}
     )
 
-    test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
     test_torch_exportable = True
 
     def setUp(self):
@@ -285,6 +284,7 @@ class BeitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(reason="BEiT can't compile dynamic")
+    @pytest.mark.torch_compile_test
     def test_sdpa_can_compile_dynamic(self):
         pass
 
@@ -380,24 +380,6 @@ class BeitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
-
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                # we skip lambda parameters as these require special initial values
-                # determined by config.layer_scale_init_value
-                if "lambda" in name:
-                    continue
-                if param.requires_grad:
-                    self.assertIn(
-                        ((param.data.mean() * 1e9).round() / 1e9).item(),
-                        [0.0, 1.0],
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
 
     @slow
     def test_model_from_pretrained(self):
@@ -517,9 +499,9 @@ class BeitModelIntegrationTest(unittest.TestCase):
 
         expected_slice = torch.tensor(
             [
-                [[-4.8963, -2.3696, -3.0359], [-2.8485, -0.9842, -1.7426], [-2.9453, -1.3338, -2.1463]],
-                [[-5.8099, -3.4140, -4.1025], [-3.8578, -2.2100, -3.0337], [-3.8383, -2.4615, -3.3681]],
-                [[-0.0314, 3.9864, 4.0536], [2.9637, 4.6879, 4.9976], [3.2074, 4.7690, 4.9946]],
+                [[-4.8960, -2.3688, -3.0355], [-2.8479, -0.9836, -1.7418], [-2.9449, -1.3333, -2.1456]],
+                [[-5.8081, -3.4124, -4.1006], [-3.8561, -2.2081, -3.0323], [-3.8365, -2.4601, -3.3669]],
+                [[-0.0309, 3.9868, 4.0540], [2.9640, 4.6877, 4.9976], [3.2081, 4.7690, 4.9942]],
             ],
             device=torch_device,
         )

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,13 +26,13 @@ Use from the root of the repo with:
 python utils/check_copies.py
 ```
 
-for a check that will error in case of inconsistencies (used by `make repo-consistency`) or
+for a check that will error in case of inconsistencies (used by `make check-repo`) or
 
 ```bash
 python utils/check_copies.py --fix_and_overwrite
 ```
 
-for a check that will fix all inconsistencies automatically (used by `make fix-copies`).
+for a check that will fix all inconsistencies automatically (used by `make fix-repo`).
 """
 
 import argparse
@@ -42,9 +41,11 @@ import os
 import re
 import subprocess
 from collections import OrderedDict
-from typing import Optional, Union
 
-from transformers.utils import direct_transformers_import
+from transformers.utils import direct_transformers_import, logging
+
+
+logger = logging.get_logger(__name__)
 
 
 # All paths are set with the intent you should run this script from the root of the repo with the command
@@ -53,12 +54,6 @@ TRANSFORMERS_PATH = "src/transformers"
 MODEL_TEST_PATH = "tests/models"
 PATH_TO_DOCS = "docs/source/en"
 REPO_PATH = "."
-
-# Mapping for files that are full copies of others (keys are copies, values the file to keep them up to data with)
-FULL_COPIES = {
-    "examples/tensorflow/question-answering/utils_qa.py": "examples/pytorch/question-answering/utils_qa.py",
-    "examples/flax/question-answering/utils_qa.py": "examples/pytorch/question-answering/utils_qa.py",
-}
 
 
 LOCALIZED_READMES = {
@@ -104,7 +99,7 @@ LOCALIZED_READMES = {
         ),
     },
     "README_ja.md": {
-        "start_prompt": "🤗Transformersは現在、以下のアーキテクチャを提供しています",
+        "start_prompt": "🤗 Transformersは現在、以下のアーキテクチャを提供しています",
         "end_prompt": "1. 新しいモデルを投稿したいですか？",
         "format_model_list": (
             "**[{title}]({model_link})** ({paper_affiliations} から) {paper_authors}.{supplements} から公開された研究論文"
@@ -390,8 +385,8 @@ def split_code_into_blocks(
 
 
 def find_code_in_transformers(
-    object_name: str, base_path: Optional[str] = None, return_indices: bool = False
-) -> Union[str, tuple[list[str], int, int]]:
+    object_name: str, base_path: str | None = None, return_indices: bool = False
+) -> str | tuple[list[str], int, int]:
     """
     Find and return the source code of an object.
 
@@ -491,7 +486,7 @@ def replace_code(code: str, replace_pattern: str) -> str:
     return code
 
 
-def find_code_and_splits(object_name: str, base_path: str, buffer: Optional[dict] = None):
+def find_code_and_splits(object_name: str, base_path: str, buffer: dict | None = None):
     """Find the code of an object (specified by `object_name`) and split it into blocks.
 
     Args:
@@ -510,7 +505,7 @@ def find_code_and_splits(object_name: str, base_path: str, buffer: Optional[dict
         code (`str`):
             The object's code.
         code_splits (`List[Tuple[str, int, int]]`):
-            `code` splitted into blocks. See `split_code_into_blocks`.
+            `code` split into blocks. See `split_code_into_blocks`.
     """
     if buffer is None:
         buffer = {}
@@ -587,7 +582,7 @@ def stylify(code: str) -> str:
     return formatted_code[len("class Bla:\n") :] if has_indent else formatted_code
 
 
-def check_codes_match(observed_code: str, theoretical_code: str) -> Optional[int]:
+def check_codes_match(observed_code: str, theoretical_code: str) -> int | None:
     """
     Checks if two version of a code match with the exception of the class/function name.
 
@@ -639,8 +634,8 @@ def check_codes_match(observed_code: str, theoretical_code: str) -> Optional[int
 
 
 def is_copy_consistent(
-    filename: str, overwrite: bool = False, buffer: Optional[dict] = None
-) -> Optional[list[tuple[str, int]]]:
+    filename: str, overwrite: bool = False, buffer: dict | None = None
+) -> list[tuple[str, int]] | None:
     """
     Check if the code commented as a copy in a file matches the original.
 
@@ -679,8 +674,8 @@ def is_copy_consistent(
                 object_name, base_path, buffer=buffer
             )
         except Exception as exc:
-            exc.args = (f"Error while trying to find source code for {filename}.\n\n" + str(exc),)
-            raise
+            logger.error(f"[31mError while trying to find source code for {filename}.\n\n" + str(exc) + "[0")
+            return []
 
         # code replaced by the patterns
         theoretical_code_blocks = OrderedDict()
@@ -803,8 +798,7 @@ def is_copy_consistent(
         orig_idx = -1
         observed_code = ""
         for name, code in observed_code_blocks.items():
-            if code.endswith("\n"):
-                code = code[:-1]
+            code = code.removesuffix("\n")
             for code_line in code.split("\n"):
                 orig_idx += 1
                 if code_line.strip() and not name.startswith(("_ignored_existing_block_", "_ignored_new_block_")):
@@ -815,8 +809,11 @@ def is_copy_consistent(
         # Test for a diff and act accordingly.
         diff_index = check_codes_match(observed_code, theoretical_code)
         if diff_index is not None:
-            # switch to the index in the original `observed_code` (i.e. before removing empty lines)
-            diff_index = idx_to_orig_idx_mapping_for_observed_code_lines[diff_index]
+            try:
+                # switch to the index in the original `observed_code` (i.e. before removing empty lines)
+                diff_index = idx_to_orig_idx_mapping_for_observed_code_lines[diff_index]
+            except KeyError:
+                raise RuntimeError(f"{filename}:L{start_index}: Error in the format")
             diffs.append([object_name, diff_index + start_index + 1])
             if overwrite:
                 # `theoretical_code_to_write` is a single string but may have several lines.
@@ -833,7 +830,7 @@ def is_copy_consistent(
     return diffs
 
 
-def check_copies(overwrite: bool = False, file: Optional[str] = None):
+def check_copies(overwrite: bool = False, file: str | None = None):
     """
     Check every file is copy-consistent with the original. Also check the model list in the main README and other
     READMEs are consistent.
@@ -862,38 +859,7 @@ def check_copies(overwrite: bool = False, file: Optional[str] = None):
         raise Exception(
             "Found the following copy inconsistencies:\n"
             + diff
-            + "\nRun `make fix-copies` or `python utils/check_copies.py --fix_and_overwrite` to fix them."
-        )
-
-
-def check_full_copies(overwrite: bool = False):
-    """
-    Check the files that are full copies of others (as indicated in `FULL_COPIES`) are copy-consistent.
-
-    Args:
-        overwrite (`bool`, *optional*, defaults to `False`):
-            Whether or not to overwrite the copies when they don't match.
-    """
-    diffs = []
-    for target, source in FULL_COPIES.items():
-        with open(source, "r", encoding="utf-8") as f:
-            source_code = f.read()
-        with open(target, "r", encoding="utf-8") as f:
-            target_code = f.read()
-        if source_code != target_code:
-            if overwrite:
-                with open(target, "w", encoding="utf-8") as f:
-                    print(f"Replacing the content of {target} by the one of {source}.")
-                    f.write(source_code)
-            else:
-                diffs.append(f"- {target}: copy does not match {source}.")
-
-    if not overwrite and len(diffs) > 0:
-        diff = "\n".join(diffs)
-        raise Exception(
-            "Found the following copy inconsistencies:\n"
-            + diff
-            + "\nRun `make fix-copies` or `python utils/check_copies.py --fix_and_overwrite` to fix them."
+            + "\nRun `make fix-repo` or `python utils/check_copies.py --fix_and_overwrite` to fix them."
         )
 
 
@@ -1078,4 +1044,3 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     check_copies(args.fix_and_overwrite, args.file)
-    check_full_copies(args.fix_and_overwrite)

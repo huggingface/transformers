@@ -33,43 +33,19 @@ if is_torch_available():
 
     from transformers import (
         AutoTokenizer,
-        Ernie4_5Config,
         Ernie4_5ForCausalLM,
         Ernie4_5Model,
     )
-    from transformers.models.ernie4_5.modeling_ernie4_5 import Ernie4_5RotaryEmbedding
 
 
 class Ernie4_5ModelTester(CausalLMModelTester):
     if is_torch_available():
-        config_class = Ernie4_5Config
         base_model_class = Ernie4_5Model
-        causal_lm_class = Ernie4_5ForCausalLM
 
 
 @require_torch
 class Ernie4_5ModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (
-            Ernie4_5Model,
-            Ernie4_5ForCausalLM,
-        )
-        if is_torch_available()
-        else ()
-    )
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": Ernie4_5Model,
-            "text-generation": Ernie4_5ForCausalLM,
-        }
-        if is_torch_available()
-        else {}
-    )
-    test_headmasking = False
-    test_pruning = False
-    fx_compatible = False  # Broken by attention refactor cc @Cyrilvallez
     model_tester_class = Ernie4_5ModelTester
-    rotary_embedding_layer = Ernie4_5RotaryEmbedding  # Enables RoPE tests if set
 
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
     # This is because we are hitting edge cases with the causal_mask buffer
@@ -94,6 +70,7 @@ class Ernie4_5IntegrationTest(unittest.TestCase):
         """
         expected_texts = Expectations(
             {
+                ("xpu", 3): "User: Hey, are you conscious? Can you talk to me?\nAssistant: Hey! I'm here to help you with whatever you need. Are you feeling a bit overwhelmed or stressed? I'm here to listen and provide support.",
                 ("cuda", None): "User: Hey, are you conscious? Can you talk to me?\nAssistant: Hey! I'm here to help you with whatever you need. Are you feeling a bit overwhelmed or stressed? I'm here to listen and provide support.",
             }
         )  # fmt: skip
@@ -103,7 +80,7 @@ class Ernie4_5IntegrationTest(unittest.TestCase):
         model = Ernie4_5ForCausalLM.from_pretrained(
             "baidu/ERNIE-4.5-0.3B-PT",
             device_map="auto",
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
         )
 
         prompt = "Hey, are you conscious? Can you talk to me?"

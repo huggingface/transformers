@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2019 The Open AI Team Authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,9 +18,8 @@ import os
 import re
 import sys
 import unicodedata
-from typing import Optional
 
-from ...tokenization_utils import PreTrainedTokenizer
+from ...tokenization_python import PreTrainedTokenizer
 from ...utils import logging
 
 
@@ -383,8 +381,8 @@ class XLMTokenizer(PreTrainedTokenizer):
                 git clone git@github.com:neubig/kytea.git && cd kytea autoreconf -i ./configure --prefix=$HOME/local
                 make && make install pip install kytea
 
-            - [jieba](https://github.com/fxsjy/jieba): Chinese tokenizer (*)
-            - Install with `pip install jieba`
+            - [rjieba](https://github.com/messense/rjieba-py): Chinese tokenizer (*)
+            - Install with `pip install rjieba`
 
         (*) The original XLM used [Stanford
         Segmenter](https://nlp.stanford.edu/software/stanford-segmenter-2018-10-16.zip). However, the wrapper
@@ -432,15 +430,17 @@ class XLMTokenizer(PreTrainedTokenizer):
             text = th_word_tokenize(text)
         elif lang == "zh":
             try:
-                if "jieba" not in sys.modules:
-                    import jieba
+                if "rjieba" not in sys.modules:
+                    import rjieba
                 else:
-                    jieba = sys.modules["jieba"]
+                    rjieba = sys.modules["rjieba"]
             except (AttributeError, ImportError):
-                logger.error("Make sure you install Jieba (https://github.com/fxsjy/jieba) with the following steps")
-                logger.error("1. pip install jieba")
+                logger.error(
+                    "Make sure you install rjieba (https://github.com/messense/rjieba-py) with the following steps"
+                )
+                logger.error("1. pip install rjieba")
                 raise
-            text = " ".join(jieba.cut(text))
+            text = " ".join(rjieba.cut(text))
             text = self.moses_pipeline(text, lang=lang)
             text = text.split()
         elif lang == "ja":
@@ -473,7 +473,7 @@ class XLMTokenizer(PreTrainedTokenizer):
         return out_string
 
     def build_inputs_with_special_tokens(
-        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+        self, token_ids_0: list[int], token_ids_1: list[int] | None = None
     ) -> list[int]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
@@ -500,7 +500,7 @@ class XLMTokenizer(PreTrainedTokenizer):
         return bos + token_ids_0 + sep + token_ids_1 + sep
 
     def get_special_tokens_mask(
-        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None, already_has_special_tokens: bool = False
+        self, token_ids_0: list[int], token_ids_1: list[int] | None = None, already_has_special_tokens: bool = False
     ) -> list[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
@@ -527,7 +527,7 @@ class XLMTokenizer(PreTrainedTokenizer):
             return [1] + ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1)) + [1]
         return [1] + ([0] * len(token_ids_0)) + [1]
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: str | None = None) -> tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return

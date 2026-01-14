@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -28,7 +27,6 @@ from transformers import (
 from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -36,6 +34,7 @@ from transformers.testing_utils import (
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -128,19 +127,18 @@ class DeepseekVLModelTester:
 
 
 @require_torch
-class DeepseekVLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class DeepseekVLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (DeepseekVLModel, DeepseekVLForConditionalGeneration) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": DeepseekVLModel,
             "image-text-to-text": DeepseekVLForConditionalGeneration,
+            "any-to-any": DeepseekVLForConditionalGeneration,
         }
         if is_torch_available()
         else {}
     )
     _is_composite = True
-    test_pruning = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = DeepseekVLModelTester(self)
@@ -188,12 +186,6 @@ class DeepseekVLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
                 out_embeds = model(inputs_embeds=inputs_embeds, **inputs)[0]
             torch.testing.assert_close(out_embeds, out_ids)
 
-    @unittest.skip(reason="Siglip uses the same initialization scheme as the Flax original implementation")
-    # Copied from tests.models.siglip.test_modeling_siglip.SiglipVisionModelTest.test_initialization
-    def test_initialization(self):
-        pass
-
-    @require_torch_sdpa
     # Copied from tests.models.janus.test_modeling_janus.JanusVisionText2TextModelTest.test_sdpa_can_dispatch_composite_models
     def test_sdpa_can_dispatch_composite_models(self):
         for model_class in self.all_model_classes:
@@ -245,9 +237,7 @@ class DeepseekVLIntegrationTest(unittest.TestCase):
         self.model_id = "deepseek-community/deepseek-vl-1.3b-chat"
 
     def test_model_text_generation(self):
-        model = DeepseekVLForConditionalGeneration.from_pretrained(
-            self.model_id, torch_dtype="auto", device_map="auto"
-        )
+        model = DeepseekVLForConditionalGeneration.from_pretrained(self.model_id, dtype="auto", device_map="auto")
         model.to(torch_device)
         model.eval()
         processor = AutoProcessor.from_pretrained(self.model_id)
@@ -279,9 +269,7 @@ class DeepseekVLIntegrationTest(unittest.TestCase):
         )
 
     def test_model_text_generation_batched(self):
-        model = DeepseekVLForConditionalGeneration.from_pretrained(
-            self.model_id, torch_dtype="auto", device_map="auto"
-        )
+        model = DeepseekVLForConditionalGeneration.from_pretrained(self.model_id, dtype="auto", device_map="auto")
         model.to(torch_device)
         model.eval()
         processor = AutoProcessor.from_pretrained(self.model_id)
@@ -327,9 +315,7 @@ class DeepseekVLIntegrationTest(unittest.TestCase):
         self.assertEqual(EXPECTED_TEXT, text)
 
     def test_model_text_generation_with_multi_image(self):
-        model = DeepseekVLForConditionalGeneration.from_pretrained(
-            self.model_id, torch_dtype="auto", device_map="auto"
-        )
+        model = DeepseekVLForConditionalGeneration.from_pretrained(self.model_id, dtype="auto", device_map="auto")
         model.to(torch_device)
         model.eval()
         processor = AutoProcessor.from_pretrained(self.model_id)
@@ -341,7 +327,10 @@ class DeepseekVLIntegrationTest(unittest.TestCase):
                     {"type": "text", "text": "What's the difference between"},
                     {"type": "image", "url": "http://images.cocodataset.org/val2017/000000039769.jpg"},
                     {"type": "text", "text": " and "},
-                    {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
+                    {
+                        "type": "image",
+                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
+                    },
                 ],
             }
         ]

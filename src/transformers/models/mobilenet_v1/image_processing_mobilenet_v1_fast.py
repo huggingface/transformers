@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,8 +15,6 @@
 
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
-    Unpack,
 )
 from ...image_utils import IMAGENET_STANDARD_MEAN, IMAGENET_STANDARD_STD, PILImageResampling
 from ...utils import auto_docstring
@@ -35,9 +32,6 @@ class MobileNetV1ImageProcessorFast(BaseImageProcessorFast):
     do_center_crop = True
     do_rescale = True
     do_normalize = True
-
-    def __init__(self, **kwargs: Unpack[DefaultFastImageProcessorKwargs]) -> None:
-        super().__init__(**kwargs)
 
 
 __all__ = ["MobileNetV1ImageProcessorFast"]

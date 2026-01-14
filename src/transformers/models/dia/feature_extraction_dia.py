@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The Nari Labs and HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Feature extractor class for Dia"""
-
-from typing import Optional, Union
 
 import numpy as np
 
@@ -59,12 +56,12 @@ class DiaFeatureExtractor(SequenceFeatureExtractor):
 
     def __call__(
         self,
-        raw_audio: Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]],
-        padding: Optional[Union[bool, str, PaddingStrategy]] = None,
-        truncation: Optional[bool] = False,
-        max_length: Optional[int] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        sampling_rate: Optional[int] = None,
+        raw_audio: np.ndarray | list[float] | list[np.ndarray] | list[list[float]],
+        padding: bool | str | PaddingStrategy | None = None,
+        truncation: bool | None = False,
+        max_length: int | None = None,
+        return_tensors: str | TensorType | None = None,
+        sampling_rate: int | None = None,
     ) -> BatchFeature:
         """
         Main method to featurize and prepare for the model one or several sequence(s).
@@ -92,7 +89,6 @@ class DiaFeatureExtractor(SequenceFeatureExtractor):
             return_tensors (`str` or [`~utils.TensorType`], *optional*, default to 'pt'):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
             sampling_rate (`int`, *optional*):
@@ -150,7 +146,7 @@ class DiaFeatureExtractor(SequenceFeatureExtractor):
         input_values = BatchFeature({"input_values": raw_audio})
 
         # temporarily treat it as if we were mono as we also convert stereo to mono
-        origingal_feature_size = self.feature_size
+        original_feature_size = self.feature_size
         self.feature_size = 1
 
         # normal padding on batch
@@ -175,7 +171,7 @@ class DiaFeatureExtractor(SequenceFeatureExtractor):
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)
 
         # rewrite back to original feature size
-        self.feature_size = origingal_feature_size
+        self.feature_size = original_feature_size
 
         return padded_inputs
 

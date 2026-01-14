@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,12 +13,11 @@
 # limitations under the License.
 
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import torch
 from torch import Tensor, nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from ... import initialization as init
 from ...modeling_outputs import ImageClassifierOutput, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, is_timm_available, requires_backends
@@ -51,65 +49,76 @@ class TimmWrapperModelOutput(ModelOutput):
     """
 
     last_hidden_state: torch.FloatTensor
-    pooler_output: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    pooler_output: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
+
+
+def _create_timm_model_with_error_handling(config: "TimmWrapperConfig", **model_kwargs):
+    """
+    Creates a timm model and provides a clear error message if the model is not found,
+    suggesting a library update.
+    """
+    try:
+        model = timm.create_model(
+            config.architecture,
+            pretrained=False,
+            **model_kwargs,
+        )
+        return model
+    except RuntimeError as e:
+        if "Unknown model" in str(e):
+            # A good general check for unknown models.
+            raise ImportError(
+                f"The model architecture '{config.architecture}' is not supported in your version of timm ({timm.__version__}). "
+                "Please upgrade timm to a more recent version with `pip install -U timm`."
+            ) from e
+        raise e
 
 
 @auto_docstring
 class TimmWrapperPreTrainedModel(PreTrainedModel):
+    base_model_prefix = "timm_model"
     main_input_name = "pixel_values"
+    input_modalities = ("image",)
     config: TimmWrapperConfig
-    _no_split_modules = []
+    # add WA here as `timm` does not support model parallelism
+    _no_split_modules = ["TimmWrapperModel"]
     model_tags = ["timm"]
 
     # used in Trainer to avoid passing `loss_kwargs` to model forward
     accepts_loss_kwargs = False
 
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["vision", "timm"])
-        super().__init__(*args, **kwargs)
-
     def post_init(self):
         self.supports_gradient_checkpointing = self._timm_model_supports_gradient_checkpointing()
         super().post_init()
-
-    @staticmethod
-    def _fix_state_dict_key_on_load(key) -> tuple[str, bool]:
-        """
-        Overrides original method that renames `gamma` and `beta` to `weight` and `bias`.
-        We don't want this behavior for timm wrapped models. Instead, this method adds a
-        "timm_model." prefix to enable loading official timm Hub checkpoints.
-        """
-        if "timm_model." not in key:
-            return f"timm_model.{key}", True
-        return key, False
-
-    def _fix_state_dict_key_on_save(self, key):
-        """
-        Overrides original method to remove "timm_model." prefix from state_dict keys.
-        Makes the saved checkpoint compatible with the `timm` library.
-        """
-        return key.replace("timm_model.", ""), True
 
     def load_state_dict(self, state_dict, *args, **kwargs):
         """
         Override original method to fix state_dict keys on load for cases when weights are loaded
         without using the `from_pretrained` method (e.g., in Trainer to resume from checkpoint).
         """
-        state_dict = {self._fix_state_dict_key_on_load(k)[0]: v for k, v in state_dict.items()}
+        state_dict = {f"timm_model.{k}" if "timm_model." not in k else k: v for k, v in state_dict.items()}
         return super().load_state_dict(state_dict, *args, **kwargs)
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """
         Initialize weights function to properly initialize Linear layer weights.
         Since model architectures may vary, we assume only the classifier requires
         initialization, while all other weights should be loaded from the checkpoint.
         """
-        if isinstance(module, (nn.Linear)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+        if isinstance(module, nn.Linear):
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.data.zero_()
+                init.zeros_(module.bias)
+        # Also, reinit all non-persistemt buffers if any!
+        if hasattr(module, "init_non_persistent_buffers"):
+            module.init_non_persistent_buffers()
+        elif isinstance(module, nn.BatchNorm2d) and getattr(module, "running_mean", None) is not None:
+            init.zeros_(module.running_mean)
+            init.ones_(module.running_var)
+            init.zeros_(module.num_batches_tracked)
 
     def _timm_model_supports_gradient_checkpointing(self):
         """
@@ -129,6 +138,13 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
     def _set_gradient_checkpointing(self, enable: bool = True, *args, **kwargs):
         self.timm_model.set_grad_checkpointing(enable)
 
+    def get_input_embeddings(self):
+        # TIMM backbones operate directly on images and do not expose token embeddings.
+        return None
+
+    def set_input_embeddings(self, value):
+        raise NotImplementedError("TimmWrapper models do not own token embeddings and cannot set them.")
+
 
 class TimmWrapperModel(TimmWrapperPreTrainedModel):
     """
@@ -136,22 +152,24 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
     """
 
     def __init__(self, config: TimmWrapperConfig):
+        requires_backends(self, ["vision", "timm"])
         super().__init__(config)
         # using num_classes=0 to avoid creating classification head
         extra_init_kwargs = config.model_args or {}
-        self.timm_model = timm.create_model(config.architecture, pretrained=False, num_classes=0, **extra_init_kwargs)
+        self.features_only = extra_init_kwargs.get("features_only", False)
+        self.timm_model = _create_timm_model_with_error_handling(config, num_classes=0, **extra_init_kwargs)
         self.post_init()
 
     @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[Union[bool, list[int]]] = None,
-        return_dict: Optional[bool] = None,
-        do_pooling: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | list[int] | None = None,
+        return_dict: bool | None = None,
+        do_pooling: bool | None = None,
         **kwargs,
-    ) -> Union[TimmWrapperModelOutput, tuple[Tensor, ...]]:
+    ) -> TimmWrapperModelOutput | tuple[Tensor, ...]:
         r"""
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. Not compatible with timm wrapped models.
@@ -210,22 +228,27 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
                 "different architecture or updating the timm package to a compatible version."
             )
 
-        pixel_values = pixel_values.to(self.device, self.dtype)
+        pixel_values = pixel_values.to(self.device)
 
-        if output_hidden_states:
-            # to enable hidden states selection
-            if isinstance(output_hidden_states, (list, tuple)):
-                kwargs["indices"] = output_hidden_states
-            last_hidden_state, hidden_states = self.timm_model.forward_intermediates(pixel_values, **kwargs)
-        else:
-            last_hidden_state = self.timm_model.forward_features(pixel_values, **kwargs)
-            hidden_states = None
-
-        if do_pooling:
-            # classification head is not created, applying pooling only
-            pooler_output = self.timm_model.forward_head(last_hidden_state)
-        else:
+        if self.features_only:
+            last_hidden_state = self.timm_model.forward(pixel_values, **kwargs)
+            hidden_states = last_hidden_state if output_hidden_states else None
             pooler_output = None
+        else:
+            if output_hidden_states:
+                # to enable hidden states selection
+                if isinstance(output_hidden_states, (list, tuple)):
+                    kwargs["indices"] = output_hidden_states
+                last_hidden_state, hidden_states = self.timm_model.forward_intermediates(pixel_values, **kwargs)
+            else:
+                last_hidden_state = self.timm_model.forward_features(pixel_values, **kwargs)
+                hidden_states = None
+
+            if do_pooling:
+                # classification head is not created, applying pooling only
+                pooler_output = self.timm_model.forward_head(last_hidden_state)
+            else:
+                pooler_output = None
 
         if not return_dict:
             outputs = (last_hidden_state, pooler_output, hidden_states)
@@ -245,6 +268,7 @@ class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
     """
 
     def __init__(self, config: TimmWrapperConfig):
+        requires_backends(self, ["vision", "timm"])
         super().__init__(config)
 
         if config.num_labels == 0:
@@ -255,8 +279,8 @@ class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
             )
 
         extra_init_kwargs = config.model_args or {}
-        self.timm_model = timm.create_model(
-            config.architecture, pretrained=False, num_classes=config.num_labels, **extra_init_kwargs
+        self.timm_model = _create_timm_model_with_error_handling(
+            config, num_classes=config.num_labels, **extra_init_kwargs
         )
         self.num_labels = config.num_labels
         self.post_init()
@@ -265,12 +289,12 @@ class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[Union[bool, list[int]]] = None,
-        return_dict: Optional[bool] = None,
+        labels: torch.LongTensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | list[int] | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[ImageClassifierOutput, tuple[Tensor, ...]]:
+    ) -> ImageClassifierOutput | tuple[Tensor, ...]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
@@ -344,25 +368,7 @@ class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
 
         loss = None
         if labels is not None:
-            if self.config.problem_type is None:
-                if self.num_labels == 1:
-                    self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
-                    self.config.problem_type = "single_label_classification"
-                else:
-                    self.config.problem_type = "multi_label_classification"
-            if self.config.problem_type == "regression":
-                loss_fct = MSELoss()
-                if self.num_labels == 1:
-                    loss = loss_fct(logits.squeeze(), labels.squeeze())
-                else:
-                    loss = loss_fct(logits, labels)
-            elif self.config.problem_type == "single_label_classification":
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-            elif self.config.problem_type == "multi_label_classification":
-                loss_fct = BCEWithLogitsLoss()
-                loss = loss_fct(logits, labels)
+            loss = self.loss_function(labels, logits, self.config)
 
         if not return_dict:
             outputs = (loss, logits, hidden_states)

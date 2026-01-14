@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +15,10 @@
 
 from typing import Optional, Union
 
-from transformers.models.beit.image_processing_beit_fast import BeitFastImageProcessorKwargs, BeitImageProcessorFast
+import torch
+from torchvision.transforms.v2 import functional as F
+
+from transformers.models.beit.image_processing_beit_fast import BeitImageProcessorFast
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
@@ -30,28 +32,12 @@ from ...image_utils import (
     ImageInput,
     PILImageResampling,
     SizeDict,
-    pil_torch_interpolation_mapping,
 )
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
-    is_torch_available,
-    is_torchvision_available,
-    is_torchvision_v2_available,
 )
-
-
-if is_torch_available():
-    import torch
-
-if is_torchvision_v2_available():
-    from torchvision.transforms.v2 import functional as F
-elif is_torchvision_available():
-    from torchvision.transforms import functional as F
-
-
-class SegformerFastImageProcessorKwargs(BeitFastImageProcessorKwargs):
-    pass
+from .image_processing_segformer import SegformerImageProcessorKwargs
 
 
 class SegformerImageProcessorFast(BeitImageProcessorFast):
@@ -70,11 +56,11 @@ class SegformerImageProcessorFast(BeitImageProcessorFast):
     def _preprocess_image_like_inputs(
         self,
         images: ImageInput,
-        segmentation_maps: Optional[ImageInput],
+        segmentation_maps: ImageInput | None,
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
-        device: Optional[Union[str, "torch.device"]] = None,
-        **kwargs: Unpack[SegformerFastImageProcessorKwargs],
+        device: Union[str, "torch.device"] | None = None,
+        **kwargs: Unpack[SegformerImageProcessorKwargs],
     ) -> BatchFeature:
         """
         Preprocess image-like inputs.
@@ -100,7 +86,7 @@ class SegformerImageProcessorFast(BeitImageProcessorFast):
                     "do_normalize": False,
                     "do_rescale": False,
                     # Nearest interpolation is used for segmentation maps instead of BILINEAR.
-                    "interpolation": pil_torch_interpolation_mapping[PILImageResampling.NEAREST],
+                    "interpolation": F.InterpolationMode.NEAREST_EXACT,
                 }
             )
             processed_segmentation_maps = self._preprocess(
@@ -120,10 +106,10 @@ class SegformerImageProcessorFast(BeitImageProcessorFast):
         do_normalize: bool,
         size: SizeDict,
         rescale_factor: float,
-        image_mean: Union[float, list[float]],
-        image_std: Union[float, list[float]],
+        image_mean: float | list[float],
+        image_std: float | list[float],
         disable_grouping: bool,
-        return_tensors: Optional[Union[str, TensorType]],
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:  # Return type can be list if return_tensors=None
         if do_reduce_labels:
@@ -153,7 +139,6 @@ class SegformerImageProcessorFast(BeitImageProcessorFast):
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
 
         # Stack images into a single tensor if return_tensors is set
-        processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
 
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 

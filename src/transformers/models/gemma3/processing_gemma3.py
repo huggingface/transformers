@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Google Inc. HuggingFace Inc. team. All rights reserved.
 #
 #
@@ -14,27 +13,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import re
-from typing import Optional, Union
 
 import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_nested_list_of_images
-from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import to_py_obj
-
-
-class Gemma3ImagesKwargs(ImagesKwargs):
-    do_pan_and_scan: Optional[bool]
-    pan_and_scan_min_crop_size: Optional[int]
-    pan_and_scan_max_num_crops: Optional[int]
-    pan_and_scan_min_ratio_to_activate: Optional[float]
-    do_convert_rgb: Optional[bool]
+from ...utils import auto_docstring, to_py_obj
 
 
 class Gemma3ProcessorKwargs(ProcessingKwargs, total=False):
-    images_kwargs: Gemma3ImagesKwargs
     _defaults = {
         "text_kwargs": {
             "padding": False,
@@ -50,11 +39,8 @@ class Gemma3ProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@auto_docstring
 class Gemma3Processor(ProcessorMixin):
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "AutoImageProcessor"
-    tokenizer_class = "AutoTokenizer"
-
     def __init__(
         self,
         image_processor,
@@ -77,12 +63,11 @@ class Gemma3Processor(ProcessorMixin):
             **kwargs,
         )
 
+    @auto_docstring
     def __call__(
         self,
-        images: ImageInput = None,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        videos=None,
-        audio=None,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         **kwargs: Unpack[Gemma3ProcessorKwargs],
     ) -> BatchFeature:
         if text is None and images is None:
@@ -101,8 +86,9 @@ class Gemma3Processor(ProcessorMixin):
 
         image_inputs = {}
         if images is not None:
+            images = self.image_processor.fetch_images(images)
             batched_images = make_nested_list_of_images(images)
-            image_inputs = self.image_processor(batched_images, **output_kwargs["images_kwargs"])
+            image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
 
             # Create empty text to be replaced with placeholders
             if not text:
@@ -174,27 +160,13 @@ class Gemma3Processor(ProcessorMixin):
 
         return MultiModalData(**vision_data)
 
-    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.batch_decode with CLIP->Gemma
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to GemmaTokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    # Copied from transformers.models.clip.processing_clip.CLIPProcessor.decode with CLIP->Gemma
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to GemmaTokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
-
     @property
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names + ["token_type_ids"]
         image_processor_input_names = self.image_processor.model_input_names
-        return list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
+
+        image_processor_input_names = [name for name in image_processor_input_names if name != "num_crops"]
+        return list(tokenizer_input_names + image_processor_input_names)
 
 
 __all__ = ["Gemma3Processor"]

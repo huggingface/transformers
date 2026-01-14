@@ -155,9 +155,9 @@ def convert_siglip_weight(
             raise ValueError(f"Unexpected member, `{prop}`, for path `{path}`. Should be `bias` or `kernel`.")
     elif path.startswith(_SIGLIP_TRANSFORMER_ENCODER_BLOCK):
         encoder_block_path = path[_SIGLIP_TRANSFORMER_ENCODER_BLOCK_LEN:]
-        next_path_seperator_idx = encoder_block_path.find("/")
-        layer_idx = encoder_block_path[:next_path_seperator_idx]
-        encoder_block_path = encoder_block_path[next_path_seperator_idx:]
+        next_path_separator_idx = encoder_block_path.find("/")
+        layer_idx = encoder_block_path[:next_path_separator_idx]
+        encoder_block_path = encoder_block_path[next_path_separator_idx:]
         normalized_path = f"vision_tower.vision_model.encoder.layers.{layer_idx}"
 
         if encoder_block_path.startswith("/LayerNorm"):
@@ -264,9 +264,9 @@ def convert_transformer_weights(
         converted_weights = [weights]
     elif path.startswith(_TRANSFORMER_DECODER_BLOCK):
         decoder_block_path = path[_TRANSFORMER_DECODER_BLOCK_LEN:]
-        next_path_seperator_idx = decoder_block_path.find("/")
-        layer_idx = decoder_block_path[:next_path_seperator_idx]
-        decoder_block_path = decoder_block_path[next_path_seperator_idx:]
+        next_path_separator_idx = decoder_block_path.find("/")
+        layer_idx = decoder_block_path[:next_path_separator_idx]
+        decoder_block_path = decoder_block_path[next_path_separator_idx:]
 
         base_path = f"language_model.model.layers.{layer_idx}"
 
@@ -406,7 +406,7 @@ def main(*args):
             num_hidden_layers=34,
             num_key_value_heads=4,
             sliding_window=1024,
-            rope_scaling={"rope_type": "linear", "factor": 8.0},  # used for global RoPE only
+            rope_parameters={"rope_type": "linear", "factor": 8.0},  # used for global RoPE only
             rope_theta=1_000_000,
             rope_local_base_freq=10_000,
             attn_logit_softcapping=None,
@@ -458,9 +458,9 @@ def main(*args):
         model = ShieldGemma2ForImageClassification(config=config)
 
     model.load_state_dict(result.state_tree, assign=True, strict=True)
-    model.config.torch_dtype = dtype
+    model.config.dtype = dtype
     logging.info("Loaded Shieldgemma2 in Hugging Face Transformers.")
-    model.save_pretrained(output_path, safe_serialization=True)
+    model.save_pretrained(output_path)
     logging.info("Saved Shieldgemma2 to SafeTensors in %s", output_path)
     del model
     del result

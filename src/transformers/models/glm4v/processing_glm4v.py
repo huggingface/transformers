@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_glm4v.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 The ZhipuAI Inc. team and HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,62 +17,34 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Optional, Union
 
 import numpy as np
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack, VideosKwargs
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...utils import auto_docstring, logging
 from ...video_utils import VideoInput
 
 
-class Glm4vVideosProcessorKwargs(VideosKwargs, total=False):
-    fps: Union[list[float], float]
-
-
-class Glm4vImagesKwargs(ImagesKwargs):
-    patch_size: Optional[int]
-    temporal_patch_size: Optional[int]
-    merge_size: Optional[int]
+logger = logging.get_logger(__name__)
 
 
 class Glm4vProcessorKwargs(ProcessingKwargs, total=False):
-    images_kwargs: Glm4vImagesKwargs
-    videos_kwargs: Glm4vVideosProcessorKwargs
     _defaults = {
         "text_kwargs": {
             "padding": False,
+            "return_token_type_ids": False,
             "return_mm_token_type_ids": False,
         },
+        "videos_kwargs": {"return_metadata": True},
     }
 
 
+@auto_docstring
 class Glm4vProcessor(ProcessorMixin):
-    r"""
-    Constructs a GLM-4V processor which wraps a GLM-4V image processor and a GLM-4 tokenizer into a single processor.
-    [`~Glm4vProcessor.__call__`] and [`~Glm4vProcessor.decode`] for more information.
-    Args:
-        image_processor ([`Glm4vProcessor`], *optional*):
-            The image processor is a required input.
-        tokenizer ([`PreTrainedTokenizerFast`], *optional*):
-            The tokenizer is a required input.
-        video_processor ([`Glm4vVideoProcessor`], *optional*):
-            The video processor is a required input.
-        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
-            in a chat into a tokenizable string.
-    """
-
-    attributes = ["image_processor", "tokenizer", "video_processor"]
-
-    image_processor_class = "AutoImageProcessor"
-    video_processor_class = "AutoVideoProcessor"
-
-    tokenizer_class = ("PreTrainedTokenizer", "PreTrainedTokenizerFast")
-
     def __init__(self, image_processor=None, tokenizer=None, video_processor=None, chat_template=None, **kwargs):
-        super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template)
         self.image_token = "<|image|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
         self.video_token = "<|video|>" if not hasattr(tokenizer, "video_token") else tokenizer.video_token
         self.image_token_id = (
@@ -86,37 +57,17 @@ class Glm4vProcessor(ProcessorMixin):
             if getattr(tokenizer, "video_token_id", None)
             else tokenizer.convert_tokens_to_ids(self.video_token)
         )
+        super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template)
 
+    @auto_docstring
     def __call__(
         self,
-        images: ImageInput = None,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        videos: VideoInput = None,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
+        videos: VideoInput | None = None,
         **kwargs: Unpack[Glm4vProcessorKwargs],
     ) -> BatchFeature:
-        """
-        Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
-        and `kwargs` arguments to PreTrainedTokenizerFast's [`~PreTrainedTokenizerFast.__call__`] if `text` is not `None` to encode
-        the text.
-
-        Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. Both channels-first and channels-last formats are supported.
-            text (`str`, `List[str]`, `List[List[str]]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            videos (`np.ndarray`, `torch.Tensor`, `List[np.ndarray]`, `List[torch.Tensor]`):
-                The image or batch of videos to be prepared. Each video can be a 4D NumPy array or PyTorch
-                tensor, or a nested list of 3D frames. Both channels-first and channels-last formats are supported.
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
-
+        r"""
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 
@@ -143,11 +94,14 @@ class Glm4vProcessor(ProcessorMixin):
 
         if videos is not None:
             videos_inputs = self.video_processor(videos=videos, **output_kwargs["videos_kwargs"])
-            timestamps = videos_inputs.pop("timestamps")
+            # If user has not requested video metadata, pop it
+            if not kwargs.get("return_metadata"):
+                video_metadata = videos_inputs.pop("video_metadata")
+            else:
+                video_metadata = videos_inputs["video_metadata"]
             video_grid_thw = videos_inputs["video_grid_thw"]
         else:
             videos_inputs = {}
-            timestamps = []
             video_grid_thw = None
 
         if not isinstance(text, list):
@@ -172,14 +126,19 @@ class Glm4vProcessor(ProcessorMixin):
                     num_frames = video_grid_thw[video_index][0]
                     video_structure = ""
 
-                    if hasattr(timestamps, "tolist"):
-                        timestamps_list = timestamps.tolist()[0]
-                    else:
-                        timestamps_list = timestamps[0] if isinstance(timestamps[0], list) else timestamps
+                    metadata = video_metadata[video_index]
+                    if metadata.fps is None:
+                        logger.warning_once(
+                            "SmolVLM requires frame timestamps to construct prompts, but the `fps` of the input video could not be inferred. "
+                            "Probably `video_metadata` was missing from inputs and you passed pre-sampled frames. "
+                            "Defaulting to `fps=24`. Please provide `video_metadata` for more accurate results."
+                        )
+                    metadata.fps = 24 if metadata.fps is None else metadata.fps
+                    timestamps = metadata.timestamps[::2]  # mrope
 
                     unique_timestamps = []
-                    for idx in range(0, len(timestamps_list)):
-                        unique_timestamps.append(timestamps_list[idx])
+                    for idx in range(0, len(timestamps)):
+                        unique_timestamps.append(timestamps[idx])
 
                     selected_timestamps = unique_timestamps[:num_frames]
                     while len(selected_timestamps) < num_frames:
@@ -187,7 +146,7 @@ class Glm4vProcessor(ProcessorMixin):
 
                     for frame_idx in range(num_frames):
                         timestamp_sec = selected_timestamps[frame_idx]
-                        frame_structure = f"<|begin_of_image|>{self.image_token}<|end_of_image|>{timestamp_sec}"
+                        frame_structure = self.replace_frame_token_id(timestamp_sec)
                         video_structure += frame_structure
 
                     text[i] = text[i].replace(self.video_token, video_structure, 1)
@@ -251,20 +210,6 @@ class Glm4vProcessor(ProcessorMixin):
 
         return MultiModalData(**vision_data)
 
-    def batch_decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to Qwen2TokenizerFast's [`~PreTrainedTokenizer.batch_decode`]. Please
-        refer to the docstring of this method for more information.
-        """
-        return self.tokenizer.batch_decode(*args, **kwargs)
-
-    def decode(self, *args, **kwargs):
-        """
-        This method forwards all its arguments to Qwen2TokenizerFast's [`~PreTrainedTokenizer.decode`]. Please refer to
-        the docstring of this method for more information.
-        """
-        return self.tokenizer.decode(*args, **kwargs)
-
     def post_process_image_text_to_text(
         self, generated_outputs, skip_special_tokens=True, clean_up_tokenization_spaces=False, **kwargs
     ):
@@ -292,12 +237,8 @@ class Glm4vProcessor(ProcessorMixin):
             **kwargs,
         )
 
-    @property
-    def model_input_names(self):
-        tokenizer_input_names = self.tokenizer.model_input_names
-        image_processor_input_names = self.image_processor.model_input_names
-        names_from_processor = list(dict.fromkeys(tokenizer_input_names + image_processor_input_names))
-        return names_from_processor + ["second_per_grid_ts"]
+    def replace_frame_token_id(self, timestamp_sec):
+        return f"<|begin_of_image|>{self.image_token}<|end_of_image|>{int(timestamp_sec)}"
 
 
 __all__ = ["Glm4vProcessor"]

@@ -9,13 +9,6 @@ class Cache(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class CacheConfig(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class DynamicCache(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -30,63 +23,7 @@ class EncoderDecoderCache(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class HQQQuantizedCache(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class HybridCache(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class OffloadedCache(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class OffloadedStaticCache(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class QuantizedCache(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class QuantizedCacheConfig(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class QuantoQuantizedCache(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class SinkCache(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class SlidingWindowCache(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -114,27 +51,6 @@ class GlueDataTrainingArguments(metaclass=DummyObject):
         requires_backends(self, ["torch"])
 
 
-class LineByLineTextDataset(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class LineByLineWithRefDataset(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class LineByLineWithSOPTextDataset(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
 class SquadDataset(metaclass=DummyObject):
     _backends = ["torch"]
 
@@ -143,20 +59,6 @@ class SquadDataset(metaclass=DummyObject):
 
 
 class SquadDataTrainingArguments(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class TextDataset(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class TextDatasetForNextSentencePrediction(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -185,13 +87,6 @@ class BayesianDetectorModel(metaclass=DummyObject):
 
 
 class BeamScorer(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class BeamSearchScorer(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -290,13 +185,6 @@ class ForcedEOSTokenLogitsProcessor(metaclass=DummyObject):
 
 
 class GenerationMixin(metaclass=DummyObject):
-    _backends = ["torch"]
-
-    def __init__(self, *args, **kwargs):
-        requires_backends(self, ["torch"])
-
-
-class HammingDiversityLogitsProcessor(metaclass=DummyObject):
     _backends = ["torch"]
 
     def __init__(self, *args, **kwargs):
@@ -622,10 +510,6 @@ class Conv1D(metaclass=DummyObject):
 
 def apply_chunking_to_forward(*args, **kwargs):
     requires_backends(apply_chunking_to_forward, ["torch"])
-
-
-def prune_layer(*args, **kwargs):
-    requires_backends(prune_layer, ["torch"])
 
 
 class Trainer(metaclass=DummyObject):

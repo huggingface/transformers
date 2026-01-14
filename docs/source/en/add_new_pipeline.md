@@ -100,19 +100,18 @@ pipeline("This is the best meal I've ever had")
 
 Register the new task your pipeline supports in the `PIPELINE_REGISTRY`. The registry defines:
 
-- the machine learning framework the pipeline supports with either `pt_model` or `tf_model` (add both to ensure it works with either frameworks)
+- The supported Pytorch model class with `pt_model`
 - a default model which should come from a specific revision (branch, or commit hash) where the model works as expected with `default`
 - the expected input with `type`
 
 ```py
 from transformers.pipelines import PIPELINE_REGISTRY
-from transformers import AutoModelForSequenceClassification, TFAutoModelForSequenceClassification
+from transformers import AutoModelForSequenceClassification
 
 PIPELINE_REGISTRY.register_pipeline(
     "new-task",
     pipeline_class=MyPipeline,
     pt_model=AutoModelForSequenceClassification,
-    tf_model=TFAutoModelForSequenceClassification,
     default={"pt": ("user/awesome-model", "branch-name")},
     type="text",
 )
@@ -128,7 +127,7 @@ It's faster to upload your pipeline code to the Hub because it doesn't require a
 
 Add your pipeline code to the Hub in a Python file.
 
-For example, a custom pipeline for sentence pair classification might look like the following code below. The implementation works for PyTorch and TensorFlow models.
+For example, a custom pipeline for sentence pair classification might look like the following code below.
 
 ```py
 import numpy as np
@@ -168,13 +167,12 @@ Save the code in a file named `pair_classification.py`, and import and register 
 ```py
 from pair_classification import PairClassificationPipeline
 from transformers.pipelines import PIPELINE_REGISTRY
-from transformers import AutoModelForSequenceClassification, TFAutoModelForSequenceClassification
+from transformers import AutoModelForSequenceClassification
 
 PIPELINE_REGISTRY.register_pipeline(
     "pair-classification",
     pipeline_class=PairClassificationPipeline,
     pt_model=AutoModelForSequenceClassification,
-    tf_model=TFAutoModelForSequenceClassification,
 )
 ```
 
@@ -186,9 +184,6 @@ The [register_pipeline](https://github.com/huggingface/transformers/blob/9feae5f
       "impl": "pair_classification.PairClassificationPipeline",
       "pt": [
         "AutoModelForSequenceClassification"
-      ],
-      "tf": [
-        "TFAutoModelForSequenceClassification"
       ],
     }
   },
@@ -219,11 +214,11 @@ Add your pipeline code as a new module to the [pipelines](https://github.com/hug
 
 Next, add a new test for the pipeline in [transformers/tests/pipelines](https://github.com/huggingface/transformers/tree/main/tests/pipelines). You can look at the other tests for examples of how to test your pipeline.
 
-The [run_pipeline_test](https://github.com/huggingface/transformers/blob/db70426854fe7850f2c5834d633aff637f14772e/tests/pipelines/test_pipelines_text_classification.py#L186) function should be very generic and run on the models defined in [model_mapping](https://github.com/huggingface/transformers/blob/db70426854fe7850f2c5834d633aff637f14772e/tests/pipelines/test_pipelines_text_classification.py#L48) and [tf_model_mapping](https://github.com/huggingface/transformers/blob/db70426854fe7850f2c5834d633aff637f14772e/tests/pipelines/test_pipelines_text_classification.py#L49). This is important for testing future compatibility with new models.
+The [run_pipeline_test](https://github.com/huggingface/transformers/blob/db70426854fe7850f2c5834d633aff637f14772e/tests/pipelines/test_pipelines_text_classification.py#L186) function should be very generic and run on the models defined in [model_mapping](https://github.com/huggingface/transformers/blob/db70426854fe7850f2c5834d633aff637f14772e/tests/pipelines/test_pipelines_text_classification.py#L48). This is important for testing future compatibility with new models.
 
 You'll also notice `ANY` is used throughout the [run_pipeline_test](https://github.com/huggingface/transformers/blob/db70426854fe7850f2c5834d633aff637f14772e/tests/pipelines/test_pipelines_text_classification.py#L186) function. The models are random, so you can't check the actual values. Using `ANY` allows the test to match the output of the pipeline type instead.
 
 Finally, you should also implement the following 4 tests.
 
-1. [test_small_model_pt](https://github.com/huggingface/transformers/blob/db70426854fe7850f2c5834d633aff637f14772e/tests/pipelines/test_pipelines_text_classification.py#L59) and [test_small_model_tf](https://github.com/huggingface/transformers/blob/db70426854fe7850f2c5834d633aff637f14772e/tests/pipelines/test_pipelines_text_classification.py#L150), use a small model for these pipelines to make sure they return the correct outputs. The results don't have to make sense. Each pipeline should return the same result.
-1. [test_large_model_pt](https://github.com/huggingface/transformers/blob/db70426854fe7850f2c5834d633aff637f14772e/tests/pipelines/test_pipelines_zero_shot_image_classification.py#L187) nad [test_large_model_tf](https://github.com/huggingface/transformers/blob/db70426854fe7850f2c5834d633aff637f14772e/tests/pipelines/test_pipelines_zero_shot_image_classification.py#L220), use a realistic model for these pipelines to make sure they return meaningful results. These tests are slow and should be marked as slow.
+1. [test_small_model_pt](https://github.com/huggingface/transformers/blob/db70426854fe7850f2c5834d633aff637f14772e/tests/pipelines/test_pipelines_text_classification.py#L59), use a small model for these pipelines to make sure they return the correct outputs. The results don't have to make sense. Each pipeline should return the same result.
+1. [test_large_model_pt](https://github.com/huggingface/transformers/blob/db70426854fe7850f2c5834d633aff637f14772e/tests/pipelines/test_pipelines_zero_shot_image_classification.py#L187), use a realistic model for these pipelines to make sure they return meaningful results. These tests are slow and should be marked as slow.

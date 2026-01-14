@@ -25,7 +25,7 @@ Sandhini Agarwal, Girish Sastry, Amanda Askell, Pamela Mishkin, Jack Clark, Gret
 
 *최신 컴퓨터 비전 시스템은 미리 정해진 고정된 객체 카테고리 집합을 예측하도록 훈련됩니다. 이러한 제한된 형태의 지도는 다른 시각적 개념을 지정하기 위해 추가적인 라벨링된 데이터가 필요하므로 그 일반성과 사용성을 제한합니다. 이미지 원시 텍스트에서 직접 학습하는 것은 훨씬 더 광범위한 지도 소스를 활용하는 아주 좋은 대안입니다. 이미지와 캡션을 맞추는 간단한 사전 학습 작업이, 인터넷에서 수집한 4억 쌍의 이미지-텍스트 데이터셋에서 SOTA 수준의 이미지 표현을 처음부터 효율적이고 확장 가능하게 학습하는 방법임을 확인할 수 있습니다. 사전 훈련 후, 자연어는 학습된 시각적 개념을 참조하거나 새로운 개념을 설명하는 데 사용되어 모델의 하위 작업으로의 제로샷 전이를 가능하게 합니다. 해당 논문에서는 OCR, 비디오 내 행동 인식, 지리적 위치 파악, 그리고 많은 종류의 세밀한 객체 분류 등 30개 이상의 다양한 기존 컴퓨터 비전 데이터셋에 대한 벤치마킹을 통해 이 접근 방식의 성능을 연구합니다. 이 모델은 대부분의 작업에 대해 의미 있게 전이되며, 종종 데이터셋별 훈련 없이도 완전 지도 학습 기준선과 경쟁력 있는 성능을 보입니다. 예를 들어, ImageNet에서 원래 ResNet-50의 정확도를 제로샷으로 일치시키는데, 이는 ResNet-50이 훈련된 128만 개의 훈련 예제를 전혀 사용할 필요가 없었습니다. 코드 및 사전 훈련된 모델 가중치는 이 https URL에서 공개합니다.*
 
-이 모델은 [valhalla](https://huggingface.co/valhalla)에 의해 기여되었습니다. 
+이 모델은 [valhalla](https://huggingface.co/valhalla)에 의해 기여되었습니다.
 원본 코드는 [이곳](https://github.com/openai/CLIP)에서 확인할 수 있습니다.
 
 ## 사용 팁과 예시[[usage-tips-and-example]]
@@ -34,7 +34,7 @@ CLIP은 멀티모달 비전 밒 언어 모델입니다. 이미지-텍스트 유�
 
 트랜스포머 인코더에 이미지를 입력하기 위해, 각 이미지는 고정 크기의 겹치지 않는 패치들의 시퀀스로 분할되고, 이후 선형 임베딩됩니다. [CLS]토큰이 전체 이미지의 표현으로 추가됩니다. 저자들은 또한 절대 위치 임베딩을 추가하고, 결과로 나온 벡터 시퀀스를 표준 트랜스포머 인토더에 입력합니다. [`CLIPImageProcessor`]는 모델을 위해 이미지를 리사이즈(또는 재스캐일링)하고 정규화하는데 사용될 수 있습니다.
 
-[`CLIPTokenizer`]는 텍스트를 인코딩하는데 사용됩니다. [`CLIPProcessor`]는 [`CLIPImageProcessor`]와 [`CLIPTokenizer`]를 하나의 인스턴스로 감싸서 텍스트를 인코딩하고 이미지를 준비하는데 모두 사용됩니다. 
+[`CLIPTokenizer`]는 텍스트를 인코딩하는데 사용됩니다. [`CLIPProcessor`]는 [`CLIPImageProcessor`]와 [`CLIPTokenizer`]를 하나의 인스턴스로 감싸서 텍스트를 인코딩하고 이미지를 준비하는데 모두 사용됩니다.
 
 다음 예시는 [`CLIPProcessor`]와 [`CLIPModel`]을 사용하여 이미지-텍스트 유사도 점수를 얻는 방법을 보여줍니다.
 
@@ -85,13 +85,13 @@ pip install -U flash-attn --no-build-isolation
 >>> from transformers import CLIPProcessor, CLIPModel
 
 >>> device = "cuda"
->>> torch_dtype = torch.float16
+>>> dtype = torch.float16
 
 >>> model = CLIPModel.from_pretrained(
 ...     "openai/clip-vit-base-patch32",
 ...     attn_implementation="flash_attention_2",
 ...     device_map=device,
-...     torch_dtype=torch_dtype,
+...     dtype=dtype,
 ... )
 >>> processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32")
 
@@ -121,7 +121,7 @@ tensor([[0.9946, 0.0052]], device='cuda:0', dtype=torch.float16)
 ```python
 from transformers import CLIPModel
 
-model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32", torch_dtype=torch.float16, attn_implementation="sdpa")
+model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32", dtype=torch.float16, attn_implementation="sdpa")
 ```
 
 최고의 속도향상을 위해서, 반정밀도로 모델을 로드하는 것을 추천합니다. (예를들면 `torch.float16` 또는 `torch.bfloat16`).
@@ -175,9 +175,9 @@ model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32", torch_dtype=to
 
 CLIP을 시작하는 데 도움이 되는 Hugging Face와 community 자료 목록(🌎로 표시됨) 입니다.
 
-- [원격 센싱 (인공위성) 이미지와 캡션을 가지고 CLIP 미세조정하기](https://huggingface.co/blog/fine-tune-clip-rsicd): 
+- [원격 센싱 (인공위성) 이미지와 캡션을 가지고 CLIP 미세조정하기](https://huggingface.co/blog/fine-tune-clip-rsicd):
 [RSICD dataset](https://github.com/201528014227051/RSICD_optimal)을 가지고 CLIP을 미세조정 하는 방법과 데이터 증강에 대한 성능 비교에 대한 블로그 포스트
-- 이 [예시 스크립트](https://github.com/huggingface/transformers/tree/main/examples/pytorch/contrastive-image-text)는 [COCO dataset](https://cocodataset.org/#home)를 이용한 사전학습된 비전과 텍스트와 인코더를 사용해서 CLIP같은 비전-텍스트 듀얼 모델을 어떻게 학습시키는지 보여줍니다. 
+- 이 [예시 스크립트](https://github.com/huggingface/transformers/tree/main/examples/pytorch/contrastive-image-text)는 [COCO dataset](https://cocodataset.org/#home)를 이용한 사전학습된 비전과 텍스트와 인코더를 사용해서 CLIP같은 비전-텍스트 듀얼 모델을 어떻게 학습시키는지 보여줍니다.
 
 <PipelineTag pipeline="image-to-text"/>
 
@@ -187,7 +187,7 @@ CLIP을 시작하는 데 도움이 되는 Hugging Face와 community 자료 목�
 
 - 사전학습된 CLIP모델과 MRR(Mean Reciprocal Rank) 점수 연산을 사용한 이미지 검색에 대한 [노트북](https://colab.research.google.com/drive/1bLVwVKpAndpEDHqjzxVPr_9nGrSbuOQd?usp=sharing). 🌎
 - 이미지 검색과 유사성 점수에 대해 보여주는 [노트북](https://colab.research.google.com/github/deep-diver/image_search_with_natural_language/blob/main/notebooks/Image_Search_CLIP.ipynb). 🌎
-- Multilingual CLIP를 사용해서 이미지와 텍스트를 어떻게 같은 벡터 공간에 매핑 시키는지에 대한 [노트북](https://colab.research.google.com/drive/1xO-wC_m_GNzgjIBQ4a4znvQkvDoZJvH4?usp=sharing). 🌎 
+- Multilingual CLIP를 사용해서 이미지와 텍스트를 어떻게 같은 벡터 공간에 매핑 시키는지에 대한 [노트북](https://colab.research.google.com/drive/1xO-wC_m_GNzgjIBQ4a4znvQkvDoZJvH4?usp=sharing). 🌎
 - [Unsplash](https://unsplash.com)와 [TMDB](https://www.themoviedb.org/) 데이터셋을 활용한 의미론적(semantic) 이미지 검색에서 CLIP을 구동하는 방법에 대한 [노트북](https://colab.research.google.com/github/vivien000/clip-demo/blob/master/clip.ipynb#scrollTo=uzdFhRGqiWkR). 🌎
 
 **설명 가능성**
@@ -199,7 +199,6 @@ CLIP을 시작하는 데 도움이 되는 Hugging Face와 community 자료 목�
 ## CLIPConfig[[transformers.CLIPConfig]]
 
 [[autodoc]] CLIPConfig
-    - from_text_vision_configs
 
 ## CLIPTextConfig[[transformers.CLIPTextConfig]]
 
@@ -212,9 +211,7 @@ CLIP을 시작하는 데 도움이 되는 Hugging Face와 community 자료 목�
 ## CLIPTokenizer[[transformers.CLIPTokenizer]]
 
 [[autodoc]] CLIPTokenizer
-    - build_inputs_with_special_tokens
     - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
     - save_vocabulary
 
 ## CLIPTokenizerFast[[transformers.CLIPTokenizerFast]]
@@ -226,16 +223,10 @@ CLIP을 시작하는 데 도움이 되는 Hugging Face와 community 자료 목�
 [[autodoc]] CLIPImageProcessor
     - preprocess
 
-## CLIPFeatureExtractor[[transformers.CLIPFeatureExtractor]]
-
-[[autodoc]] CLIPFeatureExtractor
-
 ## CLIPProcessor[[transformers.CLIPProcessor]]
 
 [[autodoc]] CLIPProcessor
 
-<frameworkcontent>
-<pt>
 
 ## CLIPModel[[transformers.CLIPModel]]
 
@@ -268,51 +259,3 @@ CLIP을 시작하는 데 도움이 되는 Hugging Face와 community 자료 목�
 
 [[autodoc]] CLIPForImageClassification
     - forward
-
-</pt>
-<tf>
-
-## TFCLIPModel[[transformers.TFCLIPModel]]
-
-[[autodoc]] TFCLIPModel
-    - call
-    - get_text_features
-    - get_image_features
-
-## TFCLIPTextModel[[transformers.TFCLIPTextModel]]
-
-[[autodoc]] TFCLIPTextModel
-    - call
-
-## TFCLIPVisionModel[[transformers.TFCLIPVisionModel]]
-
-[[autodoc]] TFCLIPVisionModel
-    - call
-
-</tf>
-<jax>
-
-## FlaxCLIPModel[[transformers.FlaxCLIPModel]]
-
-[[autodoc]] FlaxCLIPModel
-    - __call__
-    - get_text_features
-    - get_image_features
-
-## FlaxCLIPTextModel[[transformers.FlaxCLIPTextModel]]
-
-[[autodoc]] FlaxCLIPTextModel
-    - __call__
-
-## FlaxCLIPTextModelWithProjection[[transformers.FlaxCLIPTextModelWithProjection]]
-
-[[autodoc]] FlaxCLIPTextModelWithProjection
-    - __call__
-
-## FlaxCLIPVisionModel[[transformers.FlaxCLIPVisionModel]]
-
-[[autodoc]] FlaxCLIPVisionModel
-    - __call__
-
-</jax>
-</frameworkcontent>

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The Fairseq Authors and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,14 +16,14 @@
 import functools
 import operator
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class UniSpeechSatConfig(PretrainedConfig):
+class UniSpeechSatConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`UniSpeechSatModel`]. It is used to instantiate an
     UniSpeechSat model according to the specified arguments, defining the model architecture. Instantiating a
@@ -32,8 +31,8 @@ class UniSpeechSatConfig(PretrainedConfig):
     [microsoft/unispeech-sat-base-100h-libri-ft](https://huggingface.co/microsoft/unispeech-sat-base-100h-libri-ft)
     architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:

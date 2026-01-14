@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The Fairseq Authors and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,22 +16,22 @@
 import functools
 import operator
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class HubertConfig(PretrainedConfig):
+class HubertConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`HubertModel`]. It is used to instantiate an
     Hubert model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the Hubert
     [facebook/hubert-base-ls960](https://huggingface.co/facebook/hubert-base-ls960) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:

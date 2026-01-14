@@ -168,29 +168,6 @@ An increasing sequence: one, two, three, four, five, six, seven, eight, nine, te
 ['I look forward to seeing you all again!\n\n\n\n\n\n\n\n\n\n\n']
 ```
 
-### Contrastive search
-
-コントラスティブ検索デコーディング戦略は、2022年の論文[A Contrastive Framework for Neural Text Generation](https://huggingface.co/papers/2202.06417)で提案されました。
-これは、非反復的でありながら一貫性のある長い出力を生成するために優れた結果を示しています。コントラスティブ検索の動作原理を学ぶには、[このブログポスト](https://huggingface.co/blog/introducing-csearch)をご覧ください。
-コントラスティブ検索の動作を有効にし、制御する2つの主要なパラメータは「penalty_alpha」と「top_k」です：
-
-```python
->>> from transformers import AutoTokenizer, AutoModelForCausalLM
-
->>> checkpoint = "openai-community/gpt2-large"
->>> tokenizer = AutoTokenizer.from_pretrained(checkpoint)
->>> model = AutoModelForCausalLM.from_pretrained(checkpoint)
-
->>> prompt = "Hugging Face Company is"
->>> inputs = tokenizer(prompt, return_tensors="pt")
-
->>> outputs = model.generate(**inputs, penalty_alpha=0.6, top_k=4, max_new_tokens=100)
->>> tokenizer.batch_decode(outputs, skip_special_tokens=True)
-['Hugging Face Company is a family owned and operated business. We pride ourselves on being the best
-in the business and our customer service is second to none.\n\nIf you have any questions about our
-products or services, feel free to contact us at any time. We look forward to hearing from you!']
-```
-
 ### Multinomial sampling
 
 常に最高確率のトークンを次のトークンとして選択する貪欲検索とは異なり、多項分布サンプリング（または祖先サンプリングとも呼ばれます）はモデルによって提供される語彙全体の確率分布に基づいて次のトークンをランダムに選択します。ゼロ以外の確率を持つすべてのトークンには選択される可能性があり、これにより繰り返しのリスクが減少します。
@@ -262,43 +239,6 @@ time."\n\nHe added: "I am very proud of the work I have been able to do in the l
 >>> outputs = model.generate(**inputs, num_beams=5, do_sample=True)
 >>> tokenizer.decode(outputs[0], skip_special_tokens=True)
 'Das Haus ist wunderbar.'
-```
-
-### Diverse beam search decoding
-
-多様なビームサーチデコーディング戦略は、ビームサーチ戦略の拡張であり、選択肢からより多様なビームシーケンスを生成できるようにします。この仕組みの詳細については、[Diverse Beam Search: Decoding Diverse Solutions from Neural Sequence Models](https://huggingface.co/papers/1610.02424) をご参照ください。このアプローチには、`num_beams`、`num_beam_groups`、および `diversity_penalty` という3つの主要なパラメータがあります。多様性ペナルティは、出力がグループごとに異なることを保証し、ビームサーチは各グループ内で使用されます。
-
-
-```python
->>> from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
-
->>> checkpoint = "google/pegasus-xsum"
->>> prompt = (
-...     "The Permaculture Design Principles are a set of universal design principles "
-...     "that can be applied to any location, climate and culture, and they allow us to design "
-...     "the most efficient and sustainable human habitation and food production systems. "
-...     "Permaculture is a design system that encompasses a wide variety of disciplines, such "
-...     "as ecology, landscape design, environmental science and energy conservation, and the "
-...     "Permaculture design principles are drawn from these various disciplines. Each individual "
-...     "design principle itself embodies a complete conceptual framework based on sound "
-...     "scientific principles. When we bring all these separate  principles together, we can "
-...     "create a design system that both looks at whole systems, the parts that these systems "
-...     "consist of, and how those parts interact with each other to create a complex, dynamic, "
-...     "living system. Each design principle serves as a tool that allows us to integrate all "
-...     "the separate parts of a design, referred to as elements, into a functional, synergistic, "
-...     "whole system, where the elements harmoniously interact and work together in the most "
-...     "efficient way possible."
-... )
-
->>> tokenizer = AutoTokenizer.from_pretrained(checkpoint)
->>> inputs = tokenizer(prompt, return_tensors="pt")
-
->>> model = AutoModelForSeq2SeqLM.from_pretrained(checkpoint)
-
->>> outputs = model.generate(**inputs, num_beams=5, num_beam_groups=5, max_new_tokens=30, diversity_penalty=1.0)
->>> tokenizer.decode(outputs[0], skip_special_tokens=True)
-'The Design Principles are a set of universal design principles that can be applied to any location, climate and
-culture, and they allow us to design the'
 ```
 
 ### Assisted Decoding

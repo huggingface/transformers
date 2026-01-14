@@ -36,7 +36,7 @@ if is_quark_available():
 
 @require_quark
 class QuarkConfigTest(unittest.TestCase):
-    def test_commmon_args(self):
+    def test_common_args(self):
         config = AutoConfig.from_pretrained("amd/Llama-3.1-8B-Instruct-w-int8-a-int8-sym-test")
         QuarkConfig(**config.quantization_config)
 
@@ -56,6 +56,8 @@ class QuarkTest(unittest.TestCase):
     EXPECTED_OUTPUTS.add("Today I am in Paris and I am enjoying my day off! The sun is shining, the birds are")
     EXPECTED_OUTPUTS.add("Today I am in Paris and I'm here to tell you about it. It's a beautiful day,")
     EXPECTED_OUTPUTS.add("Today I am in Paris and I am not in Paris at all! I am not in Paris, but")
+    EXPECTED_OUTPUTS.add("Today I am in Paris and I am in Paris, but I am not in Paris\nToday I am")
+    EXPECTED_OUTPUTS.add("Today I am in Paris and I am at the Luxembourg Congress Center\nToday I am in Paris and I")
 
     EXPECTED_RELATIVE_DIFFERENCE = 1.66
     device_map = None
@@ -66,7 +68,7 @@ class QuarkTest(unittest.TestCase):
         Setup reference & quantized model
         """
         cls.model_fp16 = AutoModelForCausalLM.from_pretrained(
-            cls.reference_model_name, torch_dtype=torch.float16, device_map=cls.device_map
+            cls.reference_model_name, dtype=torch.float16, device_map=cls.device_map
         )
         cls.mem_fp16 = cls.model_fp16.get_memory_footprint()
 
@@ -74,7 +76,7 @@ class QuarkTest(unittest.TestCase):
 
         cls.quantized_model = AutoModelForCausalLM.from_pretrained(
             cls.quantized_model_name,
-            torch_dtype=torch.float16,
+            dtype=torch.float16,
             device_map=cls.device_map,
         )
 
@@ -103,14 +105,10 @@ class QuarkTest(unittest.TestCase):
             # Tries with a `dtype``
             self.quantized_model.to(torch.float16)
 
-    def test_original_dtype(self):
+    def test_quantized_layers_class(self):
         r"""
-        A simple test to check if the model successfully stores the original dtype
+        A simple test to check if the model successfully changes the class type of the linear layers
         """
-        self.assertTrue(hasattr(self.quantized_model.config, "_pre_quantization_dtype"))
-        self.assertFalse(hasattr(self.model_fp16.config, "_pre_quantization_dtype"))
-        self.assertTrue(self.quantized_model.config._pre_quantization_dtype == torch.float16)
-
         self.assertTrue(isinstance(self.quantized_model.model.layers[0].mlp.gate_proj, QParamsLinear))
 
     def check_inference_correctness(self, model):

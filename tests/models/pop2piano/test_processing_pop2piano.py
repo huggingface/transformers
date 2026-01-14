@@ -27,7 +27,7 @@ from transformers.testing_utils import (
     require_scipy,
     require_torch,
 )
-from transformers.tokenization_utils import BatchEncoding
+from transformers.tokenization_python import BatchEncoding
 from transformers.utils.import_utils import (
     is_essentia_available,
     is_librosa_available,
@@ -243,25 +243,3 @@ class Pop2PianoProcessorTest(unittest.TestCase):
         # test if it raises when no input is passed
         with pytest.raises(ValueError):
             processor()
-
-    def test_model_input_names(self):
-        feature_extractor = self.get_feature_extractor()
-        tokenizer = self.get_tokenizer()
-
-        processor = Pop2PianoProcessor(
-            tokenizer=tokenizer,
-            feature_extractor=feature_extractor,
-        )
-
-        audio, sampling_rate, _, notes = self.get_inputs()
-        feature_extractor(audio, sampling_rate, return_tensors="pt")
-
-        inputs = processor(
-            audio=audio,
-            sampling_rate=sampling_rate,
-            notes=notes,
-        )
-        self.assertListEqual(
-            list(inputs.keys()),
-            ["input_features", "beatsteps", "extrapolated_beatstep", "token_ids"],
-        )

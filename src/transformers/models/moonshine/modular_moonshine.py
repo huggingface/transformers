@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Callable, Optional, Union
+from collections.abc import Callable
 
 import torch
 import torch.nn as nn
@@ -21,7 +21,7 @@ from transformers.utils.generic import OutputRecorder, check_model_inputs
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask, _prepare_4d_attention_mask_for_sdpa
@@ -34,7 +34,7 @@ from ...modeling_outputs import (
     Seq2SeqLMOutput,
     Seq2SeqModelOutput,
 )
-from ...modeling_rope_utils import rope_config_validation
+from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
@@ -46,15 +46,15 @@ from ..whisper.modeling_whisper import WhisperModel, shift_tokens_right
 logger = logging.get_logger(__name__)
 
 
-class MoonshineConfig(PretrainedConfig):
+class MoonshineConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MoonshineModel`]. It is used to instantiate a Moonshine
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the Moonshine
     [UsefulSensors/moonshine-tiny](https://huggingface.co/UsefulSensors/moonshine-tiny).
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 32768):
@@ -105,47 +105,10 @@ class MoonshineConfig(PretrainedConfig):
             the task.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings.
-        rope_scaling (`Dict`, *optional*):
-            Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
-            and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
-            accordingly.
-            Expected contents:
-                `rope_type` (`str`):
-                    The sub-variant of RoPE to use. Can be one of ['default', 'linear', 'dynamic', 'yarn', 'longrope',
-                    'llama3'], with 'default' being the original RoPE implementation.
-                `factor` (`float`, *optional*):
-                    Used with all rope types except 'default'. The scaling factor to apply to the RoPE embeddings. In
-                    most scaling types, a `factor` of x will enable the model to handle sequences of length x *
-                    original maximum pre-trained length.
-                `original_max_position_embeddings` (`int`, *optional*):
-                    Used with 'dynamic', 'longrope' and 'llama3'. The original max position embeddings used during
-                    pretraining.
-                `attention_factor` (`float`, *optional*):
-                    Used with 'yarn' and 'longrope'. The scaling factor to be applied on the attention
-                    computation. If unspecified, it defaults to value recommended by the implementation, using the
-                    `factor` field to infer the suggested value.
-                `beta_fast` (`float`, *optional*):
-                    Only used with 'yarn'. Parameter to set the boundary for extrapolation (only) in the linear
-                    ramp function. If unspecified, it defaults to 32.
-                `beta_slow` (`float`, *optional*):
-                    Only used with 'yarn'. Parameter to set the boundary for interpolation (only) in the linear
-                    ramp function. If unspecified, it defaults to 1.
-                `short_factor` (`list[float]`, *optional*):
-                    Only used with 'longrope'. The scaling factor to be applied to short contexts (<
-                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
-                    size divided by the number of attention heads divided by 2
-                `long_factor` (`list[float]`, *optional*):
-                    Only used with 'longrope'. The scaling factor to be applied to long contexts (<
-                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
-                    size divided by the number of attention heads divided by 2
-                `low_freq_factor` (`float`, *optional*):
-                    Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
-                `high_freq_factor` (`float`, *optional*):
-                    Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
-        partial_rotary_factor (`float`, *optional*, defaults to 0.9):
-            Percentage of the query and keys which will have rotary embedding.
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
         is_encoder_decoder (`bool`, *optional*, defaults to `True`):
             Whether the model is used as an encoder/decoder or not.
         attention_bias (`bool`, *optional*, defaults to `False`):
@@ -182,30 +145,28 @@ class MoonshineConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=32768,
-        hidden_size=288,
-        intermediate_size=1152,
-        encoder_num_hidden_layers=6,
-        decoder_num_hidden_layers=6,
-        encoder_num_attention_heads=8,
-        decoder_num_attention_heads=8,
-        encoder_num_key_value_heads=None,
-        decoder_num_key_value_heads=None,
-        pad_head_dim_to_multiple_of=None,
-        encoder_hidden_act="gelu",
-        decoder_hidden_act="silu",
-        max_position_embeddings=512,
-        initializer_range=0.02,
-        decoder_start_token_id=1,
-        use_cache=True,
-        rope_theta=10000.0,
-        rope_scaling=None,
-        partial_rotary_factor=0.9,
-        is_encoder_decoder=True,
-        attention_bias=False,
-        attention_dropout=0.0,
-        bos_token_id=1,
-        eos_token_id=2,
+        vocab_size: int | None = 32768,
+        hidden_size: int | None = 288,
+        intermediate_size: int | None = 1152,
+        encoder_num_hidden_layers: int | None = 6,
+        decoder_num_hidden_layers: int | None = 6,
+        encoder_num_attention_heads: int | None = 8,
+        decoder_num_attention_heads: int | None = 8,
+        encoder_num_key_value_heads: int | None = None,
+        decoder_num_key_value_heads: int | None = None,
+        pad_head_dim_to_multiple_of: int | None = None,
+        encoder_hidden_act: str | None = "gelu",
+        decoder_hidden_act: str | None = "silu",
+        max_position_embeddings: int | None = 512,
+        initializer_range: float | None = 0.02,
+        decoder_start_token_id: int | None = 1,
+        use_cache: bool | None = True,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        is_encoder_decoder: bool | None = True,
+        attention_bias: bool | None = False,
+        attention_dropout: float | None = 0.0,
+        bos_token_id: int | None = 1,
+        eos_token_id: int | None = 2,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -232,15 +193,11 @@ class MoonshineConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.decoder_start_token_id = decoder_start_token_id
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
-        self.partial_rotary_factor = partial_rotary_factor
         self.is_encoder_decoder = is_encoder_decoder
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
-
-        # Validate the correctness of rotary position embeddings parameters
-        rope_config_validation(self)
+        self.rope_parameters = rope_parameters
+        kwargs.setdefault("partial_rotary_factor", 0.9)  # assign default for BC
 
         super().__init__(
             bos_token_id=bos_token_id,
@@ -282,6 +239,10 @@ class MoonshineDecoderMLP(nn.Module):
         return hidden_states
 
 
+class MoonshineRotaryEmbedding(GlmRotaryEmbedding):
+    pass
+
+
 class MoonshineAttention(GlmAttention):
     def __init__(
         self,
@@ -307,13 +268,13 @@ class MoonshineAttention(GlmAttention):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Cache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        key_value_states: Optional[torch.Tensor] = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        attention_mask: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        cache_position: torch.LongTensor | None = None,
+        key_value_states: torch.Tensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         bsz, q_len = hidden_states.shape[:-1]
 
         query_states = (
@@ -321,20 +282,20 @@ class MoonshineAttention(GlmAttention):
         )
 
         is_cross_attention = key_value_states is not None
-        if past_key_value is not None:
-            is_updated = past_key_value.is_updated.get(self.layer_idx)
+        if past_key_values is not None:
+            is_updated = past_key_values.is_updated.get(self.layer_idx)
             if is_cross_attention:
                 # after the first generated id, we can subsequently re-use all key/value_states from cache
-                past_key_value.is_updated[self.layer_idx] = True
-                past_key_value = past_key_value.cross_attention_cache
+                past_key_values.is_updated[self.layer_idx] = True
+                past_key_values = past_key_values.cross_attention_cache
             else:
-                past_key_value = past_key_value.self_attention_cache
+                past_key_values = past_key_values.self_attention_cache
 
         # use key_value_states if cross attention
         current_states = key_value_states if key_value_states is not None else hidden_states
-        if is_cross_attention and past_key_value and is_updated:
-            key_states = past_key_value.layers[self.layer_idx].keys
-            value_states = past_key_value.layers[self.layer_idx].values
+        if is_cross_attention and past_key_values and is_updated:
+            key_states = past_key_values.layers[self.layer_idx].keys
+            value_states = past_key_values.layers[self.layer_idx].values
         else:
             key_states = (
                 self.k_proj(current_states)
@@ -346,8 +307,8 @@ class MoonshineAttention(GlmAttention):
                 .view(bsz, -1, self.config.num_key_value_heads, self.head_dim)
                 .transpose(1, 2)
             )
-            if is_cross_attention and past_key_value is not None:
-                key_states, value_states = past_key_value.update(
+            if is_cross_attention and past_key_values is not None:
+                key_states, value_states = past_key_values.update(
                     key_states, value_states, self.layer_idx, {"cache_position": cache_position}
                 )
 
@@ -355,9 +316,9 @@ class MoonshineAttention(GlmAttention):
             cos, sin = position_embeddings
             query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
-            if past_key_value is not None:
+            if past_key_values is not None:
                 cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
-                key_states, value_states = past_key_value.update(
+                key_states, value_states = past_key_values.update(
                     key_states, value_states, self.layer_idx, cache_kwargs
                 )
 
@@ -392,10 +353,6 @@ class MoonshineAttention(GlmAttention):
         return attn_output, attn_weights
 
 
-class MoonshineRotaryEmbedding(GlmRotaryEmbedding):
-    pass
-
-
 class MoonshineEncoderLayer(LlamaDecoderLayer):
     def __init__(self, config: MoonshineConfig, layer_idx: int):
         super().__init__(config, layer_idx)
@@ -414,7 +371,7 @@ class MoonshineEncoderLayer(LlamaDecoderLayer):
 
 
 class MoonshineDecoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: MoonshineConfig, layer_idx: Optional[int] = None):
+    def __init__(self, config: MoonshineConfig, layer_idx: int | None = None):
         super().__init__()
         self.hidden_size = config.hidden_size
 
@@ -441,18 +398,18 @@ class MoonshineDecoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        encoder_position_ids: Optional[torch.LongTensor] = None,
-        past_key_value: Optional[Cache] = None,
-        use_cache: Optional[bool] = False,
-        cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-        encoder_position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
+        attention_mask: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        encoder_position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        use_cache: bool | None = False,
+        cache_position: torch.LongTensor | None = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        encoder_position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
+    ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
         residual = hidden_states
         hidden_states = self.input_layernorm(hidden_states)
 
@@ -460,7 +417,7 @@ class MoonshineDecoderLayer(GradientCheckpointingLayer):
             hidden_states=hidden_states,
             attention_mask=attention_mask,
             position_ids=position_ids,
-            past_key_value=past_key_value,
+            past_key_values=past_key_values,
             use_cache=use_cache,
             cache_position=cache_position,
             position_embeddings=position_embeddings,
@@ -475,7 +432,7 @@ class MoonshineDecoderLayer(GradientCheckpointingLayer):
                 hidden_states=hidden_states,
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
-                past_key_value=past_key_value,
+                past_key_values=past_key_values,
                 use_cache=use_cache,
             )
             hidden_states = residual + hidden_states
@@ -492,6 +449,7 @@ class MoonshinePreTrainedModel(PreTrainedModel):
     config: MoonshineConfig
     base_model_prefix = "model"
     main_input_name = "input_values"
+    input_modalities = "audio"
     supports_gradient_checkpointing = True
     _no_split_modules = ["MoonshineEncoderLayer", "MoonshineDecoderLayer"]
     _supports_flash_attn = True
@@ -534,12 +492,12 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
         self.conv2 = nn.Conv1d(embed_dim, 2 * embed_dim, kernel_size=7, stride=3)
         self.conv3 = nn.Conv1d(2 * embed_dim, embed_dim, kernel_size=3, stride=2)
         self.groupnorm = nn.GroupNorm(num_groups=1, num_channels=embed_dim, eps=1e-5)
-        self.rotary_emb = MoonshineRotaryEmbedding(config=config)
 
         self.layers = nn.ModuleList(
             [MoonshineEncoderLayer(config, idx) for idx in range(config.encoder_num_hidden_layers)]
         )
         self.layer_norm = nn.LayerNorm(embed_dim, bias=False)
+        self.rotary_emb = MoonshineRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
         self.post_init()
 
@@ -553,7 +511,7 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
     def forward(
         self,
         input_values: torch.FloatTensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
         r"""
@@ -561,7 +519,7 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
             input_values (`torch.FloatTensor` of shape `(batch_size, audio_length)`):
                 Float values of the raw speech waveform. Raw speech waveform can be
                 obtained by loading a `.flac` or `.wav` audio file into an array of type `list[float]`, a
-                `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec libary (`pip install torchcodec`) or
+                `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec library (`pip install torchcodec`) or
                 the soundfile library (`pip install soundfile`). To prepare the array into
                 `input_values`, the [`AutoFeatureExtractor`] should be used for padding
                 and conversion into a tensor of type `torch.FloatTensor`.
@@ -591,7 +549,7 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
                 attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
 
         position_ids = torch.arange(0, hidden_states.shape[1], device=hidden_states.device).unsqueeze(0)
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         for encoder_layer in self.layers:
             hidden_states = encoder_layer(
@@ -627,17 +585,17 @@ class MoonshineDecoder(LlamaModel):
     @check_model_inputs
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
+        encoder_hidden_states: torch.FloatTensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, BaseModelOutputWithPast]:
+    ) -> tuple | BaseModelOutputWithPast:
         r"""
         encoder_hidden_states (`torch.FloatTensor` of shape `(batch_size, encoder_sequence_length, hidden_size)`, *optional*):
             Sequence of hidden-states at the output of the last layer of the encoder. Used in the cross-attention
@@ -655,9 +613,7 @@ class MoonshineDecoder(LlamaModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         if use_cache and past_key_values is None:
-            self_attention_cache = DynamicCache()
-            cross_attention_cache = DynamicCache()
-            past_key_values = EncoderDecoderCache(self_attention_cache, cross_attention_cache)
+            past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
@@ -678,7 +634,7 @@ class MoonshineDecoder(LlamaModel):
         )
 
         hidden_states = inputs_embeds
-        position_embeddings = self.rotary_emb(hidden_states, position_ids)
+        position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
         if encoder_attention_mask is not None:
             mask_len = encoder_hidden_states.shape[-2]
@@ -702,7 +658,7 @@ class MoonshineDecoder(LlamaModel):
                 encoder_hidden_states,  # as a positional argument for gradient checkpointing
                 encoder_attention_mask=encoder_attention_mask,
                 position_ids=position_ids,
-                past_key_value=past_key_values,
+                past_key_values=past_key_values,
                 use_cache=use_cache,
                 cache_position=cache_position,
                 position_embeddings=position_embeddings,
@@ -722,23 +678,23 @@ class MoonshineModel(WhisperModel):
     @auto_docstring
     def forward(
         self,
-        input_values: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.LongTensor] = None,
-        encoder_outputs: Optional[tuple[tuple[torch.FloatTensor]]] = None,
-        past_key_values: Optional[Union[EncoderDecoderCache, tuple[torch.FloatTensor]]] = None,
-        decoder_inputs_embeds: Optional[tuple[torch.FloatTensor]] = None,
-        decoder_position_ids: Optional[tuple[torch.LongTensor]] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        input_values: torch.FloatTensor | None = None,
+        attention_mask: torch.LongTensor | None = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.LongTensor | None = None,
+        encoder_outputs: tuple[tuple[torch.FloatTensor]] | None = None,
+        past_key_values: EncoderDecoderCache | None = None,
+        decoder_inputs_embeds: tuple[torch.FloatTensor] | None = None,
+        decoder_position_ids: tuple[torch.LongTensor] | None = None,
+        use_cache: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Seq2SeqModelOutput:
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, audio_length)`):
             Float values of the raw speech waveform. Raw speech waveform can be
             obtained by loading a `.flac` or `.wav` audio file into an array of type `list[float]`, a
-            `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec libary (`pip install torchcodec`) or
+            `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec library (`pip install torchcodec`) or
             the soundfile library (`pip install soundfile`). To prepare the array into
             `input_values`, the [`AutoFeatureExtractor`] should be used for padding
             and conversion into a tensor of type `torch.FloatTensor`.
@@ -798,7 +754,7 @@ class MoonshineModel(WhisperModel):
     """
 )
 class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["proj_out.weight"]
+    _tied_weights_keys = {"proj_out.weight": "model.decoder.embed_tokens.weight"}
 
     def __init__(self, config: MoonshineConfig):
         super().__init__(config)
@@ -807,12 +763,6 @@ class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixi
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_encoder(self):
-        return self.model.get_encoder()
-
-    def get_decoder(self):
-        return self.model.get_decoder()
 
     def get_output_embeddings(self):
         return self.proj_out
@@ -827,24 +777,24 @@ class MoonshineForConditionalGeneration(MoonshinePreTrainedModel, GenerationMixi
     @auto_docstring
     def forward(
         self,
-        input_values: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.LongTensor] = None,
-        encoder_outputs: Optional[tuple[tuple[torch.FloatTensor]]] = None,
-        past_key_values: Optional[Union[EncoderDecoderCache, tuple[torch.FloatTensor]]] = None,
-        decoder_inputs_embeds: Optional[tuple[torch.FloatTensor]] = None,
-        decoder_position_ids: Optional[tuple[torch.LongTensor]] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
+        input_values: torch.FloatTensor | None = None,
+        attention_mask: torch.LongTensor | None = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.LongTensor | None = None,
+        encoder_outputs: tuple[tuple[torch.FloatTensor]] | None = None,
+        past_key_values: EncoderDecoderCache | None = None,
+        decoder_inputs_embeds: tuple[torch.FloatTensor] | None = None,
+        decoder_position_ids: tuple[torch.LongTensor] | None = None,
+        use_cache: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
+        labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Seq2SeqLMOutput:
         r"""
         input_values (`torch.FloatTensor` of shape `(batch_size, audio_length)`):
             Float values of the raw speech waveform. Raw speech waveform can be
             obtained by loading a `.flac` or `.wav` audio file into an array of type `list[float]`, a
-            `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec libary (`pip install torchcodec`) or
+            `numpy.ndarray` or a `torch.Tensor`, *e.g.* via the torchcodec library (`pip install torchcodec`) or
             the soundfile library (`pip install soundfile`). To prepare the array into
             `input_values`, the [`AutoFeatureExtractor`] should be used for padding
             and conversion into a tensor of type `torch.FloatTensor`.

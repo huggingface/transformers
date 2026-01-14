@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,11 +13,11 @@
 # limitations under the License.
 
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
-class InternVLVisionConfig(PretrainedConfig):
+class InternVLVisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`InternVLVisionModel`]. It is used to instantiate an InternVLVisionModel
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the defaults will yield
@@ -139,15 +138,15 @@ class InternVLVisionConfig(PretrainedConfig):
         self.use_mean_pooling = use_mean_pooling
 
 
-class InternVLConfig(PretrainedConfig):
+class InternVLConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`InternVLForConditionalGeneration`]. It is used to instantiate a
     InternVL model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of InternVL3-1B.
     e.g. [OpenGVLab/InternVL3-1B-hf](https://huggingface.co/OpenGVLab/InternVL3-1B-hf)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:

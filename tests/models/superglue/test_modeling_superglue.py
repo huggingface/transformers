@@ -13,12 +13,13 @@
 # limitations under the License.
 import inspect
 import unittest
+from functools import cached_property
 
 from datasets import load_dataset
 
 from transformers.models.superglue.configuration_superglue import SuperGlueConfig
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor
@@ -119,10 +120,7 @@ class SuperGlueModelTester:
 class SuperGlueModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (SuperGlueForKeypointMatching,) if is_torch_available() else ()
 
-    fx_compatible = False
-    test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
     has_attentions = True
 
     def setUp(self):
@@ -306,7 +304,7 @@ class SuperGlueModelTest(ModelTesterMixin, unittest.TestCase):
             else:
                 # indexing the first element does not always work
                 # e.g. models that output similarity scores of size (N, M) would need to index [0, 0]
-                slice_ids = [slice(0, index) for index in single_row_object.shape]
+                slice_ids = tuple(slice(0, index) for index in single_row_object.shape)
                 batched_row = batched_object[slice_ids]
                 self.assertFalse(
                     torch.isnan(batched_row).any(), f"Batched output has `nan` in {model_name} for key={key}"
@@ -423,3 +421,5 @@ class SuperGlueModelIntegrationTest(unittest.TestCase):
             torch.sum(~torch.isclose(predicted_matching_scores_values, expected_matching_scores_values, atol=1e-2)) < 4
         )
         self.assertTrue(torch.sum(predicted_matches_values != expected_matches_values) < 4)
+        self.assertTrue(torch.all(outputs.matches[0, 1] < torch.sum(outputs.mask[0, 0])))
+        self.assertTrue(torch.all(outputs.matches[0, 0] < torch.sum(outputs.mask[0, 1])))

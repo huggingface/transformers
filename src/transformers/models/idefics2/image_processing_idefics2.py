@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +14,7 @@
 
 
 from collections.abc import Iterable
-from typing import Any, Optional, Union
+from typing import Any
 
 import numpy as np
 
@@ -35,6 +34,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, is_vision_available, logging
 
 
@@ -42,8 +42,16 @@ logger = logging.get_logger(__name__)
 
 
 if is_vision_available():
-    import PIL
     from PIL import Image
+
+
+class Idefics2ImageProcessorKwargs(ImagesKwargs, total=False):
+    """
+    do_image_splitting (`bool`, *optional*, defaults to `False`):
+        Whether to split the image into a sequence 4 equal sub-images concatenated with the original image.
+    """
+
+    do_image_splitting: bool
 
 
 def get_resize_output_image_size(image, size, input_data_format) -> tuple[int, int]:
@@ -87,7 +95,7 @@ def max_across_indices(values: Iterable[Any]) -> list[Any]:
 
 
 def get_max_height_width(
-    images_list: list[list[np.ndarray]], input_data_format: Optional[Union[str, ChannelDimension]] = None
+    images_list: list[list[np.ndarray]], input_data_format: str | ChannelDimension | None = None
 ) -> list[int]:
     """
     Get the maximum height and width across all images in a batch.
@@ -106,7 +114,7 @@ def get_max_height_width(
 
 # Copied from transformers.models.detr.image_processing_detr.make_pixel_mask
 def make_pixel_mask(
-    image: np.ndarray, output_size: tuple[int, int], input_data_format: Optional[Union[str, ChannelDimension]] = None
+    image: np.ndarray, output_size: tuple[int, int], input_data_format: str | ChannelDimension | None = None
 ) -> np.ndarray:
     """
     Make a pixel mask for the image, where 1 indicates a valid pixel and 0 indicates padding.
@@ -132,7 +140,7 @@ def convert_to_rgb(image: ImageInput) -> ImageInput:
         image (Image):
             The image to convert.
     """
-    if not isinstance(image, PIL.Image.Image):
+    if not isinstance(image, Image.Image):
         return image
 
     # `image.convert("RGB")` would only work for .jpg images, as it creates a wrong background
@@ -186,18 +194,19 @@ class Idefics2ImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values", "pixel_attention_mask"]
+    valid_kwargs = Idefics2ImageProcessorKwargs
 
     def __init__(
         self,
         do_convert_rgb: bool = True,
         do_resize: bool = True,
-        size: Optional[dict[str, int]] = None,
+        size: dict[str, int] | None = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_rescale: bool = True,
         rescale_factor: float = 1 / 255,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
         do_pad: bool = True,
         do_image_splitting: bool = False,
         **kwargs,
@@ -220,8 +229,8 @@ class Idefics2ImageProcessor(BaseImageProcessor):
         image: np.ndarray,
         size: dict[str, int],
         resample: PILImageResampling = PILImageResampling.BILINEAR,
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        data_format: str | ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -257,9 +266,9 @@ class Idefics2ImageProcessor(BaseImageProcessor):
         self,
         image: np.ndarray,
         output_size: tuple[int, int],
-        constant_values: Union[float, Iterable[float]] = 0,
-        data_format: Optional[ChannelDimension] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        constant_values: float | Iterable[float] = 0,
+        data_format: ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
     ) -> np.ndarray:
         """
         Pad an image with zeros to the given size.
@@ -283,11 +292,11 @@ class Idefics2ImageProcessor(BaseImageProcessor):
     def pad(
         self,
         images: list[np.ndarray],
-        constant_values: Union[float, Iterable[float]] = 0,
+        constant_values: float | Iterable[float] = 0,
         return_pixel_mask: bool = True,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        data_format: Optional[ChannelDimension] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        return_tensors: str | TensorType | None = None,
+        data_format: ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
     ) -> BatchFeature:
         """
         For a list of images, for each images, pads a batch of images to the bottom and right of the image with zeros to the size of largest height and width.
@@ -303,10 +312,8 @@ class Idefics2ImageProcessor(BaseImageProcessor):
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                     - Unset: Return a list of `np.ndarray`.
-                    - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
                     - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                     - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                    - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`str` or `ChannelDimension`, *optional*):
                 The channel dimension format of the image. If not provided, it will be the same as the input image.
             input_data_format (`ChannelDimension` or `str`, *optional*):
@@ -356,7 +363,7 @@ class Idefics2ImageProcessor(BaseImageProcessor):
         h1: int,
         w2: int,
         h2: int,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: str | ChannelDimension | None = None,
     ) -> np.ndarray:
         if input_data_format == ChannelDimension.FIRST:
             return im[:, h1:h2, w1:w2]
@@ -366,7 +373,7 @@ class Idefics2ImageProcessor(BaseImageProcessor):
     def split_image(
         self,
         image: np.ndarray,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: str | ChannelDimension | None = None,
     ):
         """
         Split an image into 4 equal sub-images, and the concatenate that sequence with the original image.
@@ -394,20 +401,20 @@ class Idefics2ImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        do_convert_rgb: Optional[bool] = None,
-        do_resize: Optional[bool] = None,
-        size: Optional[dict[str, int]] = None,
-        resample: PILImageResampling = None,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[float] = None,
-        do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
-        do_pad: Optional[bool] = None,
-        do_image_splitting: Optional[bool] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        input_data_format: Optional[ChannelDimension] = None,
-        data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
+        do_convert_rgb: bool | None = None,
+        do_resize: bool | None = None,
+        size: dict[str, int] | None = None,
+        resample: PILImageResampling | None = None,
+        do_rescale: bool | None = None,
+        rescale_factor: float | None = None,
+        do_normalize: bool | None = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        do_pad: bool | None = None,
+        do_image_splitting: bool | None = None,
+        return_tensors: str | TensorType | None = None,
+        input_data_format: ChannelDimension | None = None,
+        data_format: ChannelDimension | None = ChannelDimension.FIRST,
     ):
         """
         Preprocess a batch of images.
@@ -444,10 +451,8 @@ class Idefics2ImageProcessor(BaseImageProcessor):
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                 - Unset: Return a list of `np.ndarray`.
-                - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
                 - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                 - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format for the output image. Can be one of:
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
@@ -472,13 +477,11 @@ class Idefics2ImageProcessor(BaseImageProcessor):
         do_pad = do_pad if do_pad is not None else self.do_pad
         do_image_splitting = do_image_splitting if do_image_splitting is not None else self.do_image_splitting
 
+        images = self.fetch_images(images)
         images_list = make_nested_list_of_images(images)
 
         if not valid_images(images_list[0]):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
+            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
 
         validate_preprocess_arguments(
             do_rescale=do_rescale,
@@ -496,8 +499,11 @@ class Idefics2ImageProcessor(BaseImageProcessor):
 
         # All transformations expect numpy arrays.
         images_list = [[to_numpy_array(image) for image in images] for images in images_list]
+        # Search for the first image in the image list.
+        # NOTE: we can't slice the first image with images_list[0][0] if the first batch contains no images. See #36682
+        first_image_in_list = [images for images in images_list if images][0][0]
 
-        if do_rescale and is_scaled_image(images_list[0][0]):
+        if do_rescale and is_scaled_image(first_image_in_list):
             logger.warning_once(
                 "It looks like you are trying to rescale already rescaled images. If the input"
                 " images have pixel values between 0 and 1, set `do_rescale=False` to avoid rescaling them again."
@@ -505,7 +511,7 @@ class Idefics2ImageProcessor(BaseImageProcessor):
 
         if input_data_format is None:
             # We assume that all images have the same channel dimension format.
-            input_data_format = infer_channel_dimension_format(images_list[0][0])
+            input_data_format = infer_channel_dimension_format(first_image_in_list)
 
         if do_image_splitting:
             new_images_list = []

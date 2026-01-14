@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,32 +13,28 @@
 # limitations under the License.
 """RoFormer model configuration"""
 
-from collections import OrderedDict
-from collections.abc import Mapping
-
-from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class RoFormerConfig(PretrainedConfig):
+class RoFormerConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`RoFormerModel`]. It is used to instantiate an
     RoFormer model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the RoFormer
     [junnyu/roformer_chinese_base](https://huggingface.co/junnyu/roformer_chinese_base) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
         vocab_size (`int`, *optional*, defaults to 50000):
             Vocabulary size of the RoFormer model. Defines the number of different tokens that can be represented by
-            the `inputs_ids` passed when calling [`RoFormerModel`] or [`TFRoFormerModel`].
+            the `inputs_ids` passed when calling [`RoFormerModel`].
         embedding_size (`int`, *optional*, defaults to None):
             Dimensionality of the encoder layers and the pooler layer. Defaults to the `hidden_size` if not provided.
         hidden_size (`int`, *optional*, defaults to 768):
@@ -61,7 +56,7 @@ class RoFormerConfig(PretrainedConfig):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 1536).
         type_vocab_size (`int`, *optional*, defaults to 2):
-            The vocabulary size of the `token_type_ids` passed when calling [`RoFormerModel`] or [`TFRoFormerModel`].
+            The vocabulary size of the `token_type_ids` passed when calling [`RoFormerModel`].
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
@@ -130,21 +125,4 @@ class RoFormerConfig(PretrainedConfig):
         self.use_cache = use_cache
 
 
-class RoFormerOnnxConfig(OnnxConfig):
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        if self.task == "multiple-choice":
-            dynamic_axis = {0: "batch", 1: "choice", 2: "sequence"}
-        else:
-            dynamic_axis = {0: "batch", 1: "sequence"}
-        dynamic_axis = {0: "batch", 1: "sequence"}
-        return OrderedDict(
-            [
-                ("input_ids", dynamic_axis),
-                ("attention_mask", dynamic_axis),
-                ("token_type_ids", dynamic_axis),
-            ]
-        )
-
-
-__all__ = ["RoFormerConfig", "RoFormerOnnxConfig"]
+__all__ = ["RoFormerConfig"]

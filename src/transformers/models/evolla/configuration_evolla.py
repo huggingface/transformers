@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Westlake Representational Learning Lab (Fajie Yuan Lab) team and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,20 +13,20 @@
 # limitations under the License.
 """Evolla model configuration"""
 
-from ...configuration_utils import PretrainedConfig
-from ...modeling_rope_utils import rope_config_validation
+from ...configuration_utils import PreTrainedConfig
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class SaProtConfig(PretrainedConfig):
+class SaProtConfig(PreTrainedConfig):
     r"""This is the configuration class to store the configuration of a [`EvollaSaProtProteinEncoder`]. It is used to instantiate a
     SaProt model according to the specified arguments, defining the model architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 446):
@@ -76,7 +75,6 @@ class SaProtConfig(PretrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-05,
         position_embedding_type="rotary",
-        use_cache=True,
         emb_layer_norm_before=False,
         token_dropout=True,
         **kwargs,
@@ -94,12 +92,11 @@ class SaProtConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.position_embedding_type = position_embedding_type
-        self.use_cache = use_cache
         self.emb_layer_norm_before = emb_layer_norm_before
         self.token_dropout = token_dropout
 
 
-class EvollaConfig(PretrainedConfig):
+class EvollaConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`EvollaModel`]. It is used to instantiate an
     Evolla model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -107,8 +104,8 @@ class EvollaConfig(PretrainedConfig):
 
     e.g. [westlake-repl/Evolla-10B-hf](https://huggingface.co/westlake-repl/Evolla-10B-hf)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         protein_encoder_config (`dict`, *optional*):
@@ -134,9 +131,7 @@ class EvollaConfig(PretrainedConfig):
             just in case (e.g., 512 or 1024 or 2048).
         rms_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon value for the RMS-norm layer in the llama model.
-        rope_theta (`float`, *optional*, defaults to 500000.0):
-            The threshold value for the RoPE layer in the llama model.
-        rope_scaling (`float`, *optional*):
+        rope_parameters (`float`, *optional*):
             The scaling factor for the RoPE layer in the llama model.
         attention_bias (`bool`, *optional*, defaults to `False`):
             Whether to use bias in the attention layer.
@@ -192,39 +187,39 @@ class EvollaConfig(PretrainedConfig):
 
     model_type = "EvollaModel"
     sub_configs = {"protein_encoder_config": SaProtConfig}
+    default_theta = 500000.0
 
     def __init__(
         self,
-        protein_encoder_config=None,
-        vocab_size=128256,  # llama vocab size
-        hidden_size=4096,  # llama hidden size
-        intermediate_size=14336,  # llama intermediate size
-        num_hidden_layers=32,  # llama num layers
-        num_attention_heads=32,  # llama num heads
-        num_key_value_heads=8,  # llama num key-value heads
-        hidden_act="silu",  # llama activation function
-        max_position_embeddings=8192,  # llama rope max length
-        rms_norm_eps=1e-05,
-        rope_theta=500000.0,
-        rope_scaling=None,
-        attention_bias=False,
-        attention_dropout=0.0,
-        mlp_bias=False,
-        aligner_ffn_mult=4,
-        aligner_enable_bias=True,
-        aligner_attention_probs_dropout_prob=0.1,
-        aligner_num_add_layers=8,
-        resampler_depth=6,
-        resampler_dim_head=64,
-        resampler_heads=8,
-        resampler_num_latents=64,
-        resampler_ff_mult=4,
-        initializer_range=0.02,
-        pad_token_id=None,
-        bos_token_id=128000,
-        eos_token_id=128009,
-        use_cache=False,
-        tie_word_embeddings=False,
+        protein_encoder_config: dict | None = None,
+        vocab_size: int | None = 128256,  # llama vocab size
+        hidden_size: int | None = 4096,  # llama hidden size
+        intermediate_size: int | None = 14336,  # llama intermediate size
+        num_hidden_layers: int | None = 32,  # llama num layers
+        num_attention_heads: int | None = 32,  # llama num heads
+        num_key_value_heads: int | None = 8,  # llama num key-value heads
+        hidden_act: str | None = "silu",  # llama activation function
+        max_position_embeddings: int | None = 8192,  # llama rope max length
+        rms_norm_eps: int | None = 1e-05,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        attention_bias: bool | None = False,
+        attention_dropout: float | None = 0.0,
+        mlp_bias: bool | None = False,
+        aligner_ffn_mult: int | None = 4,
+        aligner_enable_bias: bool | None = True,
+        aligner_attention_probs_dropout_prob: float | None = 0.1,
+        aligner_num_add_layers: int | None = 8,
+        resampler_depth: int | None = 6,
+        resampler_dim_head: int | None = 64,
+        resampler_heads: int | None = 8,
+        resampler_num_latents: int | None = 64,
+        resampler_ff_mult: int | None = 4,
+        initializer_range: float | None = 0.02,
+        pad_token_id: int | None = None,
+        bos_token_id: int | None = 128000,
+        eos_token_id: int | None = 128009,
+        use_cache: bool | None = False,
+        tie_word_embeddings: bool | None = False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -252,14 +247,7 @@ class EvollaConfig(PretrainedConfig):
         self.resampler_heads = resampler_heads
         self.resampler_num_latents = resampler_num_latents
         self.resampler_ff_mult = resampler_ff_mult
-
-        self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
-        # Validate the correctness of rotary position embeddings parameters
-        # BC: if there is a 'type' field, copy it it to 'rope_type'.
-        if self.rope_scaling is not None and "type" in self.rope_scaling:
-            self.rope_scaling["rope_type"] = self.rope_scaling["type"]
-        rope_config_validation(self)
+        self.rope_parameters = rope_parameters
 
         # Subconfig
         if protein_encoder_config is None:

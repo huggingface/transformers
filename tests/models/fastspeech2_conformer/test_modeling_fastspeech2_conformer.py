@@ -33,7 +33,7 @@ from transformers.testing_utils import (
 )
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, ids_tensor
 
 
 if is_torch_available():
@@ -125,9 +125,7 @@ class FastSpeech2ConformerModelTester:
 @require_torch
 class FastSpeech2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (FastSpeech2ConformerModel,) if is_torch_available() else ()
-    test_pruning = False
-    test_headmasking = False
-    test_torchscript = False
+
     test_resize_embeddings = False
     is_encoder_decoder = True
 
@@ -141,22 +139,6 @@ class FastSpeech2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_initialization(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    msg = f"Parameter {name} of model {model_class} seems not properly initialized"
-                    if "norm" in name:
-                        if "bias" in name:
-                            self.assertEqual(param.data.mean().item(), 0.0, msg=msg)
-                        if "weight" in name:
-                            self.assertEqual(param.data.mean().item(), 1.0, msg=msg)
-                    elif "conv" in name or "embed" in name:
-                        self.assertTrue(-1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0, msg=msg)
 
     def test_duration_energy_pitch_output(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -218,7 +200,7 @@ class FastSpeech2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdirname:
             model.save_pretrained(tmpdirname)
             _, info = FastSpeech2ConformerModel.from_pretrained(tmpdirname, output_loading_info=True)
-        self.assertEqual(info["missing_keys"], [])
+        self.assertEqual(info["missing_keys"], set())
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -240,6 +222,7 @@ class FastSpeech2ConformerModelTest(ModelTesterMixin, unittest.TestCase):
             "return_dict",
             "output_attentions",
             "output_hidden_states",
+            "kwargs",
         ]
         self.assertListEqual(arg_names, expected_arg_names)
 
@@ -393,16 +376,16 @@ class FastSpeech2ConformerModelIntegrationTest(unittest.TestCase):
                     [0.7831, -0.2663, 1.0352, 1.4489, 0.9088, 0.0247, -0.3995, 0.0078, 1.2446, 1.6998],
                 ],
                 ("cuda", 8): [
-                    [-1.2425, -1.7282, -1.6750, -1.7448, -1.6400, -1.5217, -1.4478, -1.3341, -1.4026, -1.4493],
-                    [-0.7858, -1.4967, -1.3601, -1.4875, -1.2950, -1.0725, -1.0021, -0.7553, -0.6522, -0.6929],
-                    [-0.7303, -1.3911, -1.0370, -1.2656, -1.0345, -0.7888, -0.7423, -0.5251, -0.3737, -0.3979],
-                    [-0.4784, -1.3506, -1.1556, -1.4677, -1.2820, -1.0253, -1.0868, -0.9006, -0.8949, -0.8448],
-                    [-0.3968, -1.2896, -1.2811, -1.6145, -1.4660, -1.2564, -1.4135, -1.2652, -1.3258, -1.1716],
-                    [-1.4912, -1.3092, -0.3812, -0.3886, -0.5737, -0.9034, -1.0749, -1.0571, -1.2202, -1.0567],
-                    [0.0200, -0.0577, 0.9151, 1.1516, 1.1656, 0.6628, -0.1012, -0.3086, -0.2283, 0.2658],
-                    [1.1778, 0.1805, 0.7255, 1.5732, 1.6680, 0.4539, -0.1572, -0.1785, 0.0751, 0.8175],
-                    [-0.2088, -0.3212, 1.1101, 1.5085, 1.4625, 0.6293, -0.0522, 0.0587, 0.8615, 1.4432],
-                    [0.7834, -0.2659, 1.0355, 1.4486, 0.9080, 0.0244, -0.3995, 0.0083, 1.2452, 1.6998],
+                    [-1.2426, -1.7286, -1.6754, -1.7451, -1.6402, -1.5219, -1.4480, -1.3345, -1.4030, -1.4497],
+                    [-0.7858, -1.4966, -1.3601, -1.4876, -1.2949, -1.0723, -1.0021, -0.7553, -0.6521, -0.6929],
+                    [-0.7298, -1.3908, -1.0369, -1.2656, -1.0342, -0.7883, -0.7420, -0.5249, -0.3734, -0.3977],
+                    [-0.4784, -1.3508, -1.1558, -1.4678, -1.2820, -1.0252, -1.0868, -0.9006, -0.8947, -0.8448],
+                    [-0.3963, -1.2895, -1.2813, -1.6147, -1.4658, -1.2560, -1.4134, -1.2650, -1.3255, -1.1715],
+                    [-1.4913, -1.3097, -0.3820, -0.3897, -0.5747, -0.9040, -1.0755, -1.0575, -1.2205, -1.0571],
+                    [ 0.0197, -0.0582, 0.9148, 1.1512, 1.1651, 0.6628, -0.1009, -0.3085, -0.2285, 0.2651],
+                    [ 1.1780, 0.1803, 0.7251, 1.5728, 1.6677, 0.4542, -0.1572, -0.1787, 0.0744, 0.8168],
+                    [-0.2078, -0.3211, 1.1096, 1.5085, 1.4631, 0.6299, -0.0515, 0.0589, 0.8609, 1.4429],
+                    [ 0.7831, -0.2663, 1.0352, 1.4488, 0.9087, 0.0247, -0.3995, 0.0079, 1.2447, 1.6998],
                 ],
             }
         )
@@ -562,9 +545,7 @@ class FastSpeech2ConformerWithHifiGanTester:
 @require_torch
 class FastSpeech2ConformerWithHifiGanTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (FastSpeech2ConformerWithHifiGan,) if is_torch_available() else ()
-    test_pruning = False
-    test_headmasking = False
-    test_torchscript = False
+
     test_resize_embeddings = False
     is_encoder_decoder = True
 
@@ -574,22 +555,6 @@ class FastSpeech2ConformerWithHifiGanTest(ModelTesterMixin, unittest.TestCase):
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
-
-    def test_initialization(self):
-        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    msg = f"Parameter {name} of model {model_class} seems not properly initialized"
-                    if "norm" in name:
-                        if "bias" in name:
-                            self.assertEqual(param.data.mean().item(), 0.0, msg=msg)
-                        if "weight" in name:
-                            self.assertEqual(param.data.mean().item(), 1.0, msg=msg)
-                    elif "conv" in name or "embed" in name:
-                        self.assertTrue(-1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0, msg=msg)
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         return inputs_dict
@@ -654,7 +619,7 @@ class FastSpeech2ConformerWithHifiGanTest(ModelTesterMixin, unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmpdirname:
             model.save_pretrained(tmpdirname)
             _, info = FastSpeech2ConformerWithHifiGan.from_pretrained(tmpdirname, output_loading_info=True)
-        self.assertEqual(info["missing_keys"], [])
+        self.assertEqual(info["missing_keys"], set())
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -676,6 +641,7 @@ class FastSpeech2ConformerWithHifiGanTest(ModelTesterMixin, unittest.TestCase):
             "return_dict",
             "output_attentions",
             "output_hidden_states",
+            "kwargs",
         ]
         self.assertListEqual(arg_names, expected_arg_names)
 

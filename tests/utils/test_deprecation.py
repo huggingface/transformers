@@ -15,6 +15,7 @@
 import unittest
 import warnings
 
+import pytest
 from parameterized import parameterized
 
 from transformers import __version__, is_torch_available
@@ -174,6 +175,7 @@ class DeprecationDecoratorTester(unittest.TestCase):
             result = dummy_function(deprecated_name="old_value", new_name="new_value")
         self.assertEqual(result, "new_value")
 
+    @pytest.mark.torch_compile_test
     @require_torch_accelerator
     def test_compile_safe(self):
         @deprecate_kwarg("deprecated_factor", new_name="new_factor", version=INFINITE_VERSION)

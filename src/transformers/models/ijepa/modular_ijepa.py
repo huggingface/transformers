@@ -1,15 +1,13 @@
-from typing import Optional, Union
-
 import torch
 import torch.nn as nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
 from transformers.models.ijepa.configuration_ijepa import IJepaConfig
 
-from ...modeling_outputs import ImageClassifierOutput
-from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, torch_int
-from ..vit.modeling_vit import ViTEmbeddings, ViTForImageClassification, ViTModel
+from ... import initialization as init
+from ...modeling_outputs import BaseModelOutputWithPooling, ImageClassifierOutput
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, torch_int
+from ..vit.modeling_vit import ViTEmbeddings, ViTForImageClassification, ViTModel, ViTPreTrainedModel
 
 
 class IJepaEmbeddings(ViTEmbeddings):
@@ -62,7 +60,7 @@ class IJepaEmbeddings(ViTEmbeddings):
     def forward(
         self,
         pixel_values: torch.Tensor,
-        bool_masked_pos: Optional[torch.BoolTensor] = None,
+        bool_masked_pos: torch.BoolTensor | None = None,
         interpolate_pos_encoding: bool = False,
     ) -> torch.Tensor:
         batch_size, _, height, width = pixel_values.shape
@@ -87,38 +85,21 @@ class IJepaEmbeddings(ViTEmbeddings):
 
 
 @auto_docstring
-class IJepaPreTrainedModel(PreTrainedModel):
-    config: IJepaConfig
-    base_model_prefix = "ijepa"
-    main_input_name = "pixel_values"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["IJepaEmbeddings", "IJepaLayer"]
-    _supports_sdpa = True
-    _supports_flash_attn = True
-    _supports_flex_attn = True
-    _supports_attention_backend = True
-
-    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
+class IJepaPreTrainedModel(ViTPreTrainedModel):
+    @torch.no_grad()
+    def _init_weights(self, module: nn.Linear | nn.Conv2d | nn.LayerNorm) -> None:
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
-            # `trunc_normal_cpu` not implemented in `half` issues
-            module.weight.data = nn.init.trunc_normal_(
-                module.weight.data.to(torch.float32), mean=0.0, std=self.config.initializer_range
-            ).to(module.weight.dtype)
+            init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.data.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
         elif isinstance(module, IJepaEmbeddings):
-            module.position_embeddings.data = nn.init.trunc_normal_(
-                module.position_embeddings.data.to(torch.float32),
-                mean=0.0,
-                std=self.config.initializer_range,
-            ).to(module.position_embeddings.dtype)
+            init.trunc_normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
             if module.mask_token is not None:
-                module.mask_token.data.zero_()
+                init.zeros_(module.mask_token)
 
 
 class IJepaModel(IJepaPreTrainedModel, ViTModel):
@@ -156,63 +137,29 @@ class IJepaForImageClassification(IJepaPreTrainedModel, ViTForImageClassificatio
 
     def forward(
         self,
-        pixel_values: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        interpolate_pos_encoding: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, ImageClassifierOutput]:
+        pixel_values: torch.Tensor | None = None,
+        labels: torch.Tensor | None = None,
+        interpolate_pos_encoding: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> ImageClassifierOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
-        outputs = self.ijepa(
+        outputs: BaseModelOutputWithPooling = self.ijepa(
             pixel_values,
-            head_mask=head_mask,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
             interpolate_pos_encoding=interpolate_pos_encoding,
-            return_dict=return_dict,
+            **kwargs,
         )
-
-        sequence_output = outputs[0]
-
+        sequence_output = outputs.last_hidden_state
         logits = self.classifier(sequence_output.mean(dim=1))
 
         loss = None
         if labels is not None:
-            # move labels to correct device to enable model parallelism
-            labels = labels.to(logits.device)
-            if self.config.problem_type is None:
-                if self.num_labels == 1:
-                    self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
-                    self.config.problem_type = "single_label_classification"
-                else:
-                    self.config.problem_type = "multi_label_classification"
-
-            if self.config.problem_type == "regression":
-                loss_fct = MSELoss()
-                if self.num_labels == 1:
-                    loss = loss_fct(logits.squeeze(), labels.squeeze())
-                else:
-                    loss = loss_fct(logits, labels)
-            elif self.config.problem_type == "single_label_classification":
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-            elif self.config.problem_type == "multi_label_classification":
-                loss_fct = BCEWithLogitsLoss()
-                loss = loss_fct(logits, labels)
-
-        if not return_dict:
-            output = (logits,) + outputs[1:]
-            return ((loss,) + output) if loss is not None else output
+            loss = self.loss_function(labels, logits, self.config, **kwargs)
 
         return ImageClassifierOutput(
             loss=loss,

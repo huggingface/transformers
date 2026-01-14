@@ -73,53 +73,9 @@ A model repository also includes an inference [widget](https://hf.co/docs/hub/mo
 
 Check out the Hub [Models](https://hf.co/docs/hub/models) documentation to for more information.
 
-## Model framework conversion
-
-Reach a wider audience by making a model available in PyTorch, TensorFlow, and Flax. While users can still load a model if they're using a different framework, it is slower because Transformers needs to convert the checkpoint on the fly. It is faster to convert the checkpoint first.
-
-<hfoptions id="convert">
-<hfoption id="PyTorch">
-
-Set `from_tf=True` to convert a checkpoint from TensorFlow to PyTorch and then save it.
-
-```py
-from transformers import DistilBertForSequenceClassification
-
-pt_model = DistilBertForSequenceClassification.from_pretrained("path/to/awesome-name-you-picked", from_tf=True)
-pt_model.save_pretrained("path/to/awesome-name-you-picked")
-```
-
-</hfoption>
-<hfoption id="TensorFlow">
-
-Set `from_pt=True` to convert a checkpoint from PyTorch to TensorFlow and then save it.
-
-```py
-from transformers import TFDistilBertForSequenceClassification
-
-tf_model = TFDistilBertForSequenceClassification.from_pretrained("path/to/awesome-name-you-picked", from_pt=True)
-tf_model.save_pretrained("path/to/awesome-name-you-picked")
-```
-
-</hfoption>
-<hfoption id="Flax">
-
-Set `from_pt=True` to convert a checkpoint from PyTorch to Flax and then save it.
-
-```py
-from transformers import FlaxDistilBertForSequenceClassification
-flax_model = FlaxDistilBertForSequenceClassification.from_pretrained(
-    "path/to/awesome-name-you-picked", from_pt=True
-)
-flax_model.save_pretrained("path/to/awesome-name-you-picked")
-```
-
-</hfoption>
-</hfoptions>
-
 ## Uploading a model
 
-There are several ways to upload a model to the Hub depending on your workflow preference. You can push a model with [`Trainer`], a callback for TensorFlow models, call [`~PreTrainedModel.push_to_hub`] directly on a model, or use the Hub web interface.
+There are several ways to upload a model to the Hub depending on your workflow preference. You can push a model with [`Trainer`], call [`~PreTrainedModel.push_to_hub`] directly on a model, or use the Hub web interface.
 
 <Youtube id="Z1-XMy-GNLQ"/>
 
@@ -143,19 +99,6 @@ trainer = Trainer(
 trainer.push_to_hub()
 ```
 
-### PushToHubCallback
-
-For TensorFlow models, add the [`PushToHubCallback`] to the [fit](https://keras.io/api/models/model_training_apis/#fit-method) method.
-
-```py
-from transformers import PushToHubCallback
-
-push_to_hub_callback = PushToHubCallback(
-    output_dir="./your_model_save_path", tokenizer=tokenizer, hub_model_id="your-username/my-awesome-model"
-)
-model.fit(tf_train_dataset, validation_data=tf_validation_dataset, epochs=3, callbacks=push_to_hub_callback)
-```
-
 ### PushToHubMixin
 
 The [`~utils.PushToHubMixin`] provides functionality for pushing a model or tokenizer to the Hub.
@@ -166,7 +109,7 @@ Call [`~utils.PushToHubMixin.push_to_hub`] directly on a model to upload it to t
 model.push_to_hub("my-awesome-model")
 ```
 
-Other objects like a tokenizer or TensorFlow model are also pushed to the Hub in the same way.
+Other objects like a tokenizer are also pushed to the Hub in the same way.
 
 ```py
 tokenizer.push_to_hub("my-awesome-model")

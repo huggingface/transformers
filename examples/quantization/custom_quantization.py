@@ -45,7 +45,7 @@ class CustomQuantizer(HfQuantizer):
         self.quantization_config = quantization_config
         self.scale_map = {}
         self.device = kwargs.get("device", "cuda" if torch.cuda.is_available() else "cpu")
-        self.torch_dtype = kwargs.get("torch_dtype", torch.float32)
+        self.dtype = kwargs.get("dtype", torch.float32)
 
     def _process_model_before_weight_loading(self, model, **kwargs):
         return True
@@ -61,7 +61,7 @@ class CustomQuantizer(HfQuantizer):
 
 
 model_8bit = AutoModelForCausalLM.from_pretrained(
-    "facebook/opt-350m", quantization_config=CustomConfig(), torch_dtype="auto"
+    "facebook/opt-350m", quantization_config=CustomConfig(), dtype="auto"
 )
 
 tokenizer = AutoTokenizer.from_pretrained("facebook/opt-350m")

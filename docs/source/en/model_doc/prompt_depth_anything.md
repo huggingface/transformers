@@ -13,13 +13,13 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2024-12-18 and added to Hugging Face Transformers on 2025-03-21.*
 
 # Prompt Depth Anything
 
 ## Overview
 
-The Prompt Depth Anything model was introduced in [Prompting Depth Anything for 4K Resolution Accurate Metric Depth Estimation](https://huggingface.co/papers/2412.14015) by Haotong Lin, Sida Peng, Jingxiao Chen, Songyou Peng, Jiaming Sun, Minghuan Liu, Hujun Bao, Jiashi Feng, Xiaowei Zhou, Bingyi Kang. 
-
+The Prompt Depth Anything model was introduced in [Prompting Depth Anything for 4K Resolution Accurate Metric Depth Estimation](https://huggingface.co/papers/2412.14015) by Haotong Lin, Sida Peng, Jingxiao Chen, Songyou Peng, Jiaming Sun, Minghuan Liu, Hujun Bao, Jiashi Feng, Xiaowei Zhou, Bingyi Kang.
 
 The abstract from the paper is as follows:
 
@@ -92,5 +92,11 @@ If you are interested in submitting a resource to be included here, please feel 
 ## PromptDepthAnythingImageProcessor
 
 [[autodoc]] PromptDepthAnythingImageProcessor
+    - preprocess
+    - post_process_depth_estimation
+
+## PromptDepthAnythingImageProcessorFast
+
+[[autodoc]] PromptDepthAnythingImageProcessorFast
     - preprocess
     - post_process_depth_estimation

@@ -47,7 +47,7 @@ tokenizer = AutoTokenizer.from_pretrained("databricks/dbrx-instruct", token="YOU
 model = DbrxForCausalLM.from_pretrained(
     "databricks/dbrx-instruct",
     device_map="auto",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     token="YOUR_HF_TOKEN",
     )
 
@@ -70,7 +70,7 @@ tokenizer = AutoTokenizer.from_pretrained("databricks/dbrx-instruct", token="YOU
 model = DbrxForCausalLM.from_pretrained(
     "databricks/dbrx-instruct",
     device_map="auto",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     token="YOUR_HF_TOKEN",
     attn_implementation="flash_attention_2",
     )
@@ -94,7 +94,7 @@ tokenizer = AutoTokenizer.from_pretrained("databricks/dbrx-instruct", token="YOU
 model = DbrxForCausalLM.from_pretrained(
     "databricks/dbrx-instruct",
     device_map="auto",
-    torch_dtype=torch.bfloat16,
+    dtype=torch.bfloat16,
     token="YOUR_HF_TOKEN",
     attn_implementation="sdpa",
     )

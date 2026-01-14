@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 IBM and HuggingFace Inc. team. All Rights Reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,24 +13,22 @@
 # limitations under the License.
 """PatchTSMixer model configuration"""
 
-from typing import Optional, Union
-
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class PatchTSMixerConfig(PretrainedConfig):
+class PatchTSMixerConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`PatchTSMixerModel`]. It is used to instantiate a
     PatchTSMixer model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the PatchTSMixer
     [ibm/patchtsmixer-etth1-pretrain](https://huggingface.co/ibm/patchtsmixer-etth1-pretrain) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         context_length (`int`, *optional*, defaults to 32):
@@ -167,7 +164,7 @@ class PatchTSMixerConfig(PretrainedConfig):
         self_attn_heads: int = 1,
         use_positional_encoding: bool = False,
         positional_encoding_type: str = "sincos",
-        scaling: Optional[Union[str, bool]] = "std",
+        scaling: str | bool | None = "std",
         loss: str = "mse",
         init_std: float = 0.02,
         post_init: bool = False,
@@ -175,20 +172,20 @@ class PatchTSMixerConfig(PretrainedConfig):
         # Pretrain model configuration
         mask_type: str = "random",
         random_mask_ratio: float = 0.5,
-        num_forecast_mask_patches: Optional[Union[list[int], int]] = [2],
+        num_forecast_mask_patches: list[int] | int | None = [2],
         mask_value: int = 0,
         masked_loss: bool = True,
         channel_consistent_masking: bool = True,
-        unmasked_channel_indices: Optional[list[int]] = None,
+        unmasked_channel_indices: list[int] | None = None,
         # General head configuration
         head_dropout: float = 0.2,
         distribution_output: str = "student_t",
         # Prediction head configuration
         prediction_length: int = 16,
-        prediction_channel_indices: Optional[list] = None,
+        prediction_channel_indices: list | None = None,
         # Classification/Regression configuration
         num_targets: int = 3,
-        output_range: Optional[list] = None,
+        output_range: list | None = None,
         head_aggregation: str = "max_pool",
         **kwargs,
     ):

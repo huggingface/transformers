@@ -11,13 +11,13 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+import io
 import tempfile
 import unittest
 
 import datasets
+import httpx
 import numpy as np
-import requests
 from datasets import load_dataset
 from huggingface_hub import ImageSegmentationOutputElement
 from huggingface_hub.utils import insecure_hashlib
@@ -105,7 +105,7 @@ class ImageSegmentationPipelineTests(unittest.TestCase):
         image_processor=None,
         feature_extractor=None,
         processor=None,
-        torch_dtype="float32",
+        dtype="float32",
     ):
         image_segmenter = ImageSegmentationPipeline(
             model=model,
@@ -113,7 +113,7 @@ class ImageSegmentationPipelineTests(unittest.TestCase):
             feature_extractor=feature_extractor,
             image_processor=image_processor,
             processor=processor,
-            torch_dtype=torch_dtype,
+            dtype=dtype,
         )
         return image_segmenter, [
             "./tests/fixtures/tests_samples/COCO/000000039769.png",
@@ -318,7 +318,9 @@ class ImageSegmentationPipelineTests(unittest.TestCase):
         ]
         # actual links to get files
         expected_masks = [x.replace("/blob/", "/resolve/") for x in expected_masks]
-        expected_masks = [Image.open(requests.get(image, stream=True).raw) for image in expected_masks]
+        expected_masks = [
+            Image.open(io.BytesIO(httpx.get(image, follow_redirects=True).content)) for image in expected_masks
+        ]
 
         # Convert masks to numpy array
         output_masks = [np.array(x) for x in output_masks]

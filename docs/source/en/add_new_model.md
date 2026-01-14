@@ -51,7 +51,7 @@ This section describes how the model and configuration classes interact and the 
 
 ### Model and configuration
 
-All Transformers' models inherit from a base [`PreTrainedModel`] and [`PretrainedConfig`] class. The configuration is the models blueprint.
+All Transformers' models inherit from a base [`PreTrainedModel`] and [`PreTrainedConfig`] class. The configuration is the models blueprint.
 
 There is never more than two levels of abstraction for any model to keep the code readable. The example model here, BrandNewLlama, inherits from `BrandNewLlamaPreTrainedModel` and [`PreTrainedModel`]. It is important that a new model only depends on [`PreTrainedModel`] so that it can use the [`~PreTrainedModel.from_pretrained`] and [`~PreTrainedModel.save_pretrained`] methods.
 
@@ -66,9 +66,9 @@ model = BrandNewLlamaModel.from_pretrained("username/brand_new_llama")
 model.config
 ```
 
-[`PretrainedConfig`] provides the [`~PretrainedConfig.from_pretrained`] and [`~PretrainedConfig.save_pretrained`] methods.
+[`PreTrainedConfig`] provides the [`~PreTrainedConfig.from_pretrained`] and [`~PreTrainedConfig.save_pretrained`] methods.
 
-When you use [`PreTrainedModel.save_pretrained`], it automatically calls [`PretrainedConfig.save_pretrained`] so that both the model and configuration are saved together.
+When you use [`PreTrainedModel.save_pretrained`], it automatically calls [`PreTrainedConfig.save_pretrained`] so that both the model and configuration are saved together.
 
 A model is saved to a `model.safetensors` file and a configuration is saved to a `config.json` file.
 
@@ -278,7 +278,7 @@ Every Transformers model output should have a precision or error tolerance of *1
 
 Here are some tips for an efficient debugging environment.
 
-- To debug intermediate results, it depends on the machine learning framework the original model repository is using. For PyTorch, you should write a script to decompose the original model into smaller sub-components to retrieve the intermediate values. For TensorFlow, you may need to use [tf.print](https://www.tensorflow.org/api_docs/python/tf/print). For Flax, make sure the model is *not jitted* during the forward pass (refer to this GitHub [Issue](https://github.com/google/jax/issues/196) for more details).
+- To debug intermediate results, it depends on the machine learning framework the original model repository is using. For PyTorch, you should write a script to decompose the original model into smaller sub-components to retrieve the intermediate values.
 
 - It is faster to debug with a smaller pretrained checkpoint versus a larger checkpoint where the forward pass takes more than 10 seconds. If only large checkpoints are available, create a dummy model with randomly initialized weights and save those weights to compare against the Transformers implementation.
 
@@ -314,16 +314,16 @@ Random initialization occurs in the `_init_weights` method of `BrandNewLlamaPreT
 def _init_weights(self, module):
     """Initialize the weights"""
     if isinstance(module, nn.Linear):
-        module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+        module.weight.normal_(mean=0.0, std=self.config.initializer_range)
         if module.bias is not None:
-            module.bias.data.zero_()
+            module.bias.zero_()
     elif isinstance(module, nn.Embedding):
-        module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+        module.weight.normal_(mean=0.0, std=self.config.initializer_range)
         if module.padding_idx is not None:
             module.weight.data[module.padding_idx].zero_()
     elif isinstance(module, nn.LayerNorm):
-        module.bias.data.zero_()
-        module.weight.data.fill_(1.0)
+        module.bias.zero_()
+        module.weight.fill_(1.0)
 ```
 
 The initialization scheme can look different if you need to adapt it to your model. For example, [`Wav2Vec2ForPreTraining`] initializes [nn.Linear](https://pytorch.org/docs/stable/generated/torch.nn.Linear.html) in its last two linear layers.
@@ -339,9 +339,9 @@ def _init_weights(self, module):
         module.project_hid._is_hf_initialized = True
         module.project_q._is_hf_initialized = True
     elif isinstance(module, nn.Linear):
-        module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+        module.weight.normal_(mean=0.0, std=self.config.initializer_range)
         if module.bias is not None:
-            module.bias.data.zero_()
+            module.bias.zero_()
 ```
 
 ### Convert checkpoints to Transformers
@@ -612,7 +612,7 @@ make style
 To verify the code style passes quality checks, run the command below.
 
 ```bash
-make quality
+make check-repo
 ```
 
 There may be other failing tests or checks (missing docstring or incorrect naming) on your pull request due to Transformers strict design tests. We can help you with these issues if you're stuck.

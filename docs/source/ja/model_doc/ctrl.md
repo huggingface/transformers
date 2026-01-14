@@ -73,8 +73,6 @@ CTRL モデルは、Nitish Shirish Keskar*、Bryan McCann*、Lav R. Varshney、C
 [[autodoc]] CTRLTokenizer
     - save_vocabulary
 
-<frameworkcontent>
-<pt>
 
 ## CTRLModel
 
@@ -91,23 +89,3 @@ CTRL モデルは、Nitish Shirish Keskar*、Bryan McCann*、Lav R. Varshney、C
 [[autodoc]] CTRLForSequenceClassification
     - forward
 
-</pt>
-<tf>
-
-## TFCTRLModel
-
-[[autodoc]] TFCTRLModel
-    - call
-
-## TFCTRLLMHeadModel
-
-[[autodoc]] TFCTRLLMHeadModel
-    - call
-
-## TFCTRLForSequenceClassification
-
-[[autodoc]] TFCTRLForSequenceClassification
-    - call
-
-</tf>
-</frameworkcontent>

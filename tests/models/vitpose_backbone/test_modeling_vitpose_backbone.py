@@ -16,6 +16,8 @@
 import inspect
 import unittest
 
+import pytest
+
 from transformers import VitPoseBackboneConfig
 from transformers.testing_utils import require_torch, torch_device
 from transformers.utils import is_torch_available
@@ -42,7 +44,7 @@ class VitPoseBackboneModelTester:
         is_training=True,
         use_labels=True,
         hidden_size=32,
-        num_hidden_layers=5,
+        num_hidden_layers=2,
         num_attention_heads=4,
         intermediate_size=37,
         hidden_act="gelu",
@@ -122,10 +124,8 @@ class VitPoseBackboneModelTest(ModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (VitPoseBackbone,) if is_torch_available() else ()
-    fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = False
-    test_head_masking = False
     test_torch_exportable = True
 
     def setUp(self):
@@ -139,11 +139,6 @@ class VitPoseBackboneModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_batching_equivalence(self, atol=3e-4, rtol=3e-4):
         super().test_batching_equivalence(atol=atol, rtol=rtol)
-
-    # TODO: @Pavel
-    @unittest.skip(reason="currently failing")
-    def test_initialization(self):
-        pass
 
     @unittest.skip(reason="VitPoseBackbone does not support input and output embeddings")
     def test_model_common_attributes(self):
@@ -193,6 +188,7 @@ class VitPoseBackboneModelTest(ModelTesterMixin, unittest.TestCase):
             expected_arg_names = ["pixel_values"]
             self.assertListEqual(arg_names[:1], expected_arg_names)
 
+    @pytest.mark.torch_export_test
     def test_torch_export(self):
         # Dense architecture
         super().test_torch_export()

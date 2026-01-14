@@ -17,13 +17,12 @@ import unittest
 
 import pytest
 
-from transformers import AutoModelForCausalLM, AutoTokenizer, GlmConfig, is_torch_available
+from transformers import AutoModelForCausalLM, AutoTokenizer, is_torch_available
 from transformers.testing_utils import (
     Expectations,
     require_flash_attn,
     require_torch,
     require_torch_large_accelerator,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -35,43 +34,18 @@ if is_torch_available():
     import torch
 
     from transformers import (
-        GlmForCausalLM,
-        GlmForSequenceClassification,
-        GlmForTokenClassification,
         GlmModel,
     )
 
 
 @require_torch
 class GlmModelTester(CausalLMModelTester):
-    config_class = GlmConfig
     if is_torch_available():
         base_model_class = GlmModel
-        causal_lm_class = GlmForCausalLM
-        sequence_class = GlmForSequenceClassification
-        token_class = GlmForTokenClassification
 
 
 @require_torch
 class GlmModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (GlmModel, GlmForCausalLM, GlmForSequenceClassification, GlmForTokenClassification)
-        if is_torch_available()
-        else ()
-    )
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": GlmModel,
-            "text-classification": GlmForSequenceClassification,
-            "token-classification": GlmForTokenClassification,
-            "text-generation": GlmForCausalLM,
-        }
-        if is_torch_available()
-        else {}
-    )
-
-    test_headmasking = False
-    test_pruning = False
     model_tester_class = GlmModelTester
 
 
@@ -88,9 +62,9 @@ class GlmIntegrationTest(unittest.TestCase):
             "Hi today I am going to show you how to make a simple and easy to make a DIY paper flower.",
         ]
 
-        model = AutoModelForCausalLM.from_pretrained(
-            self.model_id, torch_dtype=torch.float16, revision=self.revision
-        ).to(torch_device)
+        model = AutoModelForCausalLM.from_pretrained(self.model_id, dtype=torch.float16, revision=self.revision).to(
+            torch_device
+        )
 
         tokenizer = AutoTokenizer.from_pretrained(self.model_id, revision=self.revision)
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
@@ -106,9 +80,9 @@ class GlmIntegrationTest(unittest.TestCase):
             "Hi today I am going to show you how to make a simple and easy to make a DIY paper flower.",
         ]
 
-        model = AutoModelForCausalLM.from_pretrained(
-            self.model_id, torch_dtype=torch.bfloat16, revision=self.revision
-        ).to(torch_device)
+        model = AutoModelForCausalLM.from_pretrained(self.model_id, dtype=torch.bfloat16, revision=self.revision).to(
+            torch_device
+        )
 
         tokenizer = AutoTokenizer.from_pretrained(self.model_id, revision=self.revision)
         inputs = tokenizer(self.input_text, return_tensors="pt", padding=True).to(torch_device)
@@ -137,7 +111,7 @@ class GlmIntegrationTest(unittest.TestCase):
 
         model = AutoModelForCausalLM.from_pretrained(
             self.model_id,
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
             attn_implementation="eager",
             revision=self.revision,
         )
@@ -151,7 +125,6 @@ class GlmIntegrationTest(unittest.TestCase):
 
         self.assertEqual(output_text, EXPECTED_TEXTS)
 
-    @require_torch_sdpa
     def test_model_9b_sdpa(self):
         EXPECTED_TEXTS = [
             "Hello I am doing a project on the history of the internetSolution:\n\nStep 1: Introduction\nThe history of the",
@@ -160,7 +133,7 @@ class GlmIntegrationTest(unittest.TestCase):
 
         model = AutoModelForCausalLM.from_pretrained(
             self.model_id,
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
             attn_implementation="sdpa",
             revision=self.revision,
         )
@@ -184,7 +157,7 @@ class GlmIntegrationTest(unittest.TestCase):
 
         model = AutoModelForCausalLM.from_pretrained(
             self.model_id,
-            torch_dtype=torch.bfloat16,
+            dtype=torch.bfloat16,
             attn_implementation="flash_attention_2",
             revision=self.revision,
         )

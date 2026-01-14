@@ -11,9 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from abc import ABC
 from functools import partial
-from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -70,6 +68,7 @@ class GradientCheckpointingLayer(nn.Module):
                 do_warn = True
 
             # different names for the same thing in different layers
+            # TODO cyril: this one without `S` can be removed after deprection cycle
             if "past_key_value" in kwargs and kwargs["past_key_value"] is not None:
                 kwargs["past_key_value"] = None
                 message += " `past_key_value=None`,"
@@ -88,14 +87,14 @@ class GradientCheckpointingLayer(nn.Module):
             # warn if anything was changed
             if do_warn:
                 message = message.rstrip(",") + "."
-                logger.warning(message)
+                logger.warning_once(message)
 
             return self._gradient_checkpointing_func(partial(super().__call__, **kwargs), *args)
         return super().__call__(*args, **kwargs)
 
 
 @auto_docstring
-class GenericForSequenceClassification(ABC):
+class GenericForSequenceClassification:
     base_model_prefix = "model"
 
     def __init__(self, config):
@@ -112,13 +111,13 @@ class GenericForSequenceClassification(ABC):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> SequenceClassifierOutputWithPast:
         transformer_outputs: BaseModelOutputWithPast = getattr(self, self.base_model_prefix)(
@@ -170,7 +169,7 @@ class GenericForSequenceClassification(ABC):
 
 
 @auto_docstring
-class GenericForQuestionAnswering(ABC):
+class GenericForQuestionAnswering:
     base_model_prefix = "model"
 
     def __init__(self, config):
@@ -192,13 +191,13 @@ class GenericForQuestionAnswering(ABC):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        start_positions: Optional[torch.LongTensor] = None,
-        end_positions: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        start_positions: torch.LongTensor | None = None,
+        end_positions: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> QuestionAnsweringModelOutput:
         outputs: BaseModelOutputWithPast = getattr(self, self.base_model_prefix)(
@@ -231,7 +230,7 @@ class GenericForQuestionAnswering(ABC):
 
 
 @auto_docstring
-class GenericForTokenClassification(ABC):
+class GenericForTokenClassification:
     base_model_prefix = "model"
 
     def __init__(self, config):
@@ -255,14 +254,14 @@ class GenericForTokenClassification(ABC):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        **kwargs,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        **kwargs: Unpack[TransformersKwargs],
     ) -> TokenClassifierOutput:
         outputs: BaseModelOutputWithPast = getattr(self, self.base_model_prefix)(
             input_ids,

@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2024-04-22 and added to Hugging Face Transformers on 2024-04-24.*
 
 # Phi-3
 
@@ -71,9 +72,6 @@ Phi-3 has been integrated in the development version (4.40.0.dev) of `transforme
 
 [[autodoc]] Phi3Config
 
-<frameworkcontent>
-<pt>
-
 ## Phi3Model
 
 [[autodoc]] Phi3Model
@@ -94,6 +92,3 @@ Phi-3 has been integrated in the development version (4.40.0.dev) of `transforme
 
 [[autodoc]] Phi3ForTokenClassification
     - forward
-
-</pt>
-</frameworkcontent>

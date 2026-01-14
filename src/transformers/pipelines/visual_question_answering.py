@@ -1,4 +1,4 @@
-from typing import Optional, Union
+from typing import Union
 
 from ..generation import GenerationConfig
 from ..utils import add_end_docstrings, is_torch_available, is_vision_available, logging
@@ -95,7 +95,7 @@ class VisualQuestionAnsweringPipeline(Pipeline):
     def __call__(
         self,
         image: Union["Image.Image", str, list["Image.Image"], list[str], "KeyDataset"],
-        question: Optional[Union[str, list[str]]] = None,
+        question: str | list[str] | None = None,
         **kwargs,
     ):
         r"""
@@ -174,13 +174,12 @@ class VisualQuestionAnsweringPipeline(Pipeline):
         image = load_image(inputs["image"], timeout=timeout)
         model_inputs = self.tokenizer(
             inputs["question"],
-            return_tensors=self.framework,
+            return_tensors="pt",
             padding=padding,
             truncation=truncation,
         )
-        image_features = self.image_processor(images=image, return_tensors=self.framework)
-        if self.framework == "pt":
-            image_features = image_features.to(self.torch_dtype)
+        image_features = self.image_processor(images=image, return_tensors="pt")
+        image_features = image_features.to(self.dtype)
         model_inputs.update(image_features)
         return model_inputs
 
@@ -205,11 +204,8 @@ class VisualQuestionAnsweringPipeline(Pipeline):
             if top_k > self.model.config.num_labels:
                 top_k = self.model.config.num_labels
 
-            if self.framework == "pt":
-                probs = model_outputs.logits.sigmoid()[0]
-                scores, ids = probs.topk(top_k)
-            else:
-                raise ValueError(f"Unsupported framework: {self.framework}")
+            probs = model_outputs.logits.sigmoid()[0]
+            scores, ids = probs.topk(top_k)
 
             scores = scores.tolist()
             ids = ids.tolist()

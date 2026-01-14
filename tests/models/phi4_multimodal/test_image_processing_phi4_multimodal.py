@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,6 +19,7 @@ import unittest
 import warnings
 
 import numpy as np
+import pytest
 from packaging import version
 
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
@@ -288,6 +288,7 @@ class Phi4MultimodalImageProcessingTest(ImageProcessingTestMixin, unittest.TestC
             self.skipTest(reason="No validation found for `preprocess` method")
 
     @slow
+    @pytest.mark.torch_compile_test
     def test_can_compile_fast_image_processor(self):
         if self.fast_image_processing_class is None:
             self.skipTest("Skipping compilation test as fast image processor is not defined")

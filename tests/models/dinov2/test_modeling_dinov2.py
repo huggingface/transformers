@@ -14,16 +14,16 @@
 """Testing suite for the PyTorch Dinov2 model."""
 
 import unittest
+from functools import cached_property
 
 from transformers import Dinov2Config
 from transformers.testing_utils import (
-    is_flaky,
     require_torch,
     require_vision,
     slow,
     torch_device,
 )
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
@@ -227,19 +227,12 @@ class Dinov2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    fx_compatible = True
 
-    test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = Dinov2ModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Dinov2Config, has_text_modality=False, hidden_size=37)
-
-    @is_flaky(max_attempts=3, description="`torch.nn.init.trunc_normal_` is flaky.")
-    def test_initialization(self):
-        super().test_initialization()
 
     def test_config(self):
         self.config_tester.run_common_tests()

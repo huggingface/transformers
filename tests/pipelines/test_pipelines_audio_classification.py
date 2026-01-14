@@ -20,7 +20,6 @@ from huggingface_hub import AudioClassificationOutputElement
 
 from transformers import (
     MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING,
-    TF_MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING,
     is_torch_available,
 )
 from transformers.pipelines import AudioClassificationPipeline, pipeline
@@ -43,7 +42,6 @@ if is_torch_available():
 @is_pipeline_test
 class AudioClassificationPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING
-    tf_model_mapping = TF_MODEL_FOR_AUDIO_CLASSIFICATION_MAPPING
     _dataset = None
 
     @classmethod
@@ -61,7 +59,7 @@ class AudioClassificationPipelineTests(unittest.TestCase):
         image_processor=None,
         feature_extractor=None,
         processor=None,
-        torch_dtype="float32",
+        dtype="float32",
     ):
         audio_classifier = AudioClassificationPipeline(
             model=model,
@@ -69,7 +67,7 @@ class AudioClassificationPipelineTests(unittest.TestCase):
             feature_extractor=feature_extractor,
             image_processor=image_processor,
             processor=processor,
-            torch_dtype=torch_dtype,
+            dtype=dtype,
         )
 
         # test with a raw waveform
@@ -146,7 +144,7 @@ class AudioClassificationPipelineTests(unittest.TestCase):
     def test_small_model_pt_fp16(self):
         model = "anton-l/wav2vec2-random-tiny-classifier"
 
-        audio_classifier = pipeline("audio-classification", model=model, torch_dtype=torch.float16)
+        audio_classifier = pipeline("audio-classification", model=model, dtype=torch.float16)
 
         audio = np.ones((8000,))
         output = audio_classifier(audio, top_k=4)

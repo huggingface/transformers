@@ -20,7 +20,7 @@ import pytest
 from packaging import version
 from parameterized import parameterized
 
-from transformers import AutoTokenizer, SmolLM3Config, is_torch_available
+from transformers import AutoTokenizer, BitsAndBytesConfig, SmolLM3Config, is_torch_available
 from transformers.generation.configuration_utils import GenerationConfig
 from transformers.testing_utils import (
     backend_empty_cache,
@@ -28,7 +28,6 @@ from transformers.testing_utils import (
     require_bitsandbytes,
     require_flash_attn,
     require_torch,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -59,41 +58,16 @@ class SmolLM3ModelTester(CausalLMModelTester):
     if is_torch_available():
         base_model_class = SmolLM3Model
         causal_lm_class = SmolLM3ForCausalLM
-        sequence_class = SmolLM3ForSequenceClassification
-        token_class = SmolLM3ForTokenClassification
         question_answering_class = SmolLM3ForQuestionAnswering
+        sequence_classification_class = SmolLM3ForSequenceClassification
+        token_classification_class = SmolLM3ForTokenClassification
 
 
 @require_torch
 class SmolLM3ModelTest(CausalLMModelTest, unittest.TestCase):
-    all_model_classes = (
-        (
-            SmolLM3Model,
-            SmolLM3ForCausalLM,
-            SmolLM3ForSequenceClassification,
-            SmolLM3ForTokenClassification,
-            SmolLM3ForQuestionAnswering,
-        )
-        if is_torch_available()
-        else ()
-    )
-    test_headmasking = False
-    test_pruning = False
     model_tester_class = SmolLM3ModelTester
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": SmolLM3Model,
-            "text-classification": SmolLM3ForSequenceClassification,
-            "token-classification": SmolLM3ForTokenClassification,
-            "text-generation": SmolLM3ForCausalLM,
-            "question-answering": SmolLM3ForQuestionAnswering,
-        }
-        if is_torch_available()
-        else {}
-    )
 
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
-    @require_torch_sdpa
     @is_flaky()
     def test_eager_matches_sdpa_inference(self, *args):
         # flaky test_eager_matches_sdpa_inference_24_fp32_pad_left_output_attentions
@@ -153,7 +127,7 @@ class SmolLM3IntegrationTest(unittest.TestCase):
         model = SmolLM3ForCausalLM.from_pretrained(
             self.model_id,
             device_map="auto",
-            load_in_4bit=True,
+            quantization_config=BitsAndBytesConfig(load_in_4bit=True),
             attn_implementation="flash_attention_2",
         )
         input_ids = torch.tensor([input_ids]).to(model.model.embed_tokens.weight.device)
@@ -172,6 +146,7 @@ class SmolLM3IntegrationTest(unittest.TestCase):
         backend_empty_cache(torch_device)
         gc.collect()
 
+    @pytest.mark.torch_export_test
     @slow
     def test_export_static_cache(self):
         if version.parse(torch.__version__) < version.parse("2.4.0"):
@@ -199,7 +174,7 @@ class SmolLM3IntegrationTest(unittest.TestCase):
         model = SmolLM3ForCausalLM.from_pretrained(
             self.model_id,
             device_map=device,
-            torch_dtype=dtype,
+            dtype=dtype,
             attn_implementation=attn_implementation,
             generation_config=GenerationConfig(
                 use_cache=True,

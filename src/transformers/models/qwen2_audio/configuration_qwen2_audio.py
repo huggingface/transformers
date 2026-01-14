@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 Microsoft Research & University of Wisconsin-Madison and the HuggingFace Inc. team. All rights reserved.
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,7 +12,7 @@
 # limitations under the License.
 """Qwen2Audio model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 
@@ -21,7 +20,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 logger = logging.get_logger(__name__)
 
 
-class Qwen2AudioEncoderConfig(PretrainedConfig):
+class Qwen2AudioEncoderConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Qwen2AudioEncoder`]. It is used to instantiate a
     Qwen2-Audio audio encoder according to the specified arguments, defining the model architecture. Instantiating a
@@ -30,8 +29,8 @@ class Qwen2AudioEncoderConfig(PretrainedConfig):
 
     e.g. [Qwen/Qwen2-Audio-7B](https://huggingface.co/Qwen/Qwen2-Audio-7B)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         num_mel_bins (`int`, *optional*, defaults to 128):
@@ -116,7 +115,7 @@ class Qwen2AudioEncoderConfig(PretrainedConfig):
         self.max_source_positions = max_source_positions
 
 
-class Qwen2AudioConfig(PretrainedConfig):
+class Qwen2AudioConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Qwen2AudioForConditionalGeneration`]. It is used to instantiate an
     Qwen2-Audio model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -124,8 +123,8 @@ class Qwen2AudioConfig(PretrainedConfig):
 
     e.g. [Qwen/Qwen2-Audio-7B](https://huggingface.co/Qwen/Qwen2-Audio-7B)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         audio_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `CLIPVisionConfig`):

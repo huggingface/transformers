@@ -16,11 +16,11 @@
 import unittest
 
 import pytest
-from parameterized import parameterized
 
 from transformers import (
     AutoProcessor,
     AyaVisionConfig,
+    BitsAndBytesConfig,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -28,7 +28,6 @@ from transformers.testing_utils import (
     cleanup,
     get_device_properties,
     require_deterministic_for_xpu,
-    require_read_token,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -72,7 +71,7 @@ class AyaVisionVisionText2TextModelTester:
             "vocab_size": 99,
             "hidden_size": 128,
             "intermediate_size": 37,
-            "num_hidden_layers": 4,
+            "num_hidden_layers": 2,
             "num_attention_heads": 4,
             "output_channels": 64,
             "hidden_act": "silu",
@@ -166,14 +165,12 @@ class AyaVisionModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     pipeline_model_mapping = (
         {
             "image-text-to-text": AyaVisionForConditionalGeneration,
+            "any-to-any": AyaVisionForConditionalGeneration,
         }
         if is_torch_available()
         else {}
     )
-    fx_compatible = False
-    test_pruning = False
-    test_torchscript = False
-    test_head_masking = False
+
     _is_composite = True
 
     def setUp(self):
@@ -182,69 +179,6 @@ class AyaVisionModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
     def test_config(self):
         self.config_tester.run_common_tests()
-
-    @unittest.skip("Failing because of unique cache (HybridCache)")
-    def test_model_outputs_equivalence(self, **kwargs):
-        pass
-
-    @unittest.skip("Cohere2's forcefully disables sdpa due to softcapping")
-    def test_sdpa_can_dispatch_non_composite_models(self):
-        pass
-
-    @unittest.skip("Cohere2's eager attn/sdpa attn outputs are expected to be different")
-    def test_eager_matches_sdpa_generate(self):
-        pass
-
-    @parameterized.expand([("random",), ("same",)])
-    @pytest.mark.generate
-    @unittest.skip("Cohere2 has HybridCache which is not compatible with assisted decoding")
-    def test_assisted_decoding_matches_greedy_search(self, assistant_type):
-        pass
-
-    @unittest.skip("Cohere2 has HybridCache which is not compatible with assisted decoding")
-    def test_prompt_lookup_decoding_matches_greedy_search(self, assistant_type):
-        pass
-
-    @pytest.mark.generate
-    @unittest.skip("Cohere2 has HybridCache which is not compatible with assisted decoding")
-    def test_assisted_decoding_sample(self):
-        pass
-
-    @unittest.skip("Cohere2 has HybridCache which is not compatible with dola decoding")
-    def test_dola_decoding_sample(self):
-        pass
-
-    @unittest.skip("Cohere2 has HybridCache and doesn't support continue from past kv")
-    def test_generate_continue_from_past_key_values(self):
-        pass
-
-    @unittest.skip("Cohere2 has HybridCache and doesn't support low_memory generation")
-    def test_beam_search_low_memory(self):
-        pass
-
-    @unittest.skip("Cohere2 has HybridCache and doesn't support contrastive generation")
-    def test_contrastive_generate(self):
-        pass
-
-    @unittest.skip("Cohere2 has HybridCache and doesn't support contrastive generation")
-    def test_contrastive_generate_dict_outputs_use_cache(self):
-        pass
-
-    @unittest.skip("Cohere2 has HybridCache and doesn't support contrastive generation")
-    def test_contrastive_generate_low_memory(self):
-        pass
-
-    @unittest.skip("Cohere2 has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support.")
-    def test_generate_with_static_cache(self):
-        pass
-
-    @unittest.skip("Cohere2 has HybridCache and doesn't support StaticCache. Though it could, it shouldn't support.")
-    def test_generate_from_inputs_embeds_with_static_cache(self):
-        pass
-
-    @unittest.skip("Failing because of unique cache (HybridCache)")
-    def test_multi_gpu_data_parallel_forward(self):
-        pass
 
     @unittest.skip(reason="SiglipVisionModel does not support standalone training")
     def test_training(self):
@@ -262,11 +196,8 @@ class AyaVisionModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="Siglip uses the same initialization scheme as the Flax original implementation")
-    def test_initialization(self):
-        pass
-
     @unittest.skip(reason="Compile not yet supported because in LLava models")
+    @pytest.mark.torch_compile_test
     def test_sdpa_can_compile_dynamic(self):
         pass
 
@@ -276,7 +207,6 @@ class AyaVisionModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         pass
 
 
-@require_read_token
 @require_torch
 class AyaVisionIntegrationTest(unittest.TestCase):
     @classmethod
@@ -297,14 +227,16 @@ class AyaVisionIntegrationTest(unittest.TestCase):
         # Use 4-bit on T4
         device_type, major, _ = get_device_properties()
         load_in_4bit = (device_type == "cuda") and (major < 8)
-        torch_dtype = None if load_in_4bit else torch.float16
+        dtype = None if load_in_4bit else torch.float16
+
+        if load_in_4bit:
+            quantization_config = BitsAndBytesConfig(load_in_4bit=True)
+        else:
+            quantization_config = None
 
         if cls.model is None:
             cls.model = AyaVisionForConditionalGeneration.from_pretrained(
-                cls.model_checkpoint,
-                device_map=torch_device,
-                torch_dtype=torch_dtype,
-                load_in_4bit=load_in_4bit,
+                cls.model_checkpoint, device_map=torch_device, dtype=dtype, quantization_config=quantization_config
             )
         return cls.model
 
@@ -334,7 +266,7 @@ class AyaVisionIntegrationTest(unittest.TestCase):
 
         EXPECTED_LOGITS = Expectations(
             {
-                ("xpu", 3): [0.4109, 0.1532, 0.8018, 2.1328, 0.5483],
+                ("xpu", 3): [1.6699, 0.6260, 3.2266, 8.5547, 2.209],
                 # 4-bit
                 ("cuda", 7): [0.1097, 0.3481, 3.8340, 9.7969, 2.0488],
                 ("cuda", 8): [1.6396, 0.6094, 3.1992, 8.5234, 2.1875],
@@ -375,7 +307,7 @@ class AyaVisionIntegrationTest(unittest.TestCase):
 
         expected_outputs = Expectations(
             {
-                ("xpu", 3): "Whispers on the breeze,\nLeaves dance under moonlit skies,\nNature's quiet song.",
+                ("xpu", 3): "Whispers on the breeze,\nLeaves dance under moonlit sky,\nNature's quiet song.",
                 # 4-bit
                 ("cuda", 7): "Sure, here's a haiku for you:\n\nMorning dew sparkles,\nPetals unfold in sunlight,\n",
                 ("cuda", 8): "Whispers on the breeze,\nLeaves dance under moonlit skies,\nNature's quiet song.",
@@ -442,7 +374,10 @@ class AyaVisionIntegrationTest(unittest.TestCase):
                 {
                     "role": "user",
                     "content": [
-                        {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
+                        {
+                            "type": "image",
+                            "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
+                        },
                         {"type": "text", "text": "Describe this image"},
                     ],
                 },
@@ -458,7 +393,7 @@ class AyaVisionIntegrationTest(unittest.TestCase):
         decoded_output = processor.decode(output[0, inputs["input_ids"].shape[1] :], skip_special_tokens=True)
         expected_outputs = Expectations(
             {
-                ("xpu", 3): "Wooden path to water,\nMountains echo in stillness,\nPeaceful forest lake.",
+                ("xpu", 3): "Wooden bridge stretches\nInto still waters, mountains gleam\nPeaceful forest scene",
                 # 4-bit
                 ("cuda", 7): "Wooden bridge stretches\nMirrored lake below, mountains rise\nPeaceful, serene",
                 ("cuda", 8): 'Wooden path to water,\nMountains echo in stillness,\nPeaceful forest scene.',
@@ -477,7 +412,7 @@ class AyaVisionIntegrationTest(unittest.TestCase):
 
         expected_outputs = Expectations(
             {
-                ("xpu", 3): 'This image captures a vibrant street scene in a bustling urban area, likely in an Asian city. The focal point is a',
+                ("xpu", 3): 'This vibrant image captures a bustling street scene in a Chinese-influenced neighborhood. The focal point is a striking red stop sign',
                 # 4-bit
                 ("cuda", 7): 'This vibrant image captures a bustling street scene in a multicultural urban area, featuring a traditional Chinese gate adorned with intricate red and',
                 ("cuda", 8): 'This image captures a vibrant street scene in a bustling urban area, likely in an Asian city. The focal point is a',
@@ -538,7 +473,7 @@ class AyaVisionIntegrationTest(unittest.TestCase):
         # Batching seems to alter the output slightly, but it is also the case in the original implementation. This seems to be expected: https://github.com/huggingface/transformers/issues/23017#issuecomment-1649630232
         expected_outputs = Expectations(
             {
-                ("xpu", 3): "Wooden path to water,\nMountains echo in stillness,\nPeaceful forest lake.",
+                ("xpu", 3): "Wooden path to water,\nMountains echo in stillness,\nPeaceful forest scene.",
                 ("cuda", 7): 'Wooden bridge stretches\nMirrored lake below, mountains rise\nPeaceful, serene',
                 ("cuda", 8): 'Wooden path to water,\nMountains echo in stillness,\nPeaceful forest scene.',
             }

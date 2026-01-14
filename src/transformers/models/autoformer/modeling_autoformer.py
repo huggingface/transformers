@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright (c) 2021 THUML @ Tsinghua University
 # Copyright 2023 Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
@@ -18,15 +17,14 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import numpy as np
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
-from ...cache_utils import Cache, EncoderDecoderCache
+from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...modeling_attn_mask_utils import (
     _prepare_4d_attention_mask,
     _prepare_4d_attention_mask_for_sdpa,
@@ -61,11 +59,8 @@ class AutoFormerDecoderOutput(ModelOutput):
         hidden_size)` is output.
     trend (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
         Trend tensor for each time series.
-    past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-        `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and optionally if
-        `config.is_encoder_decoder=True` 2 additional tensors of shape `(batch_size, num_heads,
-        encoder_sequence_length, embed_size_per_head)`.
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks and optionally if
         `config.is_encoder_decoder=True` in the cross-attention blocks) that can be used (see `past_key_values`
@@ -78,12 +73,12 @@ class AutoFormerDecoderOutput(ModelOutput):
         weighted average in the cross-attention heads.
     """
 
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    trend: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
-    cross_attentions: Optional[tuple[torch.FloatTensor]] = None
+    last_hidden_state: torch.FloatTensor | None = None
+    trend: torch.FloatTensor | None = None
+    past_key_values: Cache | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
+    cross_attentions: tuple[torch.FloatTensor] | None = None
 
 
 @dataclass
@@ -101,10 +96,8 @@ class AutoformerModelOutput(ModelOutput):
         hidden_size)` is output.
     trend (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
         Trend tensor for each time series.
-    past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of shape
-        `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of shape
-        `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
+    past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
         Contains pre-computed hidden-states (key and values in the self-attention blocks and in the cross-attention
         blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
@@ -118,18 +111,18 @@ class AutoformerModelOutput(ModelOutput):
         Static features of each time series' in a batch which are copied to the covariates at inference time.
     """
 
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    trend: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None
-    decoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    decoder_attentions: Optional[tuple[torch.FloatTensor]] = None
-    cross_attentions: Optional[tuple[torch.FloatTensor]] = None
-    encoder_last_hidden_state: Optional[torch.FloatTensor] = None
-    encoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    encoder_attentions: Optional[tuple[torch.FloatTensor]] = None
-    loc: Optional[torch.FloatTensor] = None
-    scale: Optional[torch.FloatTensor] = None
-    static_features: Optional[torch.FloatTensor] = None
+    last_hidden_state: torch.FloatTensor | None = None
+    trend: torch.FloatTensor | None = None
+    past_key_values: Cache | None = None
+    decoder_hidden_states: tuple[torch.FloatTensor] | None = None
+    decoder_attentions: tuple[torch.FloatTensor] | None = None
+    cross_attentions: tuple[torch.FloatTensor] | None = None
+    encoder_last_hidden_state: torch.FloatTensor | None = None
+    encoder_hidden_states: tuple[torch.FloatTensor] | None = None
+    encoder_attentions: tuple[torch.FloatTensor] | None = None
+    loc: torch.FloatTensor | None = None
+    scale: torch.FloatTensor | None = None
+    static_features: torch.FloatTensor | None = None
 
 
 # Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesFeatureEmbedder with TimeSeries->Autoformer
@@ -270,7 +263,7 @@ class AutoformerNOPScaler(nn.Module):
         self.keepdim = config.keepdim if hasattr(config, "keepdim") else True
 
     def forward(
-        self, data: torch.Tensor, observed_indicator: Optional[torch.Tensor] = None
+        self, data: torch.Tensor, observed_indicator: torch.Tensor | None = None
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Parameters:
@@ -287,7 +280,7 @@ class AutoformerNOPScaler(nn.Module):
 
 
 # Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.weighted_average
-def weighted_average(input_tensor: torch.Tensor, weights: Optional[torch.Tensor] = None, dim=None) -> torch.Tensor:
+def weighted_average(input_tensor: torch.Tensor, weights: torch.Tensor | None = None, dim=None) -> torch.Tensor:
     """
     Computes the weighted average of a given tensor across a given `dim`, masking values associated with weight zero,
     meaning instead of `nan * 0 = nan` you will get `0 * 0 = 0`.
@@ -323,10 +316,10 @@ def nll(input: torch.distributions.Distribution, target: torch.Tensor) -> torch.
 class AutoformerSinusoidalPositionalEmbedding(nn.Embedding):
     """This module produces sinusoidal positional embeddings of any length."""
 
-    def __init__(self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None) -> None:
-        super().__init__(num_positions, embedding_dim)
+    def __init__(self, num_positions: int, embedding_dim: int, padding_idx: int | None = None) -> None:
+        super().__init__(num_positions, embedding_dim, _freeze=True)
 
-    def _init_weight(self):
+    def create_weight(self):
         """
         Identical to the XLM create_sinusoidal_embeddings except features are not interleaved. The cos features are in
         the 2nd half of the vector. [dim // 2:]
@@ -339,11 +332,11 @@ class AutoformerSinusoidalPositionalEmbedding(nn.Embedding):
         sentinel = dim // 2 if dim % 2 == 0 else (dim // 2) + 1
         out[:, 0:sentinel] = torch.FloatTensor(np.sin(position_enc[:, 0::2]))
         out[:, sentinel:] = torch.FloatTensor(np.cos(position_enc[:, 1::2]))
-        self.weight = nn.Parameter(out, requires_grad=False)
+        return out
 
     @torch.no_grad()
     def forward(
-        self, input_ids_shape: torch.Size, past_key_values_length: int = 0, position_ids: Optional[torch.Tensor] = None
+        self, input_ids_shape: torch.Size, past_key_values_length: int = 0, position_ids: torch.Tensor | None = None
     ) -> torch.Tensor:
         """`input_ids_shape` is expected to be [bsz x seqlen]."""
         if position_ids is None:
@@ -423,11 +416,11 @@ class AutoformerAttention(nn.Module):
         self,
         embed_dim: int,
         num_heads: int,
-        dropout: Optional[float] = 0.0,
-        is_decoder: Optional[bool] = False,
-        bias: Optional[bool] = True,
-        autocorrelation_factor: Optional[int] = 3,
-        layer_idx: Optional[int] = None,
+        dropout: float | None = 0.0,
+        is_decoder: bool | None = False,
+        bias: bool | None = True,
+        autocorrelation_factor: int | None = 3,
+        layer_idx: int | None = None,
     ):
         super().__init__()
         self.embed_dim = embed_dim
@@ -454,13 +447,12 @@ class AutoformerAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        key_value_states: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Cache] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        layer_head_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
-        cache_position: Optional[torch.Tensor] = None,
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+        key_value_states: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        attention_mask: torch.Tensor | None = None,
+        output_attentions: bool | None = False,
+        cache_position: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         """Input shape: Batch x Time x Channel"""
 
         # if key_value_states are provided this layer is used as a cross-attention layer
@@ -471,37 +463,38 @@ class AutoformerAttention(nn.Module):
         # get query proj
         query_states = self.q_proj(hidden_states)
 
-        if past_key_value is not None:
-            if isinstance(past_key_value, EncoderDecoderCache):
-                is_updated = past_key_value.is_updated.get(self.layer_idx)
+        is_updated = False
+        if past_key_values is not None:
+            if isinstance(past_key_values, EncoderDecoderCache):
+                is_updated = past_key_values.is_updated.get(self.layer_idx)
                 if is_cross_attention:
                     # after the first generated id, we can subsequently re-use all key/value_layer from cache
-                    curr_past_key_value = past_key_value.cross_attention_cache
+                    curr_past_key_values = past_key_values.cross_attention_cache
                 else:
-                    curr_past_key_value = past_key_value.self_attention_cache
+                    curr_past_key_values = past_key_values.self_attention_cache
             else:
-                curr_past_key_value = past_key_value
+                curr_past_key_values = past_key_values
 
         current_states = key_value_states if is_cross_attention else hidden_states
-        if is_cross_attention and past_key_value is not None and is_updated:
+        if is_cross_attention and past_key_values is not None and is_updated:
             # reuse k,v, cross_attentions
-            key_states = curr_past_key_value.layers[self.layer_idx].keys
-            value_states = curr_past_key_value.layers[self.layer_idx].values
+            key_states = curr_past_key_values.layers[self.layer_idx].keys
+            value_states = curr_past_key_values.layers[self.layer_idx].values
         else:
             key_states = self.k_proj(current_states)
             value_states = self.v_proj(current_states)
             key_states = key_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
             value_states = value_states.view(bsz, -1, self.num_heads, self.head_dim).transpose(1, 2)
 
-            if past_key_value is not None:
+            if past_key_values is not None:
                 # save all key/value_layer to cache to be re-used for fast auto-regressive generation
                 cache_position = cache_position if not is_cross_attention else None
-                key_states, value_states = curr_past_key_value.update(
+                key_states, value_states = curr_past_key_values.update(
                     key_states, value_states, self.layer_idx, {"cache_position": cache_position}
                 )
                 # set flag that curr layer for cross-attn is already updated so we can re-use in subsequent calls
-                if is_cross_attention:
-                    past_key_value.is_updated[self.layer_idx] = True
+                if is_cross_attention and isinstance(past_key_values, EncoderDecoderCache):
+                    past_key_values.is_updated[self.layer_idx] = True
 
         proj_shape = (bsz * self.num_heads, -1, self.head_dim)
         query_states = query_states.view(bsz, tgt_len, self.num_heads, self.head_dim).transpose(1, 2)
@@ -543,15 +536,6 @@ class AutoformerAttention(nn.Module):
                 )
             attn_weights = attn_weights.view(bsz, self.num_heads, tgt_len, src_len) + attention_mask
             attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, src_len)
-
-        if layer_head_mask is not None:
-            if layer_head_mask.size() != (self.num_heads,):
-                raise ValueError(
-                    f"Head mask for a single layer should be of size {(self.num_heads,)}, but is"
-                    f" {layer_head_mask.size()}"
-                )
-            attn_weights = layer_head_mask.view(1, -1, 1, 1) * attn_weights.view(bsz, self.num_heads, tgt_len, channel)
-            attn_weights = attn_weights.view(bsz * self.num_heads, tgt_len, channel)
 
         if output_attentions:
             # this operation is a bit awkward, but it's required to
@@ -655,16 +639,13 @@ class AutoformerEncoderLayer(GradientCheckpointingLayer):
         self,
         hidden_states: torch.FloatTensor,
         attention_mask: torch.FloatTensor,
-        layer_head_mask: torch.FloatTensor,
-        output_attentions: Optional[bool] = False,
-    ) -> tuple[torch.FloatTensor, Optional[torch.FloatTensor]]:
+        output_attentions: bool | None = False,
+    ) -> tuple[torch.FloatTensor, torch.FloatTensor | None]:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
             attention_mask (`torch.FloatTensor`): attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            layer_head_mask (`torch.FloatTensor`): mask for attention heads in a given layer of size
-                `(encoder_attention_heads,)`.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -673,7 +654,6 @@ class AutoformerEncoderLayer(GradientCheckpointingLayer):
         hidden_states, attn_weights = self.self_attn(
             hidden_states=hidden_states,
             attention_mask=attention_mask,
-            layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
         )
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
@@ -754,16 +734,14 @@ class AutoformerDecoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
-        layer_head_mask: Optional[torch.Tensor] = None,
-        cross_attn_layer_head_mask: Optional[torch.Tensor] = None,
-        past_key_value: Optional[Cache] = None,
-        output_attentions: Optional[bool] = False,
-        use_cache: Optional[bool] = True,
-        cache_position: Optional[torch.Tensor] = None,
-    ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
+        attention_mask: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        output_attentions: bool | None = False,
+        use_cache: bool | None = True,
+        cache_position: torch.Tensor | None = None,
+    ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -773,11 +751,7 @@ class AutoformerDecoderLayer(GradientCheckpointingLayer):
                 cross attention input to the layer of shape `(batch, seq_len, embed_dim)`
             encoder_attention_mask (`torch.FloatTensor`): encoder attention mask of size
                 `(batch, 1, tgt_len, src_len)` where padding elements are indicated by very large negative values.
-            layer_head_mask (`torch.FloatTensor`): mask for attention heads in a given layer of size
-                `(encoder_attention_heads,)`.
-            cross_attn_layer_head_mask (`torch.FloatTensor`): mask for cross-attention heads in a given layer of
-                size `(decoder_attention_heads,)`.
-            past_key_value (`Tuple(torch.FloatTensor)`): cached past key and value projection states
+            past_key_values (`Cache`): cached past key and value projection states
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers. See `attentions` under
                 returned tensors for more detail.
@@ -790,9 +764,8 @@ class AutoformerDecoderLayer(GradientCheckpointingLayer):
         # Self Attention
         hidden_states, self_attn_weights = self.self_attn(
             hidden_states=hidden_states,
-            past_key_value=past_key_value,
+            past_key_values=past_key_values,
             attention_mask=attention_mask,
-            layer_head_mask=layer_head_mask,
             output_attentions=output_attentions,
             cache_position=cache_position,
         )
@@ -811,8 +784,7 @@ class AutoformerDecoderLayer(GradientCheckpointingLayer):
                 hidden_states=hidden_states,
                 key_value_states=encoder_hidden_states,
                 attention_mask=encoder_attention_mask,
-                layer_head_mask=cross_attn_layer_head_mask,
-                past_key_value=past_key_value,
+                past_key_values=past_key_values,
                 output_attentions=output_attentions,
                 cache_position=cache_position,
             )
@@ -849,37 +821,38 @@ class AutoformerDecoderLayer(GradientCheckpointingLayer):
 class AutoformerPreTrainedModel(PreTrainedModel):
     config: AutoformerConfig
     base_model_prefix = "model"
+    input_modalities = ("time",)
     main_input_name = "past_values"
     supports_gradient_checkpointing = True
 
+    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         std = self.config.init_std
         if isinstance(module, (nn.Linear, nn.Conv1d)):
-            module.weight.data.normal_(mean=0.0, std=std)
+            init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, AutoformerSinusoidalPositionalEmbedding):
-            module._init_weight()
+            init.copy_(module.weight, module.create_weight())
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+            init.normal_(module.weight, mean=0.0, std=std)
+            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
+            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
+                init.zeros_(module.weight[module.padding_idx])
         elif isinstance(module, nn.LayerNorm):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
+            init.ones_(module.weight)
+            init.zeros_(module.bias)
 
-    # Copied from transformers.models.bart.modeling_bart.BartPreTrainedModel._update_full_mask
+    # copied from transformers.models.bart.modeling_bart.BartPreTrainedModel._update_full_mask
     def _update_full_mask(
         self,
-        attention_mask: Union[torch.Tensor, None],
+        attention_mask: torch.Tensor | None,
         inputs_embeds: torch.Tensor,
     ):
         if attention_mask is not None:
-            if self.config._attn_implementation == "flash_attention_2":
+            if "flash" in self.config._attn_implementation:
                 attention_mask = attention_mask if 0 in attention_mask else None
             elif self.config._attn_implementation == "sdpa":
-                # output_attentions=True & head_mask can not be supported when using SDPA, fall back to
-                # the manual implementation that requires a 4D causal mask in all cases.
                 # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]
                 attention_mask = _prepare_4d_attention_mask_for_sdpa(attention_mask, inputs_embeds.dtype)
             elif self.config._attn_implementation == "flex_attention":
@@ -892,7 +865,7 @@ class AutoformerPreTrainedModel(PreTrainedModel):
         return attention_mask
 
 
-# Copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesTransformerEncoder with TimeSeriesTransformer->Autoformer,TimeSeries->Autoformer
+# copied from transformers.models.time_series_transformer.modeling_time_series_transformer.TimeSeriesTransformerEncoder with TimeSeriesTransformer->Autoformer,TimeSeries->Autoformer
 class AutoformerEncoder(AutoformerPreTrainedModel):
     """
     Transformer encoder consisting of *config.encoder_layers* self attention layers. Each layer is a
@@ -923,13 +896,13 @@ class AutoformerEncoder(AutoformerPreTrainedModel):
 
     def forward(
         self,
-        attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, BaseModelOutput]:
+        attention_mask: torch.Tensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple | BaseModelOutput:
         r"""
         Args:
             attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -939,12 +912,6 @@ class AutoformerEncoder(AutoformerPreTrainedModel):
                 - 0 for tokens that are **masked**.
 
                 [What are attention masks?](../glossary#attention-mask)
-            head_mask (`torch.Tensor` of shape `(encoder_layers, encoder_attention_heads)`, *optional*):
-                Mask to nullify selected heads of the attention modules. Mask values selected in `[0, 1]`:
-
-                - 1 indicates the head is **not masked**,
-                - 0 indicates the head is **masked**.
-
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
                 Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
                 This is useful if you want more control over how to convert `input_ids` indices into associated vectors
@@ -978,14 +945,6 @@ class AutoformerEncoder(AutoformerPreTrainedModel):
         encoder_states = () if output_hidden_states else None
         all_attentions = () if output_attentions else None
 
-        # check if head_mask has a correct number of layers specified if desired
-        if head_mask is not None:
-            if head_mask.size()[0] != (len(self.layers)):
-                raise ValueError(
-                    f"The head_mask should be specified for {len(self.layers)} layers, but it is for"
-                    f" {head_mask.size()[0]}."
-                )
-
         for idx, encoder_layer in enumerate(self.layers):
             if output_hidden_states:
                 encoder_states = encoder_states + (hidden_states,)
@@ -1002,7 +961,6 @@ class AutoformerEncoder(AutoformerPreTrainedModel):
                 layer_outputs = encoder_layer(
                     hidden_states,
                     attention_mask,
-                    layer_head_mask=(head_mask[idx] if head_mask is not None else None),
                     output_attentions=output_attentions,
                 )
 
@@ -1054,20 +1012,19 @@ class AutoformerDecoder(AutoformerPreTrainedModel):
 
     def forward(
         self,
-        trend: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        cross_attn_head_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.Tensor] = None,
-    ) -> Union[tuple, AutoFormerDecoderOutput]:
+        trend: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        encoder_hidden_states: torch.FloatTensor | None = None,
+        encoder_attention_mask: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        cache_position: torch.Tensor | None = None,
+        **kwargs,
+    ) -> tuple | AutoFormerDecoderOutput:
         r"""
         Args:
             trend (`torch.FloatTensor` of shape `(batch_size, prediction_length, feature_size)`, *optional*):
@@ -1090,23 +1047,8 @@ class AutoformerDecoder(AutoformerPreTrainedModel):
                 - 0 for tokens that are **masked**.
 
                 [What are attention masks?](../glossary#attention-mask)
-            head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
-                Mask to nullify selected heads of the attention modules. Mask values selected in `[0, 1]`:
-
-                - 1 indicates the head is **not masked**,
-                - 0 indicates the head is **masked**.
-
-            cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
-                Mask to nullify selected heads of the cross-attention modules in the decoder to avoid performing
-                cross-attention on hidden heads. Mask values selected in `[0, 1]`:
-
-                - 1 indicates the head is **not masked**,
-                - 0 indicates the head is **masked**.
-
-            past_key_values (`tuple(tuple(torch.FloatTensor))`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-                Tuple of `tuple(torch.FloatTensor)` of length `config.n_layers`, with each tuple having 2 tensors of
-                shape `(batch_size, num_heads, sequence_length, embed_size_per_head)`) and 2 additional tensors of
-                shape `(batch_size, num_heads, encoder_sequence_length, embed_size_per_head)`.
+            past_key_values (`Cache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+                It is a [`~cache_utils.Cache`] instance. For more details, see our [kv cache guide](https://huggingface.co/docs/transformers/en/kv_cache).
 
                 Contains pre-computed hidden-states (key and values in the self-attention blocks and in the
                 cross-attention blocks) that can be used (see `past_key_values` input) to speed up sequential decoding.
@@ -1151,15 +1093,8 @@ class AutoformerDecoder(AutoformerPreTrainedModel):
             )
             use_cache = False
 
-        return_legacy_cache = False
-        if use_cache and not isinstance(past_key_values, Cache):
-            logger.warning_once(
-                "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
-                "You should pass an instance of `EncoderDecoderCache` instead, e.g. "
-                "`past_key_values=EncoderDecoderCache.from_legacy_cache(past_key_values)`."
-            )
-            return_legacy_cache = True
-            past_key_values = EncoderDecoderCache.from_legacy_cache(past_key_values)
+        if use_cache and past_key_values is None:
+            past_key_values = EncoderDecoderCache(DynamicCache(config=self.config), DynamicCache(config=self.config))
 
         # expand encoder attention mask
         if encoder_hidden_states is not None and encoder_attention_mask is not None:
@@ -1180,15 +1115,6 @@ class AutoformerDecoder(AutoformerPreTrainedModel):
         all_self_attns = () if output_attentions else None
         all_cross_attentions = () if (output_attentions and encoder_hidden_states is not None) else None
 
-        # check if head_mask/cross_attn_head_mask has a correct number of layers specified if desired
-        for attn_mask, mask_name in zip([head_mask, cross_attn_head_mask], ["head_mask", "cross_attn_head_mask"]):
-            if attn_mask is not None:
-                if attn_mask.size()[0] != (len(self.layers)):
-                    raise ValueError(
-                        f"The `{mask_name}` should be specified for {len(self.layers)} layers, but it is for"
-                        f" {head_mask.size()[0]}."
-                    )
-
         for idx, decoder_layer in enumerate(self.layers):
             # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
             if output_hidden_states:
@@ -1203,9 +1129,7 @@ class AutoformerDecoder(AutoformerPreTrainedModel):
                 attention_mask,
                 encoder_hidden_states,  # as a positional argument for gradient checkpointing
                 encoder_attention_mask=encoder_attention_mask,
-                layer_head_mask=(head_mask[idx] if head_mask is not None else None),
-                cross_attn_layer_head_mask=(cross_attn_head_mask[idx] if cross_attn_head_mask is not None else None),
-                past_key_value=past_key_values,
+                past_key_values=past_key_values,
                 output_attentions=output_attentions,
                 use_cache=use_cache,
                 cache_position=cache_position,
@@ -1225,9 +1149,6 @@ class AutoformerDecoder(AutoformerPreTrainedModel):
         # add hidden states from the last decoder layer
         if output_hidden_states:
             all_hidden_states += (hidden_states,)
-
-        if return_legacy_cache:
-            past_key_values = past_key_values.to_legacy_cache()
 
         if not return_dict:
             return tuple(
@@ -1325,11 +1246,11 @@ class AutoformerModel(AutoformerPreTrainedModel):
         self,
         past_values: torch.Tensor,
         past_time_features: torch.Tensor,
-        static_categorical_features: Optional[torch.Tensor] = None,
-        static_real_features: Optional[torch.Tensor] = None,
-        past_observed_mask: Optional[torch.Tensor] = None,
-        future_values: Optional[torch.Tensor] = None,
-        future_time_features: Optional[torch.Tensor] = None,
+        static_categorical_features: torch.Tensor | None = None,
+        static_real_features: torch.Tensor | None = None,
+        past_observed_mask: torch.Tensor | None = None,
+        future_values: torch.Tensor | None = None,
+        future_time_features: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """
         Creates the inputs for the network given the past and future values, time features, and static features.
@@ -1421,34 +1342,26 @@ class AutoformerModel(AutoformerPreTrainedModel):
             )
         return reshaped_lagged_sequence, features, loc, scale, static_feat
 
-    def get_encoder(self):
-        return self.encoder
-
-    def get_decoder(self):
-        return self.decoder
-
     @auto_docstring
     def forward(
         self,
         past_values: torch.Tensor,
         past_time_features: torch.Tensor,
         past_observed_mask: torch.Tensor,
-        static_categorical_features: Optional[torch.Tensor] = None,
-        static_real_features: Optional[torch.Tensor] = None,
-        future_values: Optional[torch.Tensor] = None,
-        future_time_features: Optional[torch.Tensor] = None,
-        decoder_attention_mask: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        decoder_head_mask: Optional[torch.Tensor] = None,
-        cross_attn_head_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[list[torch.FloatTensor]] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
-        output_hidden_states: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        use_cache: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.Tensor] = None,
-    ) -> Union[AutoformerModelOutput, tuple]:
+        static_categorical_features: torch.Tensor | None = None,
+        static_real_features: torch.Tensor | None = None,
+        future_values: torch.Tensor | None = None,
+        future_time_features: torch.Tensor | None = None,
+        decoder_attention_mask: torch.LongTensor | None = None,
+        encoder_outputs: list[torch.FloatTensor] | None = None,
+        past_key_values: Cache | None = None,
+        output_hidden_states: bool | None = None,
+        output_attentions: bool | None = None,
+        use_cache: bool | None = None,
+        return_dict: bool | None = None,
+        cache_position: torch.Tensor | None = None,
+        **kwargs,
+    ) -> AutoformerModelOutput | tuple:
         r"""
         past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
             Past values of the time series, that serve as context in order to predict the future. These values may
@@ -1509,11 +1422,6 @@ class AutoformerModel(AutoformerPreTrainedModel):
             Transformer requires to provide additional features.
 
             The Autoformer only learns additional embeddings for `static_categorical_features`.
-        cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
-            Mask to nullify selected heads of the cross-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
         encoder_outputs (`tuple(tuple(torch.FloatTensor)`, *optional*):
             Tuple consists of `last_hidden_state`, `hidden_states` (*optional*) and `attentions` (*optional*)
             `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)` (*optional*) is a sequence of
@@ -1573,7 +1481,6 @@ class AutoformerModel(AutoformerPreTrainedModel):
             )
             encoder_outputs = self.encoder(
                 inputs_embeds=enc_input,
-                head_mask=head_mask,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
                 return_dict=return_dict,
@@ -1622,8 +1529,6 @@ class AutoformerModel(AutoformerPreTrainedModel):
                 inputs_embeds=decoder_input,
                 attention_mask=decoder_attention_mask,
                 encoder_hidden_states=encoder_outputs[0],
-                head_mask=decoder_head_mask,
-                cross_attn_head_mask=cross_attn_head_mask,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
                 output_attentions=output_attentions,
@@ -1681,12 +1586,6 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
     def output_params(self, decoder_output):
         return self.parameter_projection(decoder_output[:, -self.config.prediction_length :, :])
 
-    def get_encoder(self):
-        return self.model.get_encoder()
-
-    def get_decoder(self):
-        return self.model.get_decoder()
-
     @torch.jit.ignore
     def output_distribution(self, params, loc=None, scale=None, trailing_n=None) -> torch.distributions.Distribution:
         sliced_params = params
@@ -1700,22 +1599,20 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
         past_values: torch.Tensor,
         past_time_features: torch.Tensor,
         past_observed_mask: torch.Tensor,
-        static_categorical_features: Optional[torch.Tensor] = None,
-        static_real_features: Optional[torch.Tensor] = None,
-        future_values: Optional[torch.Tensor] = None,
-        future_time_features: Optional[torch.Tensor] = None,
-        future_observed_mask: Optional[torch.Tensor] = None,
-        decoder_attention_mask: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        decoder_head_mask: Optional[torch.Tensor] = None,
-        cross_attn_head_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[list[torch.FloatTensor]] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
-        output_hidden_states: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        use_cache: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[Seq2SeqTSPredictionOutput, tuple]:
+        static_categorical_features: torch.Tensor | None = None,
+        static_real_features: torch.Tensor | None = None,
+        future_values: torch.Tensor | None = None,
+        future_time_features: torch.Tensor | None = None,
+        future_observed_mask: torch.Tensor | None = None,
+        decoder_attention_mask: torch.LongTensor | None = None,
+        encoder_outputs: list[torch.FloatTensor] | None = None,
+        past_key_values: Cache | None = None,
+        output_hidden_states: bool | None = None,
+        output_attentions: bool | None = None,
+        use_cache: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> Seq2SeqTSPredictionOutput | tuple:
         r"""
         past_values (`torch.FloatTensor` of shape `(batch_size, sequence_length)`):
             Past values of the time series, that serve as context in order to predict the future. These values may
@@ -1784,11 +1681,6 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
             - 0 for values that are **missing** (i.e. NaNs that were replaced by zeros).
 
             This mask is used to filter out missing values for the final loss calculation.
-        cross_attn_head_mask (`torch.Tensor` of shape `(decoder_layers, decoder_attention_heads)`, *optional*):
-            Mask to nullify selected heads of the cross-attention modules. Mask values selected in `[0, 1]`:
-
-            - 1 indicates the head is **not masked**,
-            - 0 indicates the head is **masked**.
         encoder_outputs (`tuple(tuple(torch.FloatTensor)`, *optional*):
             Tuple consists of `last_hidden_state`, `hidden_states` (*optional*) and `attentions` (*optional*)
             `last_hidden_state` of shape `(batch_size, sequence_length, hidden_size)` (*optional*) is a sequence of
@@ -1892,9 +1784,6 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
             future_values=future_values,
             future_time_features=future_time_features,
             decoder_attention_mask=decoder_attention_mask,
-            head_mask=head_mask,
-            decoder_head_mask=decoder_head_mask,
-            cross_attn_head_mask=cross_attn_head_mask,
             encoder_outputs=encoder_outputs,
             past_key_values=past_key_values,
             output_hidden_states=output_hidden_states,
@@ -1948,11 +1837,11 @@ class AutoformerForPrediction(AutoformerPreTrainedModel):
         past_values: torch.Tensor,
         past_time_features: torch.Tensor,
         future_time_features: torch.Tensor,
-        past_observed_mask: Optional[torch.Tensor] = None,
-        static_categorical_features: Optional[torch.Tensor] = None,
-        static_real_features: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        past_observed_mask: torch.Tensor | None = None,
+        static_categorical_features: torch.Tensor | None = None,
+        static_real_features: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
     ) -> SampleTSPredictionOutput:
         r"""
         Greedily generate sequences of sample predictions from a model with a probability distribution head.

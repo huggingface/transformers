@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -32,7 +31,7 @@ from transformers.testing_utils import (
 )
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
+from ...test_modeling_common import ModelTesterMixin, floats_tensor
 
 
 if is_torch_available():
@@ -123,9 +122,7 @@ class MLCDVisionModelTest(ModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (MLCDVisionModel,) if is_torch_available() else ()
-    test_pruning = False
-    test_head_masking = False
-    test_torchscript = False
+
     test_resize_embeddings = False
     test_torch_exportable = True
 
@@ -142,19 +139,11 @@ class MLCDVisionModelTest(ModelTesterMixin, unittest.TestCase):
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, torch.nn.Linear))
 
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad and "class_pos_emb" not in name:
-                    self.assertIn(
-                        ((param.data.mean() * 1e9).round() / 1e9).item(),
-                        [0.0, 1.0],
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
+    @unittest.skip(
+        reason="MLCD passes position embeddings as tuples in its vision encoder, which breaks reentrant GC."
+    )
+    def test_enable_input_require_grads_with_gradient_checkpointing(self):
+        pass
 
 
 @require_torch
@@ -162,7 +151,7 @@ class MLCDVisionModelIntegrationTest(unittest.TestCase):
     @slow
     def test_inference(self):
         model_name = "DeepGlint-AI/mlcd-vit-bigG-patch14-448"
-        model = MLCDVisionModel.from_pretrained(model_name).to(torch_device)
+        model = MLCDVisionModel.from_pretrained(model_name, attn_implementation="eager").to(torch_device)
         processor = AutoProcessor.from_pretrained(model_name)
 
         # process single image

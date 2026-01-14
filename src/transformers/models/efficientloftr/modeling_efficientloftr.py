@@ -11,18 +11,21 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional, Union
+from typing import Optional
 
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2CLS, ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
+from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import (
     ModelOutput,
     TransformersKwargs,
@@ -30,22 +33,22 @@ from ...utils import (
     can_return_tuple,
     torch_int,
 )
-from ...utils.generic import check_model_inputs
+from ...utils.generic import check_model_inputs, maybe_autocast
 from .configuration_efficientloftr import EfficientLoFTRConfig
 
 
 @dataclass
 @auto_docstring(
     custom_intro="""
-    Base class for outputs of keypoint matching models. Due to the nature of keypoint detection and matching, the number
+    Base class for outputs of EfficientLoFTR keypoint matching models. Due to the nature of keypoint detection and matching, the number
     of keypoints is not fixed and can vary from image to image, which makes batching non-trivial. In the batch of
-    images, the maximum number of matches is set as the dimension of the matches and matching scores. The mask tensor is
-    used to indicate which values in the keypoints, matches and matching_scores tensors are keypoint matching
-    information.
+    images, the maximum number of matches is set as the dimension of the matches and matching scores.
     """
 )
-class KeypointMatchingOutput(ModelOutput):
+class EfficientLoFTRKeypointMatchingOutput(ModelOutput):
     r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*):
+        Loss computed during training.
     matches (`torch.FloatTensor` of shape `(batch_size, 2, num_matches)`):
         Index of keypoint matched in the other image.
     matching_scores (`torch.FloatTensor` of shape `(batch_size, 2, num_matches)`):
@@ -61,40 +64,91 @@ class KeypointMatchingOutput(ModelOutput):
         num_keypoints)`, returned when `output_attentions=True` is passed or when `config.output_attentions=True`)
     """
 
-    matches: Optional[torch.FloatTensor] = None
-    matching_scores: Optional[torch.FloatTensor] = None
-    keypoints: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
+    loss: torch.FloatTensor | None = None
+    matches: torch.FloatTensor | None = None
+    matching_scores: torch.FloatTensor | None = None
+    keypoints: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
 
 
+@compile_compatible_method_lru_cache(maxsize=32)
+def compute_embeddings(inv_freq: torch.Tensor, embed_height: int, embed_width: int, hidden_size: int) -> torch.Tensor:
+    i_indices = torch.ones(embed_height, embed_width, dtype=inv_freq.dtype, device=inv_freq.device)
+    j_indices = torch.ones(embed_height, embed_width, dtype=inv_freq.dtype, device=inv_freq.device)
+    i_indices = i_indices.cumsum(0).unsqueeze(-1)
+    j_indices = j_indices.cumsum(1).unsqueeze(-1)
+
+    emb = torch.zeros(1, embed_height, embed_width, hidden_size // 2, dtype=inv_freq.dtype, device=inv_freq.device)
+    emb[:, :, :, 0::2] = i_indices * inv_freq
+    emb[:, :, :, 1::2] = j_indices * inv_freq
+
+    return emb
+
+
+# Copied from transformers.models.llama.modeling_llama.LlamaRotaryEmbedding with Llama->EfficientLoFTR
 class EfficientLoFTRRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
+    # Ignore copy
     def __init__(self, config: EfficientLoFTRConfig, device=None):
         super().__init__()
+
         self.config = config
-        self.rope_type = config.rope_scaling["rope_type"]
-        self.rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
 
-        inv_freq, _ = self.rope_init_fn(self.config, device)
-        inv_freq_expanded = inv_freq[None, None, None, :].float().expand(1, 1, 1, -1)
+        self.rope_type = self.config.rope_parameters["rope_type"]
+        rope_init_fn: Callable = self.compute_default_rope_parameters
+        if self.rope_type != "default":
+            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
 
-        embed_height, embed_width = config.embedding_size
-        i_indices = torch.ones(embed_height, embed_width).cumsum(0).float().unsqueeze(-1)
-        j_indices = torch.ones(embed_height, embed_width).cumsum(1).float().unsqueeze(-1)
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
-        emb = torch.zeros(1, embed_height, embed_width, self.config.hidden_size // 2)
-        emb[:, :, :, 0::2] = i_indices * inv_freq_expanded
-        emb[:, :, :, 1::2] = j_indices * inv_freq_expanded
+    @staticmethod
+    # Ignore copy
+    def compute_default_rope_parameters(
+        config: EfficientLoFTRConfig | None = None,
+        device: Optional["torch.device"] = None,
+        seq_len: int | None = None,
+    ) -> tuple["torch.Tensor", float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+            device (`torch.device`):
+                The device to use for initialization of the inverse frequencies.
+            seq_len (`int`, *optional*):
+                The current sequence length. Unused for this type of RoPE.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        base = config.rope_parameters["rope_theta"]
+        partial_rotary_factor = config.rope_parameters.get("partial_rotary_factor", 1.0)
+        head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        dim = int(head_dim * partial_rotary_factor)
 
-        self.register_buffer("inv_freq", emb, persistent=False)
+        attention_factor = 1.0  # Unused in this type of RoPE
 
+        # Compute the inverse frequencies
+        inv_freq = 1.0 / (
+            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
+        )
+        return inv_freq, attention_factor
+
+    # Ignore copy
     @torch.no_grad()
     def forward(
-        self, x: torch.Tensor, position_ids: Optional[tuple[torch.LongTensor, torch.LongTensor]] = None
+        self, x: torch.Tensor, position_ids: torch.LongTensor | None = None, layer_type=None
     ) -> tuple[torch.Tensor, torch.Tensor]:
+        feats_height, feats_width = x.shape[-2:]
+        embed_height = (feats_height - self.config.q_aggregation_kernel_size) // self.config.q_aggregation_stride + 1
+        embed_width = (feats_width - self.config.q_aggregation_kernel_size) // self.config.q_aggregation_stride + 1
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
-            emb = self.inv_freq
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
+            emb = compute_embeddings(self.inv_freq, embed_height, embed_width, self.config.hidden_size)
             sin = emb.sin()
             cos = emb.cos()
 
@@ -222,7 +276,7 @@ class EfficientLoFTRAggregationLayer(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
+        encoder_hidden_states: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         query_states = hidden_states
         is_cross_attention = encoder_hidden_states is not None
@@ -247,7 +301,7 @@ def rotate_half(x):
 
 
 # Copied from transformers.models.cohere.modeling_cohere.apply_rotary_pos_emb
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
     Args:
@@ -255,8 +309,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
         k (`torch.Tensor`): The key tensor.
         cos (`torch.Tensor`): The cosine part of the rotary embedding.
         sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`, *optional*):
-            Deprecated and unused.
         unsqueeze_dim (`int`, *optional*, defaults to 1):
             The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
             sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
@@ -296,7 +348,7 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
+    attention_mask: torch.Tensor | None,
     scaling: float,
     dropout: float = 0.0,
     **kwargs: Unpack[TransformersKwargs],
@@ -320,7 +372,6 @@ def eager_attention_forward(
 class EfficientLoFTRAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    # Copied from transformers.models.llama.modeling_llama.LlamaAttention.__init__ with Llama->EfficientLoFTR
     def __init__(self, config: EfficientLoFTRConfig, layer_idx: int):
         super().__init__()
         self.config = config
@@ -329,7 +380,7 @@ class EfficientLoFTRAttention(nn.Module):
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = config.attention_dropout
-        self.is_causal = True
+        self.is_causal = False
 
         self.q_proj = nn.Linear(
             config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
@@ -347,18 +398,16 @@ class EfficientLoFTRAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         batch_size, seq_len, dim = hidden_states.shape
         input_shape = hidden_states.shape[:-1]
 
         query_states = self.q_proj(hidden_states).view(batch_size, seq_len, -1, dim)
 
-        is_cross_attention = encoder_hidden_states is not None
-        current_states = encoder_hidden_states if is_cross_attention else hidden_states
-
+        current_states = encoder_hidden_states if encoder_hidden_states is not None else hidden_states
         key_states = self.k_proj(current_states).view(batch_size, seq_len, -1, dim)
         value_states = self.v_proj(current_states).view(batch_size, seq_len, -1, self.head_dim).transpose(1, 2)
 
@@ -419,8 +468,8 @@ class EfficientLoFTRAggregatedAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         batch_size, embed_dim, _, _ = hidden_states.shape
@@ -468,7 +517,7 @@ class EfficientLoFTRLocalFeatureTransformerLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         batch_size, _, embed_dim, height, width = hidden_states.shape
@@ -476,12 +525,16 @@ class EfficientLoFTRLocalFeatureTransformerLayer(GradientCheckpointingLayer):
         hidden_states = hidden_states.reshape(-1, embed_dim, height, width)
         hidden_states = self.self_attention(hidden_states, position_embeddings=position_embeddings, **kwargs)
 
-        encoder_hidden_states = hidden_states.reshape(-1, 2, embed_dim, height, width)
-        encoder_hidden_states = encoder_hidden_states.flip(1)
-        encoder_hidden_states = encoder_hidden_states.reshape(-1, embed_dim, height, width)
-
-        hidden_states = self.cross_attention(hidden_states, encoder_hidden_states, **kwargs)
-        hidden_states = hidden_states.reshape(batch_size, -1, embed_dim, height, width)
+        ###
+        # Implementation of a bug in the original implementation regarding the cross-attention
+        # See : https://github.com/zju3dv/MatchAnything/issues/26
+        hidden_states = hidden_states.reshape(-1, 2, embed_dim, height, width)
+        features_0 = hidden_states[:, 0]
+        features_1 = hidden_states[:, 1]
+        features_0 = self.cross_attention(features_0, features_1, **kwargs)
+        features_1 = self.cross_attention(features_1, features_0, **kwargs)
+        hidden_states = torch.stack((features_0, features_1), dim=1)
+        ###
 
         return hidden_states
 
@@ -499,7 +552,7 @@ class EfficientLoFTRLocalFeatureTransformer(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor],
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         for layer in self.layers:
@@ -564,7 +617,7 @@ class EfficientLoFTRFineFusionLayer(nn.Module):
     def forward(
         self,
         coarse_features: torch.Tensor,
-        residual_features: list[torch.Tensor],
+        residual_features: list[torch.Tensor] | tuple[torch.Tensor],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         For each image pair, compute the fine features of pixels.
@@ -613,6 +666,7 @@ class EfficientLoFTRPreTrainedModel(PreTrainedModel):
     config_class = EfficientLoFTRConfig
     base_model_prefix = "efficientloftr"
     main_input_name = "pixel_values"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = True
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -621,15 +675,29 @@ class EfficientLoFTRPreTrainedModel(PreTrainedModel):
         "attentions": EfficientLoFTRAttention,
     }
 
+    @torch.no_grad()
     def _init_weights(self, module: nn.Module) -> None:
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d, nn.Conv1d, nn.BatchNorm2d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.data.zero_()
+                init.zeros_(module.bias)
+            if getattr(module, "running_mean", None) is not None:
+                init.zeros_(module.running_mean)
+                init.ones_(module.running_var)
+                init.zeros_(module.num_batches_tracked)
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
+        elif isinstance(module, EfficientLoFTRRotaryEmbedding):
+            rope_fn = (
+                ROPE_INIT_FUNCTIONS[module.rope_type]
+                if module.rope_type != "default"
+                else module.compute_default_rope_parameters
+            )
+            buffer_value, _ = rope_fn(module.config)
+            init.copy_(module.inv_freq, buffer_value)
+            init.copy_(module.original_inv_freq, buffer_value)
 
     # Copied from transformers.models.superpoint.modeling_superpoint.SuperPointPreTrainedModel.extract_one_channel_pixel_values with SuperPoint->EfficientLoFTR
     def extract_one_channel_pixel_values(self, pixel_values: torch.FloatTensor) -> torch.FloatTensor:
@@ -670,7 +738,7 @@ class EfficientLoFTRModel(EfficientLoFTRPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        labels: Optional[torch.LongTensor] = None,
+        labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BackboneOutput:
         r"""
@@ -723,13 +791,12 @@ class EfficientLoFTRModel(EfficientLoFTRPreTrainedModel):
         coarse_features = self.local_feature_transformer(
             coarse_features, position_embeddings=position_embeddings, **kwargs
         )
-
         features = (coarse_features,) + tuple(residual_features)
 
         return BackboneOutput(feature_maps=features)
 
 
-def mask_border(tensor: torch.Tensor, border_margin: int, value: Union[bool, float, int]) -> torch.Tensor:
+def mask_border(tensor: torch.Tensor, border_margin: int, value: bool | float | int) -> torch.Tensor:
     """
     Mask a tensor border with a given value
 
@@ -748,17 +815,24 @@ def mask_border(tensor: torch.Tensor, border_margin: int, value: Union[bool, flo
     if border_margin <= 0:
         return tensor
 
-    tensor[:, :border_margin, :border_margin, :border_margin, :border_margin] = value
-    tensor[:, -border_margin:, -border_margin:, -border_margin:, -border_margin:] = value
+    tensor[:, :border_margin] = value
+    tensor[:, :, :border_margin] = value
+    tensor[:, :, :, :border_margin] = value
+    tensor[:, :, :, :, :border_margin] = value
+    tensor[:, -border_margin:] = value
+    tensor[:, :, -border_margin:] = value
+    tensor[:, :, :, -border_margin:] = value
+    tensor[:, :, :, :, -border_margin:] = value
+
     return tensor
 
 
 def create_meshgrid(
-    height: Union[int, torch.Tensor],
-    width: Union[int, torch.Tensor],
+    height: int | torch.Tensor,
+    width: int | torch.Tensor,
     normalized_coordinates: bool = False,
-    device: Optional[torch.device] = None,
-    dtype: Optional[torch.dtype] = None,
+    device: torch.device | None = None,
+    dtype: torch.dtype | None = None,
 ) -> torch.Tensor:
     """
     Copied from kornia library : kornia/kornia/utils/grid.py:26
@@ -877,7 +951,7 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
 
     Yifan Wang, Xingyi He, Sida Peng, Dongli Tan and Xiaowei Zhou.
     Efficient LoFTR: Semi-Dense Local Feature Matching with Sparse-Like Speed
-    In CVPR, 2024. https://arxiv.org/abs/2403.04765
+    In CVPR, 2024. https://huggingface.co/papers/2403.04765
     """
 
     def __init__(self, config: EfficientLoFTRConfig):
@@ -1231,9 +1305,9 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        labels: Optional[torch.LongTensor] = None,
+        labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> KeypointMatchingOutput:
+    ) -> EfficientLoFTRKeypointMatchingOutput:
         r"""
         Examples:
 
@@ -1274,6 +1348,7 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
 
         # 3. Fine-level refinement
         residual_features = features[1:]
+        coarse_features = coarse_features / self.config.hidden_size**0.5
         fine_features_0, fine_features_1 = self.refinement_layer(coarse_features, residual_features)
 
         # Filter fine features with coarse matches indices
@@ -1290,7 +1365,9 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
         matching_keypoints[:, :, :, 0] = matching_keypoints[:, :, :, 0] / width
         matching_keypoints[:, :, :, 1] = matching_keypoints[:, :, :, 1] / height
 
-        return KeypointMatchingOutput(
+        loss = None
+        return EfficientLoFTRKeypointMatchingOutput(
+            loss=loss,
             matches=coarse_matched_indices,
             matching_scores=coarse_matching_scores,
             keypoints=matching_keypoints,

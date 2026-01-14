@@ -16,10 +16,9 @@
 
 import unittest
 
-from transformers import NemotronConfig, is_torch_available
+from transformers import is_torch_available
 from transformers.testing_utils import (
     Expectations,
-    require_read_token,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -27,7 +26,6 @@ from transformers.testing_utils import (
 )
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
-from ...test_configuration_common import ConfigTester
 
 
 if is_torch_available():
@@ -36,20 +34,13 @@ if is_torch_available():
     from transformers import (
         AutoTokenizer,
         NemotronForCausalLM,
-        NemotronForQuestionAnswering,
-        NemotronForSequenceClassification,
-        NemotronForTokenClassification,
         NemotronModel,
     )
 
 
 class NemotronModelTester(CausalLMModelTester):
     if is_torch_available():
-        config_class = NemotronConfig
         base_model_class = NemotronModel
-        causal_lm_class = NemotronForCausalLM
-        sequence_class = NemotronForSequenceClassification
-        token_class = NemotronForTokenClassification
 
 
 @require_torch
@@ -58,39 +49,9 @@ class NemotronModelTest(CausalLMModelTest, unittest.TestCase):
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
     # This is because we are hitting edge cases with the causal_mask buffer
     model_split_percents = [0.5, 0.7, 0.8]
-    all_model_classes = (
-        (
-            NemotronModel,
-            NemotronForCausalLM,
-            NemotronForSequenceClassification,
-            NemotronForQuestionAnswering,
-            NemotronForTokenClassification,
-        )
-        if is_torch_available()
-        else ()
-    )
-    pipeline_model_mapping = (
-        {
-            "feature-extraction": NemotronModel,
-            "text-classification": NemotronForSequenceClassification,
-            "text-generation": NemotronForCausalLM,
-            "zero-shot": NemotronForSequenceClassification,
-            "question-answering": NemotronForQuestionAnswering,
-            "token-classification": NemotronForTokenClassification,
-        }
-        if is_torch_available()
-        else {}
-    )
-    test_headmasking = False
-    test_pruning = False
-    fx_compatible = False
 
     # used in `test_torch_compile_for_training`
     _torch_compile_train_cls = NemotronForCausalLM if is_torch_available() else None
-
-    def setUp(self):
-        self.model_tester = NemotronModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=NemotronConfig, hidden_size=37)
 
     @unittest.skip("Eager and SDPA do not produce the same outputs, thus this test fails")
     def test_model_outputs_equivalence(self, **kwargs):
@@ -100,7 +61,6 @@ class NemotronModelTest(CausalLMModelTest, unittest.TestCase):
 @require_torch_accelerator
 class NemotronIntegrationTest(unittest.TestCase):
     @slow
-    @require_read_token
     def test_nemotron_8b_generation_sdpa(self):
         text = ["What is the largest planet in solar system?"]
         EXPECTED_TEXT = [
@@ -108,7 +68,7 @@ class NemotronIntegrationTest(unittest.TestCase):
         ]
         model_id = "thhaus/nemotron3-8b"
         model = NemotronForCausalLM.from_pretrained(
-            model_id, torch_dtype=torch.float16, device_map="auto", attn_implementation="sdpa"
+            model_id, dtype=torch.float16, device_map="auto", attn_implementation="sdpa"
         )
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(text, return_tensors="pt").to(torch_device)
@@ -118,7 +78,6 @@ class NemotronIntegrationTest(unittest.TestCase):
         self.assertEqual(EXPECTED_TEXT, output_text)
 
     @slow
-    @require_read_token
     def test_nemotron_8b_generation_eager(self):
         text = ["What is the largest planet in solar system?"]
         EXPECTED_TEXTS = Expectations(
@@ -134,7 +93,7 @@ class NemotronIntegrationTest(unittest.TestCase):
         EXPECTED_TEXT = EXPECTED_TEXTS.get_expectation()
         model_id = "thhaus/nemotron3-8b"
         model = NemotronForCausalLM.from_pretrained(
-            model_id, torch_dtype=torch.float16, device_map="auto", attn_implementation="eager"
+            model_id, dtype=torch.float16, device_map="auto", attn_implementation="eager"
         )
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(text, return_tensors="pt").to(torch_device)
@@ -144,7 +103,6 @@ class NemotronIntegrationTest(unittest.TestCase):
         self.assertEqual(EXPECTED_TEXT, output_text)
 
     @slow
-    @require_read_token
     def test_nemotron_8b_generation_fa2(self):
         text = ["What is the largest planet in solar system?"]
         EXPECTED_TEXT = [
@@ -152,7 +110,7 @@ class NemotronIntegrationTest(unittest.TestCase):
         ]
         model_id = "thhaus/nemotron3-8b"
         model = NemotronForCausalLM.from_pretrained(
-            model_id, torch_dtype=torch.float16, device_map="auto", attn_implementation="flash_attention_2"
+            model_id, dtype=torch.float16, device_map="auto", attn_implementation="flash_attention_2"
         )
         tokenizer = AutoTokenizer.from_pretrained(model_id)
         inputs = tokenizer(text, return_tensors="pt").to(torch_device)

@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import re
-from typing import Any, Optional, Union, overload
+from typing import Any, Union, overload
 
 import numpy as np
 
@@ -60,7 +60,7 @@ def normalize_box(box, width, height):
     ]
 
 
-def apply_tesseract(image: "Image.Image", lang: Optional[str], tesseract_config: Optional[str]):
+def apply_tesseract(image: "Image.Image", lang: str | None, tesseract_config: str | None):
     """Applies Tesseract OCR on a document image, and returns recognized words + normalized bounding boxes."""
     # apply OCR
     data = pytesseract.image_to_data(image, lang=lang, output_type="dict", config=tesseract_config)
@@ -146,7 +146,9 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        if self.tokenizer is not None and not self.tokenizer.__class__.__name__.endswith("Fast"):
+        if self.tokenizer is not None and not (
+            self.tokenizer.__class__.__name__.endswith("Fast") or self.tokenizer.backend == "tokenizers"
+        ):
             raise ValueError(
                 "`DocumentQuestionAnsweringPipeline` requires a fast tokenizer, but a slow tokenizer "
                 f"(`{self.tokenizer.__class__.__name__}`) is provided."
@@ -168,8 +170,8 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
         padding=None,
         doc_stride=None,
         max_question_len=None,
-        lang: Optional[str] = None,
-        tesseract_config: Optional[str] = None,
+        lang: str | None = None,
+        tesseract_config: str | None = None,
         max_answer_len=None,
         max_seq_len=None,
         top_k=None,
@@ -199,7 +201,7 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
             postprocess_params["top_k"] = top_k
         if max_answer_len is not None:
             if max_answer_len < 1:
-                raise ValueError(f"max_answer_len parameter should be >= 1 (got {max_answer_len}")
+                raise ValueError(f"max_answer_len parameter should be >= 1 (got {max_answer_len})")
             postprocess_params["max_answer_len"] = max_answer_len
         if handle_impossible_answer is not None:
             postprocess_params["handle_impossible_answer"] = handle_impossible_answer
@@ -218,7 +220,7 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
         self,
         image: Union["Image.Image", str],
         question: str,
-        word_boxes: Optional[tuple[str, list[float]]] = None,
+        word_boxes: tuple[str, list[float]] | None = None,
         **kwargs: Any,
     ) -> list[dict[str, Any]]: ...
 
@@ -231,10 +233,10 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
     def __call__(
         self,
         image: Union["Image.Image", str, list[dict[str, Any]]],
-        question: Optional[str] = None,
-        word_boxes: Optional[tuple[str, list[float]]] = None,
+        question: str | None = None,
+        word_boxes: tuple[str, list[float]] | None = None,
         **kwargs: Any,
-    ) -> Union[dict[str, Any], list[dict[str, Any]]]:
+    ) -> dict[str, Any] | list[dict[str, Any]]:
         """
         Answer the question(s) given as inputs by using the document(s). A document is defined as an image and an
         optional list of (word, box) tuples which represent the text in the document. If the `word_boxes` are not
@@ -313,7 +315,7 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
         padding="do_not_pad",
         doc_stride=None,
         max_seq_len=None,
-        word_boxes: Optional[tuple[str, list[float]]] = None,
+        word_boxes: tuple[str, list[float]] | None = None,
         lang=None,
         tesseract_config="",
         timeout=None,
@@ -331,12 +333,11 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
         if input.get("image", None) is not None:
             image = load_image(input["image"], timeout=timeout)
             if self.image_processor is not None:
-                image_inputs = self.image_processor(images=image, return_tensors=self.framework)
-                if self.framework == "pt":
-                    image_inputs = image_inputs.to(self.torch_dtype)
+                image_inputs = self.image_processor(images=image, return_tensors="pt")
+                image_inputs = image_inputs.to(self.dtype)
                 image_features.update(image_inputs)
             elif self.feature_extractor is not None:
-                image_features.update(self.feature_extractor(images=image, return_tensors=self.framework))
+                image_features.update(self.feature_extractor(images=image, return_tensors="pt"))
             elif self.model_type == ModelType.VisionEncoderDecoder:
                 raise ValueError("If you are using a VisionEncoderDecoderModel, you must provide a feature extractor")
 
@@ -374,7 +375,7 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
             encoding = {
                 "inputs": image_features["pixel_values"],
                 "decoder_input_ids": self.tokenizer(
-                    task_prompt, add_special_tokens=False, return_tensors=self.framework
+                    task_prompt, add_special_tokens=False, return_tensors="pt"
                 ).input_ids,
                 "return_dict_in_generate": True,
             }
@@ -417,12 +418,9 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
             # This logic mirrors the logic in the question_answering pipeline
             p_mask = [[tok != 1 for tok in encoding.sequence_ids(span_id)] for span_id in range(num_spans)]
             for span_idx in range(num_spans):
-                if self.framework == "pt":
-                    span_encoding = {k: torch.tensor(v[span_idx : span_idx + 1]) for (k, v) in encoding.items()}
-                    if "pixel_values" in image_features:
-                        span_encoding["image"] = image_features["pixel_values"]
-                else:
-                    raise ValueError("Unsupported: Tensorflow preprocessing for DocumentQuestionAnsweringPipeline")
+                span_encoding = {k: torch.tensor(v[span_idx : span_idx + 1]) for (k, v) in encoding.items()}
+                if "pixel_values" in image_features:
+                    span_encoding["image"] = image_features["pixel_values"]
 
                 input_ids_span_idx = encoding["input_ids"][span_idx]
                 # keep the cls_token unmasked (some models use it to indicate unanswerable questions)
@@ -447,10 +445,7 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
                         else:
                             bbox.append([0] * 4)
 
-                    if self.framework == "pt":
-                        span_encoding["bbox"] = torch.tensor(bbox).unsqueeze(0)
-                    elif self.framework == "tf":
-                        raise ValueError("Unsupported: Tensorflow preprocessing for DocumentQuestionAnsweringPipeline")
+                    span_encoding["bbox"] = torch.tensor(bbox).unsqueeze(0)
                 yield {
                     **span_encoding,
                     "p_mask": p_mask[span_idx],
@@ -515,9 +510,9 @@ class DocumentQuestionAnsweringPipeline(ChunkPipeline):
         for output in model_outputs:
             words = output["words"]
 
-            if self.framework == "pt" and output["start_logits"].dtype in (torch.bfloat16, torch.float16):
+            if output["start_logits"].dtype in (torch.bfloat16, torch.float16):
                 output["start_logits"] = output["start_logits"].float()
-            if self.framework == "pt" and output["end_logits"].dtype in (torch.bfloat16, torch.float16):
+            if output["end_logits"].dtype in (torch.bfloat16, torch.float16):
                 output["end_logits"] = output["end_logits"].float()
 
             starts, ends, scores, min_null_score = select_starts_ends(

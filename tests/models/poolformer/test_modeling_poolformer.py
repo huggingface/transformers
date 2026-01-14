@@ -126,10 +126,7 @@ class PoolFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         else {}
     )
 
-    test_head_masking = False
-    test_pruning = False
     test_resize_embeddings = False
-    test_torchscript = False
     has_attentions = False
     test_torch_exportable = True
 
@@ -241,7 +238,7 @@ class PoolFormerModelIntegrationTest(unittest.TestCase):
         expectations = Expectations(
             {
                 (None, None): [-0.6113, 0.1685, -0.0492],
-                ("cuda", 8): [-0.6112, 0.1690, -0.0481],
+                ("cuda", 8): [-0.6113, 0.1685, -0.0492],
             }
         )
         expected_slice = torch.tensor(expectations.get_expectation()).to(torch_device)

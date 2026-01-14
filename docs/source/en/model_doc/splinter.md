@@ -13,6 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2021-01-02 and added to Hugging Face Transformers on 2021-08-17.*
 
 # Splinter
 
@@ -66,9 +67,7 @@ This model was contributed by [yuvalkirstain](https://huggingface.co/yuvalkirsta
 ## SplinterTokenizer
 
 [[autodoc]] SplinterTokenizer
-    - build_inputs_with_special_tokens
     - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
     - save_vocabulary
 
 ## SplinterTokenizerFast

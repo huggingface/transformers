@@ -18,38 +18,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, Union
 
+from typing import Optional
+
+import torch
 import torch.nn.functional as F
 
 from ...image_processing_utils import BatchFeature
-from ...image_processing_utils_fast import (
-    BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
-    group_images_by_shape,
-    reorder_images,
-)
+from ...image_processing_utils_fast import BaseImageProcessorFast, group_images_by_shape, reorder_images
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling, SizeDict
 from ...processing_utils import Unpack
-from ...utils import (
-    TensorType,
-    auto_docstring,
-    is_torch_available,
-)
-
-
-if is_torch_available():
-    import torch
-
-
-class DeepseekVLFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    r"""
-    min_size (`int`, *optional*, defaults to 14):
-        The minimum allowed size for the resized image. Ensures that neither the height nor width
-        falls below this value after resizing.
-    """
-
-    min_size: int
+from ...utils import TensorType, auto_docstring
+from .image_processing_deepseek_vl import DeepseekVLImageProcessorKwargs
 
 
 @auto_docstring
@@ -62,14 +42,15 @@ class DeepseekVLImageProcessorFast(BaseImageProcessorFast):
     do_resize = True
     do_rescale = True
     do_normalize = True
-    valid_kwargs = DeepseekVLFastImageProcessorKwargs
+    do_pad = True
+    valid_kwargs = DeepseekVLImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[DeepseekVLFastImageProcessorKwargs]):
+    def __init__(self, **kwargs: Unpack[DeepseekVLImageProcessorKwargs]):
         super().__init__(**kwargs)
-        if kwargs.get("image_mean", None) is None:
+        if kwargs.get("image_mean") is None:
             background_color = (127, 127, 127)
         else:
-            background_color = tuple([int(x * 255) for x in kwargs.get("image_mean")])
+            background_color = tuple(int(x * 255) for x in kwargs.get("image_mean"))
         self.background_color = tuple(background_color)
 
     def resize(
@@ -77,7 +58,7 @@ class DeepseekVLImageProcessorFast(BaseImageProcessorFast):
         image: "torch.Tensor",
         size: SizeDict,
         min_size: int,
-        interpolation: "F.InterpolationMode" = None,
+        interpolation: Optional["F.InterpolationMode"] = None,
         antialias: bool = True,
         **kwargs,
     ) -> "torch.Tensor":
@@ -102,7 +83,7 @@ class DeepseekVLImageProcessorFast(BaseImageProcessorFast):
     def pad_to_square(
         self,
         images: "torch.Tensor",
-        background_color: Union[int, tuple[int, int, int]] = 0,
+        background_color: int | tuple[int, int, int] = 0,
     ) -> "torch.Tensor":
         """
         Pads an image to a square based on the longest edge.
@@ -113,7 +94,7 @@ class DeepseekVLImageProcessorFast(BaseImageProcessorFast):
             background_color (`int` or `tuple[int, int, int]`, *optional*, defaults to 0):
                 The color to use for the padding. Can be an integer for single channel or a
                 tuple of integers representing for multi-channel images. If passed as integer
-                in mutli-channel mode, it will default to `0` in subsequent channels.
+                in multi-channel mode, it will default to `0` in subsequent channels.
 
         Returns:
             `torch.Tensor`: The padded images.
@@ -159,10 +140,10 @@ class DeepseekVLImageProcessorFast(BaseImageProcessorFast):
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        disable_grouping: Optional[bool],
-        return_tensors: Optional[Union[str, TensorType]],
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
         do_pad: bool = True,
         **kwargs,
     ) -> BatchFeature:
@@ -191,7 +172,6 @@ class DeepseekVLImageProcessorFast(BaseImageProcessorFast):
             processed_images_grouped[shape] = stacked_images
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
-        processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
 
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 

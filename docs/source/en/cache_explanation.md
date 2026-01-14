@@ -15,6 +15,7 @@ rendered properly in your Markdown viewer.
 -->
 
 # Caching
+
 Imagine you're having a conversation with someone, and instead of remembering what they previously said, they have to start from scratch every time you respond. This would be slow and inefficient, right?
 
 You can extend this analogy to transformer models. Autoregressive model generation can be slow because it makes a prediction one token at a time. Each new prediction is dependent on all the previous context.
@@ -40,13 +41,13 @@ $$
 
 The query (`Q`), key (`K`), and value (`V`) matrices are projections from the input embeddings of shape `(b, h, T, d_head)`.
 
-For causal attention, the mask prevents the model from attending to future tokens. Once a token is processed, its representation never changes with respect to future tokens, which means \\( K_{\text{past}} \\) and \\( V_{\text{past}} \\) can be cached and reused to compute the last token's representation.
+For causal attention, the mask prevents the model from attending to future tokens. Once a token is processed, its representation never changes with respect to future tokens, which means $ K_{\text{past}} $ and $ V_{\text{past}} $ can be cached and reused to compute the last token's representation.
 
 $$
 \text{Attention}(q_t, [\underbrace{k_1, k_2, \dots, k_{t-1}}_{\text{cached}}, k_{t}], [\underbrace{v_1, v_2, \dots, v_{t-1}}_{\text{cached}}, v_{t}])
 $$
 
-At inference time, you only need the last token's query to compute the representation \\( x_t \\) that predicts the next token \\( t+1 \\). At each step, the new key and value vectors are **stored** in the cache and **appended** to the past keys and values.
+At inference time, you only need the last token's query to compute the representation $ x_t $ that predicts the next token $ t+1 $. At each step, the new key and value vectors are **stored** in the cache and **appended** to the past keys and values.
 
 $$
 K_{\text{cache}} \leftarrow \text{concat}(K_{\text{past}}, k_t), \quad V_{\text{cache}} \leftarrow \text{concat}(V_{\text{past}}, v_t)
@@ -58,10 +59,8 @@ Refer to the table below to compare how caching improves efficiency.
 
 | without caching | with caching |
 |---|---|
-| for each step, recompute all previous `K` and `V`  | for each step, only compute current `K` and `V` 
+| for each step, recompute all previous `K` and `V`  | for each step, only compute current `K` and `V` |
 | attention cost per step is **quadratic** with sequence length | attention cost per step is **linear** with sequence length (memory grows linearly, but compute/token remains low) |
-
-
 
 ## Cache class
 
@@ -84,7 +83,7 @@ When you use Transformers' [`Cache`] class, the self-attention module performs s
 
 Caches are structured as a list of layers, where each layer contains a key and value cache. The key and value caches are tensors with the shape `[batch_size, num_heads, seq_len, head_dim]`.
 
-Layers can be of different types (e.g. `DynamicLayer`, `StaticLayer`, `SlidingWindowLayer`), which mostly changes how sequence length is handled and how the cache is updated.
+Layers can be of different types (e.g. `DynamicLayer`, `StaticLayer`, `StaticSlidingWindowLayer`), which mostly changes how sequence length is handled and how the cache is updated.
 
 The simplest is a `DynamicLayer` that grows as more tokens are processed. The sequence length dimension (`seq_len`) increases with each new token:
 
@@ -93,24 +92,27 @@ cache.layers[idx].keys = torch.cat([cache.layers[idx].keys, key_states], dim=-2)
 cache.layers[idx].values = torch.cat([cache.layers[idx].values, value_states], dim=-2)
 ```
 
-Other layer types like `StaticLayer` and `SlidingWindowLayer` have a fixed sequence length that is set when the cache is created. This makes them compatible with `torch.compile`. In the case of `SlidingWindowLayer`, existing tokens are shifted out of the cache when a new token is added.
+Other layer types like `StaticLayer` and `StaticSlidingWindowLayer` have a fixed sequence length that is set when the cache is created. This makes them compatible with `torch.compile`. In the case of `StaticSlidingWindowLayer`, existing tokens are shifted out of the cache when a new token is added.
 
 The example below demonstrates how to create a generation loop with [`DynamicCache`]. As discussed, the attention mask is a concatenation of past and current token values and `1` is added to the cache position for the next token.
 
 ```py
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, DynamicCache
+from accelerate import Accelerator
+
+device = Accelerator().device
 
 model_id = "meta-llama/Llama-2-7b-chat-hf"
-model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, device_map="cuda:0")
+model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, device_map=device)
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 
-past_key_values = DynamicCache()
+past_key_values = DynamicCache(config=model.config)
 messages = [{"role": "user", "content": "Hello, what's your name."}]
-inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt", return_dict=True).to("cuda:0")
+inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt", return_dict=True).to(model.device)
 
 generated_ids = inputs.input_ids
-cache_position = torch.arange(inputs.input_ids.shape[1], dtype=torch.int64, device="cuda:0")
+cache_position = torch.arange(inputs.input_ids.shape[1], dtype=torch.int64, device=model.device)
 max_new_tokens = 10
 
 for _ in range(max_new_tokens):
@@ -135,50 +137,24 @@ The cache position tracks where to insert new tokens in the attention cache. It 
 
 Cache position is used internally for two purposes:
 
-1. Selecting new tokens to process in the input sequence and ensuring only tokens that haven’t been cached yet are passed to the model's `forward`.
-2. Storing key/value pairs at the correct positions in the cache. This is especially important for fixed-size caches, like [`StaticCache`], that pre-allocates a specific cache length.
+1. Selecting new tokens to process in the input sequence and ensuring only tokens that haven't been cached yet are passed to the model's `forward`.
+2. Storing key/value pairs at the correct positions in the cache. This is especially important for fixed-size caches, that pre-allocates a specific cache length.
 
 The generation loop usually takes care of the cache position, but if you're writing a custom generation method, it is important that cache positions are accurate since they are used to write and read key/value states into fixed slots.
 
-
 ```py
 import torch
 from transformers import AutoTokenizer, AutoModelForCausalLM, DynamicCache
+from accelerate import Accelerator
+
+device = Accelerator().device
 
 model_id = "meta-llama/Llama-2-7b-chat-hf"
-model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=torch.bfloat16, device_map="cuda:0")
+model = AutoModelForCausalLM.from_pretrained(model_id, dtype=torch.bfloat16, device_map=device)
 tokenizer = AutoTokenizer.from_pretrained(model_id)
 
 messages = [{"role": "user", "content": "You are a helpful assistant."}]
-inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt", return_dict=True).to("cuda:0")
+inputs = tokenizer.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt", return_dict=True).to(model.device)
 generated_ids = model.generate(**inputs, use_cache=True, max_new_tokens=10)
 
-```
-
-
-## Legacy cache format
-
-Before the [`Cache`] class, the cache used to be stored as a tuple of tuples of tensors. This format is dynamic because it grows as text is generated, similar to [`DynamicCache`].
-
-The legacy format is essentially the same data structure but organized differently.
-- It's a tuple of tuples, where each inner tuple contains the key and value tensors for a layer.
-- The tensors have the same shape `[batch_size, num_heads, seq_len, head_dim]`.
-- The format is less flexible and doesn't support features like quantization or offloading.
-
-If your project depends on this legacy format, we recommend to convert to [`DynamicCache`] with [`~DynamicCache.from_legacy_cache`]. Note that legacy cache format is deprecated and not used anymore in `Transformers`. You can convert back to tuple format with [`DynamicCache.to_legacy_cache`] functions, which is helpful if you have custom logic for manipulating a cache in a specific format.
-
-```py
-import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM, DynamicCache
-
-tokenizer = AutoTokenizer.from_pretrained("meta-llama/Llama-2-7b-chat-hf")
-model = AutoModelForCausalLM.from_pretrained("meta-llama/Llama-2-7b-chat-hf", torch_dtype=torch.float16, device_map="auto")
-inputs = tokenizer("Hello, my name is", return_tensors="pt").to(model.device)
-
-# `return_dict_in_generate=True` is required to return the cache and `return_legacy_cache` forces the returned cache
-# in the legacy format
-generation_outputs = model.generate(**inputs, return_dict_in_generate=True, return_legacy_cache=True, max_new_tokens=5)
-
-cache = DynamicCache.from_legacy_cache(generation_outputs.past_key_values)
-legacy_format_cache = cache.to_legacy_cache()
 ```

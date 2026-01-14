@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 TII and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -41,7 +40,7 @@ CONVERSION_MAPPING = {
 def convert_falcon_h1_to_hf(input_model_path, output_path):
     tokenizer = AutoTokenizer.from_pretrained(input_model_path)
 
-    model = AutoModelForCausalLM.from_pretrained(input_model_path, torch_dtype=torch.bfloat16, trust_remote_code=True)
+    model = AutoModelForCausalLM.from_pretrained(input_model_path, dtype=torch.bfloat16, trust_remote_code=True)
 
     intermediate_size = int(model.config.expansion_factor * model.config.hidden_size)
 

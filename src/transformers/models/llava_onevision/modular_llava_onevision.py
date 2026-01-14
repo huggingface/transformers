@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,10 +13,11 @@
 # limitations under the License.
 
 import math
-from typing import Optional, Union
+from typing import Optional
 
 import torch
 from torch import nn
+from torchvision.transforms.v2 import functional as F
 
 from transformers.models.llava_next.image_processing_llava_next_fast import LlavaNextImageProcessorFast
 from transformers.models.llava_next_video.modeling_llava_next_video import (
@@ -34,7 +34,7 @@ from transformers.models.llava_next_video.modeling_llava_next_video import (
 
 from ...cache_utils import Cache
 from ...image_processing_utils import BatchFeature
-from ...image_processing_utils_fast import DefaultFastImageProcessorKwargs, group_images_by_shape, reorder_images
+from ...image_processing_utils_fast import BaseImageProcessorFast, group_images_by_shape, reorder_images
 from ...image_utils import (
     OPENAI_CLIP_MEAN,
     OPENAI_CLIP_STD,
@@ -50,35 +50,12 @@ from ...utils import (
     TensorType,
     auto_docstring,
     can_return_tuple,
-    is_torchvision_available,
-    is_torchvision_v2_available,
     logging,
 )
-
-
-if is_torchvision_available():
-    if is_torchvision_v2_available():
-        from torchvision.transforms.v2 import functional as F
-    else:
-        from torchvision.transforms import functional as F
+from .image_processing_llava_onevision import LlavaOnevisionImageProcessorKwargs
 
 
 logger = logging.get_logger(__name__)
-
-
-class LlavaOnevisionFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """
-    image_grid_pinpoints (`list[list[int]]`, *optional*):
-        A list of possible resolutions to use for processing high resolution images. The best resolution is selected
-        based on the original size of the image. Can be overridden by `image_grid_pinpoints` in the `preprocess`
-        method.
-    do_pad (`bool`, *optional*):
-        Whether to pad the image. If `True`, will pad the patch dimension of the images in the batch to the largest
-        number of patches in the batch. Padding will be applied to the bottom and right with zeros.
-    """
-
-    image_grid_pinpoints: Optional[list[list[int]]]
-    do_pad: Optional[bool]
 
 
 class LlavaOnevisionImageProcessorFast(LlavaNextImageProcessorFast):
@@ -95,13 +72,13 @@ class LlavaOnevisionImageProcessorFast(LlavaNextImageProcessorFast):
     do_convert_rgb = True
     do_pad = True
     image_grid_pinpoints = [[384, 384], [384, 768], [384, 1152], [384, 1536], [384, 1920], [384, 2304], [768, 384], [768, 768], [768, 1152], [768, 1536], [768, 1920], [768, 2304], [1152, 384], [1152, 768], [1152, 1152], [1152, 1536], [1152, 1920], [1152, 2304], [1536, 384], [1536, 768], [1536, 1152], [1536, 1536], [1536, 1920], [1536, 2304], [1920, 384], [1920, 768], [1920, 1152], [1920, 1536], [1920, 1920], [1920, 2304], [2304, 384], [2304, 768], [2304, 1152], [2304, 1536], [2304, 1920], [2304, 2304]]  # fmt: skip
-    model_input_names = ["pixel_values_videos"]
+    model_input_names = ["pixel_values", "image_sizes", "batch_num_images"]
 
     # Copied from transformers.models.llava.image_processing_llava_fast.LlavaImageProcessorFast.pad_to_square
     def pad_to_square(
         self,
         images: "torch.Tensor",
-        background_color: Union[int, tuple[int, int, int]] = 0,
+        background_color: int | tuple[int, int, int] = 0,
     ) -> "torch.Tensor":
         """
         Pads an image to a square based on the longest edge.
@@ -112,7 +89,7 @@ class LlavaOnevisionImageProcessorFast(LlavaNextImageProcessorFast):
             background_color (`int` or `tuple[int, int, int]`, *optional*, defaults to 0):
                 The color to use for the padding. Can be an integer for single channel or a
                 tuple of integers representing for multi-channel images. If passed as integer
-                in mutli-channel mode, it will default to `0` in subsequent channels.
+                in multi-channel mode, it will default to `0` in subsequent channels.
         Returns:
             `torch.Tensor`: The padded images.
         """
@@ -141,7 +118,7 @@ class LlavaOnevisionImageProcessorFast(LlavaNextImageProcessorFast):
         return padded_images
 
     @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[LlavaOnevisionFastImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[LlavaOnevisionImageProcessorKwargs]) -> BatchFeature:
         if isinstance(images, (tuple, list)) and isinstance(images[0], (tuple, list)):
             # if the first element is a list, we assume that all elements are lists
             batch_num_images = [len(x) for x in images]
@@ -150,12 +127,12 @@ class LlavaOnevisionImageProcessorFast(LlavaNextImageProcessorFast):
             batch_num_images = [1] * len(images)
         else:
             batch_num_images = [1]
-        kwargs["batch_num_images"] = batch_num_images
-        return super().preprocess(images, **kwargs)
+        return BaseImageProcessorFast.preprocess(images, batch_num_images, **kwargs)
 
     def _preprocess(
         self,
         images: list["torch.Tensor"],
+        batch_num_images: list[int],
         do_resize: bool,
         size: SizeDict,
         image_grid_pinpoints: list[list[int]],
@@ -165,12 +142,11 @@ class LlavaOnevisionImageProcessorFast(LlavaNextImageProcessorFast):
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
         do_pad: bool,
-        batch_num_images: list[int],
-        disable_grouping: Optional[bool],
-        return_tensors: Optional[Union[str, TensorType]],
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         processed_images = []
@@ -228,15 +204,12 @@ class LlavaOnevisionImageProcessorFast(LlavaNextImageProcessorFast):
                 )
                 processed_image_patches_grouped[shape] = stacked_image_patches
             processed_image_patches = reorder_images(processed_image_patches_grouped, grouped_image_patches_index)
-            processed_image_patches = (
-                torch.stack(processed_image_patches, dim=0) if return_tensors else processed_image_patches
-            )
+            processed_image_patches = torch.stack(processed_image_patches, dim=0)
             processed_images.append(processed_image_patches)
             image_sizes.append(get_image_size(image, ChannelDimension.FIRST))
 
         if do_pad:
             processed_images = self._pad_for_batching(processed_images)
-        processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
         return BatchFeature(
             data={"pixel_values": processed_images, "image_sizes": image_sizes, "batch_num_images": batch_num_images},
             tensor_type=return_tensors,
@@ -320,7 +293,6 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
                 image_feature = image_feature[0]
                 if image_newline is not None:
                     image_feature = torch.cat((image_feature, image_newline[None].to(image_feature)), dim=0)
-                image_feature = image_feature.flatten(0, 1)
             new_image_features.append(image_feature)
             feature_lens.append(image_feature.size(0))
         feature_lens = torch.tensor(feature_lens, dtype=torch.long, device=image_features[0].device)
@@ -344,10 +316,10 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
         self,
         pixel_values: torch.FloatTensor,
         image_sizes: torch.Tensor,
-        vision_feature_layer: Optional[Union[int, list[int]]] = None,
-        vision_feature_select_strategy: Optional[str] = None,
-        vision_aspect_ratio: Optional[str] = None,
-        batch_num_images: Optional[torch.LongTensor] = None,
+        vision_feature_layer: int | list[int] | None = None,
+        vision_feature_select_strategy: str | None = None,
+        vision_aspect_ratio: str | None = None,
+        batch_num_images: torch.LongTensor | None = None,
     ):
         """
         Obtains image last hidden states from the vision tower and apply multimodal projection.
@@ -417,8 +389,6 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
 
         if vision_feature_select_strategy == "default":
             selected_image_feature = selected_image_feature[:, 1:]
-        elif vision_feature_select_strategy == "full":
-            selected_image_feature = selected_image_feature
         image_features = self.multi_modal_projector(selected_image_feature)
         image_features = torch.split(image_features, image_num_patches, dim=0)
 
@@ -433,7 +403,7 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
     def get_video_features(
         self,
         pixel_values: torch.FloatTensor,
-        vision_feature_layer: Union[int, list[int]],
+        vision_feature_layer: int | list[int],
         vision_feature_select_strategy: str,
     ):
         """
@@ -467,8 +437,6 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
 
         if vision_feature_select_strategy == "default":
             selected_video_feature = selected_video_feature[:, 1:]
-        elif vision_feature_select_strategy == "full":
-            selected_video_feature = selected_video_feature
         video_features = self.multi_modal_projector(selected_video_feature)
 
         video_features = self.apply_pooling(video_features)
@@ -478,26 +446,26 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
 
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
-        image_sizes: Optional[torch.LongTensor] = None,
-        pixel_values_videos: torch.FloatTensor = None,
-        image_sizes_videos: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        vision_feature_layer: Optional[Union[int, list[int]]] = None,
-        vision_feature_select_strategy: Optional[str] = None,
-        vision_aspect_ratio: Optional[str] = None,
-        batch_num_images: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        image_sizes: torch.LongTensor | None = None,
+        pixel_values_videos: torch.FloatTensor | None = None,
+        image_sizes_videos: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        vision_feature_layer: int | list[int] | None = None,
+        vision_feature_select_strategy: str | None = None,
+        vision_aspect_ratio: str | None = None,
+        batch_num_images: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Union[tuple, LlavaOnevisionModelOutputWithPast]:
+    ) -> tuple | LlavaOnevisionModelOutputWithPast:
         r"""
         image_sizes_videos (`torch.LongTensor` of shape `(batch_size, frames, 2)`, *optional*):
             The sizes of the videos in the batch, being (height, width) for each frame in the video.
@@ -591,28 +559,28 @@ class LlavaOnevisionForConditionalGeneration(LlavaNextVideoForConditionalGenerat
     @auto_docstring
     def forward(
         self,
-        input_ids: torch.LongTensor = None,
-        pixel_values: torch.FloatTensor = None,
-        image_sizes: Optional[torch.LongTensor] = None,
-        pixel_values_videos: torch.FloatTensor = None,
-        image_sizes_videos: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        vision_feature_layer: Optional[Union[int, list[int]]] = None,
-        vision_feature_select_strategy: Optional[str] = None,
-        vision_aspect_ratio: Optional[str] = None,
-        batch_num_images: Optional[torch.LongTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        image_sizes: torch.LongTensor | None = None,
+        pixel_values_videos: torch.FloatTensor | None = None,
+        image_sizes_videos: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        vision_feature_layer: int | list[int] | None = None,
+        vision_feature_select_strategy: str | None = None,
+        vision_aspect_ratio: str | None = None,
+        batch_num_images: torch.LongTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, LlavaOnevisionCausalLMOutputWithPast]:
+    ) -> tuple | LlavaOnevisionCausalLMOutputWithPast:
         r"""
         image_sizes_videos (`torch.LongTensor` of shape `(batch_size, frames, 2)`, *optional*):
             The sizes of the videos in the batch, being (height, width) for each frame in the video.
@@ -633,7 +601,7 @@ class LlavaOnevisionForConditionalGeneration(LlavaNextVideoForConditionalGenerat
         >>> import torch
         >>> from transformers import LlavaOnevisionProcessor, LlavaOnevisionForConditionalGeneration
 
-        >>> model = LlavaOnevisionForConditionalGeneration.from_pretrained("llava-hf/llava-onevision-qwen2-7b-ov-hf", torch_dtype="float16", device_map="cuda:0")
+        >>> model = LlavaOnevisionForConditionalGeneration.from_pretrained("llava-hf/llava-onevision-qwen2-7b-ov-hf", dtype="float16", device_map="cuda:0")
         >>> processor = LlavaOnevisionProcessor.from_pretrained("llava-hf/llava-onevision-qwen2-7b-ov-hf")
 
         >>> conversation = [
@@ -728,6 +696,7 @@ class LlavaOnevisionForConditionalGeneration(LlavaNextVideoForConditionalGenerat
         attention_mask=None,
         cache_position=None,
         logits_to_keep=None,
+        is_first_iteration=False,
         **kwargs,
     ):
         # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
@@ -739,12 +708,15 @@ class LlavaOnevisionForConditionalGeneration(LlavaNextVideoForConditionalGenerat
             attention_mask=attention_mask,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
+            is_first_iteration=is_first_iteration,
             **kwargs,
         )
 
-        if cache_position[0] == 0:
-            # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
-            # Otherwise we need pixel values to be passed to model
+        if is_first_iteration or not kwargs.get("use_cache", True):
+            # Pixel values are used only in the first iteration if available
+            # In subsquent iterations, they are already merged with text and cached
+            # NOTE: first iteration doesn't have to be prefill, it can be the first
+            # iteration with a question and cached system prompt (continue generate from cache)
             model_inputs["pixel_values"] = pixel_values
             model_inputs["image_sizes"] = image_sizes
             model_inputs["pixel_values_videos"] = pixel_values_videos

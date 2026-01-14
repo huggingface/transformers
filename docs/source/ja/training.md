@@ -37,7 +37,7 @@ rendered properly in your Markdown viewer.
 事前学習済みモデルをファインチューニングする前に、データセットをダウンロードしてトレーニング用に準備する必要があります。
 前のチュートリアルでは、トレーニングデータの処理方法を説明しましたが、これからはそれらのスキルを活かす機会があります！
 
-まず、[Yelp Reviews](https://huggingface.co/datasets/yelp_review_full)データセットを読み込んでみましょう：
+まず、[Yelp Reviews](https://huggingface.co/datasets/Yelp/yelp_review_full)データセットを読み込んでみましょう：
 
 ```python
 >>> from datasets import load_dataset
@@ -77,8 +77,6 @@ rendered properly in your Markdown viewer.
 この時点で、使用したいフレームワークに対応するセクションに従う必要があります。右側のサイドバーのリンクを使用して、ジャンプしたいフレームワークに移動できます。
 そして、特定のフレームワークのすべてのコンテンツを非表示にしたい場合は、そのフレームワークのブロック右上にあるボタンを使用してください！
 
-<frameworkcontent>
-<pt>
 <Youtube id="nvBXf7s7vTI"/>
 
 ## Train with Pytorch Trainer
@@ -86,7 +84,7 @@ rendered properly in your Markdown viewer.
 🤗 Transformersは、🤗 Transformersモデルのトレーニングを最適化した[`Trainer`]クラスを提供し、独自のトレーニングループを手動で記述せずにトレーニングを開始しやすくしています。
 [`Trainer`] APIは、ログ記録、勾配累積、混合精度など、さまざまなトレーニングオプションと機能をサポートしています。
 
-まず、モデルをロードし、予想されるラベルの数を指定します。Yelp Review [dataset card](https://huggingface.co/datasets/yelp_review_full#data-fields)から、5つのラベルがあることがわかります：
+まず、モデルをロードし、予想されるラベルの数を指定します。Yelp Review [dataset card](https://huggingface.co/datasets/Yelp/yelp_review_full#data-fields)から、5つのラベルがあることがわかります：
 
 ```py
 >>> from transformers import AutoModelForSequenceClassification
@@ -163,121 +161,11 @@ BERTモデルの事前学習済みのヘッドは破棄され、ランダムに�
 >>> trainer.train()
 ```
 
-</pt>
-<tf>
-<a id='keras'></a>
-
-<Youtube id="rnTGBy2ax1c"/>
-
-## Kerasを使用してTensorFlowモデルをトレーニングする
-
-Keras APIを使用して🤗 TransformersモデルをTensorFlowでトレーニングすることもできます！
-
-### Loading Data from Keras
-
-🤗 TransformersモデルをKeras APIでトレーニングする場合、データセットをKerasが理解できる形式に変換する必要があります。
-データセットが小さい場合、データセット全体をNumPy配列に変換してKerasに渡すことができます。
-複雑なことをする前に、まずそれを試してみましょう。
-
-まず、データセットを読み込みます。GLUEベンチマークからCoLAデータセットを使用します
-([GLUE Banchmark](https://huggingface.co/datasets/glue))、これは単純なバイナリテキスト分類タスクです。今のところトレーニング分割のみを使用します。
-
-```py
-from datasets import load_dataset
-
-dataset = load_dataset("glue", "cola")
-dataset = dataset["train"]  # 今のところトレーニング分割のみを使用します
-```
-
-次に、トークナイザをロードし、データをNumPy配列としてトークン化します。ラベルは既に`0`と`1`のリストであるため、トークン化せずに直接NumPy配列に変換できます！
-
-```python
-from transformers import AutoTokenizer
-
-tokenizer = AutoTokenizer.from_pretrained("google-bert/bert-base-cased")
-tokenized_data = tokenizer(dataset["sentence"], return_tensors="np", padding=True)
-# トークナイザはBatchEncodingを返しますが、それをKeras用に辞書に変換します
-tokenized_data = dict(tokenized_data)
-
-labels = np.array(dataset["label"])  # ラベルはすでに0と1の配列です
-```
-
-最後に、モデルをロードし、[`compile`](https://keras.io/api/models/model_training_apis/#compile-method) と [`fit`](https://keras.io/api/models/model_training_apis/#fit-method) メソッドを実行します。
-注意点として、Transformersモデルはすべてデフォルトでタスクに関連した損失関数を持っているため、指定しなくても構いません（指定する場合を除く）：
-
-```python
-from transformers import TFAutoModelForSequenceClassification
-from tensorflow.keras.optimizers import Adam
-
-# モデルをロードしてコンパイルする
-model = TFAutoModelForSequenceClassification.from_pretrained("google-bert/bert-base-cased")
-# ファインチューニングには通常、学習率を下げると良いです
-model.compile(optimizer=Adam(3e-5))  # 損失関数の指定は不要です！
-
-model.fit(tokenized_data, labels)
-```
-
-<Tip>
-
-モデルを`compile()`する際に`loss`引数を渡す必要はありません！Hugging Faceモデルは、この引数を空白のままにしておくと、タスクとモデルアーキテクチャに適した損失を自動的に選択します。
-必要に応じて自分で損失を指定してオーバーライドすることもできます！
-
-</Tip>
-
-このアプローチは、小規模なデータセットには適していますが、大規模なデータセットに対しては問題になることがあります。なぜなら、トークナイズされた配列とラベルはメモリに完全に読み込まれる必要があり、またNumPyは「ジャギー」な配列を処理しないため、トークナイズされた各サンプルを全体のデータセット内で最も長いサンプルの長さにパディングする必要があります。
-これにより、配列がさらに大きくなり、すべてのパディングトークンがトレーニングを遅くする原因になります！
-
-### Loading data as a tf.data.Dataset
-
-トレーニングを遅くせずにデータを読み込むには、データを`tf.data.Dataset`として読み込むことができます。独自の`tf.data`パイプラインを作成することもできますが、これを行うための便利な方法が2つあります：
-
-- [`~TFPreTrainedModel.prepare_tf_dataset`]: これはほとんどの場合で推奨する方法です。モデル上のメソッドなので、モデルを検査してモデル入力として使用可能な列を自動的に把握し、他の列を破棄してより単純で高性能なデータセットを作成できます。
-- [`~datasets.Dataset.to_tf_dataset`]: このメソッドはより低レベルで、データセットがどのように作成されるかを正確に制御する場合に便利です。`columns`と`label_cols`を指定して、データセットに含める列を正確に指定できます。
-
-[`~TFPreTrainedModel.prepare_tf_dataset`]を使用する前に、次のコードサンプルに示すように、トークナイザの出力をデータセットに列として追加する必要があります：
-
-```py
-def tokenize_dataset(data):
-    # 返された辞書のキーはデータセットに列として追加されます
-    return tokenizer(data["text"])
-
-
-dataset = dataset.map(tokenize_dataset)
-```
-
-Hugging Faceのデータセットはデフォルトでディスクに保存されるため、これによりメモリの使用量が増えることはありません！
-列が追加されたら、データセットからバッチをストリームし、各バッチにパディングを追加できます。これにより、
-データセット全体にパディングを追加する場合と比べて、パディングトークンの数が大幅に削減されます。
-
-```python
->>> tf_dataset = model.prepare_tf_dataset(dataset["train"], batch_size=16, shuffle=True, tokenizer=tokenizer)
-```
-
-上記のコードサンプルでは、トークナイザを`prepare_tf_dataset`に渡して、バッチを正しく読み込む際に正しくパディングできるようにする必要があります。
-データセットのすべてのサンプルが同じ長さであり、パディングが不要な場合は、この引数をスキップできます。
-パディング以外の複雑な処理を行う必要がある場合（例：マスク言語モデリングのためのトークンの破損など）、
-代わりに`collate_fn`引数を使用して、サンプルのリストをバッチに変換し、必要な前処理を適用する関数を渡すことができます。
-このアプローチを実際に使用した例については、
-[examples](https://github.com/huggingface/transformers/tree/main/examples)や
-[notebooks](https://huggingface.co/docs/transformers/notebooks)をご覧ください。
-
-`tf.data.Dataset`を作成したら、以前と同様にモデルをコンパイルし、適合させることができます：
-
-```python
-model.compile(optimizer=Adam(3e-5))  # 損失引数は不要です！
-
-model.fit(tf_dataset)
-```
-
-</tf>
-</frameworkcontent>
 
 <a id='pytorch_native'></a>
 
 ## Train in native Pytorch
 
-<frameworkcontent>
-<pt>
 <Youtube id="Dh9CL8fyG80"/>
 
 [`Trainer`]はトレーニングループを処理し、1行のコードでモデルをファインチューニングできるようにします。
@@ -420,8 +308,6 @@ PyTorchから[`AdamW`](https://pytorch.org/docs/stable/generated/torch.optim.Ada
 >>> metric.compute()
 ```
 
-</pt>
-</frameworkcontent>
 
 <a id='additional-resources'></a>
 

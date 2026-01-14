@@ -20,7 +20,7 @@ import pytest
 import torch
 from parameterized import parameterized
 
-from transformers import AutoTokenizer, GPT2TokenizerFast
+from transformers import AutoTokenizer, TokenizersBackend
 from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
@@ -44,10 +44,10 @@ class GraniteSpeechProcessorTest(unittest.TestCase):
         processor.save_pretrained(self.tmpdirname)
 
     def get_tokenizer(self, **kwargs):
-        return AutoTokenizer.from_pretrained(self.checkpoint, **kwargs)
+        return AutoTokenizer.from_pretrained(self.tmpdirname, **kwargs)
 
     def get_audio_processor(self, **kwargs):
-        return GraniteSpeechFeatureExtractor.from_pretrained(self.checkpoint, **kwargs)
+        return GraniteSpeechFeatureExtractor.from_pretrained(self.tmpdirname, **kwargs)
 
     def tearDown(self):
         shutil.rmtree(self.tmpdirname)
@@ -65,7 +65,7 @@ class GraniteSpeechProcessorTest(unittest.TestCase):
         processor = GraniteSpeechProcessor.from_pretrained(self.tmpdirname)
 
         self.assertEqual(processor.tokenizer.get_vocab(), tokenizer.get_vocab())
-        self.assertIsInstance(processor.tokenizer, GPT2TokenizerFast)
+        self.assertIsInstance(processor.tokenizer, TokenizersBackend)
 
         self.assertEqual(processor.audio_processor.to_json_string(), audio_processor.to_json_string())
         self.assertIsInstance(processor.audio_processor, GraniteSpeechFeatureExtractor)

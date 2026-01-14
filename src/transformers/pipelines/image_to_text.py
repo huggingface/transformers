@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,7 +17,6 @@ from typing import Any, Union, overload
 from ..generation import GenerationConfig
 from ..utils import (
     add_end_docstrings,
-    is_tf_available,
     is_torch_available,
     is_vision_available,
     logging,
@@ -32,13 +30,8 @@ if is_vision_available():
 
     from ..image_utils import load_image
 
-if is_tf_available():
-    from ..models.auto.modeling_tf_auto import TF_MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES
-
 if is_torch_available():
-    import torch
-
-    from ..models.auto.modeling_auto import MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES
+    from ..models.auto.modeling_auto import MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES
 
 logger = logging.get_logger(__name__)
 
@@ -46,7 +39,7 @@ logger = logging.get_logger(__name__)
 @add_end_docstrings(build_pipeline_init_args(has_tokenizer=True, has_image_processor=True))
 class ImageToTextPipeline(Pipeline):
     """
-    Image To Text pipeline using a `AutoModelForVision2Seq`. This pipeline predicts a caption for a given image.
+    Image To Text pipeline using a `AutoModelForImageTextToText`. This pipeline predicts a caption for a given image.
 
     Unless the model you're using explicitly sets these generation parameters in its configuration files
     (`generation_config.json`), the following default values will be used:
@@ -84,9 +77,7 @@ class ImageToTextPipeline(Pipeline):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         requires_backends(self, "vision")
-        self.check_model_type(
-            TF_MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES if self.framework == "tf" else MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES
-        )
+        self.check_model_type(MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES)
 
     def _sanitize_parameters(self, max_new_tokens=None, generate_kwargs=None, prompt=None, timeout=None):
         forward_params = {}
@@ -119,7 +110,7 @@ class ImageToTextPipeline(Pipeline):
     def __call__(self, inputs: Union[str, "Image.Image"], **kwargs: Any) -> list[dict[str, Any]]: ...
 
     @overload
-    def __call__(self, inputs: Union[list[str], list["Image.Image"]], **kwargs: Any) -> list[list[dict[str, Any]]]: ...
+    def __call__(self, inputs: list[str] | list["Image.Image"], **kwargs: Any) -> list[list[dict[str, Any]]]: ...
 
     def __call__(self, inputs: Union[str, list[str], "Image.Image", list["Image.Image"]], **kwargs):
         """
@@ -157,53 +148,12 @@ class ImageToTextPipeline(Pipeline):
             raise ValueError("Cannot call the image-to-text pipeline without an inputs argument!")
         return super().__call__(inputs, **kwargs)
 
-    def preprocess(self, image, prompt=None, timeout=None):
+    def preprocess(self, image, timeout=None):
         image = load_image(image, timeout=timeout)
+        model_inputs = self.image_processor(images=image, return_tensors="pt")
+        model_inputs = model_inputs.to(self.dtype)
 
-        if prompt is not None:
-            logger.warning_once(
-                "Passing `prompt` to the `image-to-text` pipeline is deprecated and will be removed in version 4.48"
-                " of 🤗 Transformers. Use the `image-text-to-text` pipeline instead",
-            )
-            if not isinstance(prompt, str):
-                raise ValueError(
-                    f"Received an invalid text input, got - {type(prompt)} - but expected a single string. "
-                    "Note also that one single text can be provided for conditional image to text generation."
-                )
-
-            model_type = self.model.config.model_type
-
-            if model_type == "git":
-                model_inputs = self.image_processor(images=image, return_tensors=self.framework)
-                if self.framework == "pt":
-                    model_inputs = model_inputs.to(self.torch_dtype)
-                input_ids = self.tokenizer(text=prompt, add_special_tokens=False).input_ids
-                input_ids = [self.tokenizer.cls_token_id] + input_ids
-                input_ids = torch.tensor(input_ids).unsqueeze(0)
-                model_inputs.update({"input_ids": input_ids})
-
-            elif model_type == "pix2struct":
-                model_inputs = self.image_processor(images=image, header_text=prompt, return_tensors=self.framework)
-                if self.framework == "pt":
-                    model_inputs = model_inputs.to(self.torch_dtype)
-
-            elif model_type != "vision-encoder-decoder":
-                # vision-encoder-decoder does not support conditional generation
-                model_inputs = self.image_processor(images=image, return_tensors=self.framework)
-                if self.framework == "pt":
-                    model_inputs = model_inputs.to(self.torch_dtype)
-                text_inputs = self.tokenizer(prompt, return_tensors=self.framework)
-                model_inputs.update(text_inputs)
-
-            else:
-                raise ValueError(f"Model type {model_type} does not support conditional text generation")
-
-        else:
-            model_inputs = self.image_processor(images=image, return_tensors=self.framework)
-            if self.framework == "pt":
-                model_inputs = model_inputs.to(self.torch_dtype)
-
-        if self.model.config.model_type == "git" and prompt is None:
+        if self.model.config.model_type == "git":
             model_inputs["input_ids"] = None
 
         return model_inputs
@@ -222,10 +172,6 @@ class ImageToTextPipeline(Pipeline):
         if "generation_config" not in generate_kwargs:
             generate_kwargs["generation_config"] = self.generation_config
 
-        # FIXME: We need to pop here due to a difference in how `generation.py` and `generation.tf_utils.py`
-        #  parse inputs. In the Tensorflow version, `generate` raises an error if we don't use `input_ids` whereas
-        #  the PyTorch version matches it with `self.model.main_input_name` or `self.model.encoder.main_input_name`
-        #  in the `_prepare_model_inputs` method.
         inputs = model_inputs.pop(self.model.main_input_name)
         model_outputs = self.model.generate(inputs, **model_inputs, **generate_kwargs)
         return model_outputs

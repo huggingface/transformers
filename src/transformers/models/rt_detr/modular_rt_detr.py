@@ -1,7 +1,10 @@
 import pathlib
-from typing import Optional, Union
+from typing import Optional
 
-from transformers.models.detr.image_processing_detr_fast import DetrFastImageProcessorKwargs, DetrImageProcessorFast
+import torch
+from torchvision.transforms.v2 import functional as F
+
+from transformers.models.detr.image_processing_detr_fast import DetrImageProcessorFast
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast, SizeDict, get_max_height_width
@@ -12,7 +15,6 @@ from ...image_utils import (
     AnnotationFormat,
     AnnotationType,
     ChannelDimension,
-    ImageInput,
     PILImageResampling,
     get_image_size,
     validate_annotations,
@@ -20,22 +22,10 @@ from ...image_utils import (
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
-    is_torch_available,
-    is_torchvision_available,
-    is_torchvision_v2_available,
     logging,
     requires_backends,
 )
-
-
-if is_torch_available():
-    import torch
-
-
-if is_torchvision_v2_available():
-    from torchvision.transforms.v2 import functional as F
-elif is_torchvision_available():
-    from torchvision.transforms import functional as F
+from .image_processing_rt_detr import RTDetrImageProcessorKwargs
 
 
 logger = logging.get_logger(__name__)
@@ -47,7 +37,7 @@ def prepare_coco_detection_annotation(
     image,
     target,
     return_segmentation_masks: bool = False,
-    input_data_format: Optional[Union[ChannelDimension, str]] = None,
+    input_data_format: ChannelDimension | str | None = None,
 ):
     """
     Convert the target in COCO format into the format expected by RT-DETR.
@@ -102,11 +92,7 @@ def prepare_coco_detection_annotation(
     return new_target
 
 
-class RTDetrFastImageProcessorKwargs(DetrFastImageProcessorKwargs):
-    pass
-
-
-class RTDetrImageProcessorFast(DetrImageProcessorFast, BaseImageProcessorFast):
+class RTDetrImageProcessorFast(DetrImageProcessorFast):
     resample = PILImageResampling.BILINEAR
     image_mean = IMAGENET_DEFAULT_MEAN
     image_std = IMAGENET_DEFAULT_STD
@@ -119,34 +105,25 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast, BaseImageProcessorFast):
     size = {"height": 640, "width": 640}
     default_to_square = False
     model_input_names = ["pixel_values", "pixel_mask"]
-    valid_kwargs = RTDetrFastImageProcessorKwargs
+    valid_kwargs = RTDetrImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[RTDetrFastImageProcessorKwargs]) -> None:
+    def __init__(self, **kwargs: Unpack[RTDetrImageProcessorKwargs]) -> None:
         # Backwards compatibility
         do_convert_annotations = kwargs.get("do_convert_annotations")
         do_normalize = kwargs.get("do_normalize")
         if do_convert_annotations is None and getattr(self, "do_convert_annotations", None) is None:
             self.do_convert_annotations = do_normalize if do_normalize is not None else self.do_normalize
 
-        BaseImageProcessorFast.__init__(**kwargs)
-
-    def preprocess(
-        self,
-        images: ImageInput,
-        annotations: Optional[Union[AnnotationType, list[AnnotationType]]] = None,
-        masks_path: Optional[Union[str, pathlib.Path]] = None,
-        **kwargs: Unpack[RTDetrFastImageProcessorKwargs],
-    ) -> BatchFeature:
-        return BaseImageProcessorFast().preprocess(images, annotations, masks_path, **kwargs)
+        BaseImageProcessorFast.__init__(self, **kwargs)
 
     def prepare_annotation(
         self,
         image: torch.Tensor,
         target: dict,
-        format: Optional[AnnotationFormat] = None,
-        return_segmentation_masks: Optional[bool] = None,
-        masks_path: Optional[Union[str, pathlib.Path]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        format: AnnotationFormat | None = None,
+        return_segmentation_masks: bool | None = None,
+        masks_path: str | pathlib.Path | None = None,
+        input_data_format: str | ChannelDimension | None = None,
     ) -> dict:
         format = format if format is not None else self.format
 
@@ -162,8 +139,8 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast, BaseImageProcessorFast):
     def _preprocess(
         self,
         images: list["torch.Tensor"],
-        annotations: Optional[Union[AnnotationType, list[AnnotationType]]],
-        masks_path: Optional[Union[str, pathlib.Path]],
+        annotations: AnnotationType | list[AnnotationType] | None,
+        masks_path: str | pathlib.Path | None,
         return_segmentation_masks: bool,
         do_resize: bool,
         size: SizeDict,
@@ -172,12 +149,12 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast, BaseImageProcessorFast):
         rescale_factor: float,
         do_normalize: bool,
         do_convert_annotations: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
         do_pad: bool,
-        pad_size: Optional[dict[str, int]],
-        format: Optional[Union[str, AnnotationFormat]],
-        return_tensors: Optional[Union[str, TensorType]],
+        pad_size: SizeDict | None,
+        format: str | AnnotationFormat | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -234,7 +211,7 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast, BaseImageProcessorFast):
         if do_pad:
             # depends on all resized image shapes so we need another loop
             if pad_size is not None:
-                padded_size = (pad_size["height"], pad_size["width"])
+                padded_size = (pad_size.height, pad_size.width)
             else:
                 padded_size = get_max_height_width(images)
 
@@ -269,7 +246,7 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast, BaseImageProcessorFast):
         self,
         outputs,
         threshold: float = 0.5,
-        target_sizes: Union[TensorType, list[tuple]] = None,
+        target_sizes: TensorType | list[tuple] = None,
         use_focal_loss: bool = True,
     ):
         """
@@ -337,28 +314,13 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast, BaseImageProcessorFast):
 
         return results
 
-    def from_dict():
-        raise NotImplementedError("No need to override this method for RT-DETR yet.")
-
-    def post_process():
-        raise NotImplementedError("Post-processing is not implemented for RT-DETR yet.")
-
-    def post_process_segmentation():
+    def post_process_instance_segmentation(self):
         raise NotImplementedError("Segmentation post-processing is not implemented for RT-DETR yet.")
 
-    def post_process_instance():
-        raise NotImplementedError("Instance post-processing is not implemented for RT-DETR yet.")
-
-    def post_process_panoptic():
-        raise NotImplementedError("Panoptic post-processing is not implemented for RT-DETR yet.")
-
-    def post_process_instance_segmentation():
-        raise NotImplementedError("Segmentation post-processing is not implemented for RT-DETR yet.")
-
-    def post_process_semantic_segmentation():
+    def post_process_semantic_segmentation(self):
         raise NotImplementedError("Semantic segmentation post-processing is not implemented for RT-DETR yet.")
 
-    def post_process_panoptic_segmentation():
+    def post_process_panoptic_segmentation(self):
         raise NotImplementedError("Panoptic segmentation post-processing is not implemented for RT-DETR yet.")
 
 

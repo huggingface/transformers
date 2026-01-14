@@ -18,6 +18,7 @@ import inspect
 import math
 import tempfile
 import unittest
+from functools import cached_property
 
 from parameterized import parameterized
 
@@ -35,10 +36,9 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import cached_property
 
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor
+from ...test_modeling_common import ModelTesterMixin, floats_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -183,7 +183,7 @@ class RTDetrV2ModelTester:
             out_features=["stage2", "stage3", "stage4"],
             out_indices=[2, 3, 4],
         )
-        return RTDetrV2Config.from_backbone_configs(
+        return RTDetrV2Config(
             backbone_config=backbone_config,
             encoder_hidden_dim=self.encoder_hidden_dim,
             encoder_in_channels=hidden_sizes[1:],
@@ -262,9 +262,7 @@ class RTDetrV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         else {}
     )
     is_encoder_decoder = True
-    test_torchscript = False
-    test_pruning = False
-    test_head_masking = False
+
     test_missing_keys = False
     test_torch_exportable = True
 
@@ -330,6 +328,10 @@ class RTDetrV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
     @unittest.skip(reason="Feed forward chunking is not implemented")
     def test_feed_forward_chunking(self):
+        pass
+
+    @unittest.skip(reason="Weight tying is hardcoded (module_x = module_y) and always `True`")
+    def test_load_save_without_tied_weights(self):
         pass
 
     def test_attention_outputs(self):
@@ -593,87 +595,37 @@ class RTDetrV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
 
             self.assertTrue(outputs)
 
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        configs_no_init.initializer_bias_prior_prob = 0.2
-        bias_value = -1.3863  # log_e ((1 - 0.2) / 0.2)
-
-        failed_cases = []
-
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            # Skip the check for the backbone
-            for name, module in model.named_modules():
-                if module.__class__.__name__ == "RTDetrV2ConvEncoder":
-                    backbone_params = [f"{name}.{key}" for key in module.state_dict()]
-                    break
-
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    if ("class_embed" in name and "bias" in name) or "enc_score_head.bias" in name:
-                        bias_tensor = torch.full_like(param.data, bias_value)
-                        if not torch.allclose(param.data, bias_tensor, atol=1e-4):
-                            failed_cases.append(
-                                f"Parameter {name} of model {model_class} seems not properly initialized. "
-                                f"Biases should be initialized to {bias_value}, got {param.data}"
-                            )
-                    elif (
-                        "level_embed" in name
-                        or "sampling_offsets.bias" in name
-                        or "value_proj" in name
-                        or "output_proj" in name
-                        or "reference_points" in name
-                        or "enc_score_head.weight" in name
-                        or ("class_embed" in name and "weight" in name)
-                        or name in backbone_params
-                    ):
-                        continue
-                    else:
-                        mean = param.data.mean()
-                        round_mean = (mean * 1e9).round() / 1e9
-                        round_mean = round_mean.item()
-                        if round_mean not in [0.0, 1.0]:
-                            failed_cases.append(
-                                f"Parameter {name} of model {model_class} seems not properly initialized. "
-                                f"Mean is {round_mean}, but should be in [0, 1]"
-                            )
-
-        message = "\n" + "\n".join(failed_cases)
-        self.assertTrue(not failed_cases, message)
-
     @parameterized.expand(["float32", "float16", "bfloat16"])
     @require_torch_accelerator
     @slow
-    def test_inference_with_different_dtypes(self, torch_dtype_str):
-        torch_dtype = {
+    def test_inference_with_different_dtypes(self, dtype_str):
+        dtype = {
             "float32": torch.float32,
             "float16": torch.float16,
             "bfloat16": torch.bfloat16,
-        }[torch_dtype_str]
+        }[dtype_str]
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
 
         for model_class in self.all_model_classes:
             model = model_class(config)
-            model.to(torch_device).to(torch_dtype)
+            model.to(torch_device).to(dtype)
             model.eval()
             for key, tensor in inputs_dict.items():
                 if tensor.dtype == torch.float32:
-                    inputs_dict[key] = tensor.to(torch_dtype)
+                    inputs_dict[key] = tensor.to(dtype)
             with torch.no_grad():
                 _ = model(**self._prepare_for_class(inputs_dict, model_class))
 
     @parameterized.expand(["float32", "float16", "bfloat16"])
     @require_torch_accelerator
     @slow
-    def test_inference_equivalence_for_static_and_dynamic_anchors(self, torch_dtype_str):
-        torch_dtype = {
+    def test_inference_equivalence_for_static_and_dynamic_anchors(self, dtype_str):
+        dtype = {
             "float32": torch.float32,
             "float16": torch.float16,
             "bfloat16": torch.bfloat16,
-        }[torch_dtype_str]
+        }[dtype_str]
 
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         h, w = inputs_dict["pixel_values"].shape[-2:]
@@ -681,16 +633,16 @@ class RTDetrV2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         # convert inputs to the desired dtype
         for key, tensor in inputs_dict.items():
             if tensor.dtype == torch.float32:
-                inputs_dict[key] = tensor.to(torch_dtype)
+                inputs_dict[key] = tensor.to(dtype)
 
         for model_class in self.all_model_classes:
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model_class(config).save_pretrained(tmpdirname)
                 model_static = model_class.from_pretrained(
-                    tmpdirname, anchor_image_size=[h, w], device_map=torch_device, torch_dtype=torch_dtype
+                    tmpdirname, anchor_image_size=[h, w], device_map=torch_device, dtype=dtype
                 ).eval()
                 model_dynamic = model_class.from_pretrained(
-                    tmpdirname, anchor_image_size=None, device_map=torch_device, torch_dtype=torch_dtype
+                    tmpdirname, anchor_image_size=None, device_map=torch_device, dtype=dtype
                 ).eval()
 
             self.assertIsNotNone(model_static.config.anchor_image_size)
@@ -719,6 +671,7 @@ def prepare_img():
 
 @require_torch
 @require_vision
+@slow
 class RTDetrV2ModelIntegrationTest(unittest.TestCase):
     @cached_property
     def default_image_processor(self):
@@ -782,10 +735,10 @@ class RTDetrV2ModelIntegrationTest(unittest.TestCase):
                     [-1.0521e-01, 2.9717e00, 6.3989e02, 4.7362e02],
                 ],
                 ("cuda", 8): [
-                    [3.4115e02, 2.5109e01, 6.3997e02, 3.7290e02],
-                    [1.2785e01, 5.6350e01, 3.1767e02, 4.7134e02],
+                    [3.4114e02, 2.5111e01, 6.3998e02, 3.7289e02],
+                    [1.2779e01, 5.6347e01, 3.1767e02, 4.7134e02],
                     [3.9959e01, 7.3117e01, 1.7565e02, 1.1744e02],
-                    [-1.0471e-01, 2.9680e00, 6.3989e02, 4.7362e02],
+                    [-1.0502e-01, 2.9707e00, 6.3989e02, 4.7362e02],
                 ],
             }
         )

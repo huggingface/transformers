@@ -42,8 +42,8 @@ else:
 class ImageTextToTextPipelineTests(unittest.TestCase):
     model_mapping = MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING
 
-    def get_test_pipeline(self, model, tokenizer, processor, image_processor, torch_dtype="float32"):
-        pipe = ImageTextToTextPipeline(model=model, processor=processor, torch_dtype=torch_dtype, max_new_tokens=10)
+    def get_test_pipeline(self, model, tokenizer, processor, image_processor, dtype="float32"):
+        pipe = ImageTextToTextPipeline(model=model, processor=processor, dtype=dtype, max_new_tokens=10)
         image_token = getattr(processor.tokenizer, "image_token", "")
         examples = [
             {
@@ -196,7 +196,21 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
                 ],
             }
         ]
-        outputs = pipe([image_ny, image_chicago], text=messages, return_full_text=True, max_new_tokens=10)
+        # Deprecated behavior should raise an error after v5
+        with self.assertRaises(ValueError):
+            outputs = pipe([image_ny, image_chicago], text=messages, return_full_text=True, max_new_tokens=10)
+
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "What’s the difference between these two images?"},
+                    {"type": "image", "url": image_ny},
+                    {"type": "image", "url": image_chicago},
+                ],
+            }
+        ]
+        outputs = pipe(text=messages, return_full_text=True, max_new_tokens=10)
         self.assertEqual(
             outputs,
             [
@@ -208,11 +222,11 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
                                 {"type": "text", "text": "What’s the difference between these two images?"},
                                 {
                                     "type": "image",
-                                    "image": "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg",
+                                    "url": "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg",
                                 },
                                 {
                                     "type": "image",
-                                    "image": "https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg",
+                                    "url": "https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg",
                                 },
                             ],
                         }
@@ -224,11 +238,11 @@ class ImageTextToTextPipelineTests(unittest.TestCase):
                                 {"type": "text", "text": "What’s the difference between these two images?"},
                                 {
                                     "type": "image",
-                                    "image": "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg",
+                                    "url": "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg",
                                 },
                                 {
                                     "type": "image",
-                                    "image": "https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg",
+                                    "url": "https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg",
                                 },
                             ],
                         },

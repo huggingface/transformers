@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 Google AI, Google Brain and Carnegie Mellon University Authors and the HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,22 +13,19 @@
 # limitations under the License.
 """Tokenization classes for XLNet model."""
 
-import os
-import unicodedata
-from shutil import copyfile
-from typing import Any, Optional
+from tokenizers import AddedToken, Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
+from tokenizers.models import Unigram
 
-import sentencepiece as spm
-
-from ...tokenization_utils import AddedToken, PreTrainedTokenizer
-from ...utils import SPIECE_UNDERLINE, logging
-from ...utils.import_utils import requires
+from ...tokenization_utils_base import _get_prepend_scheme
+from ...tokenization_utils_tokenizers import TokenizersBackend
+from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
-VOCAB_FILES_NAMES = {"vocab_file": "spiece.model"}
+VOCAB_FILES_NAMES = {"vocab_file": "spiece.model", "tokenizer_file": "tokenizer.json"}
 
+SPIECE_UNDERLINE = "▁"
 
 # Segments (not really needed)
 SEG_ID_A = 0
@@ -39,18 +35,19 @@ SEG_ID_SEP = 3
 SEG_ID_PAD = 4
 
 
-@requires(backends=("sentencepiece",))
-class XLNetTokenizer(PreTrainedTokenizer):
+class XLNetTokenizer(TokenizersBackend):
     """
-    Construct an XLNet tokenizer. Based on [SentencePiece](https://github.com/google/sentencepiece).
+    Construct a XLNet tokenizer (backed by HuggingFace's *tokenizers* library). Based on
+    [Unigram](https://huggingface.co/docs/tokenizers/python/latest/components.html?highlight=unigram#models).
 
-    This tokenizer inherits from [`PreTrainedTokenizer`] which contains most of the main methods. Users should refer to
-    this superclass for more information regarding those methods.
+    This tokenizer inherits from [`TokenizersBackend`] which contains most of the main methods. Users should
+    refer to this superclass for more information regarding those methods.
 
     Args:
-        vocab_file (`str`):
-            [SentencePiece](https://github.com/google/sentencepiece) file (generally has a .spm extension) that
-            contains the vocabulary necessary to instantiate a tokenizer.
+        vocab (`list of tuples`, *optional*):
+            List of (token, score) tuples for Unigram model. If not provided, an empty list is used.
+        unk_id (`int`, *optional*, defaults to 0):
+            The ID of the unknown token in the vocabulary.
         do_lower_case (`bool`, *optional*, defaults to `False`):
             Whether to lowercase the input when tokenizing.
         remove_space (`bool`, *optional*, defaults to `True`):
@@ -92,35 +89,18 @@ class XLNetTokenizer(PreTrainedTokenizer):
         mask_token (`str`, *optional*, defaults to `"<mask>"`):
             The token used for masking values. This is the token used when training this model with masked language
             modeling. This is the token which the model will try to predict.
-        additional_special_tokens (`list[str]`, *optional*, defaults to `['<eop>', '<eod>']`):
+        additional_special_tokens (`list[str]`, *optional*, defaults to `["<eop>", "<eod>"]`):
             Additional special tokens used by the tokenizer.
-        sp_model_kwargs (`dict`, *optional*):
-            Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for
-            SentencePiece](https://github.com/google/sentencepiece/tree/master/python) can be used, among other things,
-            to set:
-
-            - `enable_sampling`: Enable subword regularization.
-            - `nbest_size`: Sampling parameters for unigram. Invalid for BPE-Dropout.
-
-              - `nbest_size = {0,1}`: No sampling is performed.
-              - `nbest_size > 1`: samples from the nbest_size results.
-              - `nbest_size < 0`: assuming that nbest_size is infinite and samples from the all hypothesis (lattice)
-                using forward-filtering-and-backward-sampling algorithm.
-
-            - `alpha`: Smoothing parameter for unigram sampling, and dropout probability of merge operations for
-              BPE-dropout.
-
-    Attributes:
-        sp_model (`SentencePieceProcessor`):
-            The *SentencePiece* processor that is used for every conversion (string, tokens and IDs).
     """
 
     vocab_files_names = VOCAB_FILES_NAMES
     padding_side = "left"
+    model = Unigram
 
     def __init__(
         self,
-        vocab_file,
+        vocab: str | list[tuple[str, float]] | None = None,
+        unk_id: int = 0,
         do_lower_case=False,
         remove_space=True,
         keep_accents=False,
@@ -131,24 +111,55 @@ class XLNetTokenizer(PreTrainedTokenizer):
         pad_token="<pad>",
         cls_token="<cls>",
         mask_token="<mask>",
-        additional_special_tokens=["<eop>", "<eod>"],
-        sp_model_kwargs: Optional[dict[str, Any]] = None,
+        additional_special_tokens=None,
         **kwargs,
-    ) -> None:
-        # Mask token behave like a normal word, i.e. include the space before it
-        mask_token = AddedToken(mask_token, lstrip=True, special=True) if isinstance(mask_token, str) else mask_token
+    ):
+        if additional_special_tokens is None:
+            additional_special_tokens = ["<eop>", "<eod>"]
 
-        self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
+        if vocab is not None:
+            self._vocab = vocab
+        else:
+            self._vocab = [(str(unk_token), 0.0)]
 
+        self._tokenizer = Tokenizer(
+            Unigram(
+                self._vocab,
+                unk_id=unk_id,
+                byte_fallback=False,
+            )
+        )
+
+        list_normalizers = [
+            normalizers.Replace("``", '"'),
+            normalizers.Replace("''", '"'),
+        ]
+        #  if not keep_accents:
+        list_normalizers.append(normalizers.NFKD())
+        list_normalizers.append(normalizers.StripAccents())
+        if do_lower_case:
+            list_normalizers.append(normalizers.Lowercase())
+
+        list_normalizers.append(normalizers.Replace(Regex(" {2,}"), " "))
+        self._tokenizer.normalizer = normalizers.Sequence(list_normalizers)
+
+        add_prefix_space = True
+        prepend_scheme = _get_prepend_scheme(add_prefix_space, self)
+        self._tokenizer.pre_tokenizer = pre_tokenizers.Sequence(
+            [
+                pre_tokenizers.WhitespaceSplit(),
+                pre_tokenizers.Metaspace(replacement="▁", prepend_scheme=prepend_scheme),
+            ]
+        )
+
+        self._tokenizer.decoder = decoders.Metaspace(replacement="▁", prepend_scheme=prepend_scheme)
+        self._pad_token_type_id = 3
         self.do_lower_case = do_lower_case
         self.remove_space = remove_space
         self.keep_accents = keep_accents
-        self.vocab_file = vocab_file
-
-        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
-        self.sp_model.Load(vocab_file)
-
+        mask_token = AddedToken(mask_token, lstrip=True, rstrip=False) if isinstance(mask_token, str) else mask_token
         super().__init__(
+            unk_id=unk_id,
             do_lower_case=do_lower_case,
             remove_space=remove_space,
             keep_accents=keep_accents,
@@ -160,228 +171,17 @@ class XLNetTokenizer(PreTrainedTokenizer):
             cls_token=cls_token,
             mask_token=mask_token,
             additional_special_tokens=additional_special_tokens,
-            sp_model_kwargs=self.sp_model_kwargs,
             **kwargs,
         )
 
-        self._pad_token_type_id = 3
-
-    @property
-    def vocab_size(self):
-        return len(self.sp_model)
-
-    def get_vocab(self):
-        vocab = {self.convert_ids_to_tokens(i): i for i in range(self.vocab_size)}
-        vocab.update(self.added_tokens_encoder)
-        return vocab
-
-    def __getstate__(self):
-        state = self.__dict__.copy()
-        state["sp_model"] = None
-        return state
-
-    def __setstate__(self, d):
-        self.__dict__ = d
-
-        # for backward compatibility
-        if not hasattr(self, "sp_model_kwargs"):
-            self.sp_model_kwargs = {}
-
-        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
-        self.sp_model.Load(self.vocab_file)
-
-    def preprocess_text(self, inputs):
-        if self.remove_space:
-            outputs = " ".join(inputs.strip().split())
-        else:
-            outputs = inputs
-        outputs = outputs.replace("``", '"').replace("''", '"')
-
-        if not self.keep_accents:
-            outputs = unicodedata.normalize("NFKD", outputs)
-            outputs = "".join([c for c in outputs if not unicodedata.combining(c)])
-        if self.do_lower_case:
-            outputs = outputs.lower()
-
-        return outputs
-
-    def _tokenize(self, text: str) -> list[str]:
-        """Tokenize a string."""
-        text = self.preprocess_text(text)
-        pieces = self.sp_model.encode(text, out_type=str)
-        new_pieces = []
-        for piece in pieces:
-            if len(piece) > 1 and piece[-1] == "," and piece[-2].isdigit():
-                cur_pieces = self.sp_model.EncodeAsPieces(piece[:-1].replace(SPIECE_UNDERLINE, ""))
-                if piece[0] != SPIECE_UNDERLINE and cur_pieces[0][0] == SPIECE_UNDERLINE:
-                    if len(cur_pieces[0]) == 1:
-                        cur_pieces = cur_pieces[1:]
-                    else:
-                        cur_pieces[0] = cur_pieces[0][1:]
-                cur_pieces.append(piece[-1])
-                new_pieces.extend(cur_pieces)
-            else:
-                new_pieces.append(piece)
-
-        return new_pieces
-
-    def _convert_token_to_id(self, token):
-        """Converts a token (str) in an id using the vocab."""
-        return self.sp_model.PieceToId(token)
-
-    def _convert_id_to_token(self, index):
-        """Converts an index (integer) in a token (str) using the vocab."""
-        return self.sp_model.IdToPiece(index)
-
-    def convert_tokens_to_string(self, tokens):
-        """Converts a sequence of tokens (strings for sub-words) in a single string."""
-        out_string = "".join(tokens).replace(SPIECE_UNDERLINE, " ").strip()
-        return out_string
-
-    def _decode(
-        self,
-        token_ids: list[int],
-        skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: Optional[bool] = None,
-        spaces_between_special_tokens: bool = True,
-        **kwargs,
-    ) -> str:
-        self._decode_use_source_tokenizer = kwargs.pop("use_source_tokenizer", False)
-
-        filtered_tokens = self.convert_ids_to_tokens(token_ids, skip_special_tokens=skip_special_tokens)
-
-        # To avoid mixing byte-level and unicode for byte-level BPT
-        # we need to build string separately for added tokens and byte-level tokens
-        # cf. https://github.com/huggingface/transformers/issues/1133
-        sub_texts = []
-        current_sub_text = []
-        for token in filtered_tokens:
-            if skip_special_tokens and token in self.all_special_ids:
-                continue
-            if token in self.added_tokens_encoder:
-                if current_sub_text:
-                    sub_texts.append(self.convert_tokens_to_string(current_sub_text))
-                    current_sub_text = []
-                sub_texts.append(token)
-            else:
-                current_sub_text.append(token)
-        if current_sub_text:
-            sub_texts.append(self.convert_tokens_to_string(current_sub_text))
-
-        # Mimic the behavior of the Rust tokenizer:
-        # By default, there are no spaces between special tokens
-        text = "".join(sub_texts)
-
-        clean_up_tokenization_spaces = (
-            clean_up_tokenization_spaces
-            if clean_up_tokenization_spaces is not None
-            else self.clean_up_tokenization_spaces
+        self._tokenizer.post_processor = processors.TemplateProcessing(
+            single=f"$A:0 {str(self.sep_token)}:0 {str(self.cls_token)}:2",
+            pair=f"$A:0 {str(self.sep_token)}:0 $B:1 {str(self.sep_token)}:1 {str(self.cls_token)}:2",
+            special_tokens=[
+                (str(self.sep_token), self.sep_token_id),
+                (str(self.cls_token), self.cls_token_id),
+            ],
         )
-        if clean_up_tokenization_spaces:
-            clean_text = self.clean_up_tokenization(text)
-            return clean_text
-        else:
-            return text
-
-    def build_inputs_with_special_tokens(
-        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
-    ) -> list[int]:
-        """
-        Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
-        adding special tokens. An XLNet sequence has the following format:
-
-        - single sequence: `X <sep> <cls>`
-        - pair of sequences: `A <sep> B <sep> <cls>`
-
-        Args:
-            token_ids_0 (`list[int]`):
-                List of IDs to which the special tokens will be added.
-            token_ids_1 (`list[int]`, *optional*):
-                Optional second list of IDs for sequence pairs.
-
-        Returns:
-            `list[int]`: List of [input IDs](../glossary#input-ids) with the appropriate special tokens.
-        """
-        sep = [self.sep_token_id]
-        cls = [self.cls_token_id]
-        if token_ids_1 is None:
-            return token_ids_0 + sep + cls
-        return token_ids_0 + sep + token_ids_1 + sep + cls
-
-    def get_special_tokens_mask(
-        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None, already_has_special_tokens: bool = False
-    ) -> list[int]:
-        """
-        Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
-        special tokens using the tokenizer `prepare_for_model` method.
-
-        Args:
-            token_ids_0 (`list[int]`):
-                List of IDs.
-            token_ids_1 (`list[int]`, *optional*):
-                Optional second list of IDs for sequence pairs.
-            already_has_special_tokens (`bool`, *optional*, defaults to `False`):
-                Whether or not the token list is already formatted with special tokens for the model.
-
-        Returns:
-            `list[int]`: A list of integers in the range [0, 1]: 1 for a special token, 0 for a sequence token.
-        """
-
-        if already_has_special_tokens:
-            return super().get_special_tokens_mask(
-                token_ids_0=token_ids_0, token_ids_1=token_ids_1, already_has_special_tokens=True
-            )
-
-        if token_ids_1 is not None:
-            return ([0] * len(token_ids_0)) + [1] + ([0] * len(token_ids_1)) + [1, 1]
-        return ([0] * len(token_ids_0)) + [1, 1]
-
-    def create_token_type_ids_from_sequences(
-        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
-    ) -> list[int]:
-        """
-        Create a mask from the two sequences passed to be used in a sequence-pair classification task. An XLNet
-        sequence pair mask has the following format:
-
-        ```
-        0 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 1 1
-        | first sequence    | second sequence |
-        ```
-
-        If `token_ids_1` is `None`, this method only returns the first portion of the mask (0s).
-
-        Args:
-            token_ids_0 (`list[int]`):
-                List of IDs.
-            token_ids_1 (`list[int]`, *optional*):
-                Optional second list of IDs for sequence pairs.
-
-        Returns:
-            `list[int]`: List of [token type IDs](../glossary#token-type-ids) according to the given sequence(s).
-        """
-        sep = [self.sep_token_id]
-        cls_segment_id = [2]
-
-        if token_ids_1 is None:
-            return len(token_ids_0 + sep) * [0] + cls_segment_id
-        return len(token_ids_0 + sep) * [0] + len(token_ids_1 + sep) * [1] + cls_segment_id
-
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
-        if not os.path.isdir(save_directory):
-            logger.error(f"Vocabulary path ({save_directory}) should be a directory")
-            return
-        out_vocab_file = os.path.join(
-            save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]
-        )
-
-        if os.path.abspath(self.vocab_file) != os.path.abspath(out_vocab_file) and os.path.isfile(self.vocab_file):
-            copyfile(self.vocab_file, out_vocab_file)
-        elif not os.path.isfile(self.vocab_file):
-            with open(out_vocab_file, "wb") as fi:
-                content_spiece_model = self.sp_model.serialized_model_proto()
-                fi.write(content_spiece_model)
-
-        return (out_vocab_file,)
 
 
 __all__ = ["XLNetTokenizer"]

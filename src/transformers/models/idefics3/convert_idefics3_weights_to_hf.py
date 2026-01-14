@@ -16,7 +16,6 @@ import argparse
 import json
 
 import torch
-from accelerate import init_empty_weights
 from huggingface_hub import hf_hub_download
 
 from transformers import (
@@ -156,7 +155,7 @@ def get_config(checkpoint):
 def convert_idefics3_hub_to_hf(original_model_id, output_hub_path, push_to_hub):
     # The original model maps to AutoModelForCausalLM, converted we map to Idefics3ForConditionalGeneration
     original_model = AutoModelForCausalLM.from_pretrained(
-        original_model_id, trust_remote_code=True, torch_dtype=torch.bfloat16
+        original_model_id, trust_remote_code=True, dtype=torch.bfloat16
     )
     # The original model doesn't use the Idefics3 processing objects
     image_processor = Idefics3ImageProcessor()
@@ -175,7 +174,7 @@ def convert_idefics3_hub_to_hf(original_model_id, output_hub_path, push_to_hub):
     config = get_config(original_model_id)
     print(config)
 
-    with init_empty_weights():
+    with torch.device("meta"):
         model = Idefics3ForConditionalGeneration(config)
 
     model.load_state_dict(new_state_dict, strict=True, assign=True)

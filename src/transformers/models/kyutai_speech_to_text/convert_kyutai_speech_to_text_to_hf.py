@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -184,7 +183,6 @@ def write_model(
     codec_model_path_or_repo,
     codec_model_name,
     output_dir,
-    safe_serialization=True,
     unwanted_prefix="transformer.",
 ):
     print("Converting the model.")
@@ -253,15 +251,13 @@ def write_model(
     model.codec_model.generation_config.use_cache = True
 
     print("Saving the model.")
-    model.save_pretrained(output_dir, safe_serialization=safe_serialization)
+    model.save_pretrained(output_dir)
     del state_dict, model
 
     # Safety check: reload the converted model
     gc.collect()
     print("Reloading the model to check if it's saved correctly.")
-    KyutaiSpeechToTextForConditionalGeneration.from_pretrained(
-        output_dir, torch_dtype=torch.bfloat16, device_map="auto"
-    )
+    KyutaiSpeechToTextForConditionalGeneration.from_pretrained(output_dir, dtype=torch.bfloat16, device_map="auto")
     print("Model reloaded successfully.")
 
 
@@ -345,9 +341,6 @@ def main():
         help="Location to write HF model and tokenizer",
     )
     parser.add_argument(
-        "--safe_serialization", action="store_true", default=True, help="Whether or not to save using `safetensors`."
-    )
-    parser.add_argument(
         "--audio_delay_seconds",
         type=float,
         required=True,
@@ -367,7 +360,6 @@ def main():
         args.codec_model_path_or_repo,
         args.mimi_name,
         args.output_dir,
-        safe_serialization=args.safe_serialization,
     )
 
     write_processor(

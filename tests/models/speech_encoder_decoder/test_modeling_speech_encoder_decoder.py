@@ -20,7 +20,6 @@ from transformers import is_torch_available
 from transformers.testing_utils import (
     require_deterministic_for_xpu,
     require_torch,
-    require_torch_sdpa,
     slow,
     torch_device,
 )
@@ -365,14 +364,15 @@ class EncoderDecoderMixin:
             enc_dec_model.generation_config.eos_token_id = None
 
         inputs = input_values if input_features is None else input_features
+        enc_dec_model.generation_config.max_length = 20
 
         # Bert does not have a bos token id, so use pad_token_id instead
         generated_output = enc_dec_model.generate(
             inputs,
             decoder_start_token_id=enc_dec_model.config.decoder.pad_token_id,
-            max_length=decoder_config.max_length,
+            max_length=enc_dec_model.generation_config.max_length,
         )
-        self.assertEqual(generated_output.shape, (inputs.shape[0],) + (decoder_config.max_length,))
+        self.assertEqual(generated_output.shape, (inputs.shape[0],) + (enc_dec_model.generation_config.max_length,))
 
     def test_encoder_decoder_model(self):
         input_ids_dict = self.prepare_config_and_inputs()
@@ -455,7 +455,6 @@ class EncoderDecoderMixin:
                 max_diff = np.amax(np.abs(out_1 - out_2))
                 self.assertLessEqual(max_diff, 1e-5)
 
-    @require_torch_sdpa
     @unittest.skip("TODO Arthur I have to skip for now because I don't understand it")
     def test_sdpa_can_dispatch_composite_models(self):
         inputs_dict = self.prepare_config_and_inputs()
