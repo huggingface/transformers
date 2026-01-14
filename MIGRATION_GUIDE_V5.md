@@ -478,6 +478,12 @@ model_4bit = AutoModelForCausalLM.from_pretrained(
 ```
 
 
+### Auto-classes
+
+- `AutoModelWithLMHead` is removed in favor of `AutoModelForCausalLM` for causal language models, `AutoModelForMaskedLM` for masked language models and `AutoModelForSeq2SeqLM` for encoder-decoder models
+- `AutoModelForVision2Seq` is removed in favor of `AutoModelForImageTextToText`
+
+
 ## Configuration
 
 - Methods to init a nested config such as `from_xxx_config` are deleted. Configs can be init from the `__init__` method in the same way. See [#41314](https://github.com/huggingface/transformers/pull/41314).

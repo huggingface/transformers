@@ -30,7 +30,6 @@ from transformers.testing_utils import (
     get_device_properties,
     require_bitsandbytes,
     require_flash_attn,
-    require_read_token,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -72,7 +71,6 @@ class MistralModelTest(CausalLMModelTest, unittest.TestCase):
 
 
 @require_torch_accelerator
-@require_read_token
 class MistralIntegrationTest(unittest.TestCase):
     # This variable is used to determine which accelerator are we using for our runners (e.g. A10 or T4)
     # Depending on the hardware we get different logits / generations

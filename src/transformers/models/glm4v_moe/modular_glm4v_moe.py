@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from collections.abc import Callable
-from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -36,35 +35,24 @@ from ..glm4_moe.modeling_glm4_moe import (
     Glm4MoeMLP,
     Glm4MoeMoE,
     Glm4MoePreTrainedModel,
-    Glm4MoeRMSNorm,
     Glm4MoeTopkRouter,
     eager_attention_forward,
 )
-from ..glm4v.configuration_glm4v import Glm4vConfig, Glm4vVisionConfig
+from ..glm4v.configuration_glm4v import Glm4vConfig
 from ..glm4v.modeling_glm4v import (
     Glm4vForConditionalGeneration,
     Glm4vTextModel,
-    Glm4vTextRotaryEmbedding,
     Glm4vVisionModel,
     Glm4vVisionRotaryEmbedding,
-    rotate_half,
 )
+from ..gpt_neox.modeling_gpt_neox import apply_rotary_pos_emb
 from ..qwen3_vl_moe.modeling_qwen3_vl_moe import (
     Qwen3VLMoeCausalLMOutputWithPast,
-    Qwen3VLMoeModelOutputWithPast,
     load_balancing_loss_func,
 )
 
 
 logger = logging.get_logger(__name__)
-
-
-class Glm4vMoeVisionConfig(Glm4vVisionConfig):
-    pass
-
-
-class Glm4vMoeRMSNorm(Glm4MoeRMSNorm):
-    pass
 
 
 class Glm4vMoeTextConfig(Glm4MoeConfig, RotaryEmbeddingConfigMixin):
@@ -289,100 +277,6 @@ class Glm4vMoeConfig(Glm4vConfig):
         super().__init__()
 
 
-class Glm4vMoeModelOutputWithPast(Qwen3VLMoeModelOutputWithPast):
-    pass
-
-
-def apply_multimodal_rotary_pos_emb(q, k, cos, sin, mrope_section, unsqueeze_dim=1):
-    """Applies Rotary Position Embedding with Multimodal Sections to the query and key tensors (https://qwenlm.github.io/blog/qwen2-vl/).
-
-    Explanation:
-        Multimodal 3D rotary position embedding is an extension to 1D rotary position embedding. The input embedding
-        sequence contains vision (images / videos) embedding and text embedding or just contains text embedding. For
-        vision embedding part, we apply rotary position embedding on temporal, height and width dimension separately.
-        Here we split the channel dimension to 3 chunks for the temporal, height and width rotary position embedding.
-        For text embedding part, we just apply 1D rotary position embedding. The three rotary position index (temporal,
-        height and width) of text embedding is always the same, so the text embedding rotary position embedding has no
-        difference with modern LLMs.
-
-    Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        mrope_section(`List(int)`):
-            Multimodal rope section is for channel dimension of temporal, height and width in rope calculation.
-        unsqueeze_dim (`int`, *optional*, defaults to 1):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
-            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
-    Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
-    """
-    mrope_section = mrope_section * 2
-    cos = torch.cat([m[i % 3] for i, m in enumerate(cos.split(mrope_section, dim=-1))], dim=-1).unsqueeze(
-        unsqueeze_dim
-    )
-    sin = torch.cat([m[i % 3] for i, m in enumerate(sin.split(mrope_section, dim=-1))], dim=-1).unsqueeze(
-        unsqueeze_dim
-    )
-
-    # Keep half or full tensor for later concatenation
-    rotary_dim = cos.shape[-1]
-    q_rot, q_pass = q[..., :rotary_dim], q[..., rotary_dim:]
-    k_rot, k_pass = k[..., :rotary_dim], k[..., rotary_dim:]
-
-    # Apply rotary embeddings on the first half or full tensor
-    q_embed = (q_rot * cos) + (rotate_half(q_rot) * sin)
-    k_embed = (k_rot * cos) + (rotate_half(k_rot) * sin)
-
-    # Concatenate back to full shape
-    q_embed = torch.cat([q_embed, q_pass], dim=-1)
-    k_embed = torch.cat([k_embed, k_pass], dim=-1)
-
-    return q_embed, k_embed
-
-
-class Glm4vMoeTextRotaryEmbedding(Glm4vTextRotaryEmbedding):
-    def __init__(self, config: Glm4vMoeTextConfig, device=None, layer_type=None):
-        super().__init__(config, device=device, layer_type=layer_type)
-
-    @staticmethod
-    def compute_default_rope_parameters(
-        config: Glm4vMoeTextConfig | None = None,
-        device: Optional["torch.device"] = None,
-        seq_len: int | None = None,
-    ) -> tuple["torch.Tensor", float]:
-        """
-        Computes the inverse frequencies according to the original RoPE implementation
-        Args:
-            config ([`~transformers.PreTrainedConfig`]):
-                The model configuration.
-            device (`torch.device`):
-                The device to use for initialization of the inverse frequencies.
-            seq_len (`int`, *optional*):
-                The current sequence length. Unused for this type of RoPE.
-        Returns:
-            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
-            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
-        """
-        base = config.rope_parameters["rope_theta"]
-        partial_rotary_factor = config.rope_parameters.get("partial_rotary_factor", 1.0)
-        head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
-        dim = int(head_dim * partial_rotary_factor)
-
-        attention_factor = 1.0  # Unused in this type of RoPE
-
-        # Compute the inverse frequencies
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
-        )
-        return inv_freq, attention_factor
-
-
 class Glm4vMoeTextAttention(Glm4Attention):
     def __init__(self, config: Glm4vMoeTextConfig, layer_idx: int | None = None):
         super().__init__(config, layer_idx)
@@ -409,9 +303,7 @@ class Glm4vMoeTextAttention(Glm4Attention):
         value_states = value_states.transpose(1, 2)
 
         cos, sin = position_embeddings
-        query_states, key_states = apply_multimodal_rotary_pos_emb(  # diff with Llama
-            query_states, key_states, cos, sin, self.rope_parameters["mrope_section"]
-        )
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin)
 
         if past_key_values is not None:
             # sin and cos are specific to RoPE models; position_ids needed for the static cache
@@ -656,8 +548,8 @@ class Glm4vMoeForConditionalGeneration(Glm4vForConditionalGeneration):
 
 __all__ = [
     "Glm4vMoeConfig",
+    "Glm4vMoeVisionConfig",  # noqa: F822
     "Glm4vMoeTextConfig",
-    "Glm4vMoeVisionConfig",
     "Glm4vMoeForConditionalGeneration",
     "Glm4vMoeModel",  # noqa: F822
     "Glm4vMoePreTrainedModel",

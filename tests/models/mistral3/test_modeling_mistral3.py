@@ -27,7 +27,6 @@ from transformers.testing_utils import (
     Expectations,
     cleanup,
     require_deterministic_for_xpu,
-    require_read_token,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -232,7 +231,6 @@ class Mistral3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
 @slow
 @require_torch_accelerator
 class Mistral3IntegrationTest(unittest.TestCase):
-    @require_read_token
     def setUp(self):
         cleanup(torch_device, gc_collect=True)
         self.model_checkpoint = "mistralai/Mistral-Small-3.1-24B-Instruct-2503"
@@ -242,7 +240,6 @@ class Mistral3IntegrationTest(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
-    @require_read_token
     def test_mistral3_integration_generate_text_only(self):
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
         processor.chat_template = processor.chat_template.replace('strftime_now("%Y-%m-%d")', '"2025-06-20"')
@@ -274,7 +271,6 @@ class Mistral3IntegrationTest(unittest.TestCase):
         expected_output = expected_outputs.get_expectation()
         self.assertEqual(decoded_output, expected_output)
 
-    @require_read_token
     @require_deterministic_for_xpu
     def test_mistral3_integration_generate(self):
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
@@ -309,7 +305,6 @@ class Mistral3IntegrationTest(unittest.TestCase):
         expected_output = expected_outputs.get_expectation()
         self.assertEqual(decoded_output, expected_output)
 
-    @require_read_token
     @require_deterministic_for_xpu
     def test_mistral3_integration_batched_generate(self):
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
@@ -382,7 +377,6 @@ class Mistral3IntegrationTest(unittest.TestCase):
             f"Decoded output: {decoded_output}\nExpected output: {expected_output}",
         )
 
-    @require_read_token
     @require_deterministic_for_xpu
     def test_mistral3_integration_batched_generate_multi_image(self):
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)

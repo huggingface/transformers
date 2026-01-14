@@ -26,7 +26,6 @@ from transformers import BertConfig, GPT2Model, is_torch_available
 from transformers.models.auto.configuration_auto import CONFIG_MAPPING
 from transformers.testing_utils import (
     DUMMY_UNKNOWN_IDENTIFIER,
-    SMALL_MODEL_IDENTIFIER,
     RequestCounter,
     require_torch,
     slow,
@@ -56,7 +55,6 @@ if is_torch_available():
         AutoModelForSequenceClassification,
         AutoModelForTableQuestionAnswering,
         AutoModelForTokenClassification,
-        AutoModelWithLMHead,
         BertForMaskedLM,
         BertForPreTraining,
         BertForQuestionAnswering,
@@ -69,7 +67,6 @@ if is_torch_available():
         GPT2Config,
         GPT2LMHeadModel,
         ResNetBackbone,
-        RobertaForMaskedLM,
         T5Config,
         T5ForConditionalGeneration,
         TapasConfig,
@@ -126,18 +123,6 @@ class AutoModelTest(unittest.TestCase):
         # Only one value should not be initialized and in the missing keys.
         for value in loading_info.values():
             self.assertEqual(len(value), 0)
-
-    @slow
-    def test_lmhead_model_from_pretrained(self):
-        model_name = "google-bert/bert-base-uncased"
-        config = AutoConfig.from_pretrained(model_name)
-        self.assertIsNotNone(config)
-        self.assertIsInstance(config, BertConfig)
-
-        model = AutoModelWithLMHead.from_pretrained(model_name)
-        model, loading_info = AutoModelWithLMHead.from_pretrained(model_name, output_loading_info=True)
-        self.assertIsNotNone(model)
-        self.assertIsInstance(model, BertForMaskedLM)
 
     @slow
     def test_model_for_causal_lm(self):
@@ -258,18 +243,6 @@ class AutoModelTest(unittest.TestCase):
         model = AutoBackbone.from_pretrained("microsoft/resnet-18", out_features=["stage2", "stage4"])
         self.assertEqual(model.out_indices, [2, 4])
         self.assertEqual(model.out_features, ["stage2", "stage4"])
-
-    def test_from_pretrained_identifier(self):
-        model = AutoModelWithLMHead.from_pretrained(SMALL_MODEL_IDENTIFIER)
-        self.assertIsInstance(model, BertForMaskedLM)
-        self.assertEqual(model.num_parameters(), 14410)
-        self.assertEqual(model.num_parameters(only_trainable=True), 14410)
-
-    def test_from_identifier_from_model_type(self):
-        model = AutoModelWithLMHead.from_pretrained(DUMMY_UNKNOWN_IDENTIFIER)
-        self.assertIsInstance(model, RobertaForMaskedLM)
-        self.assertEqual(model.num_parameters(), 14410)
-        self.assertEqual(model.num_parameters(only_trainable=True), 14410)
 
     def test_from_pretrained_with_tuple_values(self):
         # For the auto model mapping, FunnelConfig has two models: FunnelModel and FunnelBaseModel

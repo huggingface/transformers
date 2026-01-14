@@ -16,7 +16,6 @@
 from collections.abc import Callable
 
 import torch
-import torch.utils.checkpoint
 from torch import nn
 from torch.nn import functional as F
 

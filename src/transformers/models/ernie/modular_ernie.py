@@ -13,8 +13,6 @@
 # limitations under the License.
 """PyTorch ERNIE model."""
 
-import warnings
-
 import torch
 import torch.nn as nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
@@ -588,14 +586,6 @@ class ErnieForNextSentencePrediction(BertForNextSentencePrediction):
         >>> assert logits[0, 0] < logits[0, 1]  # next sentence was random
         ```
         """
-
-        if "next_sentence_label" in kwargs:
-            warnings.warn(
-                "The `next_sentence_label` argument is deprecated and will be removed in a future version, use"
-                " `labels` instead.",
-                FutureWarning,
-            )
-            labels = kwargs.pop("next_sentence_label")
 
         outputs = self.ernie(
             input_ids,

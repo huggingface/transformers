@@ -19,7 +19,6 @@ from parameterized import parameterized
 
 from transformers import AutoTokenizer, is_torch_available, xLSTMConfig
 from transformers.testing_utils import (
-    require_read_token,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -246,7 +245,6 @@ class xLSTMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
 
 @require_torch
 @slow
-@require_read_token
 @unittest.skip("Model is fully broken currently")
 class xLSTMIntegrationTest(unittest.TestCase):
     def setUp(self):

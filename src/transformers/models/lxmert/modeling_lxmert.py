@@ -14,7 +14,6 @@
 """PyTorch LXMERT model."""
 
 import math
-import warnings
 from dataclasses import dataclass
 
 import torch
@@ -1037,14 +1036,6 @@ class LxmertForPreTraining(LxmertPreTrainedModel):
         ans (`Torch.Tensor` of shape `(batch_size)`, *optional*):
             a one hot representation hof the correct answer *optional*
         """
-
-        if "masked_lm_labels" in kwargs:
-            warnings.warn(
-                "The `masked_lm_labels` argument is deprecated and will be removed in a future version, use `labels`"
-                " instead.",
-                FutureWarning,
-            )
-            labels = kwargs.pop("masked_lm_labels")
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 

@@ -14,7 +14,6 @@
 """PyTorch SAM 2 model."""
 
 import torch
-import torch.utils.checkpoint
 
 from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig

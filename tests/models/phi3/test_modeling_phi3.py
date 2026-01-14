@@ -103,7 +103,9 @@ class Phi3IntegrationTest(unittest.TestCase):
             )
         }
 
-        model = Phi3ForCausalLM.from_pretrained("microsoft/phi-3-mini-4k-instruct").to(torch_device)
+        model = Phi3ForCausalLM.from_pretrained("microsoft/phi-3-mini-4k-instruct", dtype=torch.float32).to(
+            torch_device
+        )
         model.eval()
 
         output = model(**input_ids).logits
@@ -169,7 +171,9 @@ class Phi3IntegrationTest(unittest.TestCase):
             )
         }
 
-        model = Phi3ForCausalLM.from_pretrained("microsoft/phi-3-mini-128k-instruct").to(torch_device)
+        model = Phi3ForCausalLM.from_pretrained("microsoft/phi-3-mini-128k-instruct", dtype=torch.float32).to(
+            torch_device
+        )
         model.eval()
 
         output = model(**input_ids).logits

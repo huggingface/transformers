@@ -27,7 +27,6 @@ from transformers.testing_utils import (
     cleanup,
     is_flash_attn_2_available,
     require_flash_attn,
-    require_read_token,
     require_torch,
     require_torch_large_accelerator,
     slow,
@@ -88,7 +87,6 @@ class Cohere2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
 
 
 @slow
-@require_read_token
 @require_torch_large_accelerator
 class Cohere2IntegrationTest(unittest.TestCase):
     input_text = ["Hello I am doing", "Hi today"]
@@ -240,7 +238,6 @@ class Cohere2IntegrationTest(unittest.TestCase):
         self.assertEqual(EXPECTED_TEXT_COMPLETION, ep_generated_text)
 
     @parameterized.expand([("flash_attention_2",), ("sdpa",), ("flex_attention",), ("eager",)])
-    @require_read_token
     def test_generation_beyond_sliding_window(self, attn_implementation: str):
         """Test that we can correctly generate beyond the sliding window. This is non trivial as
         we need to correctly slice the attention mask in all cases (because we use a hybrid cache).

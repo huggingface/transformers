@@ -73,7 +73,6 @@ if is_vision_available():
 
 if is_scipy_available():
     import scipy.special
-    import scipy.stats
 
 logger = logging.get_logger(__name__)
 

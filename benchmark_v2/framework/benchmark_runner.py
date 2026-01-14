@@ -20,8 +20,10 @@ from transformers import (
     AutoTokenizer,
     GenerationConfig,
     GenerationMixin,
+    is_torch_xpu_available,
 )
 from transformers.generation.streamers import BaseStreamer
+from transformers.utils import is_torch_accelerator_available
 
 from .benchmark_config import BenchmarkConfig
 from .data_classes import BenchmarkMetadata, BenchmarkResult, GPURawMetrics, pretty_print_dict
@@ -97,10 +99,13 @@ def flush_memory(flush_compile: bool = True) -> None:
             if hasattr(torch._inductor.codecache, "TritonFuture"):
                 if hasattr(torch._inductor.codecache.TritonFuture, "_compile_cache"):
                     torch._inductor.codecache.TritonFuture._compile_cache.clear()
-    # Clear CUDA cache
+    # Clear device cache
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
         torch.cuda.synchronize()
+    elif is_torch_xpu_available():
+        torch.xpu.empty_cache()
+        torch.xpu.synchronize()
     gc.collect()
 
 
@@ -156,6 +161,8 @@ class BenchmarkRunner:
         self._setup_for = ""
         # Attributes that are reset for each run
         self.model: GenerationMixin | None = None
+        self.device_type = torch.accelerator.current_accelerator().type if is_torch_accelerator_available() else "cuda"
+        self.torch_accelerator_module = getattr(torch, self.device_type, torch.cuda)
 
     def cleanup(self) -> None:
         del self.model
@@ -288,14 +295,20 @@ class BenchmarkRunner:
         e2e_latency = wall_time_1 - wall_time_0
         timestamps = torch.tensor(timestamps).sub(wall_time_0).tolist()
         self.logger.info(
-            f"Time generate done in {e2e_latency:.2f} seconds. Memory usage: {torch.cuda.memory_allocated() / 1024**2:.2f} MB"
+            f"Time generate done in {e2e_latency:.2f} seconds. Memory usage: {self.torch_accelerator_module.memory_allocated() / 1024**2:.2f} MB"
         )
         return e2e_latency, timestamps, shape_and_decoded_output, gpu_metrics
 
     def profile_generate(self, num_tokens_to_profile: int, config_name: str) -> None:
         """Profile the latency of a call to model.generate() with the given (inputs) and (max_new_tokens)."""
+        activities = [torch.profiler.ProfilerActivity.CPU]
+        if self.device_type == "cuda":
+            activities.append(torch.profiler.ProfilerActivity.CUDA)
+        elif self.device_type == "xpu":
+            activities.append(torch.profiler.ProfilerActivity.XPU)
+
         profiler = torch.profiler.profile(
-            activities=[torch.profiler.ProfilerActivity.CPU, torch.profiler.ProfilerActivity.CUDA],
+            activities=activities,
             record_shapes=True,
         )
         with profiler as prof:

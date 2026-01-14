@@ -13,8 +13,6 @@
 # limitations under the License.
 """BEiT model configuration"""
 
-import warnings
-
 from ...configuration_utils import PreTrainedConfig
 from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
 
@@ -185,14 +183,6 @@ class BeitConfig(BackboneConfigMixin, PreTrainedConfig):
         self.auxiliary_num_convs = auxiliary_num_convs
         self.auxiliary_concat_input = auxiliary_concat_input
         self.semantic_loss_ignore_index = semantic_loss_ignore_index
-
-        # handle backwards compatibility
-        if "segmentation_indices" in kwargs:
-            warnings.warn(
-                "The `segmentation_indices` argument is deprecated and will be removed in a future version, use `out_indices` instead.",
-                FutureWarning,
-            )
-            out_indices = kwargs.pop("segmentation_indices")
 
         # backbone attributes
         self.stage_names = ["stem"] + [f"stage{idx}" for idx in range(1, self.num_hidden_layers + 1)]

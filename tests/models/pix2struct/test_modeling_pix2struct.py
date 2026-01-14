@@ -683,9 +683,7 @@ class Pix2StructIntegrationTest(unittest.TestCase):
         processor = Pix2StructProcessor.from_pretrained("google/pix2struct-textcaps-base")
         image_1 = prepare_img()
 
-        second_url = (
-            "https://www.connollycove.com/wp-content/uploads/2019/06/temple-bar-dublin-world-famous-irish-pub.jpg"
-        )
+        second_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/temple-bar-dublin-world-famous-irish-pub.jpg"
         image_2 = Image.open(requests.get(second_url, stream=True).raw)
 
         # image only

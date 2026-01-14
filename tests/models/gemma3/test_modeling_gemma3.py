@@ -35,7 +35,6 @@ from transformers.testing_utils import (
     require_deterministic_for_xpu,
     require_flash_attn,
     require_flash_attn_3,
-    require_read_token,
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
@@ -457,7 +456,6 @@ class Gemma3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
 
 @slow
 @require_torch_accelerator
-@require_read_token
 class Gemma3IntegrationTest(unittest.TestCase):
     def setUp(self):
         self.processor = Gemma3Processor.from_pretrained("google/gemma-3-4b-it", padding_side="left")

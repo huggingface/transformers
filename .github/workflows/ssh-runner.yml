@@ -14,7 +14,7 @@ on:
         required: true
 
 env:
-  HF_HUB_READ_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
+  HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
   HF_HOME: /mnt/cache
   TRANSFORMERS_IS_CI: yes
   OMP_NUM_THREADS: 8
@@ -140,11 +140,11 @@ jobs:
           cd /transformers 2>/dev/null || true
           
           # Remind user to set token if needed
-          if [ -z "$HF_HUB_READ_TOKEN" ]; then
-              echo "⚠️  HF_HUB_READ_TOKEN not set. Set it with:"
-              echo "    export HF_HUB_READ_TOKEN=hf_xxxxx"
+          if [ -z "$HF_TOKEN" ]; then
+              echo "⚠️  HF_TOKEN not set. Set it with:"
+              echo "    export HF_TOKEN=hf_xxxxx"
           else
-              echo "✅ HF_HUB_READ_TOKEN is set"
+              echo "✅ HF_TOKEN is set"
           fi
           
           echo "📁 Working directory: $(pwd)"

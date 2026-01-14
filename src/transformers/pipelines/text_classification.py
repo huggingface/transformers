@@ -1,5 +1,4 @@
 import inspect
-import warnings
 from typing import Any
 
 import numpy as np
@@ -88,28 +87,16 @@ class TextClassificationPipeline(Pipeline):
 
         self.check_model_type(MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES)
 
-    def _sanitize_parameters(self, return_all_scores=None, function_to_apply=None, top_k="", **tokenizer_kwargs):
+    def _sanitize_parameters(self, function_to_apply=None, top_k="", **tokenizer_kwargs):
         # Using "" as default argument because we're going to use `top_k=None` in user code to declare
         # "No top_k"
         preprocess_params = tokenizer_kwargs
 
         postprocess_params = {}
-        if hasattr(self.model.config, "return_all_scores") and return_all_scores is None:
-            return_all_scores = self.model.config.return_all_scores
 
         if isinstance(top_k, int) or top_k is None:
             postprocess_params["top_k"] = top_k
             postprocess_params["_legacy"] = False
-        elif return_all_scores is not None:
-            warnings.warn(
-                "`return_all_scores` is now deprecated,  if want a similar functionality use `top_k=None` instead of"
-                " `return_all_scores=True` or `top_k=1` instead of `return_all_scores=False`.",
-                UserWarning,
-            )
-            if return_all_scores:
-                postprocess_params["top_k"] = None
-            else:
-                postprocess_params["top_k"] = 1
 
         if isinstance(function_to_apply, str):
             function_to_apply = ClassificationFunction[function_to_apply.upper()]

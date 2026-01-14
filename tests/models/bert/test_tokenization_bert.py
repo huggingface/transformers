@@ -18,12 +18,11 @@ import unittest
 from transformers.models.bert.tokenization_bert import (
     BertTokenizer,
 )
-from transformers.testing_utils import require_read_token, require_tokenizers
+from transformers.testing_utils import require_tokenizers
 
 from ...test_tokenization_common import TokenizerTesterMixin
 
 
-@require_read_token
 @require_tokenizers
 class BertTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
     from_pretrained_id = ["google-bert/bert-base-uncased"]
