@@ -329,6 +329,14 @@ class Lfm2VlForConditionalGeneration(Lfm2VlPreTrainedModel, GenerationMixin):
         pixel_attention_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`):
+            The tensors corresponding to the input images.
+        spatial_shapes (`torch.Tensor` of shape `(batch_size, 2)`):
+            The spatial shapes of the input images.
+        pixel_attention_mask (`torch.Tensor` of shape `(batch_size, height, width)`):
+            The pixel attention mask of the input images.
+        """
         return self.model.get_image_features(
             pixel_values=pixel_values,
             spatial_shapes=spatial_shapes,

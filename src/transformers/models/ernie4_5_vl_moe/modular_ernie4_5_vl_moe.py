@@ -90,6 +90,20 @@ from ..qwen2_vl.modeling_qwen2_vl import Qwen2VisionTransformerPretrainedModel, 
 
 logger = logging.get_logger(__name__)
 
+ERNIE4_5_VL_MOE_VIDEO_COMMON_CUSTOM_ARGS = r"""
+    pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+        The tensors corresponding to the input videos.
+    video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+        The temporal, height and width of feature shape of each video in LLM.
+"""
+
+ERNIE4_5_VL_MOE_IMAGE_COMMON_CUSTOM_ARGS = r"""
+    pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+        The tensors corresponding to the input images.
+    image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+        The temporal, height and width of feature shape of each image in LLM.
+"""
+
 
 class Ernie4_5_VL_MoeVisionConfig(Qwen2VLVisionConfig):
     r"""
@@ -1260,19 +1274,13 @@ class Ernie4_5_VL_MoeModel(Qwen2_5_VLModel):
             return position_ids, mrope_position_deltas
 
     @can_return_tuple
-    @auto_docstring
+    @auto_docstring(custom_args=ERNIE4_5_VL_MOE_VIDEO_COMMON_CUSTOM_ARGS)
     def get_video_features(
         self,
         pixel_values_videos: torch.FloatTensor,
         video_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input videos.
-        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-            The temporal, height and width of feature shape of each video in LLM.
-        """
         video_outputs = self.vision_tower(pixel_values_videos, video_grid_thw, **kwargs)
         video_embeds = self.resampler_model(video_outputs.last_hidden_state, video_grid_thw)
         split_sizes = (
@@ -1285,19 +1293,13 @@ class Ernie4_5_VL_MoeModel(Qwen2_5_VLModel):
         return video_outputs
 
     @can_return_tuple
-    @auto_docstring
+    @auto_docstring(custom_args=ERNIE4_5_VL_MOE_IMAGE_COMMON_CUSTOM_ARGS)
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         image_grid_thw: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-            The tensors corresponding to the input images.
-        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-            The temporal, height and width of feature shape of each image in LLM.
-        """
         image_outputs = self.vision_tower(pixel_values, image_grid_thw, **kwargs)
         image_embeds = self.resampler_model(image_outputs.last_hidden_state, image_grid_thw)
         split_sizes = (image_grid_thw.prod(-1) // self.vision_tower.spatial_merge_size**2).tolist()
@@ -1399,6 +1401,14 @@ class Ernie4_5_VL_MoeForConditionalGeneration(Glm4vForConditionalGeneration, Gen
         self.router_aux_loss_coef = config.text_config.router_aux_loss_coef
         self.num_experts = config.text_config.moe_num_experts
         self.num_experts_per_tok = config.text_config.moe_k
+
+    @auto_docstring(custom_args=ERNIE4_5_VL_MOE_VIDEO_COMMON_CUSTOM_ARGS)
+    def get_video_features(self, **super_kwargs):
+        return super().get_video_features(**super_kwargs)
+
+    @auto_docstring(custom_args=ERNIE4_5_VL_MOE_IMAGE_COMMON_CUSTOM_ARGS)
+    def get_image_features(self, **super_kwargs):
+        return super().get_image_features(**super_kwargs)
 
     def prepare_inputs_for_generation(
         self,
