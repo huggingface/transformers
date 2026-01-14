@@ -1108,6 +1108,7 @@ class ZambaForCausalLM(ZambaPreTrainedModel, GenerationMixin):
                 self.config, input_ids.shape[0], dtype=self.dtype, device=self.device
             )
 
+        kwargs["logits_to_keep"] = self.config.num_logits_to_keep
         model_inputs = super().prepare_inputs_for_generation(
             input_ids,
             past_key_values=past_key_values,
