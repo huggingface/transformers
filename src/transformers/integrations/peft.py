@@ -58,7 +58,7 @@ class PeftConcatenate(Concatenate):
     """Convert per-expert LoRA weights to merged MoE weights using SVD."""
     @torch.no_grad
     def convert(
-        self, input_dict: dict[str, list[torch.Tensor]], source_patterns: list[str], target_patterns: list[str], **kwargs
+        self, input_dict: dict[str, list[torch.Tensor]], source_patterns: list[str], target_patterns: list[str], full_layer_name: str , **kwargs
     ) -> dict[str, list[torch.Tensor]]:
         lora_a_out = []
         lora_b_out = []
@@ -67,13 +67,13 @@ class PeftConcatenate(Concatenate):
                 lora_a_out.append(v)
             elif "lora_B" in k:
                 lora_b_out.append(v)
-        lora_a_out = torch.cat(lora_a_out, dim=0)
+        lora_a_out = torch.cat(lora_a_out, dim=self.dim)
         for i in range(len(lora_b_out)):
             lora_b_out.append(torch.block_diag(lora_b_out[0][i], lora_b_out[1][i]))
         lora_b_out = torch.stack(lora_b_out[2:], dim=0)
         return {
-            target_patterns[0]+".lora_A.weight": [lora_a_out],
-            target_patterns[0]+".lora_B.weight": [lora_b_out],
+            full_layer_name+".lora_A.weight": [lora_a_out],
+            full_layer_name+".lora_B.weight": [lora_b_out],
         }
 
     @property
