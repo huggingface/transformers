@@ -16,7 +16,7 @@ Processor class for Grounding DINO.
 """
 
 import warnings
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING
 
 from ...image_transforms import center_to_corners_format
 from ...image_utils import ImageInput
@@ -32,7 +32,7 @@ if TYPE_CHECKING:
     from .modeling_grounding_dino import GroundingDinoObjectDetectionOutput
 
 
-AnnotationType = dict[str, Union[int, str, list[dict]]]
+AnnotationType = dict[str, int | str | list[dict]]
 
 
 def get_phrases_from_posmap(posmaps, input_ids):
@@ -123,8 +123,8 @@ class GroundingDinoProcessor(ProcessorMixin):
     @auto_docstring
     def __call__(
         self,
-        images: Optional[ImageInput] = None,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         **kwargs: Unpack[GroundingDinoProcessorKwargs],
     ) -> BatchEncoding:
         if text is not None:
@@ -151,11 +151,11 @@ class GroundingDinoProcessor(ProcessorMixin):
     def post_process_grounded_object_detection(
         self,
         outputs: "GroundingDinoObjectDetectionOutput",
-        input_ids: Optional[TensorType] = None,
+        input_ids: TensorType | None = None,
         threshold: float = 0.25,
         text_threshold: float = 0.25,
-        target_sizes: Optional[Union[TensorType, list[tuple]]] = None,
-        text_labels: Optional[list[list[str]]] = None,
+        target_sizes: TensorType | list[tuple] | None = None,
+        text_labels: list[list[str]] | None = None,
     ):
         """
         Converts the raw output of [`GroundingDinoForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,

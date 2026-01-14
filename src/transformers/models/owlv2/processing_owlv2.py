@@ -15,7 +15,7 @@
 Image/Text processor class for OWLv2
 """
 
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -43,7 +43,7 @@ class Owlv2ImagesKwargs(ImagesKwargs, total=False):
         performs image-to-image matching instead of text-to-image matching.
     """
 
-    query_images: Optional[ImageInput]
+    query_images: ImageInput | None
 
 
 class Owlv2ProcessorKwargs(ProcessingKwargs, total=False):
@@ -67,8 +67,8 @@ class Owlv2Processor(ProcessorMixin):
     # Copied from transformers.models.owlvit.processing_owlvit.OwlViTProcessor.__call__ with OwlViT->Owlv2
     def __call__(
         self,
-        images: Optional[ImageInput] = None,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         **kwargs: Unpack[Owlv2ProcessorKwargs],
     ) -> BatchFeature:
         r"""
@@ -145,8 +145,8 @@ class Owlv2Processor(ProcessorMixin):
         self,
         outputs: "Owlv2ObjectDetectionOutput",
         threshold: float = 0.1,
-        target_sizes: Optional[Union[TensorType, list[tuple]]] = None,
-        text_labels: Optional[list[list[str]]] = None,
+        target_sizes: TensorType | list[tuple] | None = None,
+        text_labels: list[list[str]] | None = None,
     ):
         """
         Converts the raw output of [`Owlv2ForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
@@ -195,7 +195,7 @@ class Owlv2Processor(ProcessorMixin):
         outputs: "Owlv2ImageGuidedObjectDetectionOutput",
         threshold: float = 0.0,
         nms_threshold: float = 0.3,
-        target_sizes: Optional[Union[TensorType, list[tuple]]] = None,
+        target_sizes: TensorType | list[tuple] | None = None,
     ):
         """
         Converts the output of [`Owlv2ForObjectDetection.image_guided_detection`] into the format expected by the COCO
