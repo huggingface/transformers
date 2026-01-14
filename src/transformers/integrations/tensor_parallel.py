@@ -929,6 +929,11 @@ class SequenceParallel(TensorParallelLayer):
     def shard_tensor(
         self,
         param: torch.Tensor,
+        param_type=None,
+        param_casting_dtype=None,
+        to_contiguous=None,
+        rank=None,
+        device_mesh=None,
         tensor_idx=None,
     ):
         parameter = param[...].to(param_casting_dtype)
@@ -952,15 +957,24 @@ class GroupedGemmParallel(TensorParallelLayer):
         super().__init__(**kwargs)
 
     def shard_tensor(
-        self, param: torch.Tensor, tensor_idx: int | None = None, device=None, dtype=None
+        self,
+        param: torch.Tensor,
+        param_type=None,
+        param_casting_dtype=None,
+        to_contiguous=None,
+        rank=None,
+        device_mesh=None,
+        tensor_idx: int | None = None,
     ) -> torch.Tensor:
+        device_mesh = device_mesh or self.device_mesh
+        rank = rank if rank is not None else self.rank
         global_num_experts = self.empty_param.shape[0]
-        if global_num_experts % self.device_mesh.size() != 0:
+        if global_num_experts % device_mesh.size() != 0:
             raise ValueError(
-                f"Global number of experts must be divisible by number of devices: {global_num_experts} % {self.device_mesh.size()} != 0"
+                f"Global number of experts must be divisible by number of devices: {global_num_experts} % {device_mesh.size()} != 0"
             )
         local_num_experts = global_num_experts // device_mesh.size()
-        parameter = param[ep_rank * local_num_experts : (ep_rank + 1) * local_num_experts].to(param_casting_dtype)
+        parameter = param[rank * local_num_experts : (rank + 1) * local_num_experts].to(param_casting_dtype)
         return parameter, None
 
 
