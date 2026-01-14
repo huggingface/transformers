@@ -828,6 +828,8 @@ class FalconMambaForCausalLM(FalconMambaPreTrainedModel, GenerationMixin):
             else:
                 max_batch_size = input_ids.size(0)
             cache_params = FalconMambaCache(self.backbone.config, max_batch_size, device=self.device, dtype=self.dtype)
+        elif use_cache and cache_position[0] > 0:
+            attention_mask = None
 
         model_inputs = super().prepare_inputs_for_generation(
             input_ids,

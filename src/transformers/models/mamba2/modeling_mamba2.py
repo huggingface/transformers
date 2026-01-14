@@ -982,6 +982,8 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel, GenerationMixin):
             model_inputs["cache_params"] = Mamba2Cache(
                 self.backbone.config, max_batch_size, device=self.device, dtype=self.dtype
             )
+        elif use_cache and cache_position[0] > 0:
+            model_inputs["attention_mask"] = None
 
         return model_inputs
 
