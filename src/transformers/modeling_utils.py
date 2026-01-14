@@ -26,6 +26,7 @@ from abc import abstractmethod
 from collections import defaultdict
 from collections.abc import Callable, Iterator, Sequence
 from contextlib import contextmanager
+from dataclasses import dataclass, replace
 from enum import Enum
 from functools import partial, wraps
 from itertools import cycle
@@ -160,6 +161,41 @@ FLASH_ATTN_KERNEL_FALLBACK = {
     "flash_attention_2": "kernels-community/flash-attn2",
     "flash_attention_3": "kernels-community/vllm-flash-attn3",
 }
+
+
+@dataclass(frozen=True)
+class LoadStateDictConfig:
+    """
+    Bundles arguments for state-dict loading and finalization to keep call sites lightweight.
+    """
+
+    pretrained_model_name_or_path: str | None
+    ignore_mismatched_sizes: bool = False
+    sharded_metadata: dict | None = None
+    device_map: dict | None = None
+    disk_offload_folder: str | None = None
+    offload_buffers: bool = False
+    dtype: torch.dtype | None = None
+    hf_quantizer: HfQuantizer | None = None
+    device_mesh: Optional["torch.distributed.device_mesh.DeviceMesh"] = None
+    weights_only: bool = True
+    weight_mapping: Sequence[WeightConverter | WeightRenaming] | None = None
+
+    @property
+    def is_quantized(self) -> bool:
+        return self.hf_quantizer is not None
+
+
+@dataclass
+class LoadStateDictInfo:
+    """Return container for state-dict loading results and diagnostics."""
+
+    missing_keys: set[str]
+    unexpected_keys: set[str]
+    mismatched_keys: set[tuple[str, torch.Size]]
+    disk_offload_index: dict[str, str] | None
+    error_msgs: list[str]
+    conversion_errors: set[str]
 
 
 def is_local_dist_rank_0():
@@ -4069,11 +4105,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             device_map = _get_device_map(model, device_map, max_memory, hf_quantizer)
 
         # Finalize model weight initialization
-        model, missing_keys, unexpected_keys, mismatched_keys, offload_index, error_msgs = cls._load_pretrained_model(
-            model,
-            state_dict,
-            checkpoint_files,
-            pretrained_model_name_or_path,
+        load_config = LoadStateDictConfig(
+            pretrained_model_name_or_path=pretrained_model_name_or_path,
             ignore_mismatched_sizes=ignore_mismatched_sizes,
             sharded_metadata=sharded_metadata,
             device_map=device_map,
@@ -4085,7 +4118,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             weights_only=weights_only,
             weight_mapping=weight_conversions,
         )
-
+        load_info = cls._load_pretrained_model(model, state_dict, checkpoint_files, load_config)
+        load_info = cls._finalize_load_state_dict(model, load_config, load_info)
         model.eval()  # Set model in evaluation mode to deactivate Dropout modules by default
         model.set_use_kernels(use_kernels, kernel_config)
 
@@ -4104,7 +4138,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # If the device_map has more than 1 device: dispatch model with hooks on all devices
         if device_map is not None and len(set(device_map.values())) > 1:
-            accelerate_dispatch(model, hf_quantizer, device_map, offload_folder, offload_index, offload_buffers)
+            accelerate_dispatch(
+                model, hf_quantizer, device_map, offload_folder, load_info.disk_offload_index, offload_buffers
+            )
 
         if hf_quantizer is not None:
             model.hf_quantizer = hf_quantizer
@@ -4131,10 +4167,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         if output_loading_info:
             loading_info = {
-                "missing_keys": missing_keys,
-                "unexpected_keys": unexpected_keys,
-                "mismatched_keys": mismatched_keys,
-                "error_msgs": error_msgs,
+                "missing_keys": load_info.missing_keys,
+                "unexpected_keys": load_info.unexpected_keys,
+                "mismatched_keys": load_info.mismatched_keys,
+                "error_msgs": load_info.error_msgs,
             }
             return model, loading_info
         return model
@@ -4145,20 +4181,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         model: "PreTrainedModel",
         state_dict: dict | None,
         checkpoint_files: list[str] | None,
-        pretrained_model_name_or_path: str | None,
-        ignore_mismatched_sizes: bool = False,
-        sharded_metadata: dict | None = None,
-        device_map: dict | None = None,
-        disk_offload_folder: str | None = None,
-        offload_buffers: bool = False,
-        dtype: torch.dtype | None = None,
-        hf_quantizer: HfQuantizer | None = None,
-        device_mesh: Optional["torch.distributed.device_mesh.DeviceMesh"] = None,
-        weights_only: bool = True,
-        weight_mapping: Sequence[WeightConverter | WeightRenaming] | None = None,
-    ):
-        is_quantized = hf_quantizer is not None
-        is_hqq_or_quark = is_quantized and hf_quantizer.quantization_config.quant_method in {
+        load_config: LoadStateDictConfig,
+    ) -> LoadStateDictInfo:
+        is_quantized = load_config.is_quantized
+        is_hqq_or_quark = is_quantized and load_config.hf_quantizer.quantization_config.quant_method in {
             QuantizationMethod.HQQ,
             QuantizationMethod.QUARK,
         }
@@ -4172,21 +4198,21 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         # This offload index if for params explicitly on the "disk" in the device_map
         disk_offload_index = None
         # Prepare parameters offloading if needed
-        if device_map is not None and "disk" in device_map.values():
+        if load_config.device_map is not None and "disk" in load_config.device_map.values():
             disk_offload_index = accelerate_disk_offload(
                 model,
-                disk_offload_folder,
+                load_config.disk_offload_folder,
                 checkpoint_files,
-                device_map,
-                sharded_metadata,
-                dtype,
-                weight_mapping,
+                load_config.device_map,
+                load_config.sharded_metadata,
+                load_config.dtype,
+                load_config.weight_mapping,
             )
 
         # Warmup cuda to load the weights much faster on devices
-        if device_map is not None and not is_hqq_or_quark:
-            expanded_device_map = expand_device_map(device_map, expected_keys)
-            caching_allocator_warmup(model, expanded_device_map, hf_quantizer)
+        if load_config.device_map is not None and not is_hqq_or_quark:
+            expanded_device_map = expand_device_map(load_config.device_map, expected_keys)
+            caching_allocator_warmup(model, expanded_device_map, load_config.hf_quantizer)
 
         error_msgs = []
 
@@ -4194,7 +4220,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             if state_dict is None:
                 merged_state_dict = {}
                 for ckpt_file in checkpoint_files:
-                    merged_state_dict.update(load_state_dict(ckpt_file, map_location="cpu", weights_only=weights_only))
+                    merged_state_dict.update(
+                        load_state_dict(ckpt_file, map_location="cpu", weights_only=load_config.weights_only)
+                    )
                 state_dict = merged_state_dict
             error_msgs, missing_keys = _load_state_dict_into_zero3_model(model, state_dict)
             # This is not true but for now we assume only best-case scenario with deepspeed, i.e. perfectly matching checkpoints
@@ -4224,16 +4252,16 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 convert_and_load_state_dict_in_model(
                     model=model,
                     state_dict=merged_state_dict,
-                    weight_mapping=weight_mapping,
+                    weight_mapping=load_config.weight_mapping,
                     tp_plan=model._tp_plan,
-                    hf_quantizer=hf_quantizer,
-                    dtype=dtype,
-                    device_map=device_map,
+                    hf_quantizer=load_config.hf_quantizer,
+                    dtype=load_config.dtype,
+                    device_map=load_config.device_map,
                     dtype_plan=model.dtype_plan,
-                    device_mesh=device_mesh,
+                    device_mesh=load_config.device_mesh,
                     disk_offload_index=disk_offload_index,
-                    disk_offload_folder=disk_offload_folder,
-                    offload_buffers=offload_buffers,
+                    disk_offload_folder=load_config.disk_offload_folder,
+                    offload_buffers=load_config.offload_buffers,
                 )
             )
 
@@ -4241,6 +4269,21 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             for k in all_pointer:
                 k.__exit__(None, None, None)
 
+        return LoadStateDictInfo(
+            missing_keys=missing_keys,
+            unexpected_keys=unexpected_keys,
+            mismatched_keys=mismatched_keys,
+            disk_offload_index=disk_offload_index,
+            error_msgs=error_msgs,
+            conversion_errors=conversion_errors,
+        )
+
+    def _finalize_load_state_dict(
+        self,
+        model,
+        load_config: LoadStateDictConfig,
+        load_info: LoadStateDictInfo,
+    ) -> LoadStateDictInfo:
         # TODO @ArthurZucker this will be in a separate function to allows people not to run this
         # for more granularity
 
@@ -4249,32 +4292,36 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # Move missing (and potentially mismatched) keys and non-persistent buffers back to their expected device from
         # meta device (because they were not moved when loading the weights as they were not in the loaded state dict)
-        missing_and_mismatched = missing_keys | {k[0] for k in mismatched_keys}
-        model._move_missing_keys_from_meta_to_device(missing_and_mismatched, device_map, device_mesh, hf_quantizer)
+        missing_and_mismatched = load_info.missing_keys | {k[0] for k in load_info.mismatched_keys}
+        model._move_missing_keys_from_meta_to_device(
+            missing_and_mismatched, load_config.device_map, load_config.device_mesh, load_config.hf_quantizer
+        )
 
         # Correctly initialize the missing (and potentially mismatched) keys (all parameters without the `_is_hf_initialized` flag)
-        model._initialize_missing_keys(is_quantized)
+        model._initialize_missing_keys(load_config.is_quantized)
 
         # Tie the weights
-        model.tie_weights(missing_keys=missing_keys, recompute_mapping=False)
+        model.tie_weights(missing_keys=load_info.missing_keys, recompute_mapping=False)
 
         # Adjust missing and unexpected keys
-        missing_keys, unexpected_keys = model._adjust_missing_and_unexpected_keys(missing_keys, unexpected_keys)
+        missing_keys, unexpected_keys = model._adjust_missing_and_unexpected_keys(
+            load_info.missing_keys, load_info.unexpected_keys
+        )
 
         log_state_dict_report(
             model=model,
-            pretrained_model_name_or_path=pretrained_model_name_or_path,
+            pretrained_model_name_or_path=load_config.pretrained_model_name_or_path,
             logger=logger,
-            error_msgs=error_msgs,
+            error_msgs=load_info.error_msgs,
             unexpected_keys=unexpected_keys,
             missing_keys=missing_keys,
-            mismatched_keys=mismatched_keys,
-            mismatched_shapes=mismatched_keys,
-            conversion_errors=conversion_errors,
-            ignore_mismatched_sizes=ignore_mismatched_sizes,
+            mismatched_keys=load_info.mismatched_keys,
+            mismatched_shapes=load_info.mismatched_keys,
+            conversion_errors=load_info.conversion_errors,
+            ignore_mismatched_sizes=load_config.ignore_mismatched_sizes,
         )
 
-        return model, missing_keys, unexpected_keys, mismatched_keys, disk_offload_index, error_msgs
+        return replace(load_info, missing_keys=missing_keys, unexpected_keys=unexpected_keys)
 
     def retrieve_modules_from_names(self, names, add_prefix=False, remove_prefix=False):
         module_keys = {".".join(key.split(".")[:-1]) for key in names}

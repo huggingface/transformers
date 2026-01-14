@@ -20,10 +20,8 @@ from ..conversion_mapping import get_model_conversion_mapping
 from ..core_model_loading import (
     Concatenate,
     ConversionOps,
-    MergeModulelist,
     WeightConverter,
     WeightRenaming,
-
 )
 from ..utils import (
     CONFIG_NAME,
@@ -36,8 +34,8 @@ from ..utils import (
     is_torch_available,
     logging,
 )
-
 from ..utils.hub import DownloadKwargs
+from ..utils.loading_report import log_state_dict_report
 
 
 if is_torch_available():
@@ -56,13 +54,19 @@ logger = logging.get_logger(__name__)
 
 class PeftConcatenate(Concatenate):
     """Convert per-expert LoRA weights to merged MoE weights using SVD."""
+
     @torch.no_grad
     def convert(
-        self, input_dict: dict[str, list[torch.Tensor]], source_patterns: list[str], target_patterns: list[str], full_layer_name: str , **kwargs
+        self,
+        input_dict: dict[str, list[torch.Tensor]],
+        source_patterns: list[str],
+        target_patterns: list[str],
+        full_layer_name: str,
+        **kwargs,
     ) -> dict[str, list[torch.Tensor]]:
         lora_a_out = []
         lora_b_out = []
-        for k,v in input_dict.items():
+        for k, v in input_dict.items():
             if "lora_A" in k:
                 lora_a_out.append(v)
             elif "lora_B" in k:
@@ -72,8 +76,8 @@ class PeftConcatenate(Concatenate):
             lora_b_out.append(torch.block_diag(lora_b_out[0][i], lora_b_out[1][i]))
         lora_b_out = torch.stack(lora_b_out[2:], dim=0)
         return {
-            full_layer_name+"_lora_A_weight": [lora_a_out],
-            full_layer_name+"_lora_B_weight": [lora_b_out],
+            full_layer_name + "_lora_A_weight": [lora_a_out],
+            full_layer_name + "_lora_B_weight": [lora_b_out],
         }
 
     @property
@@ -96,9 +100,7 @@ def _build_peft_weight_mapping(
         peft_weight_conversions = []
         for i, op in enumerate(conversion.operations):
             if isinstance(op, Concatenate):
-                peft_weight_conversions.append(
-                    PeftConcatenate(dim=op.dim)
-                )
+                peft_weight_conversions.append(PeftConcatenate(dim=op.dim))
             else:
                 peft_weight_conversions.append(op)
         # For source, we capture the orignal weights + the lora weights
@@ -109,7 +111,7 @@ def _build_peft_weight_mapping(
             new_source_patterns.append(f"{pat}.lora_B.*")
         conversion.source_patterns = new_source_patterns
         pat = conversion.target_patterns[0].rsplit(".", 1)[0]
-        conversion.target_patterns = [ pat + "_lora_A_weight", pat + "_lora_B_weight"]
+        conversion.target_patterns = [pat + "_lora_A_weight", pat + "_lora_B_weight"]
         conversion.operations = peft_weight_conversions
     weight_conversions = [WeightRenaming("base_model.model.model", "model")] + weight_conversions
     return weight_conversions
@@ -315,8 +317,8 @@ class PeftAdapterMixin:
         if not self._hf_peft_config_loaded:
             self._hf_peft_config_loaded = True
 
+        from ..modeling_utils import LoadStateDictConfig, _get_resolved_checkpoint_files
 
-        from ..modeling_utils import _get_resolved_checkpoint_files
         checkpoint_files, sharded_metadata = _get_resolved_checkpoint_files(
             pretrained_model_name_or_path=peft_model_id,
             variant=None,
@@ -331,19 +333,42 @@ class PeftAdapterMixin:
         hf_quantizer = getattr(self, "hf_quantizer", None)
         load_device_map = {"": self.device}
         # the only state dict we are comparing for missing etc is get_peft_model_state_dict !
-        model, missing_keys, unexpected_keys, mismatched_keys, disk_offload_index, error_msgs = self._load_pretrained_model(
-            model=self,
+        load_config = LoadStateDictConfig(
             pretrained_model_name_or_path=peft_model_id,
-            checkpoint_files=checkpoint_files,
-            state_dict=None,
-            weight_mapping=peft_weight_conversions,
-            hf_quantizer=hf_quantizer,
-            device_map=load_device_map,
             ignore_mismatched_sizes=ignore_mismatched_sizes,
             sharded_metadata=sharded_metadata,
+            device_map=load_device_map,
             disk_offload_folder=offload_folder,
             offload_buffers=offload_buffers,
+            hf_quantizer=hf_quantizer,
             device_mesh=device_mesh,
+            weight_mapping=peft_weight_conversions,
+        )
+        load_info = self._load_pretrained_model(
+            model=self,
+            checkpoint_files=checkpoint_files,
+            state_dict=None,
+            load_config=load_config,
+        )
+
+        def keep(k):
+            return ("lora" in k) or ("default" in k) or ("adapter" in k)
+
+        unexpected_keys = list(filter(keep, load_info.unexpected_keys))
+        missing_keys = list(filter(keep, load_info.missing_keys))
+        mismatched_keys = list(filter(keep, load_info.mismatched_keys))
+
+        log_state_dict_report(
+            model=self,
+            pretrained_model_name_or_path=peft_model_id,
+            logger=logger,
+            error_msgs=load_info.error_msgs,
+            unexpected_keys=unexpected_keys,
+            missing_keys=missing_keys,
+            mismatched_keys=mismatched_keys,
+            mismatched_shapes=mismatched_keys,
+            conversion_errors=load_info.conversion_errors,
+            ignore_mismatched_sizes=ignore_mismatched_sizes,
         )
 
     def enable_peft_hotswap(
@@ -705,6 +730,5 @@ def maybe_load_adapters(
         with open(_adapter_model_path, "r", encoding="utf-8") as f:
             _adapter_model_path = pretrained_model_name_or_path
             pretrained_model_name_or_path = json.load(f)["base_model_name_or_path"]
-
 
     return _adapter_model_path, pretrained_model_name_or_path, adapter_kwargs
