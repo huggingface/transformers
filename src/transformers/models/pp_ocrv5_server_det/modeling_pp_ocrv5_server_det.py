@@ -52,7 +52,6 @@ class LearnableAffineBlock(nn.Module):
 class ConvBNAct(nn.Module):
     """
     Standard sequence of Convolution, Batch Normalization, and optional Activation/LAB.
-
     Args:
         in_channels (`int`):
             Number of input channels.
