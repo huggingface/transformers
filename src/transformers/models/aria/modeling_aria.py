@@ -926,13 +926,6 @@ class AriaModel(AriaPreTrainedModel):
         vision_feature_layer: int = -1,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        vision_feature_select_strategy (`str`, *optional*):
-            The feature selection strategy used to select the vision feature from the vision backbone.
-            Can be one of `"default"` or `"full"`
-        pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`):
-            The tensors corresponding to the input images.
-        """
         vision_feature_layer = (
             vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
         )

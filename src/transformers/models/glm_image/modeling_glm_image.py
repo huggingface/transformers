@@ -721,7 +721,7 @@ class GlmImageVisionModel(GlmImagePreTrainedModel):
     def forward(
         self, pixel_values: torch.Tensor, grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
-        """
+        r"""
         pixel_values (`torch.Tensor` of shape `(total_patches, num_channels * patch_size * patch_size)`):
             Packed pixel values.
         grid_thw (`torch.Tensor` of shape `(num_images, 3)`):

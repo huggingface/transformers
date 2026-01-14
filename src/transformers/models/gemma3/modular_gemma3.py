@@ -803,10 +803,6 @@ class Gemma3Model(PaliGemmaModel):
     def get_image_features(
         self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`)
-            The tensors corresponding to the input images.
-        """
         vision_outputs = self.vision_tower(pixel_values=pixel_values, **kwargs)
         last_hidden_state = vision_outputs.last_hidden_state
         vision_outputs.pooler_output = self.multi_modal_projector(last_hidden_state)

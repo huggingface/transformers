@@ -103,7 +103,7 @@ logger = logging.get_logger(__name__)
 @dataclass
 @auto_docstring
 class BaseModelOutputWithDeepstackFeatures(BaseModelOutputWithPooling):
-    """
+    r"""
     deepstack_features (`List[torch.FloatTensor]`, *optional*):
         List of hidden-states (feature maps) from deepstack layers.
     """

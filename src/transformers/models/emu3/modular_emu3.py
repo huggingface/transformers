@@ -957,7 +957,7 @@ class Emu3Model(Emu3PreTrainedModel):
     def get_image_features(
         self, pixel_values: torch.FloatTensor, image_sizes: torch.LongTensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | Emu3VQVAEModelOutput:
-        """
+        r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
             The tensors corresponding to the input images.
         """

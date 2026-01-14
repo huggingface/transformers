@@ -128,16 +128,6 @@ class Mistral3Model(LlavaModel):
         vision_feature_layer: int | list[int] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`):
-            The tensors corresponding to the input images.
-        vision_feature_layer (`Union[int, list[int]]`, *optional*):
-            The index of the layer to select the vision feature. If multiple indices are provided,
-            the vision feature of the corresponding indices will be concatenated to form the
-            vision features.
-        image_sizes (`torch.Tensor`, *optional*):
-            Tensor containing the image sizes as returned by the processor.
-        """
         vision_feature_layer = (
             vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
         )

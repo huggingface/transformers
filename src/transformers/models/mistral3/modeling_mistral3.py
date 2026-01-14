@@ -223,12 +223,6 @@ class Mistral3Model(Mistral3PreTrainedModel):
         vision_feature_layer: int | list[int] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        r"""
-        pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`):
-            The tensors corresponding to the input images.
-        image_sizes (`torch.Tensor`, *optional*):
-            Tensor containing the image sizes as returned by the processor.
-        """
         vision_feature_layer = (
             vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
         )

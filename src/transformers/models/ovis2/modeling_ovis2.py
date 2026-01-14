@@ -494,13 +494,6 @@ class Ovis2Model(Ovis2PreTrainedModel):
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithVisualIndicatorFeatures:
-        r"""
-        vision_feature_select_strategy (`str`, *optional*):
-            The feature selection strategy used to select the vision feature from the vision backbone.
-            Can be one of `"default"` or `"full"`
-        pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`):
-            The tensors corresponding to the input images.
-        """
         image_outputs = self.vision_tower(pixel_values, **kwargs)
         image_features = image_outputs.pooler_output
         batch_size, img_seq_len, _ = image_features.shape
