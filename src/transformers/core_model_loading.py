@@ -1030,7 +1030,7 @@ def convert_and_load_state_dict_in_model(
         )
 
         # 2. finally, collect the tensor into the proper converter
-        if renamed_key in missing_keys or "lora" in renamed_key:
+        if renamed_key in missing_keys:
             empty_param = meta_model_state_dict.get(renamed_key)
             # If we enter here, we have a WeightConverter operation to perform
             if source_pattern is not None:

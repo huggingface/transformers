@@ -72,8 +72,8 @@ class PeftConcatenate(Concatenate):
             lora_b_out.append(torch.block_diag(lora_b_out[0][i], lora_b_out[1][i]))
         lora_b_out = torch.stack(lora_b_out[2:], dim=0)
         return {
-            full_layer_name+".lora_A.weight": [lora_a_out],
-            full_layer_name+".lora_B.weight": [lora_b_out],
+            full_layer_name+"_lora_A_weight": [lora_a_out],
+            full_layer_name+"_lora_B_weight": [lora_b_out],
         }
 
     @property
@@ -108,6 +108,8 @@ def _build_peft_weight_mapping(
             new_source_patterns.append(f"{pat}.lora_A.*")
             new_source_patterns.append(f"{pat}.lora_B.*")
         conversion.source_patterns = new_source_patterns
+        pat = conversion.target_patterns[0].rsplit(".", 1)[0]
+        conversion.target_patterns = [ pat + "_lora_A_weight", pat + "_lora_B_weight"]
         conversion.operations = peft_weight_conversions
     weight_conversions = [WeightRenaming("base_model.model.model", "model")] + weight_conversions
     return weight_conversions
