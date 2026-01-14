@@ -284,6 +284,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("mobilevitv2", "MobileViTV2Model"),
         ("modernbert", "ModernBertModel"),
         ("modernbert-decoder", "ModernBertDecoderModel"),
+        ("modernvbert", "ModernVBertModel"),
         ("moonshine", "MoonshineModel"),
         ("moshi", "MoshiModel"),
         ("mpnet", "MPNetModel"),
@@ -467,6 +468,7 @@ MODEL_FOR_PRETRAINING_MAPPING_NAMES = OrderedDict(
         ("big_bird", "BigBirdForPreTraining"),
         ("bloom", "BloomForCausalLM"),
         ("camembert", "CamembertForMaskedLM"),
+        ("colmodernvbert", "ColModernVBertForRetrieval"),
         ("colpali", "ColPaliForRetrieval"),
         ("colqwen2", "ColQwen2ForRetrieval"),
         ("ctrl", "CTRLLMHeadModel"),
@@ -887,6 +889,7 @@ MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
 
 MODEL_FOR_RETRIEVAL_MAPPING_NAMES = OrderedDict(
     [
+        ("colmodernvbert", "ColModernVBertForRetrieval"),
         ("colpali", "ColPaliForRetrieval"),
     ]
 )
@@ -996,6 +999,7 @@ MODEL_FOR_MASKED_LM_MAPPING_NAMES = OrderedDict(
         ("megatron-bert", "MegatronBertForMaskedLM"),
         ("mobilebert", "MobileBertForMaskedLM"),
         ("modernbert", "ModernBertForMaskedLM"),
+        ("modernvbert", "ModernVBertForMaskedLM"),
         ("mpnet", "MPNetForMaskedLM"),
         ("mra", "MraForMaskedLM"),
         ("mvp", "MvpForConditionalGeneration"),
@@ -1177,6 +1181,7 @@ MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("mobilebert", "MobileBertForSequenceClassification"),
         ("modernbert", "ModernBertForSequenceClassification"),
         ("modernbert-decoder", "ModernBertDecoderForSequenceClassification"),
+        ("modernvbert", "ModernVBertForSequenceClassification"),
         ("mpnet", "MPNetForSequenceClassification"),
         ("mpt", "MptForSequenceClassification"),
         ("mra", "MraForSequenceClassification"),
@@ -1272,6 +1277,7 @@ MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES = OrderedDict(
         ("mixtral", "MixtralForQuestionAnswering"),
         ("mobilebert", "MobileBertForQuestionAnswering"),
         ("modernbert", "ModernBertForQuestionAnswering"),
+        ("modernvbert", "ModernVBertForQuestionAnswering"),
         ("mpnet", "MPNetForQuestionAnswering"),
         ("mpt", "MptForQuestionAnswering"),
         ("mra", "MraForQuestionAnswering"),
@@ -1385,6 +1391,7 @@ MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES = OrderedDict(
         ("mixtral", "MixtralForTokenClassification"),
         ("mobilebert", "MobileBertForTokenClassification"),
         ("modernbert", "ModernBertForTokenClassification"),
+        ("modernvbert", "ModernVBertForTokenClassification"),
         ("mpnet", "MPNetForTokenClassification"),
         ("mpt", "MptForTokenClassification"),
         ("mra", "MraForTokenClassification"),
@@ -1445,6 +1452,7 @@ MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES = OrderedDict(
         ("megatron-bert", "MegatronBertForMultipleChoice"),
         ("mobilebert", "MobileBertForMultipleChoice"),
         ("modernbert", "ModernBertForMultipleChoice"),
+        ("modernvbert", "ModernVBertForMultipleChoice"),
         ("mpnet", "MPNetForMultipleChoice"),
         ("mra", "MraForMultipleChoice"),
         ("nystromformer", "NystromformerForMultipleChoice"),
