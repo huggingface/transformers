@@ -421,8 +421,8 @@ class Serve:
     def __init__(
         self,
         continuous_batching: Annotated[
-            bool, typer.Option(help="Whether to use continuous batching for chat completions.")
-        ] = False,
+            bool, typer.Option(help="Whether to use continuous batching for chat completions. Will default to locally saved settings.")
+        ] = None,
         device: Annotated[
             str,
             typer.Option(
@@ -441,7 +441,7 @@ class Serve:
         attn_implementation: Annotated[
             str | None,
             typer.Option(
-                help="Which attention implementation to use; you can run --attn_implementation=flash_attention_2, in which case you must install this manually by running `pip install flash-attn --no-build-isolation`."
+                help="Which attention implementation to use. Will default to locally saved settings."
             ),
         ] = None,
         quantization: Annotated[
@@ -524,14 +524,18 @@ class Serve:
                 "Missing dependencies for the serving CLI. Please install with `pip install transformers[serving]`"
             )
 
-        # Save input arguments
-        self.continuous_batching = continuous_batching
-        self.device = device
+        settings = Settings()
+        logger.warning(settings)
+
+        self.attn_implementation = attn_implementation if attn_implementation is not None else settings.attention_method.label
+        self.continuous_batching = continuous_batching if continuous_batching is not None else settings.attention_method.paged
+
+        self.device = device or settings.device
+        self.context_length = context_length or settings.context_length
+        self.quantization = quantization or settings.quantization_method.as_string()
+
         self.dtype = dtype
         self.trust_remote_code = trust_remote_code
-        self.attn_implementation = attn_implementation
-        self.context_length = context_length
-        self.quantization = quantization
         self.host = host
         self.port = port
         self.model_timeout = model_timeout
@@ -620,6 +624,8 @@ class Serve:
         def chat_completion(request: Request, body: dict):
             self.validate_chat_completion_request(request=body)
 
+            logger.warning(f"[Request received] Model: {body['model']}, CB: {self.continuous_batching}")
+
             if self.continuous_batching:
                 return self.continuous_batching_chat_completion(body, request.state.request_id)
             else:
@@ -628,6 +634,9 @@ class Serve:
         @app.post("/v1/responses")
         def responses(request: dict):
             self.validate_response_request(request=request)
+
+            logger.warning(f"[Request received] Model: {request['model']}, CB: {self.continuous_batching}")
+
             # Support non-streaming mode when `stream=false` is provided
             stream = request.get("stream", True)
             if not stream:
@@ -1097,6 +1106,7 @@ class Serve:
             use_cache=False,
             do_sample=False,
             scheduler="fifo",
+            max_tokens=req.get("max_tokens", self.context_length),
         )
 
         if self.running_continuous_batching_manager is None:
@@ -1110,9 +1120,18 @@ class Serve:
             self.running_continuous_batching_manager.start()
 
         # TODO (Joao, Lysandre): this should also work with tool support
+        modality = self.get_model_modality(model, processor=processor)
+        processor_inputs = self.get_processor_inputs_from_inbound_messages(req["messages"], modality)
+
         inputs = processor.apply_chat_template(
-            req["messages"], return_tensors="pt", add_generation_prompt=True, return_dict=True
-        ).to(model.device)["input_ids"][0]
+            processor_inputs,
+            add_generation_prompt=True,
+            tools=req.get("tools"),
+            return_tensors="pt",
+            return_dict=True,
+            tokenize=True,
+        )
+        inputs = inputs['input_ids'][0].to(model.device)
 
         def stream_chat_completion(request_id, decode_stream):
             from transformers.generation.continuous_batching import RequestStatus
@@ -1348,13 +1367,22 @@ class Serve:
             skip_special_tokens=skip_special_tokens,
             skip_prompt=True,
         )
-        generation_config = create_generation_config_from_req(req, model_generation_config=model.generation_config)
 
-        last_kv_cache = None
         if self.is_continuation(req) and not must_discard_cache:
             seq_len = self.last_kv_cache.get_seq_length()
             if inputs["input_ids"].shape[-1] > seq_len:
                 last_kv_cache = self.last_kv_cache
+        else:
+            seq_len = inputs["input_ids"].shape[-1]
+
+        generation_config = create_generation_config_from_req(
+            req,
+            model_generation_config=model.generation_config,
+            max_tokens=req.get("max_tokens", self.context_length),
+            max_new_tokens=req.get("max_tokens", self.context_length) - seq_len,
+        )
+
+        last_kv_cache = None
 
         generation_kwargs = {
             **inputs,

@@ -19,7 +19,7 @@ import re
 import string
 import time
 from collections.abc import AsyncIterator
-from typing import Annotated, Any
+from typing import Annotated, Any, Optional
 from urllib.parse import urljoin, urlparse
 
 import httpx
@@ -100,10 +100,11 @@ If you're a new user, check this basic flag guide: https://huggingface.co/docs/t
 
 
 class RichInterface:
-    def __init__(self, model_id: str, user_id: str):
+    def __init__(self, model_id: str, user_id: str, base_url: str):
         self._console = Console()
         self.model_id = model_id
         self.user_id = user_id
+        self.base_url = base_url
 
     async def stream_output(self, stream: AsyncIterator[ChatCompletionStreamOutput]) -> tuple[str, str | Any | None]:
         self._console.print(f"[bold blue]<{self.model_id}>:")
@@ -190,6 +191,74 @@ class RichInterface:
         self._console.print(Markdown(HELP_STRING_MINIMAL if minimal else HELP_STRING))
         self._console.print()
 
+    def print_model_load(self, model: str):
+        import json
+
+        import requests
+        from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn, TimeElapsedColumn
+
+        response = requests.post(
+            f"{self.base_url.rstrip('/')}/load_model",
+            json={"model": model},
+            stream=True,
+        )
+        response.raise_for_status()
+
+        bars = {}  # desc -> task_id
+
+        progress = Progress(
+            TextColumn("[progress.description]{task.description}"),
+            BarColumn(),
+            TaskProgressColumn(),
+            TimeElapsedColumn(),
+            console=self._console,
+            transient=True,
+        )
+
+        with progress:
+            stage_task = progress.add_task(model, total=None)  # or a number if you know it
+
+            for line in response.iter_lines():
+                if not line or not line.startswith(b"data: "):
+                    continue
+
+                payload = json.loads(line.split(b"data: ", 1)[1])
+                stage = payload.get("stage")
+                message = payload.get("message") or stage
+
+                if stage and stage.startswith("tqdm:"):
+                    desc = payload.get("desc") or "Loading weights"
+                    total = payload.get("total")
+                    n = payload.get("n")
+
+                    task_id = bars.get(desc)
+                    if stage == "tqdm:start" and task_id is None:
+                        task_id = progress.add_task(desc, total=total)
+                        bars[desc] = task_id
+
+                    if task_id is not None:
+                        if total is not None:
+                            progress.update(task_id, total=total)
+                        if n is not None:
+                            progress.update(task_id, completed=n)
+                        elif stage == "tqdm:update":
+                            progress.advance(task_id, 1)
+                        if stage == "tqdm:close":
+                            progress.update(task_id, visible=False)
+                    continue
+
+                if stage:
+                    # update stage line (you can also set total if you know it)
+                    progress.update(stage_task, description=f"{model} • {message}")
+                    progress.advance(stage_task, 1)
+
+                if stage == "ready":
+                    break
+                if stage == "error":
+                    raise RuntimeError(payload.get("message", "Unknown error"))
+        self._console.print(Markdown(f"_*{model} is warm.*_"))
+        self._console.print()
+
     def print_status(self, config: GenerationConfig):
         """Prints the status of the model and generation settings to the console."""
         self._console.print(f"[bold blue]Model: {self.model_id}\n")
@@ -206,7 +275,7 @@ class Chat:
         self,
         model_id: Annotated[str, typer.Argument(help="ID of the model to use (e.g. 'HuggingFaceTB/SmolLM3-3B').")],
         base_url: Annotated[
-            str | None, typer.Argument(help="Base url to connect to (e.g. http://localhost:8000/v1).")
+            Optional[str], typer.Argument(help="Base url to connect to (e.g. http://localhost:8000/v1).")
         ] = f"http://{DEFAULT_HTTP_ENDPOINT['hostname']}:{DEFAULT_HTTP_ENDPOINT['port']}",
         generate_flags: Annotated[
             list[str] | None,
@@ -364,17 +433,18 @@ class Chat:
         return chat, valid_command, config
 
     async def _inner_run(self):
-        interface = RichInterface(model_id=self.model_id, user_id=self.user)
+        interface = RichInterface(model_id=self.model_id, user_id=self.user, base_url=self.base_url)
         interface.clear()
         chat = new_chat_history(self.system_prompt)
 
         # Starts the session with a minimal help message at the top, so that a user doesn't get stuck
         interface.print_help(minimal=True)
+        interface.print_model_load(self.model_id)
 
         config = self.config
 
         async with AsyncInferenceClient(base_url=self.base_url) as client:
-            pending_user_input: str | None = None
+            pending_user_input: Optional[str] = None
             while True:
                 try:
                     if pending_user_input is not None:
