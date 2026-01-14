@@ -276,6 +276,7 @@ class Scheduler(ABC):
             [req_id for req_id in self.waiting_requests_order if req_id not in request_ids_to_remove_from_waiting]
         )
 
+
 # TODO: further common-ize the two classes
 @attach_tracer()
 class FIFOScheduler(Scheduler):
