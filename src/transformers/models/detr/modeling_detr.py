@@ -602,7 +602,7 @@ class DetrMLP(nn.Module):
         return hidden_states
 
 
-class DetrEncoderLayer(nn.Module):
+class DetrEncoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: DetrConfig):
         super().__init__()
         self.hidden_size = config.d_model
@@ -901,6 +901,7 @@ class DetrPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _no_split_modules = [r"DetrConvEncoder", r"DetrEncoderLayer", r"DetrDecoderLayer"]
+    supports_gradient_checkpointing = True
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_attention_backend = True
@@ -954,7 +955,6 @@ class DetrEncoder(DetrPreTrainedModel):
         super().__init__(config)
 
         self.dropout = config.dropout
-        self.layerdrop = config.encoder_layerdrop
         self.layers = nn.ModuleList([DetrEncoderLayer(config) for _ in range(config.encoder_layers)])
 
         # Initialize weights and apply final processing
@@ -995,20 +995,10 @@ class DetrEncoder(DetrPreTrainedModel):
             )
 
         for encoder_layer in self.layers:
-            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
-            to_drop = False
-            if self.training:
-                dropout_probability = torch.rand([])
-                if dropout_probability < self.layerdrop:  # skip the layer
-                    to_drop = True
-
-            if to_drop:
-                hidden_states = None
-            else:
-                # we add spatial_position_embeddings as extra input to the encoder_layer
-                hidden_states = encoder_layer(
-                    hidden_states, attention_mask, spatial_position_embeddings=spatial_position_embeddings, **kwargs
-                )
+            # we add spatial_position_embeddings as extra input to the encoder_layer
+            hidden_states = encoder_layer(
+                hidden_states, attention_mask, spatial_position_embeddings=spatial_position_embeddings, **kwargs
+            )
 
         return BaseModelOutput(last_hidden_state=hidden_states)
 
@@ -1031,13 +1021,11 @@ class DetrDecoder(DetrPreTrainedModel):
     def __init__(self, config: DetrConfig):
         super().__init__(config)
         self.dropout = config.dropout
-        self.layerdrop = config.decoder_layerdrop
 
         self.layers = nn.ModuleList([DetrDecoderLayer(config) for _ in range(config.decoder_layers)])
         # in DETR, the decoder uses layernorm after the last decoder layer output
         self.layernorm = nn.LayerNorm(config.d_model)
 
-        self.gradient_checkpointing = False
         # Initialize weights and apply final processing
         self.post_init()
 
@@ -1076,7 +1064,7 @@ class DetrDecoder(DetrPreTrainedModel):
 
             spatial_position_embeddings (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`, *optional*):
                 Spatial position embeddings (2D positional encodings from encoder) that are added to the keys in each cross-attention layer.
-            query_position_embeddings (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
+            object_queries_position_embeddings (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
                 Position embeddings for the object query slots that are added to the queries and keys in each self-attention layer.
         """
 
@@ -1108,12 +1096,6 @@ class DetrDecoder(DetrPreTrainedModel):
         # decoder layers
 
         for idx, decoder_layer in enumerate(self.layers):
-            # add LayerDrop (see https://huggingface.co/papers/1909.11556 for description)
-            if self.training:
-                dropout_probability = torch.rand([])
-                if dropout_probability < self.layerdrop:
-                    continue
-
             hidden_states = decoder_layer(
                 hidden_states,
                 attention_mask,
