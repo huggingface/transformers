@@ -90,7 +90,6 @@ class GlmImageVisionText2TextModelTester:
             "depth": 2,
             "hidden_act": "gelu",
             "hidden_size": 32,
-            "out_hidden_size": 16,
             "intermediate_size": 22,
             "patch_size": 16,
             "spatial_merge_size": 1,
@@ -340,6 +339,13 @@ class GlmImageModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
     @unittest.skip(reason="GlmImage needs special input preparation to pass this test")
     def test_generate_compile_model_forward_fullgraph(self):
         pass
+
+    def _image_features_prepare_config_and_inputs(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        inputs_dict["image_grid_thw"] = inputs_dict["image_grid_thw"][:-1]
+        del inputs_dict["input_ids"]
+        del inputs_dict["attention_mask"]
+        return config, inputs_dict
 
 
 @require_torch
