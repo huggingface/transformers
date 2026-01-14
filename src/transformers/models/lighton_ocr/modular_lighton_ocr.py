@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Any
+from typing import Any, Optional
 
 import numpy as np
 import torch
@@ -37,7 +37,9 @@ from ..pixtral.configuration_pixtral import PixtralVisionConfig
 from ..pixtral.image_processing_pixtral import get_resize_output_image_size
 from ..pixtral.modeling_pixtral import (
     PixtralAttention,
+    PixtralPreTrainedModel,
     PixtralRMSNorm,
+    PixtralRotaryEmbedding,
     PixtralVisionModel,
 )
 from ..qwen3.configuration_qwen3 import Qwen3Config
@@ -403,8 +405,58 @@ class LightOnOcrProcessor(ProcessorMixin):
         return MultiModalData(**vision_data)
 
 
-class LightOnOcrRMSNorm(PixtralRMSNorm):
+class LightOnOcrVisionRMSNorm(PixtralRMSNorm):
     pass
+
+
+class LightOnOcrVisionAttention(PixtralAttention):
+    """Multi-headed attention for vision encoder."""
+
+    def __init__(self, config):
+        super().__init__(config)
+        self.num_key_value_groups = 1  # needed for eager_attention_forward compatibility
+
+
+# We need to redefine this class as Pixtral does not respect Vision-suffix at all...
+class LightOnOcrVisionRotaryEmbedding(PixtralRotaryEmbedding):
+    def __init__(self, config: LightOnOcrVisionConfig, device=None, layer_type=None):
+        super().__init__(config, device, layer_type)
+
+    def compute_default_rope_parameters(
+        config: LightOnOcrVisionConfig | None = None,
+        device: Optional["torch.device"] = None,
+        seq_len: int | None = None,
+    ) -> tuple["torch.Tensor", float]:
+        super().compute_default_rope_parameters(config, device, seq_len)
+
+
+# We need to redefine this class as Pixtral does not respect Vision-suffix at all...
+class LightOnOcrVisionPreTrainedModel(PixtralPreTrainedModel):
+    config: LightOnOcrVisionConfig
+
+
+@auto_docstring(
+    custom_intro="""
+    The vision encoder of LightOnOcr, based on Pixtral vision architecture.
+    """
+)
+class LightOnOcrVisionModel(PixtralVisionModel):
+    pass
+
+
+@auto_docstring(
+    custom_intro="""
+    The language model of LightOnOcr, based on Qwen3 architecture.
+    """
+)
+class LightOnOcrTextModel(Qwen3Model):
+    config_class = LightOnOcrTextConfig
+
+    def get_input_embeddings(self):
+        return self.embed_tokens
+
+    def set_input_embeddings(self, value):
+        self.embed_tokens = value
 
 
 class LightOnOcrPatchMerger(nn.Module):
@@ -459,7 +511,7 @@ class LightOnOcrVisionProjector(nn.Module):
         super().__init__()
         self.config = config
 
-        self.norm = LightOnOcrRMSNorm(config.vision_config.hidden_size, eps=1e-6)
+        self.norm = LightOnOcrVisionRMSNorm(config.vision_config.hidden_size, eps=1e-6)
         self.patch_merger = LightOnOcrPatchMerger(config)
         self.act = nn.GELU()
         self.linear_1 = nn.Linear(
@@ -480,9 +532,8 @@ class LightOnOcrVisionProjector(nn.Module):
 
 class LightOnOcrPreTrainedModel(PreTrainedModel):
     config_class = LightOnOcrConfig
-    base_model_prefix = "model"
     supports_gradient_checkpointing = True
-    _no_split_modules = ["LightOnOcrVisionProjector", "LightOnOcrPatchMerger", "LightOnOcrVisionAttentionLayer"]
+    _no_split_modules = ["LightOnOcrVisionProjector", "LightOnOcrVisionAttentionLayer"]
     _skip_keys_device_placement = "past_key_values"
     _supports_flash_attn = True
     _supports_sdpa = True
@@ -491,53 +542,16 @@ class LightOnOcrPreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
 
 
-class LightOnOcrAttention(PixtralAttention):
-    """Multi-headed attention for vision encoder."""
-
-    def __init__(self, config):
-        super().__init__(config)
-        self.num_key_value_groups = 1  # needed for eager_attention_forward compatibility
-
-
-@auto_docstring(
-    custom_intro="""
-    The vision encoder of LightOnOcr, based on Pixtral vision architecture.
-    """
-)
-class LightOnOcrVisionModel(PixtralVisionModel):
-    config_class = LightOnOcrVisionConfig
-
-
-@auto_docstring(
-    custom_intro="""
-    The language model of LightOnOcr, based on Qwen3 architecture.
-    """
-)
-class LightOnOcrTextModel(Qwen3Model):
-    config_class = LightOnOcrTextConfig
-
-    def get_input_embeddings(self):
-        return self.embed_tokens
-
-    def set_input_embeddings(self, value):
-        self.embed_tokens = value
-
-
 class LightOnOcrModel(LightOnOcrPreTrainedModel):
-    base_model_prefix = ""
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
     config: LightOnOcrConfig
 
     def __init__(self, config: LightOnOcrConfig):
         super().__init__(config)
-
         self.vision_encoder = LightOnOcrVisionModel._from_config(config.vision_config)
-
         self.vision_projection = LightOnOcrVisionProjector(config)
-
         self.language_model = LightOnOcrTextModel._from_config(config.text_config)
-
         self.post_init()
 
     def get_input_embeddings(self):
@@ -633,6 +647,7 @@ class LightOnOcrModel(LightOnOcrPreTrainedModel):
 
 class LightOnOcrForConditionalGeneration(LightOnOcrPreTrainedModel, GenerationMixin):
     config_class = LightOnOcrConfig
+    base_model_prefix = "model"
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
     def __init__(self, config: LightOnOcrConfig):

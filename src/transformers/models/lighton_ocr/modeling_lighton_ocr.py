@@ -39,10 +39,10 @@ from ...utils.generic import TransformersKwargs, check_model_inputs, maybe_autoc
 from .configuration_lighton_ocr import LightOnOcrConfig, LightOnOcrTextConfig, LightOnOcrVisionConfig
 
 
-class LightOnOcrRMSNorm(nn.Module):
+class LightOnOcrVisionRMSNorm(nn.Module):
     def __init__(self, hidden_size, eps=1e-6):
         """
-        LightOnOcrRMSNorm is equivalent to T5LayerNorm
+        LightOnOcrVisionRMSNorm is equivalent to T5LayerNorm
         """
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
@@ -57,90 +57,6 @@ class LightOnOcrRMSNorm(nn.Module):
 
     def extra_repr(self):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
-
-
-class LightOnOcrPatchMerger(nn.Module):
-    """
-    Learned merging of spatial_merge_size ** 2 patches.
-    """
-
-    def __init__(self, config: LightOnOcrConfig):
-        super().__init__()
-        self.config = config
-        self.hidden_size = config.vision_config.hidden_size
-        self.spatial_merge_size = config.spatial_merge_size
-
-        self.patch_size = config.vision_config.patch_size
-
-        self.merging_layer = nn.Linear(self.hidden_size * self.spatial_merge_size**2, self.hidden_size, bias=False)
-
-    def forward(self, image_features: torch.Tensor, image_sizes: torch.Tensor | list) -> torch.Tensor:
-        image_sizes_in_patches = [
-            (image_size[0] // self.patch_size, image_size[1] // self.patch_size) for image_size in image_sizes
-        ]
-
-        tokens_per_image = [patch_height * patch_width for patch_height, patch_width in image_sizes_in_patches]
-        hidden_dim = image_features.shape[-1]
-
-        permuted_tensor = []
-        for image_index, image_tokens in enumerate(image_features.split(tokens_per_image)):
-            # reshape image_tokens into a 2D grid
-            patch_height, patch_width = image_sizes_in_patches[image_index]
-            # shape [num_patches, hidden_dim] -> [1, hidden_dim, patch_height, patch_width]
-            image_grid = image_tokens.view(patch_height, patch_width, hidden_dim).permute(2, 0, 1).unsqueeze(0)
-            # shape [1, hidden_dim, patch_height, patch_width] -> [patch_height // sms * patch_width // sms, hidden_dim * sms**2]
-            # sms = spatial_merge_size
-            # Note: patch_height and patch_width are guaranteed to be divisible by sms because the image processor
-            # resizes images to multiples of effective_patch_size (patch_size * spatial_merge_size)
-            grid = torch.nn.functional.unfold(
-                image_grid,
-                kernel_size=self.spatial_merge_size,
-                stride=self.spatial_merge_size,
-            )
-            # shape [patch_height // sms * patch_width // sms, hidden_dim * sms**2] -> [patch_height // sms * patch_width // sms, hidden_dim * sms**2]
-            grid = grid.view(hidden_dim * self.spatial_merge_size**2, -1).t()
-            permuted_tensor.append(grid)
-
-        image_features = torch.cat(permuted_tensor, dim=0)
-        image_features = self.merging_layer(image_features)
-        return image_features
-
-
-class LightOnOcrVisionProjector(nn.Module):
-    def __init__(self, config: LightOnOcrConfig):
-        super().__init__()
-        self.config = config
-
-        self.norm = LightOnOcrRMSNorm(config.vision_config.hidden_size, eps=1e-6)
-        self.patch_merger = LightOnOcrPatchMerger(config)
-        self.act = nn.GELU()
-        self.linear_1 = nn.Linear(
-            config.vision_config.hidden_size,
-            config.text_config.hidden_size,
-            bias=False,
-        )
-        self.linear_2 = nn.Linear(config.text_config.hidden_size, config.text_config.hidden_size, bias=False)
-
-    def forward(self, image_features: torch.Tensor, image_sizes: torch.Tensor | list):
-        image_features = self.norm(image_features)
-        image_features = self.patch_merger(image_features, image_sizes)
-        hidden_states = self.linear_1(image_features)
-        hidden_states = self.act(hidden_states)
-        hidden_states = self.linear_2(hidden_states)
-        return hidden_states
-
-
-class LightOnOcrPreTrainedModel(PreTrainedModel):
-    config_class = LightOnOcrConfig
-    base_model_prefix = "model"
-    supports_gradient_checkpointing = True
-    _no_split_modules = ["LightOnOcrVisionProjector", "LightOnOcrPatchMerger", "LightOnOcrVisionAttentionLayer"]
-    _skip_keys_device_placement = "past_key_values"
-    _supports_flash_attn = True
-    _supports_sdpa = True
-    _can_compile_fullgraph = True
-    _supports_flex_attn = True
-    _supports_attention_backend = True
 
 
 def rotate_half(x):
@@ -213,7 +129,7 @@ def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
     return hidden_states.reshape(batch, num_key_value_heads * n_rep, slen, head_dim)
 
 
-class LightOnOcrAttention(nn.Module):
+class LightOnOcrVisionAttention(nn.Module):
     """Multi-headed attention for vision encoder."""
 
     def __init__(self, config):
@@ -285,9 +201,9 @@ class LightOnOcrAttention(nn.Module):
         return attn_output, attn_weights
 
 
-class LightOnOcrRotaryEmbedding(nn.Module):
+class LightOnOcrVisionRotaryEmbedding(nn.Module):
     """
-    The key with lighton_ocr embedding is just that you have a frequency for each pixel positions.
+    The key with light_on_ocr_vision embedding is just that you have a frequency for each pixel positions.
     If you have height x width pixels (or embedding pixels), then the frequency used for ROPE
     is given by indexing the pre_computed frequency on the width and height.
 
@@ -373,7 +289,21 @@ class LightOnOcrRotaryEmbedding(nn.Module):
         return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
-class LightOnOcrMLP(nn.Module):
+@auto_docstring
+class LightOnOcrVisionPreTrainedModel(PreTrainedModel):
+    config: LightOnOcrVisionConfig
+    base_model_prefix = "model"
+    main_input_name = "pixel_values"
+    input_modalities = ("image",)
+    supports_gradient_checkpointing = True
+    _supports_attention_backend = True
+    _supports_flash_attn = True
+    _supports_sdpa = True
+    _supports_flex_attn = True
+    _no_split_modules = ["LightOnOcrVisionAttentionLayer"]
+
+
+class LightOnOcrVisionMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
@@ -389,13 +319,13 @@ class LightOnOcrMLP(nn.Module):
         return down_proj
 
 
-class LightOnOcrAttentionLayer(GradientCheckpointingLayer):
+class LightOnOcrVisionAttentionLayer(GradientCheckpointingLayer):
     def __init__(self, config):
         super().__init__()
-        self.attention_norm = LightOnOcrRMSNorm(config.hidden_size, eps=1e-5)
-        self.feed_forward = LightOnOcrMLP(config)
-        self.attention = LightOnOcrAttention(config)
-        self.ffn_norm = LightOnOcrRMSNorm(config.hidden_size, eps=1e-5)
+        self.attention_norm = LightOnOcrVisionRMSNorm(config.hidden_size, eps=1e-5)
+        self.feed_forward = LightOnOcrVisionMLP(config)
+        self.attention = LightOnOcrVisionAttention(config)
+        self.ffn_norm = LightOnOcrVisionRMSNorm(config.hidden_size, eps=1e-5)
 
     def forward(
         self,
@@ -439,13 +369,13 @@ class LightOnOcrAttentionLayer(GradientCheckpointingLayer):
         return outputs
 
 
-class LightOnOcrTransformer(nn.Module):
+class LightOnOcrVisionTransformer(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
         self.layers = torch.nn.ModuleList()
         for _ in range(config.num_hidden_layers):
-            self.layers.append(LightOnOcrAttentionLayer(config))
+            self.layers.append(LightOnOcrVisionAttentionLayer(config))
         self.gradient_checkpointing = False
 
     def forward(
@@ -546,9 +476,8 @@ def generate_block_attention_mask(patch_embeds_list, tensor):
     The vision encoder of LightOnOcr, based on Pixtral vision architecture.
     """
 )
-class LightOnOcrVisionModel(LightOnOcrPreTrainedModel):
+class LightOnOcrVisionModel(LightOnOcrVisionPreTrainedModel):
     base_model_prefix = "vision_encoder"
-    config_class = LightOnOcrVisionConfig
 
     def __init__(self, config):
         super().__init__(config)
@@ -561,9 +490,9 @@ class LightOnOcrVisionModel(LightOnOcrPreTrainedModel):
             bias=False,
         )
         self.patch_size = config.patch_size
-        self.ln_pre = LightOnOcrRMSNorm(config.hidden_size, eps=1e-5)
-        self.transformer = LightOnOcrTransformer(config)
-        self.patch_positional_embedding = LightOnOcrRotaryEmbedding(config)
+        self.ln_pre = LightOnOcrVisionRMSNorm(config.hidden_size, eps=1e-5)
+        self.transformer = LightOnOcrVisionTransformer(config)
+        self.patch_positional_embedding = LightOnOcrVisionRotaryEmbedding(config)
 
         self.post_init()
 
@@ -974,21 +903,99 @@ class LightOnOcrTextModel(LightOnOcrTextPreTrainedModel):
         self.embed_tokens = value
 
 
+class LightOnOcrPatchMerger(nn.Module):
+    """
+    Learned merging of spatial_merge_size ** 2 patches.
+    """
+
+    def __init__(self, config: LightOnOcrConfig):
+        super().__init__()
+        self.config = config
+        self.hidden_size = config.vision_config.hidden_size
+        self.spatial_merge_size = config.spatial_merge_size
+
+        self.patch_size = config.vision_config.patch_size
+
+        self.merging_layer = nn.Linear(self.hidden_size * self.spatial_merge_size**2, self.hidden_size, bias=False)
+
+    def forward(self, image_features: torch.Tensor, image_sizes: torch.Tensor | list) -> torch.Tensor:
+        image_sizes_in_patches = [
+            (image_size[0] // self.patch_size, image_size[1] // self.patch_size) for image_size in image_sizes
+        ]
+
+        tokens_per_image = [patch_height * patch_width for patch_height, patch_width in image_sizes_in_patches]
+        hidden_dim = image_features.shape[-1]
+
+        permuted_tensor = []
+        for image_index, image_tokens in enumerate(image_features.split(tokens_per_image)):
+            # reshape image_tokens into a 2D grid
+            patch_height, patch_width = image_sizes_in_patches[image_index]
+            # shape [num_patches, hidden_dim] -> [1, hidden_dim, patch_height, patch_width]
+            image_grid = image_tokens.view(patch_height, patch_width, hidden_dim).permute(2, 0, 1).unsqueeze(0)
+            # shape [1, hidden_dim, patch_height, patch_width] -> [patch_height // sms * patch_width // sms, hidden_dim * sms**2]
+            # sms = spatial_merge_size
+            # Note: patch_height and patch_width are guaranteed to be divisible by sms because the image processor
+            # resizes images to multiples of effective_patch_size (patch_size * spatial_merge_size)
+            grid = torch.nn.functional.unfold(
+                image_grid,
+                kernel_size=self.spatial_merge_size,
+                stride=self.spatial_merge_size,
+            )
+            # shape [patch_height // sms * patch_width // sms, hidden_dim * sms**2] -> [patch_height // sms * patch_width // sms, hidden_dim * sms**2]
+            grid = grid.view(hidden_dim * self.spatial_merge_size**2, -1).t()
+            permuted_tensor.append(grid)
+
+        image_features = torch.cat(permuted_tensor, dim=0)
+        image_features = self.merging_layer(image_features)
+        return image_features
+
+
+class LightOnOcrVisionProjector(nn.Module):
+    def __init__(self, config: LightOnOcrConfig):
+        super().__init__()
+        self.config = config
+
+        self.norm = LightOnOcrVisionRMSNorm(config.vision_config.hidden_size, eps=1e-6)
+        self.patch_merger = LightOnOcrPatchMerger(config)
+        self.act = nn.GELU()
+        self.linear_1 = nn.Linear(
+            config.vision_config.hidden_size,
+            config.text_config.hidden_size,
+            bias=False,
+        )
+        self.linear_2 = nn.Linear(config.text_config.hidden_size, config.text_config.hidden_size, bias=False)
+
+    def forward(self, image_features: torch.Tensor, image_sizes: torch.Tensor | list):
+        image_features = self.norm(image_features)
+        image_features = self.patch_merger(image_features, image_sizes)
+        hidden_states = self.linear_1(image_features)
+        hidden_states = self.act(hidden_states)
+        hidden_states = self.linear_2(hidden_states)
+        return hidden_states
+
+
+class LightOnOcrPreTrainedModel(PreTrainedModel):
+    config_class = LightOnOcrConfig
+    supports_gradient_checkpointing = True
+    _no_split_modules = ["LightOnOcrVisionProjector", "LightOnOcrVisionAttentionLayer"]
+    _skip_keys_device_placement = "past_key_values"
+    _supports_flash_attn = True
+    _supports_sdpa = True
+    _can_compile_fullgraph = True
+    _supports_flex_attn = True
+    _supports_attention_backend = True
+
+
 class LightOnOcrModel(LightOnOcrPreTrainedModel):
-    base_model_prefix = ""
     # Reference: fix gemma3 grad acc #37208
     accepts_loss_kwargs = False
     config: LightOnOcrConfig
 
     def __init__(self, config: LightOnOcrConfig):
         super().__init__(config)
-
         self.vision_encoder = LightOnOcrVisionModel._from_config(config.vision_config)
-
         self.vision_projection = LightOnOcrVisionProjector(config)
-
         self.language_model = LightOnOcrTextModel._from_config(config.text_config)
-
         self.post_init()
 
     def get_input_embeddings(self):
@@ -1084,6 +1091,7 @@ class LightOnOcrModel(LightOnOcrPreTrainedModel):
 
 class LightOnOcrForConditionalGeneration(LightOnOcrPreTrainedModel, GenerationMixin):
     config_class = LightOnOcrConfig
+    base_model_prefix = "model"
     _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
 
     def __init__(self, config: LightOnOcrConfig):
