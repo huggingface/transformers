@@ -137,14 +137,8 @@ class SolarOpenConfig(PreTrainedConfig):
         use_qk_norm: bool = False,
         **kwargs,
     ):
-        if rope_parameters is None:
-            rope_parameters = RopeParameters(
-                rope_theta=self.default_theta,
-                rope_type="yarn",
-                partial_rotary_factor=1.0,  # set default to 1.0
-                factor=2.0,
-                original_max_position_embeddings=65_536,
-            )
+        kwargs.setdefault("partial_rotary_factor", 1.0)  # override default from Glm4MoeConfig
+        self.head_dim = head_dim
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -176,7 +170,28 @@ class SolarOpenConfig(PreTrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
-        self.head_dim = head_dim
+
+    def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation: set | None = None, **kwargs):
+        default_rope_params = RopeParameters(
+            rope_type="yarn",
+            factor=2.0,
+            original_max_position_embeddings=65_536,
+        )
+
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or self.rope_parameters
+        self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else default_rope_params
+
+        # Standardize and validate the correctness of rotary position embeddings parameters
+        self.rope_parameters.setdefault("rope_theta", kwargs.pop("rope_theta", self.default_theta))
+
+        if "partial_rotary_factor" in kwargs:
+            self.rope_parameters.setdefault("partial_rotary_factor", kwargs["partial_rotary_factor"])
+            ignore_keys_at_rope_validation = {"partial_rotary_factor"}
+
+        self.standardize_rope_params()
+        self.validate_rope(ignore_keys=ignore_keys_at_rope_validation)
+        return kwargs
 
 
 __all__ = ["SolarOpenConfig"]
