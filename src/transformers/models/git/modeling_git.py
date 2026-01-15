@@ -203,6 +203,7 @@ class GitEmbeddings(nn.Module):
         else:
             embeddings = inputs_embeds
 
+        print("position_ids", position_ids)
         position_embeddings = self.position_embeddings(position_ids)
         embeddings += position_embeddings
 
@@ -1054,6 +1055,10 @@ class GitModel(GitPreTrainedModel):
                 else past_key_values.get_seq_length()
             )
 
+        # Adjust position ids by adding image seq length
+        if pixel_values is None and past_key_values is not None and input_ids.shape[1] == 1:
+            position_ids = position_ids + past_key_values_length
+
         embedding_output = self.embeddings(
             input_ids=input_ids,
             position_ids=position_ids,
@@ -1122,6 +1127,7 @@ class GitModel(GitPreTrainedModel):
             attention_mask = torch.cat([extended_attention_mask, attention_mask], dim=-1)
 
         # Images attend each other bidirectionally while text remains causal
+        print(cache_position)
         causal_mask = create_causal_mask_mapping(
             self.config,
             embedding_output,
