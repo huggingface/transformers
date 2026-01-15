@@ -435,11 +435,7 @@ class BioGptModel(BioGptPreTrainedModel):
 
         # embed positions
         if position_ids is None:
-            # position_ids = cache_position.unsqueeze(0)
-            position_ids = torch.cumsum(attention_mask, dim=1)
-            position_ids = (position_ids * attention_mask - 1).long()
-            # cut positions if `past_seen_tokens` is > 0
-            position_ids = position_ids[:, past_key_values_length:]
+            position_ids = cache_position.unsqueeze(0)
 
         positions = self.embed_positions(attention_mask, past_key_values_length, position_ids=position_ids)
         hidden_states = inputs_embeds + positions

@@ -148,11 +148,10 @@ class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
         # Handle the custom "pixel_values" input obtained with `ColQwen2Processor` through unpadding
         if pixel_values is not None and image_grid_thw is not None:
             # NOTE: image_grid_thw: (batch_size, 3) where image_grid_thw[i] = (num_patches_h, num_patches_w, temporal_patch_size)
-            offsets = image_grid_thw[:, 1] * image_grid_thw[:, 2]  # (num_patches_h, num_patches_w)
-            pixel_values = torch.cat(
-                [pixel_sequence[:offset] for pixel_sequence, offset in zip(pixel_values, offsets)],
-                dim=0,
-            )  # (num_patches_h * num_patches_w, pixel_values)
+            offsets = image_grid_thw[:, 1] * image_grid_thw[:, 2]  # (batch_size,)
+            arange = torch.arange(pixel_values.shape[1], device=offsets.device)  # (max_len,)
+            mask = arange.unsqueeze(0) < offsets.unsqueeze(1)  # (batch_size, max_len)
+            pixel_values = pixel_values[mask]  # (total_valid_patches, channels, height, width)
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
 

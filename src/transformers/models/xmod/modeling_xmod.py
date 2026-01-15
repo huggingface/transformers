@@ -449,9 +449,6 @@ class XmodOutput(nn.Module):
         return hidden_states
 
     def lang_adapter(self, lang_ids: torch.Tensor, hidden_states: torch.Tensor):
-        # Process subsequent samples with the same lang_id in parallel
-        lang_ids, lang_lengths = torch.unique_consecutive(lang_ids, return_counts=True)
-
         if not self.ln_before_adapter:
             residual = hidden_states
 
@@ -463,14 +460,14 @@ class XmodOutput(nn.Module):
         if self.ln_before_adapter:
             residual = hidden_states
 
-        split_hidden_states = torch.split(hidden_states, lang_lengths.tolist(), 0)
-        lang_wise_outputs = []
-        for i, (lang_id, split_hidden_state) in enumerate(zip(lang_ids, split_hidden_states)):
-            lang = list(self.adapter_modules.keys())[int(lang_id.item())]
-            lang_wise_outputs.append(self.adapter_modules[lang](split_hidden_state))
-        hidden_states = torch.cat(lang_wise_outputs, 0)
+        new_hidden_states = torch.zeros_like(hidden_states)
+        for adapter_idx, lang_key in enumerate(self.adapter_modules.keys()):
+            lang_mask = lang_ids == adapter_idx
+            lang_hidden_states = hidden_states[lang_mask]
+            adapted_lang_hidden_states = self.adapter_modules[lang_key](lang_hidden_states)
+            new_hidden_states[lang_mask] = adapted_lang_hidden_states
 
-        hidden_states = self.dropout(hidden_states)
+        hidden_states = self.dropout(new_hidden_states)
         hidden_states += residual
         return hidden_states
 
