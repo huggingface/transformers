@@ -270,7 +270,6 @@ class Transpose(ConversionOps):
             raise ValueError("Undefined Operation encountered!")
         # Here it's the first operation of a chain, so return the source
         if len(target_patterns) > 1:
-            # Here it's the first operation of a chain, so return the source
             if len(source_patterns) == 1:
                 return source_patterns[0]
             else:
