@@ -1473,9 +1473,6 @@ class VideoLlama3VideoProcessor(Qwen2VLVideoProcessor):
     valid_kwargs = VideoLlama3VideoProcessorInitKwargs
     model_input_names = ["pixel_values_videos", "video_grid_thw", "video_merge_sizes", "video_compression_mask"]
 
-    def _further_process_kwargs(self):
-        raise AttributeError("VideoLlama3 never supported min/max pixels, no need to copy from Qwen")
-
     def _get_compression_mask(
         self,
         pixel_values_videos: torch.FloatTensor,
@@ -1532,8 +1529,6 @@ class VideoLlama3VideoProcessor(Qwen2VLVideoProcessor):
         do_normalize: bool,
         image_mean: float | list[float] | None,
         image_std: float | list[float] | None,
-        min_pixels: int | None = None,
-        max_pixels: int | None = None,
         patch_size: int | None = None,
         temporal_patch_size: int | None = None,
         merge_size: int | None = None,
@@ -1553,8 +1548,8 @@ class VideoLlama3VideoProcessor(Qwen2VLVideoProcessor):
                     height,
                     width,
                     factor=patch_size * merge_size,
-                    min_pixels=min_pixels,
-                    max_pixels=max_pixels // shape[0],
+                    min_pixels=size["shortest_edge"],
+                    max_pixels=size["longest_edge"] // shape[0],
                 )
                 stacked_videos = self.resize(
                     image=stacked_videos,
