@@ -178,6 +178,8 @@ class Ovis2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         if is_torch_available()
         else {}
     )
+    # Ovis2 post-processes the last_hidden_state to hidden_size * hidden_stride**2
+    skip_test_image_features_output_shape = True
     _is_composite = True
 
     def setUp(self):

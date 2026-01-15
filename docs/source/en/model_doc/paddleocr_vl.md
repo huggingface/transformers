@@ -206,6 +206,7 @@ model = AutoModelForImageTextToText.from_pretrained("PaddlePaddle/PaddleOCR-VL",
 
 [[autodoc]] PaddleOCRVLForConditionalGeneration
     - forward
+    - get_image_features
 
 ## PaddleOCRVLConfig
 

@@ -271,6 +271,7 @@ visualizer("<img>What is shown in this image?")
 
 [[autodoc]] Gemma3ForConditionalGeneration
     - forward
+    - get_image_features
 
 ## Gemma3ForSequenceClassification
 

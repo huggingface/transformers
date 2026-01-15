@@ -83,3 +83,4 @@ The attributes can be obtained from model config, as `model.config.num_query_tok
 [[autodoc]] InstructBlipVideoForConditionalGeneration
     - forward
     - generate
+    - get_video_features

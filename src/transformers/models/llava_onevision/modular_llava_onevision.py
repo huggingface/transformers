@@ -45,6 +45,7 @@ from ...image_utils import (
     get_image_size,
 )
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
+from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import Unpack
 from ...utils import (
     TensorType,
@@ -245,7 +246,7 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
             image_newline (`torch.Tensor` of shape `(embed_dim)`)
                 New line embedding vector.
             vision_aspect_ratio (`str`, *optional*, "anyres_max_9"):
-                Aspect ratio used when processong image features. The default value is "anyres_max_9".
+                Aspect ratio used when processing image features. The default value is "anyres_max_9".
         Returns:
             image_features (`torch.Tensor` of shape `(all_feat_len, embed_dim)`)
             feature_lens (`list[int]`)
@@ -312,6 +313,10 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
         image_features = image_features.view(batch_frames, -1, dim)
         return image_features
 
+    @can_return_tuple
+    @auto_docstring(
+        custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
+    )
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
@@ -320,27 +325,15 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
         vision_feature_select_strategy: str | None = None,
         vision_aspect_ratio: str | None = None,
         batch_num_images: torch.LongTensor | None = None,
-    ):
-        """
-        Obtains image last hidden states from the vision tower and apply multimodal projection.
-
-        Args:
-            pixel_values (`torch.FloatTensor]` of shape `(batch_size, num_patches, channels, height, width)`)
-               The tensors corresponding to the input images.
-            image_sizes (`torch.Tensor` of shape `(num_images, 2)`)
-                Actual image size of each images (H, W).
-            vision_feature_layer (`Union[int, list[int]]`):
-                The index of the layer to select the vision feature. If multiple indices are provided,
-                the vision feature of the corresponding indices will be concatenated to form the
-                vision features.
-            vision_feature_select_strategy (`str`):
-                The feature selection strategy used to select the vision feature from the vision backbone.
-                Can be one of `"default"` or `"full"`
-            batch_num_images (`torch.LongTensor`, *optional*):
-                Number of images in each sample.
-        Returns:
-            image_features (list[`torch.Tensor`]): List of image feature tensor, each contains all the visual feature of all patches
-            and are of shape `(num_patches, image_length, embed_dim)`).
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        image_sizes (`torch.Tensor` of shape `(num_images, 2)`):
+            Actual image size of each images (H, W).
+        vision_aspect_ratio (`str`, *optional*, defaults to `"anyres_max_9"`):
+            Aspect ratio used when processing image features. The default value is "anyres_max_9".
+        batch_num_images (`torch.LongTensor`, *optional*):
+            Number of images in each sample.
         """
         vision_feature_layer = (
             vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
@@ -378,13 +371,14 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
             # otherwise has to be stacked from list of (num_patches, num_channels, height, width)
             raise ValueError(f"pixel_values of shape {pixel_values.shape}, expect to be of 4 or 5 dimensions")
 
-        image_features = self.vision_tower(pixel_values, output_hidden_states=True)
+        kwargs["output_hidden_states"] = True
+        image_outputs = self.vision_tower(pixel_values, **kwargs)
         # If we have one vision feature layer, return the corresponding hidden states,
         # otherwise, select the hidden states of each feature layer and concatenate them
         if isinstance(vision_feature_layer, int):
-            selected_image_feature = image_features.hidden_states[vision_feature_layer]
+            selected_image_feature = image_outputs.hidden_states[vision_feature_layer]
         else:
-            hs_pool = [image_features.hidden_states[layer_idx] for layer_idx in vision_feature_layer]
+            hs_pool = [image_outputs.hidden_states[layer_idx] for layer_idx in vision_feature_layer]
             selected_image_feature = torch.cat(hs_pool, dim=-1)
 
         if vision_feature_select_strategy == "default":
@@ -398,41 +392,52 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
             image_newline=self.image_newline,
             vision_aspect_ratio=vision_aspect_ratio,
         )
-        return image_features
+        image_outputs.pooler_output = image_features
 
+        return image_outputs
+
+    @can_return_tuple
+    @auto_docstring(
+        custom_intro="Obtains video last hidden states from the vision tower, apply multimodal projection and pooling."
+    )
     def get_video_features(
         self,
         pixel_values: torch.FloatTensor,
-        vision_feature_layer: int | list[int],
-        vision_feature_select_strategy: str,
-    ):
+        vision_feature_layer: int | list[int] | None = None,
+        vision_feature_select_strategy: str | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values (`torch.FloatTensor]` of shape `(batch_size, num_frames, channels, height, width)`)
+            The tensors corresponding to the input video.
+        vision_feature_layer (`Union[int, list[int]], *optional*, defaults to -2`):
+            The index of the layer to select the vision feature. If multiple indices are provided,
+            the vision feature of the corresponding indices will be concatenated to form the
+            vision features.
+        vision_feature_select_strategy (`str`):
+            The feature selection strategy used to select the vision feature from the vision backbone.
+            Can be one of `"default"` or `"full"`
         """
-        Obtains video last hidden states from the vision tower, apply multimodal projection and pooling.
+        vision_feature_layer = (
+            vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
+        )
+        vision_feature_select_strategy = (
+            vision_feature_select_strategy
+            if vision_feature_select_strategy is not None
+            else self.config.vision_feature_select_strategy
+        )
 
-        Args:
-            pixel_values (`torch.FloatTensor]` of shape `(batch_size, num_frames, channels, height, width)`)
-               The tensors corresponding to the input video.
-            vision_feature_layer (`Union[int, list[int]], *optional*, defaults to -2`):
-                The index of the layer to select the vision feature. If multiple indices are provided,
-                the vision feature of the corresponding indices will be concatenated to form the
-                vision features.
-            vision_feature_select_strategy (`str`):
-                The feature selection strategy used to select the vision feature from the vision backbone.
-                Can be one of `"default"` or `"full"`
-        Returns:
-            video_features (list[`torch.Tensor`]): List of video feature tensor, each contains all the visual feature of all patches
-            and are of shape `(num_videos, video_length, embed_dim)`).
-        """
         batch_size, frames, channels, height, width = pixel_values.shape
         pixel_values = pixel_values.view(batch_size * frames, channels, height, width)
-        video_features = self.vision_tower(pixel_values, output_hidden_states=True)
+        kwargs["output_hidden_states"] = True
+        vision_outputs = self.vision_tower(pixel_values, **kwargs)
 
         # If we have one vision feature layer, return the corresponding hidden states,
         # otherwise, select the hidden states of each feature layer and concatenate them
         if isinstance(vision_feature_layer, int):
-            selected_video_feature = video_features.hidden_states[vision_feature_layer]
+            selected_video_feature = vision_outputs.hidden_states[vision_feature_layer]
         else:
-            hs_pool = [video_features.hidden_states[layer_idx] for layer_idx in vision_feature_layer]
+            hs_pool = [vision_outputs.hidden_states[layer_idx] for layer_idx in vision_feature_layer]
             selected_video_feature = torch.cat(hs_pool, dim=-1)
 
         if vision_feature_select_strategy == "default":
@@ -441,8 +446,9 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
 
         video_features = self.apply_pooling(video_features)
         video_features = video_features.reshape(batch_size, frames * video_features.shape[1], -1)
+        vision_outputs.pooler_output = video_features
 
-        return video_features
+        return vision_outputs
 
     def forward(
         self,
@@ -470,7 +476,7 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
         image_sizes_videos (`torch.LongTensor` of shape `(batch_size, frames, 2)`, *optional*):
             The sizes of the videos in the batch, being (height, width) for each frame in the video.
         vision_aspect_ratio (`str`, *optional*, defaults to `"anyres_max_9"`):
-            Aspect ratio used when processong image features. The default value is "anyres_max_9".
+            Aspect ratio used when processing image features. The default value is "anyres_max_9".
         batch_num_images (`torch.LongTensor`, *optional*):
             Number of images in each sample.
         """
@@ -506,7 +512,8 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
                 vision_feature_layer=vision_feature_layer,
                 vision_feature_select_strategy=vision_feature_select_strategy,
                 batch_num_images=batch_num_images,
-            )
+                return_dict=True,
+            ).pooler_output
             image_features = torch.cat(image_features, dim=0)
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask, _ = self.get_placeholder_mask(
@@ -520,7 +527,8 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
                 pixel_values_videos,
                 vision_feature_layer=vision_feature_layer,
                 vision_feature_select_strategy=vision_feature_select_strategy,
-            )
+                return_dict=True,
+            ).pooler_output
             image_newline = (
                 self.image_newline[None, None, :].repeat(video_features.shape[0], 1, 1).to(video_features.device)
             )
@@ -585,7 +593,7 @@ class LlavaOnevisionForConditionalGeneration(LlavaNextVideoForConditionalGenerat
         image_sizes_videos (`torch.LongTensor` of shape `(batch_size, frames, 2)`, *optional*):
             The sizes of the videos in the batch, being (height, width) for each frame in the video.
         vision_aspect_ratio (`str`, *optional*, defaults to `"anyres_max_9"`):
-            Aspect ratio used when processong image features. The default value is "anyres_max_9".
+            Aspect ratio used when processing image features. The default value is "anyres_max_9".
         batch_num_images (`torch.LongTensor`, *optional*):
             Number of images in each sample.
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -723,6 +731,35 @@ class LlavaOnevisionForConditionalGeneration(LlavaNextVideoForConditionalGenerat
             model_inputs["image_sizes_videos"] = image_sizes_videos
 
         return model_inputs
+
+    @auto_docstring
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        image_sizes: torch.Tensor,
+        vision_feature_layer: int | list[int] | None = None,
+        vision_feature_select_strategy: str | None = None,
+        vision_aspect_ratio: str | None = None,
+        batch_num_images: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        image_sizes (`torch.Tensor` of shape `(num_images, 2)`):
+            Actual image size of each images (H, W).
+        vision_aspect_ratio (`str`, *optional*, defaults to `"anyres_max_9"`):
+            Aspect ratio used when processing image features. The default value is "anyres_max_9".
+        batch_num_images (`torch.LongTensor`, *optional*):
+            Number of images in each sample.
+        """
+        return self.model.get_image_features(
+            pixel_values=pixel_values,
+            image_sizes=image_sizes,
+            vision_feature_layer=vision_feature_layer,
+            vision_feature_select_strategy=vision_feature_select_strategy,
+            vision_aspect_ratio=vision_aspect_ratio,
+            batch_num_images=batch_num_images,
+            **kwargs,
+        )
 
 
 __all__ = [

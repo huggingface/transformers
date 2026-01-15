@@ -170,3 +170,4 @@ for i, transcription in enumerate(transcriptions):
 
 [[autodoc]] GraniteSpeechForConditionalGeneration
     - forward
+    - get_audio_features

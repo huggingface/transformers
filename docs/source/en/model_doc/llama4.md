@@ -426,6 +426,7 @@ model = Llama4ForConditionalGeneration.from_pretrained(
 
 [[autodoc]] Llama4ForConditionalGeneration
     - forward
+    - get_image_features
 
 ## Llama4ForCausalLM
 

@@ -31,7 +31,13 @@ from ...integrations import use_kernel_forward_from_hub
 from ...masking_utils import create_causal_mask, create_chunked_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, CausalLMOutputWithPast, ModelOutput
+from ...modeling_outputs import (
+    BaseModelOutput,
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
+    CausalLMOutputWithPast,
+    ModelOutput,
+)
 from ...modeling_rope_utils import (
     ROPE_INIT_FUNCTIONS,
     dynamic_rope_update,
@@ -1198,30 +1204,25 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
     def get_decoder(self):
         return self.language_model.get_decoder()
 
+    @can_return_tuple
+    @auto_docstring(custom_intro="Obtains image last hidden states from the vision tower and apply al projection.")
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         vision_feature_select_strategy: str,
-        **kwargs,
-    ):
-        """
-        Obtains image last hidden states from the vision tower and apply al projection.
-
-        Args:
-            pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`)
-               The tensors corresponding to the input images.
-            vision_feature_select_strategy (`str`):
-                The feature selection strategy used to select the vision feature from the vision backbone.
-                Can be one of `"default"` or `"full"`
-        Returns:
-            image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`)
+            The tensors corresponding to the input images.
+        vision_feature_select_strategy (`str`):
+            The feature selection strategy used to select the vision feature from the vision backbone.
+            Can be one of `"default"` or `"full"`
         """
         if vision_feature_select_strategy not in ["default", "full"]:
-            raise ValueError(f"Unexpected select feature strategy: {self.vision_feature_select_strategy}")
+            raise ValueError(f"Unexpected select feature strategy: {vision_feature_select_strategy}")
         kwargs = {k: v for k, v in kwargs.items() if v is not None}
-        image_outputs = self.vision_model(pixel_values, output_hidden_states=False, **kwargs)
-        hidden_state = image_outputs.last_hidden_state
-        return hidden_state
+        return self.vision_model(pixel_values, **kwargs)
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
@@ -1319,7 +1320,8 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
             image_features = self.get_image_features(
                 pixel_values=pixel_values,
                 vision_feature_select_strategy=vision_feature_select_strategy,
-            )
+                return_dict=True,
+            ).pooler_output
 
             vision_flat = image_features.view(-1, image_features.size(-1))
             projected_vision_flat = self.multi_modal_projector(vision_flat).to(

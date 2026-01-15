@@ -187,11 +187,13 @@ print(generated_texts[0])
 
 [[autodoc]] SmolVLMModel
     - forward
+    - get_image_features
 
 ## SmolVLMForConditionalGeneration
 
 [[autodoc]] SmolVLMForConditionalGeneration
     - forward
+    - get_image_features
 
 ## SmolVLMImageProcessor
 

@@ -107,6 +107,7 @@ print(processor.decode(generation[0]))
 
 [[autodoc]] T5Gemma2ForConditionalGeneration
     - forward
+    - get_image_features
 
 ## T5Gemma2ForSequenceClassification
 

@@ -74,7 +74,11 @@ class ChameleonModelTester:
         pad_token_id=0,
         vq_num_embeds=5,
         vq_embed_dim=5,
+        vq_resolution=512,
         vq_channel_multiplier=[1, 2],
+        vq_num_res_blocks=2,
+        vq_attn_resolutions=None,
+        vq_attn_type="vanilla",
         vq_img_token_start_id=10,  # has to be less than vocab size when added with vq_num_embeds
         scope=None,
     ):
@@ -104,7 +108,11 @@ class ChameleonModelTester:
         self.scope = scope
         self.vq_num_embeds = vq_num_embeds
         self.vq_embed_dim = vq_embed_dim
+        self.vq_resolution = vq_resolution
         self.vq_channel_multiplier = vq_channel_multiplier
+        self.vq_num_res_blocks = vq_num_res_blocks
+        self.vq_attn_resolutions = vq_attn_resolutions
+        self.vq_attn_type = vq_attn_type
         self.vq_img_token_start_id = vq_img_token_start_id
 
     def prepare_config_and_inputs(self):
@@ -165,9 +173,13 @@ class ChameleonModelTester:
             "embed_dim": self.vq_embed_dim,
             "num_embeddings": self.vq_num_embeds,
             "latent_channels": self.vq_embed_dim,
+            "resolution": self.vq_resolution,
             "in_channels": 3,
             "base_channels": 32,  # we have a GroupNorm of 32 groups, so can't do less
             "channel_multiplier": self.vq_channel_multiplier,
+            "num_res_blocks": self.vq_num_res_blocks,
+            "attn_resolutions": self.vq_attn_resolutions,
+            "attn_type": self.vq_attn_type,
         }
 
     def create_and_check_model(self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels):
@@ -219,6 +231,18 @@ class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_batching_equivalence(self):
         pass
 
+    @unittest.skip("Skip get_image_features tests as those are tested via ChameleonVision2SeqModelTest instead")
+    def test_get_image_features_output(self):
+        pass
+
+    @unittest.skip("Skip get_image_features tests as those are tested via ChameleonVision2SeqModelTest instead")
+    def test_get_image_features_hidden_states(self):
+        pass
+
+    @unittest.skip("Skip get_image_features tests as those are tested via ChameleonVision2SeqModelTest instead")
+    def test_get_image_features_attentions(self):
+        pass
+
 
 class ChameleonVision2SeqModelTester(ChameleonModelTester):
     def __init__(self, parent, image_size=10, **kwargs):
@@ -255,6 +279,7 @@ class ChameleonVision2SeqModelTest(ModelTesterMixin, GenerationTesterMixin, Pipe
         if is_torch_available()
         else {}
     )
+    # skip_test_image_features_output_shape = True  # Align uses index 1 for hidden_size instead of last index
 
     def setUp(self):
         self.model_tester = ChameleonVision2SeqModelTester(self)
@@ -321,6 +346,24 @@ class ChameleonVision2SeqModelTest(ModelTesterMixin, GenerationTesterMixin, Pipe
             # two images and two image tokens don't raise an error
             pixel_values = torch.cat([pixel_values, pixel_values], dim=0)
             _ = model(input_ids=input_ids, pixel_values=pixel_values)
+
+    def _image_features_get_expected_num_hidden_states(self, model_tester=None):
+        if model_tester is None:
+            model_tester = self.model_tester
+        # The number of ChameleonVQVAEEncoderResnetBlock instances, plus 1 for before the block
+        return len(model_tester.vq_channel_multiplier) * model_tester.vq_num_res_blocks + 3
+
+    def _image_features_get_expected_num_attentions(self, model_tester=None):
+        if model_tester is None:
+            model_tester = self.model_tester
+        # The number of ChameleonVQVAEEncoderAttnBlock instances
+        if (
+            model_tester.vq_attn_resolutions
+            and model_tester.vq_resolution in model_tester.vq_attn_resolutions
+            and model_tester.vq_attn_type == "vanilla"
+        ):
+            return len(model_tester.vq_channel_multiplier) * model_tester.vq_num_res_blocks + 1
+        return 1
 
 
 @require_torch

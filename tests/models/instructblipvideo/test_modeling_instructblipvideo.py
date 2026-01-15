@@ -489,6 +489,8 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyTest(
         (InstructBlipVideoForConditionalGeneration, InstructBlipVideoModel) if is_torch_available() else ()
     )
     additional_model_inputs = ["qformer_input_ids", "input_ids"]
+    # InstructBlipVideo merges batch_size and num_frames in the first output dimension
+    skip_test_video_features_output_shape = True
 
     test_resize_embeddings = True
     test_attention_outputs = False
@@ -624,6 +626,12 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyTest(
                         and submodule.config._attn_implementation == "sdpa"
                     ):
                         raise ValueError("The eager model should not have SDPA attention layers")
+
+    def _video_features_prepare_config_and_inputs(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        del inputs_dict["input_ids"]
+        del inputs_dict["attention_mask"]
+        return config, inputs_dict
 
 
 # We will verify our results on an image of cute cats

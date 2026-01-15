@@ -89,6 +89,8 @@ probs = outputs.logits_per_image.softmax(dim=-1)
 
 [[autodoc]] Aimv2Model
     - forward
+    - get_text_features
+    - get_image_features
 
 ## Aimv2VisionModel
 

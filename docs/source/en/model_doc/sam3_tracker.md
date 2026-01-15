@@ -319,6 +319,7 @@ Sam3Tracker can use masks from previous predictions as input to refine segmentat
 
 [[autodoc]] Sam3TrackerModel
     - forward
+    - get_image_features
 
 ## Sam3TrackerPreTrainedModel
 

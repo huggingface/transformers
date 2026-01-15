@@ -48,3 +48,5 @@ new zero-shot vision tasks such as image classification or retrieval.
 
 [[autodoc]] VisionTextDualEncoderModel
     - forward
+    - get_text_features
+    - get_image_features

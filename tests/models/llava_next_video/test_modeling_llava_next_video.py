@@ -205,6 +205,10 @@ class LlavaNextVideoForConditionalGenerationModelTest(ModelTesterMixin, Generati
         if is_torch_available()
         else ()
     )
+    # LlavaNextVideo merges batch_size and num_patches in the first output dimension
+    skip_test_image_features_output_shape = True
+    # LlavaNextVideo merges batch_size and num_frames in the first output dimension
+    skip_test_video_features_output_shape = True
 
     _is_composite = True
 
@@ -328,6 +332,11 @@ class LlavaNextVideoForConditionalGenerationModelTest(ModelTesterMixin, Generati
     )
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
         pass
+
+    def _video_features_prepare_config_and_inputs(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        inputs_dict = {"pixel_values": inputs_dict["pixel_values_videos"]}
+        return config, inputs_dict
 
 
 @require_torch

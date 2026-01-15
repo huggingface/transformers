@@ -18,10 +18,11 @@ from torch import nn
 
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...modeling_outputs import CausalLMOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...models.auto.modeling_auto import AutoModel
-from ...utils import auto_docstring, can_return_tuple, logging
+from ...processing_utils import Unpack
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from .configuration_fuyu import FuyuConfig
 
 
@@ -113,19 +114,20 @@ class FuyuModel(FuyuPreTrainedModel):
             )
         return output_embeddings
 
-    def get_image_features(self, pixel_values: torch.FloatTensor, **kwargs):
-        """
-        Encodes images into continuous embeddings that can be forwarded to the language model.
-
-        Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-                The tensors corresponding to the input images.
+    @can_return_tuple
+    @auto_docstring
+    def get_image_features(
+        self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input images.
         """
         patch_embeddings = [
             self.vision_embed_tokens(patch.to(self.vision_embed_tokens.weight.dtype)).squeeze(0)
             for patch in pixel_values
         ]
-        return patch_embeddings
+        return BaseModelOutputWithPooling(last_hidden_state=patch_embeddings)
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
@@ -204,7 +206,7 @@ class FuyuModel(FuyuPreTrainedModel):
             inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
 
         if image_patches is not None:
-            patch_embeddings = self.get_image_features(image_patches)
+            patch_embeddings = self.get_image_features(image_patches, return_dict=True).last_hidden_state
             patch_embeddings = torch.cat(patch_embeddings, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=patch_embeddings

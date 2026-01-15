@@ -1534,7 +1534,9 @@ class Sam2VideoModel(Sam2Model):
         else:
             # Compute features using image encoder
             image_batch = inference_session.get_frame(frame_idx).unsqueeze(0)  # Add batch dimension
-            vision_feats, vision_pos_embeds, _, _ = self.get_image_features(image_batch)
+            image_outputs = self.get_image_features(image_batch, return_dict=True)
+            vision_feats = image_outputs.fpn_hidden_states
+            vision_pos_embeds = image_outputs.fpn_position_embeddings
             # Cache features
             inference_session.cache.cache_vision_features(
                 frame_idx, {"vision_feats": vision_feats, "vision_pos_embeds": vision_pos_embeds}
@@ -1639,10 +1641,10 @@ class Sam2VideoModel(Sam2Model):
         vision_hidden_states = None
 
         if pixel_values is not None:
-            feature_maps, _, vision_hidden_states, vision_attentions = self.get_image_features(
-                pixel_values,
-                **kwargs,
-            )
+            image_outputs = self.get_image_features(pixel_values, return_dict=True, **kwargs)
+            feature_maps = image_outputs.fpn_hidden_states
+            vision_hidden_states = image_outputs.hidden_states
+            vision_attentions = image_outputs.attentions
 
             # add no memory embedding to the last feature map
             feature_maps[-1] = feature_maps[-1] + self.no_memory_embedding

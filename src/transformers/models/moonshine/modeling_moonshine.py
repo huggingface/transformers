@@ -556,7 +556,7 @@ class MoonshineEncoder(MoonshinePreTrainedModel):
         input_values: torch.FloatTensor,
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPast:
+    ) -> tuple | BaseModelOutputWithPast:
         r"""
         Args:
             input_values (`torch.FloatTensor` of shape `(batch_size, audio_length)`):
