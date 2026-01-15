@@ -296,7 +296,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("olmoe", "OlmoeModel"),
         ("omdet-turbo", "OmDetTurboForObjectDetection"),
         ("omniasr_ctc", "OmniASRForCTC"),
-        ("omniasr_encoder", "OmniASREncoder"),
+        ("omniasr_encoder", "OmniASRModel"),
         ("oneformer", "OneFormerModel"),
         ("openai-gpt", "OpenAIGPTModel"),
         ("opt", "OPTModel"),

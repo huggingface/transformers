@@ -354,6 +354,13 @@ class OmniASRLLMConfig(PreTrainedConfig):
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
+
+        
+    TODO
+    - docstrings for each parameter
+
+    TODO encoder_stacking used by Zero-Shot variant
+    https://github.com/facebookresearch/omnilingual-asr/blob/81f51e224ce9e74b02cc2a3eaf21b2d91d743455/src/omnilingual_asr/models/wav2vec2_llama/model.py#L1024
     """
 
     model_type = "omniasr_llm"
@@ -361,6 +368,14 @@ class OmniASRLLMConfig(PreTrainedConfig):
 
     # TODO change to omniasr vals
     # from other repo: https://github.com/harikc456/wav2vec2_llama_hf/blob/6153f04a7d3357d49601323fc1f7f4364bce6735/convert_to_hf.py#L237
+    # TODO default to 7bv2?
+    """
+    LLaMAConfig(model_dim=4096, max_seq_len=8192, vocab_size=10288, pad_idx=1, tied_embeddings=False, num_layers=12,            
+        num_attn_heads=8, num_key_value_heads=8, ffn_inner_dim=4096, ffn_inner_dim_scale=0.6666666666666666,                        
+        ffn_inner_dim_multiplier=1.0, ffn_inner_dim_multiple_of=256, rope_theta=10000.0, use_scaled_rope=False,                     
+        rope_scale=LLaMARoPEScaleConfig(factor=8.0, frequency_factors=(1.0, 4.0), original_context_length=8192), dropout_p=0.1,     
+        init_std=None, init_std_scale='layer', shard_embed_dim=True)  
+    """
     _default_text_config_kwargs = {
         "vocab_size": 10288,
         "hidden_size": 4096,
@@ -377,11 +392,13 @@ class OmniASRLLMConfig(PreTrainedConfig):
         self,
         encoder_config=None,
         text_config=None,
-        # TODO check token ids, took from Wav2Vec2
+        encoder_stacking=1,
+        num_lang_embeddings=1694,
         bos_token_id=0,
         pad_token_id=1,
         eos_token_id=2,
         unk_token_id=3,
+        num_special_tokens=1,
         **kwargs,
     ):
         
@@ -403,6 +420,9 @@ class OmniASRLLMConfig(PreTrainedConfig):
         self.vocab_size = text_config.vocab_size
         self.initializer_range = self.encoder_config.initializer_range
         self.unk_token_id = unk_token_id
+        self.encoder_stacking = encoder_stacking
+        self.num_lang_embeddings = num_lang_embeddings
+        self.num_special_tokens = num_special_tokens
 
         super().__init__(
             pad_token_id=pad_token_id,
@@ -411,9 +431,6 @@ class OmniASRLLMConfig(PreTrainedConfig):
             **kwargs,
         )
 
-    @property
-    def hidden_size(self):
-        return self.encoder_config.hidden_size
 
 
 __all__ = ["OmniASRCTCConfig", "OmniASRLLMConfig", "OmniASREncoderConfig"]

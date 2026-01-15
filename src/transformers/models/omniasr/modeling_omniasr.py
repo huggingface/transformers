@@ -24,6 +24,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ..auto import AutoModel, AutoModelForCausalLM
 from ...generation import GenerationMixin
 from ...integrations.deepspeed import is_deepspeed_zero3_enabled
 from ...integrations.fsdp import is_fsdp_managed_module
@@ -791,7 +792,7 @@ class OmniASRPreTrainedModel(PreTrainedModel):
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
                 init.uniform_(module.bias, a=-k, b=k)
 
-
+    
     def apply_weight_norm(self, legacy=True):
         weight_norm = nn.utils.weight_norm
         if hasattr(nn.utils.parametrizations, "weight_norm") and not legacy:
@@ -800,18 +801,18 @@ class OmniASRPreTrainedModel(PreTrainedModel):
         if is_deepspeed_zero3_enabled():
             import deepspeed
 
-            with deepspeed.zero.GatheredParameters(self.encoder.embed_positions.conv.weight, modifier_rank=0):
-                weight_norm(self.encoder.embed_positions.conv, name="weight", dim=2)
-            if hasattr(self.encoder.embed_positions.conv, "parametrizations"):
-                weight_g = self.encoder.embed_positions.conv.parametrizations.weight.original0
-                weight_v = self.encoder.embed_positions.conv.parametrizations.weight.original1
+            with deepspeed.zero.GatheredParameters(self.encoder.encoder.embed_positions.conv.weight, modifier_rank=0):
+                weight_norm(self.encoder.encoder.embed_positions.conv, name="weight", dim=2)
+            if hasattr(self.encoder.encoder.embed_positions.conv, "parametrizations"):
+                weight_g = self.encoder.encoder.embed_positions.conv.parametrizations.weight.original0
+                weight_v = self.encoder.encoder.embed_positions.conv.parametrizations.weight.original1
             else:
-                weight_g = self.encoder.embed_positions.conv.weight_g
-                weight_v = self.encoder.embed_positions.conv.weight_v
-            deepspeed.zero.register_external_parameter(self.encoder.embed_positions, weight_v)
-            deepspeed.zero.register_external_parameter(self.encoder.embed_positions, weight_g)
+                weight_g = self.encoder.encoder.embed_positions.conv.weight_g
+                weight_v = self.encoder.encoder.embed_positions.conv.weight_v
+            deepspeed.zero.register_external_parameter(self.encoder.encoder.embed_positions, weight_v)
+            deepspeed.zero.register_external_parameter(self.encoder.encoder.embed_positions, weight_g)
         else:
-            weight_norm(self.encoder.embed_positions.conv, name="weight", dim=2)
+            weight_norm(self.encoder.encoder.embed_positions.conv, name="weight", dim=2)
 
 
     def remove_weight_norm(self, legacy=True):
@@ -820,7 +821,7 @@ class OmniASRPreTrainedModel(PreTrainedModel):
             remove_weight_norm = torch.nn.utils.parametrize.remove_parametrizations
 
         # TODO deepspeed zero3 case
-        remove_weight_norm(self.encoder.embed_positions.conv, name="weight")
+        remove_weight_norm(self.encoder.encoder.embed_positions.conv, name="weight")
     
 
     def _get_feat_extract_output_lengths(
@@ -1103,6 +1104,7 @@ class OmniASRFeedForward(nn.Module):
         return hidden_states
 
 
+# TODO rename this to OmniASREncoder and unwrap .encoder?
 @auto_docstring
 class OmniASRModel(OmniASRPreTrainedModel):
     def __init__(self, config: OmniASREncoderConfig):
@@ -1240,39 +1242,9 @@ class OmniASRForCTC(OmniASRPreTrainedModel):
 
     def __init__(self, config: OmniASRCTCConfig):
         super().__init__(config)
-        self.model = OmniASRModel(config.encoder_config)
+        self.encoder = OmniASRModel(config.encoder_config)
         self.ctc_head = nn.Linear(config.hidden_size, config.vocab_size)
         self.post_init()
-
-    def apply_weight_norm(self, legacy=True):
-        weight_norm = nn.utils.weight_norm
-        if hasattr(nn.utils.parametrizations, "weight_norm") and not legacy:
-            weight_norm = nn.utils.parametrizations.weight_norm
-
-        if is_deepspeed_zero3_enabled():
-            import deepspeed
-
-            with deepspeed.zero.GatheredParameters(self.model.encoder.embed_positions.conv.weight, modifier_rank=0):
-                weight_norm(self.model.encoder.embed_positions.conv, name="weight", dim=2)
-            if hasattr(self.model.encoder.embed_positions.conv, "parametrizations"):
-                weight_g = self.model.encoder.embed_positions.conv.parametrizations.weight.original0
-                weight_v = self.model.encoder.embed_positions.conv.parametrizations.weight.original1
-            else:
-                weight_g = self.model.encoder.embed_positions.conv.weight_g
-                weight_v = self.model.encoder.embed_positions.conv.weight_v
-            deepspeed.zero.register_external_parameter(self.model.encoder.embed_positions, weight_v)
-            deepspeed.zero.register_external_parameter(self.model.encoder.embed_positions, weight_g)
-        else:
-            weight_norm(self.model.encoder.embed_positions.conv, name="weight", dim=2)
-
-
-    def remove_weight_norm(self, legacy=True):
-        remove_weight_norm = nn.utils.remove_weight_norm
-        if hasattr(nn.utils.parametrizations, "weight_norm") and not legacy:
-            remove_weight_norm = torch.nn.utils.parametrize.remove_parametrizations
-
-        # TODO deepspeed zero3 case
-        remove_weight_norm(self.model.encoder.embed_positions.conv, name="weight")
 
     @can_return_tuple
     @auto_docstring
@@ -1346,16 +1318,45 @@ class OmniASRForCTC(OmniASRPreTrainedModel):
 )
 class OmniASRForConditionalGeneration(OmniASRPreTrainedModel, GenerationMixin):
     config: OmniASRLLMConfig
-    # below is from Voxtral
+    # TODO keep below from Voxtral?
     # _keep_in_fp32_modules_strict = ["embed_positions"]
+
+    # TODO encoder_stacking used by Zero-Shot variant
+    # https://github.com/facebookresearch/omnilingual-asr/blob/81f51e224ce9e74b02cc2a3eaf21b2d91d743455/src/omnilingual_asr/models/wav2vec2_llama/model.py#L1024
 
     def __init__(self, config):
         super().__init__(config)
-        self.vocab_size = config.text_config.vocab_size
-        self.audio_tower = AutoModel.from_config(config.encoder_config)
-        self.language_model = AutoModelForCausalLM.from_config(config.text_config)
-        self.multi_modal_projector = VoxtralMultiModalProjector(config)
+        self.vocab_size = config.vocab_size
+        self.encoder = AutoModel.from_config(config.encoder_config)
+
+        # NOTE not using AutoModelForCausalLM because mismatch between embed_token and lm_head in original?
+        # see: https://github.com/facebookresearch/omnilingual-asr/blob/81f51e224ce9e74b02cc2a3eaf21b2d91d743455/src/omnilingual_asr/models/wav2vec2_llama/factory.py#L215
+        # self.language_model = AutoModelForCausalLM.from_config(config.text_config)
+        self.language_model = AutoModel.from_config(config.text_config)
+        self.lm_head = nn.Linear(config.text_config.hidden_size, config.vocab_size - config.num_special_tokens, bias=False)
+
+        # Original: https://github.com/facebookresearch/omnilingual-asr/blob/81f51e224ce9e74b02cc2a3eaf21b2d91d743455/src/omnilingual_asr/models/wav2vec2_llama/factory.py#L205
+        self.multi_modal_projector = nn.Linear(
+            config.encoder_config.hidden_size * config.encoder_stacking,
+            config.text_config.hidden_size,
+            bias=True,
+        )
+
+        # Original: https://github.com/facebookresearch/omnilingual-asr/blob/main/src/omnilingual_asr/models/wav2vec2_llama/factory.py#L232-L251
+        self.lang_embeddings = nn.Embedding(config.num_lang_embeddings, config.text_config.hidden_size)
+
+        # self.lm_head = nn.Linear(config.text_config.hidden_size, config.vocab_size, bias=False)
         self.post_init()
+
+    def get_audio_features(self, input_features: torch.FloatTensor):
+        # TODO use encoder and multimodal projector to get audio features
+        # similar to this from original: https://github.com/facebookresearch/omnilingual-asr/blob/81f51e224ce9e74b02cc2a3eaf21b2d91d743455/src/omnilingual_asr/models/wav2vec2_llama/model.py#L1003
+        
+        # below does something in similar style as Voxtral
+        audio_outputs = self.encoder(input_features)
+        audio_hidden_states = audio_outputs.last_hidden_state
+        audio_embeds = self.multi_modal_projector(audio_hidden_states)
+        return audio_embeds
 
 
 __all__ = [
