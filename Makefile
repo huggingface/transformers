@@ -11,21 +11,22 @@ exclude_folders :=  ""
 style:
 	ruff check $(check_dirs) setup.py conftest.py --fix --exclude $(exclude_folders)
 	ruff format $(check_dirs) setup.py conftest.py --exclude $(exclude_folders)
-	python setup.py deps_table_update
+	python utils/custom_init_isort.py
 	python utils/sort_auto_mappings.py
-	python utils/check_doc_toc.py --fix_and_overwrite
 
 
-# Check that the repo is in a good state
+# Check that the repo is in a good state (both style and consistency CI checks)
 # Note: each line is run in its own shell, and doing `-` before the command ignores the errors if any, continuing with next command
 check-repo:
 	ruff check $(check_dirs) setup.py conftest.py
 	ruff format --check $(check_dirs) setup.py conftest.py
-	python -c "from transformers import *" || (echo '🚨 import failed, this means you introduced unprotected imports! 🚨'; exit 1)
+	-python utils/custom_init_isort.py --check_only
 	-python utils/sort_auto_mappings.py --check_only
-	-python utils/check_doc_toc.py
+	-python -c "from transformers import *" || (echo '🚨 import failed, this means you introduced unprotected imports! 🚨'; exit 1)
 	-python utils/check_copies.py
 	-python utils/check_modular_conversion.py
+	-python utils/check_doc_toc.py
+	-python utils/check_docstrings.py
 	-python utils/check_dummies.py
 	-python utils/check_repo.py
 	-python utils/check_modeling_structure.py
@@ -34,14 +35,21 @@ check-repo:
 	-python utils/check_config_docstrings.py
 	-python utils/check_config_attributes.py
 	-python utils/check_doctest_list.py
-	-python utils/update_metadata.py --check-only 
-	-python utils/check_docstrings.py 
-	-python utils/add_dates.py --check-only 
+	-python utils/update_metadata.py --check-only  
+	-python utils/add_dates.py --check-only
+	-@{ \
+		md5sum src/transformers/dependency_versions_table.py > md5sum.saved; \
+		python setup.py deps_table_update; \
+		md5sum -c --quiet md5sum.saved || (printf "Error: the version dependency table is outdated.\nPlease run 'make fix-repo' and commit the changes.\n" && exit 1); \
+		rm md5sum.saved; \
+	}
 
 
 # Run all repo checks for which there is an automatic fix, most notably modular conversions
 # Note: each line is run in its own shell, and doing `-` before the command ignores the errors if any, continuing with next command
 fix-repo: style
+	-python setup.py deps_table_update
+	-python utils/check_doc_toc.py --fix_and_overwrite
 	-python utils/check_copies.py --fix_and_overwrite
 	-python utils/check_modular_conversion.py --fix_and_overwrite
 	-python utils/check_dummies.py --fix_and_overwrite
