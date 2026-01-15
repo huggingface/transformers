@@ -322,7 +322,7 @@ class AudioFlamingo3Encoder(AudioFlamingo3PreTrainedModel):
     def set_input_embeddings(self, value: nn.Module):
         self.conv1 = value
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @check_model_inputs
     def forward(
         self,
         input_features: torch.Tensor,

@@ -742,7 +742,7 @@ class Qwen2VisionTransformerPretrainedModel(Qwen2VLPreTrainedModel):
         rotary_pos_emb = rotary_pos_emb_full[pos_ids].flatten(1)
         return rotary_pos_emb
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,

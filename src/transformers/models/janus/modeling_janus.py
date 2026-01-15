@@ -878,7 +878,7 @@ class JanusVQVAE(JanusPreTrainedModel):
         self.gradient_checkpointing = False
         self.post_init()
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @check_model_inputs
     def encode(self, pixel_values: torch.LongTensor, **kwargs: Unpack[TransformersKwargs]) -> JanusVQVAEModelOutput:
         hidden_states = self.encoder(pixel_values)
         conv_hidden_states = self.quant_conv(hidden_states)

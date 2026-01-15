@@ -652,7 +652,7 @@ class GlmImageVQVAE(GlmImagePreTrainedModel):
         self.eval()  # GlmImage's VQ model is frozen
         self.post_init()
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @check_model_inputs
     def encode(self, hidden_states) -> GlmImageVQVAEModelOutput:
         conv_hidden_states = self.quant_conv(hidden_states)
         quantized_last_hidden_state, emb_loss, indices = self.quantize(conv_hidden_states)
@@ -716,7 +716,7 @@ class GlmImageVisionModel(GlmImagePreTrainedModel):
         pos_ids = torch.cat(pos_ids, dim=0)
         return pos_ids
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @check_model_inputs
     @auto_docstring
     def forward(
         self, pixel_values: torch.Tensor, grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]

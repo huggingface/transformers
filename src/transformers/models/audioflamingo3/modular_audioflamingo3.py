@@ -62,7 +62,7 @@ class AudioFlamingo3Encoder(Qwen2AudioEncoder):
         "attentions": AudioFlamingo3Attention,
     }
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @check_model_inputs
     def forward(
         self,
         input_features: torch.Tensor,

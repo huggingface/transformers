@@ -296,7 +296,7 @@ class GraniteSpeechCTCEncoder(GraniteSpeechPreTrainedModel):
         self.num_layers = config.num_layers
         self.post_init()
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @check_model_inputs
     def forward(
         self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:

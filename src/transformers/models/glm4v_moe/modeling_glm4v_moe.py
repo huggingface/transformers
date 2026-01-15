@@ -828,7 +828,7 @@ class Glm4vMoeVisionModel(Glm4vMoePreTrainedModel):
         rotary_pos_emb = rotary_pos_emb_full[pos_ids].flatten(1)
         return rotary_pos_emb, pos_ids
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @check_model_inputs
     @auto_docstring
     def forward(
         self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]

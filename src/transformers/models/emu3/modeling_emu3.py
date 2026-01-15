@@ -1002,7 +1002,7 @@ class Emu3VQVAE(PreTrainedModel):
 
         self.post_init()
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @check_model_inputs
     def encode(
         self, pixel_values: torch.Tensor, image_sizes: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> Emu3VQVAEModelOutput:

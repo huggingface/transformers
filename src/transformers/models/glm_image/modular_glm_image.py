@@ -586,7 +586,7 @@ class GlmImageVisionModel(Glm4vVisionModel):
         pos_ids = torch.cat(pos_ids, dim=0)
         return pos_ids
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @check_model_inputs
     @auto_docstring
     def forward(
         self, pixel_values: torch.Tensor, grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]

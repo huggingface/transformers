@@ -834,7 +834,7 @@ class ChameleonVQVAE(ChameleonPreTrainedModel):
         self.eval()  # Chameleon's VQ model is frozen
         self.post_init()
 
-    @check_model_inputs(tie_last_hidden_states=False)
+    @check_model_inputs
     def encode(
         self, pixel_values: torch.LongTensor, **kwargs: Unpack[TransformersKwargs]
     ) -> ChameleonVQVAEModelOutput:
