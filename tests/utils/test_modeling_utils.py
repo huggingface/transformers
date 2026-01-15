@@ -932,8 +932,10 @@ class ModelUtilsTest(TestCasePlus):
             _ = BertModel.from_pretrained(tmp_dir, use_safetensors=False)
 
             # We can load the model without specifying use_safetensors
-            with self.assertRaises(OSError):
-                BertModel.from_pretrained(tmp_dir)
+            new_model = BertModel.from_pretrained(tmp_dir)
+
+            for p1, p2 in zip(model.parameters(), new_model.parameters()):
+                torch.testing.assert_close(p1, p2)
 
     def test_checkpoint_variant_hub(self):
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -1276,7 +1278,7 @@ class ModelUtilsTest(TestCasePlus):
                 BertModel.from_pretrained(tmp_dir)
 
         self.assertTrue(
-            "Error no file named model.safetensors found in directory" in str(missing_model_file_error.exception),
+            "Error no file named model.safetensors, or pytorch_model.bin" in str(missing_model_file_error.exception),
             msg=missing_model_file_error.exception,
         )
 
