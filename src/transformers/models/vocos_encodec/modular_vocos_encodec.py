@@ -20,6 +20,7 @@ import torch.nn.functional as F
 from ... import initialization as init
 from ...utils import auto_docstring, can_return_tuple
 from ..vocos.modeling_vocos import VocosConvNeXtBlock, VocosModel, VocosOutput, VocosPreTrainedModel
+from ..vocos.modeling_vocos import VocosISTFTHead as VocosEncodecISTFTHead
 from .configuration_vocos_encodec import VocosEncodecConfig
 
 
@@ -70,8 +71,7 @@ class VocosEncodecPreTrainedModel(VocosPreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize the weights"""
-
-        if type(module).__name__ == "VocosEncodecISTFTHead":
+        if isinstance(module, (VocosEncodecISTFTHead)):
             window = torch.hann_window(module.win_length)
             init.copy_(module.window, window)
         elif isinstance(module, nn.Linear):

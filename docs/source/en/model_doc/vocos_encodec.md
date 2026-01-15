@@ -167,7 +167,7 @@ write_wav("vocos_bark.wav", sampling_rate, audio[0].detach().cpu().numpy())
 
 ## VocosEncodecConfig
 
-[[autodoc]] VocosConfig
+[[autodoc]] VocosEncodecConfig
 
 
 ## VocosEncodecProcessor

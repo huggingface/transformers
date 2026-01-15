@@ -32,7 +32,7 @@ class VocosConfig(PretrainedConfig):
 
     Args:
         n_mels (`int`, *optional*, defaults to 100):
-            Number of mel-spectrogram input channels (i.e. number of mel filter bins).
+            Number of mel filterbanks.
         hidden_size (`int`, *optional*, defaults to 512):
             Hidden dimension for the ConvNeXt backbone.
         intermediate_size (`int`, *optional*, defaults to 1536):
@@ -43,7 +43,7 @@ class VocosConfig(PretrainedConfig):
             Kernel size for depthwise convolutions.
         padding (`int`, *optional*, defaults to 3):
             Padding applied to depthwise convolutions.
-        layer_scale_init_value (`float`, *optional*, defaults to `0.125`):
+        layer_scale_init_value (`float`, *optional*, defaults to 0.125):
             Initial value for layer-scale (if >0, enables per-block scaling).
         layer_norm_eps (`float`, *optional*, defaults to 1e-06):
             Epsilon for all LayerNorm operations.

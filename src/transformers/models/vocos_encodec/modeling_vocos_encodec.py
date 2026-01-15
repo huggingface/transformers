@@ -102,37 +102,6 @@ class VocosEncodecConvNeXtBlock(nn.Module):
         return hidden_states
 
 
-class VocosEncodecPreTrainedModel(PreTrainedModel):
-    config_class = VocosEncodecConfig
-    base_model_prefix = "vocos_encodec"
-    main_input_name = "input_features"
-    supports_gradient_checkpointing = False
-
-    def _init_weights(self, module):
-        """Initialize the weights"""
-
-        if type(module).__name__ == "VocosEncodecISTFTHead":
-            window = torch.hann_window(module.win_length)
-            init.copy_(module.window, window)
-        elif isinstance(module, nn.Linear):
-            std = getattr(self.config, "initializer_range", 0.02)
-            init.normal_(module.weight, mean=0.0, std=std)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, nn.LayerNorm):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
-        elif isinstance(module, nn.Conv1d):
-            nn.init.kaiming_normal_(module.weight)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, VocosEncodecAdaptiveLayerNorm):
-            if hasattr(module, "bias") and module.bias is not None:
-                init.zeros_(module.bias)
-            if hasattr(module, "weight") and module.weight is not None:
-                init.ones_(module.weight)
-
-
 def custom_istft(input, n_fft: int, padding=None, **kwargs) -> "torch.Tensor":
     """
     Performs the Inverse Short Time Fourier Transform (ISTFT) on STFT coefficients to reconstruct audio in the time domain.
@@ -267,6 +236,36 @@ class VocosEncodecISTFTHead(nn.Module):
             padding=self.padding,
         )
         return audio
+
+
+class VocosEncodecPreTrainedModel(PreTrainedModel):
+    config_class = VocosEncodecConfig
+    base_model_prefix = "vocos_encodec"
+    main_input_name = "input_features"
+    supports_gradient_checkpointing = False
+
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        if isinstance(module, (VocosEncodecISTFTHead)):
+            window = torch.hann_window(module.win_length)
+            init.copy_(module.window, window)
+        elif isinstance(module, nn.Linear):
+            std = getattr(self.config, "initializer_range", 0.02)
+            init.normal_(module.weight, mean=0.0, std=std)
+            if module.bias is not None:
+                init.zeros_(module.bias)
+        elif isinstance(module, nn.LayerNorm):
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
+        elif isinstance(module, nn.Conv1d):
+            nn.init.kaiming_normal_(module.weight)
+            if module.bias is not None:
+                init.zeros_(module.bias)
+        elif isinstance(module, VocosEncodecAdaptiveLayerNorm):
+            if hasattr(module, "bias") and module.bias is not None:
+                init.zeros_(module.bias)
+            if hasattr(module, "weight") and module.weight is not None:
+                init.ones_(module.weight)
 
 
 @auto_docstring(
