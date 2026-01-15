@@ -198,12 +198,8 @@ class SolarOpenConfig(PretrainedConfig):
 
 class SolarOpenDecoderLayer(LlamaDecoderLayer):
     def __init__(self, config: SolarOpenConfig, layer_idx: int):
-        nn.Module.__init__(self)
-        self.hidden_size = config.hidden_size
-        self.self_attn = SolarOpenAttention(config=config, layer_idx=layer_idx)
+        super().__init__(config, layer_idx)
         self.mlp = SolarOpenMoE(config)
-        self.input_layernorm = SolarOpenRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = SolarOpenRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
 
 class SolarOpenMoE(Glm4MoeMoE):

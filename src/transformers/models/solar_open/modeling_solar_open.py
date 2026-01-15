@@ -46,6 +46,7 @@ class SolarOpenDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: SolarOpenConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
+
         self.self_attn = SolarOpenAttention(config=config, layer_idx=layer_idx)
         self.mlp = SolarOpenMoE(config)
         self.input_layernorm = SolarOpenRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
