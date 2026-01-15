@@ -39,7 +39,7 @@ Second, we coordinate this data through a progressive curriculum jointly optimiz
 Third, to enable reasoning capabilities through scalable RL, we apply our proposed framework SnapPO for efficient optimization.
 Across benchmarks in English and Korean, Solar Open achieves competitive performance, demonstrating the effectiveness of this methodology for underserved language AI development.
 
-Tips:
+## Usage Tips
 
 Recommended inference parameters for optimal performance:
 
