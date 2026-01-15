@@ -70,15 +70,14 @@ class SolarOpenModelTest(CausalLMModelTest, unittest.TestCase):
 @require_torch_accelerator
 @slow
 class SolarOpenIntegrationTest(unittest.TestCase):
+    def setup(self):
+        cleanup(torch_device, gc_collect=True)
+
     def tearDown(self):
-        cleanup(torch_device, gc_collect=False)
+        cleanup(torch_device, gc_collect=True)
 
     def test_batch_generation_dummy_bf16(self):
-        torch.manual_seed(42)
-        torch.cuda.manual_seed_all(42)
-        torch.backends.cudnn.deterministic = True
-        torch.use_deterministic_algorithms(True, warn_only=True)
-
+        """Original model is 100B, hence using a dummy model on our CI to sanity check against"""
         model_id = "SSON9/solar-open-tiny-dummy"
         prompts = [
             "Orange is the new black",
@@ -86,17 +85,16 @@ class SolarOpenIntegrationTest(unittest.TestCase):
         ]
         # expected random outputs from the tiny dummy model
         EXPECTED_DECODED_TEXT = [
-            "Orange is the new blackRIB catheterCCTV yshift catheter merits yshiftCCTVCCTVCCTVCCTVCCTVCCTVCCTVCCTVCCTVCCTVCCTVCCTVCCTV",
-            "Lorem ipsum dolor sit amet=√=√ 치수=√ 치수 치수 치수 치수 치수 Shelley Shelley Shelley Shelley Shelley Shelley Shelley Shelley Shelley площа площа",
+            'Orange is the new blackRIB yshift yshift catheter merits catheterCCTV meritsCCTVCCTVCCTVCCTVCCTVCCTV SyllabusCCTVCCTVCCTVCCTV Syllabus',
+            'Lorem ipsum dolor sit amet=√=√=√ 치수 치수 치수 치수 치수 치수 치수 Shelley Shelley Shelley Shelley Shelley Shelley Shelley Shelley площа площа',
         ]
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
-        model = SolarOpenForCausalLM.from_pretrained(model_id, device_map=torch_device, torch_dtype=torch.bfloat16)
+        model = SolarOpenForCausalLM.from_pretrained(model_id, experts_implementation="eager", device_map=torch_device, torch_dtype=torch.bfloat16)
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 
         generated_ids = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         generated_texts = tokenizer.batch_decode(generated_ids, skip_special_tokens=False)
-        print(generated_texts)
 
         for text, expected_text in zip(generated_texts, EXPECTED_DECODED_TEXT):
             self.assertEqual(text, expected_text)
