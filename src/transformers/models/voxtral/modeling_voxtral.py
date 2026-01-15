@@ -297,7 +297,7 @@ class VoxtralEncoder(VoxtralPreTrainedModel):
         input_features,
         attention_mask=None,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
         Args:
             input_features (`torch.LongTensor` of shape `(batch_size, feature_size, sequence_length)`):

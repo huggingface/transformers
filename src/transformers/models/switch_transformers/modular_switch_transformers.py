@@ -447,7 +447,7 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
         use_cache=None,
         cache_position=None,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> tuple | MoEModelOutputWithPastAndCrossAttentions:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 

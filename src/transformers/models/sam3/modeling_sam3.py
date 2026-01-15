@@ -1399,7 +1399,7 @@ class Sam3DetrEncoder(Sam3PreTrainedModel):
         text_mask: torch.Tensor | None = None,
         spatial_sizes: list[tuple[int, int]] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> tuple | Sam3DETREncoderOutput:
         """
         Forward pass for the DETR encoder.
 

@@ -68,7 +68,7 @@ class AudioFlamingo3Encoder(Qwen2AudioEncoder):
         input_features: torch.Tensor,
         input_features_mask: torch.Tensor | None = None,
         **kwargs,
-    ):
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
         Args:
             input_features (`torch.FloatTensor` of shape `(batch_size, feature_size, sequence_length)`):
