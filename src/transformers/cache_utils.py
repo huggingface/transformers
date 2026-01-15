@@ -353,8 +353,9 @@ class StaticLayer(CacheLayerMixin):
         )
 
         batch_size = key_states.shape[0]
+        self.keys = self.keys_map[batch_size]
+        self.values = self.values_map[batch_size]
 
-        
         self._current_batch_size = batch_size
 
         try:
