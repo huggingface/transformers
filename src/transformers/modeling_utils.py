@@ -24,7 +24,7 @@ import sys
 import warnings
 from abc import abstractmethod
 from collections import defaultdict
-from collections.abc import Callable, Iterator, Sequence
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
 from dataclasses import dataclass, replace
 from enum import Enum
@@ -179,7 +179,7 @@ class LoadStateDictConfig:
     hf_quantizer: HfQuantizer | None = None
     device_mesh: Optional["torch.distributed.device_mesh.DeviceMesh"] = None
     weights_only: bool = True
-    weight_mapping: Sequence[WeightConverter | WeightRenaming] | None = None
+    weight_mapping: list[WeightConverter | WeightRenaming] | None = None
 
     @property
     def is_quantized(self) -> bool:

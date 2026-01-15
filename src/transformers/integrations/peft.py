@@ -14,10 +14,9 @@
 import inspect
 import json
 import os
-from dataclasses import fields, replace
+from dataclasses import replace
 from typing import TYPE_CHECKING, Any, Literal, Optional
 
-from ..conversion_mapping import get_model_conversion_mapping
 from ..core_model_loading import (
     Concatenate,
     ConversionOps,
@@ -80,7 +79,9 @@ class PeftConcatenate(Concatenate):
             lora_b_out.append(torch.block_diag(lora_b_out[0][i], lora_b_out[1][i]))
         lora_b_out = torch.stack(lora_b_out[2:], dim=0)
         return {
-            full_layer_name + "_lora_A_weight": [lora_a_out],
+            full_layer_name + "_lora_A_weight": [
+                lora_a_out
+            ],  # @BenjaminBossan this depends on MoE implementation for 3 patams
             full_layer_name + "_lora_B_weight": [lora_b_out],
         }
 
@@ -99,7 +100,6 @@ def _build_peft_weight_mapping(
     # The just replace the operations (Concatenate, MergeModulelist) with the corresponding PeftMergeModuleList and PeftConcatenate
     for conversion in weight_conversions:
         if isinstance(conversion, WeightRenaming):
-            # we don't need to do anything, renamings are going to happen
             continue
         peft_weight_conversions = []
         for i, op in enumerate(conversion.operations):
@@ -110,11 +110,13 @@ def _build_peft_weight_mapping(
         # For source, we capture the orignal weights + the lora weights
         new_source_patterns = []
         for pat in list(conversion.source_patterns):
+            # we replace the weight pattern to colllect loras
             pat = pat.rsplit(".", 1)[0]
             new_source_patterns.append(f"{pat}.lora_A.*")
             new_source_patterns.append(f"{pat}.lora_B.*")
         conversion.source_patterns = new_source_patterns
         pat = conversion.target_patterns[0].rsplit(".", 1)[0]
+        # we make sure the target key is correct
         conversion.target_patterns = [pat + "_lora_A_weight", pat + "_lora_B_weight"]
         conversion.operations = peft_weight_conversions
     weight_conversions = [WeightRenaming("base_model.model.model", "model")] + weight_conversions
@@ -226,11 +228,7 @@ class PeftAdapterMixin:
 
         if local_files_only:
             kwargs["local_files_only"] = True
-        base_load_config = (
-            {field.name: getattr(load_config, field.name) for field in fields(LoadStateDictConfig)}
-            if load_config is not None
-            else {}
-        )
+        base_load_config = load_config.__dict__ if load_config is not None else {}
         base_load_config.update(kwargs)
         base_load_config.setdefault("pretrained_model_name_or_path", None)
         load_config = LoadStateDictConfig(**base_load_config)
@@ -255,8 +253,7 @@ class PeftAdapterMixin:
         if adapter_kwargs is None:
             adapter_kwargs = {}
 
-        key_mapping = adapter_kwargs.pop("key_mapping", None)
-        weight_conversions = get_model_conversion_mapping(self, key_mapping=key_mapping)
+        weight_conversions = load_config.weight_mapping
         peft_weight_conversions = _build_peft_weight_mapping(weight_conversions, adapter_name)
         peft_load_kwargs = {"low_cpu_mem_usage": low_cpu_mem_usage}
 

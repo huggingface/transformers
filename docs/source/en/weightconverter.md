@@ -131,12 +131,14 @@ At a high level, the contract looks like this:
 2. **Describe how to map weights.** Build a conversion/renaming list (for example, in a helper like
    `_build_peft_weight_mapping(...)`) using [`WeightConverter`] or [`WeightRenaming`]. This is where you express how
    checkpoint keys should be converted, split, merged, or renamed to match your model namespace.
+   You can do mostly 3 things:
+    - add operations to the list of converters: these will be applied on all weights except for the ones collected in any of the `WeightConverter`. These in general should be `WeightRenaming` operations
+    - add operations to the list of operations of each converter: this is what happens for `Quantization`, where we just add a quantization operation after the list of operations of any `WeightConverter`.
+    - replace / map operations to your custom operations: this is what happens with `peft`. We replace the `Concatenate` operation of say `mixtral`, to be `PeftConcatenate`. This way, when the adapter checkpoint is read, the weights to be concatenated are collected, and are properly formated for `peft`
 3. **Load + finalize + report.** Use the core loader to perform the conversion and populate tensors, then finalize and
    log results. Concretely, this flow is:
    - `LoadStateDictConfig(...)` + `_load_pretrained_model(...)` to load and convert.
    - `_finalize_load_state_dict(...)` to move any missing/mismatched tensors off `meta`, initialize them, and tie weights.
    - `log_state_dict_report(...)` to report missing/unexpected/mismatched keys (and conversion errors).
 
-Because the loader understands conversion dependencies, it can stream and schedule tensor materialization efficiently.
-That means you can mix and match operations (chunk, concatenate, split, reshape, permute, etc.) and still benefit from
-the same performance and memory properties described in this guide.
+These APIs are expose to allow you to handle custom code, custom weight format, but also make sure you benefit from the highest and most efficient weight loading, sharding and good quality of life of `transformers` API!
