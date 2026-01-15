@@ -297,7 +297,9 @@ class GraniteSpeechCTCEncoder(GraniteSpeechPreTrainedModel):
         self.post_init()
 
     @check_model_inputs(tie_last_hidden_states=False)
-    def forward(self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutputWithPooling:
+    def forward(
+        self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | BaseModelOutputWithPooling:
         hidden_states = self.input_linear(hidden_states)
         for idx, layer in enumerate(self.layers, start=1):
             hidden_states = layer(hidden_states, attention_dists=self.attention_dists)

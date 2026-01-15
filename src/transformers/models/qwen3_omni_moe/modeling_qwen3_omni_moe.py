@@ -1239,7 +1239,7 @@ class Qwen3OmniMoeVisionEncoder(Qwen3OmniMoePreTrainedModel):
     @check_model_inputs(tie_last_hidden_states=False)
     def forward(
         self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> BaseModelOutputWithDeepstackFeatures:
+    ) -> tuple | BaseModelOutputWithDeepstackFeatures:
         """
         Args:
             hidden_states (`torch.Tensor` of shape `(seq_len, hidden_size)`):

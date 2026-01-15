@@ -438,7 +438,7 @@ class GotOcr2VisionEncoder(GotOcr2PreTrainedModel):
     @check_model_inputs(tie_last_hidden_states=False)
     def forward(
         self, pixel_values: torch.FloatTensor | None = None, **kwargs: Unpack[TransformersKwargs]
-    ) -> GotOcr2VisionEncoderOutput:
+    ) -> tuple | GotOcr2VisionEncoderOutput:
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 

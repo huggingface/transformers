@@ -1251,7 +1251,7 @@ class Qwen2_5OmniVisionEncoder(Qwen2_5OmniPreTrainedModel):
     @check_model_inputs(tie_last_hidden_states=False)
     def forward(
         self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> torch.Tensor:
+    ) -> tuple | BaseModelOutputWithPooling:
         """
         Args:
             hidden_states (`torch.Tensor` of shape `(seq_len, hidden_size)`):

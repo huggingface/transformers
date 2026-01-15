@@ -107,7 +107,7 @@ class PeVideoEncoder(PeAudioVideoEncoder):
         pixel_values_videos: torch.Tensor,
         padding_mask_videos: torch.Tensor | None = None,
         **kwargs,
-    ) -> BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPooling:
         inputs_embeds, padding_mask = self.embedder(pixel_values_videos, padding_mask=padding_mask_videos)
         inputs_embeds, attention_mask = self.patch_embedder(inputs_embeds, padding_mask=padding_mask)
 

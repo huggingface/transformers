@@ -958,7 +958,7 @@ class PaddleOCRVisionModel(PaddleOCRVLPreTrainedModel):
         cu_seqlens: torch.Tensor,
         image_grid_thw: list[tuple[int, int, int] | list[tuple[int, int, int]]] | None = None,
         **kwargs,
-    ) -> BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPooling:
         """
         Args:
             pixel_values (`torch.FloatTensor` of shape `(batch_size, sequence_length, image_channels, patch_size, patch_size)`):

@@ -1694,7 +1694,7 @@ class Sam3DetrDecoder(Sam3PreTrainedModel):
         text_mask: torch.Tensor | None = None,
         spatial_shapes: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor | None, torch.Tensor | None]:
+    ) -> tuple | Sam3DETRDecoderOutput:
         """
         Forward pass for the DETR decoder.
 
@@ -2010,7 +2010,7 @@ class Sam3MaskDecoder(Sam3PreTrainedModel):
         prompt_features: torch.Tensor | None = None,
         prompt_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> dict[str, torch.Tensor]:
+    ) -> tuple | Sam3MaskDecoderOutput:
         """
         Args:
             decoder_queries: Decoder output queries [batch_size, num_queries, hidden_size]

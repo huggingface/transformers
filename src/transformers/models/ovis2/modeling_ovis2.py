@@ -421,7 +421,7 @@ class Ovis2VisionModel(Ovis2PreTrainedModel):
     @check_model_inputs(tie_last_hidden_states=False)
     def forward(
         self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+    ) -> tuple | BaseModelOutputWithVisualIndicatorFeatures:
         outputs = self.transformer(pixel_values, **kwargs)
         last_hidden_state = outputs[0]
         if self.config.hidden_stride > 1:
