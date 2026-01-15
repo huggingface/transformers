@@ -1613,24 +1613,6 @@ class Kosmos2_5TextForCausalLM(Kosmos2_5PreTrainedModel, GenerationMixin):
     ):
         # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
 
-        # Pixel values are used only in the first iteration if available
-        # In subsquent iterations, they are already cached
-        if past_key_values is not None and past_key_values.get_seq_length() > 0:
-            image_embeds = None
-            image_embeds_position_mask = None
-
-        # appending `False` to `image_embeds_position_mask` (because `input_ids` grows during generation)
-        elif image_embeds_position_mask is not None:
-            batch_size, seq_len = inputs_embeds.size()[:-1] if inputs_embeds is not None else input_ids.size()
-            mask_len = image_embeds_position_mask.size()[-1]
-            image_embeds_position_mask = torch.cat(
-                (
-                    image_embeds_position_mask,
-                    torch.zeros(size=(batch_size, seq_len - mask_len), dtype=torch.bool, device=input_ids.device),
-                ),
-                dim=1,
-            )
-
         model_inputs = super().prepare_inputs_for_generation(
             input_ids,
             inputs_embeds=inputs_embeds,
@@ -1644,8 +1626,33 @@ class Kosmos2_5TextForCausalLM(Kosmos2_5PreTrainedModel, GenerationMixin):
             is_first_iteration=is_first_iteration,
             **model_kwargs,
         )
-        # Kosmos2.5 has offset for position ids, so we need to create them correctly in PositionEmbedding layer
-        model_inputs.pop("position_ids", None)
+
+        # Pixel values are used only in the first iteration if available
+        # In subsquent iterations, they are already cached
+        if past_key_values is not None and past_key_values.get_seq_length() > 0:
+            model_inputs["image_embeds"] = None
+            model_inputs["image_embeds_position_mask"] = None
+            model_inputs["position_ids"] = (
+                Kosmos2_5TextSinusoidalPositionalEmbedding.create_position_ids_from_input_ids(
+                    input_ids,
+                    padding_idx=self.config.pad_token_id,
+                    past_key_values_length=0,
+                )[:, -cache_position.shape[0] :]
+            )
+
+        # appending `False` to `image_embeds_position_mask` (because `input_ids` grows during generation)
+        elif image_embeds_position_mask is not None:
+            batch_size, seq_len = inputs_embeds.size()[:-1] if inputs_embeds is not None else input_ids.size()
+            mask_len = image_embeds_position_mask.size()[-1]
+            model_inputs["image_embeds_position_mask"] = torch.cat(
+                (
+                    image_embeds_position_mask,
+                    torch.zeros(size=(batch_size, seq_len - mask_len), dtype=torch.bool, device=input_ids.device),
+                ),
+                dim=1,
+            )
+            # Kosmos2.5 has offset for position ids, so we need to create them correctly in PositionEmbedding layer
+            model_inputs.pop("position_ids", None)
 
         return model_inputs
 
