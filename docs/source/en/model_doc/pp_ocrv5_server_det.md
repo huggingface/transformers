@@ -27,6 +27,7 @@ import requests
 from PIL import Image
 from transformers import AutoImageProcessor, AutoModelForObjectDetection
 
+model_path = "PaddlePaddle/PP-OCRV5_server_det_safetensors"
 model = AutoModelForObjectDetection.from_pretrained(model_path)
 image_processor = AutoImageProcessor.from_pretrained(model_path)
 
@@ -57,6 +58,7 @@ import requests
 from PIL import Image
 from transformers import AutoImageProcessor, AutoModelForObjectDetection
 
+model_path = "PaddlePaddle/PP-OCRV5_server_det_safetensors"
 model = AutoModelForObjectDetection.from_pretrained(model_path)
 image_processor = AutoImageProcessor.from_pretrained(model_path)
 

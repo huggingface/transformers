@@ -2300,6 +2300,8 @@ class PPOCRV5ServerDetForObjectDetection(PPOCRV5ServerDetPreTrainedModel):
     and returns outputs compatible with the Transformers object detection API.
     """
 
+    _keys_to_ignore_on_load_missing = ["num_batches_tracked"]
+
     def __init__(self, config: PPOCRV5ServerDetConfig):
         """
         Initialize the PPOCRV5ServerDetForObjectDetection with the specified configuration.
