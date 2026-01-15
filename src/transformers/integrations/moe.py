@@ -101,7 +101,7 @@ def batched_mm_experts_forward(
     selected_down = self.down_proj[expert_ids]  # (S, hidden_dim, intermediate_dim)
 
     # --- Up projection per expert (batched) ---
-    if getattr(self, "experts_are_transposed", False):
+    if getattr(self, "transposed_weights", False):
         gate_up_out = torch.bmm(current_hidden_states.unsqueeze(1), selected_gate_up).squeeze(1)
     else:
         gate_up_out = torch.bmm(selected_gate_up, current_hidden_states.unsqueeze(-1)).squeeze(-1)
@@ -119,7 +119,7 @@ def batched_mm_experts_forward(
         hidden_after_activation = self.act_fn(gate) * up  # (S, intermediate_dim)
 
     # --- Down projection per expert (batched) ---
-    if getattr(self, "experts_are_transposed", False):
+    if getattr(self, "transposed_weights", False):
         out_per_sample = torch.bmm(hidden_after_activation.unsqueeze(1), selected_down).squeeze(1)
     else:
         out_per_sample = torch.bmm(selected_down, hidden_after_activation.unsqueeze(-1)).squeeze(-1)
@@ -189,7 +189,7 @@ def grouped_mm_experts_forward(
     offsets = torch.cumsum(num_tokens_per_expert, dim=0, dtype=torch.int32)
 
     # --- Up projection per expert (grouped_mm) ---
-    if getattr(self, "experts_are_transposed", False):
+    if getattr(self, "transposed_weights", False):
         gate_up_out = torch._grouped_mm(current_states_g, self.gate_up_proj, offs=offsets)
     else:
         gate_up_out = torch._grouped_mm(current_states_g, self.gate_up_proj.transpose(-2, -1), offs=offsets)
@@ -208,7 +208,7 @@ def grouped_mm_experts_forward(
         hidden_after_activation = self.act_fn(gate) * up  # (S, intermediate_dim)
 
     # --- Down projection per expert (grouped_mm) ---
-    if getattr(self, "experts_are_transposed", False):
+    if getattr(self, "transposed_weights", False):
         out_per_sample_g = torch._grouped_mm(hidden_after_activation, self.down_proj, offs=offsets)
     else:
         out_per_sample_g = torch._grouped_mm(hidden_after_activation, self.down_proj.transpose(-2, -1), offs=offsets)
@@ -241,33 +241,54 @@ class ExpertsInterface(GeneralInterface):
 ALL_EXPERTS_FUNCTIONS = ExpertsInterface()
 
 
-def use_experts_implementation(experts_class: type[torch.nn.Module]) -> type[torch.nn.Module]:
-    original_init = experts_class.__init__
-    original_forward = experts_class.forward
+def use_experts_implementation(
+    experts_class: type[torch.nn.Module] | None = None, *, transposed_weights: bool = False
+) -> type[torch.nn.Module]:
+    """Decorator to modify experts class to support different experts implementations.
 
-    @wraps(original_init)
-    def __init__(self, config, *args, **kwargs):
-        original_init(self, config, *args, **kwargs)
-        self.config = config
+    Args:
+        experts_class (`type[torch.nn.Module]`, *optional*):
+            The experts class to modify. If not provided, returns a decorator that can be applied to the class.
+        transposed_weights (`bool`, *optional*, defaults to `False`):
+            Whether the expert weights are stored in transposed format.
 
-    @wraps(original_forward)
-    def forward(self, *args, **kwargs):
-        experts_forward = original_forward
+    Returns:
+        `type[torch.nn.Module]`: The modified experts class.
+    """
 
-        if self.config._experts_implementation == "grouped_mm":
-            if self.gate_up_proj.data_ptr() % 16 != 0 or self.down_proj.data_ptr() % 16 != 0:
-                logger.warning(
-                    "'grouped_mm' experts implementation requires 16-byte aligned expert weights. "
-                    "We will fall back to 'eager' implementation to avoid potential crashes. "
-                    "Please re-initialize the expert weights with 16-byte alignment."
-                )
-                self.config._experts_implementation = "eager"
+    def wrapper(experts_class: type[torch.nn.Module]) -> type[torch.nn.Module]:
+        original_init = experts_class.__init__
+        original_forward = experts_class.forward
 
-        if self.config._experts_implementation != "eager":
-            experts_forward = ALL_EXPERTS_FUNCTIONS[self.config._experts_implementation]
+        @wraps(original_init)
+        def __init__(self, config, *args, **kwargs):
+            original_init(self, config, *args, **kwargs)
+            self.transposed_weights = transposed_weights
+            self.config = config
 
-        return experts_forward(self, *args, **kwargs)
+        @wraps(original_forward)
+        def forward(self, *args, **kwargs):
+            experts_forward = original_forward
 
-    experts_class.__init__ = __init__
-    experts_class.forward = forward
-    return experts_class
+            if self.config._experts_implementation == "grouped_mm":
+                if self.gate_up_proj.data_ptr() % 16 != 0 or self.down_proj.data_ptr() % 16 != 0:
+                    logger.warning(
+                        "'grouped_mm' experts implementation requires 16-byte aligned expert weights. "
+                        "We will fall back to 'eager' implementation to avoid potential crashes. "
+                        "Please re-initialize the expert weights with 16-byte alignment."
+                    )
+                    self.config._experts_implementation = "eager"
+
+            if self.config._experts_implementation != "eager":
+                experts_forward = ALL_EXPERTS_FUNCTIONS[self.config._experts_implementation]
+
+            return experts_forward(self, *args, **kwargs)
+
+        experts_class.__init__ = __init__
+        experts_class.forward = forward
+        return experts_class
+
+    if experts_class is not None:
+        return wrapper(experts_class)
+
+    return wrapper

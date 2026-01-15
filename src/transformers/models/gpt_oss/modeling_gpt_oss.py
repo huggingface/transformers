@@ -64,14 +64,13 @@ class GptOssRMSNorm(nn.Module):
         return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
 
-@use_experts_implementation(transposed_experts=True)
+@use_experts_implementation(transposed_weights=True)
 class GptOssExperts(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.intermediate_size = config.intermediate_size
         self.num_experts = config.num_local_experts
         self.hidden_size = config.hidden_size
-        self.experts_are_transposed = True
         self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_size, 2 * self.intermediate_size))
         self.gate_up_proj_bias = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_size))
         self.down_proj = nn.Parameter(torch.empty((self.num_experts, self.intermediate_size, self.hidden_size)))
@@ -103,8 +102,7 @@ class GptOssExperts(nn.Module):
             # skip masking index
             if expert_idx == self.num_experts:
                 continue
-            with torch.no_grad():
-                top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
+            top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
             current_state = hidden_states[token_idx]
             gate_up = current_state @ self.gate_up_proj[expert_idx] + self.gate_up_proj_bias[expert_idx]
             gated_output = self._apply_gate(gate_up)
