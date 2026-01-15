@@ -345,6 +345,6 @@ def get_model_conversion_mapping(
 
     # Add the ones from the quantizer as well if provided
     if hf_quantizer is not None:
-        weight_conversions.extend(hf_quantizer.get_weight_conversions())
+        weight_conversions = hf_quantizer.get_weight_conversions() + weight_conversions
 
     return weight_conversions
