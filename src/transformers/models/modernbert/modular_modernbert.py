@@ -23,6 +23,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
+from ...integrations import use_kernel_func_from_hub, use_kernelized_func
 from ...masking_utils import create_bidirectional_mask, create_bidirectional_sliding_window_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -40,7 +41,7 @@ from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple, check_model_inputs
 from ...utils.import_utils import is_triton_available
 from ..bert.modeling_bert import eager_attention_forward
-from ..gemma3.modeling_gemma3 import Gemma3RotaryEmbedding, apply_rotary_pos_emb
+from ..gemma3.modeling_gemma3 import Gemma3RotaryEmbedding, rotate_half
 
 
 logger = logging.get_logger(__name__)
@@ -338,6 +339,34 @@ class ModernBertRotaryEmbedding(Gemma3RotaryEmbedding):
         return super().compute_default_rope_parameters(config, device, seq_len, layer_type)
 
 
+@use_kernel_func_from_hub("rotary_pos_emb")
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
+    """Applies Rotary Position Embedding to the query and key tensors.
+
+    Args:
+        q (`torch.Tensor`): The query tensor.
+        k (`torch.Tensor`): The key tensor.
+        cos (`torch.Tensor`): The cosine part of the rotary embedding.
+        sin (`torch.Tensor`): The sine part of the rotary embedding.
+        unsqueeze_dim (`int`, *optional*, defaults to 1):
+            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
+            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
+            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
+            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
+            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
+            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
+    Returns:
+        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+    """
+    origin_type = q.dtype
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
+    q_embed = (q.float() * cos) + (rotate_half(q.float()) * sin)
+    k_embed = (k.float() * cos) + (rotate_half(k.float()) * sin)
+    return q_embed.to(dtype=origin_type), k_embed.to(dtype=origin_type)
+
+
+@use_kernelized_func(apply_rotary_pos_emb)
 class ModernBertAttention(nn.Module):
     """Performs multi-headed self attention on a batch of unpadded sequences.
 
@@ -366,10 +395,11 @@ class ModernBertAttention(nn.Module):
         )
 
         if layer_idx % config.global_attn_every_n_layers != 0:
-            # +1 is needed because flash attention sets inclusive boundaries (see modeling_flash_attention_utils.py)
-            # i.e., window_size=(w-1, w-1) attends to 2*(w-1)+1=2*w-1 tokens total. To get a total window of 2*sliding_window+1,
-            # we need to pass sliding_window+1 here so it becomes (sliding_window, sliding_window).
-            self.sliding_window = config.sliding_window + 1
+            # config.sliding_window (local_attention) represents the total window size (default 128).
+            # Flash attention window_size=(left, right) attends to left + 1 + right tokens total.
+            # To get a total window of ~sliding_window tokens, we need left = right = sliding_window // 2.
+            # The +1 accounts for flash attention's inclusive boundary handling(see modeling_flash_attention_utils.py).
+            self.sliding_window = config.sliding_window // 2 + 1
         else:
             self.sliding_window = None
 
