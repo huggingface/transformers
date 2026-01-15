@@ -269,7 +269,6 @@ class DeepseekV2Moe(nn.Module):
             topk_weight, topk_idx = torch.topk(tmp_scores, k=self.top_k, dim=-1, sorted=False)
 
         topk_weight = topk_weight * self.routed_scaling_factor
-        topk_weight = torch.zeros_like(router_logits).scatter_(1, topk_idx, topk_weight)
         return topk_idx, topk_weight
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
