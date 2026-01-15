@@ -396,7 +396,6 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
 
         from transformers import Qwen3MoeConfig, Qwen3MoeModel
 
-        # Create a tiny MoE config for testing using CausalLMModelTester defaults
         tiny_config = Qwen3MoeConfig(
             vocab_size=99,
             hidden_size=32,
@@ -422,14 +421,13 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         self.assertTrue(is_deepspeed_zero3_enabled())
 
         with tempfile.TemporaryDirectory() as tmpdirname:
-            # Create a model in the NEW v5 format and save it
             with LoggingLevel(logging.INFO):
                 with mockenv_context(**self.dist_env_1_gpu):
                     model = Qwen3MoeModel(tiny_config)
                     model.save_pretrained(tmpdirname)
 
-            # Now manually create an "old" checkpoint format with separate expert weights
-            # This simulates loading a checkpoint saved before the v5 refactor
+            # Manually create an "old" checkpoint format with separate expert weights
+            # to simulate loading a checkpoint saved before the v5 refactor
             old_checkpoint_dir = f"{tmpdirname}_old"
             import os
             import shutil
@@ -437,24 +435,21 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
             os.makedirs(old_checkpoint_dir, exist_ok=True)
             shutil.copy(f"{tmpdirname}/config.json", f"{old_checkpoint_dir}/config.json")
 
-            # Load the new model state dict and convert it to old format
             from safetensors.torch import load_file, save_file
 
             new_state_dict = load_file(f"{tmpdirname}/model.safetensors")
             old_state_dict = {}
 
-            # Convert fused expert weights back to separate weights (simulating old checkpoint)
             for key, tensor in new_state_dict.items():
                 if "mlp.experts.gate_up_proj" in key:
-                    # Split gate_up_proj into separate gate_proj and up_proj for each expert
                     layer_prefix = key.replace(".mlp.experts.gate_up_proj", "")
                     num_experts = tensor.shape[0]
                     intermediate_size = tensor.shape[1] // 2
 
                     for expert_idx in range(num_experts):
-                        expert_tensor = tensor[expert_idx]  # shape: [2*intermediate, hidden]
-                        gate_tensor = expert_tensor[:intermediate_size, :]  # first half
-                        up_tensor = expert_tensor[intermediate_size:, :]  # second half
+                        expert_tensor = tensor[expert_idx]
+                        gate_tensor = expert_tensor[:intermediate_size, :]
+                        up_tensor = expert_tensor[intermediate_size:, :]
 
                         old_state_dict[f"{layer_prefix}.mlp.experts.{expert_idx}.gate_proj.weight"] = gate_tensor
                         old_state_dict[f"{layer_prefix}.mlp.experts.{expert_idx}.up_proj.weight"] = up_tensor
@@ -462,21 +457,18 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
                     "mlp.experts.down_proj" in key
                     and key[key.rfind(".mlp.experts.down_proj") :] == ".mlp.experts.down_proj"
                 ):
-                    # Split down_proj into separate down_proj for each expert
                     layer_prefix = key.replace(".mlp.experts.down_proj", "")
                     num_experts = tensor.shape[0]
 
                     for expert_idx in range(num_experts):
-                        expert_tensor = tensor[expert_idx]  # shape: [hidden, intermediate]
+                        expert_tensor = tensor[expert_idx]
                         old_state_dict[f"{layer_prefix}.mlp.experts.{expert_idx}.down_proj.weight"] = expert_tensor
                 else:
-                    # Copy non-expert weights as-is
                     old_state_dict[key] = tensor
 
-            # Save the old format checkpoint
             save_file(old_state_dict, f"{old_checkpoint_dir}/model.safetensors")
 
-            # Now load the old checkpoint with DeepSpeed Zero3 - this should apply weight conversions
+            # Load the old checkpoint with DeepSpeed Zero3 and verify weight conversions are applied
             with LoggingLevel(logging.INFO):
                 with mockenv_context(**self.dist_env_1_gpu):
                     logger = logging.get_logger("transformers.modeling_utils")
@@ -484,32 +476,27 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
                         loaded_model = Qwen3MoeModel.from_pretrained(old_checkpoint_dir)
 
             self.assertIn("Detected DeepSpeed ZeRO-3", cl.out)
-            # Verify that expert weights were NOT missing (i.e., weight conversions were applied)
             self.assertNotRegex(cl.out, r"mlp\.experts\.(gate_up_proj|down_proj)\s*\|\s*MISSING")
 
-            # Verify the model structure is correct (new v5 format with fused experts)
-            # With DeepSpeed Zero3, parameters are partitioned, so we need to gather them to check shapes
+            # Verify the model structure is correct (fused experts in v5 format)
+            # DeepSpeed Zero3 partitions parameters, so we need to gather them to check shapes
             import deepspeed
 
             expert_params_to_check = []
             for name, param in loaded_model.named_parameters():
                 if "mlp.experts.gate_up_proj" in name or "mlp.experts.down_proj" in name:
                     expert_params_to_check.append((name, param))
-                # Verify we DON'T have old-style separate expert weights
                 self.assertNotRegex(name, r"mlp\.experts\.\d+\.(gate_proj|up_proj|down_proj)\.weight")
 
-            # Gather parameters from DeepSpeed Zero3 partitions to check their full shapes
             with deepspeed.zero.GatheredParameters([param for _, param in expert_params_to_check], modifier_rank=0):
                 for name, param in expert_params_to_check:
                     if "mlp.experts.gate_up_proj" in name:
-                        # Should be a 3D tensor: [num_experts, 2*intermediate, hidden]
                         self.assertEqual(len(param.shape), 3, f"gate_up_proj should be 3D, got {param.shape}")
                         self.assertEqual(param.shape[0], 8, f"Should have 8 experts, got {param.shape[0]}")
                     elif (
                         "mlp.experts.down_proj" in name
                         and name[name.rfind(".mlp.experts.down_proj") :] == ".mlp.experts.down_proj"
                     ):
-                        # Should be a 3D tensor: [num_experts, hidden, intermediate]
                         self.assertEqual(len(param.shape), 3, f"down_proj should be 3D, got {param.shape}")
                         self.assertEqual(param.shape[0], 8, f"Should have 8 experts, got {param.shape[0]}")
 
