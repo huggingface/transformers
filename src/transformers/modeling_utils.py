@@ -595,7 +595,7 @@ def _get_resolved_checkpoint_files(
                 # result when internet is up, the repo and revision exist, but the file does not.
                 resolved_archive_file = cached_file(pretrained_model_name_or_path, filename, **cached_file_kwargs)
 
-                # Try safetensors files
+                # Try safetensors files first if not already found
                 if resolved_archive_file is None and filename == _add_variant(SAFE_WEIGHTS_NAME, variant):
                     # Maybe the checkpoint is sharded, we try to grab the index name in this case.
                     resolved_archive_file = cached_file(
@@ -624,7 +624,7 @@ def _get_resolved_checkpoint_files(
                             pretrained_model_name_or_path, filename, **cached_file_kwargs
                         )
 
-                # Try `.bin` files
+                # Then try `.bin` files
                 if resolved_archive_file is None and filename == _add_variant(WEIGHTS_NAME, variant):
                     # Maybe the checkpoint is sharded, we try to grab the index name in this case.
                     resolved_archive_file = cached_file(
@@ -635,38 +635,37 @@ def _get_resolved_checkpoint_files(
                     if resolved_archive_file is not None:
                         is_sharded = True
 
-                # Finally, check if we found a match, and raise appropriare errors if it's not the case
-                if not local_files_only and not is_offline_mode():
-                    # If we have a match, but it's `.bin` format, try to launch safetensors conversion for next time
-                    if resolved_archive_file is not None:
-                        safe_weights_name = SAFE_WEIGHTS_INDEX_NAME if is_sharded else SAFE_WEIGHTS_NAME
-                        if (
-                            filename in [WEIGHTS_NAME, WEIGHTS_INDEX_NAME]
-                            and not has_file(pretrained_model_name_or_path, safe_weights_name, **has_file_kwargs)
-                            and can_auto_convert
-                        ):
-                            Thread(
-                                target=auto_conversion,
-                                args=(pretrained_model_name_or_path,),
-                                kwargs={"ignore_errors_during_conversion": False, **cached_file_kwargs},
-                                name="Thread-auto_conversion",
-                            ).start()
-                    # If no match, raise errors
+                # If we have a match, but it's `.bin` format, try to launch safetensors conversion for next time
+                if resolved_archive_file is not None:
+                    safe_weights_name = SAFE_WEIGHTS_INDEX_NAME if is_sharded else SAFE_WEIGHTS_NAME
+                    if (
+                        filename in [WEIGHTS_NAME, WEIGHTS_INDEX_NAME]
+                        and not has_file(pretrained_model_name_or_path, safe_weights_name, **has_file_kwargs)
+                        and can_auto_convert
+                    ):
+                        Thread(
+                            target=auto_conversion,
+                            args=(pretrained_model_name_or_path,),
+                            kwargs={"ignore_errors_during_conversion": False, **cached_file_kwargs},
+                            name="Thread-auto_conversion",
+                        ).start()
+
+                # If no match, raise appropriare errors
+                else:
+                    # Otherwise, no PyTorch file was found
+                    if variant is not None and has_file(
+                        pretrained_model_name_or_path, WEIGHTS_NAME, **has_file_kwargs
+                    ):
+                        raise OSError(
+                            f"{pretrained_model_name_or_path} does not appear to have a file named"
+                            f" {_add_variant(WEIGHTS_NAME, variant)} but there is a file without the variant"
+                            f" {variant}. Use `variant=None` to load this model from those weights."
+                        )
                     else:
-                        # Otherwise, no PyTorch file was found
-                        if variant is not None and has_file(
-                            pretrained_model_name_or_path, WEIGHTS_NAME, **has_file_kwargs
-                        ):
-                            raise OSError(
-                                f"{pretrained_model_name_or_path} does not appear to have a file named"
-                                f" {_add_variant(WEIGHTS_NAME, variant)} but there is a file without the variant"
-                                f" {variant}. Use `variant=None` to load this model from those weights."
-                            )
-                        else:
-                            raise OSError(
-                                f"{pretrained_model_name_or_path} does not appear to have a file named"
-                                f" {_add_variant(WEIGHTS_NAME, variant)} or {_add_variant(SAFE_WEIGHTS_NAME, variant)}."
-                            )
+                        raise OSError(
+                            f"{pretrained_model_name_or_path} does not appear to have a file named"
+                            f" {_add_variant(WEIGHTS_NAME, variant)} or {_add_variant(SAFE_WEIGHTS_NAME, variant)}."
+                        )
 
             except OSError:
                 # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted
