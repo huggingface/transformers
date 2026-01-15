@@ -906,7 +906,6 @@ PIPELINE_TASKS_TO_SAMPLE_DOCSTRINGS = OrderedDict(
         ("table-question-answering", TABLE_QUESTION_ANSWERING_SAMPLE),
         ("document-question-answering", DOCUMENT_QUESTION_ANSWERING_SAMPLE),
         ("question-answering", QUESTION_ANSWERING_SAMPLE),
-        ("text2text-generation", TEXT2TEXT_GENERATION_SAMPLE),
         ("next-sentence-prediction", NEXT_SENTENCE_PREDICTION_SAMPLE),
         ("multiple-choice", MULTIPLE_CHOICE_SAMPLE),
         ("text-classification", TEXT_CLASSIFICATION_SAMPLE),
@@ -931,7 +930,6 @@ MODELS_TO_PIPELINE = OrderedDict(
         ("MODEL_FOR_AUDIO_XVECTOR_MAPPING_NAMES", "audio-xvector"),
         # Vision
         ("MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES", "image-text-to-text"),
-        ("MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES", "image-to-text"),
         ("MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING_NAMES", "visual-question-answering"),
         ("MODEL_FOR_DEPTH_ESTIMATION_MAPPING_NAMES", "depth-estimation"),
         ("MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES", "video-classification"),
