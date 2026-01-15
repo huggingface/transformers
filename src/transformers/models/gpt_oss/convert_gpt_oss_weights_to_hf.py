@@ -16,9 +16,9 @@ import argparse
 import gc
 import json
 import os
+import re
 from pathlib import Path
 
-import re
 import tiktoken
 import torch
 from safetensors.torch import load_file as safe_load

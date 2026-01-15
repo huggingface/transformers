@@ -15,7 +15,6 @@
 
 import json
 import os
-
 import re
 
 from ...tokenization_python import PreTrainedTokenizer

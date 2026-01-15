@@ -14,7 +14,6 @@
 """Tokenization classes for Salesforce CTRL."""
 
 import json
-
 import re
 
 from ...tokenization_python import PreTrainedTokenizer
