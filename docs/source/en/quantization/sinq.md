@@ -178,4 +178,5 @@ If you find **SINQ** useful in your research or applications
 
 ## 3. Current Limitations
 
+Currently, the A-SINQ method is not supported in Hugging Face. Please refer to the official [SINQ repository](https://github.com/huawei-csl/SINQ/tree/main) to quantize a model with this strategy.
 At the moment the SINQ quantization strategy and SINQ quantized models do not support Multi-GPU option, so if your system counts multiple GPUs please specify which one should be used.

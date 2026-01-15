@@ -1,4 +1,3 @@
-# src/transformers/integrations/sinq.py
 # coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
@@ -29,34 +28,17 @@ if is_torch_available():
     import torch
     import torch.nn as nn
 
-
 class SinqQuantize(ConversionOps):
     """
     Param-level ConversionOp for SINQ (from FP weights).
 
     At load time, for each `Linear.weight` that should be quantized:
-      - we take the loaded weight tensor,
-      - we build a temporary dense nn.Linear (weight-only),
-      - we wrap it into SINQLinear,
-      - we replace the original module inside the model.
-
-    This is structurally similar to TorchAoQuantize / Fp8Quantize, but
-    we delegate SINQ-specific details here instead of in the HfQuantizer.
+      - The SINQLinear module already exists (created in _process_model_before_weight_loading)
+      - We just call quantize() on it with the loaded weight tensor
     """
 
     def __init__(self, hf_quantizer: "SinqHfQuantizer"):
         self.hf_quantizer = hf_quantizer
-
-    def _get_runtime_device_str(self) -> str:
-        cfg = self.hf_quantizer.quantization_config
-        device_str = getattr(self.hf_quantizer, "_normalized_device_str", None)
-        if device_str is not None:
-            return device_str
-        if getattr(cfg, "device", None) in (None, "auto"):
-            if torch.cuda.is_available():
-                return "cuda:0"
-            return "cpu"
-        return str(cfg.device)
 
     def convert(
         self,
@@ -70,54 +52,16 @@ class SinqQuantize(ConversionOps):
         _, values = next(iter(input_dict.items()))
         weight_tensor = values[0] if isinstance(values, list) else values
 
-        module_path, _, _ = full_layer_name.rpartition(".") 
-        parent_path, _, child_name = module_path.rpartition(".")
-        parent = model.get_submodule(parent_path) if parent_path else model
+        module, tensor_name = get_module_from_name(model, full_layer_name)
 
-        from sinq.sinqlinear import SINQLinear
-        from sinq.sinqlinear import sinq_base_quant_config as sinq_base_quant_config_fn
-
-        #device_str = self._get_runtime_device_str()
-        #device = torch.device(device_str)
-        device = weight_tensor.device
-        compute_dtype = self.hf_quantizer.dtype or weight_tensor.dtype
-
-        in_features = weight_tensor.shape[1]
-        out_features = weight_tensor.shape[0]
-
-        dense = nn.Linear(
-            in_features,
-            out_features,
-            bias=False,
-            device=device,
-            dtype=weight_tensor.dtype,
-        )
-        with torch.no_grad():
-            dense.weight.copy_(weight_tensor)#.to(device=device, dtype=weight_tensor.dtype))
-
-        cfg = self.hf_quantizer.quantization_config
-        sinq_quant_dict = self.hf_quantizer._build_sinq_quant_dict(cfg)
-        device_str = self._get_runtime_device_str()
-
-        sinq_layer = SINQLinear(
-            linear_layer=dense,
-            quant_config=sinq_quant_dict,
-            del_orig=True,
-            compute_dtype=compute_dtype,
-            device=device_str,
-            use_unpack_kernel=True,
-            layer_activations=None,
-        )
-
-        setattr(parent, child_name, sinq_layer)
+        module.quantize(weight_tensor)
 
         if missing_keys is not None:
             missing_keys.discard(full_layer_name)
 
-        sinq_layer._is_hf_initialized = True
+        module._is_hf_initialized = True
 
         return {}
-
 
 class SinqDeserialize(ConversionOps):
     """
@@ -131,24 +75,13 @@ class SinqDeserialize(ConversionOps):
     WeightConverter in the quantizer is configured so that:
       - we group ".W_q", ".meta", ".bias" as input_dict
       - conceptually treat them as belonging to "<prefix>.weight"
-      - and call this SinqDeserialize.convert to reconstruct a SINQLinear.
+      - and call this SinqDeserialize.convert to load the state into the existing SINQLinear.
 
-    The returned dict is {} because we perform module replacement directly.
+    The returned dict is {} because we load directly into the module.
     """
 
     def __init__(self, hf_quantizer: "SinqHfQuantizer"):
         self.hf_quantizer = hf_quantizer
-
-    def _get_runtime_device_str(self) -> str:
-        cfg = self.hf_quantizer.quantization_config
-        device_str = getattr(self.hf_quantizer, "_normalized_device_str", None)
-        if device_str is not None:
-            return device_str
-        if getattr(cfg, "device", None) in (None, "auto"):
-            if torch.cuda.is_available():
-                return "cuda:0"
-            return "cpu"
-        return str(cfg.device)
 
     def convert(
         self,
@@ -157,7 +90,6 @@ class SinqDeserialize(ConversionOps):
         full_layer_name: str | None = None,
         **kwargs,
     ) -> Dict[str, "torch.Tensor"]:
-        from sinq.sinqlinear import SINQLinear 
 
         for k, v in list(input_dict.items()):
             if isinstance(v, list):
@@ -173,24 +105,7 @@ class SinqDeserialize(ConversionOps):
                 v = v[0]
             return {full_layer_name: v}
 
-        #device_str = self._get_runtime_device_str()
-        #device = torch.device(device_str)
-        compute_dtype = self.hf_quantizer.dtype or W_q.dtype
-
-        module_path, _, _ = full_layer_name.rpartition(".") 
-        parent_path, _, child_name = module_path.rpartition(".")
-        parent = model.get_submodule(parent_path) if parent_path else model
-        device_str = self._get_runtime_device_str()
-
-        sinq_layer = SINQLinear(
-            linear_layer=None,
-            quant_config=None,
-            del_orig=True,
-            compute_dtype=compute_dtype,
-            device=device_str,
-            use_unpack_kernel=True,
-            layer_activations=None,
-        )
+        module, _ = get_module_from_name(model, full_layer_name)
 
         state = {
             "W_q": W_q,
@@ -199,9 +114,7 @@ class SinqDeserialize(ConversionOps):
         if bias is not None:
             state["bias"] = bias
 
-        sinq_layer.load_state_dict(state)
-
-        setattr(parent, child_name, sinq_layer)
-        sinq_layer._is_hf_initialized = True
+        module.load_state_dict(state)
+        module._is_hf_initialized = True
 
         return {}

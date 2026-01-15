@@ -2113,7 +2113,7 @@ class SinqConfig(QuantizationConfigMixin):
             Tiling mode for SINQ (typically "1D"; "2D" if supported in your backend).
         method (`str`, default "sinq"):
             "sinq"  – calibration-free weight-only SINQ  
-            "asinq" – A-SINQ (activation-aware), uses post-load calibration.
+            "asinq" – A-SINQ (activation-aware), not supported in Hugging Face. Please refer to the official SINQ repository.
         per_channel (`bool`, default True):
             Reserved flag for future per-channel options (not used directly here).
         symmetric (`bool`, default True):
