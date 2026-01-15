@@ -34,6 +34,7 @@ from ...modeling_outputs import BaseModelOutput, ModelOutput, SampleTSPrediction
 from ...modeling_utils import PreTrainedModel
 from ...time_series_utils import NegativeBinomialOutput, NormalOutput, StudentTOutput
 from ...utils import auto_docstring, is_torch_flex_attn_available, logging
+from ...utils.generic import is_flash_attention_requested
 from .configuration_autoformer import AutoformerConfig
 
 
@@ -850,7 +851,7 @@ class AutoformerPreTrainedModel(PreTrainedModel):
         inputs_embeds: torch.Tensor,
     ):
         if attention_mask is not None:
-            if "flash" in self.config._attn_implementation:
+            if is_flash_attention_requested(self.config):
                 attention_mask = attention_mask if 0 in attention_mask else None
             elif self.config._attn_implementation == "sdpa":
                 # [bsz, seq_len] -> [bsz, 1, tgt_seq_len, src_seq_len]

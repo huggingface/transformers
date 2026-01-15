@@ -35,6 +35,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_flex_attn_available, logging
+from ...utils.generic import is_flash_attention_requested
 from .configuration_opt import OPTConfig
 
 
@@ -357,7 +358,7 @@ class OPTDecoder(OPTPreTrainedModel):
         past_key_values: Cache,
         output_attentions: bool = False,
     ):
-        if self.config._attn_implementation == "flash_attention_2":
+        if is_flash_attention_requested(self.config):
             if attention_mask is not None and (attention_mask == 0.0).any():
                 return attention_mask
             return None
