@@ -229,34 +229,14 @@ def load_model(
             kwargs = model_kwargs.copy()
 
             try:
-                model = model_class.from_pretrained(model, **kwargs)
+                model = model_class.from_pretrained(model, use_safetensors=None, **kwargs)
                 # Stop loading on the first successful load.
                 break
-            except (OSError, ValueError, TypeError, RuntimeError) as e:
+            except (OSError, ValueError, TypeError, RuntimeError):
                 # `from_pretrained` may raise a `TypeError` or `RuntimeError` when the requested `dtype`
                 # is not supported on the execution device (e.g. bf16 on a consumer GPU). We capture those so
                 # we can transparently retry the load in float32 before surfacing an error to the user.
                 fallback_tried = False
-
-                # Check if it's a safetensors-related error and retry without safetensors
-                # Only trigger if the error message explicitly suggests using use_safetensors=False
-                error_msg = str(e)
-                if isinstance(e, OSError) and "use `use_safetensors=False` to load the original model." in error_msg:
-                    fallback_tried = True
-                    no_safetensors_kwargs = kwargs.copy()
-                    no_safetensors_kwargs["use_safetensors"] = False
-                    try:
-                        model = model_class.from_pretrained(model, **no_safetensors_kwargs)
-                        logger.warning(
-                            "Falling back to loading without safetensors because the model does not have safetensors files."
-                        )
-                        break
-                    except Exception:
-                        # If it still fails, capture the traceback and continue to the next class.
-                        all_traceback[model_class.__name__] = traceback.format_exc()
-                        continue
-
-                # Check if it's a dtype-related error and retry with float32
                 if "dtype" in kwargs:
                     import torch
 
