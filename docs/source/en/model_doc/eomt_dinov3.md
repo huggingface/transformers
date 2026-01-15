@@ -59,7 +59,7 @@ from PIL import Image
 from transformers import AutoImageProcessor, EomtDinov3ForUniversalSegmentation
 
 
-model_id = "tue-mps/coco_panoptic_eomt_dinov3_large_640"
+model_id = "tue-mps/eomt-dinov3-coco-panoptic-base-640"
 processor = AutoImageProcessor.from_pretrained(model_id)
 model = EomtDinov3ForUniversalSegmentation.from_pretrained(model_id).to("cuda" if torch.cuda.is_available() else "cpu")
 

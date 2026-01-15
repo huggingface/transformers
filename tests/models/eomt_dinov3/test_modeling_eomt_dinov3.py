@@ -271,7 +271,7 @@ class EomtDinov3ForUniversalSegmentationTest(ModelTesterMixin, PipelineTesterMix
 @require_torch
 class EomtDinov3ForUniversalSegmentationIntegrationTest(unittest.TestCase):
     def setUp(self):
-        self.model_id = "nielsr/eomt-dinov3-coco-panoptic-large-640"
+        self.model_id = "tue-mps/eomt-dinov3-coco-panoptic-large-640"
 
     @slow
     def test_inference(self):
@@ -353,7 +353,7 @@ class EomtDinov3ForUniversalSegmentationIntegrationTest(unittest.TestCase):
     @slow
     @unittest.skip(reason="No semantic segmentation checkpoint available yet")
     def test_semantic_segmentation_inference(self):
-        model_id = "nielsr/eomt-dinov3-ade20k-semantic-large-512"
+        model_id = "tue-mps/eomt-dinov3-ade20k-semantic-large-512"
         model = EomtDinov3ForUniversalSegmentation.from_pretrained(model_id, device_map="auto")
         processor = AutoImageProcessor.from_pretrained(model_id)
 
@@ -437,7 +437,7 @@ class EomtDinov3ForUniversalSegmentationIntegrationTest(unittest.TestCase):
 
     @slow
     def test_instance_segmentation_inference(self):
-        model_id = "nielsr/eomt-dinov3-coco-instance-large-640"
+        model_id = "tue-mps/eomt-dinov3-coco-instance-large-640"
         model = EomtDinov3ForUniversalSegmentation.from_pretrained(model_id, device_map="auto")
         processor = AutoImageProcessor.from_pretrained(model_id)
 
