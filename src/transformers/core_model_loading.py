@@ -439,6 +439,39 @@ class Transpose(ConversionOps):
         return Transpose(dim0=self.dim1, dim1=self.dim0)
 
 
+class Force16BytesAlignment(ConversionOps):
+    """
+    Ensures that the given tensor is 16-bytes aligned in memory.
+    """
+
+    @torch.no_grad()
+    def convert(
+        self,
+        input_dict: dict[str, list[torch.Tensor]],
+        source_patterns: list[str],
+        target_patterns: list[str],
+        config,
+        **kwargs,
+    ) -> dict[str, list[torch.Tensor]]:
+        if len(input_dict) != len(target_patterns):
+            raise ValueError(
+                f"Force16BytesAlignment conversion can only happen on each key ({len(input_dict)}) "
+                f"and should match exact one target ({len(target_patterns)})."
+            )
+
+        output: dict[str, list[torch.Tensor]] = {}
+        for key, target_pattern in zip(input_dict.keys(), target_patterns):
+            tensor = input_dict.get(key, [])
+            if len(tensor) != 1:
+                raise ValueError(f"Force16BytesAlignment conversion requires exactly one tensor, found {len(tensor)}.")
+            output[target_pattern] = tensor[0].clone() if tensor[0].data_ptr() % 16 == 0 else tensor[0].clone()
+        return output
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return deepcopy(self)
+
+
 @dataclass(slots=True)
 class WeightTransform:
     source_patterns: str | list[str] = field(init=True)

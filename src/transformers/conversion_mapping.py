@@ -21,6 +21,7 @@ from .core_model_loading import (
     Chunk,
     Concatenate,
     ErnieFuseAndSplitTextVisionExperts,
+    Force16BytesAlignment,
     MergeModulelist,
     Transpose,
     WeightConverter,
@@ -40,6 +41,18 @@ if TYPE_CHECKING:
 
 def _build_checkpoint_conversion_mapping():
     mapping = {
+        "gpt_oss": [
+            WeightConverter(
+                source_patterns="mlp.experts.gate_up_proj",
+                target_patterns="mlp.experts.gate_up_proj",
+                operations=[Force16BytesAlignment()],
+            ),
+            WeightConverter(
+                source_patterns="mlp.experts.down_proj",
+                target_patterns="mlp.experts.down_proj",
+                operations=[Force16BytesAlignment()],
+            ),
+        ],
         "mixtral": [
             WeightRenaming(".block_sparse_moe.gate", ".mlp.gate"),
             WeightConverter(

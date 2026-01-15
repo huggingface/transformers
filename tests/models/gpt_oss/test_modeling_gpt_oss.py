@@ -120,6 +120,10 @@ class GptOssModelTest(CausalLMModelTest, unittest.TestCase):
     def test_generate_compile_model_forward_fullgraph(self):
         return super().test_generate_compile_model_forward_fullgraph()
 
+    @unittest.skip("GptOss does not rename any weights in its conversion mapping")
+    def test_reverse_loading_mapping(self):
+        pass
+
 
 RESULTS_PATH = Path(__file__).parent.parent.parent / "fixtures/gpt_oss/integration_tests.json"
 

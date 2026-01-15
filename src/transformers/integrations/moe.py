@@ -270,15 +270,6 @@ def use_experts_implementation(
         def forward(self, *args, **kwargs):
             experts_forward = original_forward
 
-            if self.config._experts_implementation == "grouped_mm":
-                if self.gate_up_proj.data_ptr() % 16 != 0 or self.down_proj.data_ptr() % 16 != 0:
-                    logger.warning(
-                        "'grouped_mm' experts implementation requires 16-byte aligned expert weights. "
-                        "We will fall back to 'eager' implementation to avoid potential crashes. "
-                        "Please re-initialize the expert weights with 16-byte alignment."
-                    )
-                    self.config._experts_implementation = "eager"
-
             if self.config._experts_implementation != "eager":
                 experts_forward = ALL_EXPERTS_FUNCTIONS[self.config._experts_implementation]
 
