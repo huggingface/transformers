@@ -20,6 +20,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
+from ...utils.generic import _conv_out_length
 from ..wav2vec2.modeling_wav2vec2 import Wav2Vec2FeedForward, Wav2Vec2ForSequenceClassification, Wav2Vec2Model
 from ..wav2vec2_conformer.modeling_wav2vec2_conformer import (
     Wav2Vec2ConformerForAudioFrameClassification,
@@ -635,11 +636,6 @@ class Wav2Vec2BertPreTrainedModel(PreTrainedModel):
         """
 
         add_adapter = self.config.add_adapter if add_adapter is None else add_adapter
-
-        def _conv_out_length(input_length, kernel_size, stride, padding):
-            # 1D convolutional layer output length formula taken
-            # from https://pytorch.org/docs/stable/generated/torch.nn.Conv1d.html
-            return torch.div(input_length + 2 * padding - kernel_size, stride, rounding_mode="floor") + 1
 
         if add_adapter:
             padding = self.config.adapter_kernel_size // 2

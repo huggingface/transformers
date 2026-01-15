@@ -25,6 +25,7 @@ from ...integrations.fsdp import is_fsdp_managed_module
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring
+from ...utils.generic import _conv_out_length
 from ..wav2vec2.modeling_wav2vec2 import (
     Wav2Vec2Attention,
     Wav2Vec2EncoderLayer,
@@ -289,11 +290,6 @@ class SEWPreTrainedModel(PreTrainedModel):
         """
         Computes the output length of the convolutional layers
         """
-
-        def _conv_out_length(input_length, kernel_size, stride):
-            # 1D convolutional layer output length formula taken
-            # from https://pytorch.org/docs/stable/generated/torch.nn.Conv1d.html
-            return torch.div(input_length - kernel_size, stride, rounding_mode="floor") + 1
 
         for kernel_size, stride in zip(self.config.conv_kernel, self.config.conv_stride):
             input_lengths = _conv_out_length(input_lengths, kernel_size, stride)

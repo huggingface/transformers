@@ -45,6 +45,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, is_peft_available
+from ...utils.generic import _conv_out_length
 from .configuration_data2vec_audio import Data2VecAudioConfig
 
 
@@ -511,11 +512,6 @@ class Data2VecAudioPreTrainedModel(PreTrainedModel):
         """
 
         add_adapter = self.config.add_adapter if add_adapter is None else add_adapter
-
-        def _conv_out_length(input_length, kernel_size, stride):
-            # 1D convolutional layer output length formula taken
-            # from https://pytorch.org/docs/stable/generated/torch.nn.Conv1d.html
-            return torch.div(input_length - kernel_size, stride, rounding_mode="floor") + 1
 
         for kernel_size, stride in zip(self.config.conv_kernel, self.config.conv_stride):
             input_lengths = _conv_out_length(input_lengths, kernel_size, stride)
@@ -1221,11 +1217,6 @@ class Data2VecAudioForXVector(Data2VecAudioPreTrainedModel):
         """
         Computes the output length of the TDNN layers
         """
-
-        def _conv_out_length(input_length, kernel_size, stride):
-            # 1D convolutional layer output length formula taken
-            # from https://pytorch.org/docs/stable/generated/torch.nn.Conv1d.html
-            return (input_length - kernel_size) // stride + 1
 
         for kernel_size in self.config.tdnn_kernel:
             input_lengths = _conv_out_length(input_lengths, kernel_size, 1)

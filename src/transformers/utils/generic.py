@@ -245,6 +245,12 @@ def to_py_obj(obj):
         return obj
 
 
+def _conv_out_length(input_length, kernel_size, stride, pad=0, dilation=1):
+    # 1D convolutional layer output length formula taken
+    # from https://pytorch.org/docs/stable/generated/torch.nn.Conv1d.html
+    return torch.div(input_length + 2 * pad - dilation * (kernel_size - 1) - 1, stride, rounding_mode="floor") + 1
+
+
 def to_numpy(obj):
     """
     Convert a PyTorch tensor, Numpy array or python list to a Numpy array.

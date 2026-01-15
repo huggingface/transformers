@@ -38,6 +38,7 @@ from ...modeling_outputs import (
 )
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, logging
+from ...utils.generic import _conv_out_length
 from .configuration_seamless_m4t_v2 import SeamlessM4Tv2Config
 
 
@@ -2523,13 +2524,6 @@ class SeamlessM4Tv2CodeHifiGan(PreTrainedModel):
         """
         Computes the output length of the hifigan convolutional layers
         """
-
-        def _conv_out_length(input_length, kernel_size, stride, pad, dilation=1):
-            # 1D convolutional layer output length formula taken
-            # from https://pytorch.org/docs/stable/generated/torch.nn.Conv1d.html
-            return (
-                torch.div(input_length + 2 * pad - dilation * (kernel_size - 1) - 1, stride, rounding_mode="floor") + 1
-            )
 
         def _transpose_conv_out_length(input_length, kernel_size, stride, pad, dilation=1):
             return (input_length - 1) * stride - 2 * pad + dilation * (kernel_size - 1) + 1
