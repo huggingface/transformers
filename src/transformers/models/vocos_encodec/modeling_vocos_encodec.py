@@ -43,6 +43,7 @@ class VocosEncodecOutput(ModelOutput):
             Attention mask indicates which positions contain valid audio vs padding tokens, values of 1 indicate valid audio,
             0 indicates padding. Returned in the output to remove padding from reconstructed audios when
             processing batches with sequences of different lengths (batch_size > 1).
+
     """
 
     audio: torch.FloatTensor
@@ -109,7 +110,8 @@ class VocosEncodecPreTrainedModel(PreTrainedModel):
 
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, (VocosEncodecISTFTHead)):
+
+        if type(module).__name__ == "VocosEncodecISTFTHead":
             window = torch.hann_window(module.win_length)
             init.copy_(module.window, window)
         elif isinstance(module, nn.Linear):
@@ -118,17 +120,17 @@ class VocosEncodecPreTrainedModel(PreTrainedModel):
             if module.bias is not None:
                 init.zeros_(module.bias)
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
         elif isinstance(module, nn.Conv1d):
             nn.init.kaiming_normal_(module.weight)
             if module.bias is not None:
-                module.bias.data.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, VocosEncodecAdaptiveLayerNorm):
             if hasattr(module, "bias") and module.bias is not None:
-                module.bias.data.zero_()
+                init.zeros_(module.bias)
             if hasattr(module, "weight") and module.weight is not None:
-                module.weight.data.fill_(1.0)
+                init.ones_(module.weight)
 
 
 def custom_istft(input, n_fft: int, padding=None, **kwargs) -> "torch.Tensor":

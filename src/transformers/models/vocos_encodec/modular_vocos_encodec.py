@@ -74,24 +74,23 @@ class VocosEncodecPreTrainedModel(VocosPreTrainedModel):
         if type(module).__name__ == "VocosEncodecISTFTHead":
             window = torch.hann_window(module.win_length)
             init.copy_(module.window, window)
-
         elif isinstance(module, nn.Linear):
             std = getattr(self.config, "initializer_range", 0.02)
-            module.weight.data.normal_(mean=0.0, std=std)
+            init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
                 init.zeros_(module.bias)
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
         elif isinstance(module, nn.Conv1d):
             nn.init.kaiming_normal_(module.weight)
             if module.bias is not None:
-                module.bias.data.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, VocosEncodecAdaptiveLayerNorm):
             if hasattr(module, "bias") and module.bias is not None:
-                module.bias.data.zero_()
+                init.zeros_(module.bias)
             if hasattr(module, "weight") and module.weight is not None:
-                module.weight.data.fill_(1.0)
+                init.ones_(module.weight)
 
 
 @auto_docstring(
@@ -108,6 +107,7 @@ class VocosEncodecModel(VocosModel):
         )
         self.norm = VocosEncodecAdaptiveLayerNorm(config)
 
+        self.register_buffer("codebook_weights", torch.zeros(config.num_quantizers, config.codebook_dim))
         self._bandwidth_to_id = {bandwidth: id for id, bandwidth in enumerate(config.bandwidths)}
 
     @can_return_tuple
