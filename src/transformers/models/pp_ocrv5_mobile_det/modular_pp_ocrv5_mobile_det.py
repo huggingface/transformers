@@ -1892,6 +1892,8 @@ class PPOCRV5MobileDetForObjectDetection(PPOCRV5MobileDetPreTrainedModel):
     and returns outputs compatible with the Transformers object detection API.
     """
 
+    _keys_to_ignore_on_load_missing = ["num_batches_tracked"]
+    
     def __init__(self, config: PPOCRV5MobileDetConfig):
         """
         Initialize the PPOCRV5MobileDetForObjectDetection with the specified configuration.
