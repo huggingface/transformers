@@ -3540,8 +3540,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     "You cannot cast a GPTQ model in a new `dtype`. Make sure to load the model using `from_pretrained` using the desired"
                     " `dtype` by passing the correct `dtype` argument."
                 )
-        result = super().to(*args, **kwargs)
-        return result
+        return super().to(*args, **kwargs)
 
     def half(self, *args):
         # Checks if the model is quantized
