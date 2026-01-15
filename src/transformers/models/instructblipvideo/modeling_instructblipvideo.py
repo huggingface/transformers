@@ -37,6 +37,8 @@ from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPooling,
     BaseModelOutputWithPoolingAndCrossAttentions,
+    CausalLMOutputWithPast,
+    Seq2SeqLMOutput,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -906,9 +908,9 @@ class InstructBlipVideoForConditionalGenerationModelOutput(ModelOutput):
 
     loss: tuple[torch.FloatTensor] | None = None
     logits: tuple[torch.FloatTensor] | None = None
-    vision_outputs: torch.FloatTensor | None = None
-    qformer_outputs: tuple[torch.FloatTensor] | None = None
-    language_model_outputs: tuple[torch.FloatTensor] | None = None
+    vision_outputs: BaseModelOutputWithPooling | None = None
+    qformer_outputs: BaseModelOutputWithPoolingAndCrossAttentions | None = None
+    language_model_outputs: CausalLMOutputWithPast | Seq2SeqLMOutput | None = None
 
     def to_tuple(self) -> tuple[Any]:
         return tuple(
@@ -1130,8 +1132,8 @@ class BaseModelOutputWithVisionQformerOutputs(BaseModelOutputWithPooling):
         Outputs of the Q-Former (Querying Transformer).
     """
 
-    vision_outputs: torch.FloatTensor | None = None
-    qformer_outputs: tuple[torch.FloatTensor] | None = None
+    vision_outputs: BaseModelOutputWithPooling | None = None
+    qformer_outputs: BaseModelOutputWithPoolingAndCrossAttentions | None = None
 
 
 @auto_docstring(
