@@ -38,11 +38,9 @@ if is_torch_available():
 
     from transformers import (
         AutoConfig,
-        AutoModelWithLMHead,
         AutoTokenizer,
         MarianModel,
         MarianMTModel,
-        TranslationPipeline,
     )
     from transformers.models.marian.modeling_marian import (
         MarianDecoder,
@@ -411,7 +409,7 @@ class MarianIntegrationTest(unittest.TestCase):
 
     @cached_property
     def model(self):
-        model: MarianMTModel = AutoModelWithLMHead.from_pretrained(self.model_name).to(torch_device)
+        model: MarianMTModel = MarianMTModel.from_pretrained(self.model_name).to(torch_device)
         c = model.config
         self.assertListEqual(c.bad_words_ids, [[c.pad_token_id]])
         self.assertEqual(c.max_length, 512)
@@ -591,13 +589,6 @@ class TestMarian_en_ROMANCE(MarianIntegrationTest):
     @slow
     def test_batch_generation_en_ROMANCE_multi(self):
         self._assert_generated_batch_equal_expected()
-
-    @slow
-    @require_torch
-    def test_pipeline(self):
-        pipeline = TranslationPipeline(self.model, self.tokenizer, device=torch_device)
-        output = pipeline(self.src_text)
-        self.assertEqual(self.expected_text, [x["translation_text"] for x in output])
 
 
 @require_sentencepiece
