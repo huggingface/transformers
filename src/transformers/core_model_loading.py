@@ -256,12 +256,7 @@ class Transpose(ConversionOps):
 
     @torch.no_grad
     def convert(
-        self,
-        input_dict: dict[str, torch.Tensor],
-        source_patterns: list[str],
-        target_patterns: list[str],
-        config,
-        **kwargs,
+        self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str], **kwargs
     ) -> dict[str, torch.Tensor]:
         target_pattern = self.get_target_pattern(input_dict, source_patterns, target_patterns)
         tensors = next(iter(input_dict.values()))
@@ -269,10 +264,7 @@ class Transpose(ConversionOps):
         return {target_pattern: torch.transpose(tensor, dim0=self.dim0, dim1=self.dim1).contiguous()}
 
     def get_target_pattern(
-        self,
-        input_dict: dict[str, torch.Tensor | list[torch.Tensor]],
-        source_patterns: list[str],
-        target_patterns: list[str],
+        self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str]
     ) -> str:
         if len(input_dict) != 1:
             raise ValueError("Undefined Operation encountered!")
