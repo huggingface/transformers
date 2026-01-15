@@ -325,12 +325,16 @@ def _apply_weight_conversions_to_state_dict(model, state_dict, weight_mapping):
     # Build a mapping of what needs to be converted
     # Sort the state dict items to ensure consistent ordering (important for MoE conversions)
     conversion_mapping = {}
+    key_rename_cache = {}  # Cache rename results to avoid redundant processing in cleanup loop
     sorted_state_dict = sorted(state_dict.items(), key=lambda kv: dot_natural_key(kv[0]))
     for original_key, tensor in sorted_state_dict:
         # Rename the key according to all renaming pattern and optional weight converter patterns
         renamed_key, source_pattern = rename_source_key(
             original_key, renamings, converters, prefix, meta_model_state_dict
         )
+
+        # Cache the rename result for use in the cleanup loop
+        key_rename_cache[original_key] = renamed_key
 
         # Only process if the renamed key is in the model's state dict
         if renamed_key in meta_model_state_dict:
@@ -361,9 +365,9 @@ def _apply_weight_conversions_to_state_dict(model, state_dict, weight_mapping):
             logger.warning(f"Failed to convert {first_param_name}: {e}")
             continue
 
-    # Add any keys that didn't need conversion
+    # Add any keys that didn't need conversion (use cached rename results)
     for key, tensor in sorted_state_dict:
-        renamed_key, _ = rename_source_key(key, renamings, converters, prefix, meta_model_state_dict)
+        renamed_key = key_rename_cache[key]
         if renamed_key not in new_state_dict and renamed_key in meta_model_state_dict:
             new_state_dict[renamed_key] = tensor
 
