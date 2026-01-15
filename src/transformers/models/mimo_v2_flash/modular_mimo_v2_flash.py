@@ -22,6 +22,7 @@ import torch.utils.checkpoint
 from torch import nn
 
 from ...activations import ACT2FN
+from ...modeling_attn_mask_utils import _prepare_4d_causal_attention_mask
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...utils import logging
@@ -429,14 +430,35 @@ class MiMoV2FlashModel(MiMoV2FlashPreTrainedModel):
         return_dict = (
             return_dict if return_dict is not None else self.config.use_return_dict
         )
+        if return_dict is None:
+            return_dict = True
 
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
         hidden_states = inputs_embeds
-        next_cache = [] if use_cache else None
 
-        # Initialize output tensors
+        batch_size, seq_length = hidden_states.shape[:2]
+
+        past_length = 0
+        if past_key_values is not None:
+            past_length = past_key_values[0][0].shape[2]
+
+        if position_ids is None:
+            device = hidden_states.device
+            position_ids = torch.arange(
+                past_length, seq_length + past_length, dtype=torch.long, device=device
+            )
+            position_ids = position_ids.unsqueeze(0).view(-1, seq_length)
+        else:
+            position_ids = position_ids.view(-1, seq_length).long()
+
+        if attention_mask is not None:
+            attention_mask = _prepare_4d_causal_attention_mask(
+                attention_mask, (batch_size, seq_length), inputs_embeds, past_length
+            )
+
+        next_cache = [] if use_cache else None
         all_hidden_states = () if output_hidden_states else None
         all_self_attns = () if output_attentions else None
 
@@ -455,7 +477,7 @@ class MiMoV2FlashModel(MiMoV2FlashPreTrainedModel):
             hidden_states = layer_outputs[0]
 
             if use_cache:
-                next_cache.append(layer_outputs[2 if output_attentions else 1])
+                next_cache.append(layer_outputs[2])
 
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
@@ -518,6 +540,8 @@ class MiMoV2FlashForCausalLM(MiMoV2FlashPreTrainedModel):
         return_dict = (
             return_dict if return_dict is not None else self.config.use_return_dict
         )
+        if return_dict is None:
+            return_dict = True
 
         outputs = self.model(
             input_ids=input_ids,

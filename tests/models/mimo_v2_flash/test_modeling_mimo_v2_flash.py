@@ -19,7 +19,13 @@ from transformers import is_torch_available
 
 # Direct import to bypass lazy-loading issues on local dev environment
 from transformers.models.mimo_v2_flash import MiMoV2FlashConfig
-from transformers.testing_utils import ConfigTester, require_torch, torch_device
+from transformers.testing_utils import (
+    ConfigTester,
+    ids_tensor,
+    random_attention_mask,
+    require_torch,
+    torch_device,
+)
 
 if is_torch_available():
     import torch
@@ -127,8 +133,8 @@ class MiMoV2FlashModelTester:
         model = MiMoV2FlashModel(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(input_ids, attention_mask=input_mask)
-        result = model(input_ids)
+        result = model(input_ids, attention_mask=input_mask, return_dict=True)
+        result = model(input_ids, return_dict=True)
         self.parent.assertEqual(
             result.last_hidden_state.shape,
             (self.batch_size, self.seq_length, self.hidden_size),
@@ -140,7 +146,9 @@ class MiMoV2FlashModelTester:
         model = MiMoV2FlashForCausalLM(config=config)
         model.to(torch_device)
         model.eval()
-        result = model(input_ids, attention_mask=input_mask, labels=token_labels)
+        result = model(
+            input_ids, attention_mask=input_mask, labels=token_labels, return_dict=True
+        )
         self.parent.assertEqual(
             result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size)
         )
