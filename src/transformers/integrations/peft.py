@@ -36,7 +36,7 @@ from ..utils import (
 )
 from ..utils.hub import DownloadKwargs
 from ..utils.loading_report import log_state_dict_report
-
+from ..conversion_mapping import get_model_conversion_mapping
 
 if is_torch_available():
     import torch
@@ -253,7 +253,7 @@ class PeftAdapterMixin:
         if adapter_kwargs is None:
             adapter_kwargs = {}
 
-        weight_conversions = load_config.weight_mapping
+        weight_conversions = get_model_conversion_mapping(self)
         peft_weight_conversions = _build_peft_weight_mapping(weight_conversions, adapter_name)
         peft_load_kwargs = {"low_cpu_mem_usage": low_cpu_mem_usage}
 
