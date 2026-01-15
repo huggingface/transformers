@@ -3877,7 +3877,9 @@ class Trainer:
             if num_items_in_batch is not None:
                 kwargs["num_items_in_batch"] = num_items_in_batch
             inputs = {**inputs, **kwargs}
-        outputs = model(**inputs)
+        with self.compute_loss_context_manager():
+            outputs = model(**inputs)
+
 
         # User-defined compute_loss function
         if self.compute_loss_func is not None:
