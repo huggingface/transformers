@@ -281,6 +281,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("shieldgemma2", "GemmaTokenizer" if is_tokenizers_available() else None),
         ("siglip", "SiglipTokenizer" if is_sentencepiece_available() else None),
         ("siglip2", "GemmaTokenizer" if is_tokenizers_available() else None),
+        ("solar_open", "TokenizersBackend" if is_tokenizers_available() else None),
         ("speech_to_text", "Speech2TextTokenizer" if is_sentencepiece_available() else None),
         ("speecht5", "SpeechT5Tokenizer" if is_sentencepiece_available() else None),
         ("splinter", "SplinterTokenizer"),
