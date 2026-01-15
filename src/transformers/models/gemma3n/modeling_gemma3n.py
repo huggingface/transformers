@@ -51,6 +51,7 @@ class Gemma3nAudioEncoderModelOutput(BaseModelOutputWithPooling):
 
     Args:
         last_hidden_state (`torch.FloatTensor` of shape `(batch_size, audio_soft_tokens_per_image, hidden_size)`):
+            Sequence of hidden-states at the output of the last layer of the audio encoder.
         pooler_output (`torch.FloatTensor` of shape `(batch_size, hidden_size)`):
             Last layer hidden-state of the first token of the sequence (classification token) after further processing
             through the layers used for the auxiliary pretraining task. E.g. for BERT-family of models, this returns
@@ -961,7 +962,7 @@ class Gemma3nAudioEncoder(PreTrainedModel):
     @check_model_inputs(tie_last_hidden_states=False)
     def forward(
         self, audio_mel: torch.Tensor, audio_mel_mask: torch.BoolTensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple[torch.Tensor, torch.BoolTensor]:
+    ) -> tuple | Gemma3nAudioEncoderModelOutput:
         """Encodes a batch of MELs.
 
         Args:
