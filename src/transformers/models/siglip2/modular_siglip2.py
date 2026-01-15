@@ -15,6 +15,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from tokenizers import normalizers
 
 from transformers.models.siglip.configuration_siglip import SiglipConfig, SiglipTextConfig, SiglipVisionConfig
 from transformers.models.siglip.modeling_siglip import (
@@ -34,8 +35,54 @@ from transformers.models.siglip.modeling_siglip import (
 )
 
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
+from ...tokenization_utils_tokenizers import TokenizersBackend
 from ...utils import auto_docstring, filter_out_non_signature_kwargs
 from ...utils.generic import check_model_inputs, is_flash_attention_requested
+
+
+VOCAB_FILES_NAMES = {"tokenizer_file": "tokenizer.json"}
+
+
+def _ensure_lowercase_normalizer(tok):
+    backend = getattr(tok, "_tokenizer", None)
+    if backend is None:
+        return
+
+    current = backend.normalizer
+    if current is None:
+        backend.normalizer = normalizers.Lowercase()
+        return
+
+    if isinstance(current, normalizers.Lowercase):
+        return
+
+    if isinstance(current, normalizers.Sequence):
+        items = list(current.normalizers)
+        if not any(isinstance(n, normalizers.Lowercase) for n in items):
+            backend.normalizer = normalizers.Sequence([normalizers.Lowercase(), *items])
+        return
+
+    backend.normalizer = normalizers.Sequence([normalizers.Lowercase(), current])
+
+
+class Siglip2Tokenizer(TokenizersBackend):
+    vocab_files_names = VOCAB_FILES_NAMES
+    padding_side = "right"
+    model_input_names = ["input_ids", "attention_mask"]
+
+    def __init__(self, tokenizer_file=None, do_lower_case: bool = True, **kwargs):
+        self.do_lower_case = do_lower_case
+
+        # this is what makes from_pretrained() load tokenizer.json
+        super().__init__(tokenizer_file=tokenizer_file, **kwargs)
+
+        # Persist flag for save/load
+        if hasattr(self, "init_kwargs") and isinstance(self.init_kwargs, dict):
+            self.init_kwargs.setdefault("tokenizer_class", self.__class__.__name__)
+            self.init_kwargs["do_lower_case"] = do_lower_case
+
+        if do_lower_case:
+            _ensure_lowercase_normalizer(self)
 
 
 class Siglip2TextConfig(SiglipTextConfig):
@@ -607,4 +654,5 @@ __all__ = [
     "Siglip2TextModel",
     "Siglip2VisionModel",
     "Siglip2ForImageClassification",
+    "Siglip2Tokenizer",
 ]
