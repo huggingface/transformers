@@ -68,6 +68,11 @@ class PixtralProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         image_tokens = (inputs["input_ids"] == image_token_index).sum().item()
         self.assertEqual(expected_image_tokens, image_tokens)
 
+    def test_from_pretrained_subfolder_tokenizer(self):
+        processor = PixtralProcessor.from_pretrained("hf-internal-testing/tiny-flux2", subfolder="tokenizer")
+        self.assertIsInstance(processor, PixtralProcessor)
+        self.assertIsNotNone(processor.tokenizer)
+
     def test_processor_with_single_image(self):
         processor = self.processor_class.from_pretrained(self.tmpdirname)
         prompt_string = "USER: [IMG]\nWhat's the content of the image? ASSISTANT:"
