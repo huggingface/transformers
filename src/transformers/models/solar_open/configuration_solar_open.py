@@ -18,17 +18,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 
 
-class SolarOpenConfig(PretrainedConfig):
+class SolarOpenConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`SolarOpenModel`]. It is used to instantiate a
     SolarOpen model according to the specified arguments, defining the model architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`Glm4MoeConfig`] and can be used to control the model outputs. Read the
+    documentation from [`Glm4MoeConfig`] for more information.
 
     Instantiating a configuration defaults will yield a similar configuration to that of
     [upstage/Solar-Open-100B](https://huggingface.co/upstage/Solar-Open-100B) architecture.
@@ -107,6 +107,7 @@ class SolarOpenConfig(PretrainedConfig):
     attribute_map = {
         "num_local_experts": "n_routed_experts",
     }
+    default_theta = 1_000_000.0
 
     def __init__(
         self,
@@ -122,16 +123,10 @@ class SolarOpenConfig(PretrainedConfig):
         hidden_act: str = "silu",
         max_position_embeddings: int = 131072,
         initializer_range: float = 0.02,
-        rms_norm_eps: float = 1e-5,
+        rms_norm_eps: int = 1e-5,
         use_cache: bool = True,
         tie_word_embeddings: bool = False,
-        rope_parameters: RopeParameters | None = {
-            "rope_theta": 1000000.0,
-            "rope_type": "yarn",
-            "partial_rotary_factor": 1.0,
-            "factor": 2.0,
-            "original_max_position_embeddings": 65536,
-        },
+        rope_parameters: RopeParameters | None = None,
         attention_bias: bool = False,
         attention_dropout: float = 0.0,
         num_experts_per_tok: int = 8,
@@ -142,32 +137,29 @@ class SolarOpenConfig(PretrainedConfig):
         use_qk_norm: bool = False,
         **kwargs,
     ):
+        if rope_parameters is None:
+            rope_parameters = RopeParameters(
+                rope_theta=self.default_theta,
+                rope_type="yarn",
+                partial_rotary_factor=1.0,  # set default to 1.0
+                factor=2.0,
+                original_max_position_embeddings=65_536,
+            )
         self.vocab_size = vocab_size
-        self.hidden_size = hidden_size
         self.max_position_embeddings = max_position_embeddings
+        self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
+
         self.num_key_value_heads = num_key_value_heads
-        self.head_dim = head_dim
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-        self.rope_parameters = rope_parameters
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
-
-        # Backward compatibility: handle legacy rope-related parameter
-        if "rope_scaling" in kwargs:
-            self.rope_parameters = kwargs.pop("rope_scaling")
-        if self.rope_parameters is not None:
-            if "rope_type" not in self.rope_parameters and "type" in self.rope_parameters:
-                self.rope_parameters["rope_type"] = self.rope_parameters["type"]
-            if "rope_theta" not in self.rope_parameters and "rope_theta" in kwargs:
-                self.rope_parameters["rope_theta"] = kwargs.pop("rope_theta")
-            if "partial_rotary_factor" not in self.rope_parameters and "partial_rotary_factor" in kwargs:
-                self.rope_parameters["partial_rotary_factor"] = kwargs.pop("partial_rotary_factor")
-        self.validate_rope()
+        self.rope_parameters = rope_parameters
+        kwargs.setdefault("partial_rotary_factor", 0.5)  # assign default for BC
 
         # MoE arguments
         self.moe_intermediate_size = moe_intermediate_size
