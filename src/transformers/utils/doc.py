@@ -677,27 +677,6 @@ AUDIO_FRAME_CLASSIFICATION_SAMPLE = PT_SPEECH_FRAME_CLASS_SAMPLE
 AUDIO_XVECTOR_SAMPLE = PT_SPEECH_XVECTOR_SAMPLE
 
 
-IMAGE_TO_TEXT_SAMPLE = r"""
-    Example:
-
-    ```python
-    >>> from PIL import Image
-    >>> import requests
-    >>> from transformers import AutoProcessor, {model_class}
-
-    >>> processor = AutoProcessor.from_pretrained("{checkpoint}")
-    >>> model = {model_class}.from_pretrained("{checkpoint}")
-
-    >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    >>> image = Image.open(requests.get(url, stream=True).raw)
-
-    >>> inputs = processor(images=image, return_tensors="pt")
-
-    >>> outputs = model(**inputs)
-    ```
-"""
-
-
 DEPTH_ESTIMATION_SAMPLE = r"""
     Example:
 
@@ -842,14 +821,6 @@ OBJECT_DETECTION_SAMPLE = r"""
 QUESTION_ANSWERING_SAMPLE = PT_QUESTION_ANSWERING_SAMPLE
 
 
-TEXT2TEXT_GENERATION_SAMPLE = r"""
-    Example:
-
-    ```python
-    ```
-"""
-
-
 TEXT_CLASSIFICATION_SAMPLE = PT_SEQUENCE_CLASSIFICATION_SAMPLE
 
 
@@ -921,7 +892,6 @@ PIPELINE_TASKS_TO_SAMPLE_DOCSTRINGS = OrderedDict(
         ("audio-classification", AUDIO_CLASSIFICATION_SAMPLE),
         ("audio-xvector", AUDIO_XVECTOR_SAMPLE),
         ("image-text-to-text", IMAGE_TEXT_TO_TEXT_GENERATION_SAMPLE),
-        ("image-to-text", IMAGE_TO_TEXT_SAMPLE),
         ("visual-question-answering", VISUAL_QUESTION_ANSWERING_SAMPLE),
         ("depth-estimation", DEPTH_ESTIMATION_SAMPLE),
         ("video-classification", VIDEO_CLASSIFICATION_SAMPLE),

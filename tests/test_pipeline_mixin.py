@@ -594,17 +594,6 @@ class PipelineTesterMixin:
         self.run_task_tests(task="any-to-any", dtype="float16")
 
     @is_pipeline_test
-    @require_vision
-    def test_pipeline_image_to_text(self):
-        self.run_task_tests(task="image-to-text")
-
-    @is_pipeline_test
-    @require_vision
-    @require_torch
-    def test_pipeline_image_to_text_fp16(self):
-        self.run_task_tests(task="image-to-text", dtype="float16")
-
-    @is_pipeline_test
     @require_timm
     @require_vision
     @require_torch
