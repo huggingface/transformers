@@ -106,6 +106,7 @@ from .utils import (
     copy_func,
     has_file,
     is_accelerate_available,
+    is_env_variable_true,
     is_flash_attn_2_available,
     is_flash_attn_3_available,
     is_grouped_mm_available,
@@ -504,6 +505,7 @@ def _get_resolved_checkpoint_files(
     if pretrained_model_name_or_path is not None and gguf_file is None:
         pretrained_model_name_or_path = str(pretrained_model_name_or_path)
         is_local = os.path.isdir(pretrained_model_name_or_path)
+        # If the file is a local folder (but not in the HF_HOME cache, even if it's technically local)
         if is_local:
             if transformers_explicit_filename is not None:
                 # If the filename is explicitly defined, load this by default.
@@ -562,25 +564,38 @@ def _get_resolved_checkpoint_files(
             else:
                 filename = _add_variant(WEIGHTS_NAME, variant)
 
+            # Prepare set of kwargs for hub functions
+            has_file_kwargs = {
+                "revision": revision,
+                "proxies": proxies,
+                "token": token,
+                "cache_dir": cache_dir,
+                "local_files_only": local_files_only,
+            }
+            cached_file_kwargs = {
+                "force_download": force_download,
+                "user_agent": user_agent,
+                "subfolder": subfolder,
+                "_raise_exceptions_for_gated_repo": False,
+                "_raise_exceptions_for_missing_entries": False,
+                "_commit_hash": commit_hash,
+                **has_file_kwargs,
+            }
+            can_auto_convert = (
+                not is_offline_mode()  # for obvious reasons
+                # If we are in a CI environment or in a pytest run, we prevent the conversion
+                and not is_env_variable_true("DISABLE_SAFETENSORS_CONVERSION")
+                and not is_remote_code  # converter bot does not work on remote code
+                and subfolder == ""  # converter bot does not work on subfolders
+            )
+
             try:
                 # Load from URL or cache if already cached
-                cached_file_kwargs = {
-                    "cache_dir": cache_dir,
-                    "force_download": force_download,
-                    "proxies": proxies,
-                    "local_files_only": local_files_only,
-                    "token": token,
-                    "user_agent": user_agent,
-                    "revision": revision,
-                    "subfolder": subfolder,
-                    "_raise_exceptions_for_gated_repo": False,
-                    "_raise_exceptions_for_missing_entries": False,
-                    "_commit_hash": commit_hash,
-                }
-                resolved_archive_file = cached_file(pretrained_model_name_or_path, filename, **cached_file_kwargs)
-
                 # Since we set _raise_exceptions_for_missing_entries=False, we don't get an exception but a None
                 # result when internet is up, the repo and revision exist, but the file does not.
+                resolved_archive_file = cached_file(pretrained_model_name_or_path, filename, **cached_file_kwargs)
+
+                # Try safetensors files first if not already found
                 if resolved_archive_file is None and filename == _add_variant(SAFE_WEIGHTS_NAME, variant):
                     # Maybe the checkpoint is sharded, we try to grab the index name in this case.
                     resolved_archive_file = cached_file(
@@ -591,7 +606,7 @@ def _get_resolved_checkpoint_files(
                     if resolved_archive_file is not None:
                         is_sharded = True
                     elif use_safetensors:
-                        if revision == "main" and not is_offline_mode():
+                        if revision == "main" and can_auto_convert:
                             resolved_archive_file, revision, is_sharded = auto_conversion(
                                 pretrained_model_name_or_path, **cached_file_kwargs
                             )
@@ -608,6 +623,8 @@ def _get_resolved_checkpoint_files(
                         resolved_archive_file = cached_file(
                             pretrained_model_name_or_path, filename, **cached_file_kwargs
                         )
+
+                # Then try `.bin` files
                 if resolved_archive_file is None and filename == _add_variant(WEIGHTS_NAME, variant):
                     # Maybe the checkpoint is sharded, we try to grab the index name in this case.
                     resolved_archive_file = cached_file(
@@ -617,67 +634,38 @@ def _get_resolved_checkpoint_files(
                     )
                     if resolved_archive_file is not None:
                         is_sharded = True
-                if not local_files_only and not is_offline_mode():
-                    if resolved_archive_file is not None:
-                        # In a CI environment (CircleCI / Github Actions workflow runs) or in a pytest run,
-                        # we set `DISABLE_SAFETENSORS_CONVERSION=true` to prevent the conversion.
-                        if (
-                            filename in [WEIGHTS_NAME, WEIGHTS_INDEX_NAME]
-                            and os.getenv("DISABLE_SAFETENSORS_CONVERSION", None) != "true"
-                        ):
-                            # If the PyTorch file was found, check if there is a safetensors file on the repository
-                            # If there is no safetensors file on the repositories, start an auto conversion
-                            safe_weights_name = SAFE_WEIGHTS_INDEX_NAME if is_sharded else SAFE_WEIGHTS_NAME
-                            has_file_kwargs = {
-                                "revision": revision,
-                                "proxies": proxies,
-                                "token": token,
-                                "cache_dir": cache_dir,
-                                "local_files_only": local_files_only,
-                            }
-                            cached_file_kwargs = {
-                                "cache_dir": cache_dir,
-                                "force_download": force_download,
-                                "local_files_only": local_files_only,
-                                "user_agent": user_agent,
-                                "subfolder": subfolder,
-                                "_raise_exceptions_for_gated_repo": False,
-                                "_raise_exceptions_for_missing_entries": False,
-                                "_commit_hash": commit_hash,
-                                **has_file_kwargs,
-                            }
-                            if (
-                                not has_file(pretrained_model_name_or_path, safe_weights_name, **has_file_kwargs)
-                                and not is_remote_code
-                            ):
-                                Thread(
-                                    target=auto_conversion,
-                                    args=(pretrained_model_name_or_path,),
-                                    kwargs={"ignore_errors_during_conversion": True, **cached_file_kwargs},
-                                    name="Thread-auto_conversion",
-                                ).start()
+
+                # If we have a match, but it's `.bin` format, try to launch safetensors conversion for next time
+                if resolved_archive_file is not None:
+                    safe_weights_name = SAFE_WEIGHTS_INDEX_NAME if is_sharded else SAFE_WEIGHTS_NAME
+                    if (
+                        filename in [WEIGHTS_NAME, WEIGHTS_INDEX_NAME]
+                        and not has_file(pretrained_model_name_or_path, safe_weights_name, **has_file_kwargs)
+                        and can_auto_convert
+                    ):
+                        Thread(
+                            target=auto_conversion,
+                            args=(pretrained_model_name_or_path,),
+                            kwargs={"ignore_errors_during_conversion": False, **cached_file_kwargs},
+                            name="Thread-auto_conversion",
+                        ).start()
+
+                # If no match, raise appropriare errors
+                else:
+                    # Otherwise, no PyTorch file was found
+                    if variant is not None and has_file(
+                        pretrained_model_name_or_path, WEIGHTS_NAME, **has_file_kwargs
+                    ):
+                        raise OSError(
+                            f"{pretrained_model_name_or_path} does not appear to have a file named"
+                            f" {_add_variant(WEIGHTS_NAME, variant)} but there is a file without the variant"
+                            f" {variant}. Use `variant=None` to load this model from those weights."
+                        )
                     else:
-                        # Otherwise, no PyTorch file was found
-                        has_file_kwargs = {
-                            "revision": revision,
-                            "proxies": proxies,
-                            "token": token,
-                            "cache_dir": cache_dir,
-                            "local_files_only": local_files_only,
-                        }
-                        if variant is not None and has_file(
-                            pretrained_model_name_or_path, WEIGHTS_NAME, **has_file_kwargs
-                        ):
-                            raise OSError(
-                                f"{pretrained_model_name_or_path} does not appear to have a file named"
-                                f" {_add_variant(WEIGHTS_NAME, variant)} but there is a file without the variant"
-                                f" {variant}. Use `variant=None` to load this model from those weights."
-                            )
-                        else:
-                            raise OSError(
-                                f"{pretrained_model_name_or_path} does not appear to have a file named"
-                                f" {_add_variant(WEIGHTS_NAME, variant)} or {_add_variant(SAFE_WEIGHTS_NAME, variant)}."
-                            )
+                        raise OSError(
+                            f"{pretrained_model_name_or_path} does not appear to have a file named"
+                            f" {_add_variant(WEIGHTS_NAME, variant)} or {_add_variant(SAFE_WEIGHTS_NAME, variant)}."
+                        )
 
             except OSError:
                 # Raise any environment error raise by `cached_file`. It will have a helpful error message adapted
@@ -3641,7 +3629,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         local_files_only: bool = False,
         token: str | bool | None = None,
         revision: str = "main",
-        use_safetensors: bool | None = True,
+        use_safetensors: bool | None = None,
         weights_only: bool = True,
         **kwargs,
     ) -> SpecificPreTrainedModelType:
