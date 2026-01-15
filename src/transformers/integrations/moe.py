@@ -64,6 +64,43 @@ logger = get_logger(__name__)
 #         return final_hidden_states
 
 
+def _batched_linear(
+    input: torch.Tensor,
+    weight: torch.Tensor,
+    bias: torch.Tensor | None = None,
+    is_transposed: bool = False,
+) -> torch.Tensor:
+    """Batched linear layer supporting optional bias and transposed weights.
+
+    Args:
+        input (`torch.Tensor`):
+            Input tensor of shape (batch_size, input_dim).
+        weight (`torch.Tensor`):
+            Weight tensor of shape (batch_size, output_dim, input_dim) if transposed is `False`,
+            else of shape (batch_size, input_dim, output_dim).
+        bias (`torch.Tensor`, *optional*):
+            Bias tensor of shape (batch_size, output_dim). Default is `None`.
+        is_transposed (`bool`, *optional*, defaults to `False`):
+            Whether the weight tensor is transposed.
+    Returns:
+        `torch.Tensor`: Output tensor of shape (batch_size, output_dim).
+    """
+    if bias is not None:
+        if is_transposed:
+            # (batch_size, 1, output_dim) + (batch_size, 1, input_dim) @ (batch_size, input_dim, output_dim) -> (batch_size, 1, output_dim) -> (batch_size, output_dim)
+            return torch.baddbmm(bias.unsqueeze(1), input.unsqueeze(1), weight).squeeze(1)
+        else:
+            # (batch_size, output_dim, 1) + (batch_size, output_dim, input_dim) @ (batch_size, input_dim, 1) -> (batch_size, output_dim, 1) -> (batch_size, output_dim)
+            return torch.baddbmm(bias.unsqueeze(-1), weight, input.unsqueeze(-1)).squeeze(-1)
+    else:
+        if is_transposed:
+            # (batch_size, 1, input_dim) @ (batch_size, input_dim, output_dim) -> (batch_size, 1, output_dim) -> (batch_size, output_dim)
+            return torch.bmm(input.unsqueeze(1), weight).squeeze(1)
+        else:
+            # (batch_size, output_dim, input_dim) @ (batch_size, input_dim, 1) -> (batch_size, output_dim, 1) -> (batch_size, output_dim)
+            return torch.bmm(weight, input.unsqueeze(-1)).squeeze(-1)
+
+
 def batched_mm_experts_forward(
     self: torch.nn.Module,
     hidden_states: torch.Tensor,
@@ -94,38 +131,26 @@ def batched_mm_experts_forward(
         )
 
     # Get current hidden states for selected samples
-    current_hidden_states = hidden_states[token_idx]  # (S, hidden_dim)
+    selected_hidden_states = hidden_states[token_idx]
 
-    # Select projection matrices for selected experts
-    selected_gate_up = self.gate_up_proj[expert_ids]  # (S, hidden_dim, 2 * intermediate_dim)
-    selected_down = self.down_proj[expert_ids]  # (S, hidden_dim, intermediate_dim)
+    # Select expert weights and biases for selected samples
+    selected_gate_up = self.gate_up_proj[expert_ids]
+    selected_down = self.down_proj[expert_ids]
+    selected_gate_up_bias = self.gate_up_proj_bias[expert_ids] if self.has_bias else None
+    selected_down_bias = self.down_proj_bias[expert_ids] if self.has_bias else None
 
     # --- Up projection per expert (batched) ---
-    if getattr(self, "transposed_weights", False):
-        gate_up_out = torch.bmm(current_hidden_states.unsqueeze(1), selected_gate_up).squeeze(1)
-    else:
-        gate_up_out = torch.bmm(selected_gate_up, current_hidden_states.unsqueeze(-1)).squeeze(-1)
-
-    if hasattr(self, "gate_up_proj_bias") and self.gate_up_proj_bias is not None:
-        gate_up_out = gate_up_out + self.gate_up_proj_bias[expert_ids]
+    gate_up_out = _batched_linear(
+        selected_hidden_states, selected_gate_up, bias=selected_gate_up_bias, is_transposed=self.is_transposed
+    )  # (S, 2 * intermediate_dim)
 
     # Apply gating
-    if hasattr(self, "_apply_gate"):
-        # Custom gating if defined
-        hidden_after_activation = self._apply_gate(gate_up_out)  # (S, intermediate_dim)
-    else:
-        # Default gating mechanism
-        gate, up = gate_up_out.chunk(2, dim=-1)  # (S, intermediate_dim)
-        hidden_after_activation = self.act_fn(gate) * up  # (S, intermediate_dim)
+    hidden_after_activation = self._apply_gate(gate_up_out)  # (S, intermediate_dim)
 
     # --- Down projection per expert (batched) ---
-    if getattr(self, "transposed_weights", False):
-        out_per_sample = torch.bmm(hidden_after_activation.unsqueeze(1), selected_down).squeeze(1)
-    else:
-        out_per_sample = torch.bmm(selected_down, hidden_after_activation.unsqueeze(-1)).squeeze(-1)
-
-    if hasattr(self, "down_proj_bias") and self.down_proj_bias is not None:
-        out_per_sample = out_per_sample + self.down_proj_bias[expert_ids]
+    out_per_sample = _batched_linear(
+        hidden_after_activation, selected_down, bias=selected_down_bias, is_transposed=self.is_transposed
+    )  # (S, hidden_dim)
 
     # Apply routing weights
     out_per_sample = out_per_sample * sample_weights.unsqueeze(-1)  # (S, hidden_dim)
@@ -134,6 +159,44 @@ def batched_mm_experts_forward(
     final_hidden_states.index_add_(0, token_idx, out_per_sample.to(final_hidden_states.dtype))
 
     return final_hidden_states
+
+
+def _grouped_linear(
+    input: torch.Tensor,
+    weight: torch.Tensor,
+    bias: torch.Tensor | None = None,
+    offs: torch.Tensor | None = None,
+    is_transposed: bool = False,
+) -> torch.Tensor:
+    """Grouped linear layer supporting optional bias and transposed weights.
+
+    Args:
+        input (`torch.Tensor`):
+            Input tensor of shape (S, input_dim).
+        weight (`torch.Tensor`):
+            Weight tensor of shape (num_experts, output_dim, input_dim) if transposed is `False`,
+            else of shape (num_experts, input_dim, output_dim).
+        bias (`torch.Tensor`, *optional*):
+            Bias tensor of shape (num_experts, output_dim). Default is `None`.
+        offs (`torch.Tensor`, *optional*):
+            Offsets tensor indicating the boundaries of each group in the input tensor.
+        is_transposed (`bool`, *optional*, defaults to `False`):
+            Whether the weight tensor is transposed.
+    Returns:
+        `torch.Tensor`: Output tensor of shape (S, output_dim).
+    """
+    if is_transposed:
+        # (S, input_dim) @ grouped (num_experts, input_dim, output_dim) -> (S, output_dim)
+        out = torch._grouped_mm(input, weight, offs=offs)
+    else:
+        # (S, input_dim) @ grouped (num_experts, output_dim, input_dim).T -> (S, output_dim)
+        out = torch._grouped_mm(input, weight.transpose(-2, -1), offs=offs)
+
+    if bias is not None:
+        # We should be able to pass bias to the grouped_mm call, but it's not yet supported.
+        out = out + bias
+
+    return out
 
 
 def grouped_mm_experts_forward(
@@ -157,10 +220,6 @@ def grouped_mm_experts_forward(
     expert_ids = top_k_index.reshape(-1)
     token_idx = torch.arange(num_tokens, device=device).unsqueeze(1).expand(-1, num_top_k).reshape(-1)
 
-    # Get permutation to group by expert
-    perm = torch.argsort(expert_ids, stable=True)
-    inv_perm = torch.argsort(perm, stable=True)
-
     # Resolve routing weights per selected sample, allowing top_k_weights to be either:
     # - (num_tokens, num_top_k) Qwen2MoE style
     # - (num_tokens, num_experts) DeepseekV2 style
@@ -175,47 +234,37 @@ def grouped_mm_experts_forward(
         )
 
     # Get current hidden states for selected samples
-    current_hidden_states = hidden_states[token_idx]  # (S, hidden_dim)
+    current_hidden_states = hidden_states[token_idx]
 
-    # Group by expert for grouped_mm
+    # Sort by expert for grouped processing
+    perm = torch.argsort(expert_ids, stable=True)
+    inv_perm = torch.argsort(perm, stable=True)
+
+    # Group by expert
     expert_ids_g = expert_ids[perm]
     sample_weights_g = sample_weights[perm]
     current_states_g = current_hidden_states[perm]
+    selected_gate_up_bias = self.gate_up_proj_bias[expert_ids_g] if self.has_bias else None
+    selected_down_bias = self.down_proj_bias[expert_ids_g] if self.has_bias else None
 
     # Compute offsets for grouped_mm
     # using histc instead of bincount to avoid cuda graph issues
     # (grouped_mm_experts_forward still fails with cuda graphs but because of _grouped_mm internals)
     num_tokens_per_expert = torch.histc(expert_ids_g.float(), bins=num_experts, min=0, max=num_experts - 1)
-    offsets = torch.cumsum(num_tokens_per_expert, dim=0, dtype=torch.int32)
+    offs = torch.cumsum(num_tokens_per_expert, dim=0, dtype=torch.int32)
 
     # --- Up projection per expert (grouped_mm) ---
-    if getattr(self, "transposed_weights", False):
-        gate_up_out = torch._grouped_mm(current_states_g, self.gate_up_proj, offs=offsets)
-    else:
-        gate_up_out = torch._grouped_mm(current_states_g, self.gate_up_proj.transpose(-2, -1), offs=offsets)
-
-    if hasattr(self, "gate_up_proj_bias") and self.gate_up_proj_bias is not None:
-        # we should be able to pass bias to the grouped_mm call, but it's still not fully supported
-        gate_up_out = gate_up_out + self.gate_up_proj_bias[expert_ids_g]
+    gate_up_out = _grouped_linear(
+        current_states_g, self.gate_up_proj, bias=selected_gate_up_bias, is_transposed=self.is_transposed, offs=offs
+    )  # (S, 2 * intermediate_dim)
 
     # Apply gating
-    if hasattr(self, "_apply_gate"):
-        # Custom gating if defined
-        hidden_after_activation = self._apply_gate(gate_up_out)  # (S, intermediate_dim)
-    else:
-        # Default gating mechanism
-        gate, up = gate_up_out.chunk(2, dim=-1)  # (S, intermediate_dim)
-        hidden_after_activation = self.act_fn(gate) * up  # (S, intermediate_dim)
+    hidden_after_activation = self._apply_gate(gate_up_out)  # (S, intermediate_dim)
 
     # --- Down projection per expert (grouped_mm) ---
-    if getattr(self, "transposed_weights", False):
-        out_per_sample_g = torch._grouped_mm(hidden_after_activation, self.down_proj, offs=offsets)
-    else:
-        out_per_sample_g = torch._grouped_mm(hidden_after_activation, self.down_proj.transpose(-2, -1), offs=offsets)
-
-    if hasattr(self, "down_proj_bias") and self.down_proj_bias is not None:
-        # we should be able to pass bias to the grouped_mm call, but it's still not fully supported
-        out_per_sample_g = out_per_sample_g + self.down_proj_bias[expert_ids_g]
+    out_per_sample_g = _grouped_linear(
+        hidden_after_activation, self.down_proj, bias=selected_down_bias, is_transposed=self.is_transposed, offs=offs
+    )  # (S, hidden_dim)
 
     # Apply routing weights
     out_per_sample_g = out_per_sample_g * sample_weights_g.unsqueeze(-1)
@@ -242,15 +291,17 @@ ALL_EXPERTS_FUNCTIONS = ExpertsInterface()
 
 
 def use_experts_implementation(
-    experts_class: type[torch.nn.Module] | None = None, *, transposed_weights: bool = False
+    experts_class: type[torch.nn.Module] | None = None, *, is_transposed: bool = False, has_bias: bool = False
 ) -> type[torch.nn.Module]:
     """Decorator to modify experts class to support different experts implementations.
 
     Args:
         experts_class (`type[torch.nn.Module]`, *optional*):
             The experts class to modify. If not provided, returns a decorator that can be applied to the class.
-        transposed_weights (`bool`, *optional*, defaults to `False`):
+        is_transposed (`bool`, *optional*, defaults to `False`):
             Whether the expert weights are stored in transposed format.
+        has_bias (`bool`, *optional*, defaults to `False`):
+            Whether the expert layers include bias terms.
 
     Returns:
         `type[torch.nn.Module]`: The modified experts class.
@@ -263,8 +314,9 @@ def use_experts_implementation(
         @wraps(original_init)
         def __init__(self, config, *args, **kwargs):
             original_init(self, config, *args, **kwargs)
-            self.transposed_weights = transposed_weights
             self.config = config
+            self.has_bias = has_bias
+            self.is_transposed = is_transposed
 
         @wraps(original_forward)
         def forward(self, *args, **kwargs):
@@ -274,6 +326,14 @@ def use_experts_implementation(
                 experts_forward = ALL_EXPERTS_FUNCTIONS[self.config._experts_implementation]
 
             return experts_forward(self, *args, **kwargs)
+
+        if not hasattr(experts_class, "_apply_gate"):
+
+            def _apply_gate(self, gate_up_out: torch.Tensor) -> torch.Tensor:
+                gate, up = gate_up_out.chunk(2, dim=-1)  # (S, intermediate_dim)
+                return self.act_fn(gate) * up  # (S, intermediate_dim)
+
+            experts_class._apply_gate = _apply_gate
 
         experts_class.__init__ = __init__
         experts_class.forward = forward

@@ -2690,6 +2690,11 @@ class ModelTesterMixin:
             model.to(0)
             model.eval()
 
+            if model.config._experts_implementation == "grouped_mm":
+                # DataParallel does not respect buffer alignment when replicating the model on
+                # multiple GPUs, which can cause errors in grouped_mm experts implementation.
+                model.set_experts_implementation("eager")
+
             # Wrap model in nn.DataParallel
             model = nn.DataParallel(model)
             torch.cuda.synchronize()  # otherwise the transfer might not be complete
