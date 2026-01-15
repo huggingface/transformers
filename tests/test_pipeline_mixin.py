@@ -386,7 +386,7 @@ class PipelineTesterMixin:
 
         # TODO: We should check if a model file is on the Hub repo. instead.
         try:
-            model = model_architecture.from_pretrained(repo_id, revision=commit)
+            model = model_architecture.from_pretrained(repo_id, revision=commit, use_safetensors=True)
         except Exception:
             logger.warning(
                 f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')}_{dtype} is skipped: Could not find or load "
