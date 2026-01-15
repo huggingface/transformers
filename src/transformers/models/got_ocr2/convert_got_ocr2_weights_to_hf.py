@@ -17,7 +17,7 @@ import gc
 import glob
 import os
 
-import regex as re
+import re
 import torch
 from huggingface_hub import snapshot_download
 from safetensors import safe_open

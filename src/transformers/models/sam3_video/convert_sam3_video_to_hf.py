@@ -21,7 +21,7 @@ import argparse
 import gc
 import os
 
-import regex as re
+import re
 import torch
 
 from transformers import CLIPTokenizerFast

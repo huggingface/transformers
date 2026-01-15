@@ -16,7 +16,7 @@ import gc
 import json
 import os
 
-import regex as re
+import re
 import torch
 from huggingface_hub import snapshot_download
 from huggingface_hub.errors import HFValidationError

@@ -16,7 +16,7 @@
 import json
 from functools import lru_cache
 
-import regex as re
+import re
 
 from ...tokenization_python import AddedToken, PreTrainedTokenizer
 from ...utils import logging

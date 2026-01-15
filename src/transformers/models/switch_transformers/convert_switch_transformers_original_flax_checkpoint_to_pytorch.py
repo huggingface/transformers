@@ -262,8 +262,6 @@ GIN_TO_CONFIG_MAPPING = {
 
 def convert_gin_to_config(gin_file, num_experts):
     # Convert a google style config to the hugging face format
-    import regex as re
-
     with open(gin_file, "r") as f:
         raw_gin = f.read()
 

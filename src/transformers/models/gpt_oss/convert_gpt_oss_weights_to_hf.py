@@ -18,7 +18,7 @@ import json
 import os
 from pathlib import Path
 
-import regex as re
+import re
 import tiktoken
 import torch
 from safetensors.torch import load_file as safe_load

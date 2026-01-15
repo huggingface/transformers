@@ -18,7 +18,7 @@ import json
 import math
 import os
 
-import regex as re
+import re
 import torch
 import torch.nn.functional as F
 
