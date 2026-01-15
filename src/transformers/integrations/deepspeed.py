@@ -298,6 +298,9 @@ def _apply_weight_conversions_to_state_dict(model, state_dict, weight_mapping):
     # Local import to avoid circular dependency (core_model_loading -> accelerate -> deepspeed)
     from ..core_model_loading import WeightConverter, WeightRenaming, dot_natural_key, rename_source_key
 
+    # Preserve metadata from the original state dict
+    metadata = getattr(state_dict, "_metadata", None)
+
     prefix = model.base_model_prefix
     meta_model_state_dict = model.state_dict()
 
@@ -311,6 +314,9 @@ def _apply_weight_conversions_to_state_dict(model, state_dict, weight_mapping):
             renamed_key, _ = rename_source_key(original_key, renamings, [], prefix, meta_model_state_dict)
             if renamed_key in meta_model_state_dict:
                 new_state_dict[renamed_key] = tensor
+        # Attach metadata to the new state dict
+        if metadata is not None:
+            new_state_dict._metadata = metadata
         return new_state_dict
 
     # Full path: we have WeightConverter operations that require tensor fusion/splitting
@@ -360,6 +366,10 @@ def _apply_weight_conversions_to_state_dict(model, state_dict, weight_mapping):
         renamed_key, _ = rename_source_key(key, renamings, converters, prefix, meta_model_state_dict)
         if renamed_key not in new_state_dict and renamed_key in meta_model_state_dict:
             new_state_dict[renamed_key] = tensor
+
+    # Attach metadata to the new state dict
+    if metadata is not None:
+        new_state_dict._metadata = metadata
 
     return new_state_dict
 
