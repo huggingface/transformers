@@ -176,6 +176,7 @@ class SolarOpenConfig(PreTrainedConfig):
             tie_word_embeddings=tie_word_embeddings,
             **kwargs,
         )
+        self.head_dim = head_dim
 
 
 __all__ = ["SolarOpenConfig"]

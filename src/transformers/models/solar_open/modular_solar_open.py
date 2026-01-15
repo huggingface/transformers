@@ -175,6 +175,7 @@ class SolarOpenConfig(Glm4MoeConfig):
 
         del self.intermediate_size
         del self.first_k_dense_replace
+        self.head_dim = head_dim
 
 
 class SolarOpenDecoderLayer(LlamaDecoderLayer):
@@ -188,6 +189,9 @@ class SolarOpenMoE(Glm4MoeMoE):
 
 
 class SolarOpenAttention(Glm4MoeAttention):
+    def __init__(self, config: SolarOpenConfig, layer_idx: int | None = None):
+        super().__init__(config, layer_idx)
+        self.head_dim = config.head_dim
     pass
 
 
