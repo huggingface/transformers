@@ -213,22 +213,26 @@ def is_mlx_array(x):
 def is_flash_attention_requested(config=None, requested_attention_implementation: str | None = None):
     """
     Checks whether some flavor of flash attention is requested or not.
-    Priority order first goes for any explicitly passed value `requested_attention_implementation` and
-    then checks the config's saved value `config._attn_implementation`.
+
+    This is checked against one of the two arguments, i.e. either the `config` or the directly passed value
+    `requested_attention_implementation`. Otherwise, an error will be raised (ambiguity).
 
     The different versions of flash attention are usually
     - Implementations based on the original flash attention repo: https://github.com/Dao-AILab/flash-attention
     - Kernels implementations such as: https://huggingface.co/kernels-community/vllm-flash-attn3
     """
-    checked_attention_implementation = requested_attention_implementation
-    if checked_attention_implementation is None:
-        if config and hasattr(config, "_attn_implementation"):
-            checked_attention_implementation = config._attn_implementation
+    if config is not None and requested_attention_implementation is not None:
+        raise ValueError(
+            "Requested attention implementation is ambiguous: "
+            "Please pass either the config or the name of the attention implementation, not both."
+        )
 
-    if checked_attention_implementation is not None:
-        return "flash" in checked_attention_implementation
+    if config is not None:
+        checked_attention_implementation = config._attn_implementation
+    else:
+        checked_attention_implementation = requested_attention_implementation
 
-    return False
+    return "flash" in checked_attention_implementation
 
 
 def to_py_obj(obj):
