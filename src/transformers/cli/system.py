@@ -22,7 +22,7 @@ import contextlib
 import io
 import os
 import platform
-from typing import Annotated, Optional
+from typing import Annotated
 
 import huggingface_hub
 import typer
@@ -40,7 +40,7 @@ from ..utils import (
 
 def env(
     accelerate_config_file: Annotated[
-        Optional[str],
+        str | None,
         typer.Argument(help="The accelerate config file to use for the default values in the launching script."),
     ] = None,
 ) -> None:

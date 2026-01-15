@@ -404,12 +404,6 @@ Pipelines available for natural language processing tasks include the following.
     - __call__
     - all
 
-### SummarizationPipeline
-
-[[autodoc]] SummarizationPipeline
-    - __call__
-    - all
-
 ### TableQuestionAnsweringPipeline
 
 [[autodoc]] TableQuestionAnsweringPipeline
@@ -427,21 +421,9 @@ Pipelines available for natural language processing tasks include the following.
     - __call__
     - all
 
-### Text2TextGenerationPipeline
-
-[[autodoc]] Text2TextGenerationPipeline
-    - __call__
-    - all
-
 ### TokenClassificationPipeline
 
 [[autodoc]] TokenClassificationPipeline
-    - __call__
-    - all
-
-### TranslationPipeline
-
-[[autodoc]] TranslationPipeline
     - __call__
     - all
 
@@ -482,6 +464,12 @@ Pipelines available for multimodal tasks include the following.
 ### ImageTextToTextPipeline
 
 [[autodoc]] ImageTextToTextPipeline
+    - __call__
+    - all
+
+### AnyToAnyPipeline
+
+[[autodoc]] AnyToAnyPipeline
     - __call__
     - all
 

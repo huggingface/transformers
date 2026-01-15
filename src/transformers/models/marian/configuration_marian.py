@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The Marian Team Authors and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -35,7 +34,7 @@ class MarianConfig(PreTrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 58101):
             Vocabulary size of the Marian model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`MarianModel`] or [`TFMarianModel`].
+            `inputs_ids` passed when calling [`MarianModel`].
         d_model (`int`, *optional*, defaults to 1024):
             Dimensionality of the layers and the pooler layer.
         encoder_layers (`int`, *optional*, defaults to 12):
@@ -147,7 +146,7 @@ class MarianConfig(PreTrainedConfig):
         self.num_hidden_layers = encoder_layers
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
         self.share_encoder_decoder_embeddings = share_encoder_decoder_embeddings
-        kwargs["tie_encoder_decoder"] = share_encoder_decoder_embeddings
+        kwargs["tie_word_embeddings"] = share_encoder_decoder_embeddings
         super().__init__(
             pad_token_id=pad_token_id,
             eos_token_id=eos_token_id,

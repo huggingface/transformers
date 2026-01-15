@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020, The T5 Authors and HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,7 +22,7 @@ logger = logging.get_logger(__name__)
 
 class T5Config(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`T5Model`] or a [`TFT5Model`]. It is used to
+    This is the configuration class to store the configuration of a [`T5Model`]. It is used to
     instantiate a T5 model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the T5
     [google-t5/t5-small](https://huggingface.co/google-t5/t5-small) architecture.
@@ -34,7 +33,7 @@ class T5Config(PreTrainedConfig):
     Arguments:
         vocab_size (`int`, *optional*, defaults to 32128):
             Vocabulary size of the T5 model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`T5Model`] or [`TFT5Model`].
+            `inputs_ids` passed when calling [`T5Model`].
         d_model (`int`, *optional*, defaults to 512):
             Size of the encoder layers and the pooler layer.
         d_kv (`int`, *optional*, defaults to 64):
@@ -131,13 +130,19 @@ class T5Config(PreTrainedConfig):
         if feed_forward_proj == "gated-gelu":
             self.dense_act_fn = "gelu_new"
 
+        # Super weird feature of T5 because we support T5 and T51.1 from the same
+        # model code. Original T5 always scaled outputs, but the 1.1v does not.
+        # The model code was relying on saved configs where `tie_word_embeddings` is
+        # set to `False` in 1.1v and using it as indicator of whether to scale or not
+        # But in fact we tie weights always and force it to be `True`
+        self.scale_decoder_outputs = kwargs.get("tie_word_embeddings") is not False
+        kwargs["tie_word_embeddings"] = True
         super().__init__(
             pad_token_id=pad_token_id,
             eos_token_id=eos_token_id,
             is_encoder_decoder=is_encoder_decoder,
             **kwargs,
         )
-        self.tie_encoder_decoder = True  # T5 is always tied, has always been like that.
 
 
 __all__ = ["T5Config"]

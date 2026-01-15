@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 NVIDIA CORPORATION and the HuggingFace Inc. team. All rights
 # reserved.
 #
@@ -14,14 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, Union
 
 import torch
 from torch import nn
 
 from ...activations import ACT2FN
 from ...cache_utils import Cache
-from ...masking_utils import eager_mask, padding_mask_function
+from ...masking_utils import create_bidirectional_mask
 from ...modeling_outputs import BaseModelOutput, CausalLMOutputWithPast
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
@@ -59,7 +57,8 @@ class AudioFlamingo3Encoder(Qwen2AudioEncoder):
     def forward(
         self,
         input_features: torch.Tensor,
-        input_features_mask: Optional[torch.Tensor] = None,
+        input_features_mask: torch.Tensor | None = None,
+        **kwargs,
     ):
         r"""
         Args:
@@ -73,20 +72,10 @@ class AudioFlamingo3Encoder(Qwen2AudioEncoder):
                 - 0 for tokens that are **masked**.
         """
 
-        # Prepare attention mask for transformer layers
-        batch_size = input_features.shape[0]
         seq_len = (input_features.shape[-1] - 1) // 2 + 1  # After conv2 downsampling
-
         input_features_lengths = input_features_mask.sum(-1)
         input_features_lengths = (input_features_lengths - 1) // 2 + 1  # conv2 downsampling
         input_features_mask = torch.arange(seq_len, device=input_features.device) < input_features_lengths[:, None]
-        attention_mask = eager_mask(
-            batch_size=batch_size,
-            cache_position=torch.arange(seq_len, device=input_features.device),
-            kv_length=seq_len,
-            mask_function=padding_mask_function(input_features_mask),
-            dtype=self.conv1.weight.dtype,
-        )
 
         # Conv front-end
         inputs_embeds = nn.functional.gelu(self.conv1(input_features))
@@ -96,6 +85,12 @@ class AudioFlamingo3Encoder(Qwen2AudioEncoder):
         # Add positions, dropout
         hidden_states = inputs_embeds + self.embed_positions.weight
         hidden_states = nn.functional.dropout(hidden_states, p=self.dropout, training=self.training)
+
+        attention_mask = create_bidirectional_mask(
+            config=self.config,
+            input_embeds=hidden_states,
+            attention_mask=input_features_mask,
+        )
 
         # Transformer stack
         for layer in self.layers:
@@ -173,24 +168,21 @@ class AudioFlamingo3ForConditionalGeneration(VoxtralForConditionalGeneration):
         audio_embeds = audio_embeds[valid_mask.to(audio_embeds.device)]
         return audio_embeds
 
-    def get_audio_embeds(self):
-        raise NotImplementedError("This method is not supported for AudioFlamingo3ForConditionalGeneration.")
-
     @can_return_tuple
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        input_features: Optional[torch.FloatTensor] = None,
-        input_features_mask: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
+        input_ids: torch.LongTensor | None = None,
+        input_features: torch.FloatTensor | None = None,
+        input_features_mask: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         r"""

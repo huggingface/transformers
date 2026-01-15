@@ -134,7 +134,7 @@ pipeline("the secret to baking a really good cake is ")
 To chat with a model, the usage pattern is the same. The only difference is you need to construct a chat history (the input to `Pipeline`) between you and the system.
 
 > [!TIP]
-> You can also chat with a model directly from the command line.
+> You can also chat with a model directly from the command line, as long as [`transformers serve` is running](https://huggingface.co/docs/transformers/main/en/serving).
 > ```shell
 > transformers chat Qwen/Qwen2.5-0.5B-Instruct
 > ```
@@ -224,7 +224,7 @@ pipeline(
     - Reduce compute time and production costs.
     - Dozens of model architectures with 1M+ pretrained checkpoints across all modalities.
 
-1. Choose the right framework for every part of a models lifetime:
+1. Choose the right framework for every part of a model's lifetime:
     - Train state-of-the-art models in 3 lines of code.
     - Move a single model between PyTorch/JAX/TF2.0 frameworks at will.
     - Pick the right framework for training, evaluation, and production.

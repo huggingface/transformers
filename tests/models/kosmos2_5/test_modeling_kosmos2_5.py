@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 Microsoft Research and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -32,7 +31,7 @@ from transformers.models.kosmos2_5.configuration_kosmos2_5 import (
 from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     require_vision,
     slow,
     torch_device,
@@ -376,6 +375,10 @@ class Kosmos2_5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     def test_prompt_lookup_decoding_matches_greedy_search(self):
         pass
 
+    @unittest.skip(reason="Kosmos2-3 has no separate base model without a head.")
+    def test_model_base_model_prefix(self):
+        pass
+
     def test_model(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
@@ -462,7 +465,7 @@ class Kosmos2_5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         pass
 
     # TODO: ydshieh
-    @require_torch_gpu
+    @require_torch_accelerator
     @slow
     @unittest.skip(reason="_update_causal_mask is not implemented yet which fails this test")
     def test_sdpa_can_dispatch_on_flash(self):
@@ -623,7 +626,7 @@ class Kosmos2_5ModelIntegrationTest(unittest.TestCase):
         self.assertListEqual(generated_text, EXPECTED_TEXT[self.cuda_compute_capability_major_version])
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @pytest.mark.flash_attn_test
     @slow
     def test_FA2(self):

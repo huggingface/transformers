@@ -617,7 +617,6 @@ class Owlv2ModelIntegrationTest(unittest.TestCase):
         model = Owlv2Model.from_pretrained(model_name).to(torch_device)
         image_processor = OwlViTImageProcessor.from_pretrained(model_name)
         processor = OwlViTProcessor.from_pretrained(model_name, image_processor=image_processor)
-        print("processor:", processor)
 
         image = prepare_img()
         inputs = processor(
@@ -736,7 +735,7 @@ class Owlv2ModelIntegrationTest(unittest.TestCase):
                 [-3.3644, -4.0717, -4.0717, -4.0717],
                 [-2.9425, -4.0717, -4.0717, -4.0717],
             ]
-        )
+        ).to(torch_device)
 
         torch.testing.assert_close(model.box_bias[:3, :4], expected_default_box_bias, rtol=1e-4, atol=1e-4)
 

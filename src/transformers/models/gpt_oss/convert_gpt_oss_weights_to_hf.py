@@ -17,7 +17,6 @@ import gc
 import json
 import os
 from pathlib import Path
-from typing import Optional
 
 import regex as re
 import tiktoken
@@ -57,7 +56,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
 # fmt: on
 
 
-def convert_old_keys_to_new_keys(state_dict_keys: Optional[dict] = None):
+def convert_old_keys_to_new_keys(state_dict_keys: dict | None = None):
     """
     This function should be applied only once, on the concatenated keys to efficiently rename using
     the key mappings.
@@ -146,7 +145,6 @@ def convert_moe_packed_tensors(
 def write_model(
     model_path,
     input_base_path,
-    safe_serialization=True,
     instruct=False,
     mxfp4=False,
 ):
@@ -255,7 +253,7 @@ def write_model(
         del config._name_or_path
 
         print("Saving the model")
-        model.save_pretrained(model_path, safe_serialization=safe_serialization)
+        model.save_pretrained(model_path)
         del state_dict, model
 
     else:
@@ -332,7 +330,6 @@ def create_safetensors_index(safetensors_index, num_shards, model_path):
         json.dump(safetensors_index, f)
 
 
-# Copied from transformers.models.gpt2.tokenization_gpt2.bytes_to_unicode
 def bytes_to_unicode():
     """
     Returns list of utf-8 byte and a mapping to unicode strings. We specifically avoids mapping to whitespace/control
@@ -388,7 +385,7 @@ class GptOssConverter(TikTokenConverter):
         self,
         vocab_file,
         model_max_length: int,
-        chat_template: Optional[str] = None,
+        chat_template: str | None = None,
         **kwargs,
     ):
         super().__init__(vocab_file, pattern=None)
@@ -795,9 +792,6 @@ def main():
         help="Location to write HF model and tokenizer",
     )
     parser.add_argument(
-        "--safe_serialization", default=True, type=bool, help="Whether or not to save using `safetensors`."
-    )
-    parser.add_argument(
         "--special_tokens",
         default=None,
         type=list[str],
@@ -825,7 +819,6 @@ def main():
     write_model(
         model_path=args.output_dir,
         input_base_path=args.input_dir,
-        safe_serialization=args.safe_serialization,
         instruct=args.instruct,
         mxfp4=args.mxfp4,
     )

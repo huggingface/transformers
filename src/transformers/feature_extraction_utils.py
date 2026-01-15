@@ -19,9 +19,10 @@ import copy
 import json
 import os
 from collections import UserDict
-from typing import TYPE_CHECKING, Any, Optional, TypeVar, Union
+from typing import TYPE_CHECKING, Any, TypeVar, Union
 
 import numpy as np
+from huggingface_hub import create_repo, is_offline_mode
 
 from .dynamic_module_utils import custom_object_save
 from .utils import (
@@ -29,11 +30,9 @@ from .utils import (
     PROCESSOR_NAME,
     PushToHubMixin,
     TensorType,
+    _is_tensor_or_array_like,
     copy_func,
-    download_url,
     is_numpy_array,
-    is_offline_mode,
-    is_remote_url,
     is_torch_available,
     is_torch_device,
     is_torch_dtype,
@@ -69,11 +68,18 @@ class BatchFeature(UserDict):
         tensor_type (`Union[None, str, TensorType]`, *optional*):
             You can give a tensor_type here to convert the lists of integers in PyTorch/Numpy Tensors at
             initialization.
+        skip_tensor_conversion (`list[str]` or `set[str]`, *optional*):
+            List or set of keys that should NOT be converted to tensors, even when `tensor_type` is specified.
     """
 
-    def __init__(self, data: Optional[dict[str, Any]] = None, tensor_type: Union[None, str, TensorType] = None):
+    def __init__(
+        self,
+        data: dict[str, Any] | None = None,
+        tensor_type: None | str | TensorType = None,
+        skip_tensor_conversion: list[str] | set[str] | None = None,
+    ):
         super().__init__(data)
-        self.convert_to_tensors(tensor_type=tensor_type)
+        self.convert_to_tensors(tensor_type=tensor_type, skip_tensor_conversion=skip_tensor_conversion)
 
     def __getitem__(self, item: str) -> Any:
         """
@@ -98,7 +104,7 @@ class BatchFeature(UserDict):
         if "data" in state:
             self.data = state["data"]
 
-    def _get_is_as_tensor_fns(self, tensor_type: Optional[Union[str, TensorType]] = None):
+    def _get_is_as_tensor_fns(self, tensor_type: str | TensorType | None = None):
         if tensor_type is None:
             return None, None
 
@@ -112,6 +118,14 @@ class BatchFeature(UserDict):
             import torch
 
             def as_tensor(value):
+                if torch.is_tensor(value):
+                    return value
+
+                # stack list of tensors if tensor_type is PyTorch (# torch.tensor() does not support list of tensors)
+                if isinstance(value, (list, tuple)) and len(value) > 0 and torch.is_tensor(value[0]):
+                    return torch.stack(value)
+
+                # convert list of numpy arrays to numpy array (stack) if tensor_type is Numpy
                 if isinstance(value, (list, tuple)) and len(value) > 0:
                     if isinstance(value[0], np.ndarray):
                         value = np.array(value)
@@ -140,7 +154,11 @@ class BatchFeature(UserDict):
             is_tensor = is_numpy_array
         return is_tensor, as_tensor
 
-    def convert_to_tensors(self, tensor_type: Optional[Union[str, TensorType]] = None):
+    def convert_to_tensors(
+        self,
+        tensor_type: str | TensorType | None = None,
+        skip_tensor_conversion: list[str] | set[str] | None = None,
+    ):
         """
         Convert the inner content to tensors.
 
@@ -148,6 +166,13 @@ class BatchFeature(UserDict):
             tensor_type (`str` or [`~utils.TensorType`], *optional*):
                 The type of tensors to use. If `str`, should be one of the values of the enum [`~utils.TensorType`]. If
                 `None`, no modification is done.
+            skip_tensor_conversion (`list[str]` or `set[str]`, *optional*):
+                List or set of keys that should NOT be converted to tensors, even when `tensor_type` is specified.
+
+        Note:
+            Values that don't have an array-like structure (e.g., strings, dicts, lists of strings) are
+            automatically skipped and won't be converted to tensors. Ragged arrays (lists of arrays with
+            different lengths) are still attempted, though they may raise errors during conversion.
         """
         if tensor_type is None:
             return self
@@ -156,18 +181,30 @@ class BatchFeature(UserDict):
 
         # Do the tensor conversion in batch
         for key, value in self.items():
+            # Skip keys explicitly marked for no conversion
+            if skip_tensor_conversion and key in skip_tensor_conversion:
+                continue
+
+            # Skip values that are not array-like
+            if not _is_tensor_or_array_like(value):
+                continue
+
             try:
                 if not is_tensor(value):
                     tensor = as_tensor(value)
-
                     self[key] = tensor
-            except:  # noqa E722
+            except Exception as e:
                 if key == "overflowing_values":
-                    raise ValueError("Unable to create tensor returning overflowing values of different lengths. ")
+                    raise ValueError(
+                        f"Unable to create tensor for '{key}' with overflowing values of different lengths. "
+                        f"Original error: {str(e)}"
+                    ) from e
                 raise ValueError(
-                    "Unable to create tensor, you should probably activate padding "
-                    "with 'padding=True' to have batched tensors with the same length."
-                )
+                    f"Unable to convert output '{key}' (type: {type(value).__name__}) to tensor: {str(e)}\n"
+                    f"You can try:\n"
+                    f"  1. Use padding=True to ensure all outputs have the same shape\n"
+                    f"  2. Set return_tensors=None to return Python objects instead of tensors"
+                ) from e
 
         return self
 
@@ -206,12 +243,15 @@ class BatchFeature(UserDict):
 
         # We cast only floating point tensors to avoid issues with tokenizers casting `LongTensor` to `FloatTensor`
         def maybe_to(v):
-            # check if v is a floating point
+            # check if v is a floating point tensor
             if isinstance(v, torch.Tensor) and torch.is_floating_point(v):
                 # cast and send to device
                 return v.to(*args, **kwargs)
             elif isinstance(v, torch.Tensor) and device is not None:
                 return v.to(device=device, non_blocking=non_blocking)
+            # recursively handle lists and tuples
+            elif isinstance(v, (list, tuple)):
+                return type(v)(maybe_to(item) for item in v)
             else:
                 return v
 
@@ -229,8 +269,8 @@ class FeatureExtractionMixin(PushToHubMixin):
 
     def __init__(self, **kwargs):
         """Set elements of `kwargs` as attributes."""
-        # Pop "processor_class" as it should be saved as private attribute
-        self._processor_class = kwargs.pop("processor_class", None)
+        # Pop "processor_class", it should not be saved in feature extractor config
+        kwargs.pop("processor_class", None)
         # Additional attributes without default values
         for key, value in kwargs.items():
             try:
@@ -239,18 +279,14 @@ class FeatureExtractionMixin(PushToHubMixin):
                 logger.error(f"Can't set {key} with value {value} for {self}")
                 raise err
 
-    def _set_processor_class(self, processor_class: str):
-        """Sets processor class as an attribute."""
-        self._processor_class = processor_class
-
     @classmethod
     def from_pretrained(
         cls: type[SpecificFeatureExtractorType],
-        pretrained_model_name_or_path: Union[str, os.PathLike],
-        cache_dir: Optional[Union[str, os.PathLike]] = None,
+        pretrained_model_name_or_path: str | os.PathLike,
+        cache_dir: str | os.PathLike | None = None,
         force_download: bool = False,
         local_files_only: bool = False,
-        token: Optional[Union[str, bool]] = None,
+        token: str | bool | None = None,
         revision: str = "main",
         **kwargs,
     ) -> SpecificFeatureExtractorType:
@@ -340,7 +376,7 @@ class FeatureExtractionMixin(PushToHubMixin):
 
         return cls.from_dict(feature_extractor_dict, **kwargs)
 
-    def save_pretrained(self, save_directory: Union[str, os.PathLike], push_to_hub: bool = False, **kwargs):
+    def save_pretrained(self, save_directory: str | os.PathLike, push_to_hub: bool = False, **kwargs):
         """
         Save a feature_extractor object to the directory `save_directory`, so that it can be re-loaded using the
         [`~feature_extraction_utils.FeatureExtractionMixin.from_pretrained`] class method.
@@ -363,7 +399,7 @@ class FeatureExtractionMixin(PushToHubMixin):
         if push_to_hub:
             commit_message = kwargs.pop("commit_message", None)
             repo_id = kwargs.pop("repo_id", save_directory.split(os.path.sep)[-1])
-            repo_id = self._create_repo(repo_id, **kwargs)
+            repo_id = create_repo(repo_id, exist_ok=True, **kwargs).repo_id
             files_timestamps = self._get_files_timestamps(save_directory)
 
         # If we have a custom config, we copy the file defining it in the folder and set the attributes so it can be
@@ -390,7 +426,7 @@ class FeatureExtractionMixin(PushToHubMixin):
 
     @classmethod
     def get_feature_extractor_dict(
-        cls, pretrained_model_name_or_path: Union[str, os.PathLike], **kwargs
+        cls, pretrained_model_name_or_path: str | os.PathLike, **kwargs
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         """
         From a `pretrained_model_name_or_path`, resolve to a dictionary of parameters, to be used for instantiating a
@@ -430,10 +466,6 @@ class FeatureExtractionMixin(PushToHubMixin):
             resolved_feature_extractor_file = pretrained_model_name_or_path
             resolved_processor_file = None
             is_local = True
-        elif is_remote_url(pretrained_model_name_or_path):
-            feature_extractor_file = pretrained_model_name_or_path
-            resolved_processor_file = None
-            resolved_feature_extractor_file = download_url(pretrained_model_name_or_path)
         else:
             feature_extractor_file = FEATURE_EXTRACTOR_NAME
             try:
@@ -559,7 +591,7 @@ class FeatureExtractionMixin(PushToHubMixin):
         return output
 
     @classmethod
-    def from_json_file(cls, json_file: Union[str, os.PathLike]) -> "FeatureExtractionMixin":
+    def from_json_file(cls, json_file: str | os.PathLike) -> "FeatureExtractionMixin":
         """
         Instantiates a feature extractor of type [`~feature_extraction_utils.FeatureExtractionMixin`] from the path to
         a JSON file of parameters.
@@ -590,15 +622,9 @@ class FeatureExtractionMixin(PushToHubMixin):
             if isinstance(value, np.ndarray):
                 dictionary[key] = value.tolist()
 
-        # make sure private name "_processor_class" is correctly
-        # saved as "processor_class"
-        _processor_class = dictionary.pop("_processor_class", None)
-        if _processor_class is not None:
-            dictionary["processor_class"] = _processor_class
-
         return json.dumps(dictionary, indent=2, sort_keys=True) + "\n"
 
-    def to_json_file(self, json_file_path: Union[str, os.PathLike]):
+    def to_json_file(self, json_file_path: str | os.PathLike):
         """
         Save this instance to a JSON file.
 

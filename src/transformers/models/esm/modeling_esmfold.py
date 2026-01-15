@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 Meta and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,7 +16,6 @@ import sys
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from functools import partial
-from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -32,6 +30,7 @@ from ...utils import (
     auto_docstring,
     logging,
 )
+from ...utils.generic import maybe_autocast
 from .modeling_esm import EsmModel, EsmPreTrainedModel
 from .openfold_utils import (
     OFProtein,
@@ -110,33 +109,34 @@ class EsmForProteinFoldingOutput(ModelOutput):
         Per-sample maximum predicted error.
     """
 
-    frames: Optional[torch.FloatTensor] = None
-    sidechain_frames: Optional[torch.FloatTensor] = None
-    unnormalized_angles: Optional[torch.FloatTensor] = None
-    angles: Optional[torch.FloatTensor] = None
-    positions: Optional[torch.FloatTensor] = None
-    states: Optional[torch.FloatTensor] = None
-    s_s: Optional[torch.FloatTensor] = None
-    s_z: Optional[torch.FloatTensor] = None
-    distogram_logits: Optional[torch.FloatTensor] = None
-    lm_logits: Optional[torch.FloatTensor] = None
-    aatype: Optional[torch.FloatTensor] = None
-    atom14_atom_exists: Optional[torch.FloatTensor] = None
-    residx_atom14_to_atom37: Optional[torch.FloatTensor] = None
-    residx_atom37_to_atom14: Optional[torch.FloatTensor] = None
-    atom37_atom_exists: Optional[torch.FloatTensor] = None
-    residue_index: Optional[torch.FloatTensor] = None
-    lddt_head: Optional[torch.FloatTensor] = None
-    plddt: Optional[torch.FloatTensor] = None
-    ptm_logits: Optional[torch.FloatTensor] = None
-    ptm: Optional[torch.FloatTensor] = None
-    aligned_confidence_probs: Optional[torch.FloatTensor] = None
-    predicted_aligned_error: Optional[torch.FloatTensor] = None
-    max_predicted_aligned_error: Optional[torch.FloatTensor] = None
+    frames: torch.FloatTensor | None = None
+    sidechain_frames: torch.FloatTensor | None = None
+    unnormalized_angles: torch.FloatTensor | None = None
+    angles: torch.FloatTensor | None = None
+    positions: torch.FloatTensor | None = None
+    states: torch.FloatTensor | None = None
+    s_s: torch.FloatTensor | None = None
+    s_z: torch.FloatTensor | None = None
+    distogram_logits: torch.FloatTensor | None = None
+    lm_logits: torch.FloatTensor | None = None
+    aatype: torch.FloatTensor | None = None
+    atom14_atom_exists: torch.FloatTensor | None = None
+    residx_atom14_to_atom37: torch.FloatTensor | None = None
+    residx_atom37_to_atom14: torch.FloatTensor | None = None
+    atom37_atom_exists: torch.FloatTensor | None = None
+    residue_index: torch.FloatTensor | None = None
+    lddt_head: torch.FloatTensor | None = None
+    plddt: torch.FloatTensor | None = None
+    ptm_logits: torch.FloatTensor | None = None
+    ptm: torch.FloatTensor | None = None
+    aligned_confidence_probs: torch.FloatTensor | None = None
+    predicted_aligned_error: torch.FloatTensor | None = None
+    max_predicted_aligned_error: torch.FloatTensor | None = None
 
 
 def is_fp16_enabled(device_type):
     # Autocast world
+    # NOTE: `torch.get_autocast_dtype` is there starting from PyTorch 2.4
     autocast_dtype = (
         torch.get_autocast_dtype(device_type)
         if hasattr(torch, "get_autocast_dtype")
@@ -220,7 +220,7 @@ class EsmFoldLinear(nn.Linear):
         out_dim: int,
         bias: bool = True,
         init: str = "default",
-        init_fn: Optional[Callable[[torch.Tensor, torch.Tensor], None]] = None,
+        init_fn: Callable[[torch.Tensor, torch.Tensor], None] | None = None,
     ):
         """
         Args:
@@ -266,7 +266,7 @@ class EsmFoldLayerNorm(nn.Module):
     def forward(self, x):
         d = x.dtype
         if d is torch.bfloat16 and not is_deepspeed_initialized():
-            with torch.autocast(device_type="cuda", enabled=False):
+            with maybe_autocast(device_type="cuda", enabled=False):
                 out = nn.functional.layer_norm(x, self.c_in, self.weight.to(dtype=d), self.bias.to(dtype=d), self.eps)
         else:
             out = nn.functional.layer_norm(x, self.c_in, self.weight, self.bias, self.eps)
@@ -281,7 +281,7 @@ def softmax_no_cast(t: torch.Tensor, dim: int = -1) -> torch.Tensor:
     """
     d = t.dtype
     if d is torch.bfloat16 and not is_deepspeed_initialized():
-        with torch.autocast(device_type="cuda", enabled=False):
+        with maybe_autocast(device_type="cuda", enabled=False):
             s = torch.nn.functional.softmax(t, dim=dim)
     else:
         s = torch.nn.functional.softmax(t, dim=dim)
@@ -381,13 +381,13 @@ class EsmFoldAttention(nn.Module):
         self,
         q_x: torch.Tensor,
         kv_x: torch.Tensor,
-        biases: Optional[list[torch.Tensor]] = None,
+        biases: list[torch.Tensor] | None = None,
         use_memory_efficient_kernel: bool = False,
         use_lma: bool = False,
         lma_q_chunk_size: int = 1024,
         lma_kv_chunk_size: int = 4096,
         use_flash: bool = False,
-        flash_mask: Optional[torch.Tensor] = None,
+        flash_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """
         Args:
@@ -494,8 +494,8 @@ class EsmFoldTriangleAttention(nn.Module):
     def forward(
         self,
         x: torch.Tensor,
-        mask: Optional[torch.Tensor] = None,
-        chunk_size: Optional[int] = None,
+        mask: torch.Tensor | None = None,
+        chunk_size: int | None = None,
         use_memory_efficient_kernel: bool = False,
         use_lma: bool = False,
         inplace_safe: bool = False,
@@ -574,7 +574,7 @@ class EsmFoldTriangleMultiplicativeUpdate(nn.Module):
         self.sigmoid = nn.Sigmoid()
 
     def _combine_projections(
-        self, a: torch.Tensor, b: torch.Tensor, _inplace_chunk_size: Optional[int] = None
+        self, a: torch.Tensor, b: torch.Tensor, _inplace_chunk_size: int | None = None
     ) -> torch.Tensor:
         if self._outgoing:
             a = permute_final_dims(a, (2, 0, 1))
@@ -602,8 +602,8 @@ class EsmFoldTriangleMultiplicativeUpdate(nn.Module):
     def _inference_forward(
         self,
         z: torch.Tensor,
-        mask: Optional[torch.Tensor] = None,
-        inplace_chunk_size: Optional[int] = None,
+        mask: torch.Tensor | None = None,
+        inplace_chunk_size: int | None = None,
         with_add: bool = True,
     ):
         """
@@ -829,10 +829,10 @@ class EsmFoldTriangleMultiplicativeUpdate(nn.Module):
     def forward(
         self,
         z: torch.Tensor,
-        mask: Optional[torch.Tensor] = None,
+        mask: torch.Tensor | None = None,
         inplace_safe: bool = False,
         _add_with_inplace: bool = False,
-        _inplace_chunk_size: Optional[int] = 256,
+        _inplace_chunk_size: int | None = 256,
     ) -> torch.Tensor:
         """
         Args:
@@ -867,7 +867,7 @@ class EsmFoldTriangleMultiplicativeUpdate(nn.Module):
 
         device_type = a.device.type if a.device.type != "mps" else "cpu"
         if is_fp16_enabled(device_type):
-            with torch.autocast(device_type=device_type, enabled=False):
+            with maybe_autocast(device_type=device_type, enabled=False):
                 x = self._combine_projections(a.float(), b.float())
         else:
             x = self._combine_projections(a, b)
@@ -910,7 +910,7 @@ class EsmFoldPreTrainedModel(EsmPreTrainedModel):
                 elif module.init == "gating":
                     init.zeros_(module.weight)
                     if module.bias:
-                        init.ones(module.bias)
+                        init.ones_(module.bias)
                 elif module.init == "normal":
                     init.kaiming_normal_(module.weight, nonlinearity="linear")
                 elif module.init == "final":
@@ -1008,7 +1008,7 @@ class EsmFoldDropout(nn.Module):
     Implementation of dropout with the ability to share the dropout mask along a particular dimension.
     """
 
-    def __init__(self, r: float, batch_dim: Union[int, list[int]]):
+    def __init__(self, r: float, batch_dim: int | list[int]):
         super().__init__()
 
         self.r = r
@@ -1414,11 +1414,11 @@ class EsmFoldInvariantPointAttention(nn.Module):
     def forward(
         self,
         s: torch.Tensor,
-        z: Optional[torch.Tensor],
+        z: torch.Tensor | None,
         r: Rigid,
         mask: torch.Tensor,
         _offload_inference: bool = False,
-        _z_reference_list: Optional[Sequence[torch.Tensor]] = None,
+        _z_reference_list: Sequence[torch.Tensor] | None = None,
     ) -> torch.Tensor:
         """
         Args:
@@ -1490,7 +1490,7 @@ class EsmFoldInvariantPointAttention(nn.Module):
         # [*, H, N_res, N_res]
         device_type = q.device.type if q.device.type != "mps" else "cpu"
         if is_fp16_enabled(device_type):
-            with torch.autocast(device_type=device_type, enabled=False):
+            with maybe_autocast(device_type=device_type, enabled=False):
                 a = torch.matmul(
                     permute_final_dims(q.float(), (1, 0, 2)),  # [*, H, N_res, C_hidden]
                     permute_final_dims(k.float(), (1, 2, 0)),  # [*, H, C_hidden, N_res]
@@ -1977,6 +1977,11 @@ class EsmForProteinFolding(EsmPreTrainedModel):
 
     _can_record_outputs = None
 
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, EsmForProteinFolding):
+            init.copy_(module.af2_to_esm, module._af2_to_esm_from_vocab_list(module.config.vocab_list))
+
     def __init__(self, config):
         super().__init__(config)
 
@@ -2044,11 +2049,11 @@ class EsmForProteinFolding(EsmPreTrainedModel):
     def forward(
         self,
         input_ids: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        masking_pattern: Optional[torch.Tensor] = None,
-        num_recycles: Optional[int] = None,
-        output_hidden_states: Optional[bool] = False,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        masking_pattern: torch.Tensor | None = None,
+        num_recycles: int | None = None,
+        output_hidden_states: bool | None = False,
     ) -> EsmForProteinFoldingOutput:
         r"""
         masking_pattern (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
@@ -2218,7 +2223,7 @@ class EsmForProteinFolding(EsmPreTrainedModel):
     @torch.no_grad()
     def infer(
         self,
-        seqs: Union[str, list[str]],
+        seqs: str | list[str],
         position_ids=None,
     ):
         if isinstance(seqs, str):
@@ -2257,7 +2262,7 @@ class EsmForProteinFolding(EsmPreTrainedModel):
 
     @staticmethod
     def output_to_pdb(output: dict) -> list[str]:
-        """Returns the pbd (file) string from the model given the model output."""
+        """Returns the pdb (file) string from the model given the model output."""
         output = {k: v.to("cpu").numpy() for k, v in output.items()}
         pdbs = []
         final_atom_positions = atom14_to_atom37(output["positions"][-1], output)

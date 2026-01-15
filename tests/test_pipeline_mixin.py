@@ -60,6 +60,7 @@ from transformers.testing_utils import (
 )
 from transformers.utils import direct_transformers_import, logging
 
+from .pipelines.test_pipelines_any_to_any import AnyToAnyPipelineTests
 from .pipelines.test_pipelines_audio_classification import AudioClassificationPipelineTests
 from .pipelines.test_pipelines_automatic_speech_recognition import AutomaticSpeechRecognitionPipelineTests
 from .pipelines.test_pipelines_depth_estimation import DepthEstimationPipelineTests
@@ -75,14 +76,11 @@ from .pipelines.test_pipelines_image_to_text import ImageToTextPipelineTests
 from .pipelines.test_pipelines_mask_generation import MaskGenerationPipelineTests
 from .pipelines.test_pipelines_object_detection import ObjectDetectionPipelineTests
 from .pipelines.test_pipelines_question_answering import QAPipelineTests
-from .pipelines.test_pipelines_summarization import SummarizationPipelineTests
 from .pipelines.test_pipelines_table_question_answering import TQAPipelineTests
-from .pipelines.test_pipelines_text2text_generation import Text2TextGenerationPipelineTests
 from .pipelines.test_pipelines_text_classification import TextClassificationPipelineTests
 from .pipelines.test_pipelines_text_generation import TextGenerationPipelineTests
 from .pipelines.test_pipelines_text_to_audio import TextToAudioPipelineTests
 from .pipelines.test_pipelines_token_classification import TokenClassificationPipelineTests
-from .pipelines.test_pipelines_translation import TranslationPipelineTests
 from .pipelines.test_pipelines_video_classification import VideoClassificationPipelineTests
 from .pipelines.test_pipelines_visual_question_answering import VisualQuestionAnsweringPipelineTests
 from .pipelines.test_pipelines_zero_shot import ZeroShotClassificationPipelineTests
@@ -105,16 +103,14 @@ pipeline_test_mapping = {
     "image-to-image": {"test": ImageToImagePipelineTests},
     "image-to-text": {"test": ImageToTextPipelineTests},
     "mask-generation": {"test": MaskGenerationPipelineTests},
+    "any-to-any": {"test": AnyToAnyPipelineTests},
     "object-detection": {"test": ObjectDetectionPipelineTests},
     "question-answering": {"test": QAPipelineTests},
-    "summarization": {"test": SummarizationPipelineTests},
     "table-question-answering": {"test": TQAPipelineTests},
-    "text2text-generation": {"test": Text2TextGenerationPipelineTests},
     "text-classification": {"test": TextClassificationPipelineTests},
     "text-generation": {"test": TextGenerationPipelineTests},
     "text-to-audio": {"test": TextToAudioPipelineTests},
     "token-classification": {"test": TokenClassificationPipelineTests},
-    "translation": {"test": TranslationPipelineTests},
     "video-classification": {"test": VideoClassificationPipelineTests},
     "visual-question-answering": {"test": VisualQuestionAnsweringPipelineTests},
     "zero-shot": {"test": ZeroShotClassificationPipelineTests},
@@ -592,6 +588,18 @@ class PipelineTesterMixin:
 
     @is_pipeline_test
     @require_vision
+    @require_torch
+    def test_pipeline_any_to_any(self):
+        self.run_task_tests(task="any-to-any")
+
+    @is_pipeline_test
+    @require_vision
+    @require_torch
+    def test_pipeline_any_to_any_fp16(self):
+        self.run_task_tests(task="any-to-any", dtype="float16")
+
+    @is_pipeline_test
+    @require_vision
     def test_pipeline_image_to_text(self):
         self.run_task_tests(task="image-to-text")
 
@@ -653,15 +661,6 @@ class PipelineTesterMixin:
         self.run_task_tests(task="question-answering", dtype="float16")
 
     @is_pipeline_test
-    def test_pipeline_summarization(self):
-        self.run_task_tests(task="summarization")
-
-    @is_pipeline_test
-    @require_torch
-    def test_pipeline_summarization_fp16(self):
-        self.run_task_tests(task="summarization", dtype="float16")
-
-    @is_pipeline_test
     def test_pipeline_table_question_answering(self):
         self.run_task_tests(task="table-question-answering")
 
@@ -669,15 +668,6 @@ class PipelineTesterMixin:
     @require_torch
     def test_pipeline_table_question_answering_fp16(self):
         self.run_task_tests(task="table-question-answering", dtype="float16")
-
-    @is_pipeline_test
-    def test_pipeline_text2text_generation(self):
-        self.run_task_tests(task="text2text-generation")
-
-    @is_pipeline_test
-    @require_torch
-    def test_pipeline_text2text_generation_fp16(self):
-        self.run_task_tests(task="text2text-generation", dtype="float16")
 
     @is_pipeline_test
     def test_pipeline_text_classification(self):
@@ -716,15 +706,6 @@ class PipelineTesterMixin:
     @require_torch
     def test_pipeline_token_classification_fp16(self):
         self.run_task_tests(task="token-classification", dtype="float16")
-
-    @is_pipeline_test
-    def test_pipeline_translation(self):
-        self.run_task_tests(task="translation")
-
-    @is_pipeline_test
-    @require_torch
-    def test_pipeline_translation_fp16(self):
-        self.run_task_tests(task="translation", dtype="float16")
 
     @is_pipeline_test
     @require_torch

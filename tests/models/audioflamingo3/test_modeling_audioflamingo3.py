@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 NVIDIA CORPORATION and the HuggingFace Inc. team. All rights
 # reserved.
 #
@@ -157,6 +156,7 @@ class AudioFlamingo3ForConditionalGenerationModelTest(ModelTesterMixin, Generati
     """
 
     all_model_classes = (AudioFlamingo3ForConditionalGeneration,) if is_torch_available() else ()
+    # TODO: @eustlb, this is incorrect
     pipeline_model_mapping = (
         {
             "text-to-speech": AudioFlamingo3ForConditionalGeneration,
@@ -188,6 +188,10 @@ class AudioFlamingo3ForConditionalGenerationModelTest(ModelTesterMixin, Generati
 
     @unittest.skip(reason="AudioFlamingo3 tests avoid right-padding equivalence; fusion is in-place.")
     def test_flash_attn_2_inference_equivalence_right_padding(self):
+        pass
+
+    @unittest.skip(reason="AudioFlamingo3 has no separate base model without a head.")
+    def test_model_base_model_prefix(self):
         pass
 
     def test_sdpa_can_dispatch_composite_models(self):

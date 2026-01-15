@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The Suno AI Authors and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,14 +14,13 @@
 """PyTorch BARK model."""
 
 import math
-import warnings
-from typing import Optional, Union
 
 import numpy as np
 import torch
 from torch import nn
 from torch.nn import functional as F
 
+from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
 from ...generation.logits_process import (
@@ -34,7 +32,7 @@ from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_flash_attention_utils import flash_attn_supports_top_left_mask, is_flash_attn_available
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import CausalLMOutputWithPast, MaskedLMOutput
-from ...modeling_utils import PreTrainedModel, get_parameter_device
+from ...modeling_utils import PreTrainedModel
 from ...utils import (
     auto_docstring,
     is_accelerate_available,
@@ -338,7 +336,7 @@ class BarkPreTrainedModel(PreTrainedModel):
 
         # if has _hf_hook, has been offloaded so the device has to be found in the hook
         if not hasattr(self, "_hf_hook"):
-            return get_parameter_device(self)
+            return super().device
         for module in self.modules():
             if (
                 hasattr(module, "_hf_hook")
@@ -347,13 +345,21 @@ class BarkPreTrainedModel(PreTrainedModel):
             ):
                 return torch.device(module._hf_hook.execution_device)
 
-        return get_parameter_device(self)
+        return super().device
+
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, BarkSelfAttention):
+            if module.is_causal:
+                block_size = module.config.block_size
+                bias = torch.tril(torch.ones((block_size, block_size), dtype=bool)).view(1, 1, block_size, block_size)
+                init.copy_(module.bias, bias)
 
 
 # GPT2-like autoregressive model
 class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
     config: BarkSubModelConfig
-    output_modalities = "audio"
+    output_modalities = ("audio",)
 
     def __init__(self, config):
         super().__init__(config)
@@ -415,18 +421,19 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Cache] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        input_embeds: Optional[torch.Tensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.Tensor] = None,
-    ) -> Union[tuple[torch.Tensor], CausalLMOutputWithPast]:
+        input_ids: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        labels: torch.LongTensor | None = None,
+        input_embeds: torch.Tensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        cache_position: torch.Tensor | None = None,
+        **kwargs,
+    ) -> tuple[torch.Tensor] | CausalLMOutputWithPast:
         r"""
         input_embeds (`torch.FloatTensor` of shape `(batch_size, input_sequence_length, hidden_size)`, *optional*):
             Optionally, instead of passing `input_ids` you can choose to directly pass an embedded representation.
@@ -559,9 +566,9 @@ class BarkSemanticModel(BarkCausalModel):
     def generate(
         self,
         input_ids: torch.Tensor,
-        semantic_generation_config: Optional[BarkSemanticGenerationConfig] = None,
-        history_prompt: Optional[dict[str, torch.Tensor]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
+        semantic_generation_config: BarkSemanticGenerationConfig | None = None,
+        history_prompt: dict[str, torch.Tensor] | None = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs,
     ) -> torch.LongTensor:
         """
@@ -651,8 +658,10 @@ class BarkSemanticModel(BarkCausalModel):
         )  # size: 10048
 
         # take the generated semantic tokens
-        semantic_output = semantic_output[:, max_input_semantic_length + 1 :]
-
+        if kwargs.get("return_dict_in_generate", False):
+            semantic_output = semantic_output.sequences[:, max_input_semantic_length + 1 :]
+        else:
+            semantic_output = semantic_output[:, max_input_semantic_length + 1 :]
         return semantic_output
 
 
@@ -674,7 +683,7 @@ class BarkCoarseModel(BarkCausalModel):
         batch_size: int,
         semantic_generation_config: int,
         codebook_size: int,
-        history_prompt: Optional[dict[str, torch.Tensor]] = None,
+        history_prompt: dict[str, torch.Tensor] | None = None,
     ):
         """
         Preprocess the optional `Bark` speaker prompts before `self.generate`.
@@ -744,13 +753,13 @@ class BarkCoarseModel(BarkCausalModel):
     def generate(
         self,
         semantic_output: torch.Tensor,
-        semantic_generation_config: Optional[BarkSemanticGenerationConfig] = None,
-        coarse_generation_config: Optional[BarkCoarseGenerationConfig] = None,
+        semantic_generation_config: BarkSemanticGenerationConfig | None = None,
+        coarse_generation_config: BarkCoarseGenerationConfig | None = None,
         codebook_size: int = 1024,
-        history_prompt: Optional[dict[str, torch.Tensor]] = None,
-        return_output_lengths: Optional[bool] = None,
+        history_prompt: dict[str, torch.Tensor] | None = None,
+        return_output_lengths: bool | None = None,
         **kwargs,
-    ) -> Union[torch.LongTensor, tuple[torch.LongTensor, torch.LongTensor]]:
+    ) -> torch.LongTensor | tuple[torch.LongTensor, torch.LongTensor]:
         """
         Generates coarse acoustics tokens from input text semantic tokens and an additional optional `Bark` speaker
         prompt.
@@ -865,7 +874,10 @@ class BarkCoarseModel(BarkCausalModel):
 
             input_coarse_len = input_coarse.shape[1]
 
-            x_coarse = torch.hstack([x_coarse, output_coarse[:, input_coarse_len:]])
+            if kwargs.get("return_dict_in_generate", False):
+                x_coarse = torch.hstack([x_coarse, output_coarse.sequences[:, input_coarse_len:]])
+            else:
+                x_coarse = torch.hstack([x_coarse, output_coarse[:, input_coarse_len:]])
             total_generated_len = x_coarse.shape[1] - len_coarse_history
 
             del output_coarse
@@ -963,8 +975,8 @@ class BarkFineModel(BarkPreTrainedModel):
 
     def resize_token_embeddings(
         self,
-        new_num_tokens: Optional[int] = None,
-        pad_to_multiple_of: Optional[int] = None,
+        new_num_tokens: int | None = None,
+        pad_to_multiple_of: int | None = None,
         mean_resizing: bool = True,
     ) -> nn.Embedding:
         """
@@ -1015,15 +1027,16 @@ class BarkFineModel(BarkPreTrainedModel):
     def forward(
         self,
         codebook_idx: int,  # an additional idx corresponding to the id of the codebook that will be predicted
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        input_embeds: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple[torch.Tensor], MaskedLMOutput]:
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        labels: torch.LongTensor | None = None,
+        input_embeds: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple[torch.Tensor] | MaskedLMOutput:
         r"""
         codebook_idx (`int`):
             Index of the codebook that will be predicted.
@@ -1133,11 +1146,11 @@ class BarkFineModel(BarkPreTrainedModel):
     def generate(
         self,
         coarse_output: torch.Tensor,
-        semantic_generation_config: Optional[BarkSemanticGenerationConfig] = None,
-        coarse_generation_config: Optional[BarkCoarseGenerationConfig] = None,
+        semantic_generation_config: BarkSemanticGenerationConfig | None = None,
+        coarse_generation_config: BarkCoarseGenerationConfig | None = None,
         fine_generation_config: BarkFineGenerationConfig = None,
         codebook_size: int = 1024,
-        history_prompt: Optional[dict[str, torch.Tensor]] = None,
+        history_prompt: dict[str, torch.Tensor] | None = None,
         **kwargs,
     ) -> torch.LongTensor:
         """
@@ -1318,7 +1331,7 @@ class BarkModel(BarkPreTrainedModel, GenerationMixin):
         # for bark_model, device must be verified on its sub-models
         # if has _hf_hook, has been offloaded so the device has to be found in the hook
         if not hasattr(self.semantic, "_hf_hook"):
-            return get_parameter_device(self)
+            return super().device
         for module in self.semantic.modules():
             if (
                 hasattr(module, "_hf_hook")
@@ -1329,7 +1342,7 @@ class BarkModel(BarkPreTrainedModel, GenerationMixin):
 
     def enable_cpu_offload(
         self,
-        accelerator_id: Optional[int] = 0,
+        accelerator_id: int | None = 0,
         **kwargs,
     ):
         r"""
@@ -1338,24 +1351,12 @@ class BarkModel(BarkPreTrainedModel, GenerationMixin):
 
         Args:
             accelerator_id (`int`, *optional*, defaults to 0):
-                accelerator id on which the sub-models will be loaded and offloaded. This argument is deprecated.
-            kwargs (`dict`, *optional*):
-                additional keyword arguments:
-                    `gpu_id`: accelerator id on which the sub-models will be loaded and offloaded.
+                accelerator id on which the sub-models will be loaded and offloaded.
         """
         if is_accelerate_available():
             from accelerate import cpu_offload_with_hook
         else:
             raise ImportError("`enable_model_cpu_offload` requires `accelerate`.")
-
-        gpu_id = kwargs.get("gpu_id", 0)
-
-        if gpu_id != 0:
-            warnings.warn(
-                "The argument `gpu_id` is deprecated and will be removed in version 4.54.0 of Transformers. Please use `accelerator_id` instead.",
-                FutureWarning,
-            )
-            accelerator_id = gpu_id
 
         device_type = "cuda"
         if is_torch_accelerator_available():
@@ -1406,9 +1407,9 @@ class BarkModel(BarkPreTrainedModel, GenerationMixin):
     @torch.no_grad()
     def generate(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        history_prompt: Optional[dict[str, torch.Tensor]] = None,
-        return_output_lengths: Optional[bool] = None,
+        input_ids: torch.Tensor | None = None,
+        history_prompt: dict[str, torch.Tensor] | None = None,
+        return_output_lengths: bool | None = None,
         **kwargs,
     ) -> torch.LongTensor:
         """

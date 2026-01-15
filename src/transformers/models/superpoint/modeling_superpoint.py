@@ -14,7 +14,6 @@
 """PyTorch SuperPoint model."""
 
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -100,12 +99,12 @@ class SuperPointKeypointDescriptionOutput(ModelOutput):
         (also called feature maps) of the model at the output of each stage.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    keypoints: Optional[torch.IntTensor] = None
-    scores: Optional[torch.FloatTensor] = None
-    descriptors: Optional[torch.FloatTensor] = None
-    mask: Optional[torch.BoolTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    loss: torch.FloatTensor | None = None
+    keypoints: torch.IntTensor | None = None
+    scores: torch.FloatTensor | None = None
+    descriptors: torch.FloatTensor | None = None
+    mask: torch.BoolTensor | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
 
 
 class SuperPointConvBlock(nn.Module):
@@ -169,9 +168,9 @@ class SuperPointEncoder(nn.Module):
     def forward(
         self,
         input,
-        output_hidden_states: Optional[bool] = False,
-        return_dict: Optional[bool] = True,
-    ) -> Union[tuple, BaseModelOutputWithNoAttention]:
+        output_hidden_states: bool | None = False,
+        return_dict: bool | None = True,
+    ) -> tuple | BaseModelOutputWithNoAttention:
         all_hidden_states = () if output_hidden_states else None
 
         for conv_block in self.conv_blocks:
@@ -325,7 +324,7 @@ class SuperPointPreTrainedModel(PreTrainedModel):
     config: SuperPointConfig
     base_model_prefix = "superpoint"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = False
 
     def extract_one_channel_pixel_values(self, pixel_values: torch.FloatTensor) -> torch.FloatTensor:
@@ -375,10 +374,11 @@ class SuperPointForKeypointDetection(SuperPointPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        labels: Optional[torch.LongTensor] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, SuperPointKeypointDescriptionOutput]:
+        labels: torch.LongTensor | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple | SuperPointKeypointDescriptionOutput:
         r"""
         Examples:
 

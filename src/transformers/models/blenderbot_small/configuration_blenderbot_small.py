@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The Facebook, Inc. and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -35,7 +34,7 @@ class BlenderbotSmallConfig(PreTrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 50265):
             Vocabulary size of the BlenderbotSmall model. Defines the number of different tokens that can be
-            represented by the `inputs_ids` passed when calling [`BlenderbotSmallModel`] or [`TFBlenderbotSmallModel`].
+            represented by the `inputs_ids` passed when calling [`BlenderbotSmallModel`].
         d_model (`int`, *optional*, defaults to 512):
             Dimensionality of the layers and the pooler layer.
         encoder_layers (`int`, *optional*, defaults to 8):

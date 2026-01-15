@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -35,6 +34,7 @@ from transformers.testing_utils import (
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor, random_attention_mask
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -127,12 +127,13 @@ class DeepseekVLModelTester:
 
 
 @require_torch
-class DeepseekVLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class DeepseekVLModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (DeepseekVLModel, DeepseekVLForConditionalGeneration) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "feature-extraction": DeepseekVLModel,
             "image-text-to-text": DeepseekVLForConditionalGeneration,
+            "any-to-any": DeepseekVLForConditionalGeneration,
         }
         if is_torch_available()
         else {}

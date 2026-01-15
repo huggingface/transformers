@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_dinov3_vit.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 Meta AI and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,7 +20,6 @@
 
 import math
 from collections.abc import Callable
-from typing import Optional
 
 import numpy as np
 import torch
@@ -36,7 +34,7 @@ from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.backbone_utils import BackboneMixin
-from ...utils.generic import check_model_inputs
+from ...utils.generic import check_model_inputs, maybe_autocast
 from .configuration_dinov3_vit import DINOv3ViTConfig
 
 
@@ -55,7 +53,7 @@ class DINOv3ViTEmbeddings(nn.Module):
             config.num_channels, config.hidden_size, kernel_size=config.patch_size, stride=config.patch_size
         )
 
-    def forward(self, pixel_values: torch.Tensor, bool_masked_pos: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward(self, pixel_values: torch.Tensor, bool_masked_pos: torch.Tensor | None = None) -> torch.Tensor:
         batch_size = pixel_values.shape[0]
         target_dtype = self.patch_embeddings.weight.dtype
 
@@ -106,9 +104,9 @@ def get_patches_center_coordinates(
 
 def augment_patches_center_coordinates(
     coords: torch.Tensor,
-    shift: Optional[float] = None,
-    jitter: Optional[float] = None,
-    rescale: Optional[float] = None,
+    shift: float | None = None,
+    jitter: float | None = None,
+    rescale: float | None = None,
 ) -> torch.Tensor:
     # Shift coords by adding a uniform value in [-shift, shift]
     if shift is not None:
@@ -156,7 +154,7 @@ class DINOv3ViTRopePositionEmbedding(nn.Module):
         device = pixel_values.device
         device_type = device.type if isinstance(device.type, str) and device.type != "mps" else "cpu"
 
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             # Although we could precompute static patch_coords from image_size and patch_size in the config,
             # the model was trained with random_scale, so it can process images of varying sizes.
             # Therefore, it's better to compute patch_coords dynamically (with lru_cache).
@@ -195,8 +193,8 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
-    scaling: Optional[float] = None,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
     dropout: float = 0.0,
     **kwargs: Unpack[TransformersKwargs],
 ):
@@ -278,10 +276,10 @@ class DINOv3ViTAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
+        attention_mask: torch.Tensor | None = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
 
         batch_size, patches, _ = hidden_states.size()
@@ -345,7 +343,7 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
 class DINOv3ViTDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
-    def __init__(self, drop_prob: Optional[float] = None) -> None:
+    def __init__(self, drop_prob: float | None = None) -> None:
         super().__init__()
         self.drop_prob = drop_prob
 
@@ -408,8 +406,8 @@ class DINOv3ViTLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
+        attention_mask: torch.Tensor | None = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
     ) -> torch.Tensor:
         # Attention with residual connection
         residual = hidden_states
@@ -437,7 +435,7 @@ class DINOv3ViTPreTrainedModel(PreTrainedModel):
     config: DINOv3ViTConfig
     base_model_prefix = "dinov3_vit"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = True
     _no_split_modules = ["DINOv3ViTLayer"]
     _supports_sdpa = True
@@ -466,6 +464,9 @@ class DINOv3ViTPreTrainedModel(PreTrainedModel):
             init.zeros_(module.mask_token)
         elif isinstance(module, DINOv3ViTLayerScale):
             init.constant_(module.lambda1, self.config.layerscale_value)
+        elif isinstance(module, DINOv3ViTRopePositionEmbedding):
+            inv_freq = 1 / module.base ** torch.arange(0, 1, 4 / module.head_dim, dtype=torch.float32)
+            init.copy_(module.inv_freq, inv_freq)
 
 
 @auto_docstring
@@ -489,7 +490,7 @@ class DINOv3ViTModel(DINOv3ViTPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.Tensor,
-        bool_masked_pos: Optional[torch.Tensor] = None,
+        bool_masked_pos: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         r"""
@@ -532,12 +533,12 @@ class DINOv3ViTBackbone(DINOv3ViTPreTrainedModel, BackboneMixin):
     def get_input_embeddings(self):
         return self.embeddings.patch_embeddings
 
-    @check_model_inputs()
+    @check_model_inputs
     @can_return_tuple
     def forward(
         self,
         pixel_values: torch.Tensor,
-        output_hidden_states: Optional[bool] = None,
+        output_hidden_states: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BackboneOutput:
         pixel_values = pixel_values.to(self.embeddings.patch_embeddings.weight.dtype)
