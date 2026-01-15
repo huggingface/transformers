@@ -1202,20 +1202,8 @@ class JanusForConditionalGeneration(JanusPreTrainedModel, GenerationMixin):
         model_kwargs["attention_mask"] = attention_mask
 
         # Mask all the tokens that are neither BOS nor BOI with pad token in the unconditional logits.
-        # Get boi_token_id from model_kwargs if provided, otherwise use image_token_id from config
-        boi_token_id = model_kwargs.get("boi_token_id", None)
-        if boi_token_id is None:
-            boi_token_id = getattr(self.config, "image_token_id", None)
-        if boi_token_id is None:
-            # Fallback: try to get from generation_config if it was set as an attribute
-            boi_token_id = getattr(generation_config, "boi_token_id", None)
-        if boi_token_id is None:
-            raise ValueError(
-                "`boi_token_id` is required for image generation but was not found in model_kwargs, "
-                "model config, or generation config. Please provide it explicitly."
-            )
         mask = (input_tokens[batch_size:, :] != generation_config.bos_token_id) & (
-            input_tokens[batch_size:, :] != boi_token_id
+            input_tokens[batch_size:, :] != generation_config.generation_kwargs["boi_token_id"]
         )
         input_tokens[batch_size:, :].masked_fill_(mask, generation_config.pad_token_id)
 
