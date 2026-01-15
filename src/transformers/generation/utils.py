@@ -1772,9 +1772,9 @@ class GenerationMixin(ContinuousMixin):
         """
         # parameterization priority:
         # user-defined kwargs or `generation_config` > `self.generation_config` > global default values
-        # TODO: (raushan) doesn't make sense to allow kwargs and `generation_config`. Should be mutually exclusive!
         # TODO (joao): per-model generation config classes.
 
+        generation_config_provided = generation_config is not None
         if generation_config is None:
             # Users may modify `model.config` to control generation. This is a legacy behavior and is not supported anymore
             if len(self.config._get_generation_parameters()) > 0:
@@ -1809,6 +1809,16 @@ class GenerationMixin(ContinuousMixin):
         # (if we're inside this branch, then it is because we're using default values from the Hub)
         if generation_config.cache_implementation == "hybrid":
             generation_config.cache_implementation = None
+
+        # It doesn't make sense to allow kwargs and `generation_config`, that should be mutually exclusive
+        if generation_config_provided is not None and set(kwargs.keys()) - set(model_kwargs.keys()):
+            generation_kwargs = set(kwargs.keys()) - set(model_kwargs.keys())
+            logger.warning_once(
+                f"Passing `generation_config` together with generation-related "
+                f"arguments=({generation_kwargs}) is deprecated and will be removed in future versions. "
+                "Please pass either a `generation_config` object OR all generation "
+                "parameters explicitly, but not both.",
+            )
 
         # Finally keep output_xxx args in `model_kwargs` so it can be passed to `forward`
         output_attentions = generation_config.output_attentions
