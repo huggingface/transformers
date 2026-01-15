@@ -85,20 +85,17 @@ def _batched_linear(
     Returns:
         `torch.Tensor`: Output tensor of shape (batch_size, output_dim).
     """
-    if bias is not None:
-        if is_transposed:
-            # (batch_size, 1, output_dim) + (batch_size, 1, input_dim) @ (batch_size, input_dim, output_dim) -> (batch_size, 1, output_dim) -> (batch_size, output_dim)
-            return torch.baddbmm(bias.unsqueeze(1), input.unsqueeze(1), weight).squeeze(1)
-        else:
-            # (batch_size, output_dim, 1) + (batch_size, output_dim, input_dim) @ (batch_size, input_dim, 1) -> (batch_size, output_dim, 1) -> (batch_size, output_dim)
-            return torch.baddbmm(bias.unsqueeze(-1), weight, input.unsqueeze(-1)).squeeze(-1)
+    if is_transposed:
+        # (batch_size, 1, input_dim) @ (batch_size, input_dim, output_dim) -> (batch_size, 1, output_dim) -> (batch_size, output_dim)
+        out = torch.bmm(input.unsqueeze(1), weight).squeeze(1)
     else:
-        if is_transposed:
-            # (batch_size, 1, input_dim) @ (batch_size, input_dim, output_dim) -> (batch_size, 1, output_dim) -> (batch_size, output_dim)
-            return torch.bmm(input.unsqueeze(1), weight).squeeze(1)
-        else:
-            # (batch_size, output_dim, input_dim) @ (batch_size, input_dim, 1) -> (batch_size, output_dim, 1) -> (batch_size, output_dim)
-            return torch.bmm(weight, input.unsqueeze(-1)).squeeze(-1)
+        # (batch_size, output_dim, input_dim) @ (batch_size, input_dim, 1) -> (batch_size, output_dim, 1) -> (batch_size, output_dim)
+        out = torch.bmm(weight, input.unsqueeze(-1)).squeeze(-1)
+
+    if bias is not None:
+        out = out + bias
+
+    return out
 
 
 def batched_mm_experts_forward(
