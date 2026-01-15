@@ -295,8 +295,7 @@ def _apply_weight_conversions_to_state_dict(model, state_dict, weight_mapping):
     Apply weight conversions (renaming and merging/splitting operations) to a state dict.
     This is a simplified version that handles the conversion without loading into the model.
     """
-    from copy import deepcopy
-
+    # Local import to avoid circular dependency (core_model_loading -> accelerate -> deepspeed)
     from ..core_model_loading import WeightConverter, WeightRenaming, dot_natural_key, rename_source_key
 
     prefix = model.base_model_prefix
@@ -330,7 +329,7 @@ def _apply_weight_conversions_to_state_dict(model, state_dict, weight_mapping):
         # Only process if the renamed key is in the model's state dict
         if renamed_key in meta_model_state_dict:
             if source_pattern is not None:
-                new_converter = deepcopy(pattern_to_converter[source_pattern])
+                new_converter = copy.deepcopy(pattern_to_converter[source_pattern])
                 mapping = conversion_mapping.setdefault(renamed_key, new_converter)
             else:
                 mapping = conversion_mapping.setdefault(renamed_key, WeightRenaming(original_key, renamed_key))
