@@ -759,7 +759,6 @@ def _get_dtype(
     2. Else, use the dtype provided as a dict or str
     """
     is_sharded = sharded_metadata is not None
-    asked_dtype = dtype
 
     if dtype is not None:
         if isinstance(dtype, str):
@@ -806,6 +805,13 @@ def _get_dtype(
     if isinstance(dtype, dict):
         main_dtype = dtype.get("", torch.get_default_dtype())
         main_dtype = getattr(torch, main_dtype) if isinstance(main_dtype, str) else main_dtype
+
+        logger.warning_once(
+            "Using different dtypes per module is deprecated and will be removed in future versions "
+            "Setting different dtypes per backbone model might cause device errors downstream, therefore "
+            f"setting the dtype={main_dtype} for all modules."
+        )
+
     else:
         main_dtype = dtype
 
@@ -813,17 +819,7 @@ def _get_dtype(
     config.dtype = main_dtype
     for sub_config_key in config.sub_configs:
         if (sub_config := getattr(config, sub_config_key)) is not None:
-            # The dtype was "auto" -> try to read the subconfig dtype value if any
-            if asked_dtype == "auto":
-                sub_dtype = getattr(sub_config, "dtype", main_dtype)
-                sub_dtype = getattr(torch, sub_dtype) if isinstance(sub_dtype, str) else sub_dtype
-            # The dtype was provided as a dict, try to see if we match the subconfig name
-            elif isinstance(dtype, dict):
-                sub_dtype = dtype.get(sub_config_key, main_dtype)
-                sub_dtype = getattr(torch, sub_dtype) if isinstance(sub_dtype, str) else sub_dtype
-            else:
-                sub_dtype = main_dtype
-            sub_config.dtype = sub_dtype
+            sub_config.dtype = main_dtype
 
     return config, main_dtype
 
@@ -876,13 +872,8 @@ class ModuleUtilsMixin:
         return encoder_extended_attention_mask
 
     @staticmethod
-    def create_extended_attention_mask_for_decoder(input_shape, attention_mask, device=None):
-        if device is not None:
-            warnings.warn(
-                "The `device` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
-            )
-        else:
-            device = attention_mask.device
+    def create_extended_attention_mask_for_decoder(input_shape, attention_mask):
+        device = attention_mask.device
         batch_size, seq_length = input_shape
         seq_ids = torch.arange(seq_length, device=device)
         causal_mask = seq_ids[None, None, :].repeat(batch_size, seq_length, 1) <= seq_ids[None, :, None]
@@ -906,7 +897,6 @@ class ModuleUtilsMixin:
         self,
         attention_mask: Tensor,
         input_shape: tuple[int, ...],
-        device: torch.device | None = None,
         dtype: torch.dtype | None = None,
     ) -> Tensor:
         """
@@ -924,12 +914,6 @@ class ModuleUtilsMixin:
         if dtype is None:
             dtype = self.dtype
 
-        if not (attention_mask.dim() == 2 and getattr(self.config, "is_decoder", None)):
-            # show warning only if it won't be shown in `create_extended_attention_mask_for_decoder`
-            if device is not None:
-                warnings.warn(
-                    "The `device` argument is deprecated and will be removed in v5 of Transformers.", FutureWarning
-                )
         # We can provide a self-attention mask of dimensions [batch_size, from_seq_length, to_seq_length]
         # ourselves in which case we just need to make it broadcastable to all heads.
         if attention_mask.dim() == 3:
@@ -940,7 +924,7 @@ class ModuleUtilsMixin:
             # - if the model is an encoder, make the mask broadcastable to [batch_size, num_heads, seq_length, seq_length]
             if getattr(self.config, "is_decoder", None):
                 extended_attention_mask = ModuleUtilsMixin.create_extended_attention_mask_for_decoder(
-                    input_shape, attention_mask, device
+                    input_shape, attention_mask
                 )
             else:
                 extended_attention_mask = attention_mask[:, None, None, :]
@@ -3229,12 +3213,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 f"The model is quantized with {hf_quantizer.quantization_config.quant_method} and is not serializable - check out the warnings from"
                 " the logger on the traceback to understand the reason why the quantized model is not serializable."
             )
-
-        if "save_config" in kwargs:
-            warnings.warn(
-                "`save_config` is deprecated and will be removed in v5 of Transformers. Use `is_main_process` instead."
-            )
-            is_main_process = kwargs.pop("save_config")
 
         # we need to check against tp_size, not tp_plan, as tp_plan is substituted to the class one
         if self._tp_size is not None and not is_huggingface_hub_greater_or_equal("0.31.4"):

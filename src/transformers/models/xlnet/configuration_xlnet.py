@@ -14,8 +14,6 @@
 # limitations under the License.
 """XLNet configuration"""
 
-import warnings
-
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
@@ -208,14 +206,6 @@ class XLNetConfig(PreTrainedConfig):
         self.pad_token_id = pad_token_id
         self.eos_token_id = eos_token_id
         self.tie_word_embeddings = tie_word_embeddings
-
-        if "use_cache" in kwargs:
-            warnings.warn(
-                "The `use_cache` argument is deprecated and will be removed in a future version, use `use_mems_eval`"
-                " instead.",
-                FutureWarning,
-            )
-            use_mems_eval = kwargs["use_cache"]
 
         self.use_mems_eval = use_mems_eval
         self.use_mems_train = use_mems_train
