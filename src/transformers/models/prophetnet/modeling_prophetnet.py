@@ -1849,7 +1849,7 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel, GenerationMixin):
         is_first_iteration=False,
         **kwargs,
     ):
-        # Overwritten -- our tests complain if we use GenerationMixin.prepare_inputs_for_generation
+        # Overwritten -- Prophetnet does not support cache_position
 
         model_inputs = super().prepare_inputs_for_generation(
             input_ids,
@@ -1860,7 +1860,6 @@ class ProphetNetForCausalLM(ProphetNetPreTrainedModel, GenerationMixin):
             **kwargs,
         )
 
-        # Prophetnet does not support cache_position
         model_inputs.pop("cache_position", None)
 
         return model_inputs

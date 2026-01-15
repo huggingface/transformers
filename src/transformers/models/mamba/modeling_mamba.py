@@ -752,7 +752,7 @@ class MambaForCausalLM(MambaPreTrainedModel, GenerationMixin):
         is_first_iteration: bool | None = False,
         **kwargs,
     ):
-        # Overwritten -- uses `cache_params` as opposed to `past_key_values`
+        # Overwritten -- has custom cache class `MambaCache`
         model_inputs = super().prepare_inputs_for_generation(
             input_ids,
             inputs_embeds=inputs_embeds,

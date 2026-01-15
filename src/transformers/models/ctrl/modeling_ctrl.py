@@ -480,7 +480,7 @@ class CTRLLMHeadModel(CTRLPreTrainedModel, GenerationMixin):
     def prepare_inputs_for_generation(
         self, input_ids, past_key_values=None, use_cache=None, is_first_iteration=False, **kwargs
     ):
-        # Overwritten -- inputs_embeds not working properly
+        # Overwritten -- `token_type_ids` are created in custom way inside model`
 
         model_inputs = super().prepare_inputs_for_generation(
             input_ids,
