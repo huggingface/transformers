@@ -73,20 +73,30 @@ class SolarOpenIntegrationTest(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=False)
 
-    def test_batch_generation_bf16(self):
+    def test_batch_generation_dummy_bf16(self):
+        torch.manual_seed(42)
+        torch.cuda.manual_seed_all(42)
+        torch.backends.cudnn.deterministic = True
+        torch.use_deterministic_algorithms(True, warn_only=True)
+
+        model_id = "SSON9/solar-open-tiny-dummy"
         prompts = [
-            "<|begin|>assistant<|content|>How are you?<|end|><|begin|>assistant",
-            "<|begin|>assistant<|content|>What is LLM?<|end|><|begin|>assistant",
+            "Orange is the new black",
+            "Lorem ipsum dolor sit amet",
         ]
-        model_id = "upstage/Solar-Open-100B"
+        # expected random outputs from the tiny dummy model
+        EXPECTED_DECODED_TEXT = [
+            "Orange is the new blackRIB catheterCCTV yshift catheter merits yshiftCCTVCCTVCCTVCCTVCCTVCCTVCCTVCCTVCCTVCCTVCCTVCCTVCCTV",
+            "Lorem ipsum dolor sit amet=√=√ 치수=√ 치수 치수 치수 치수 치수 Shelley Shelley Shelley Shelley Shelley Shelley Shelley Shelley Shelley площа площа",
+        ]
+
         tokenizer = AutoTokenizer.from_pretrained(model_id)
-        model = SolarOpenForCausalLM.from_pretrained(model_id, device_map="auto", torch_dtype=torch.bfloat16)
+        model = SolarOpenForCausalLM.from_pretrained(model_id, device_map=torch_device, torch_dtype=torch.bfloat16)
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 
         generated_ids = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         generated_texts = tokenizer.batch_decode(generated_ids, skip_special_tokens=False)
+        print(generated_texts)
 
-        for text in generated_texts:
-            # Check that the generated continuation starts with <|think|>
-            generated_part = text.split("<|begin|>assistant")[-1]
-            self.assertTrue(generated_part.startswith("<|think|>"))
+        for text, expected_text in zip(generated_texts, EXPECTED_DECODED_TEXT):
+            self.assertEqual(text, expected_text)
