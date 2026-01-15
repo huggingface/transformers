@@ -96,7 +96,9 @@ class Ovis2VisionAttention(Aimv2Attention):
 
 
 class Ovis2VisionEncoderLayer(Aimv2EncoderLayer):
-    pass
+    def __init__(self, config: Ovis2VisionConfig):
+        super().__init__()
+        self.attention = Ovis2VisionAttention(config)
 
 
 class Ovis2VisionEncoder(SiglipEncoder):
