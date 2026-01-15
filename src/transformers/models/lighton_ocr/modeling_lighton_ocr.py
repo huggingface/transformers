@@ -25,7 +25,7 @@ from torch import nn
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...integrations import use_kernel_forward_from_hub
-from ...modeling_outputs import BaseModelOutputWithPast, ModelOutput
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
@@ -170,27 +170,22 @@ class LightOnOcrModel(LightOnOcrPreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
-    def get_image_features(self, pixel_values: torch.Tensor, image_sizes: torch.Tensor | list):
-        """
-        Obtains image features from the vision encoder and projection.
-
-        Args:
-            pixel_values: Image tensors
-            image_sizes: Tensor or list of (height, width) pairs for each image
-
-        Returns:
-            List of image feature tensors, one per image
-        """
-        visual_features = self.vision_encoder(pixel_values, image_sizes=image_sizes).last_hidden_state
-
-        image_features = self.vision_projection(visual_features.squeeze(0), image_sizes)
+    @can_return_tuple
+    @auto_docstring
+    def get_image_features(
+        self, pixel_values: torch.Tensor, image_sizes: torch.Tensor | list, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | BaseModelOutputWithPooling:
+        image_outputs = self.vision_encoder(pixel_values, image_sizes=image_sizes, **kwargs)
+        image_features = image_outputs.last_hidden_state
+        image_features = self.vision_projection(image_features.squeeze(0), image_sizes)
 
         # Split features per image based on the effective patch size
         downsample_ratio = self.config.vision_config.patch_size * self.config.spatial_merge_size
         split_sizes = [(height // downsample_ratio) * (width // downsample_ratio) for height, width in image_sizes]
         image_features = torch.split(image_features, split_sizes)
+        image_outputs.pooler_output = image_features
 
-        return image_features
+        return image_outputs
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
@@ -330,8 +325,11 @@ class LightOnOcrForConditionalGeneration(LightOnOcrPreTrainedModel, GenerationMi
     def get_output_embeddings(self) -> nn.Module:
         return self.lm_head
 
-    def get_image_features(self, pixel_values: torch.FloatTensor, image_sizes: torch.Tensor, **kwargs):
-        return self.model.get_image_features(pixel_values=pixel_values, image_sizes=image_sizes)
+    @auto_docstring
+    def get_image_features(
+        self, pixel_values: torch.FloatTensor, image_sizes: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | BaseModelOutputWithPooling:
+        return self.model.get_image_features(pixel_values=pixel_values, image_sizes=image_sizes, **kwargs)
 
     @can_return_tuple
     @auto_docstring

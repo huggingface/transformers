@@ -12,7 +12,7 @@ Unless required by applicable law or agreed to in writing, software distributed 
 rendered properly in your Markdown viewer.
 
 specific language governing permissions and limitations under the License. -->
-*This model was released on {release_date} and added to Hugging Face Transformers on 2026-01-14.*
+*This model was released on {release_date} and added to Hugging Face Transformers on .*
 
 # LightOnOcr
 
@@ -73,8 +73,10 @@ print(output_text)
 
 [[autodoc]] LightOnOcrModel
     - forward
+    - get_image_features
 
 ## LightOnOcrForConditionalGeneration
 
 [[autodoc]] LightOnOcrForConditionalGeneration
     - forward
+    - get_image_features
