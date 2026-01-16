@@ -166,20 +166,10 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("xclip", "XCLIPProcessor"),
     ]
 )
-# hacky hacky again, to fix - where do we store this?
-PROCESSOR_CLASS_ALIASES = {
-    "DeepseekVLV2Processor": ("deepseek_ocr", "DeepseekOcrProcessor"),
-}
-
 PROCESSOR_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, PROCESSOR_MAPPING_NAMES)
 
 
 def processor_class_from_name(class_name: str):
-    alias = PROCESSOR_CLASS_ALIASES.get(class_name)
-    if alias is not None:
-        module_name, alias_name = alias
-        module = importlib.import_module(f".{module_name}", "transformers.models")
-        return getattr(module, alias_name)
     for module_name, processors in PROCESSOR_MAPPING_NAMES.items():
         if class_name in processors:
             module_name = model_type_to_module_name(module_name)

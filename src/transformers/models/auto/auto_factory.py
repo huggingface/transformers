@@ -34,11 +34,7 @@ from ...utils import (
     logging,
     requires_backends,
 )
-from .configuration_auto import (
-    AutoConfig,
-    model_type_to_module_name,
-    replace_list_option_in_docstrings,
-)
+from .configuration_auto import AutoConfig, model_type_to_module_name, replace_list_option_in_docstrings
 
 
 if is_torch_available():
@@ -208,7 +204,6 @@ class _BaseAutoModelClass:
     @classmethod
     def from_config(cls, config, **kwargs):
         trust_remote_code = kwargs.pop("trust_remote_code", None)
-        config = cls._prepare_config_for_auto_class(config)
         has_remote_code = hasattr(config, "auto_map") and cls.__name__ in config.auto_map
         has_local_code = type(config) in cls._model_mapping
         if has_remote_code:
@@ -336,7 +331,6 @@ class _BaseAutoModelClass:
             if kwargs_orig.get("quantization_config", None) is not None:
                 kwargs["quantization_config"] = kwargs_orig["quantization_config"]
 
-        config = cls._prepare_config_for_auto_class(config)
         has_remote_code = hasattr(config, "auto_map") and cls.__name__ in config.auto_map
         has_local_code = type(config) in cls._model_mapping
         upstream_repo = None
@@ -634,13 +628,7 @@ class _LazyAutoMapping(OrderedDict[type[PreTrainedConfig], _LazyAutoMappingValue
         if not hasattr(item, "__name__") or item.__name__ not in self._reverse_config_mapping:
             return False
         model_type = self._reverse_config_mapping[item.__name__]
-        if model_type in self._model_mapping:
-            return True
-        # some config classes (e.g., DeepseekOcrConfig) are registered under multiple model types.
-        for candidate_type, config_name in self._config_mapping.items():
-            if config_name == item.__name__ and candidate_type in self._model_mapping:
-                return True
-        return False
+        return model_type in self._model_mapping
 
     def register(self, key: type[PreTrainedConfig], value: _LazyAutoMappingValue, exist_ok=False) -> None:
         """
