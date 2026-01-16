@@ -283,7 +283,7 @@ class BloomAttention(nn.Module):
 
         # change view to [batch_size, num_heads, q_length, kv_length]
         attn_weights = attention_scores.view(batch_size, self.num_heads, q_length, -1)
-        if attention_mask is not None:  # no matter the length, we just slice it
+        if attention_mask is not None:
             causal_mask = attention_mask[:, :, :, : key_layer.shape[-1]]
             attn_weights = attn_weights + causal_mask
 

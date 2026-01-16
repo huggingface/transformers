@@ -128,7 +128,7 @@ class GPTNeoSelfAttention(nn.Module):
         mask_value = torch.tensor(mask_value, dtype=attn_weights.dtype, device=attn_weights.device)
         attn_weights = torch.where(causal_mask, attn_weights, mask_value)
 
-        if attention_mask is not None:  # no matter the length, we just slice it
+        if attention_mask is not None:
             causal_mask = attention_mask[:, :, :, : key.shape[-2]]
             attn_weights = attn_weights + causal_mask
 
@@ -219,7 +219,7 @@ class GPTNeoFlashAttention2(GPTNeoSelfAttention):
 
         attn_dropout = self.config.attention_dropout if self.training else 0.0
 
-        if attention_mask is not None:  # no matter the length, we just slice it
+        if attention_mask is not None:
             attention_mask = attention_mask[:, :, :, : key.shape[-2]]
 
         # In PEFT, usually we cast the layer norms in float32 for training stability reasons

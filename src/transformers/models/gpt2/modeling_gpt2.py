@@ -74,8 +74,7 @@ def eager_attention_forward(module, query, key, value, attention_mask, **kwargs)
 
     if attention_mask is not None:
         # Apply the attention mask
-        causal_mask = attention_mask[:, :, :, : key.shape[-2]]
-        attn_weights = attn_weights + causal_mask
+        attn_weights = attn_weights + attention_mask
 
     attn_weights = nn.functional.softmax(attn_weights, dim=-1)
 
