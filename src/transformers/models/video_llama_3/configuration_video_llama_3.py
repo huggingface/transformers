@@ -100,6 +100,8 @@ class VideoLlama3Config(PreTrainedConfig):
             The image token index to encode the image prompt.
         video_token_id (`int`, *optional*, defaults to 151656):
             The video token index to encode the image prompt.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether to tie weight embeddings
     """
 
     model_type = "video_llama_3"
@@ -112,6 +114,7 @@ class VideoLlama3Config(PreTrainedConfig):
         vision_config=None,
         image_token_id=151655,
         video_token_id=151656,
+        tie_word_embeddings=False,
         **kwargs,
     ):
         if isinstance(vision_config, dict):
@@ -136,6 +139,7 @@ class VideoLlama3Config(PreTrainedConfig):
 
         self.image_token_id = image_token_id
         self.video_token_id = video_token_id
+        self.tie_word_embeddings = tie_word_embeddings
 
         super().__init__(**kwargs)
 

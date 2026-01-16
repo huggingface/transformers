@@ -43,7 +43,7 @@ from ...utils import (
     auto_docstring,
     logging,
 )
-from ...utils.generic import maybe_autocast
+from ...utils.generic import is_flash_attention_requested, maybe_autocast
 from .configuration_gpt2 import GPT2Config
 
 
@@ -682,7 +682,7 @@ class GPT2Model(GPT2PreTrainedModel):
                 encoder_attention_mask = _prepare_4d_attention_mask_for_sdpa(
                     mask=encoder_attention_mask, dtype=inputs_embeds.dtype, tgt_len=input_shape[-1]
                 )
-            elif self._attn_implementation != "flash_attention_2":
+            elif not is_flash_attention_requested(requested_attention_implementation=self._attn_implementation):
                 encoder_attention_mask = self.invert_attention_mask(encoder_attention_mask)
         else:
             encoder_attention_mask = None
