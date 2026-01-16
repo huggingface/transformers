@@ -32,6 +32,8 @@ from .utils import (
     TensorType,
     _is_tensor_or_array_like,
     copy_func,
+    is_mlx_array,
+    is_mlx_available,
     is_numpy_array,
     is_torch_available,
     is_torch_device,
@@ -141,6 +143,27 @@ class BatchFeature(UserDict):
                     return torch.tensor(value)
 
             is_tensor = torch.is_tensor
+
+        elif tensor_type == TensorType.MLX:
+
+            if not is_mlx_available():
+                raise ImportError("Unable to convert output to MLX tensors format, MLX is not installed.")
+            import mlx.core as mx
+
+            def as_tensor(value):
+                if isinstance(value, (list, tuple)) and len(value) > 0:
+                    if isinstance(value[0], np.ndarray):
+                        value = np.array(value)
+                    elif (
+                        isinstance(value[0], (list, tuple))
+                        and len(value[0]) > 0
+                        and isinstance(value[0][0], np.ndarray)
+                    ):
+                        value = np.array(value)
+                return mx.array(value)
+            
+            is_tensor = is_mlx_array
+                
         else:
 
             def as_tensor(value, dtype=None):

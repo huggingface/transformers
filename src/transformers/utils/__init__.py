@@ -57,6 +57,7 @@ from .generic import (
     find_labels,
     flatten_dict,
     is_numpy_array,
+    is_mlx_array,
     is_tensor,
     is_timm_config_dict,
     is_timm_local_checkpoint,
