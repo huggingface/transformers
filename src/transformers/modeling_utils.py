@@ -106,6 +106,7 @@ from .utils import (
     copy_func,
     has_file,
     is_accelerate_available,
+    is_bitsandbytes_available,
     is_env_variable_true,
     is_flash_attn_2_available,
     is_flash_attn_3_available,
@@ -910,7 +911,7 @@ class ModuleUtilsMixin:
             # Provided a padding mask of dimensions [batch_size, seq_length]
             # - if the model is a decoder, apply a causal mask in addition to the padding mask
             # - if the model is an encoder, make the mask broadcastable to [batch_size, num_heads, seq_length, seq_length]
-            if self.config.is_decoder:
+            if getattr(self.config, "is_decoder", None):
                 extended_attention_mask = ModuleUtilsMixin.create_extended_attention_mask_for_decoder(
                     input_shape, attention_mask
                 )
@@ -2392,7 +2393,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         tied_mapping = self._tied_weights_keys
         # If the config does not specify any tying, return empty dict
-        if not self.config.tie_word_embeddings:
+        # NOTE: not all modules have `tie_word_embeddings` attr, for example vision-only
+        # modules do not have any word embeddings!
+        tie_word_embeddings = getattr(self.config, "tie_word_embeddings", False)
+        if not tie_word_embeddings:
             return {}
         # If None, return empty dict
         elif tied_mapping is None:
@@ -2642,10 +2646,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 new_num_tokens = new_embeddings.weight.shape[0]
 
         # if word embeddings are not tied, make sure that lm head is resized as well
-        if (
-            self.get_output_embeddings() is not None
-            and not self.config.get_text_config(decoder=True).tie_word_embeddings
-        ):
+        if self.get_output_embeddings() is not None:
             old_lm_head = self.get_output_embeddings()
             if isinstance(old_lm_head, torch.nn.Embedding):
                 new_lm_head = self._get_resized_embeddings(old_lm_head, new_num_tokens, mean_resizing=mean_resizing)
@@ -3051,7 +3052,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             raise ValueError(f"{self.__class__.__name__} does not support gradient checkpointing.")
 
         if gradient_checkpointing_kwargs is None:
-            gradient_checkpointing_kwargs = {"use_reentrant": True}
+            gradient_checkpointing_kwargs = {"use_reentrant": False}
 
         gradient_checkpointing_func = functools.partial(checkpoint, **gradient_checkpointing_kwargs)
 
@@ -3529,10 +3530,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     " desired `dtype` by passing the correct `dtype` argument."
                 )
 
-            if getattr(self, "is_loaded_in_8bit", False):
+            if getattr(self, "is_loaded_in_8bit", False) and not is_bitsandbytes_available("0.48"):
                 raise ValueError(
-                    "`.to` is not supported for `8-bit` bitsandbytes models. Please use the model as it is, since the"
-                    " model has already been set to the correct devices and casted to the correct `dtype`."
+                    "You need to install `pip install bitsandbytes>=0.48.0` if you want to move a 8-bit model across devices using to()."
                 )
         elif getattr(self, "quantization_method", None) == QuantizationMethod.GPTQ:
             if dtype_present_in_args:
@@ -4302,15 +4302,17 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
             # If the pad token is equal to either BOS, EOS, or SEP, we do not know whether the user should use an
             # attention_mask or not. In this case, we should still show a warning because this is a rare case.
+            # NOTE: `sep_token_id` is not used in all models and it can be absent in the config
+            sep_token_id = getattr(self.config, "sep_token_id", None)
             if (
                 (self.config.bos_token_id is not None and self.config.bos_token_id == self.config.pad_token_id)
                 or (self.config.eos_token_id is not None and self.config.eos_token_id == self.config.pad_token_id)
-                or (self.config.sep_token_id is not None and self.config.sep_token_id == self.config.pad_token_id)
+                or (sep_token_id is not None and sep_token_id == self.config.pad_token_id)
             ):
                 warn_string += (
                     f"\nYou may ignore this warning if your `pad_token_id` ({self.config.pad_token_id}) is identical "
                     f"to the `bos_token_id` ({self.config.bos_token_id}), `eos_token_id` ({self.config.eos_token_id}), "
-                    f"or the `sep_token_id` ({self.config.sep_token_id}), and your input is not padded."
+                    f"or the `sep_token_id` ({sep_token_id}), and your input is not padded."
                 )
 
             logger.warning_once(warn_string)

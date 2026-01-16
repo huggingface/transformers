@@ -1571,7 +1571,7 @@ class MvpForCausalLM(MvpPreTrainedModel, GenerationMixin):
         >>> from transformers import AutoTokenizer, MvpForCausalLM
 
         >>> tokenizer = AutoTokenizer.from_pretrained("RUCAIBox/mvp")
-        >>> model = MvpForCausalLM.from_pretrained("RUCAIBox/mvp", add_cross_attention=False)
+        >>> model = MvpForCausalLM.from_pretrained("RUCAIBox/mvp")
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
