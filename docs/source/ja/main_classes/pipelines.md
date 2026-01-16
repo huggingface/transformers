@@ -400,12 +400,6 @@ my_pipeline = pipeline(model="xxxx", pipeline_class=MyPipeline)
 
 詳細については、[`TokenClassificationPipeline`] を参照してください。
 
-### QuestionAnsweringPipeline
-
-[[autodoc]] QuestionAnsweringPipeline
-    - __call__
-    - all
-
 ### TableQuestionAnsweringPipeline
 
 [[autodoc]] TableQuestionAnsweringPipeline
@@ -460,12 +454,6 @@ my_pipeline = pipeline(model="xxxx", pipeline_class=MyPipeline)
 ### ImageTextToTextPipeline
 
 [[autodoc]] ImageTextToTextPipeline
-    - __call__
-    - all
-
-### VisualQuestionAnsweringPipeline
-
-[[autodoc]] VisualQuestionAnsweringPipeline
     - __call__
     - all
 

@@ -362,23 +362,11 @@ my_pipeline = pipeline(model="xxxx", pipeline_class=MyPipeline)
 
 可用于自然语言处理任务的pipeline包括以下几种。
 
-### FillMaskPipeline
-
-[[autodoc]] FillMaskPipeline
-    - __call__
-    - all
-
 ### NerPipeline
 
 [[autodoc]] NerPipeline
 
 See [`TokenClassificationPipeline`] for all details.
-
-### QuestionAnsweringPipeline
-
-[[autodoc]] QuestionAnsweringPipeline
-    - __call__
-    - all
 
 ### TableQuestionAnsweringPipeline
 
@@ -440,12 +428,6 @@ See [`TokenClassificationPipeline`] for all details.
 ### MaskGenerationPipeline
 
 [[autodoc]] MaskGenerationPipeline
-    - __call__
-    - all
-
-### VisualQuestionAnsweringPipeline
-
-[[autodoc]] VisualQuestionAnsweringPipeline
     - __call__
     - all
 
