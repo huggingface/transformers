@@ -248,20 +248,21 @@ def convert_moe_packed_tensors(
 
         blk = blocks[r0:r1]
         exp = scales[r0:r1]
+        sub = out[r0:r1]
 
         # This vector is only used to index into `lut`, but is hugeee in GPU memory so we delete it immediately
         idx_lo = (blk & 0x0F).to(torch.int)
-        out[r0:r1, 0::2] = lut[idx_lo]
+        sub[:, 0::2] = lut[idx_lo]
         del idx_lo
 
         # This vector is only used to index into `lut`, but is hugeee in GPU memory so we delete it immediately
         idx_hi = (blk >> 4).to(torch.int)
-        out[r0:r1, 1::2] = lut[idx_hi]
+        sub[:, 1::2] = lut[idx_hi]
         del idx_hi
 
         # Perform op
-        torch.ldexp(out[r0:r1], exp, out=out[r0:r1])
-        del blk, exp
+        torch.ldexp(sub, exp, out=sub)
+        del blk, exp, sub
 
     out = out.reshape(*prefix_shape, G, B * 2).view(*prefix_shape, G * B * 2)
 
