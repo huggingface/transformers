@@ -208,8 +208,6 @@ class SolarOpenAttention(Glm4MoeAttention):
         super().__init__(config, layer_idx)
         self.head_dim = config.head_dim
 
-    pass
-
 
 class SolarOpenRMSNorm(Glm4MoeRMSNorm):
     pass
