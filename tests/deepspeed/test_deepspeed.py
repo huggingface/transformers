@@ -55,6 +55,8 @@ from transformers.utils import SAFE_WEIGHTS_NAME, is_torch_bf16_available_on_dev
 
 
 if is_torch_available():
+    import os
+
     import torch
     import torch.nn as nn
 
@@ -386,6 +388,117 @@ class CoreIntegrationDeepSpeed(TestCasePlus, TrainerIntegrationCommon):
         )
         # check that we get the same results either with torch or deepspeed
         torch.testing.assert_close(good_torch_sin_cos, good_deepspeed_sin_cos.cpu())
+
+    def test_init_zero3_moe_weight_conversion(self):
+        # Test that weight conversions (MoE expert fusion) work correctly with DeepSpeed Zero3
+        # This tests the fix for the issue where DeepSpeed Zero3 loading was bypassing weight conversions
+        import tempfile
+
+        from transformers import Qwen3MoeConfig, Qwen3MoeModel
+
+        tiny_config = Qwen3MoeConfig(
+            vocab_size=99,
+            hidden_size=32,
+            intermediate_size=32,
+            moe_intermediate_size=16,
+            num_hidden_layers=2,
+            num_attention_heads=2,
+            num_key_value_heads=2,
+            num_experts=8,
+            num_experts_per_tok=2,
+        )
+
+        ds_config = {
+            "train_batch_size": 1,
+            "zero_optimization": {
+                "stage": 3,
+            },
+        }
+
+        dschf = HfDeepSpeedConfig(ds_config)
+
+        self.assertTrue(dschf.is_zero3())
+        self.assertTrue(is_deepspeed_zero3_enabled())
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            with LoggingLevel(logging.INFO):
+                with mockenv_context(**self.dist_env_1_gpu):
+                    model = Qwen3MoeModel(tiny_config)
+                    model.save_pretrained(tmpdirname)
+
+            # Manually create an "old" checkpoint format with separate expert weights
+            # to simulate loading a checkpoint saved before the v5 refactor
+            old_checkpoint_dir = f"{tmpdirname}_old"
+            import os
+            import shutil
+
+            os.makedirs(old_checkpoint_dir, exist_ok=True)
+            shutil.copy(f"{tmpdirname}/config.json", f"{old_checkpoint_dir}/config.json")
+
+            from safetensors.torch import load_file, save_file
+
+            new_state_dict = load_file(f"{tmpdirname}/model.safetensors")
+            old_state_dict = {}
+
+            for key, tensor in new_state_dict.items():
+                if "mlp.experts.gate_up_proj" in key:
+                    layer_prefix = key.replace(".mlp.experts.gate_up_proj", "")
+                    num_experts = tensor.shape[0]
+                    intermediate_size = tensor.shape[1] // 2
+
+                    for expert_idx in range(num_experts):
+                        expert_tensor = tensor[expert_idx]
+                        gate_tensor = expert_tensor[:intermediate_size, :]
+                        up_tensor = expert_tensor[intermediate_size:, :]
+
+                        old_state_dict[f"{layer_prefix}.mlp.experts.{expert_idx}.gate_proj.weight"] = gate_tensor
+                        old_state_dict[f"{layer_prefix}.mlp.experts.{expert_idx}.up_proj.weight"] = up_tensor
+                elif (
+                    "mlp.experts.down_proj" in key
+                    and key[key.rfind(".mlp.experts.down_proj") :] == ".mlp.experts.down_proj"
+                ):
+                    layer_prefix = key.replace(".mlp.experts.down_proj", "")
+                    num_experts = tensor.shape[0]
+
+                    for expert_idx in range(num_experts):
+                        expert_tensor = tensor[expert_idx]
+                        old_state_dict[f"{layer_prefix}.mlp.experts.{expert_idx}.down_proj.weight"] = expert_tensor
+                else:
+                    old_state_dict[key] = tensor
+
+            save_file(old_state_dict, f"{old_checkpoint_dir}/model.safetensors")
+
+            # Load the old checkpoint with DeepSpeed Zero3 and verify weight conversions are applied
+            with LoggingLevel(logging.INFO):
+                with mockenv_context(**self.dist_env_1_gpu):
+                    logger = logging.get_logger("transformers.modeling_utils")
+                    with CaptureLogger(logger) as cl:
+                        loaded_model = Qwen3MoeModel.from_pretrained(old_checkpoint_dir)
+
+            self.assertIn("Detected DeepSpeed ZeRO-3", cl.out)
+            self.assertNotRegex(cl.out, r"mlp\.experts\.(gate_up_proj|down_proj)\s*\|\s*MISSING")
+
+            # Verify the model structure is correct (fused experts in v5 format)
+            # DeepSpeed Zero3 partitions parameters, so we need to gather them to check shapes
+            import deepspeed
+
+            expert_params_to_check = []
+            for name, param in loaded_model.named_parameters():
+                if "mlp.experts.gate_up_proj" in name or "mlp.experts.down_proj" in name:
+                    expert_params_to_check.append((name, param))
+                self.assertNotRegex(name, r"mlp\.experts\.\d+\.(gate_proj|up_proj|down_proj)\.weight")
+
+            with deepspeed.zero.GatheredParameters([param for _, param in expert_params_to_check], modifier_rank=0):
+                for name, param in expert_params_to_check:
+                    if "mlp.experts.gate_up_proj" in name:
+                        self.assertEqual(len(param.shape), 3, f"gate_up_proj should be 3D, got {param.shape}")
+                        self.assertEqual(param.shape[0], 8, f"Should have 8 experts, got {param.shape[0]}")
+                    elif (
+                        "mlp.experts.down_proj" in name
+                        and name[name.rfind(".mlp.experts.down_proj") :] == ".mlp.experts.down_proj"
+                    ):
+                        self.assertEqual(len(param.shape), 3, f"down_proj should be 3D, got {param.shape}")
+                        self.assertEqual(param.shape[0], 8, f"Should have 8 experts, got {param.shape[0]}")
 
 
 class TrainerIntegrationDeepSpeedWithCustomConfig(TestCasePlus):
