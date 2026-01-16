@@ -13,13 +13,12 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2026-01-19 and added to Hugging Face Transformers on 2026-01-15.*
+*This model was released on 2026-01-15 and added to Hugging Face Transformers on 2026-01-15.*
 
 
 # GLM-4.7-Flash
 
 ## Overview
-
 
 
 ## Glm4MoeLiteConfig
