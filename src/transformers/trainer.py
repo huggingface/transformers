@@ -2333,11 +2333,7 @@ class Trainer:
         if use_accelerator_prepare:
             self.model.train()
             if hasattr(self.lr_scheduler, "step"):
-                # We should avoid accelerate preparing the model in TP case since we dont need it as it is handled by transformers from_pretrained and also it goes into DDP based preparation.
-                if self.is_tp_enabled:
-                    self.optimizer = self.accelerator.prepare(self.optimizer)
-                else:
-                    model, self.optimizer = self.accelerator.prepare(self.model, self.optimizer)
+                model, self.optimizer = self.accelerator.prepare(self.model, self.optimizer)
             else:
                 # to handle cases wherein we pass "DummyScheduler" such as when it is specified in DeepSpeed config.
                 model, self.optimizer, self.lr_scheduler = self.accelerator.prepare(
@@ -5101,7 +5097,8 @@ class Trainer:
                         args["parallelism_config"] = ParallelismConfig(tp_size=self.model.tp_size)
                 else:
                     raise ValueError("Requires accelerate>1.12.0 to use Tensor Parallelism.")
-
+            elif args["parallelism_config"].tp_size != self.model.tp_size:
+                args["parallelism_config"].tp_size = self.model.tp_size
         if is_accelerate_available("1.2.0"):
             # it we don't have the correct version, we will rely on env var instead that were set in TrainingArguments
             from accelerate.utils import TorchDynamoPlugin
