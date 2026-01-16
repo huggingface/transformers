@@ -19,6 +19,7 @@ import httpx
 from transformers import MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING, is_vision_available
 from transformers.pipelines import ImageToTextPipeline, pipeline
 from transformers.testing_utils import (
+    Expectations,
     is_pipeline_test,
     require_torch,
     require_vision,
@@ -185,7 +186,13 @@ class ImageToTextPipelineTests(unittest.TestCase):
         image = Image.open(io.BytesIO(httpx.get(url, follow_redirects=True).content))
 
         outputs = pipe(image)
-        self.assertEqual(outputs, [{"generated_text": "a cartoon of a purple character."}])
+        EXPECTED_OUTPUT = Expectations(
+            {
+                ("cuda", 8): [{"generated_text": "a cartoon of a purple character."}],
+                ("rocm", (9, 4)): [{"generated_text": "a cartoon of a purple monster"}],
+            }
+        ).get_expectation()
+        self.assertEqual(outputs, EXPECTED_OUTPUT)
 
     @slow
     @require_torch
@@ -212,7 +219,14 @@ class ImageToTextPipelineTests(unittest.TestCase):
         prompt = "a photo of a"
 
         outputs = pipe(image, prompt=prompt)
-        self.assertEqual(outputs, [{"generated_text": "a photo of a tent with a tent and a tent in the background."}])
+
+        EXPECTED_OUTPUT = Expectations(
+            {
+                ("cuda", 8): [{"generated_text": "a photo of a tent with a tent and a tent in the background."}],
+                ("rocm", (9, 4)): [{"generated_text": "a photo of a tent with a tent and a large umbrella."}],
+            }
+        ).get_expectation()
+        self.assertEqual(outputs, EXPECTED_OUTPUT)
 
         with self.assertRaises(ValueError):
             outputs = pipe([image, image], prompt=[prompt, prompt])
