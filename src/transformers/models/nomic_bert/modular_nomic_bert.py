@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 the HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,7 +13,6 @@
 # limitations under the License.
 
 import math
-from typing import Optional, Union
 
 import torch
 import torch.nn as nn
@@ -432,7 +430,7 @@ class RotaryEmbedding(nn.Module):
 
             return rearrange(torch.stack((-x2, x1), dim=-1), "... d two -> ... (d two)", two=2)
 
-    def apply_rotary_emb(self, x, cos, sin, offset=0, interleaved=False):
+    def apply_rotary_emb(self, x, cos, sin, offset=0, position_ids=None, interleaved=False):
         """
         Apply rotary embeddings to input tensor.
 
@@ -450,18 +448,27 @@ class RotaryEmbedding(nn.Module):
             Tensor with rotary embeddings applied to the first `rotary_dim` dimensions
         """
         ro_dim = self.dim
-        seq_len = x.shape[2]
 
-        cos, sin = (
-            cos[offset : offset + seq_len, : ro_dim // 2],
-            sin[offset : offset + seq_len, : ro_dim // 2],
-        )
+        if position_ids is not None:
+            cos = cos[position_ids].squeeze(1)
+            sin = sin[position_ids].squeeze(1)
+        else:
+            seq_len = x.shape[2]
+            cos, sin = (
+                cos[offset : offset + seq_len, : ro_dim // 2],
+                sin[offset : offset + seq_len, : ro_dim // 2],
+            )
 
         _check_einops_available()
         from einops import repeat
 
-        cos = repeat(cos, "s d -> 1 1 s (2 d)" if not interleaved else "s d -> 1 1 s (d 2)")
-        sin = repeat(sin, "s d -> 1 1 s (2 d)" if not interleaved else "s d -> 1 1 s (d 2)")
+        if cos.dim() == 2:
+            cos = repeat(cos, "s d -> 1 1 s (2 d)" if not interleaved else "s d -> 1 1 s (d 2)")
+            sin = repeat(sin, "s d -> 1 1 s (2 d)" if not interleaved else "s d -> 1 1 s (d 2)")
+        else:
+            cos = repeat(cos, "b s d -> b 1 s (2 d)" if not interleaved else "b s d -> b 1 s (d 2)")
+            sin = repeat(sin, "b s d -> b 1 s (2 d)" if not interleaved else "b s d -> b 1 s (d 2)")
+
         return torch.cat(
             [x[..., :ro_dim] * cos + self._rotate_half(x[..., :ro_dim], interleaved) * sin, x[..., ro_dim:]],
             dim=-1,
@@ -528,8 +535,9 @@ class RotaryEmbedding(nn.Module):
         self,
         q: torch.Tensor,
         k: torch.Tensor,
-        seqlen_offset: Union[int, torch.Tensor] = 0,
-        max_seqlen: Optional[int] = None,
+        seqlen_offset: int | torch.Tensor = 0,
+        position_ids: torch.Tensor | None = None,
+        max_seqlen: int | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Apply rotary position embeddings to query and key tensors.
@@ -541,6 +549,8 @@ class RotaryEmbedding(nn.Module):
                 - An integer: all sequences are shifted by this amount (common in KV cache scenarios)
                 - A tensor of shape (batch_size,): each sequence has its own offset
                 Defaults to 0.
+            position_ids: Position IDs tensor of shape (batch_size, seqlen). If provided, it overrides the default
+                position IDs computed from `seqlen_offset`.
             max_seqlen: Maximum sequence length for cache update. If provided and seqlen_offset
                 is a tensor, updates the cache up to this length. Useful for batched inference
                 with variable-length sequences.
@@ -549,19 +559,27 @@ class RotaryEmbedding(nn.Module):
             Tuple of (q_rot, k_rot) with rotary embeddings applied. Both tensors have the same
             shape as the input q and k tensors.
         """
-        seqlen = q.shape[2]
-        if seqlen > self._seq_len_cached:
-            self._update_cos_sin_cache(seqlen, device=q.device, dtype=q.dtype)
-        elif max_seqlen is not None:
-            self._update_cos_sin_cache(max_seqlen, device=q.device, dtype=q.dtype)
-        elif isinstance(seqlen_offset, int):
-            self._update_cos_sin_cache(seqlen + seqlen_offset, device=q.device, dtype=q.dtype)
-        elif isinstance(seqlen_offset, torch.Tensor):
-            max_offset = seqlen_offset.max().item()
-            self._update_cos_sin_cache(seqlen + max_offset, device=q.device, dtype=q.dtype)
+        # Determine needed cache size
+        if max_seqlen is not None:
+            needed_len = max_seqlen
+        elif position_ids is not None:
+            # Ensure cache is large enough for the largest position ID
+            needed_len = position_ids.max().item() + 1
+        else:
+            needed_len = q.shape[2] + (seqlen_offset if isinstance(seqlen_offset, int) else 0)
 
-        q_rot = self.apply_rotary_emb(q, self._cos_cached, self._sin_cached, seqlen_offset, self.interleaved)
-        k_rot = self.apply_rotary_emb(k, self._cos_cached, self._sin_cached, seqlen_offset, self.interleaved)
+        # Update cache
+        if needed_len > self._seq_len_cached:
+            self._update_cos_sin_cache(needed_len, device=q.device, dtype=q.dtype)
+        elif self._cos_cached.device != q.device or self._cos_cached.dtype != q.dtype:
+            self._update_cos_sin_cache(needed_len, device=q.device, dtype=q.dtype)
+
+        q_rot = self.apply_rotary_emb(
+            q, self._cos_cached, self._sin_cached, seqlen_offset, position_ids, self.interleaved
+        )
+        k_rot = self.apply_rotary_emb(
+            k, self._cos_cached, self._sin_cached, seqlen_offset, position_ids, self.interleaved
+        )
         return q_rot, k_rot
 
 
@@ -928,7 +946,7 @@ class NomicBertModel(BertModel):
         raise ValueError("NomicBert only supports Cache-based past_key_values during generation.")
 
     def get_head_mask(
-        self, head_mask: Optional[torch.Tensor], num_hidden_layers: int, is_attention_chunked: bool = False
+        self, head_mask: torch.Tensor | None, num_hidden_layers: int, is_attention_chunked: bool = False
     ) -> torch.Tensor:
         """
         Prepare the head mask if needed.
