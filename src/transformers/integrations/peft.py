@@ -117,7 +117,7 @@ def _build_peft_weight_mapping(
             new_source_patterns.append(f"{pat}.lora_B{adapter_name}.*")
         conversion.source_patterns = new_source_patterns
         pat = conversion.target_patterns[0].rsplit(".", 1)[0]
-        pat = pat.replace("gate_up_proj", "").replace('down_proj.', 'base_layer.')
+        pat = pat.replace("gate_up_proj", "base_layer").replace('down_proj.', '')
         # we make sure the target key is correct
         conversion.target_patterns = [pat + ".lora_A", pat + ".lora_B"]
         conversion.operations = peft_weight_conversions
