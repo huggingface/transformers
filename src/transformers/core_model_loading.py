@@ -250,9 +250,6 @@ class Transpose(ConversionOps):
     Transposes the given tensor along dim0 and dim1.
     """
 
-    # BIG TODO: This Ops may clash with TP if the required transpose dim are the same as the TP shard dim
-    # Would require to check if this Ops is used before sharding with TP
-
     def __init__(self, dim0: int = 0, dim1: int = 1):
         self.dim0 = dim0
         self.dim1 = dim1
