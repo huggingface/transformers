@@ -39,7 +39,6 @@ from transformers.testing_utils import (
     Expectations,
     require_deterministic_for_xpu,
     require_flash_attn,
-    require_torch_accelerator,
     slow,
     torch_device,
 )
@@ -214,7 +213,6 @@ class ContinuousBatchingNonGenerationTest(unittest.TestCase):
             (2, 0, 1, 1, 3, 4, True),
         ]
     )
-    @require_torch_accelerator
     def test_continuous_batching_will_allocation_be_successful(
         self,
         num_requested_blocks: int,
@@ -372,7 +370,6 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
             )
         )
     )
-    @require_torch_accelerator
     @slow
     def test_continuous_batching_config_combinations(
         self,
@@ -398,7 +395,6 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
             )
         )
     )
-    @require_torch_accelerator
     @slow
     def test_continuous_batching_diverse_models(self, model_id: str, use_cuda_graph: bool, use_compile: bool) -> None:
         try:
@@ -406,17 +402,14 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
         finally:
             flush_memory(flush_compile=use_compile)
 
-    @require_torch_accelerator
     def test_continuous_batching_fast(self) -> None:
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
         self._test_continuous_batching_parity(model_id, False, "sdpa", False, False)
 
-    @require_torch_accelerator
     def test_continuous_batching_long_generate(self) -> None:
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
         self._test_continuous_batching_parity(model_id, True, "flash_attention_2", True, True, max_new_tokens=80)
 
-    @require_torch_accelerator
     def test_continuous_batching_few_blocks(self) -> None:
         """This test verifies that generation works with a very small number of blocks, ie. small enough that we need to
         offload a request at some point. To add more complexity, we repeat the same prompt 4 times and enable prefix
@@ -475,15 +468,12 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
 
         manager.stop(block=True)
 
-    @require_torch_accelerator
     def test_streaming_request(self) -> None:
         self._test_streaming_or_not_request(with_streaming=True, with_non_streaming=False)
 
-    @require_torch_accelerator
     def test_non_streaming_request(self) -> None:
         self._test_streaming_or_not_request(with_streaming=False, with_non_streaming=True)
 
-    @require_torch_accelerator
     def test_streaming_and_non_streaming_requests_can_alternate(self) -> None:
         self._test_streaming_or_not_request(with_streaming=True, with_non_streaming=True)
 
@@ -580,18 +570,17 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
         print(f"{chunk_no_reuse.generated_tokens = } {expected_output_tokens = }")
         self.assertEqual(chunk_no_reuse.generated_tokens, expected_output_tokens)
 
-    @require_torch_accelerator
     def test_prefix_sharing(self) -> None:
         model_id = "Qwen/Qwen2.5-0.5B-Instruct"
         num_layer_groups = {"full_attention": 1, "sliding_window": 0}
         input_msg = "What is the Transformers library known for?"
         expected_generated_tokens = Expectations({
+            ("cpu", None): [785, 80532, 6733, 374, 3881, 369, 1181, 5726, 311, 1855, 323, 36635, 3460, 12934, 4128, 4119, 11, 7945, 1846, 16176, 389, 279, 3460, 12934, 4128, 4119, 320, 4086, 44, 8, 2390, 13],
             (None, None): [785, 80532, 6733, 374, 3881, 369, 1181, 5726, 311, 1855, 323, 36635, 3460, 12934, 4128, 4119, 11, 2670, 1846, 429, 646, 6923, 1467, 11, 14683, 1467, 11, 323, 2736, 1008, 4128, 13904]
         }).get_expectation()  # fmt: skip
 
         return self._test_block_sharing(model_id, num_layer_groups, input_msg, expected_generated_tokens)
 
-    @require_torch_accelerator
     def test_block_sharing_with_hybrid_model(self) -> None:
         model_id = "google/gemma-3-1b-it"
         num_layer_groups = {"full_attention": 2, "sliding_window": 11}
@@ -603,7 +592,6 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
         return self._test_block_sharing(model_id, num_layer_groups, input_msg, expected_generated_tokens)
 
     @parameterized.expand([True, False])
-    @require_torch_accelerator
     @require_flash_attn  # otherwise the test can fail because attention bias has a very slight impact on SDPA and eager
     def test_num_return_sequences(self, allow_block_sharing: bool) -> None:
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
