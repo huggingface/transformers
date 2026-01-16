@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import copy
 import inspect
 import json
 import os
@@ -67,23 +68,16 @@ class PeftConcatenate(Concatenate):
         full_layer_name: str,
         **kwargs,
     ) -> dict[str, list[torch.Tensor]]:
-        lora_a_out = []
         lora_b_out = []
         for k, v in input_dict.items():
-            if "lora_A" in k:
-                lora_a_out.append(v)
-            elif "lora_B" in k:
+            if ".lora_B" in k:
                 lora_b_out.append(v)
-        lora_a_out = torch.cat(lora_a_out, dim=self.dim)
+
+        lora_b_block_diag = []
         for i in range(len(lora_b_out)):
-            lora_b_out.append(torch.block_diag(lora_b_out[0][i], lora_b_out[1][i]))
-        lora_b_out = torch.stack(lora_b_out[2:], dim=0)
-        return {
-            full_layer_name : [
-                lora_a_out
-            ],  # @BenjaminBossan this depends on MoE implementation for 3 patams
-            full_layer_name.replace("lora_A", "lora_B"): [lora_b_out],
-        }
+            lora_b_block_diag.append(torch.block_diag(lora_b_out[0][i], lora_b_out[1][i]))
+        lora_b_final = torch.stack(lora_b_block_diag, dim=0)
+        return {full_layer_name: [lora_b_final]}
 
     @property
     def reverse_op(self) -> ConversionOps:
@@ -98,33 +92,51 @@ def _build_peft_weight_mapping(
 
     # We iterate over all the operations and simply add the PEFT LoRA MoE conversion when appropriate.
     # The just replace the operations (Concatenate, MergeModulelist) with the corresponding PeftMergeModuleList and PeftConcatenate
-    for conversion in weight_conversions:
-        if isinstance(conversion, WeightRenaming):
+
+    # strip "base_model.model" and add adapter name
+    new_weight_conversions = [
+        WeightRenaming("base_model.model.model", "model"),
+        WeightRenaming("lora_A.weight", f"lora_A.{adapter_name}.weight"),
+        WeightRenaming("lora_B.weight", f"lora_B.{adapter_name}.weight"),
+        # TODO: lora_embedding_A and B
+    ]
+
+    for orig_conversion in weight_conversions:
+        if isinstance(orig_conversion, WeightRenaming):
+            new_weight_conversions.append(orig_conversion)
             continue
-        peft_weight_conversions = []
-        for i, op in enumerate(conversion.operations):
-            if isinstance(op, Concatenate):
-                peft_weight_conversions.append(PeftConcatenate(dim=op.dim))
-            else:
-                peft_weight_conversions.append(op)
-        # For source, we capture the orignal weights + the lora weights
-        new_source_patterns = []
-        adapter_name = "" if adapter_name == "default" else f".{adapter_name}"
-        for pat in list(conversion.source_patterns):
-            # we replace the weight pattern to colllect loras
-            pat = pat.rsplit(".", 1)[0]
-            new_source_patterns.append(f"{pat}.lora_A{adapter_name}.*")
-            new_source_patterns.append(f"{pat}.lora_B{adapter_name}.*")
-        conversion.source_patterns = new_source_patterns
-        pat = conversion.target_patterns[0].rsplit(".", 1)[0]
-        pat = pat.replace("gate_up_proj", "base_layer").replace('down_proj.', '')
-        # we make sure the target key is correct
-        conversion.target_patterns = [pat + ".lora_A", pat + ".lora_B"]
-        conversion.operations = peft_weight_conversions
-    weight_conversions = [WeightRenaming("base_model.model.model", "model")] + weight_conversions
-    weight_conversions = [WeightRenaming("lora_A.weight", "lora_A.default.weight")] + weight_conversions
-    weight_conversions = [WeightRenaming("lora_B.weight", "lora_B.default.weight")] + weight_conversions
-    return weight_conversions
+
+        for lora in ("lora_A", "lora_B"):  # TODO: lora_embedding_A and lora_embedding_B
+            conversion = copy.deepcopy(orig_conversion)
+            # deal with operations
+            peft_weight_operations = []
+            for i, op in enumerate(conversion.operations):
+                if isinstance(op, Concatenate):
+                    if lora == "lora_B":  # block diagonal
+                        peft_weight_operations.append(PeftConcatenate(dim=op.dim))
+                    else:
+                        peft_weight_operations.append(op)
+                else:
+                    peft_weight_operations.append(op)
+            conversion.operations = peft_weight_operations
+
+            # TODO: this assumption may not hold for models != mixtral
+            # For source, we capture the orignal weights + the lora weights
+            new_source_patterns = []
+            for pat in list(conversion.source_patterns):
+                # we replace the weight pattern to colllect loras
+                pat = pat.rsplit(".", 1)[0]
+                # note: the source state_dict does *not* contain the adapter name
+                new_source_patterns.append(f"{pat}.{lora}.*")
+            conversion.source_patterns = new_source_patterns
+
+            pat = conversion.target_patterns[0]
+            pat = pat.replace("gate_up_proj", "base_layer").replace(".down_proj", "")
+            # we make sure the target key is correct, add '.weight' because the parameter is targeted directly
+            conversion.target_patterns = [f"{pat}.{lora}.{adapter_name}.weight"]
+            new_weight_conversions.append(conversion)
+
+    return new_weight_conversions
 
 
 class PeftAdapterMixin:
@@ -294,6 +306,8 @@ class PeftAdapterMixin:
                 **adapter_kwargs,
             )
             peft_config.inference_mode = not is_trainable
+
+        peft_config = convert_peft_config_for_transformers(peft_config, model=self, conversions=weight_conversions)
 
         if not hotswap:
             # Create and add fresh new adapters into the model, unless the weights are hotswapped
@@ -710,3 +724,96 @@ def maybe_load_adapters(
             pretrained_model_name_or_path = json.load(f)["base_model_name_or_path"]
 
     return _adapter_model_path, pretrained_model_name_or_path, adapter_kwargs
+
+
+#####################
+# weight conversion #
+#####################
+
+# With transformers v5, we need to convert some weights to reflect updated model architectures. If users have trained
+# PEFT adapters for these models, they also need to be updated. This may require updating the PEFT config too. The
+# logic for this is found below. Right now, only LoRA is supported.
+
+# TODO: These functions will be added to PEFT in release 0.19.0. Drop them here once 0.19.0 becomes the min PEFT
+# version.
+
+def _convert_peft_config_mixtral(peft_config):
+    peft_config.target_parameters = peft_config.target_parameters or set()
+
+    # add gate.weight to target_parameters
+    for target in peft_config.target_modules:
+        if (target == "gate") or target.endswith(".gate"):
+            # FIXME: what if only specific layers are targeted, e.g. '0.gate'
+            peft_config.target_parameters.add(f"{target}.weight")
+    # remove gate from target_modules
+    peft_config.target_modules = {
+        key for key in peft_config.target_modules if not ((key == "gate") or (key.endswith(".gate")))
+    }
+
+    # add expert layers: w1 & w3 => gate_up_proj, ModuleList of layers is now a stacked parameter.
+    for target in peft_config.target_modules:
+        # if only w1 or only w3 are targeted, conversion is not possible
+        if (target == "w1") or target.endswith(".w1"):
+            if target.replace("w1", "w3") not in peft_config.target_modules:
+                raise ValueError("Cannot convert because blabla")  # FIXME
+        if (target == "w3") or target.endswith(".w3"):
+            if target.replace("w3", "w1") not in peft_config.target_modules:
+                raise ValueError("Cannot convert because blabla")  # FIXME
+
+        if (target == "w1") or target.endswith(".w1"):
+            # FIXME: what if only specific layers are targeted, e.g. '0.w1'
+            peft_config.target_parameters.add("gate_up_proj")
+    # remove w1 and w3
+    peft_config.target_modules = {
+        key for key in peft_config.target_modules if not ((key == "w1") or (key.endswith(".w1")))
+    }
+    peft_config.target_modules = {
+        key for key in peft_config.target_modules if not ((key == "w3") or (key.endswith(".w3")))
+    }
+
+    # add expert layers: w2 => down_proj, ModuleList of layers is now a stacked parameter.
+    for target in peft_config.target_modules:
+        if (target == "w2") or target.endswith(".w2"):
+            # FIXME: what if only specific layers are targeted, e.g. '0.w2'
+            peft_config.target_parameters.add("down_proj")
+    # remove w1 and w3
+    peft_config.target_modules = {
+        key for key in peft_config.target_modules if not ((key == "w2") or (key.endswith(".w2")))
+    }
+    return peft_config
+
+
+def convert_peft_config_for_transformers(peft_config, model: torch.nn.Module, conversions: list[Any] | None):
+    # FIXME document this properly
+    # Deal with weight conversion from transformers
+
+    ##############################
+    # check if conversion needed #
+    ##############################
+
+    # If, for any reason, we cannot apply conversion, we just return the PEFT config as is.
+    from peft import PeftType  # avoid circular import
+
+    if peft_config.peft_type != PeftType.LORA:
+        # weight conversion is currently only supported for LoRA
+        return peft_config
+    if not hasattr(model, "config"):
+        # not a transformer model
+        return peft_config
+    if not hasattr(model.config, "model_type"):
+        # not a transformer model
+        return peft_config
+
+    # TODO: deal with general renamings
+
+    ##########################
+    # model specific changes #
+    ##########################
+
+    peft_config = copy.deepcopy(peft_config)  # don't mutate the original config
+
+    # TODO So far, only dealing with Mixtral
+    if model.config.model_type == "mixtral":
+        peft_config = _convert_peft_config_mixtral(peft_config)
+
+    return peft_config
