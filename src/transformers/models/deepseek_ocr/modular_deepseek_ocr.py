@@ -1,4 +1,4 @@
-# Copyright 2025 Deepseek-AI and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 DeepSeek-AI and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -395,6 +395,32 @@ class DeepseekOcrConfig(PreTrainedConfig):
         "projector_config": DeepseekOcrProjectorConfig,
     }
 
+    @classmethod
+    def from_pretrained(
+        cls,
+        pretrained_model_name_or_path,
+        cache_dir=None,
+        force_download=False,
+        local_files_only=False,
+        token=None,
+        revision="main",
+        **kwargs,
+    ):
+        kwargs["cache_dir"] = cache_dir
+        kwargs["force_download"] = force_download
+        kwargs["local_files_only"] = local_files_only
+        kwargs["revision"] = revision
+        kwargs["token"] = token
+
+        config_dict, kwargs = cls.get_config_dict(pretrained_model_name_or_path, **kwargs)
+        if cls.base_config_key and cls.base_config_key in config_dict:
+            config_dict = config_dict[cls.base_config_key]
+
+        if config_dict.get("model_type") == "deepseek_vl_v2":
+            config_dict["model_type"] = cls.model_type
+
+        return cls.from_dict(config_dict, **kwargs)
+
     def __init__(
         self,
         text_config=None,
@@ -717,11 +743,6 @@ class DeepseekOcrCLIPVisionModel(CLIPVisionModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         r"""
-        Args:
-            patch_embeds (`torch.FloatTensor`, *optional*):
-                Precomputed patch embeddings derived from the SAM vision encoder. When provided, the transformer will
-                reuse them instead of recomputing embeddings from `pixel_values`.
-
         Example:
 
         ```python

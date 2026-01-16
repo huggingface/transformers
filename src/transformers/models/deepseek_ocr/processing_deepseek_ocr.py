@@ -1,4 +1,4 @@
-# Copyright 2025 DeepSeek-AI and the HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 DeepSeek-AI and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -23,7 +23,7 @@ from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import AddedToken, TextInput
-from ...utils import is_torch_available, is_vision_available, logging
+from ...utils import is_torch_available, is_vision_available
 from ..auto.tokenization_auto import AutoTokenizer
 from .image_processing_deepseek_ocr_fast import DeepseekOcrImageProcessorFast
 
@@ -35,8 +35,6 @@ if is_vision_available():
     # used only within the post-processing methods
     from PIL import Image, ImageDraw, ImageFont
 
-
-logger = logging.get_logger(__name__)
 
 DEEPSEEK_OCR_MIN_DYNAMIC_CROPS = 2
 
@@ -122,7 +120,7 @@ class DeepseekOcrProcessor(ProcessorMixin):
 
         super().__init__(image_processor, tokenizer, **kwargs)
 
-    # hacky hacky, so that from_pretrained does not yell because there is no processor config in the hub repo
+    # @molbap hacky hacky, so that from_pretrained does not yell because there is no processor config in the hub repo
     @classmethod
     def _get_arguments_from_pretrained(cls, pretrained_model_name_or_path, processor_dict=None, **kwargs):
         try:
@@ -130,10 +128,6 @@ class DeepseekOcrProcessor(ProcessorMixin):
         except OSError as error:
             if "preprocessor_config" not in str(error):
                 raise
-            logger.warning_once(
-                "Deepseek OCR repository does not provide a preprocessor_config.json file. "
-                "Falling back to default DeepseekOcrImageProcessorFast settings."
-            )
             image_processor = DeepseekOcrImageProcessorFast()
             tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)
             return [image_processor, tokenizer]
