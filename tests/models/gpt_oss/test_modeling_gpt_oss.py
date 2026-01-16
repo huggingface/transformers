@@ -319,11 +319,11 @@ if __name__ == "__main__":
         model_id = f"openai/gpt-oss-{model}"
         model_obj = AutoModelForCausalLM.from_pretrained(
             model_id,
+            dtype="auto",
             device_map="auto",
-            dtype=torch.bfloat16,
+            use_kernels=kernels,
             attn_implementation=attn_impl,
             quantization_config=Mxfp4Config(dequantize=not quantized),
-            use_kernels=kernels,
         )
 
         # Set the correct mode
@@ -407,11 +407,11 @@ if __name__ == "__main__":
 
         model_obj = AutoModelForCausalLM.from_pretrained(
             model_id,
+            dtype="auto",
             device_map="auto",
-            dtype=torch.bfloat16,
+            use_kernels=kernels,
             attn_implementation=attn_impl,
             quantization_config=Mxfp4Config(dequantize=True),
-            use_kernels=kernels,
         )
         model_obj.train()
 
@@ -470,7 +470,7 @@ if __name__ == "__main__":
 
         model = AutoModelForCausalLM.from_pretrained(
             model_id,
-            dtype=torch.bfloat16,
+            dtype="auto",
             device_map="auto",
             attn_implementation="eager",
         )
@@ -536,7 +536,7 @@ I am a language model, not a human being"""
 
         model = AutoModelForCausalLM.from_pretrained(
             model_id,
-            dtype=torch.bfloat16,
+            dtype="auto",
             device_map="auto",
             attn_implementation="eager",
         )
