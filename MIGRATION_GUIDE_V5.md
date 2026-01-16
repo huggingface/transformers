@@ -598,7 +598,7 @@ Linked PRs:
 
 ## Pipelines
 
-### Removed text pipelines
+### Text pipelines that should just be LLMs
 
 `Text2TextGenerationPipeline`, as well as the related `SummarizationPipeline` and `TranslationPipeline`, were deprecated and will now be removed. The
 `question-answering` pipeline has also been removed. `pipeline` classes are intended as a high-level beginner-friendly API,
@@ -624,7 +624,7 @@ print(summarizer(message_history)[0]["generated_text"][-1]["content"])
 
 The above example can be adapted for translation or question answering simply by changing the prompt.
 
-### Removed vision-language pipelines
+### Vision pipelines that should just be VLMs
 
 Similarly, the `image-to-text` and `visual-question-answering` pipelines have been removed. For image captioning or question answering
 tasks we recommend using a modern vision-language chat model via the `image-text-to-text` pipeline. For example:
@@ -657,8 +657,9 @@ The above example can be adapted for visual question answering simply by asking 
 The `fill-mask` and `image-to-image` pipelines have been removed, and were rarely used. For most image generation tasks, you
 probably want [🤗 Diffusers](https://huggingface.co/docs/diffusers/index) instead!
 
+### Other changes
 
-- The `feature-extraction` pipeline has now been renamed to `text-embedding` and the `image-feature-extraction` pipeline 
+- The `feature-extraction` pipeline has now been renamed to `text-embedding` and the `image-feature-extraction` pipeline has been renamed to `image-embedding`. The older names are still usable as aliases, so this should not impact your existing code.
 - Image text to text pipelines will no longer accept images as a separate argument along with conversation chats. Image data has to be embedded in the chat's "content" field. See [#42359](https://github.com/huggingface/transformers/pull/42359)
 
 ## PushToHubMixin
