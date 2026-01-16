@@ -97,8 +97,10 @@ class UMT5Config(PreTrainedConfig):
         eos_token_id=1,
         decoder_start_token_id=0,
         classifier_dropout=0.0,
+        is_decoder=False,
         **kwargs,
     ):
+        self.is_decoder = is_decoder
         self.vocab_size = vocab_size
         self.d_model = d_model
         self.d_kv = d_kv
@@ -131,14 +133,14 @@ class UMT5Config(PreTrainedConfig):
         if feed_forward_proj == "gated-gelu":
             self.dense_act_fn = "gelu_new"
 
-        # Force because official weights have False serialized, but we have to tie always
-        kwargs["tie_word_embeddings"] = True
+        self.tokenizer_class = tokenizer_class
+        self.pad_token_id = pad_token_id
+        self.eos_token_id = eos_token_id
+        self.decoder_start_token_id = decoder_start_token_id
+        self.tie_word_embeddings = True  # force it for T5 family
+
         super().__init__(
             is_encoder_decoder=is_encoder_decoder,
-            tokenizer_class=tokenizer_class,
-            pad_token_id=pad_token_id,
-            eos_token_id=eos_token_id,
-            decoder_start_token_id=decoder_start_token_id,
             **kwargs,
         )
 
