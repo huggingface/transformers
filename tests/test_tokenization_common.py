@@ -25,7 +25,7 @@ import unittest
 from collections import OrderedDict
 from itertools import takewhile
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Optional, Union
+from typing import TYPE_CHECKING, Any, Union
 
 from parameterized import parameterized
 
@@ -160,7 +160,7 @@ def merge_model_tokenizer_mappings(
 
 def check_subword_sampling(
     tokenizer: PreTrainedTokenizer,
-    text: Optional[str] = None,
+    text: str | None = None,
     test_sentencepiece_ignore_case: bool = True,
 ) -> None:
     """
@@ -488,9 +488,9 @@ Hey how are you doing"""  # noqa: W293
         self,
         expected_encoding: dict,
         model_name: str,
-        revision: Optional[str] = None,
-        sequences: Optional[list[str]] = None,
-        decode_kwargs: Optional[dict[str, Any]] = None,
+        revision: str | None = None,
+        sequences: list[str] | None = None,
+        decode_kwargs: dict[str, Any] | None = None,
         padding: bool = True,
     ):
         """

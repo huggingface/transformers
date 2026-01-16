@@ -19,6 +19,8 @@
       title: Customizing model components
     - local: model_sharing
       title: Sharing
+    - local: serialization
+      title: Exporting to production
     - local: modular_transformers
       title: Contributing a new model to Transformers
     - local: add_new_model
@@ -121,12 +123,6 @@
     - local: open_webui
       title: Open WebUI
     title: Serving
-  - local: agents
-    title: Agents
-  - local: tools
-    title: Tools
-  - local: transformers_as_backend
-    title: Transformers as modeling backend
   title: Inference
 - isExpanded: false
   sections:
@@ -228,11 +224,19 @@
   title: Quantization
 - isExpanded: false
   sections:
-  - local: serialization
-    title: ONNX
-  - local: executorch
-    title: ExecuTorch
-  title: Export to production
+  - local: community_integrations/sglang
+    title: SGLang
+  - local: community_integrations/tensorrt-llm
+    title: TensorRT-LLM
+  - local: community_integrations/vllm
+    title: vLLM
+  - local: community_integrations/transformers_as_backend
+    title: Building a compatible model backend for inference
+  - sections:
+    - local: community_integrations/llama_cpp
+      title: llama.cpp
+    title: Local deployment
+  title: Community integrations
 - isExpanded: false
   sections:
   - sections:
@@ -517,6 +521,8 @@
         title: glm4
       - local: model_doc/glm4_moe
         title: glm4_moe
+      - local: model_doc/glm_image
+        title: GlmImage
       - local: model_doc/openai-gpt
         title: GPT
       - local: model_doc/gpt_neo
@@ -599,6 +605,8 @@
         title: MegatronGPT2
       - local: model_doc/minimax
         title: MiniMax
+      - local: model_doc/minimax_m2
+        title: MiniMax-M2
       - local: model_doc/ministral
         title: Ministral
       - local: model_doc/ministral3
@@ -735,6 +743,8 @@
         title: XLNet
       - local: model_doc/xlstm
         title: xLSTM
+      - local: model_doc/glm4_moe_lite
+        title: y
       - local: model_doc/yoso
         title: YOSO
       - local: model_doc/zamba
@@ -807,6 +817,8 @@
         title: LeViT
       - local: model_doc/lightglue
         title: LightGlue
+      - local: model_doc/lw_detr
+        title: LW-DETR
       - local: model_doc/mask2former
         title: Mask2Former
       - local: model_doc/maskformer
@@ -905,6 +917,8 @@
         title: EnCodec
       - local: model_doc/fastspeech2_conformer
         title: FastSpeech2Conformer
+      - local: model_doc/glmasr
+        title: GLM-ASR
       - local: model_doc/granite_speech
         title: GraniteSpeech
       - local: model_doc/hubert
@@ -1055,8 +1069,6 @@
         title: Gemma3n
       - local: model_doc/git
         title: GIT
-      - local: model_doc/glmasr
-        title: GLM-ASR
       - local: model_doc/glm46v
         title: Glm46V
       - local: model_doc/glm4v
@@ -1099,6 +1111,8 @@
         title: LayoutXLM
       - local: model_doc/lfm2_vl
         title: LFM2-VL
+      - local: model_doc/lighton_ocr
+        title: LightOnOcr
       - local: model_doc/lilt
         title: LiLT
       - local: model_doc/llama4

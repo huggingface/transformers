@@ -77,7 +77,6 @@ from transformers.models.auto.modeling_auto import (
     MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES,
     MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES,
     MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES,
-    MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES,
     MODEL_MAPPING_NAMES,
 )
 from transformers.testing_utils import (
@@ -760,7 +759,6 @@ class ModelTesterMixin:
                 *get_values(MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES),
                 *get_values(MODEL_FOR_MASKED_LM_MAPPING_NAMES),
                 *get_values(MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES),
-                *get_values(MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES),
                 *get_values(MODEL_FOR_CTC_MAPPING_NAMES),
             ]:
                 inputs_dict["labels"] = torch.zeros(
@@ -1157,13 +1155,12 @@ class ModelTesterMixin:
         addition_year = 0  # if we cannot find it, set it to 0 (i.e. oldest)
         if match_object := re.search(r"^# Copyright (\d{4})", source_code, re.MULTILINE | re.IGNORECASE):
             addition_year = int(match_object.group(1))
+        # For now, skip everything older than 2023 and "important models" (too many models to patch otherwise)
+        # TODO: relax this as we patch more and more models
+        if addition_year < 2023:
+            self.skipTest(reason="Not a prioritized model for now.")
 
         for model_class in self.all_model_classes:
-            # For now, skip everything older than 2023 and "important models" (too much models to patch otherwise)
-            # TODO: relax this as we patch more and more models
-            if addition_year < 2023:
-                self.skipTest(reason=f"{model_class} is not a prioritized model for now.")
-
             # This context manager makes sure that we get the same results deterministically for random new weights
             with seeded_weight_init():
                 # First, initialize the model from __init__ -> this ensure everything is correctly initialized, even if
@@ -1282,14 +1279,6 @@ class ModelTesterMixin:
                 buf_name, immediate_parent_class, pretrained_parent_class = find_parent_traceback(
                     buffer, model_from_init
                 )
-
-                # We cannot control timm model weights initialization, so skip in this case
-                if (pretrained_parent_class == "TimmWrapperPreTrainedModel" and "timm_model." in buffer) or (
-                    pretrained_parent_class == "TimmBackbone" and "_backbone." in buffer
-                ):
-                    different_buffers.discard(buffer)
-                    continue
-
                 # Add it to the traceback
                 traceback = (
                     f"`{buf_name}` in module `{immediate_parent_class}` called from `{pretrained_parent_class}`\n"
@@ -1452,7 +1441,7 @@ class ModelTesterMixin:
             else:
                 # indexing the first element does not always work
                 # e.g. models that output similarity scores of size (N, M) would need to index [0, 0]
-                slice_ids = [slice(0, index) for index in single_row_object.shape]
+                slice_ids = tuple(slice(0, index) for index in single_row_object.shape)
                 batched_row = batched_object[slice_ids]
                 self.assertFalse(
                     torch.isnan(batched_row).any(), f"Batched output has `nan` in {model_name} for key={key}"
