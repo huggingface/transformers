@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The Qwen Team and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """PyTorch Qwen3-VL-MOE model."""
-
-from typing import Optional, Union
 
 import torch
 import torch.nn as nn
@@ -90,8 +87,6 @@ class Qwen3VLMoeTextConfig(PreTrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether the model's input and output word embeddings should be tied.
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -150,27 +145,26 @@ class Qwen3VLMoeTextConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 151936,
-        hidden_size: Optional[int] = 2048,
-        intermediate_size: Optional[int] = 5632,
-        num_hidden_layers: Optional[int] = 24,
-        num_attention_heads: Optional[int] = 16,
-        num_key_value_heads: Optional[int] = 16,
-        hidden_act: Optional[str] = "silu",
-        max_position_embeddings: Optional[int] = 128000,
-        initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[float] = 1e-6,
-        use_cache: Optional[bool] = True,
-        tie_word_embeddings: Optional[bool] = False,
-        attention_bias: Optional[bool] = False,
-        attention_dropout: Optional[float] = 0.0,
-        decoder_sparse_step: Optional[int] = 1,
-        moe_intermediate_size: Optional[int] = 1408,
-        num_experts_per_tok: Optional[int] = 4,
-        num_experts: Optional[int] = 60,
-        mlp_only_layers: Optional[list[int]] = None,
-        rope_parameters: Optional[RopeParameters] = None,
-        head_dim: Optional[int] = None,
+        vocab_size: int | None = 151936,
+        hidden_size: int | None = 2048,
+        intermediate_size: int | None = 5632,
+        num_hidden_layers: int | None = 24,
+        num_attention_heads: int | None = 16,
+        num_key_value_heads: int | None = 16,
+        hidden_act: str | None = "silu",
+        max_position_embeddings: int | None = 128000,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: float | None = 1e-6,
+        use_cache: bool | None = True,
+        attention_bias: bool | None = False,
+        attention_dropout: float | None = 0.0,
+        decoder_sparse_step: int | None = 1,
+        moe_intermediate_size: int | None = 1408,
+        num_experts_per_tok: int | None = 4,
+        num_experts: int | None = 60,
+        mlp_only_layers: list[int] | None = None,
+        rope_parameters: RopeParameters | None = None,
+        head_dim: int | None = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -202,7 +196,6 @@ class Qwen3VLMoeTextConfig(PreTrainedConfig):
         self.mlp_only_layers = [] if mlp_only_layers is None else mlp_only_layers
 
         super().__init__(
-            tie_word_embeddings=tie_word_embeddings,
             ignore_keys_at_rope_validation={"mrope_section", "mrope_interleaved"},
             **kwargs,
         )
@@ -237,7 +230,7 @@ class Qwen3VLMoeConfig(Qwen3VLConfig):
         vision_end_token_id (`int`, *optional*, defaults to 151653):
             The end token index to encode the image prompt.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether to tie the word embeddings.
+            Whether the model's input and output word embeddings should be tied.
 
     ```python
     >>> from transformers import Qwen3VLMoeForConditionalGeneration, Qwen3VLMoeConfig
@@ -330,7 +323,7 @@ class Qwen3VLMoeTextModel(Qwen3VLTextModel):
 
 
 class Qwen3VLMoeCausalLMOutputWithPast(Qwen3VLCausalLMOutputWithPast):
-    aux_loss: Optional[torch.FloatTensor] = None
+    aux_loss: torch.FloatTensor | None = None
 
 
 class Qwen3VLMoeModel(Qwen3VLModel):
@@ -342,17 +335,17 @@ class Qwen3VLMoeForConditionalGeneration(Qwen3VLForConditionalGeneration):
     def forward(
         self,
         input_ids: torch.LongTensor = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.Tensor] = None,
-        pixel_values_videos: Optional[torch.FloatTensor] = None,
-        image_grid_thw: Optional[torch.LongTensor] = None,
-        video_grid_thw: Optional[torch.LongTensor] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        pixel_values: torch.Tensor | None = None,
+        pixel_values_videos: torch.FloatTensor | None = None,
+        image_grid_thw: torch.LongTensor | None = None,
+        video_grid_thw: torch.LongTensor | None = None,
+        cache_position: torch.LongTensor | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ):
         r"""

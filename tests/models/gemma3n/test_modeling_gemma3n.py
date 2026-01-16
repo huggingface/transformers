@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -38,7 +37,6 @@ from transformers.testing_utils import (
     Expectations,
     cleanup,
     require_deterministic_for_xpu,
-    require_read_token,
     require_torch,
     require_torch_accelerator,
     set_config_for_less_flaky_test,
@@ -769,18 +767,6 @@ class Gemma3nVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
             text_config={"activation_sparsity_pattern": None},
         )
 
-    @unittest.skip(reason="SiglipVisionModel (vision backbone) does not support standalone training")
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(reason="SiglipVisionModel (vision backbone) does not support standalone training")
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(reason="SiglipVisionModel (vision backbone) does not support standalone training")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
     @unittest.skip(
         reason="Siglip has no FLEX attention, and we don't have a proper way to set/test attn in VLMs. TODO @raushan"
     )
@@ -810,7 +796,6 @@ class Gemma3nVision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitt
 
 @slow
 @require_torch_accelerator
-@require_read_token
 class Gemma3nIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.processor = AutoProcessor.from_pretrained("Google/gemma-3n-E4B-it", padding_side="left")

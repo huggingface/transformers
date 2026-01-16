@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,7 +17,7 @@ import importlib
 import json
 import os
 from collections import OrderedDict
-from typing import Any, Optional, Union
+from typing import Any
 
 from transformers.utils.import_utils import is_mistral_common_available
 
@@ -61,7 +60,7 @@ logger = logging.get_logger(__name__)
 REGISTERED_TOKENIZER_CLASSES: dict[str, type[Any]] = {}
 REGISTERED_FAST_ALIASES: dict[str, type[Any]] = {}
 
-TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
+TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
     [
         ("aimv2", "CLIPTokenizer" if is_tokenizers_available() else None),
         ("albert", "AlbertTokenizer" if is_tokenizers_available() else None),
@@ -131,6 +130,15 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
         ("gemma3n", "GemmaTokenizer" if is_tokenizers_available() else None),
         ("gemma3n_text", "GemmaTokenizer" if is_tokenizers_available() else None),
         ("git", "BertTokenizer" if is_tokenizers_available() else None),
+        ("glm", "TokenizersBackend" if is_tokenizers_available() else None),
+        ("glm4", "TokenizersBackend" if is_tokenizers_available() else None),
+        ("glm4_moe", "TokenizersBackend" if is_tokenizers_available() else None),
+        ("glm4_moe_lite", "TokenizersBackend" if is_tokenizers_available() else None),
+        ("glm4v", "TokenizersBackend" if is_tokenizers_available() else None),
+        ("glm4v_moe", "TokenizersBackend" if is_tokenizers_available() else None),
+        ("glm_image", "TokenizersBackend" if is_tokenizers_available() else None),
+        ("glmasr", "TokenizersBackend" if is_tokenizers_available() else None),
+        ("got_ocr2", "TokenizersBackend" if is_tokenizers_available() else None),
         ("gpt-sw3", "GPTSw3Tokenizer" if is_sentencepiece_available() else None),
         ("gpt2", "GPT2Tokenizer" if is_tokenizers_available() else None),
         ("gpt_bigcode", "GPT2Tokenizer" if is_tokenizers_available() else None),
@@ -161,6 +169,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
         ("layoutlmv3", "LayoutLMv3Tokenizer" if is_tokenizers_available() else None),
         ("layoutxlm", "LayoutXLMTokenizer" if is_tokenizers_available() else None),
         ("led", "LEDTokenizer" if is_tokenizers_available() else None),
+        ("lighton_ocr", "Qwen2TokenizerFast" if is_tokenizers_available() else None),
         ("lilt", "RobertaTokenizer" if is_tokenizers_available() else None),
         ("longformer", "RobertaTokenizer" if is_tokenizers_available() else None),
         ("longt5", "T5Tokenizer" if is_tokenizers_available() else None),
@@ -266,6 +275,8 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, Optional[str]](
         ("roc_bert", "RoCBertTokenizer"),
         ("roformer", "RoFormerTokenizer" if is_tokenizers_available() else None),
         ("rwkv", "GPTNeoXTokenizer" if is_tokenizers_available() else None),
+        ("sam3", "CLIPTokenizer" if is_tokenizers_available() else None),
+        ("sam3_video", "CLIPTokenizer" if is_tokenizers_available() else None),
         ("seamless_m4t", "SeamlessM4TTokenizer" if is_tokenizers_available() else None),
         ("seamless_m4t_v2", "SeamlessM4TTokenizer" if is_tokenizers_available() else None),
         ("shieldgemma2", "GemmaTokenizer" if is_tokenizers_available() else None),
@@ -335,7 +346,7 @@ def load_merges(merges_file):
     return merges
 
 
-def tokenizer_class_from_name(class_name: str) -> Union[type[Any], None]:
+def tokenizer_class_from_name(class_name: str) -> type[Any] | None:
     # Bloom tokenizer classes were removed but should map to the fast backend for BC
     if class_name in {"BloomTokenizer", "BloomTokenizerFast"}:
         return TokenizersBackend
@@ -380,12 +391,12 @@ def tokenizer_class_from_name(class_name: str) -> Union[type[Any], None]:
 
 
 def get_tokenizer_config(
-    pretrained_model_name_or_path: Union[str, os.PathLike[str]],
-    cache_dir: Optional[Union[str, os.PathLike[str]]] = None,
+    pretrained_model_name_or_path: str | os.PathLike[str],
+    cache_dir: str | os.PathLike[str] | None = None,
     force_download: bool = False,
-    proxies: Optional[dict[str, str]] = None,
-    token: Optional[Union[bool, str]] = None,
-    revision: Optional[str] = None,
+    proxies: dict[str, str] | None = None,
+    token: bool | str | None = None,
+    revision: str | None = None,
     local_files_only: bool = False,
     subfolder: str = "",
     **kwargs,
@@ -493,7 +504,7 @@ class AutoTokenizer:
     @replace_list_option_in_docstrings(TOKENIZER_MAPPING_NAMES)
     def from_pretrained(
         cls, pretrained_model_name_or_path, *inputs, **kwargs
-    ) -> Union[TokenizersBackend, SentencePieceBackend]:
+    ) -> TokenizersBackend | SentencePieceBackend:
         r"""
         Instantiate one of the tokenizer classes of the library from a pretrained model vocabulary.
 
@@ -571,18 +582,6 @@ class AutoTokenizer:
         >>> # Explicitly use the sentencepiece backend
         >>> tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/llama-tokenizer", backend="sentencepiece")
         ```"""
-        use_auth_token = kwargs.pop("use_auth_token", None)
-        if use_auth_token is not None:
-            logger.warning(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-                FutureWarning,
-            )
-            if kwargs.get("token") is not None:
-                raise ValueError(
-                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-                )
-            kwargs["token"] = use_auth_token
-
         config = kwargs.pop("config", None)
         kwargs["_from_auto"] = True
 
@@ -698,7 +697,7 @@ class AutoTokenizer:
                 tokenizer_class = TokenizersBackend
 
             return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-        elif getattr(config, "tokenizer_class"):
+        elif getattr(config, "tokenizer_class", None):
             _class = config.tokenizer_class
             if "PreTrainedTokenizerFast" not in _class:
                 _class = _class.replace("Fast", "")
@@ -717,7 +716,7 @@ class AutoTokenizer:
                 )
             config = config.encoder
 
-        model_type = config_class_to_model_type(type(config).__name__) or config.get("model_type", None)
+        model_type = config_class_to_model_type(type(config).__name__) or getattr(config, "model_type", None)
         if model_type is not None:
             tokenizer_class = TOKENIZER_MAPPING.get(type(config), TokenizersBackend)
             if tokenizer_class is not None:

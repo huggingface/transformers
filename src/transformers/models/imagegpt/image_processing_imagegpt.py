@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,7 +13,7 @@
 # limitations under the License.
 """Image processor class for ImageGPT."""
 
-from typing import Optional, Union
+from typing import Union
 
 import numpy as np
 
@@ -55,7 +54,7 @@ class ImageGPTImageProcessorKwargs(ImagesKwargs, total=False):
         When True, each pixel is assigned to its nearest color cluster, enabling ImageGPT's discrete token modeling.
     """
 
-    clusters: Optional[Union[np.ndarray, list[list[int]], "torch.Tensor"]]
+    clusters: Union[np.ndarray, list[list[int]], "torch.Tensor"] | None
     do_color_quantize: bool
 
 
@@ -105,9 +104,9 @@ class ImageGPTImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         # clusters is a first argument to maintain backwards compatibility with the old ImageGPTImageProcessor
-        clusters: Optional[Union[list[list[int]], np.ndarray]] = None,
+        clusters: list[list[int]] | np.ndarray | None = None,
         do_resize: bool = True,
-        size: Optional[dict[str, int]] = None,
+        size: dict[str, int] | None = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_normalize: bool = True,
         do_color_quantize: bool = True,
@@ -129,8 +128,8 @@ class ImageGPTImageProcessor(BaseImageProcessor):
         image: np.ndarray,
         size: dict[str, int],
         resample: PILImageResampling = PILImageResampling.BILINEAR,
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        data_format: str | ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
         **kwargs,
     ) -> np.ndarray:
         """
@@ -175,8 +174,8 @@ class ImageGPTImageProcessor(BaseImageProcessor):
     def normalize(
         self,
         image: np.ndarray,
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        data_format: str | ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
     ) -> np.ndarray:
         """
         Normalizes an images' pixel values to between [-1, 1].
@@ -197,15 +196,15 @@ class ImageGPTImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        do_resize: Optional[bool] = None,
-        size: Optional[dict[str, int]] = None,
-        resample: Optional[PILImageResampling] = None,
-        do_normalize: Optional[bool] = None,
-        do_color_quantize: Optional[bool] = None,
-        clusters: Optional[Union[list[list[int]], np.ndarray]] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        data_format: Optional[Union[str, ChannelDimension]] = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        do_resize: bool | None = None,
+        size: dict[str, int] | None = None,
+        resample: PILImageResampling | None = None,
+        do_normalize: bool | None = None,
+        do_color_quantize: bool | None = None,
+        clusters: list[list[int]] | np.ndarray | None = None,
+        return_tensors: str | TensorType | None = None,
+        data_format: str | ChannelDimension | None = ChannelDimension.FIRST,
+        input_data_format: str | ChannelDimension | None = None,
     ) -> PIL.Image.Image:
         """
         Preprocess an image or batch of images.

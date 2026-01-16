@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 HuggingFace Inc. team. All rights reserved.
 # Copyright (c) 2024, NVIDIA CORPORATION. All rights reserved.
 #
@@ -14,8 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Nemotron model configuration"""
-
-from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
@@ -105,26 +102,26 @@ class NemotronConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 256000,
-        hidden_size: Optional[int] = 6144,
-        intermediate_size: Optional[int] = 24576,
-        num_hidden_layers: Optional[int] = 32,
-        num_attention_heads: Optional[int] = 48,
-        head_dim: Optional[int] = None,
-        num_key_value_heads: Optional[int] = None,
-        hidden_act: Optional[str] = "relu2",
-        max_position_embeddings: Optional[int] = 4096,
-        initializer_range: Optional[float] = 0.0134,
-        norm_eps: Optional[int] = 1e-5,
-        use_cache: Optional[bool] = True,
-        pad_token_id: Optional[int] = None,
-        bos_token_id: Optional[int] = 2,
-        eos_token_id: Optional[int] = 3,
-        tie_word_embeddings: Optional[bool] = False,
-        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        attention_bias: Optional[bool] = False,
-        attention_dropout: Optional[float] = 0.0,
-        mlp_bias: Optional[bool] = False,
+        vocab_size: int | None = 256000,
+        hidden_size: int | None = 6144,
+        intermediate_size: int | None = 24576,
+        num_hidden_layers: int | None = 32,
+        num_attention_heads: int | None = 48,
+        head_dim: int | None = None,
+        num_key_value_heads: int | None = None,
+        hidden_act: str | None = "relu2",
+        max_position_embeddings: int | None = 4096,
+        initializer_range: float | None = 0.0134,
+        norm_eps: int | None = 1e-5,
+        use_cache: bool | None = True,
+        pad_token_id: int | None = None,
+        bos_token_id: int | None = 2,
+        eos_token_id: int | None = 3,
+        tie_word_embeddings: bool | None = False,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        attention_bias: bool | None = False,
+        attention_dropout: float | None = 0.0,
+        mlp_bias: bool | None = False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -145,13 +142,11 @@ class NemotronConfig(PreTrainedConfig):
         self.rope_parameters = rope_parameters
         kwargs.setdefault("partial_rotary_factor", 0.5)  # assign default for BC
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        super().__init__(**kwargs)
 
 
 __all__ = ["NemotronConfig"]

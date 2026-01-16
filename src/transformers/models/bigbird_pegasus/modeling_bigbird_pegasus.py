@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 Google Research The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +15,6 @@
 
 import math
 from collections.abc import Callable
-from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -76,7 +74,7 @@ class BigBirdPegasusLearnedPositionalEmbedding(nn.Embedding):
         super().__init__(num_embeddings, embedding_dim)
 
     def forward(
-        self, input_ids_shape: torch.Size, past_key_values_length: int = 0, position_ids: Optional[torch.Tensor] = None
+        self, input_ids_shape: torch.Size, past_key_values_length: int = 0, position_ids: torch.Tensor | None = None
     ):
         """`input_ids' shape is expected to be [bsz x seqlen]."""
 
@@ -94,7 +92,7 @@ class BigBirdPegasusScaledWordEmbedding(nn.Embedding):
     This module overrides nn.Embeddings' forward by multiplying with embeddings scale.
     """
 
-    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, embed_scale: Optional[float] = 1.0):
+    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, embed_scale: float | None = 1.0):
         super().__init__(num_embeddings, embedding_dim, padding_idx)
         self.embed_scale = embed_scale
 
@@ -1160,8 +1158,8 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
-    scaling: Optional[float] = None,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
     dropout: float = 0.0,
     **kwargs: Unpack[TransformersKwargs],
 ):
@@ -1196,8 +1194,8 @@ class BigBirdPegasusDecoderAttention(nn.Module):
         is_decoder: bool = False,
         bias: bool = True,
         is_causal: bool = False,
-        config: Optional[BigBirdPegasusConfig] = None,
-        layer_idx: Optional[int] = None,
+        config: BigBirdPegasusConfig | None = None,
+        layer_idx: int | None = None,
     ):
         super().__init__()
         self.embed_dim = embed_dim
@@ -1230,15 +1228,15 @@ class BigBirdPegasusDecoderAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        key_value_states: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Cache] = None,
-        attention_mask: Optional[torch.Tensor] = None,
+        key_value_states: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        attention_mask: torch.Tensor | None = None,
         output_attentions: bool = False,
-        cache_position: Optional[torch.Tensor] = None,
+        cache_position: torch.Tensor | None = None,
         # TODO: we need a refactor so that the different attention modules can get their specific kwargs
         # ATM, we have mixed things encoder, decoder, and encoder-decoder attn
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         """Input shape: Batch x Time x Channel"""
 
         # if key_value_states are provided this layer is used as a cross-attention layer
@@ -1396,7 +1394,7 @@ class BigBirdPegasusEncoderLayer(GradientCheckpointingLayer):
 
 
 class BigBirdPegasusDecoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: BigBirdPegasusConfig, layer_idx: Optional[int] = None):
+    def __init__(self, config: BigBirdPegasusConfig, layer_idx: int | None = None):
         super().__init__()
         self.embed_dim = config.d_model
         self.self_attn = BigBirdPegasusDecoderAttention(
@@ -1431,13 +1429,13 @@ class BigBirdPegasusDecoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Cache] = None,
-        output_attentions: Optional[bool] = False,
-        use_cache: Optional[bool] = True,
-        cache_position: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        output_attentions: bool | None = False,
+        use_cache: bool | None = True,
+        cache_position: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """
         Args:
@@ -1594,12 +1592,12 @@ class BigBirdPegasusEncoder(BigBirdPegasusPreTrainedModel):
 
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
     ):
         r"""
@@ -1863,17 +1861,17 @@ class BigBirdPegasusDecoder(BigBirdPegasusPreTrainedModel):
 
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.Tensor] = None,
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        cache_position: torch.Tensor | None = None,
         **kwargs,
     ):
         r"""
@@ -2091,21 +2089,21 @@ class BigBirdPegasusModel(BigBirdPegasusPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.LongTensor] = None,
-        encoder_outputs: Optional[list[torch.FloatTensor]] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.LongTensor | None = None,
+        encoder_outputs: list[torch.FloatTensor] | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
         **kwargs,
-    ) -> Union[tuple, Seq2SeqModelOutput]:
+    ) -> tuple | Seq2SeqModelOutput:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Provide for translation and summarization training. By default, the model will create this tensor by
@@ -2210,7 +2208,7 @@ class BigBirdPegasusForConditionalGeneration(BigBirdPegasusPreTrainedModel, Gene
 
     # Copied from transformers.models.bart.modeling_bart.BartForConditionalGeneration.resize_token_embeddings with Bart->BigBirdPegasus, BART->BIGBIRD_PEGASUS
     def resize_token_embeddings(
-        self, new_num_tokens: int, pad_to_multiple_of: Optional[int] = None, mean_resizing: bool = True
+        self, new_num_tokens: int, pad_to_multiple_of: int | None = None, mean_resizing: bool = True
     ) -> nn.Embedding:
         new_embeddings = super().resize_token_embeddings(new_num_tokens, pad_to_multiple_of, mean_resizing)
         self._resize_final_logits_bias(new_embeddings.weight.shape[0])
@@ -2229,22 +2227,22 @@ class BigBirdPegasusForConditionalGeneration(BigBirdPegasusPreTrainedModel, Gene
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.LongTensor] = None,
-        encoder_outputs: Optional[list[torch.FloatTensor]] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.LongTensor | None = None,
+        encoder_outputs: list[torch.FloatTensor] | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
         **kwargs,
-    ) -> Union[tuple, Seq2SeqLMOutput]:
+    ) -> tuple | Seq2SeqLMOutput:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Provide for translation and summarization training. By default, the model will create this tensor by
@@ -2365,21 +2363,21 @@ class BigBirdPegasusForSequenceClassification(BigBirdPegasusPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.LongTensor] = None,
-        encoder_outputs: Optional[list[torch.FloatTensor]] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.LongTensor | None = None,
+        encoder_outputs: list[torch.FloatTensor] | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
         **kwargs,
-    ) -> Union[tuple, Seq2SeqSequenceClassifierOutput]:
+    ) -> tuple | Seq2SeqSequenceClassifierOutput:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Provide for translation and summarization training. By default, the model will create this tensor by
@@ -2486,22 +2484,22 @@ class BigBirdPegasusForQuestionAnswering(BigBirdPegasusPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.LongTensor] = None,
-        encoder_outputs: Optional[list[torch.FloatTensor]] = None,
-        start_positions: Optional[torch.LongTensor] = None,
-        end_positions: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.LongTensor | None = None,
+        encoder_outputs: list[torch.FloatTensor] | None = None,
+        start_positions: torch.LongTensor | None = None,
+        end_positions: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
         **kwargs,
-    ) -> Union[tuple, Seq2SeqQuestionAnsweringModelOutput]:
+    ) -> tuple | Seq2SeqQuestionAnsweringModelOutput:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Provide for translation and summarization training. By default, the model will create this tensor by
@@ -2615,21 +2613,21 @@ class BigBirdPegasusForCausalLM(BigBirdPegasusPreTrainedModel, GenerationMixin):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        encoder_hidden_states: torch.FloatTensor | None = None,
+        encoder_attention_mask: torch.FloatTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
         **kwargs,
-    ) -> Union[tuple, CausalLMOutputWithCrossAttentions]:
+    ) -> tuple | CausalLMOutputWithCrossAttentions:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
@@ -2643,7 +2641,7 @@ class BigBirdPegasusForCausalLM(BigBirdPegasusPreTrainedModel, GenerationMixin):
 
         >>> tokenizer = AutoTokenizer.from_pretrained("google/bigbird-pegasus-large-arxiv")
         >>> model = BigBirdPegasusForCausalLM.from_pretrained(
-        ...     "google/bigbird-pegasus-large-arxiv", add_cross_attention=False
+        ...     "google/bigbird-pegasus-large-arxiv"
         ... )
         >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
