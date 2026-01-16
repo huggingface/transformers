@@ -252,10 +252,7 @@ class MMGroundingDinoModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.T
 
     test_missing_keys = False
     pipeline_model_mapping = (
-        {
-            "image-embedding": MMGroundingDinoModel,
-            "zero-shot-object-detection": MMGroundingDinoForObjectDetection,
-        }
+        {"image-embedding": MMGroundingDinoModel, "zero-shot-object-detection": MMGroundingDinoForObjectDetection}
         if is_torch_available()
         else {}
     )
