@@ -203,7 +203,6 @@ class GitEmbeddings(nn.Module):
         else:
             embeddings = inputs_embeds
 
-        print("position_ids", position_ids)
         position_embeddings = self.position_embeddings(position_ids)
         embeddings += position_embeddings
 
