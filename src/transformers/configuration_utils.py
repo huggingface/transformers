@@ -18,7 +18,6 @@ import copy
 import json
 import math
 import os
-import warnings
 from typing import TYPE_CHECKING, Any, TypeVar, Union
 
 from huggingface_hub import create_repo
@@ -115,16 +114,6 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
             Whether or not the model should return a [`~transformers.utils.ModelOutput`] instead of a plain tuple.
         is_encoder_decoder (`bool`, *optional*, defaults to `False`):
             Whether the model is used as an encoder/decoder or not.
-        is_decoder (`bool`, *optional*, defaults to `False`):
-            Whether to only use the decoder in an encoder-decoder architecture, otherwise it has no effect on
-            decoder-only or encoder-only architectures.
-        cross_attention_hidden_size (`bool`, *optional*):
-            The hidden size of the cross-attention layer in case the model is used as a decoder in an encoder-decoder
-            setting and the cross-attention hidden dimension differs from `self.config.hidden_size`.
-        add_cross_attention (`bool`, *optional*, defaults to `False`):
-            Whether cross-attention layers should be added to the model. Note, this option is only relevant for models
-            that can be used as decoder models within the [`EncoderDecoderModel`] class, which consists of all models
-            in `AUTO_MODELS_FOR_CAUSAL_LM`.
         chunk_size_feed_forward (`int`, *optional*, defaults to `0`):
             The chunk size of all feed forward layers in the residual attention blocks. A chunk size of `0` means that
             the feed forward layer is not chunked. A chunk size of n means that the feed forward layer processes `n` <
@@ -135,43 +124,18 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
 
         architectures (`list[str]`, *optional*):
             Model architectures that can be used with the model pretrained weights.
-        finetuning_task (`str`, *optional*):
-            Name of the task used to fine-tune the model.
         id2label (`dict[int, str]`, *optional*):
             A map from index (for instance prediction index, or target index) to label.
         label2id (`dict[str, int]`, *optional*):
             A map from label to index for the model.
         num_labels (`int`, *optional*):
             Number of labels to use in the last layer added to the model, typically for a classification task.
-        task_specific_params (`dict[str, Any]`, *optional*):
-            Additional keyword arguments to store for the current task.
         problem_type (`str`, *optional*):
             Problem type for `XxxForSequenceClassification` models. Can be one of `"regression"`,
             `"single_label_classification"` or `"multi_label_classification"`.
 
-        > Parameters linked to the tokenizer
-
-        tokenizer_class (`str`, *optional*):
-            The name of the associated tokenizer class to use (if none is set, will use the tokenizer associated to the
-            model by default).
-        prefix (`str`, *optional*):
-            A specific prompt that should be added at the beginning of each text before calling the model.
-        bos_token_id (`int`, *optional*):
-            The id of the _beginning-of-stream_ token.
-        pad_token_id (`int`, *optional*):
-            The id of the _padding_ token.
-        eos_token_id (`int`, *optional*):
-            The id of the _end-of-stream_ token.
-        decoder_start_token_id (`int`, *optional*):
-            If an encoder-decoder model starts decoding with a different token than _bos_, the id of that token.
-        sep_token_id (`int`, *optional*):
-            The id of the _separation_ token.
-
         > PyTorch specific parameters
 
-        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
-            Whether the model's input and output word embeddings should be tied. Note that this is only relevant if the
-            model has a output word embedding layer.
         dtype (`str`, *optional*):
             The `dtype` of the weights. This attribute can be used to initialize the model to a non-default `dtype`
             (which is normally `float32`) and thus allow for optimal storage allocation. For example, if the saved
@@ -208,28 +172,14 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         return_dict: bool = True,
         dtype: Union[str, "torch.dtype"] | None = None,
         # Common arguments
-        tie_word_embeddings: bool = True,
         chunk_size_feed_forward: int = 0,
         is_encoder_decoder: bool = False,
-        is_decoder: bool = False,
-        cross_attention_hidden_size: int | None = None,
-        add_cross_attention: bool = False,
         # Fine-tuning task arguments
         architectures: list[str] | None = None,
-        finetuning_task: str | None = None,
         id2label: dict[int, str] | None = None,
         label2id: dict[str, int] | None = None,
         num_labels: int | None = None,
-        task_specific_params: dict[str, Any] | None = None,
         problem_type: str | None = None,
-        # Tokenizer kwargs
-        tokenizer_class: str | None = None,
-        prefix: str | None = None,
-        bos_token_id: int | None = None,
-        pad_token_id: int | None = None,
-        eos_token_id: int | None = None,
-        sep_token_id: int | None = None,
-        decoder_start_token_id: int | None = None,
         **kwargs,
     ):
         # Validation for some arguments
@@ -277,25 +227,15 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         self._output_attentions = output_attentions  # has public property
 
         # Less common kwargs, only used by some models
-        if "tie_encoder_decoder" in kwargs:
-            tie_encoder_decoder = kwargs.pop("tie_encoder_decoder")
-            tie_word_embeddings = tie_encoder_decoder or tie_word_embeddings
-
-        self.tie_word_embeddings = tie_word_embeddings
         self.chunk_size_feed_forward = chunk_size_feed_forward
 
         # Encoder-decoder models attributes
         self.is_encoder_decoder = is_encoder_decoder
-        self.is_decoder = is_decoder  # used in encoder-decoder models to differentiate encoder from decoder
-        self.cross_attention_hidden_size = cross_attention_hidden_size
-        self.add_cross_attention = add_cross_attention
 
         # Fine-tuning task attributes
         self.architectures = architectures
-        self.finetuning_task = finetuning_task
         self.id2label = id2label
         self.label2id = label2id
-        self.task_specific_params = task_specific_params
         self.problem_type = problem_type
 
         if self.id2label is None:
@@ -303,15 +243,6 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         else:
             # Keys are always strings in JSON so convert ids to int here.
             self.id2label = {int(key): value for key, value in self.id2label.items()}
-
-        # Tokenizer attributes
-        self.tokenizer_class = tokenizer_class
-        self.prefix = prefix
-        self.bos_token_id = bos_token_id
-        self.pad_token_id = pad_token_id
-        self.eos_token_id = eos_token_id
-        self.sep_token_id = sep_token_id
-        self.decoder_start_token_id = decoder_start_token_id
 
         # Parameters for sequence generation saved in the config are popped instead of loading them.
         for parameter_name in GenerationConfig._get_default_generation_params().keys():
@@ -329,14 +260,6 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
 
         # Drop the transformers version info
         self.transformers_version = kwargs.pop("transformers_version", None)
-
-        # Deal with gradient checkpointing
-        if kwargs.get("gradient_checkpointing", False):
-            warnings.warn(
-                "Passing `gradient_checkpointing` to a config initialization is deprecated and will be removed in v5 "
-                "Transformers. Using `model.gradient_checkpointing_enable()` instead, or if you are using the "
-                "`Trainer` API, pass `gradient_checkpointing=True` in your `TrainingArguments`."
-            )
 
         # Additional attributes without default values
         for key, value in kwargs.items():
@@ -1100,6 +1023,9 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         Checks and removes if there are any keys in the dict that should not be serialized when saving the config.
         Runs recursive check on the dict, to remove from all sub configs.
         """
+
+        if "_is_quantized" in d:
+            del d["_is_quantized"]
         if "_auto_class" in d:
             del d["_auto_class"]
         if "_output_attentions" in d:

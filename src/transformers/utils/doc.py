@@ -961,7 +961,7 @@ MODELS_TO_PIPELINE = OrderedDict(
         ("MODEL_FOR_AUDIO_XVECTOR_MAPPING_NAMES", "audio-xvector"),
         # Vision
         ("MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES", "image-text-to-text"),
-        ("MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES", "image-to-text"),
+        ("MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES", "image-to-text"),
         ("MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING_NAMES", "visual-question-answering"),
         ("MODEL_FOR_DEPTH_ESTIMATION_MAPPING_NAMES", "depth-estimation"),
         ("MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES", "video-classification"),

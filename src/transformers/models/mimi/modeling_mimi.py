@@ -97,17 +97,42 @@ class MimiConv1dPaddingCache:
             raise ValueError(
                 f"Expected `num_layers` ({num_layers}) values in `per_layer_padding`, `per_layer_padding_mode` and `per_layer_in_channels`"
             )
-        elif not all(mode in ["constant", "replicate"] for mode in per_layer_padding_mode):
-            raise NotImplementedError(
-                "`padding_cache` is not supported for convolutions using other than `constant` or `replicate` padding mode"
-            )
 
         self.per_layer_padding = per_layer_padding
         self.per_layer_padding_mode = per_layer_padding_mode
         self.per_layer_in_channels = per_layer_in_channels
-        self.per_layer_is_init = [True] * num_layers
 
         self.padding_cache = [None] * num_layers
+
+    def _cache_init(self, hidden_states: torch.Tensor, layer_idx: int):
+        """
+        Initialize the cache for a specific layer.
+
+        Parameters:
+            hidden_states (`torch.Tensor`):
+                The hidden states to initialize the cache with.
+            layer_idx (`int`):
+                The index of the layer to initialize the cache for.
+        Returns:
+            `torch.Tensor`, the initialized cache.
+        """
+        batch_size, dtype, device = hidden_states.shape[0], hidden_states.dtype, hidden_states.device
+        padding, padding_mode, in_channels = (
+            self.per_layer_padding[layer_idx],
+            self.per_layer_padding_mode[layer_idx],
+            self.per_layer_in_channels[layer_idx],
+        )
+
+        if padding_mode == "constant":
+            current_cache = torch.zeros(batch_size, in_channels, padding, device=device, dtype=dtype)
+        elif padding_mode == "replicate":
+            current_cache = (
+                torch.ones(batch_size, in_channels, padding, device=device, dtype=dtype) * hidden_states[..., :1]
+            )
+        else:
+            raise NotImplementedError(f"Padding mode {padding_mode} not supported")
+
+        return current_cache
 
     def update(self, hidden_states: torch.Tensor, layer_idx: int):
         """
@@ -122,40 +147,24 @@ class MimiConv1dPaddingCache:
             `torch.Tensor` or `None`, the current padding cache.
         """
         batch_size, dtype, device = hidden_states.shape[0], hidden_states.dtype, hidden_states.device
-        padding = self.per_layer_padding[layer_idx]
-        padding_mode = self.per_layer_padding_mode[layer_idx]
-        in_channels = self.per_layer_in_channels[layer_idx]
+        padding, in_channels = self.per_layer_padding[layer_idx], self.per_layer_in_channels[layer_idx]
 
         if self.padding_cache[layer_idx] is None:
-            if padding_mode == "constant":
-                current_cache = torch.zeros(
-                    batch_size,
-                    in_channels,
-                    padding,
-                    device=device,
-                    dtype=dtype,
-                )
-            elif padding_mode == "replicate":
-                current_cache = (
-                    torch.ones(
-                        batch_size,
-                        in_channels,
-                        padding,
-                        device=device,
-                        dtype=dtype,
-                    )
-                    * hidden_states[..., :1]
-                )
+            current_cache = self._cache_init(hidden_states, layer_idx)
         else:
             current_cache = self.padding_cache[layer_idx]
 
         # update the cache
         if padding > 0:
-            padding_states = hidden_states[:, :, -padding:]
+            shortfall = max(0, padding - hidden_states.shape[-1])
+            if shortfall > 0:
+                padding_states = torch.cat([current_cache[:, :, -shortfall:], hidden_states], dim=-1)
+            else:
+                padding_states = hidden_states[:, :, -padding:]
         else:
-            padding_states = torch.empty(batch_size, in_channels, padding, dtype=dtype, device=device)
-        self.padding_cache[layer_idx] = padding_states
+            padding_states = torch.empty(batch_size, in_channels, 0, dtype=dtype, device=device)
 
+        self.padding_cache[layer_idx] = padding_states
         return current_cache
 
 
@@ -577,7 +586,7 @@ def rotate_half(x):
 
 
 # Copied from transformers.models.llama.modeling_llama.apply_rotary_pos_emb
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
     Args:
@@ -585,8 +594,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
         k (`torch.Tensor`): The key tensor.
         cos (`torch.Tensor`): The cosine part of the rotary embedding.
         sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`, *optional*):
-            Deprecated and unused.
         unsqueeze_dim (`int`, *optional*, defaults to 1):
             The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
             sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
@@ -813,7 +820,7 @@ class MimiFlashAttention2(MimiAttention):
                     else torch.get_autocast_gpu_dtype()
                 )
             # Handle the case where the model is quantized
-            elif hasattr(self.config, "quantization_config"):
+            elif hasattr(self.config, "_is_quantized"):
                 target_dtype = self.config.dtype
             else:
                 target_dtype = self.q_proj.weight.dtype

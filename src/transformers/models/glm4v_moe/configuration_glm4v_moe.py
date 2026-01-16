@@ -21,6 +21,182 @@ from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 
 
+class Glm4vMoeTextConfig(PreTrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`Glm4vMoeModel`]. It is used to instantiate a
+    GLM-4.5V model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of
+    GLM-4.5V [zai-org/GLM-4.5V](https://huggingface.co/zai-org/GLM-4.5V).
+
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
+
+    Args:
+        vocab_size (`int`, *optional*, defaults to 151424):
+            Vocabulary size of the Glm4vMoe model. Defines the number of different tokens that can be represented by the
+            `inputs_ids` passed when calling [`Glm4vMoeModel`]
+        hidden_size (`int`, *optional*, defaults to 4096):
+            Dimension of the hidden representations.
+        intermediate_size (`int`, *optional*, defaults to 10944):
+            Dimension of the MLP representations.
+        num_hidden_layers (`int`, *optional*, defaults to 46):
+            Number of hidden layers in the Transformer encoder.
+        num_attention_heads (`int`, *optional*, defaults to 96):
+            Number of attention heads for each attention layer in the Transformer encoder.
+        num_key_value_heads (`int`, *optional*, defaults to 8):
+            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
+            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
+            `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
+            converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
+            by meanpooling all the original heads within that group. For more details checkout [this
+            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to `32`.
+        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
+            The non-linear activation function (function or string) in the decoder.
+        max_position_embeddings (`int`, *optional*, defaults to 65536):
+            The maximum sequence length that this model might ever be used with.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
+            The epsilon used by the rms normalization layers.
+        use_cache (`bool`, *optional*, defaults to `True`):
+            Whether or not the model should return the last key/values attentions (not used by all models). Only
+            relevant if `config.is_decoder=True`.
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
+        attention_bias (`bool`, defaults to `True`, *optional*, defaults to `True`):
+            Whether to use a bias in the query, key, value and output projection layers during self-attention.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
+        moe_intermediate_size (`int`, *optional*, defaults to 1408):
+            Intermediate size of the routed expert.
+        num_experts_per_tok (`int`, *optional*, defaults to 8):
+            number of experts per token.
+        n_shared_experts (`int`, *optional*, defaults to 1):
+            Number of shared experts.
+        n_routed_experts (`int`, *optional*, defaults to 128):
+            Number of routed experts.
+        routed_scaling_factor (`float`, *optional*, defaults to 1.0):
+            Scaling factor or routed experts.
+        n_group (`int`, *optional*, defaults to 1):
+            Number of groups for routed experts.
+        topk_group (`int`, *optional*, defaults to 1):
+            Number of selected groups for each token(for each token, ensuring the selected experts is only within `topk_group` groups).
+        first_k_dense_replace (`int`, *optional*, defaults to 1):
+            Number of dense layers in shallow layers(embed->dense->dense->...->dense->moe->moe...->lm_head).
+                                                                    \--k dense layers--/
+        norm_topk_prob (`bool`, *optional*, defaults to `True`):
+            Whether to normalize the topk probabilities.
+        pad_token_id (`int`, *optional*):
+            Padding token id.
+        eos_token_id (`int`, *optional*):
+            End of stream token id.
+        bos_token_id (`int`, *optional*):
+            Beginning of stream token id.
+        router_aux_loss_coef (`float`, *optional*, defaults to 0.0001):
+            The aux loss factor for the loss.
+
+    ```python
+    >>> from transformers import Glm4vMoeTextModel, Glm4vMoeConfig
+
+    >>> # Initializing a GLM-4.5V style configuration
+    >>> configuration = Glm4vMoeConfig()
+
+    >>> # Initializing a model from the GLM-4.5V style configuration
+    >>> model = Glm4vMoeTextModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
+    model_type = "glm4v_moe_text"
+    keys_to_ignore_at_inference = ["past_key_values"]
+    # Default tensor parallel plan for base model `Glm4vMoe`
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
+    }
+    base_model_pp_plan = {
+        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
+        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
+        "norm": (["hidden_states"], ["hidden_states"]),
+    }
+    attribute_map = {
+        "num_local_experts": "n_routed_experts",
+    }
+    base_config_key = "text_config"
+
+    def __init__(
+        self,
+        vocab_size: int | None = 151424,
+        hidden_size: int | None = 4096,
+        intermediate_size: int | None = 10944,
+        num_hidden_layers: int | None = 46,
+        num_attention_heads: int | None = 96,
+        num_key_value_heads: int | None = 8,
+        hidden_act: str | None = "silu",
+        max_position_embeddings: int | None = 65536,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: int | None = 1e-5,
+        use_cache: bool | None = True,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        attention_bias: bool | None = True,
+        attention_dropout: float | None = 0.0,
+        moe_intermediate_size: int | None = 1408,
+        num_experts_per_tok: int | None = 8,
+        n_shared_experts: int | None = 1,
+        n_routed_experts: int | None = 128,
+        routed_scaling_factor: float | None = 1.0,
+        n_group: int | None = 1,
+        topk_group: int | None = 1,
+        first_k_dense_replace: int | None = 1,
+        norm_topk_prob: bool | None = True,
+        pad_token_id: int | None = None,
+        eos_token_id: int | None = None,
+        bos_token_id: int | None = None,
+        router_aux_loss_coef: float | None = 0.0001,
+        **kwargs,
+    ):
+        self.pad_token_id = pad_token_id
+        self.eos_token_id = eos_token_id
+        self.bos_token_id = bos_token_id
+        self.vocab_size = vocab_size
+        self.max_position_embeddings = max_position_embeddings
+        self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+
+        self.num_key_value_heads = num_key_value_heads
+        self.hidden_act = hidden_act
+        self.initializer_range = initializer_range
+        self.rms_norm_eps = rms_norm_eps
+        self.use_cache = use_cache
+        self.attention_bias = attention_bias
+        self.attention_dropout = attention_dropout
+        self.rope_parameters = rope_parameters
+        kwargs.setdefault("partial_rotary_factor", 0.5)  # assign default for BC
+
+        # MoE arguments
+        self.moe_intermediate_size = moe_intermediate_size
+        self.num_experts_per_tok = num_experts_per_tok
+        self.n_group = n_group
+        self.topk_group = topk_group
+        self.n_shared_experts = n_shared_experts
+        self.n_routed_experts = n_routed_experts
+        self.routed_scaling_factor = routed_scaling_factor
+        self.first_k_dense_replace = first_k_dense_replace
+        self.norm_topk_prob = norm_topk_prob
+        self.router_aux_loss_coef = router_aux_loss_coef
+        super().__init__(ignore_keys_at_rope_validation={"mrope_section"}, **kwargs)
+
+
 class Glm4vMoeVisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Glm4vMoeVisionModel`]. It is used to instantiate an Glm4vMoeVisionModel
@@ -114,174 +290,6 @@ class Glm4vMoeVisionConfig(PreTrainedConfig):
         self.attention_dropout = attention_dropout
 
 
-class Glm4vMoeTextConfig(PreTrainedConfig):
-    r"""
-    This is the configuration class to store the configuration of a [`Glm4vMoeModel`]. It is used to instantiate a
-    GLM-4.5V model according to the specified arguments, defining the model architecture. Instantiating a
-    configuration with the defaults will yield a similar configuration to that of
-    GLM-4.5V [zai-org/GLM-4.5V](https://huggingface.co/zai-org/GLM-4.5V).
-
-    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PreTrainedConfig`] for more information.
-
-    Args:
-        vocab_size (`int`, *optional*, defaults to 151424):
-            Vocabulary size of the Glm4vMoe model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`Glm4vMoeModel`]
-        hidden_size (`int`, *optional*, defaults to 4096):
-            Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 10944):
-            Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 46):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 96):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        num_key_value_heads (`int`, *optional*, defaults to 8):
-            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
-            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
-            `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
-            converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details checkout [this
-            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to `32`.
-        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-            The non-linear activation function (function or string) in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to 65536):
-            The maximum sequence length that this model might ever be used with.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the rms normalization layers.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether the model's input and output word embeddings should be tied.
-        rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
-            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
-            with longer `max_position_embeddings`.
-        attention_bias (`bool`, defaults to `True`, *optional*, defaults to `True`):
-            Whether to use a bias in the query, key, value and output projection layers during self-attention.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        moe_intermediate_size (`int`, *optional*, defaults to 1408):
-            Intermediate size of the routed expert.
-        num_experts_per_tok (`int`, *optional*, defaults to 8):
-            number of experts per token.
-        n_shared_experts (`int`, *optional*, defaults to 1):
-            Number of shared experts.
-        n_routed_experts (`int`, *optional*, defaults to 128):
-            Number of routed experts.
-        routed_scaling_factor (`float`, *optional*, defaults to 1.0):
-            Scaling factor or routed experts.
-        n_group (`int`, *optional*, defaults to 1):
-            Number of groups for routed experts.
-        topk_group (`int`, *optional*, defaults to 1):
-            Number of selected groups for each token(for each token, ensuring the selected experts is only within `topk_group` groups).
-        first_k_dense_replace (`int`, *optional*, defaults to 1):
-            Number of dense layers in shallow layers(embed->dense->dense->...->dense->moe->moe...->lm_head).
-                                                                    \--k dense layers--/
-        norm_topk_prob (`bool`, *optional*, defaults to `True`):
-            Whether to normalize the topk probabilities.
-        router_aux_loss_coef (`float`, *optional*, defaults to 0.0001):
-            The aux loss factor for the loss.
-    ```python
-    >>> from transformers import Glm4vMoeTextModel, Glm4vMoeConfig
-
-    >>> # Initializing a GLM-4.5V style configuration
-    >>> configuration = Glm4vMoeConfig()
-
-    >>> # Initializing a model from the GLM-4.5V style configuration
-    >>> model = Glm4vMoeTextModel(configuration)
-
-    >>> # Accessing the model configuration
-    >>> configuration = model.config
-    ```"""
-
-    model_type = "glm4v_moe_text"
-    keys_to_ignore_at_inference = ["past_key_values"]
-    # Default tensor parallel plan for base model `Glm4vMoe`
-    base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": "colwise",
-        "layers.*.self_attn.k_proj": "colwise",
-        "layers.*.self_attn.v_proj": "colwise",
-        "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.gate_proj": "colwise",
-        "layers.*.mlp.up_proj": "colwise",
-        "layers.*.mlp.down_proj": "rowwise",
-    }
-    base_model_pp_plan = {
-        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
-        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
-        "norm": (["hidden_states"], ["hidden_states"]),
-    }
-    attribute_map = {
-        "num_local_experts": "n_routed_experts",
-    }
-    base_config_key = "text_config"
-
-    def __init__(
-        self,
-        vocab_size: int | None = 151424,
-        hidden_size: int | None = 4096,
-        intermediate_size: int | None = 10944,
-        num_hidden_layers: int | None = 46,
-        num_attention_heads: int | None = 96,
-        num_key_value_heads: int | None = 8,
-        hidden_act: str | None = "silu",
-        max_position_embeddings: int | None = 65536,
-        initializer_range: float | None = 0.02,
-        rms_norm_eps: int | None = 1e-5,
-        use_cache: bool | None = True,
-        tie_word_embeddings: bool | None = False,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        attention_bias: bool | None = True,
-        attention_dropout: float | None = 0.0,
-        moe_intermediate_size: int | None = 1408,
-        num_experts_per_tok: int | None = 8,
-        n_shared_experts: int | None = 1,
-        n_routed_experts: int | None = 128,
-        routed_scaling_factor: float | None = 1.0,
-        n_group: int | None = 1,
-        topk_group: int | None = 1,
-        first_k_dense_replace: int | None = 1,
-        norm_topk_prob: bool | None = True,
-        router_aux_loss_coef: float | None = 0.0001,
-        **kwargs,
-    ):
-        self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-
-        self.num_key_value_heads = num_key_value_heads
-        self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.use_cache = use_cache
-        self.attention_bias = attention_bias
-        self.attention_dropout = attention_dropout
-        self.rope_parameters = rope_parameters
-        kwargs.setdefault("partial_rotary_factor", 0.5)  # assign default for BC
-
-        # MoE arguments
-        self.moe_intermediate_size = moe_intermediate_size
-        self.num_experts_per_tok = num_experts_per_tok
-        self.n_group = n_group
-        self.topk_group = topk_group
-        self.n_shared_experts = n_shared_experts
-        self.n_routed_experts = n_routed_experts
-        self.routed_scaling_factor = routed_scaling_factor
-        self.first_k_dense_replace = first_k_dense_replace
-        self.norm_topk_prob = norm_topk_prob
-        self.router_aux_loss_coef = router_aux_loss_coef
-        super().__init__(
-            tie_word_embeddings=tie_word_embeddings, ignore_keys_at_rope_validation={"mrope_section"}, **kwargs
-        )
-
-
 class Glm4vMoeConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Glm4vMoeModel`]. It is used to instantiate a
@@ -310,6 +318,8 @@ class Glm4vMoeConfig(PreTrainedConfig):
             The video start token index to encode the start of video.
         video_end_token_id (`int`, *optional*, defaults to 151342):
             The video end token index to encode the end of video.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether the model's input and output word embeddings should be tied.
 
     ```python
     >>> from transformers import Glm4vMoeForConditionalGeneration, Glm4vMoeConfig
@@ -338,6 +348,7 @@ class Glm4vMoeConfig(PreTrainedConfig):
         image_end_token_id=151340,
         video_start_token_id=151341,
         video_end_token_id=151342,
+        tie_word_embeddings=False,
         **kwargs,
     ):
         if isinstance(vision_config, dict):
@@ -356,8 +367,9 @@ class Glm4vMoeConfig(PreTrainedConfig):
         self.video_end_token_id = video_end_token_id
         self.image_start_token_id = image_start_token_id
         self.image_end_token_id = image_end_token_id
+        self.tie_word_embeddings = tie_word_embeddings
 
         super().__init__(**kwargs)
 
 
-__all__ = ["Glm4vMoeConfig", "Glm4vMoeTextConfig", "Glm4vMoeVisionConfig"]
+__all__ = ["Glm4vMoeConfig", "Glm4vMoeVisionConfig", "Glm4vMoeTextConfig"]

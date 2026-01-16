@@ -15,6 +15,7 @@
 import gc
 import itertools
 import unittest
+from unittest.mock import patch
 
 import torch
 from parameterized import parameterized
@@ -29,13 +30,15 @@ from transformers import (
 )
 from transformers.generation.continuous_batching.cache import (
     FullAttentionCacheAllocator,
+    PagedAttentionCache,
     SlidingAttentionCacheAllocator,
     group_layers_by_attn_type,
 )
-from transformers.generation.continuous_batching.continuous_api import build_attention_mask
+from transformers.generation.continuous_batching.continuous_api import ContinuousBatchProcessor, build_attention_mask
 from transformers.testing_utils import (
     Expectations,
     require_deterministic_for_xpu,
+    require_flash_attn,
     require_torch_accelerator,
     slow,
     torch_device,
@@ -177,6 +180,79 @@ class ContinuousBatchingNonGenerationTest(unittest.TestCase):
                 f"Actual mask:\n{str_mask}"
             )
 
+    @parameterized.expand(
+        [
+            # Case 1: Only full attention groups, allocation succeeds
+            # needed_blocks = 2 * 1 = 2, free_blocks = 10 -> 2 <= 10 = True
+            (2, 0, 1, 0, 0, 10, True),
+            # Case 2: Only full attention groups, allocation fails
+            # needed_blocks = 5 * 2 = 10, free_blocks = 5 -> 10 <= 5 = False
+            (5, 0, 2, 0, 0, 5, False),
+            # Case 3: Mixed attention, sliding window not yet full
+            # needed_blocks = 2 * 1 + min(4 - 0, 2) * 1 = 2 + 2 = 4, free_blocks = 10 -> 4 <= 10 = True
+            (2, 0, 1, 1, 4, 10, True),
+            # Case 4: Mixed attention, sliding window partially filled
+            # needed_blocks = 3 * 1 + min(4 - 2, 3) * 1 = 3 + 2 = 5, free_blocks = 5 -> 5 <= 5 = True
+            (3, 2, 1, 1, 4, 5, True),
+            # Case 5: Mixed attention, sliding window already full (allocated_blocks >= max_sliding)
+            # blocks_left = max(4 - 5, 0) = 0, needed_blocks = 3 * 1 + 0 = 3, free_blocks = 5 -> 3 <= 5 = True
+            (3, 5, 1, 1, 4, 5, True),
+            # Case 6: Mixed attention, sliding window full, allocation fails due to full attention
+            # blocks_left = max(4 - 4, 0) = 0, needed_blocks = 6 * 1 + 0 = 6, free_blocks = 5 -> 6 <= 5 = False
+            (6, 4, 1, 1, 4, 5, False),
+            # Case 7: Multiple full attention groups
+            # needed_blocks = 3 * 2 = 6, free_blocks = 6 -> 6 <= 6 = True
+            (3, 0, 2, 0, 0, 6, True),
+            # Case 8: Multiple sliding attention groups, not full
+            # needed_blocks = 2 * 1 + min(4 - 1, 2) * 2 = 2 + 4 = 6, free_blocks = 6 -> 6 <= 6 = True
+            (2, 1, 1, 2, 4, 6, True),
+            # Case 9: Edge case - requesting 0 blocks always succeeds
+            # needed_blocks = 0, free_blocks = 0 -> 0 <= 0 = True
+            (0, 0, 1, 1, 4, 0, True),
+            # Case 10: Edge case - exactly enough blocks
+            # needed_blocks = 2 * 1 + min(3 - 0, 2) * 1 = 2 + 2 = 4, free_blocks = 4 -> 4 <= 4 = True
+            (2, 0, 1, 1, 3, 4, True),
+        ]
+    )
+    @require_torch_accelerator
+    def test_continuous_batching_will_allocation_be_successful(
+        self,
+        num_requested_blocks: int,
+        allocated_blocks: int,
+        num_full_attention_groups: int,
+        num_sliding_attention_groups: int,
+        max_sliding_window_blocks_per_request: int,
+        num_free_blocks: int,
+        expected_result: bool,
+    ) -> None:
+        """Test the will_allocation_be_successful method of PagedAttentionCache, overloading the elevant attributes of
+        a dummy cache."""
+        # Create the cache
+        cache = PagedAttentionCache(
+            config=AutoConfig.from_pretrained("HuggingFaceTB/SmolLM-1.7B", attn_implementation="sdpa"),
+            generation_config=GenerationConfig(num_blocks=8, block_size=16, max_batch_tokens=8),
+            device=torch_device,
+        )
+
+        # Overload cache parameters to match test scenario
+        cache.num_full_attention_groups = num_full_attention_groups
+        cache.num_sliding_attention_groups = num_sliding_attention_groups
+        cache.max_sliding_window_blocks_per_request = max_sliding_window_blocks_per_request
+
+        # Overload the cache get_num_free_blocks method
+        cache.get_num_free_blocks = lambda: num_free_blocks
+
+        # Test the method
+        result = cache.will_allocation_be_successful(num_requested_blocks, allocated_blocks)
+
+        self.assertEqual(
+            result,
+            expected_result,
+            f"Failed for: {num_requested_blocks=}, {allocated_blocks=}, {num_full_attention_groups=}, "
+            f"{num_sliding_attention_groups=}, {max_sliding_window_blocks_per_request=}, {num_free_blocks=}. "
+            f"Expected {expected_result}, got {result}",
+        )
+
 
 class ContinuousBatchingGenerationTest(unittest.TestCase):
     # -----------------------------------------------Parity tests----------------------------------------------- #
@@ -191,6 +267,8 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
         use_cuda_graph: bool,
         use_compile: bool,
         max_new_tokens: int = 20,
+        num_blocks: int | None = None,
+        num_repeat_prompts: int = 1,
     ) -> None:
         """Tests the parity between continuous batching and non-continuous batching generation."""
 
@@ -209,6 +287,8 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
             "A robe takes 2 bolts of blue fiber and half that much white fiber. How many bolts in total does it take?",
             "A basket contains 25 oranges among which 1 is bad, 20% are unripe, 2 are sour and the rest are good. How many oranges are good?",
         ]  # fmt: skip
+        if num_repeat_prompts > 1:
+            user_messages = user_messages * num_repeat_prompts
         chats = [[{"role": "user", "content": user_message}] for user_message in user_messages]
         tokenized = [tokenizer.apply_chat_template(chat, add_generation_prompt=True) for chat in chats]
         input_ids = [(x if isinstance(x, list) else x["input_ids"]) for x in tokenized]
@@ -223,6 +303,7 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
         model.generation_config.max_new_tokens = max_new_tokens
         model.generation_config.do_sample = False
         model.generation_config.use_cuda_graph = use_cuda_graph
+        model.generation_config.num_blocks = num_blocks
         if use_compile:
             model.generation_config.compile_config = CompileConfig(fullgraph=True, mode="default")
 
@@ -334,6 +415,23 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
     def test_continuous_batching_long_generate(self) -> None:
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
         self._test_continuous_batching_parity(model_id, True, "flash_attention_2", True, True, max_new_tokens=80)
+
+    @require_torch_accelerator
+    def test_continuous_batching_few_blocks(self) -> None:
+        """This test verifies that generation works with a very small number of blocks, ie. small enough that we need to
+        offload a request at some point. To add more complexity, we repeat the same prompt 4 times and enable prefix
+        sharing."""
+        model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
+
+        # Patch soft_reset_one_request to verify it's called at least once
+        original_soft_reset = ContinuousBatchProcessor.soft_reset_one_request
+        with patch.object(
+            ContinuousBatchProcessor, "soft_reset_one_request", autospec=True, side_effect=original_soft_reset
+        ) as mock_soft_reset:
+            self._test_continuous_batching_parity(
+                model_id, True, "sdpa", True, False, num_blocks=4, num_repeat_prompts=4
+            )
+            self.assertTrue(mock_soft_reset.called, "Soft reset method was not called.")
 
     # ---------------------------------------Streaming tests--------------------------------------- #
     #           Ensures the requests have the right behavior with and without streaming             #
@@ -504,10 +602,9 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
 
         return self._test_block_sharing(model_id, num_layer_groups, input_msg, expected_generated_tokens)
 
-    # The test always passes on H100 with torch 2.9, but only passed case 0 on A100 with torch 2.6 and fails on A100
-    # with torch 2.9. This might be due to a GPU diff, so test might be flaky on the CI which runs on A10.
     @parameterized.expand([True, False])
     @require_torch_accelerator
+    @require_flash_attn  # otherwise the test can fail because attention bias has a very slight impact on SDPA and eager
     def test_num_return_sequences(self, allow_block_sharing: bool) -> None:
         model_id = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
         tokenizer = AutoTokenizer.from_pretrained(model_id, padding_side="left")
@@ -519,7 +616,7 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
         input_ids = [(x if isinstance(x, list) else x["input_ids"]) for x in tokenized]
 
         # Generation with continuous batching
-        model = AutoModelForCausalLM.from_pretrained(model_id, attn_implementation="sdpa")
+        model = AutoModelForCausalLM.from_pretrained(model_id, attn_implementation="flash_attention_2")
         model = model.to(torch_device).eval()
         model.generation_config.max_new_tokens = 30
         model.generation_config.do_sample = False
