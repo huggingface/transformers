@@ -14,7 +14,6 @@
 """PyTorch BARK model."""
 
 import math
-import warnings
 
 import numpy as np
 import torch
@@ -40,6 +39,7 @@ from ...utils import (
     is_torch_accelerator_available,
     logging,
 )
+from ...utils.generic import is_flash_attention_requested
 from ..auto import AutoModel
 from .configuration_bark import (
     BarkCoarseConfig,
@@ -498,7 +498,7 @@ class BarkCausalModel(BarkPreTrainedModel, GenerationMixin):
         if attention_mask is not None:
             if batch_size <= 0:
                 raise ValueError("batch_size has to be defined and > 0")
-            if self.config._attn_implementation == "flash_attention_2":
+            if is_flash_attention_requested(self.config):
                 attention_mask = attention_mask if 0 in attention_mask else None
             else:
                 attention_mask = attention_mask.view(batch_size, -1)
@@ -1096,7 +1096,7 @@ class BarkFineModel(BarkPreTrainedModel):
         if attention_mask is not None:
             if batch_size <= 0:
                 raise ValueError("batch_size has to be defined and > 0")
-            if self.config._attn_implementation == "flash_attention_2":
+            if is_flash_attention_requested(self.config):
                 attention_mask = attention_mask if 0 in attention_mask else None
             else:
                 # [bsz, to_seq_length] -> [bsz, 1, 1, to_seq_length]
@@ -1352,24 +1352,12 @@ class BarkModel(BarkPreTrainedModel, GenerationMixin):
 
         Args:
             accelerator_id (`int`, *optional*, defaults to 0):
-                accelerator id on which the sub-models will be loaded and offloaded. This argument is deprecated.
-            kwargs (`dict`, *optional*):
-                additional keyword arguments:
-                    `gpu_id`: accelerator id on which the sub-models will be loaded and offloaded.
+                accelerator id on which the sub-models will be loaded and offloaded.
         """
         if is_accelerate_available():
             from accelerate import cpu_offload_with_hook
         else:
             raise ImportError("`enable_model_cpu_offload` requires `accelerate`.")
-
-        gpu_id = kwargs.get("gpu_id", 0)
-
-        if gpu_id != 0:
-            warnings.warn(
-                "The argument `gpu_id` is deprecated and will be removed in version 4.54.0 of Transformers. Please use `accelerator_id` instead.",
-                FutureWarning,
-            )
-            accelerator_id = gpu_id
 
         device_type = "cuda"
         if is_torch_accelerator_available():
