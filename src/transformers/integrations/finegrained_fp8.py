@@ -14,7 +14,7 @@
 
 from ..core_model_loading import ConversionOps
 from ..quantizers.quantizers_utils import should_convert_module
-from ..utils import is_torch_accelerator_available, is_torch_available, logging
+from ..utils import is_kernels_available, is_torch_accelerator_available, is_torch_available, logging
 
 
 if is_torch_available():
@@ -45,16 +45,22 @@ def _get_quantization_kernel():
     return _quantization_kernel if _quantization_kernel else None
 
 
-def _supports_cutlass_blockwise_fp8(block_size: list[int] | None) -> bool:
+def _supports_cutlass(block_size: list[int] | None, output_dtype: torch.dtype) -> bool:
     """
-    Check if CUTLASS blockwise FP8 matmul is supported for the given block size.
+    Check if CUTLASS blockwise FP8 matmul is supported for the given block size and output dtype.
 
     CUTLASS blockwise kernels require:
     - SM90+ (Hopper or newer)
     - Block size [128, 128] for weights
     - Block size [1, 128] for activations (handled implicitly)
+    - Output dtype bfloat16 or float16
     """
-    if not is_torch_available() or not torch.cuda.is_available():
+
+    if not is_torch_available() or not torch.cuda.is_available() or not is_kernels_available():
+        return False
+
+    # CUTLASS only supports bfloat16/float16 output
+    if output_dtype not in (torch.bfloat16, torch.float16):
         return False
 
     # Check block size compatibility - CUTLASS only supports [128, 128]
@@ -64,11 +70,8 @@ def _supports_cutlass_blockwise_fp8(block_size: list[int] | None) -> bool:
         return False
 
     # Check GPU capability (SM90+)
-    try:
-        capability = torch.cuda.get_device_capability()
-        cuda_capability = capability[0] * 10 + capability[1]
-    except Exception:
-        return False
+    capability = torch.cuda.get_device_capability()
+    cuda_capability = capability[0] * 10 + capability[1]
 
     # Try to load the kernel and check if blockwise FP8 is supported
     kernel = _get_quantization_kernel()
@@ -413,11 +416,8 @@ def w8a8_block_fp8_matmul(
 
     Otherwise falls back to Triton.
     """
-    # Check if we can use CUTLASS
-    # CUTLASS only supports bfloat16/float16 output
-    cutlass_compatible_dtype = output_dtype in (torch.bfloat16, torch.float16)
 
-    if cutlass_compatible_dtype and _supports_cutlass_blockwise_fp8(block_size):
+    if _supports_cutlass(block_size, output_dtype):
         kernel = _get_quantization_kernel()
         if kernel is not None:
             try:
