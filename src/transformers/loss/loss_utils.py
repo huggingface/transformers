@@ -32,19 +32,18 @@ def fixed_cross_entropy(
     target: torch.Tensor,
     num_items_in_batch: torch.Tensor | None = None,
     ignore_index: int = -100,
-    **kwargs,
+    label_smoothing: float | None = None,
+    weight: torch.Tensor | None = None,
 ) -> torch.Tensor:
     reduction = "sum" if num_items_in_batch is not None else "mean"
-
-    ce_params = inspect.signature(nn.functional.cross_entropy).parameters
-    allowed_kwargs = {k: v for k, v in kwargs.items() if k in ce_params}
 
     loss = nn.functional.cross_entropy(
         source,
         target,
         ignore_index=ignore_index,
         reduction=reduction,
-        **allowed_kwargs,
+        label_smoothing=label_smoothing,
+        weight=weight,
     )
 
     if reduction == "sum":
