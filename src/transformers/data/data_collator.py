@@ -222,6 +222,17 @@ class DataCollatorWithPadding:
     return_tensors: str = "pt"
 
     def __call__(self, features: list[dict[str, Any]]) -> dict[str, Any]:
+        if not isinstance(features, (list, tuple)) or len(features) == 0:
+            raise ValueError(
+                "DataCollatorWithPadding expects a non-empty list of feature dictionaries, "
+                f"but received: {type(features)}."
+            )
+
+        if not all(isinstance(f, dict) for f in features):
+            raise ValueError(
+                f"Each feature must be a dictionary, but at least one element is of type {type(features[0])}."
+            )
+
         batch = pad_without_fast_tokenizer_warning(
             self.tokenizer,
             features,
