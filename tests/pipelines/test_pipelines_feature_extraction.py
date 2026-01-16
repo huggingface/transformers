@@ -20,8 +20,8 @@ from transformers import (
     FEATURE_EXTRACTOR_MAPPING,
     IMAGE_PROCESSOR_MAPPING,
     MODEL_MAPPING,
-    TextEmbeddingPipeline,
     LxmertConfig,
+    TextEmbeddingPipeline,
     is_torch_available,
     pipeline,
 )

@@ -381,9 +381,7 @@ class Aimv2ModelTest(Aimv2ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     additional_model_inputs = ["pixel_values"]
     all_model_classes = (Aimv2Model,) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"text-embedding": Aimv2Model, "image-embedding": Aimv2VisionModel}
-        if is_torch_available()
-        else {}
+        {"text-embedding": Aimv2Model, "image-embedding": Aimv2VisionModel} if is_torch_available() else {}
     )
 
     test_resize_embeddings = False
