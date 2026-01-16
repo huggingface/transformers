@@ -101,9 +101,11 @@ class Mistral3MultiModalProjector(nn.Module):
         self.norm = Mistral3RMSNorm(config.vision_config.hidden_size, eps=config.text_config.rms_norm_eps)
         self.patch_merger = Mistral3PatchMerger(config)
         # We have hidden_size * the number of vision feature layers
-        num_feature_layers = 1 if isinstance(config.vision_feature_layer, int) else len(config.vision_feature_layer)
+        self.num_feature_layers = (
+            1 if isinstance(config.vision_feature_layer, int) else len(config.vision_feature_layer)
+        )
         self.linear_1 = nn.Linear(
-            config.vision_config.hidden_size * num_feature_layers,
+            config.vision_config.hidden_size * self.num_feature_layers,
             config.text_config.hidden_size,
             bias=config.multimodal_projector_bias,
         )

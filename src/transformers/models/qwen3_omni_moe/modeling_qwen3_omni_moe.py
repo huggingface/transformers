@@ -54,7 +54,13 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple, is_grouped_mm_available
-from ...utils.generic import OutputRecorder, TransformersKwargs, check_model_inputs, maybe_autocast
+from ...utils.generic import (
+    OutputRecorder,
+    TransformersKwargs,
+    check_model_inputs,
+    is_flash_attention_requested,
+    maybe_autocast,
+)
 from .configuration_qwen3_omni_moe import (
     Qwen3OmniMoeAudioEncoderConfig,
     Qwen3OmniMoeCode2WavConfig,
@@ -716,7 +722,7 @@ class Qwen3OmniMoeAudioEncoder(Qwen3OmniMoePreTrainedModel):
         # NOTE: the created attention masl only approximates the ragged FA2 attention by
         # allowing bidirectional attention within `cu_seqlens` blocks, and not attending between
         # blocks. Though it will not be a 100% match for FA2's `varlen` path
-        if self.config._attn_implementation == "flash_attention_2":
+        if is_flash_attention_requested(self.config):
             return None
 
         seq_length = inputs_tensor.shape[0]
@@ -911,7 +917,7 @@ class Qwen3OmniMoeVisionAttention(nn.Module):
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        if "flash" in self.config._attn_implementation:
+        if is_flash_attention_requested(self.config):
             # Flash Attention: Use cu_seqlens for variable length attention
             max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
             attn_output, _ = attention_interface(
@@ -1441,7 +1447,7 @@ class Qwen3OmniMoeThinkerTextRMSNorm(nn.Module):
 
 
 @use_kernel_func_from_hub("rotary_pos_emb")
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
     Args:
@@ -1449,8 +1455,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
         k (`torch.Tensor`): The key tensor.
         cos (`torch.Tensor`): The cosine part of the rotary embedding.
         sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`, *optional*):
-            Deprecated and unused.
         unsqueeze_dim (`int`, *optional*, defaults to 1):
             The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
             sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
@@ -1922,7 +1926,6 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(
         self.vocab_size = config.text_config.vocab_size
         self.model = Qwen3OmniMoeThinkerTextModel._from_config(config.text_config)
         self.lm_head = nn.Linear(config.text_config.hidden_size, config.text_config.vocab_size, bias=False)
-        self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self.spatial_merge_size = config.vision_config.spatial_merge_size
         self.rope_deltas = None
         self.num_experts = config.text_config.num_experts

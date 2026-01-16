@@ -212,8 +212,6 @@ class Ernie4_5_VL_MoeTextConfig(Ernie4_5_MoeConfig, PreTrainedConfig):
             relevant if `config.is_decoder=True`.
         use_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in any of the projections including mlp and attention for example.
-        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
-            Whether the model's input and output word embeddings should be tied.
         rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
@@ -235,6 +233,12 @@ class Ernie4_5_VL_MoeTextConfig(Ernie4_5_MoeConfig, PreTrainedConfig):
             allow the model to output the auxiliary loss, including load balancing loss and router z-loss.
         router_aux_loss_coef (`float`, *optional*, defaults to 0.001):
             The aux loss factor for the total loss.
+        pad_token_id (`int`, *optional*):
+            Padding token id.
+        eos_token_id (`int`, *optional*):
+            End of stream token id.
+        bos_token_id (`int`, *optional*):
+            Beginning of stream token id.
     """
 
     model_type = "ernie4_5_vl_moe_text"
@@ -267,7 +271,6 @@ class Ernie4_5_VL_MoeTextConfig(Ernie4_5_MoeConfig, PreTrainedConfig):
         rms_norm_eps=1e-5,
         use_cache=True,
         use_bias=False,
-        tie_word_embeddings=True,
         rope_parameters=None,
         mlp_layer_types=None,
         moe_intermediate_size=None,
@@ -277,6 +280,9 @@ class Ernie4_5_VL_MoeTextConfig(Ernie4_5_MoeConfig, PreTrainedConfig):
         moe_norm_min=1e-12,
         output_router_logits=False,
         router_aux_loss_coef=0.001,
+        pad_token_id=None,
+        eos_token_id=None,
+        bos_token_id=None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -308,10 +314,11 @@ class Ernie4_5_VL_MoeTextConfig(Ernie4_5_MoeConfig, PreTrainedConfig):
         self.moe_norm_min = moe_norm_min
         self.output_router_logits = output_router_logits
         self.router_aux_loss_coef = router_aux_loss_coef
+        self.pad_token_id = pad_token_id
+        self.eos_token_id = eos_token_id
+        self.bos_token_id = bos_token_id
 
-        PreTrainedConfig.__init__(
-            tie_word_embeddings=tie_word_embeddings, ignore_keys_at_rope_validation={"mrope_section"}, **kwargs
-        )
+        PreTrainedConfig.__init__(ignore_keys_at_rope_validation={"mrope_section"}, **kwargs)
 
 
 class Ernie4_5_VL_MoeConfig(PreTrainedConfig):
@@ -341,6 +348,8 @@ class Ernie4_5_VL_MoeConfig(PreTrainedConfig):
             The video token index to encode the end of video.
         video_token_id (`int`, *optional*, defaults to 103367):
             The video token index to encode the video prompt.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether the model's input and output word embeddings should be tied.
 
     ```python
     >>> from transformers import Ernie4_5_VL_MoeForConditionalGeneration, Ernie4_5_VL_MoeConfig
@@ -369,6 +378,7 @@ class Ernie4_5_VL_MoeConfig(PreTrainedConfig):
         video_start_token_id=101306,
         video_end_token_id=101307,
         video_token_id=103367,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         if isinstance(vision_config, dict):
@@ -391,6 +401,7 @@ class Ernie4_5_VL_MoeConfig(PreTrainedConfig):
         self.video_start_token_id = video_start_token_id
         self.video_end_token_id = video_end_token_id
         self.video_token_id = video_token_id
+        self.tie_word_embeddings = tie_word_embeddings
 
         super().__init__(**kwargs)
 
@@ -490,7 +501,7 @@ def rotate_half_text(x):
     return torch.stack((-x2, x1), dim=-1).flatten(-2)
 
 
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
     Args:
@@ -498,8 +509,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
         k (`torch.Tensor`): The key tensor.
         cos (`torch.Tensor`): The cosine part of the rotary embedding.
         sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`, *optional*):
-            Deprecated and unused.
         unsqueeze_dim (`int`, *optional*, defaults to 1):
             The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
             sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note

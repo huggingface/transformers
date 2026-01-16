@@ -38,6 +38,7 @@ from ...modeling_outputs import (
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, RopeParameters
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, is_flash_attn_2_available, logging
+from ...utils.generic import is_flash_attention_requested
 from ...utils.import_utils import is_triton_available
 from ..gemma3.modeling_gemma3 import Gemma3RotaryEmbedding, apply_rotary_pos_emb
 
@@ -141,6 +142,8 @@ class ModernBertConfig(PreTrainedConfig):
         repad_logits_with_grad (`bool`, *optional*, defaults to `False`):
             When True, ModernBertForMaskedLM keeps track of the logits' gradient when repadding for output. This only
             applies when using Flash Attention 2 with passed labels. Otherwise output logits always have a gradient.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
     Examples:
 
@@ -197,8 +200,15 @@ class ModernBertConfig(PreTrainedConfig):
         sparse_pred_ignore_index: int | None = -100,
         reference_compile: bool | None = None,
         repad_logits_with_grad: bool | None = False,
+        tie_word_embeddings: bool | None = True,
         **kwargs,
     ):
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.cls_token_id = cls_token_id
+        self.sep_token_id = sep_token_id
+        self.tie_word_embeddings = tie_word_embeddings
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -245,14 +255,7 @@ class ModernBertConfig(PreTrainedConfig):
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
         self.rope_parameters = rope_parameters
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            cls_token_id=cls_token_id,
-            sep_token_id=sep_token_id,
-            **kwargs,
-        )
+        super().__init__(**kwargs)
 
     def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation=None, **kwargs):
         rope_scaling = kwargs.pop("rope_scaling", None)
@@ -714,7 +717,7 @@ class ModernBertAttention(nn.Module):
             self.local_attention = (-1, -1)
             max_position_embeddings = config.max_position_embeddings
 
-        if config._attn_implementation == "flash_attention_2":
+        if is_flash_attention_requested(config):
             rope_parameters_dict = (
                 self.config.rope_parameters[layer_type] if layer_type is not None else self.config.rope_parameters
             )
@@ -738,7 +741,7 @@ class ModernBertAttention(nn.Module):
         qkv = self.Wqkv(hidden_states)
 
         bs = hidden_states.shape[0]
-        if self.config._attn_implementation == "flash_attention_2":
+        if is_flash_attention_requested(self.config):
             qkv = qkv.view(-1, 3, self.num_heads, self.head_dim)
         else:
             qkv = qkv.view(bs, -1, 3, self.num_heads, self.head_dim)
@@ -1032,7 +1035,7 @@ class ModernBertModel(ModernBertPreTrainedModel):
             attention_mask = torch.ones((batch_size, seq_len), device=device, dtype=torch.bool)
 
         repad = False
-        if self.config._attn_implementation == "flash_attention_2":
+        if is_flash_attention_requested(self.config):
             if indices is None and cu_seqlens is None and max_seqlen is None:
                 repad = True
                 if inputs_embeds is None:
@@ -1094,7 +1097,7 @@ class ModernBertModel(ModernBertPreTrainedModel):
         # If the attention implementation is FA2 and there is no need for repadding, there might still be the batch
         # dimension missing
         elif (
-            self.config._attn_implementation == "flash_attention_2"
+            is_flash_attention_requested(self.config)
             and all_hidden_states is not None
             and all_hidden_states[-1].dim() == 2
         ):
@@ -1222,7 +1225,7 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         self._maybe_set_compile()
 
-        if self.config._attn_implementation == "flash_attention_2":
+        if is_flash_attention_requested(self.config):
             if indices is None and cu_seqlens is None and max_seqlen is None:
                 if batch_size is None and seq_len is None:
                     if inputs_embeds is not None:
@@ -1281,7 +1284,7 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
         if labels is not None:
             loss = self.loss_function(logits, labels, vocab_size=self.config.vocab_size, **kwargs)
 
-        if self.config._attn_implementation == "flash_attention_2":
+        if is_flash_attention_requested(self.config):
             # Logits padding
             with nullcontext() if self.config.repad_logits_with_grad or labels is None else torch.no_grad():
                 logits = _pad_modernbert_output(inputs=logits, indices=indices, batch=batch_size, seqlen=seq_len)
