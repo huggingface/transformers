@@ -49,7 +49,7 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
-def reverse_target_pattern(pattern: str) -> tuple[str, str | None]:
+def process_target_pattern(pattern: str) -> tuple[str, str | None]:
     """
     Process a target pattern for reverse mapping (when targets become sources).
 
@@ -73,7 +73,7 @@ def reverse_target_pattern(pattern: str) -> tuple[str, str | None]:
     # Qwen2.5, Sam3, Ernie4.5 VL MoE!
     pattern = re.sub(r"\(\?.+\)", "", pattern)
     # Allow capturing groups in patterns, i.e. to add/remove a prefix to all keys (e.g. timm_wrapper, sam3)
-    capturing_group_match = re.search(r"\([^)]+\)", pattern)
+    capturing_group_match = re.search(r"\(.+?\)", pattern)
     captured_group = None
     if capturing_group_match:
         captured_group = capturing_group_match.group(0)
@@ -495,19 +495,32 @@ class WeightTransform:
 
         # Process target_patterns: detect capturing groups and replace with \1
         # Store the original capturing group patterns for reverse mapping
-        target_capturing_groups: list[str | None] = []
+        target_capturing_groups: list[str] = []
         for i, pattern in enumerate(self.target_patterns):
-            self.target_patterns[i], captured_group = reverse_target_pattern(pattern)
+            self.target_patterns[i], captured_group = process_target_pattern(pattern)
             if captured_group is not None:
                 target_capturing_groups.append(captured_group)
 
+        # Validate that we only have one unique capturing group pattern across all targets
+        # This ensures deterministic reverse mapping when sources have \1 backreferences
+        unique_capturing_groups = set(target_capturing_groups)
+        if len(unique_capturing_groups) > 1:
+            raise ValueError(
+                f"Multiple different capturing groups found in target_patterns: {unique_capturing_groups}. "
+                f"All target patterns must use the same capturing group pattern."
+            )
+        unique_capturing_group = unique_capturing_groups.pop() if unique_capturing_groups else None
+
         # We also need to check capturing groups in the sources during reverse mapping (e.g. timm_wrapper, sam3)
-        capturing_groups_index = 0
         for i, pattern in enumerate(self.source_patterns):
             if r"\1" in pattern:
-                # Use the stored capturing group from target_patterns
-                pattern = pattern.replace(r"\1", target_capturing_groups[capturing_groups_index], 1)
-                capturing_groups_index += 1
+                if unique_capturing_group is None:
+                    raise ValueError(
+                        f"Source pattern '{pattern}' contains \\1 backreference, but no capturing groups "
+                        f"found in target_patterns."
+                    )
+                # Use the unique capturing group from target_patterns for all sources
+                pattern = pattern.replace(r"\1", unique_capturing_group, 1)
             self.source_patterns[i] = pattern
 
         # Construct the regex we will use to rename keys from the sources to the targets
