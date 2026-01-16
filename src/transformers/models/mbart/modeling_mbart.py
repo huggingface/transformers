@@ -1505,7 +1505,7 @@ class MBartForCausalLM(MBartPreTrainedModel, GenerationMixin):
         >>> from transformers import AutoTokenizer, MBartForCausalLM
 
         >>> tokenizer = AutoTokenizer.from_pretrained("facebook/mbart-large-cc25")
-        >>> model = MBartForCausalLM.from_pretrained("facebook/mbart-large-cc25", add_cross_attention=False)
+        >>> model = MBartForCausalLM.from_pretrained("facebook/mbart-large-cc25")
         >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
