@@ -40,8 +40,8 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple, check_model_inputs
 from ...utils.import_utils import is_triton_available
-from ..bert.modeling_bert import eager_attention_forward
-from ..gemma3.modeling_gemma3 import Gemma3RotaryEmbedding, rotate_half
+from ..gemma3.modeling_gemma3 import Gemma3RotaryEmbedding, apply_rotary_pos_emb
+from ..align.modeling_align import eager_attention_forward
 
 
 logger = logging.get_logger(__name__)
@@ -343,33 +343,6 @@ class ModernBertRotaryEmbedding(Gemma3RotaryEmbedding):
         return super().compute_default_rope_parameters(config, device, seq_len, layer_type)
 
 
-@use_kernel_func_from_hub("rotary_pos_emb")
-def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
-    """Applies Rotary Position Embedding to the query and key tensors.
-
-    Args:
-        q (`torch.Tensor`): The query tensor.
-        k (`torch.Tensor`): The key tensor.
-        cos (`torch.Tensor`): The cosine part of the rotary embedding.
-        sin (`torch.Tensor`): The sine part of the rotary embedding.
-        unsqueeze_dim (`int`, *optional*, defaults to 1):
-            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
-            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
-            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
-            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
-            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
-            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
-    Returns:
-        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
-    """
-    origin_type = q.dtype
-    cos = cos.unsqueeze(unsqueeze_dim)
-    sin = sin.unsqueeze(unsqueeze_dim)
-    q_embed = (q.float() * cos) + (rotate_half(q.float()) * sin)
-    k_embed = (k.float() * cos) + (rotate_half(k.float()) * sin)
-    return q_embed.to(dtype=origin_type), k_embed.to(dtype=origin_type)
-
-
 @use_kernelized_func(apply_rotary_pos_emb)
 class ModernBertAttention(nn.Module):
     """Performs multi-headed self attention on a batch of unpadded sequences.
@@ -431,7 +404,17 @@ class ModernBertAttention(nn.Module):
         value_states = value_states.transpose(1, 2)
 
         cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, unsqueeze_dim=1)
+        # Flash attention requires float32 for rotary embeddings to match the original implementation
+        # which used a separate ModernBertUnpaddedRotaryEmbedding class
+        if "flash" in self.config._attn_implementation:
+            original_dtype = query_states.dtype
+            query_states = query_states.float()
+            key_states = key_states.float()
+            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, unsqueeze_dim=1)
+            query_states = query_states.to(original_dtype)
+            key_states = key_states.to(original_dtype)
+        else:
+            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, unsqueeze_dim=1)
 
         attention_interface = eager_attention_forward
         if self.config._attn_implementation != "eager":
