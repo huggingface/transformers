@@ -47,7 +47,7 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
-from ...utils.generic import check_model_inputs
+from ...utils.generic import check_model_inputs, is_flash_attention_requested
 from ...video_utils import (
     VideoInput,
     group_videos_by_shape,
@@ -169,6 +169,8 @@ class VideoLlama3Config(PreTrainedConfig):
             The image token index to encode the image prompt.
         video_token_id (`int`, *optional*, defaults to 151656):
             The video token index to encode the image prompt.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether to tie weight embeddings
     """
 
     model_type = "video_llama_3"
@@ -181,6 +183,7 @@ class VideoLlama3Config(PreTrainedConfig):
         vision_config=None,
         image_token_id=151655,
         video_token_id=151656,
+        tie_word_embeddings=False,
         **kwargs,
     ):
         if isinstance(vision_config, dict):
@@ -205,6 +208,7 @@ class VideoLlama3Config(PreTrainedConfig):
 
         self.image_token_id = image_token_id
         self.video_token_id = video_token_id
+        self.tie_word_embeddings = tie_word_embeddings
 
         super().__init__(**kwargs)
 
@@ -286,7 +290,7 @@ class VideoLlama3VisionAttention(SiglipAttention):
         cu_seqlens: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """
         Args:
             hidden_states (`torch.Tensor`):
@@ -312,7 +316,7 @@ class VideoLlama3VisionAttention(SiglipAttention):
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        if self.config._attn_implementation == "flash_attention_2":
+        if is_flash_attention_requested(self.config):
             # Flash Attention 2: Use cu_seqlens for variable length attention
             max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
             attn_output, attn_weights = attention_interface(
@@ -412,7 +416,7 @@ class VideoLlama3VisionEncoder(SiglipEncoder):
         cu_seqlens: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, BaseModelOutput]:
+    ) -> tuple | BaseModelOutput:
         r"""
         cu_seqlens (`torch.Tensor` of shape `(num_images_or_videos + 1,)`):
             The cumulative sequence lengths of each image or video feature.
@@ -495,7 +499,7 @@ class VideoLlama3VisionModel(VideoLlama3PreTrainedModel):
         grid_thw: torch.Tensor,
         merge_sizes: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, BaseModelOutput]:
+    ) -> tuple | BaseModelOutput:
         r"""
         grid_thw (`torch.LongTensor` of shape `(num_images_or_videos, 3)`):
             The temporal, height and width dimensions of feature shape for each image. Each row contains [t, h, w] values.
@@ -568,11 +572,11 @@ class VideoLlama3ModelOutputWithPast(ModelOutput):
     """
 
     last_hidden_state: torch.FloatTensor = None
-    past_key_values: Optional[list[torch.FloatTensor]] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
-    image_hidden_states: Optional[torch.FloatTensor] = None
-    video_hidden_states: Optional[torch.FloatTensor] = None
+    past_key_values: list[torch.FloatTensor] | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
+    image_hidden_states: torch.FloatTensor | None = None
+    video_hidden_states: torch.FloatTensor | None = None
 
 
 class VideoLlama3Model(Qwen2VLModel):
@@ -643,21 +647,21 @@ class VideoLlama3Model(Qwen2VLModel):
     def forward(
         self,
         input_ids: torch.LongTensor = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        pixel_values: Optional[torch.Tensor] = None,
-        image_grid_thw: Optional[torch.LongTensor] = None,
-        image_merge_sizes: Optional[torch.LongTensor] = None,
-        pixel_values_videos: Optional[torch.FloatTensor] = None,
-        video_grid_thw: Optional[torch.LongTensor] = None,
-        video_merge_sizes: Optional[torch.LongTensor] = None,
-        video_compression_mask: Optional[torch.BoolTensor] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        pixel_values: torch.Tensor | None = None,
+        image_grid_thw: torch.LongTensor | None = None,
+        image_merge_sizes: torch.LongTensor | None = None,
+        pixel_values_videos: torch.FloatTensor | None = None,
+        video_grid_thw: torch.LongTensor | None = None,
+        video_merge_sizes: torch.LongTensor | None = None,
+        video_compression_mask: torch.BoolTensor | None = None,
+        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, VideoLlama3ModelOutputWithPast]:
+    ) -> tuple | VideoLlama3ModelOutputWithPast:
         r"""
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
             The temporal, height and width of feature shape of each image in LLM.
@@ -741,13 +745,13 @@ class VideoLlama3CausalLMOutputWithPast(ModelOutput):
         video_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    logits: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[list[torch.FloatTensor]] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
-    image_hidden_states: Optional[torch.FloatTensor] = None
-    video_hidden_states: Optional[torch.FloatTensor] = None
+    loss: torch.FloatTensor | None = None
+    logits: torch.FloatTensor | None = None
+    past_key_values: list[torch.FloatTensor] | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
+    image_hidden_states: torch.FloatTensor | None = None
+    video_hidden_states: torch.FloatTensor | None = None
 
 
 class VideoLlama3ForConditionalGeneration(Qwen2VLForConditionalGeneration):
@@ -762,22 +766,22 @@ class VideoLlama3ForConditionalGeneration(Qwen2VLForConditionalGeneration):
     def forward(
         self,
         input_ids: torch.LongTensor = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        pixel_values: Optional[torch.Tensor] = None,
-        image_grid_thw: Optional[torch.LongTensor] = None,
-        image_merge_sizes: Optional[torch.LongTensor] = None,
-        pixel_values_videos: Optional[torch.FloatTensor] = None,
-        video_grid_thw: Optional[torch.LongTensor] = None,
-        video_merge_sizes: Optional[torch.LongTensor] = None,
-        video_compression_mask: Optional[torch.BoolTensor] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        pixel_values: torch.Tensor | None = None,
+        image_grid_thw: torch.LongTensor | None = None,
+        image_merge_sizes: torch.LongTensor | None = None,
+        pixel_values_videos: torch.FloatTensor | None = None,
+        video_grid_thw: torch.LongTensor | None = None,
+        video_merge_sizes: torch.LongTensor | None = None,
+        video_compression_mask: torch.BoolTensor | None = None,
+        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, VideoLlama3CausalLMOutputWithPast]:
+    ) -> tuple | VideoLlama3CausalLMOutputWithPast:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
@@ -842,13 +846,14 @@ class VideoLlama3ForConditionalGeneration(Qwen2VLForConditionalGeneration):
         cache_position=None,
         position_ids=None,
         use_cache=True,
-        pixel_values: Optional[torch.Tensor] = None,
-        image_grid_thw: Optional[torch.LongTensor] = None,
-        image_merge_sizes: Optional[torch.LongTensor] = None,
-        pixel_values_videos: Optional[torch.FloatTensor] = None,
-        video_grid_thw: Optional[torch.LongTensor] = None,
-        video_merge_sizes: Optional[torch.LongTensor] = None,
-        video_compression_mask: Optional[torch.BoolTensor] = None,
+        pixel_values: torch.Tensor | None = None,
+        image_grid_thw: torch.LongTensor | None = None,
+        image_merge_sizes: torch.LongTensor | None = None,
+        pixel_values_videos: torch.FloatTensor | None = None,
+        video_grid_thw: torch.LongTensor | None = None,
+        video_merge_sizes: torch.LongTensor | None = None,
+        video_compression_mask: torch.BoolTensor | None = None,
+        is_first_iteration: bool | None = False,
         **kwargs,
     ):
         # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
@@ -868,10 +873,11 @@ class VideoLlama3ForConditionalGeneration(Qwen2VLForConditionalGeneration):
             video_merge_sizes=video_merge_sizes,
             video_compression_mask=video_compression_mask,
             use_cache=use_cache,
+            is_first_iteration=is_first_iteration,
             **kwargs,
         )
 
-        if model_inputs["cache_position"][0] != 0:
+        if not is_first_iteration and use_cache:
             model_inputs["pixel_values"] = None
             model_inputs["pixel_values_videos"] = None
 
@@ -879,13 +885,13 @@ class VideoLlama3ForConditionalGeneration(Qwen2VLForConditionalGeneration):
 
     def _get_image_nums_and_video_nums(
         self,
-        input_ids: Optional[torch.LongTensor],
-        inputs_embeds: Optional[torch.Tensor] = None,
-        image_grid_thw: Optional[torch.LongTensor] = None,
-        image_merge_sizes: Optional[torch.LongTensor] = None,
-        video_grid_thw: Optional[torch.LongTensor] = None,
-        video_merge_sizes: Optional[torch.LongTensor] = None,
-        video_compression_mask: Optional[torch.BoolTensor] = None,
+        input_ids: torch.LongTensor | None,
+        inputs_embeds: torch.Tensor | None = None,
+        image_grid_thw: torch.LongTensor | None = None,
+        image_merge_sizes: torch.LongTensor | None = None,
+        video_grid_thw: torch.LongTensor | None = None,
+        video_merge_sizes: torch.LongTensor | None = None,
+        video_compression_mask: torch.BoolTensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Get the number of images and videos for each sample to calculate the separation length of the sample tensor.
@@ -964,7 +970,7 @@ class VideoLlama3ForConditionalGeneration(Qwen2VLForConditionalGeneration):
         self,
         expand_size: int = 1,
         is_encoder_decoder: bool = False,
-        input_ids: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
         **model_kwargs,
     ) -> tuple[torch.LongTensor, dict[str, Any]]:
         # Overwritten -- Support for expanding tensors without a batch size dimension
@@ -1092,24 +1098,10 @@ class VideoLlama3ProcessorKwargs(Qwen2VLProcessorKwargs):
 
 
 class VideoLlama3Processor(Qwen2VLProcessor):
-    r"""
-    Constructs a VideoLLaMA3 processor which wraps a VideoLLaMA3 image processor and a Qwen2 tokenizer into a single processor.
-    [`VideoLlama3Processor`] offers all the functionalities of [`VideoLlama3ImageProcessor`] and [`Qwen2Tokenizer`]. See the
-    [`~VideoLlama3Processor.__call__`] and [`~VideoLlama3Processor.decode`] for more information.
-    Args:
-        image_processor ([`VideoLlama3ImageProcessor`], *optional*):
-            The image processor is a required input.
-        tokenizer ([`Qwen2Tokenizer`], *optional*):
-            The tokenizer is a required input.
-        video_processor ([`VideoLlama3VideoProcessor`], *optional*):
-            The video processor is a required input.
-        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
-    """
-
     def __call__(
         self,
         images: ImageInput = None,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         videos: VideoInput = None,
         **kwargs: Unpack[VideoLlama3ProcessorKwargs],
     ) -> BatchFeature:
@@ -1240,16 +1232,16 @@ class VideoLlama3ImageProcessor(Qwen2VLImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Optional[dict[str, int]] = None,
+        size: dict[str, int] | None = None,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         do_rescale: bool = True,
-        rescale_factor: Union[int, float] = 1 / 255,
+        rescale_factor: int | float = 1 / 255,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
         do_convert_rgb: bool = True,
-        min_pixels: Optional[int] = None,
-        max_pixels: Optional[int] = None,
+        min_pixels: int | None = None,
+        max_pixels: int | None = None,
         patch_size: int = 14,
         temporal_patch_size: int = 1,
         merge_size: int = 1,
@@ -1282,24 +1274,24 @@ class VideoLlama3ImageProcessor(Qwen2VLImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        videos: Optional[VideoInput] = None,
-        do_resize: Optional[bool] = None,
-        size: Optional[dict[str, int]] = None,
-        min_pixels: Optional[int] = None,
-        max_pixels: Optional[int] = None,
-        resample: Optional[PILImageResampling] = None,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[float] = None,
-        do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
-        patch_size: Optional[int] = None,
-        temporal_patch_size: Optional[int] = None,
-        merge_size: Optional[int] = None,
-        do_convert_rgb: Optional[bool] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        videos: VideoInput | None = None,
+        do_resize: bool | None = None,
+        size: dict[str, int] | None = None,
+        min_pixels: int | None = None,
+        max_pixels: int | None = None,
+        resample: PILImageResampling | None = None,
+        do_rescale: bool | None = None,
+        rescale_factor: float | None = None,
+        do_normalize: bool | None = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        patch_size: int | None = None,
+        temporal_patch_size: int | None = None,
+        merge_size: int | None = None,
+        do_convert_rgb: bool | None = None,
+        return_tensors: str | TensorType | None = None,
+        data_format: ChannelDimension | None = ChannelDimension.FIRST,
+        input_data_format: str | ChannelDimension | None = None,
     ):
         """
         Args:
@@ -1452,7 +1444,7 @@ class VideoLlama3ImageProcessorFast(Qwen2VLImageProcessorFast):
         images: ImageInput,
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
-        device: Optional[Union[str, "torch.device"]] = None,
+        device: Union[str, "torch.device"] | None = None,
         **kwargs: Unpack[VideoLlama3ImageProcessorKwargs],
     ) -> BatchFeature:
         # Prepare input images
@@ -1472,7 +1464,7 @@ class VideoLlama3ImageProcessorFast(Qwen2VLImageProcessorFast):
 
 
 class VideoLlama3VideoProcessorInitKwargs(Qwen2VLVideoProcessorInitKwargs):
-    use_token_compression: Optional[bool]
+    use_token_compression: bool | None
 
 
 class VideoLlama3VideoProcessor(Qwen2VLVideoProcessor):
@@ -1490,8 +1482,8 @@ class VideoLlama3VideoProcessor(Qwen2VLVideoProcessor):
         pixel_values_videos: torch.FloatTensor,
         video_grid_thw: torch.LongTensor,
         video_merge_sizes: torch.LongTensor,
-        threshold: Optional[float] = 0.1,
-        min_tokens: Optional[int] = 1,
+        threshold: float | None = 0.1,
+        min_tokens: int | None = 1,
     ) -> torch.BoolTensor:
         """
         Get the compression mask for video tokens based on pixel differences.
@@ -1539,15 +1531,13 @@ class VideoLlama3VideoProcessor(Qwen2VLVideoProcessor):
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        min_pixels: Optional[int] = None,
-        max_pixels: Optional[int] = None,
-        patch_size: Optional[int] = None,
-        temporal_patch_size: Optional[int] = None,
-        merge_size: Optional[int] = None,
-        use_token_compression: Optional[bool] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        patch_size: int | None = None,
+        temporal_patch_size: int | None = None,
+        merge_size: int | None = None,
+        use_token_compression: bool | None = None,
+        return_tensors: str | TensorType | None = None,
         device: Optional["torch.Tensor"] = None,
         **kwargs,
     ):
@@ -1562,8 +1552,8 @@ class VideoLlama3VideoProcessor(Qwen2VLVideoProcessor):
                     height,
                     width,
                     factor=patch_size * merge_size,
-                    min_pixels=min_pixels,
-                    max_pixels=max_pixels // shape[0],
+                    min_pixels=size["shortest_edge"],
+                    max_pixels=size["longest_edge"] // shape[0],
                 )
                 stacked_videos = self.resize(
                     image=stacked_videos,

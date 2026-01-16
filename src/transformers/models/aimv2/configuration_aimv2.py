@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_aimv2.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 Apple Inc. and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,8 +17,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
@@ -160,10 +157,6 @@ class Aimv2TextConfig(PreTrainedConfig):
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
-        pad_token_id (`int`, *optional*, defaults to 1):
-            The id of the padding token in the vocabulary.
-        bos_token_id (`int`, *optional*, defaults to 49406):
-            The id of the beginning-of-sequence token in the vocabulary.
         eos_token_id (`int`, *optional*, defaults to 49407):
             The id of the end-of-sequence token in the vocabulary.
         max_position_embeddings (`int`, *optional*, defaults to 77):
@@ -188,14 +181,13 @@ class Aimv2TextConfig(PreTrainedConfig):
         qkv_bias: bool = False,
         mlp_bias: bool = False,
         hidden_act: str = "silu",
-        pad_token_id: Optional[int] = None,
-        bos_token_id: Optional[int] = None,
         eos_token_id: int = 49407,
         max_position_embeddings: int = 77,
         initializer_range: bool = 0.02,
         **kwargs,
     ):
-        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+        super().__init__(**kwargs)
+        self.eos_token_id = eos_token_id
 
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size

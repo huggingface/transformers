@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Google Inc. HuggingFace Inc. team. All rights reserved.
 #
 #
@@ -25,7 +24,7 @@ python src/transformers/models/gemma3/convert_gemma3_weights.py \
 """
 
 from collections.abc import Iterator, Sequence
-from typing import Any, Optional
+from typing import Any
 
 import accelerate
 import numpy as np
@@ -323,7 +322,7 @@ _VISION_DTYPE = flags.DEFINE_enum(
 )
 
 
-def get_chat_template() -> Optional[str]:
+def get_chat_template() -> str | None:
     if not _INCLUDE_CHAT_TEMPLATE.value:
         return None
 
@@ -539,7 +538,7 @@ def convert_transformer_weights(
 
 def convert(
     checkpoint_path: str, config: Gemma3Config, variant: str
-) -> tuple[dict[str, torch.Tensor], Optional[Sequence[np.ndarray]]]:
+) -> tuple[dict[str, torch.Tensor], Sequence[np.ndarray] | None]:
     """Loads Orbax checkpoint from `input_path` and converts it to HF tree."""
     checkpointer = obc.PyTreeCheckpointer()
     ckpt = checkpointer.restore(checkpoint_path)

@@ -988,17 +988,17 @@ class T5Gemma2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
             torch.testing.assert_close(normalized_0[2], normalized_1[2], rtol=1e-3, atol=1e-4)
             torch.testing.assert_close(normalized_0, normalized_1, rtol=1e-3, atol=1e-4)
 
-    @unittest.skip(reason="SiglipVisionModel (vision backbone) does not support standalone training")
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing(self):
-        pass
+        super().test_training_gradient_checkpointing()
 
-    @unittest.skip(reason="SiglipVisionModel (vision backbone) does not support standalone training")
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(reason="SiglipVisionModel (vision backbone) does not support standalone training")
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
+        super().test_training_gradient_checkpointing_use_reentrant_false()
+
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        super().test_training_gradient_checkpointing_use_reentrant_true()
 
     @unittest.skip(reason="SiglipVisionModel (vision backbone) does not support standalone training")
     def test_torch_compile_for_training(self):

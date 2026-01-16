@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +15,6 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -164,7 +162,7 @@ class LlavaNextModelOutputWithPast(BaseModelOutputWithPast):
         image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
-    image_hidden_states: Optional[torch.FloatTensor] = None
+    image_hidden_states: torch.FloatTensor | None = None
 
 
 @dataclass
@@ -189,12 +187,12 @@ class LlavaNextCausalLMOutputWithPast(ModelOutput):
         image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    logits: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[Cache] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
-    image_hidden_states: Optional[torch.FloatTensor] = None
+    loss: torch.FloatTensor | None = None
+    logits: torch.FloatTensor | None = None
+    past_key_values: Cache | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
+    image_hidden_states: torch.FloatTensor | None = None
 
 
 # Copied from transformers.models.llava.modeling_llava.LlavaMultiModalProjector with Llava->LlavaNext
@@ -270,7 +268,6 @@ class LlavaNextModel(LlavaNextPreTrainedModel):
 
         self.vocab_size = config.text_config.vocab_size
         self.language_model = AutoModel.from_config(config.text_config)
-        self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self.post_init()
 
     def get_input_embeddings(self):
@@ -350,8 +347,8 @@ class LlavaNextModel(LlavaNextPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         image_sizes: torch.Tensor,
-        vision_feature_layer: Optional[Union[int, list[int]]] = None,
-        vision_feature_select_strategy: Optional[str] = None,
+        vision_feature_layer: int | list[int] | None = None,
+        vision_feature_select_strategy: str | None = None,
     ):
         """
         Obtains image last hidden states from the vision tower and apply multimodal projection.
@@ -449,22 +446,22 @@ class LlavaNextModel(LlavaNextPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        image_sizes: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        vision_feature_layer: Optional[Union[int, list[int]]] = None,
-        vision_feature_select_strategy: Optional[str] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        image_sizes: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        vision_feature_layer: int | list[int] | None = None,
+        vision_feature_select_strategy: str | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Union[tuple, LlavaNextModelOutputWithPast]:
+    ) -> tuple | LlavaNextModelOutputWithPast:
         r"""
         vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
             The feature selection strategy used to select the vision feature from the vision backbone.
@@ -568,8 +565,8 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
         self,
         pixel_values: torch.FloatTensor,
         image_sizes: torch.Tensor,
-        vision_feature_layer: Optional[Union[int, list[int]]] = None,
-        vision_feature_select_strategy: Optional[str] = None,
+        vision_feature_layer: int | list[int] | None = None,
+        vision_feature_select_strategy: str | None = None,
     ):
         return self.model.get_image_features(
             pixel_values=pixel_values,
@@ -582,23 +579,23 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        image_sizes: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        vision_feature_layer: Optional[Union[int, list[int]]] = None,
-        vision_feature_select_strategy: Optional[str] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        image_sizes: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        vision_feature_layer: int | list[int] | None = None,
+        vision_feature_select_strategy: str | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, LlavaNextCausalLMOutputWithPast]:
+    ) -> tuple | LlavaNextCausalLMOutputWithPast:
         r"""
         vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
             The feature selection strategy used to select the vision feature from the vision backbone.
@@ -692,6 +689,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
         attention_mask=None,
         cache_position=None,
         logits_to_keep=None,
+        is_first_iteration=False,
         **kwargs,
     ):
         # Overwritten -- in specific circumstances we don't want to forward image inputs to the model
@@ -703,12 +701,15 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
             attention_mask=attention_mask,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
+            is_first_iteration=is_first_iteration,
             **kwargs,
         )
 
-        # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
-        # Otherwise we need pixel values to be passed to model
-        if cache_position[0] == 0:
+        # Pixel values are used only in the first iteration if available
+        # In subsquent iterations, they are already merged with text and cached
+        # NOTE: first iteration doesn't have to be prefill, it can be the first
+        # iteration with a question and cached system prompt (continue generate from cache)
+        if is_first_iteration or not kwargs.get("use_cache", True):
             model_inputs["pixel_values"] = pixel_values
             model_inputs["image_sizes"] = image_sizes
 

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 Apple Inc. and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,8 +14,6 @@
 #
 # Original license: https://github.com/apple/ml-cvnets/blob/main/LICENSE
 """PyTorch MobileViTV2 model."""
-
-from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -40,7 +37,7 @@ logger = logging.get_logger(__name__)
 
 
 # Copied from transformers.models.mobilevit.modeling_mobilevit.make_divisible
-def make_divisible(value: int, divisor: int = 8, min_value: Optional[int] = None) -> int:
+def make_divisible(value: int, divisor: int = 8, min_value: int | None = None) -> int:
     """
     Ensure that all layers have a channel count that is divisible by `divisor`.
     """
@@ -70,7 +67,7 @@ class MobileViTV2ConvLayer(nn.Module):
         bias: bool = False,
         dilation: int = 1,
         use_normalization: bool = True,
-        use_activation: Union[bool, str] = True,
+        use_activation: bool | str = True,
     ) -> None:
         super().__init__()
         padding = int((kernel_size - 1) / 2) * dilation
@@ -551,7 +548,7 @@ class MobileViTV2Encoder(nn.Module):
         hidden_states: torch.Tensor,
         output_hidden_states: bool = False,
         return_dict: bool = True,
-    ) -> Union[tuple, BaseModelOutputWithNoAttention]:
+    ) -> tuple | BaseModelOutputWithNoAttention:
         all_hidden_states = () if output_hidden_states else None
 
         for i, layer_module in enumerate(self.layer):
@@ -624,11 +621,11 @@ class MobileViTV2Model(MobileViTV2PreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.Tensor] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        pixel_values: torch.Tensor | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, BaseModelOutputWithPoolingAndNoAttention]:
+    ) -> tuple | BaseModelOutputWithPoolingAndNoAttention:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -692,12 +689,12 @@ class MobileViTV2ForImageClassification(MobileViTV2PreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.Tensor] = None,
-        output_hidden_states: Optional[bool] = None,
-        labels: Optional[torch.Tensor] = None,
-        return_dict: Optional[bool] = None,
+        pixel_values: torch.Tensor | None = None,
+        output_hidden_states: bool | None = None,
+        labels: torch.Tensor | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, ImageClassifierOutputWithNoAttention]:
+    ) -> tuple | ImageClassifierOutputWithNoAttention:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
@@ -860,12 +857,12 @@ class MobileViTV2ForSemanticSegmentation(MobileViTV2PreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        pixel_values: torch.Tensor | None = None,
+        labels: torch.Tensor | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, SemanticSegmenterOutput]:
+    ) -> tuple | SemanticSegmenterOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
             Ground truth semantic segmentation maps for computing the loss. Indices should be in `[0, ...,

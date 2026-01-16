@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -178,13 +177,11 @@ class Idefics3Config(PreTrainedConfig):
             text_config = CONFIG_MAPPING["llama"](
                 rms_norm_eps=1e-5,
                 pad_token_id=pad_token_id,
-                tie_word_embeddings=False,
             )
-
         self.text_config = text_config
         self.scale_factor = scale_factor
 
-        super().__init__(**kwargs, pad_token_id=pad_token_id, tie_word_embeddings=tie_word_embeddings)
+        super().__init__(**kwargs)
 
 
 __all__ = ["Idefics3Config", "Idefics3VisionConfig"]
