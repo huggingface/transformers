@@ -293,6 +293,20 @@ class ExpertsInterface(GeneralInterface):
 ALL_EXPERTS_FUNCTIONS = ExpertsInterface()
 
 
+def _default_apply_gate(self, gate_up_out: torch.Tensor) -> torch.Tensor:
+    """
+    Default gating mechanism: splits the gate_up_out into gate and up parts,
+    applies the activation function to the gate part, and multiplies it with the up part.
+    Args:
+        gate_up_out (`torch.Tensor`):
+            The output tensor from the gate and up projection of shape (S, 2 * intermediate_dim).
+    Returns:
+        `torch.Tensor`: The gated output tensor of shape (S, intermediate_dim).
+    """
+    gate, up = gate_up_out.chunk(2, dim=-1)  # (S, intermediate_dim)
+    return self.act_fn(gate) * up  # (S, intermediate_dim)
+
+
 def use_experts_implementation(
     experts_class: type[torch.nn.Module] | None = None, *, is_transposed: bool = False, has_bias: bool = False
 ) -> type[torch.nn.Module]:
@@ -331,13 +345,7 @@ def use_experts_implementation(
             return experts_forward(self, *args, **kwargs)
 
         if not hasattr(experts_class, "_apply_gate"):
-
-            def _apply_gate(self, gate_up_out: torch.Tensor) -> torch.Tensor:
-                gate, up = gate_up_out.chunk(2, dim=-1)  # (S, intermediate_dim)
-                return self.act_fn(gate) * up  # (S, intermediate_dim)
-
-            experts_class._apply_gate = _apply_gate
-
+            experts_class._apply_gate = _default_apply_gate
         experts_class.__init__ = __init__
         experts_class.forward = forward
         return experts_class
