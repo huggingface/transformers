@@ -68,10 +68,6 @@ def initialize_tensor_parallelism(
 
                 backend_map = {"cuda": "nccl", "cpu": "gloo", "xpu": "xccl", "hpu": "hccl"}
                 backend = backend_map.get(device_type)
-                if device_type == "cpu" and int(os.environ.get("CCL_WORKER_COUNT", "0")):
-                    backend = "ccl"
-                if device_type == "xpu" and not is_torch_greater_or_equal("2.8", accept_dev=True):
-                    backend = "ccl"
 
                 torch.distributed.init_process_group(backend=backend, rank=rank, world_size=world_size)
                 current_device = getattr(torch, device_type)

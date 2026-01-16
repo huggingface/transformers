@@ -21,7 +21,6 @@ from transformers.testing_utils import (
     backend_synchronize,
     require_accelerate,
     require_auto_round,
-    require_intel_extension_for_pytorch,
     require_torch_accelerator,
     require_torch_gpu,
     require_torch_multi_accelerator,
@@ -106,7 +105,6 @@ class AutoRoundTest(unittest.TestCase):
         output = quantized_model.generate(**input_ids, max_new_tokens=40, do_sample=False)
         self.assertIn(self.tokenizer.decode(output[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
 
-    @require_intel_extension_for_pytorch
     def test_quantized_model_on_cpu(self):
         """
         Simple test that checks if the quantized model is working properly
@@ -174,7 +172,6 @@ class AutoRoundTest(unittest.TestCase):
         inputs = tokenizer(text, return_tensors="pt").to(model.device)
         tokenizer.decode(model.generate(**inputs, max_new_tokens=5)[0])
 
-    @require_intel_extension_for_pytorch
     def test_convert_from_awq_cpu(self):
         """
         Simple test that checks if auto-round work properly with awq format
