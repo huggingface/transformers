@@ -25,20 +25,20 @@ from ...test_tokenization_common import TokenizerTesterMixin
 
 def _write_test_tokenizer_json(path: str):
     """
-    Deterministic tokenizer.json for unit tests that passes TokenizerTesterMixin.
+    Deterministic tokenizer.json for unit tests compatible with GemmaTokenizer-style backend
+    (used by Siglip2Tokenizer after inheriting GemmaTokenizer).
 
-    - WordPiece backend (fast tokenizer).
-    - Whitespace pre-tokenizer.
-    - WordPiece decoder so decode() is stable and space-separated.
-    - Vocab includes enough tokens/pieces/punctuation for common tests,
-      plus both cases for do_lower_case checks.
+    - BPE backend with byte fallback.
+    - Normalizer: replace spaces with "▁"
+    - Decoder: converts "▁" back to " " so decode() is stable.
+    - Vocab includes "▁" and enough chars/tokens for TokenizerTesterMixin common tests.
     """
-    from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers
-    from tokenizers.models import WordPiece
+    from tokenizers import Tokenizer, decoders, normalizers
+    from tokenizers.models import BPE
 
     pad = "<pad>"
-    eos = "(EOS)"
-    bos = "(BOS)"
+    eos = "<eos>"
+    bos = "<bos>"
     unk = "<unk>"
     mask = "<mask>"
 
@@ -55,14 +55,30 @@ def _write_test_tokenizer_json(path: str):
     for t in [pad, eos, bos, unk, mask]:
         add(t)
 
+    # Gemma-style space marker token
+    add("▁")
+
     # Used by get_input_output_texts: "a b c ... t"
+    # With Gemma normalizer, that becomes "a▁b▁c..."; so letters + ▁ must exist.
     for t in list("abcdefghijklmnopqrst"):
         add(t)
 
-    # Common words used across TokenizerTesterMixin tests
-    words = [
-        "HELLO",
-        "WORLD",
+    # Add lowercase alphabet for fallbacks (covers many common tests)
+    for c in "abcdefghijklmnopqrstuvwxyz":
+        add(c)
+
+    # Add uppercase + digits (common mixin cases)
+    for c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
+        add(c)
+    for c in "0123456789":
+        add(c)
+
+    # Common punctuation tokens
+    for p in [".", ",", "!", "?", "'", '"', "-", "(", ")", ":", ";", "_", "/"]:
+        add(p)
+
+    # A few common "word-like" tokens (optional, but helps keep tokenization stable)
+    for w in [
         "hello",
         "world",
         "This",
@@ -72,7 +88,6 @@ def _write_test_tokenizer_json(path: str):
         "to",
         "be",
         "encoded",
-        ".",
         "Test",
         "this",
         "method",
@@ -84,64 +99,32 @@ def _write_test_tokenizer_json(path: str):
         "extra",
         "tokens",
         "here",
-        "high-level",
-        "end-to-end",
-        "state-of-the-art",
-        "user's",
-        "system's",
-        "example",
-        "feature",
-        "model",
-        "pipeline",
-        "dataset",
-        "process",
-        "result",
-        "output",
-        "value",
-        "performance",
-        "running",
-        "working",
-        "tested",
-        "validated",
-        "improved",
-        "simple",
-        "complex",
-        "happy",
-        "fast",
-        "robust",
+        "it",
         "He",
         "She",
         "They",
-        "it",
-    ]
-    for w in words:
+        "é",
+    ]:
         add(w)
 
-    # Punctuation as standalone tokens
-    for p in [",", "!", "?", "'", '"', "-", "(", ")", ":", ";"]:
-        add(p)
+    # No merges needed for these unit tests
+    merges = []
 
-    # WordPiece fallback pieces
-    for c in "abcdefghijklmnopqrstuvwxyz":
-        add(c)
-        add(f"##{c}")
-    for c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
-        add(c)
-        add(f"##{c}")
-    for c in "0123456789":
-        add(c)
-        add(f"##{c}")
+    tok = Tokenizer(
+        BPE(
+            vocab=vocab,
+            merges=merges,
+            fuse_unk=True,
+            unk_token=unk,
+            dropout=None,
+            byte_fallback=True,
+        )
+    )
 
-    # Accented char used in common sample_text
-    add("é")
-    add("##é")
+    # Gemma-style normalizer/decoder
+    tok.normalizer = normalizers.Replace(" ", "▁")
+    tok.decoder = decoders.Sequence([decoders.Replace("▁", " "), decoders.ByteFallback(), decoders.Fuse()])
 
-    tok = Tokenizer(WordPiece(vocab=vocab, unk_token=unk, continuing_subword_prefix="##"))
-    tok.normalizer = normalizers.NFKC()
-    tok.pre_tokenizer = pre_tokenizers.Whitespace()
-    tok.decoder = decoders.WordPiece(prefix="##")
-
-    tok.add_special_tokens([pad, eos, bos, unk, mask])
     tok.save(path)
 
 

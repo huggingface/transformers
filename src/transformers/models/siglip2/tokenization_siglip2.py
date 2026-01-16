@@ -18,7 +18,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from tokenizers import normalizers
+from tokenizers import Tokenizer, decoders, normalizers
+from tokenizers.models import BPE
 
 from ...tokenization_utils_tokenizers import TokenizersBackend
 
@@ -49,23 +50,74 @@ def _ensure_lowercase_normalizer(tok):
 
 
 class Siglip2Tokenizer(TokenizersBackend):
+    """
+    Gemma tokenizer + SigLIP2 training default: lowercase normalization.
+    """
+
     vocab_files_names = VOCAB_FILES_NAMES
-    padding_side = "right"
+    padding_side = "left"
     model_input_names = ["input_ids", "attention_mask"]
+    model = BPE
 
-    def __init__(self, tokenizer_file=None, do_lower_case: bool = True, **kwargs):
+    def __init__(
+        self,
+        vocab: str | dict[str, int] | None = None,
+        merges: str | list[str] | None = None,
+        unk_token: str = "<unk>",
+        bos_token: str = "<bos>",
+        eos_token: str = "<eos>",
+        pad_token: str = "<pad>",
+        mask_token: str = "<mask>",
+        do_lower_case: bool = True,
+        **kwargs,
+    ):
         self.do_lower_case = do_lower_case
+        if vocab is None:
+            vocab = {
+                str(pad_token): 0,
+                str(eos_token): 1,
+                str(bos_token): 2,
+                str(unk_token): 3,
+                str(mask_token): 4,
+            }
+        self._vocab = vocab
+        self._merges = merges or []
 
-        # this is what makes from_pretrained() load tokenizer.json
-        super().__init__(tokenizer_file=tokenizer_file, **kwargs)
+        self._tokenizer = Tokenizer(
+            BPE(
+                vocab=self._vocab,
+                merges=self._merges,
+                fuse_unk=True,
+                unk_token=str(unk_token),
+                dropout=None,
+                byte_fallback=True,
+            )
+        )
 
-        # Persist flag for save/load
+        self._tokenizer.decoder = decoders.Sequence(
+            [decoders.Replace("▁", " "), decoders.ByteFallback(), decoders.Fuse()]
+        )
+        self._tokenizer.normalizer = normalizers.Replace(" ", "▁")
+        super().__init__(
+            unk_token=unk_token,
+            bos_token=bos_token,
+            eos_token=eos_token,
+            pad_token=pad_token,
+            mask_token=mask_token,
+            **kwargs,
+        )
+
+        # Persist for save/load + push_to_hub dynamic tokenizer test
         if hasattr(self, "init_kwargs") and isinstance(self.init_kwargs, dict):
             self.init_kwargs.setdefault("tokenizer_class", self.__class__.__name__)
             self.init_kwargs["do_lower_case"] = do_lower_case
 
         if do_lower_case:
             _ensure_lowercase_normalizer(self)
+
+    def _unk_id(self) -> int:
+        # Align with historical Siglip2 convention: pad, eos, bos, unk
+        return 3
 
 
 __all__ = ["Siglip2Tokenizer"]
