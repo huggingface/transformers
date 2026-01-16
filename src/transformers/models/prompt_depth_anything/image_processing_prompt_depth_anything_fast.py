@@ -113,7 +113,7 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
     def preprocess(
         self,
         images: ImageInput,
-        prompt_depth: Optional[ImageInput] = None,
+        prompt_depth: ImageInput | None = None,
         **kwargs: Unpack[PromptDepthAnythingImageProcessorKwargs],
     ) -> BatchFeature:
         r"""
@@ -186,11 +186,11 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
     def _preprocess_image_like_inputs(
         self,
         images: ImageInput,
-        prompt_depth: Optional[ImageInput],
+        prompt_depth: ImageInput | None,
         input_data_format: ChannelDimension,
-        device: Optional[Union[str, "torch.device"]] = None,
-        prompt_scale_to_meter: Optional[float] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        device: Union[str, "torch.device"] | None = None,
+        prompt_scale_to_meter: float | None = None,
+        return_tensors: str | TensorType | None = None,
         **kwargs: Unpack[PromptDepthAnythingImageProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -248,18 +248,18 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        keep_aspect_ratio: Optional[bool],
+        keep_aspect_ratio: bool | None,
         interpolation: Optional["F.InterpolationMode"],
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        do_pad: Optional[bool],
-        disable_grouping: Optional[bool],
-        ensure_multiple_of: Optional[int] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        size_divisor: Optional[int] = None,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        do_pad: bool | None,
+        disable_grouping: bool | None,
+        ensure_multiple_of: int | None = None,
+        return_tensors: str | TensorType | None = None,
+        size_divisor: int | None = None,
         **kwargs,
     ) -> "torch.Tensor":
         """
@@ -305,7 +305,7 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
     def post_process_depth_estimation(
         self,
         outputs: "DepthEstimatorOutput",
-        target_sizes: Optional[Union[TensorType, list[tuple[int, int]], None]] = None,
+        target_sizes: TensorType | list[tuple[int, int]] | None | None = None,
     ) -> list[dict[str, TensorType]]:
         """
         Converts the raw output of [`DepthEstimatorOutput`] into final depth predictions and depth PIL images.

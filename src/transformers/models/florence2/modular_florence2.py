@@ -236,26 +236,8 @@ class Florence2ProcessorKwargs(LlavaProcessorKwargs):
     pass
 
 
+@auto_docstring
 class Florence2Processor(ProcessorMixin):
-    r"""
-    Constructs a Florence2 processor which wraps a Florence2 image processor and a Florence2 tokenizer into a single processor.
-
-    [`Florence2Processor`] offers all the functionalities of [`AutoImageProcessor`] and [`BartTokenizerFast`]. See the
-    [`~Florence2Processor.__call__`] and [`~Florence2Processor.decode`] for more information.
-
-    Args:
-        image_processor (`AutoImageProcessor`, *optional*):
-            The image processor is a required input.
-        tokenizer (`Union[BartTokenizer, BartTokenizerFast]`, *optional*):
-            The tokenizer is a required input.
-        num_additional_image_tokens (`int`, *optional*, defaults to 0):
-            Number of additional tokens added to the image embeddings, such as CLS (+1). If the backbone has no CLS or other
-            extra tokens appended, no need to set this arg.
-        post_processor_config (`dict`,  *optional*, defaults to 0):
-            Task-specific parsing rules for [`Florence2PostProcessor`], e.g. regex patterns,
-            thresholds, or banned tokens.
-    """
-
     def __init__(
         self,
         image_processor=None,
@@ -264,6 +246,14 @@ class Florence2Processor(ProcessorMixin):
         post_processor_config: dict | None = None,
         **kwargs,
     ):
+        r"""
+        num_additional_image_tokens (`int`, *optional*, defaults to 0):
+            Number of additional tokens added to the image embeddings, such as CLS (+1). If the backbone has no CLS or other
+            extra tokens appended, no need to set this arg.
+        post_processor_config (`dict`,  *optional*, defaults to 0):
+            Task-specific parsing rules for [`Florence2PostProcessor`], e.g. regex patterns,
+            thresholds, or banned tokens.
+        """
         self.tasks_answer_post_processing_type = {
             "<OCR>": "pure_text",
             "<OCR_WITH_REGION>": "ocr",
@@ -337,32 +327,14 @@ class Florence2Processor(ProcessorMixin):
             prompts.append(prompt)
         return prompts
 
+    @auto_docstring
     def __call__(
         self,
         images: ImageInput | None = None,
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         **kwargs: Unpack[Florence2ProcessorKwargs],
     ) -> BatchFeature:
-        """
-        Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
-        and `kwargs` arguments to BartTokenizerFast's [`~BartTokenizerFast.__call__`] if `text` is not `None` to encode
-        the text. To prepare the image(s), this method forwards the `images` and `kwargs` arguments to
-        CLIPImageProcessor's [`~CLIPImageProcessor.__call__`] if `images` is not `None`. Please refer to the docstring
-        of the above two methods for more information.
-
-        Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. Both channels-first and channels-last formats are supported.
-            text (`str`, `list[str]`, `list[list[str]]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
-
+        r"""
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 

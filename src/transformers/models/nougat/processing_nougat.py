@@ -20,65 +20,64 @@ from typing import Optional, Union
 from transformers.tokenization_utils_base import PreTokenizedInput, TextInput, TruncationStrategy
 
 from ...processing_utils import ProcessorMixin
-from ...utils import PaddingStrategy, TensorType
+from ...utils import PaddingStrategy, TensorType, auto_docstring
 
 
+@auto_docstring
 class NougatProcessor(ProcessorMixin):
-    r"""
-    Constructs a Nougat processor which wraps a Nougat image processor and a Nougat tokenizer into a single processor.
-
-    [`NougatProcessor`] offers all the functionalities of [`NougatImageProcessor`] and [`NougatTokenizerFast`]. See the
-    [`~NougatProcessor.__call__`] and [`~NougatProcessor.decode`] for more information.
-
-    Args:
-        image_processor ([`NougatImageProcessor`]):
-            An instance of [`NougatImageProcessor`]. The image processor is a required input.
-        tokenizer ([`NougatTokenizerFast`]):
-            An instance of [`NougatTokenizerFast`]. The tokenizer is a required input.
-    """
-
     def __init__(self, image_processor, tokenizer):
         super().__init__(image_processor, tokenizer)
 
+    @auto_docstring
     def __call__(
         self,
         images=None,
         text=None,
-        do_crop_margin: Optional[bool] = None,
-        do_resize: Optional[bool] = None,
-        size: Optional[dict[str, int]] = None,
+        do_crop_margin: bool | None = None,
+        do_resize: bool | None = None,
+        size: dict[str, int] | None = None,
         resample: "PILImageResampling" = None,  # noqa: F821
-        do_thumbnail: Optional[bool] = None,
-        do_align_long_axis: Optional[bool] = None,
-        do_pad: Optional[bool] = None,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[Union[int, float]] = None,
-        do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
+        do_thumbnail: bool | None = None,
+        do_align_long_axis: bool | None = None,
+        do_pad: bool | None = None,
+        do_rescale: bool | None = None,
+        rescale_factor: int | float | None = None,
+        do_normalize: bool | None = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
         data_format: Optional["ChannelDimension"] = "channels_first",  # noqa: F821
-        input_data_format: Optional[Union[str, "ChannelDimension"]] = None,  # noqa: F821
-        text_pair: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
-        text_target: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
-        text_pair_target: Optional[
-            Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]
-        ] = None,
+        input_data_format: Union[str, "ChannelDimension"] | None = None,  # noqa: F821
+        text_pair: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        text_target: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        text_pair_target: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         add_special_tokens: bool = True,
-        padding: Union[bool, str, PaddingStrategy] = False,
-        truncation: Optional[Union[bool, str, TruncationStrategy]] = None,
-        max_length: Optional[int] = None,
+        padding: bool | str | PaddingStrategy = False,
+        truncation: bool | str | TruncationStrategy | None = None,
+        max_length: int | None = None,
         stride: int = 0,
         is_split_into_words: bool = False,
-        pad_to_multiple_of: Optional[int] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        return_token_type_ids: Optional[bool] = None,
-        return_attention_mask: Optional[bool] = None,
+        pad_to_multiple_of: int | None = None,
+        return_tensors: str | TensorType | None = None,
+        return_token_type_ids: bool | None = None,
+        return_attention_mask: bool | None = None,
         return_overflowing_tokens: bool = False,
         return_special_tokens_mask: bool = False,
         return_offsets_mapping: bool = False,
         return_length: bool = False,
         verbose: bool = True,
     ):
+        r"""
+        do_crop_margin (`bool`, *optional*):
+            Whether to automatically crop white margins from document images. When enabled, the processor detects
+            and removes white space around the edges of document pages, which is useful for processing scanned
+            documents or PDFs with large margins.
+        do_thumbnail (`bool`, *optional*):
+            Whether to create a thumbnail version of the image. When enabled, a smaller version of the image is
+            generated alongside the main processed image, which can be useful for preview or faster processing.
+        do_align_long_axis (`bool`, *optional*):
+            Whether to automatically align images so that the longer axis is horizontal. When enabled, portrait
+            images are rotated to landscape orientation, which is typically better for document processing tasks.
+        """
         if images is None and text is None:
             raise ValueError("You need to specify either an `images` or `text` input to process.")
 

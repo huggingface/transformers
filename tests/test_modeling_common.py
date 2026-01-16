@@ -77,7 +77,6 @@ from transformers.models.auto.modeling_auto import (
     MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES,
     MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES,
     MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES,
-    MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES,
     MODEL_MAPPING_NAMES,
 )
 from transformers.testing_utils import (
@@ -760,7 +759,6 @@ class ModelTesterMixin:
                 *get_values(MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES),
                 *get_values(MODEL_FOR_MASKED_LM_MAPPING_NAMES),
                 *get_values(MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES),
-                *get_values(MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES),
                 *get_values(MODEL_FOR_CTC_MAPPING_NAMES),
             ]:
                 inputs_dict["labels"] = torch.zeros(
@@ -1619,15 +1617,14 @@ class ModelTesterMixin:
         # Scenario - 1 default behaviour
         self.check_training_gradient_checkpointing()
 
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        # Scenario - 2 with `use_reentrant=True` - this is the default value that is used in pytorch's
-        # torch.utils.checkpoint.checkpoint
-        self.check_training_gradient_checkpointing(gradient_checkpointing_kwargs={"use_reentrant": True})
-
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        # Scenario - 3 with `use_reentrant=False` pytorch suggests users to use this value for
-        # future releases: https://pytorch.org/docs/stable/checkpoint.html
+        # Scenario - 2 with `use_reentrant=False` - this is the default value that is used in pytorch's
+        # torch.utils.checkpoint.checkpoint
         self.check_training_gradient_checkpointing(gradient_checkpointing_kwargs={"use_reentrant": False})
+
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        # Scenario - 3 with `use_reentrant=True` (old default behaviour, not recommended)
+        self.check_training_gradient_checkpointing(gradient_checkpointing_kwargs={"use_reentrant": True})
 
     def test_attention_outputs(self):
         if not self.has_attentions:
@@ -2393,10 +2390,6 @@ class ModelTesterMixin:
         for model_class in self.all_model_classes:
             config, _ = self.model_tester.prepare_config_and_inputs_for_common()
             config.tie_word_embeddings = False
-            try:
-                config.get_text_config().tie_word_embeddings = False
-            except Exception as _:
-                pass
 
             model = model_class(config)  # we init the model without tie
             # if this test fails later on, it means init tied the weights
@@ -2435,8 +2428,8 @@ class ModelTesterMixin:
 
             tied_weight_keys = _get_tied_weight_keys(model_tied)
             # If we don't find any tied weights keys, and by default we don't tie the embeddings, it's because the model
-            # does not tie them
-            if len(tied_weight_keys) == 0 and not original_config.tie_word_embeddings:
+            # does not tie them or does not have embedding layer (non-text model)
+            if len(tied_weight_keys) == 0 and not getattr(original_config, "tie_word_embeddings", None):
                 continue
 
             ptrs = collections.defaultdict(list)
@@ -2451,7 +2444,7 @@ class ModelTesterMixin:
                 is_tied_key = any(re.search(key, p) for group in tied_params for p in group)
                 self.assertTrue(
                     is_tied_key,
-                    f"{key} is not a tied weight key pattern for {model_class}: {is_tied_key}. With same patams: {tied_params}",
+                    f"{key} is not a tied weight key pattern for {model_class}: {is_tied_key}. With same params: {tied_params}",
                 )
 
             # Removed tied weights found from tied params -> there should only be one left after
