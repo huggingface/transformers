@@ -198,6 +198,7 @@ IGNORE_NON_TESTED = (
         "Qwen2VLTextModel",  # Building part of bigger (tested) model
         "Qwen2_5_VLTextModel",  # Building part of bigger (tested) model
         "InternVLVisionModel",  # Building part of bigger (tested) model
+        "InternvlFlashVisionModel",  # Building part of bigger (tested) model
         "JanusVisionModel",  # Building part of bigger (tested) model
         "TimesFmModel",  # Building part of bigger (tested) model
         "CsmDepthDecoderForCausalLM",  # Building part of bigger (tested) model. Tested implicitly through CsmForConditionalGenerationIntegrationTest.
