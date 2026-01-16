@@ -807,7 +807,7 @@ class ProphetNetModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     all_model_classes = (ProphetNetModel, ProphetNetForConditionalGeneration) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "feature-extraction": ProphetNetModel,
+            "text-embedding": ProphetNetModel,
             "summarization": ProphetNetForConditionalGeneration,
             "text-generation": ProphetNetForCausalLM,
             "text2text-generation": ProphetNetForConditionalGeneration,

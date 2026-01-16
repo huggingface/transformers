@@ -480,7 +480,7 @@ class SwitchTransformersModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
     )
     pipeline_model_mapping = (
         {
-            "feature-extraction": SwitchTransformersModel,
+            "text-embedding": SwitchTransformersModel,
             "summarization": SwitchTransformersForConditionalGeneration,
             "text2text-generation": SwitchTransformersForConditionalGeneration,
             "translation": SwitchTransformersForConditionalGeneration,

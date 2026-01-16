@@ -217,7 +217,7 @@ class SplinterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         else ()
     )
     pipeline_model_mapping = (
-        {"feature-extraction": SplinterModel, "question-answering": SplinterForQuestionAnswering}
+        {"text-embedding": SplinterModel, "question-answering": SplinterForQuestionAnswering}
         if is_torch_available()
         else {}
     )

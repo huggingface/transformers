@@ -228,7 +228,7 @@ class M2M100ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     )
     pipeline_model_mapping = (
         {
-            "feature-extraction": M2M100Model,
+            "text-embedding": M2M100Model,
             "summarization": M2M100ForConditionalGeneration,
             "text2text-generation": M2M100ForConditionalGeneration,
             "translation": M2M100ForConditionalGeneration,

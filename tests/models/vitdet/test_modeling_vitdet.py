@@ -162,7 +162,7 @@ class VitDetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (VitDetModel, VitDetBackbone) if is_torch_available() else ()
-    pipeline_model_mapping = {"feature-extraction": VitDetModel} if is_torch_available() else {}
+    pipeline_model_mapping = {"text-embedding": VitDetModel} if is_torch_available() else {}
 
     test_resize_embeddings = False
 

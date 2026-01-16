@@ -239,7 +239,7 @@ class HieraModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else ()
     )
     pipeline_model_mapping = (
-        {"image-feature-extraction": HieraModel, "image-classification": HieraForImageClassification}
+        {"image-embedding": HieraModel, "image-classification": HieraForImageClassification}
         if is_torch_available()
         else {}
     )

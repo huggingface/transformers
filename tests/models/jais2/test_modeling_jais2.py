@@ -64,7 +64,7 @@ class Jais2ModelTest(CausalLMModelTest, unittest.TestCase):
 
     pipeline_model_mapping = (
         {
-            "feature-extraction": Jais2Model,
+            "text-embedding": Jais2Model,
             "text-generation": Jais2ForCausalLM,
         }
         if is_torch_available()

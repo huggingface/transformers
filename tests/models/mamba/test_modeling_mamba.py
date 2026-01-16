@@ -238,7 +238,7 @@ class MambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     test_missing_keys = False
 
     pipeline_model_mapping = (
-        {"feature-extraction": MambaModel, "text-generation": MambaForCausalLM} if is_torch_available() else {}
+        {"text-embedding": MambaModel, "text-generation": MambaForCausalLM} if is_torch_available() else {}
     )
 
     def setUp(self):

@@ -518,7 +518,7 @@ class Siglip2ModelTester:
 @require_torch
 class Siglip2ModelTest(Siglip2ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Siglip2Model,) if is_torch_available() else ()
-    pipeline_model_mapping = {"feature-extraction": Siglip2Model} if is_torch_available() else {}
+    pipeline_model_mapping = {"text-embedding": Siglip2Model} if is_torch_available() else {}
     additional_model_inputs = [
         "pixel_values",
         "pixel_attention_mask",

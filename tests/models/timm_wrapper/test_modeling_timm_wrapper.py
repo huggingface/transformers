@@ -88,7 +88,7 @@ class TimmWrapperModelTester:
 class TimmWrapperModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (TimmWrapperModel, TimmWrapperForImageClassification) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"image-feature-extraction": TimmWrapperModel, "image-classification": TimmWrapperForImageClassification}
+        {"image-embedding": TimmWrapperModel, "image-classification": TimmWrapperForImageClassification}
         if is_torch_available()
         else {}
     )

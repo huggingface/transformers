@@ -458,7 +458,7 @@ class Sam2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     all_model_classes = (Sam2Model,) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": Sam2Model, "mask-generation": Sam2Model} if is_torch_available() else {}
+        {"text-embedding": Sam2Model, "mask-generation": Sam2Model} if is_torch_available() else {}
     )
 
     test_resize_embeddings = False

@@ -241,7 +241,7 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     test_torch_exportable = False  # uses custom kernels by default, not compatible with torch.export
 
     pipeline_model_mapping = (
-        {"feature-extraction": Mamba2Model, "text-generation": Mamba2ForCausalLM} if is_torch_available() else {}
+        {"text-embedding": Mamba2Model, "text-generation": Mamba2ForCausalLM} if is_torch_available() else {}
     )
 
     def setUp(self):

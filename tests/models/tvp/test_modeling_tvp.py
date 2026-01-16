@@ -170,7 +170,7 @@ class TVPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     all_model_classes = (TvpModel, TvpForVideoGrounding) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": TvpModel, "temporal-video-grounding": TvpForVideoGrounding}
+        {"text-embedding": TvpModel, "temporal-video-grounding": TvpForVideoGrounding}
         if is_torch_available()
         else {}
     )

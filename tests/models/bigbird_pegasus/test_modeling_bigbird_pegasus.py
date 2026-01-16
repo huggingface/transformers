@@ -251,7 +251,7 @@ class BigBirdPegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineT
     )
     pipeline_model_mapping = (
         {
-            "feature-extraction": BigBirdPegasusModel,
+            "text-embedding": BigBirdPegasusModel,
             "question-answering": BigBirdPegasusForQuestionAnswering,
             "summarization": BigBirdPegasusForConditionalGeneration,
             "text-classification": BigBirdPegasusForSequenceClassification,

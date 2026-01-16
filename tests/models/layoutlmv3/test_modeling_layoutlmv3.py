@@ -283,7 +283,7 @@ class LayoutLMv3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         else ()
     )
     pipeline_model_mapping = (
-        {"document-question-answering": LayoutLMv3ForQuestionAnswering, "feature-extraction": LayoutLMv3Model}
+        {"document-question-answering": LayoutLMv3ForQuestionAnswering, "text-embedding": LayoutLMv3Model}
         if is_torch_available()
         else {}
     )

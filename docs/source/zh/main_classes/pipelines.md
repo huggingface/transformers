@@ -419,15 +419,15 @@ See [`TokenClassificationPipeline`] for all details.
     - __call__
     - all
 
-### FeatureExtractionPipeline
+### TextEmbeddingPipeline
 
-[[autodoc]] FeatureExtractionPipeline
+[[autodoc]] TextEmbeddingPipeline
     - __call__
     - all
 
-### ImageFeatureExtractionPipeline
+### ImageEmbeddingPipeline
 
-[[autodoc]] ImageFeatureExtractionPipeline
+[[autodoc]] ImageEmbeddingPipeline
     - __call__
     - all
 

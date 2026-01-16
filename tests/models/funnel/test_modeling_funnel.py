@@ -365,7 +365,7 @@ class FunnelModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     )
     pipeline_model_mapping = (
         {
-            "feature-extraction": (FunnelBaseModel, FunnelModel),
+            "text-embedding": (FunnelBaseModel, FunnelModel),
             "fill-mask": FunnelForMaskedLM,
             "question-answering": FunnelForQuestionAnswering,
             "text-classification": FunnelForSequenceClassification,

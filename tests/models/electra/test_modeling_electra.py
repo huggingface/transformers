@@ -394,7 +394,7 @@ class ElectraModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     )
     pipeline_model_mapping = (
         {
-            "feature-extraction": ElectraModel,
+            "text-embedding": ElectraModel,
             "fill-mask": ElectraForMaskedLM,
             "question-answering": ElectraForQuestionAnswering,
             "text-classification": ElectraForSequenceClassification,

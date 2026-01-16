@@ -535,7 +535,7 @@ class SamHQModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     all_model_classes = (SamHQModel,) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": SamHQModel, "mask-generation": SamHQModel} if is_torch_available() else {}
+        {"text-embedding": SamHQModel, "mask-generation": SamHQModel} if is_torch_available() else {}
     )
 
     test_resize_embeddings = False

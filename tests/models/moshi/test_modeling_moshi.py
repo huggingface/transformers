@@ -159,7 +159,7 @@ class MoshiDecoderTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     test_resize_embeddings = True
     pipeline_model_mapping = (
         {
-            "feature-extraction": MoshiModel,
+            "text-embedding": MoshiModel,
             "text-generation": MoshiForCausalLM,
         }
         if is_torch_available()

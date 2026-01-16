@@ -210,7 +210,7 @@ class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     all_model_classes = (ChameleonModel, ChameleonForConditionalGeneration) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "feature-extraction": ChameleonModel,
+            "text-embedding": ChameleonModel,
             "text-generation": ChameleonForConditionalGeneration,
         }
         if is_torch_available()

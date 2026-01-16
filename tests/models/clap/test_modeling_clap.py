@@ -452,7 +452,7 @@ class ClapModelTester:
 @require_torch
 class ClapModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (ClapModel,) if is_torch_available() else ()
-    pipeline_model_mapping = {"feature-extraction": ClapModel} if is_torch_available() else {}
+    pipeline_model_mapping = {"text-embedding": ClapModel} if is_torch_available() else {}
 
     test_resize_embeddings = False
     test_attention_outputs = False

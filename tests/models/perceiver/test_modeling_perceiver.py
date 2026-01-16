@@ -292,7 +292,7 @@ class PerceiverModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
     )
     pipeline_model_mapping = (
         {
-            "feature-extraction": PerceiverModel,
+            "text-embedding": PerceiverModel,
             "fill-mask": PerceiverForMaskedLM,
             "image-classification": (
                 PerceiverForImageClassificationConvProcessing,

@@ -260,7 +260,7 @@ class Speech2TextModelTester:
 class Speech2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Speech2TextModel, Speech2TextForConditionalGeneration) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"automatic-speech-recognition": Speech2TextForConditionalGeneration, "feature-extraction": Speech2TextModel}
+        {"automatic-speech-recognition": Speech2TextForConditionalGeneration, "text-embedding": Speech2TextModel}
         if is_torch_available()
         else {}
     )
