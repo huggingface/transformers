@@ -25,6 +25,7 @@ from ...integrations.fsdp import is_fsdp_managed_module
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring
+from ...utils.generic import is_flash_attention_requested
 from ..wav2vec2.modeling_wav2vec2 import (
     Wav2Vec2Attention,
     Wav2Vec2EncoderLayer,
@@ -166,7 +167,7 @@ class SEWEncoder(nn.Module):
 
         if attention_mask is not None:
             expand_attention_mask = attention_mask.unsqueeze(-1).repeat(1, 1, hidden_states.shape[2])
-            if self.config._attn_implementation == "flash_attention_2":
+            if is_flash_attention_requested(self.config):
                 # make sure padded tokens output 0
                 hidden_states[~expand_attention_mask] = 0.0
                 # 2d mask is passed through the layers
