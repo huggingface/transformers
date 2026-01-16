@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,9 +15,8 @@
 
 import importlib
 import os
-import warnings
 from collections import OrderedDict
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING
 
 # Build the list of all image processors
 from ...configuration_utils import PreTrainedConfig
@@ -56,7 +54,7 @@ FORCE_FAST_IMAGE_PROCESSOR = ["Qwen2VLImageProcessor"]
 if TYPE_CHECKING:
     # This significantly improves completion suggestion performance when
     # the transformers package is used with Microsoft's Pylance language server.
-    IMAGE_PROCESSOR_MAPPING_NAMES: OrderedDict[str, tuple[Optional[str], Optional[str]]] = OrderedDict()
+    IMAGE_PROCESSOR_MAPPING_NAMES: OrderedDict[str, tuple[str | None, str | None]] = OrderedDict()
 else:
     IMAGE_PROCESSOR_MAPPING_NAMES = OrderedDict(
         [
@@ -110,6 +108,7 @@ else:
             ("git", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
             ("glm46v", ("Glm46VImageProcessor", "Glm46VImageProcessorFast")),
             ("glm4v", ("Glm4vImageProcessor", "Glm4vImageProcessorFast")),
+            ("glm_image", ("GlmImageImageProcessor", "GlmImageImageProcessorFast")),
             ("glpn", ("GLPNImageProcessor", "GLPNImageProcessorFast")),
             ("got_ocr2", ("GotOcr2ImageProcessor", "GotOcr2ImageProcessorFast")),
             ("grounding-dino", ("GroundingDinoImageProcessor", "GroundingDinoImageProcessorFast")),
@@ -131,11 +130,13 @@ else:
             ("levit", ("LevitImageProcessor", "LevitImageProcessorFast")),
             ("lfm2_vl", (None, "Lfm2VlImageProcessorFast")),
             ("lightglue", ("LightGlueImageProcessor", "LightGlueImageProcessorFast")),
+            ("lighton_ocr", ("PixtralImageProcessor", "PixtralImageProcessorFast")),
             ("llama4", (None, "Llama4ImageProcessorFast")),
             ("llava", ("LlavaImageProcessor", "LlavaImageProcessorFast")),
             ("llava_next", ("LlavaNextImageProcessor", "LlavaNextImageProcessorFast")),
             ("llava_next_video", ("LlavaNextImageProcessor", "LlavaNextImageProcessorFast")),
             ("llava_onevision", ("LlavaOnevisionImageProcessor", "LlavaOnevisionImageProcessorFast")),
+            ("lw_detr", ("DeformableDetrImageProcessor", "DeformableDetrImageProcessorFast")),
             ("mask2former", ("Mask2FormerImageProcessor", "Mask2FormerImageProcessorFast")),
             ("maskformer", ("MaskFormerImageProcessor", "MaskFormerImageProcessorFast")),
             ("metaclip_2", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
@@ -178,6 +179,8 @@ else:
             ("sam2", (None, "Sam2ImageProcessorFast")),
             ("sam2_video", (None, "Sam2ImageProcessorFast")),
             ("sam3", (None, "Sam3ImageProcessorFast")),
+            ("sam3_tracker", (None, "Sam3ImageProcessorFast")),
+            ("sam3_tracker_video", (None, "Sam3ImageProcessorFast")),
             ("sam3_video", (None, "Sam3ImageProcessorFast")),
             ("sam_hq", ("SamImageProcessor", "SamImageProcessorFast")),
             ("segformer", ("SegformerImageProcessor", "SegformerImageProcessorFast")),
@@ -258,12 +261,12 @@ def get_image_processor_class_from_name(class_name: str):
 
 
 def get_image_processor_config(
-    pretrained_model_name_or_path: Union[str, os.PathLike],
-    cache_dir: Optional[Union[str, os.PathLike]] = None,
+    pretrained_model_name_or_path: str | os.PathLike,
+    cache_dir: str | os.PathLike | None = None,
     force_download: bool = False,
-    proxies: Optional[dict[str, str]] = None,
-    token: Optional[Union[bool, str]] = None,
-    revision: Optional[str] = None,
+    proxies: dict[str, str] | None = None,
+    token: bool | str | None = None,
+    revision: str | None = None,
     local_files_only: bool = False,
     **kwargs,
 ):
@@ -635,30 +638,14 @@ class AutoImageProcessor:
         )
 
     @staticmethod
-    def register(
-        config_class,
-        image_processor_class=None,
-        slow_image_processor_class=None,
-        fast_image_processor_class=None,
-        exist_ok=False,
-    ):
+    def register(config_class, slow_image_processor_class=None, fast_image_processor_class=None, exist_ok=False):
         """
         Register a new image processor for this class.
 
         Args:
             config_class ([`PreTrainedConfig`]):
                 The configuration corresponding to the model to register.
-            image_processor_class ([`ImageProcessingMixin`]): The image processor to register.
         """
-        if image_processor_class is not None:
-            if slow_image_processor_class is not None:
-                raise ValueError("Cannot specify both image_processor_class and slow_image_processor_class")
-            warnings.warn(
-                "The image_processor_class argument is deprecated and will be removed in v4.42. Please use `slow_image_processor_class`, or `fast_image_processor_class` instead",
-                FutureWarning,
-            )
-            slow_image_processor_class = image_processor_class
-
         if slow_image_processor_class is None and fast_image_processor_class is None:
             raise ValueError("You need to specify either slow_image_processor_class or fast_image_processor_class")
         if slow_image_processor_class is not None and issubclass(slow_image_processor_class, BaseImageProcessorFast):

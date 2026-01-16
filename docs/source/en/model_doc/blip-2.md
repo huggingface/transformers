@@ -72,6 +72,7 @@ If you're interested in submitting a resource to be included here, please feel f
 ## Blip2Processor
 
 [[autodoc]] Blip2Processor
+    - __call__
 
 ## Blip2VisionModel
 

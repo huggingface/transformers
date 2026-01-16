@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,7 +26,7 @@ from contextlib import contextmanager
 from copy import deepcopy
 from dataclasses import dataclass, field
 from itertools import chain
-from typing import TYPE_CHECKING, Any, Optional, Union
+from typing import TYPE_CHECKING, Any
 
 import torch
 
@@ -51,7 +50,7 @@ logger = logging.get_logger(__name__)
 
 
 def build_glob_alternation(
-    globs: list[Union[WeightRenaming, WeightConverter, str]],
+    globs: list[WeightRenaming | WeightConverter | str],
 ) -> tuple[re.Pattern, dict[str, str], dict[str, str]]:
     """
     Build a single alternation regex with one named group per glob.
@@ -146,7 +145,7 @@ class Concatenate(ConversionOps):
     ) -> dict[str, torch.Tensor]:
         target_pattern = self.get_target_pattern(target_patterns)
         all_tensors = []
-        # Very important to keep the relative order of the source patterms here, so we iterate over them not the
+        # Very important to keep the relative order of the source patterns here, so we iterate over them not the
         # input directly as it's unordered!
         for source_pattern in source_patterns:
             tensors = input_dict[source_pattern]
@@ -432,7 +431,7 @@ class Transpose(ConversionOps):
             tensor = input_dict.get(key, [])
             if len(tensor) != 1:
                 raise ValueError(f"Transpose conversion requires exactly one tensor, found {len(tensor)}.")
-            output[target_pattern] = torch.transpose(tensor[0], dim0=self.dim0, dim1=self.dim1)
+            output[target_pattern] = torch.transpose(tensor[0], dim0=self.dim0, dim1=self.dim1).contiguous()
         return output
 
     @property
@@ -442,12 +441,12 @@ class Transpose(ConversionOps):
 
 @dataclass(slots=True)
 class WeightTransform:
-    source_patterns: Union[str, list[str]] = field(init=True)
-    target_patterns: Union[str, list[str]] = field(init=True)
+    source_patterns: str | list[str] = field(init=True)
+    target_patterns: str | list[str] = field(init=True)
     compiled_sources: re.Pattern = field(init=False)
 
-    distributed_operation: Optional[TensorParallelLayer] = None
-    quantization_operation: Optional[ConversionOps] = None
+    distributed_operation: TensorParallelLayer | None = None
+    quantization_operation: ConversionOps | None = None
 
     collected_tensors: dict[str, list[Future]] = field(default_factory=lambda: defaultdict(list), init=False)
     layer_targets: dict[str, set[str]] = field(default_factory=lambda: defaultdict(set), init=False)
@@ -573,8 +572,8 @@ class WeightRenaming(WeightTransform):
         model=None,
         config=None,
         hf_quantizer=None,
-        missing_keys: Optional[MutableSet[str]] = None,
-        conversion_errors: Optional[MutableMapping[str, str]] = None,
+        missing_keys: MutableSet[str] | None = None,
+        conversion_errors: MutableMapping[str, str] | None = None,
     ):
         # Collect the tensors here - we use a new dictionary to avoid keeping them in memory in the internal
         # attribute during the whole process
@@ -630,8 +629,8 @@ class WeightConverter(WeightTransform):
         model=None,
         config=None,
         hf_quantizer=None,
-        missing_keys: Optional[MutableSet[str]] = None,
-        conversion_errors: Optional[MutableMapping[str, str]] = None,
+        missing_keys: MutableSet[str] | None = None,
+        conversion_errors: MutableMapping[str, str] | None = None,
     ):
         # Collect the tensors here - we use a new dictionary to avoid keeping them in memory in the internal
         # attribute during the whole process
@@ -742,7 +741,7 @@ def log_conversion_errors(
     first_target_key: str,
     conversion_errors: MutableMapping[str, str],
     extras: Any = None,
-    op: Union[list[ConversionOps], ConversionOps, None] = None,
+    op: list[ConversionOps] | ConversionOps | None = None,
 ):
     """Catch all exceptions during `convert` calls, and log the errors for later. Re-raise a `SkipParameters` exception
     that will be catched later to skip the parameters that raised the original Exception."""
@@ -750,7 +749,7 @@ def log_conversion_errors(
         yield
     except Exception as e:
 
-        def _format_op_name(curr_op: Union[list[ConversionOps], ConversionOps, None]) -> Optional[str]:
+        def _format_op_name(curr_op: list[ConversionOps] | ConversionOps | None) -> str | None:
             if curr_op is None:
                 return None
             if isinstance(curr_op, (list, tuple, set)):
@@ -786,7 +785,7 @@ def set_param_for_module(
     mismatch_keys: MutableSet[tuple[str, torch.Size, torch.Size]],
     missing_keys: MutableSet[str],
     unexpected_keys: MutableSet[str],
-    distributed_operation: Optional[TensorParallelLayer],
+    distributed_operation: TensorParallelLayer | None,
     hf_quantizer: HfQuantizer,
 ):
     module_path, _, param_name = target_name.rpartition(".")
@@ -896,6 +895,7 @@ def convert_and_load_state_dict_in_model(
     device_mesh: torch.distributed.device_mesh.DeviceMesh | None = None,
     disk_offload_index: dict | None = None,
     disk_offload_folder: str | None = None,
+    offload_buffers: bool = False,
 ):
     r"""
     We build a mapping from the keys obtained by renaming each of the checkpoint keys according to the weight_mapping rules.
@@ -989,8 +989,9 @@ def convert_and_load_state_dict_in_model(
     dtype_plan = dtype_plan or {}
     weight_mapping = weight_mapping or []
     meta_model_state_dict = model.state_dict()
-    missing_keys = set(meta_model_state_dict.keys())
+    model_buffers = {k for k, _ in model.named_buffers()}
 
+    missing_keys = set(meta_model_state_dict.keys())
     conversion_errors = {}
     mismatch_keys = set()
     unexpected_keys = set()
@@ -1064,7 +1065,7 @@ def convert_and_load_state_dict_in_model(
                     if getattr(mapping, "distributed_operation", None) is None:
                         tp_layer = ALL_PARALLEL_STYLES[model.tp_plan[matched_tp_pattern]].__class__
                         mapping.distributed_operation = tp_layer(
-                            device_mesh=device_mesh, rank=device_map[""].index, empty_param=empty_param.clone()
+                            device_mesh=device_mesh, rank=device_mesh.get_local_rank(), empty_param=empty_param.clone()
                         )
                     shard_index = len(mapping.collected_tensors.get(original_key, []))
                     future_or_tensor = spawn_tp_materialize(
@@ -1108,7 +1109,7 @@ def convert_and_load_state_dict_in_model(
                         param = param[0] if isinstance(param, list) else param
                         param_device = get_device(device_map, target_name)
                         # Offloading support
-                        if param_device == "disk":
+                        if param_device == "disk" and (target_name not in model_buffers or offload_buffers):
                             disk_offload_index = offload_and_maybe_resave_param(
                                 target_name, param, missing_keys, disk_offload_folder, disk_offload_index, mapping
                             )

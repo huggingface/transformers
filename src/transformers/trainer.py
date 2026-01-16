@@ -1671,6 +1671,12 @@ class Trainer:
                 optimizer_cls = AdamW8bit
             else:
                 raise ValueError("Invalid optimizer")
+            optimizer_kwargs.update(
+                {
+                    "block_size": optim_args.get("block_size", 256),
+                    "bf16_stochastic_round": strtobool(optim_args.get("bf16_stochastic_round", "False")),
+                }
+            )
             optimizer_kwargs.update(adam_kwargs)
         elif args.optim in [
             OptimizerNames.SCHEDULE_FREE_RADAM,
@@ -2265,8 +2271,7 @@ class Trainer:
                 # nn.DataParallel(model) replicates the model, creating new variables and module
                 # references registered here no longer work on other gpus, breaking the module
                 raise ValueError(
-                    "Currently --debug underflow_overflow is not supported under DP. Please use DDP"
-                    " (torchrun or torch.distributed.launch (deprecated))."
+                    "Currently --debug underflow_overflow is not supported under DP. Please use DDP with torchrun"
                 )
             else:
                 DebugUnderflowOverflow(self.model)
@@ -2328,11 +2333,7 @@ class Trainer:
         if use_accelerator_prepare:
             self.model.train()
             if hasattr(self.lr_scheduler, "step"):
-                # We should avoid accelerate preparing the model in TP case since we dont need it as it is handled by transformers from_pretrained and also it goes into DDP based preparation.
-                if self.is_tp_enabled:
-                    self.optimizer = self.accelerator.prepare(self.optimizer)
-                else:
-                    model, self.optimizer = self.accelerator.prepare(self.model, self.optimizer)
+                model, self.optimizer = self.accelerator.prepare(self.model, self.optimizer)
             else:
                 # to handle cases wherein we pass "DummyScheduler" such as when it is specified in DeepSpeed config.
                 model, self.optimizer, self.lr_scheduler = self.accelerator.prepare(
@@ -3050,7 +3051,8 @@ class Trainer:
                 return
 
         with safe_globals():
-            checkpoint_rng_state = torch.load(rng_file)
+            check_torch_load_is_safe()
+            checkpoint_rng_state = torch.load(rng_file, weights_only=True)
         random.setstate(checkpoint_rng_state["python"])
         np.random.set_state(checkpoint_rng_state["numpy"])
         torch.random.set_rng_state(checkpoint_rng_state["cpu"])
@@ -5095,7 +5097,8 @@ class Trainer:
                         args["parallelism_config"] = ParallelismConfig(tp_size=self.model.tp_size)
                 else:
                     raise ValueError("Requires accelerate>1.12.0 to use Tensor Parallelism.")
-
+            elif args["parallelism_config"].tp_size != self.model.tp_size:
+                args["parallelism_config"].tp_size = self.model.tp_size
         if is_accelerate_available("1.2.0"):
             # it we don't have the correct version, we will rely on env var instead that were set in TrainingArguments
             from accelerate.utils import TorchDynamoPlugin
