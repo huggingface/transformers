@@ -207,11 +207,11 @@ class _BaseAutoModelClass:
 
     @classmethod
     def from_config(cls, config, **kwargs):
-        config = cls._prepare_config_for_auto_class(config)
         trust_remote_code = kwargs.pop("trust_remote_code", None)
+        config = cls._prepare_config_for_auto_class(config)
         has_remote_code = hasattr(config, "auto_map") and cls.__name__ in config.auto_map
         has_local_code = type(config) in cls._model_mapping
-        if has_remote_code and not has_local_code:  # hack to force local loading
+        if has_remote_code:
             class_ref = config.auto_map[cls.__name__]
             if "--" in class_ref:
                 upstream_repo = class_ref.split("--")[0]
