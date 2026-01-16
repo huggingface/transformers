@@ -93,7 +93,7 @@ VIDEO_PROCESSOR_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, VIDEO_PROCESSOR
 
 def video_processor_class_from_name(class_name: str):
     for module_name, extractors in VIDEO_PROCESSOR_MAPPING_NAMES.items():
-        if class_name in extractors:
+        if extractors is not None and class_name in extractors:
             module_name = model_type_to_module_name(module_name)
 
             module = importlib.import_module(f".{module_name}", "transformers.models")
