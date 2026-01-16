@@ -64,7 +64,6 @@ model = AutoModelForCausalLM.from_pretrained(
     pretrained_model_name_or_path=MODEL_ID,
     torch_dtype=torch.bfloat16,
     device_map="auto",
-    trust_remote_code=True,
 )
 
 # Prepare input
