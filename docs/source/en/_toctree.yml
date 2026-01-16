@@ -224,19 +224,27 @@
   title: Quantization
 - isExpanded: false
   sections:
-  - local: community_integrations/sglang
-    title: SGLang
-  - local: community_integrations/tensorrt-llm
-    title: TensorRT-LLM
-  - local: community_integrations/vllm
-    title: vLLM
-  - local: community_integrations/transformers_as_backend
-    title: Building a compatible model backend for inference
   - sections:
+    - local: community_integrations/transformers_as_backend
+      title: Building a compatible model backend for inference
+    - local: community_integrations/sglang
+      title: SGLang
+    - local: community_integrations/tensorrt-llm
+      title: TensorRT-LLM
+    - local: community_integrations/vllm
+      title: vLLM
+    title: Inference engines
+  - sections:
+    - local: community_integrations/candle
+      title: Candle
+    - local: community_integrations/executorch
+      title: ExecuTorch
     - local: community_integrations/llama_cpp
       title: llama.cpp
+    - local: community_integrations/mlx
+      title: MLX
     title: Local deployment
-  title: Community integrations
+  title: Ecosystem integrations
 - isExpanded: false
   sections:
   - sections:
