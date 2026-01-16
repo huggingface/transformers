@@ -1189,15 +1189,14 @@ class DeepseekOcrModel(LlavaNextModel):
         num_local_crops: torch.LongTensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple | BaseModelOutputWithPast:
-        """
-        Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, 1, num_channels, height, width)`):
-                Global view (1024x1024) consumed by SAM + CLIP. This is injected wherever `<image>` placeholders appear.
-            pixel_values_local (`torch.FloatTensor` of shape `(batch_size, max_num_crops, num_channels, crop_height, crop_width)`):
-                Optional high-resolution (640x640) crops. When provided, they are stitched into the packed feature grid
-                ahead of the global features.
-            num_local_crops (`torch.LongTensor` of shape `(batch_size,)`):
-                Number of valid local crops for each image in the batch.
+        r"""
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, 1, num_channels, height, width)`):
+            Global view (1024x1024) consumed by SAM + CLIP. This is injected wherever `<image>` placeholders appear.
+        pixel_values_local (`torch.FloatTensor` of shape `(batch_size, max_num_crops, num_channels, crop_height, crop_width)`):
+            Optional high-resolution (640x640) crops. When provided, they are stitched into the packed feature grid
+            ahead of the global features.
+        num_local_crops (`torch.LongTensor` of shape `(batch_size,)`):
+            Number of valid local crops for each image in the batch.
         """
         image_spatial_crop = kwargs.pop("image_spatial_crop", None)
         pixel_values_local = kwargs.pop("pixel_values_local", pixel_values_local)
@@ -1282,14 +1281,13 @@ class DeepseekOcrForConditionalGeneration(LlavaNextForConditionalGeneration):
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | DeepseekOcrCausalLMOutputWithPast:
-        """
-        Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, 1, num_channels, height, width)`):
-                Global view of images downsampled to 1024x1024 for processing by both SAM and CLIP encoders.
-            pixel_values_local (`torch.FloatTensor` of shape `(batch_size, max_num_crops, num_channels, crop_height, crop_width)`):
-                High-resolution local crops (640x640) extracted from images for detailed OCR processing.
-            num_local_crops (`torch.LongTensor` of shape `(batch_size,)`):
-                Number of valid local crops for each image in the batch.
+        r"""
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, 1, num_channels, height, width)`):
+            Global view of images downsampled to 1024x1024 for processing by both SAM and CLIP encoders.
+        pixel_values_local (`torch.FloatTensor` of shape `(batch_size, max_num_crops, num_channels, crop_height, crop_width)`):
+            High-resolution local crops (640x640) extracted from images for detailed OCR processing.
+        num_local_crops (`torch.LongTensor` of shape `(batch_size,)`):
+            Number of valid local crops for each image in the batch.
         """
         image_spatial_crop = kwargs.pop("image_spatial_crop", None)
         if image_sizes is None and image_spatial_crop is not None:
