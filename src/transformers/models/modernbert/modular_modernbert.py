@@ -23,7 +23,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...integrations import use_kernel_func_from_hub, use_kernelized_func
+from ...integrations import use_kernelized_func
 from ...masking_utils import create_bidirectional_mask, create_bidirectional_sliding_window_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -40,8 +40,8 @@ from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
 from ...utils.generic import can_return_tuple, check_model_inputs
 from ...utils.import_utils import is_triton_available
-from ..gemma3.modeling_gemma3 import Gemma3RotaryEmbedding, apply_rotary_pos_emb
 from ..align.modeling_align import eager_attention_forward
+from ..gemma3.modeling_gemma3 import Gemma3RotaryEmbedding, apply_rotary_pos_emb
 
 
 logger = logging.get_logger(__name__)
