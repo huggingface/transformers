@@ -96,6 +96,7 @@ class VivitConfig(PreTrainedConfig):
         qkv_bias=True,
         **kwargs,
     ):
+        super().__init__(**kwargs)
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
@@ -111,8 +112,6 @@ class VivitConfig(PreTrainedConfig):
         self.tubelet_size = tubelet_size
         self.num_channels = num_channels
         self.qkv_bias = qkv_bias
-
-        super().__init__(**kwargs)
 
 
 __all__ = ["VivitConfig"]

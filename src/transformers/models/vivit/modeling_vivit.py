@@ -63,7 +63,7 @@ class VivitTubeletEmbeddings(nn.Module):
         batch_size, num_frames, num_channels, height, width = pixel_values.shape
         if not interpolate_pos_encoding and (height != self.image_size or width != self.image_size):
             raise ValueError(
-                f"Image image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
+                f"Image size ({height}*{width}) doesn't match model ({self.image_size[0]}*{self.image_size[1]})."
             )
 
         # permute to (batch_size, num_channels, num_frames, height, width)
@@ -85,7 +85,7 @@ class VivitEmbeddings(nn.Module):
 
     def __init__(self, config: VivitConfig):
         super().__init__()
-
+        self.config = config
         self.cls_token = nn.Parameter(torch.zeros(1, 1, config.hidden_size))
         self.patch_embeddings = VivitTubeletEmbeddings(config)
 
@@ -94,7 +94,6 @@ class VivitEmbeddings(nn.Module):
         )
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
         self.patch_size = config.tubelet_size[1:]
-        self.config = config
 
     # Adapted from transformers.models.vit.modeling_vit.ViTEmbeddings.interpolate_pos_encoding
     def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
@@ -402,7 +401,7 @@ class VivitModel(VivitPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_input_embeddings(self):
+    def get_input_embeddings(self) -> VivitTubeletEmbeddings:
         return self.embeddings.patch_embeddings
 
     @check_model_inputs(tie_last_hidden_states=False)

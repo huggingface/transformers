@@ -75,6 +75,7 @@ else:
             ("video_llama_3", "VideoLlama3VideoProcessor"),
             ("video_llava", "VideoLlavaVideoProcessor"),
             ("videomae", "VideoMAEVideoProcessor"),
+            ("videoprism", "VideoPrismVideoProcessor"),
             ("vjepa2", "VJEPA2VideoProcessor"),
         ]
     )
