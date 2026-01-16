@@ -33,11 +33,16 @@ from .utils import (
     is_librosa_available,
     is_numpy_array,
     is_soundfile_available,
+    is_torch_available,
     is_torch_tensor,
     is_torchcodec_available,
     requires_backends,
 )
 
+
+if is_torch_available():
+    import torch
+    import torch.nn.functional as F
 
 if TYPE_CHECKING:
     import torch
@@ -1041,6 +1046,131 @@ def spectrogram_batch(
     spectrogram_list = [spectrogram[i, : true_num_frames[i], :].T for i in range(len(true_num_frames))]
 
     return spectrogram_list
+
+
+def spectrogram_torch(
+    waveform_list: list["torch.Tensor"],
+    window: "torch.Tensor",
+    frame_length: int,
+    hop_length: int,
+    fft_length: Optional[int] = None,
+    power: float = 1.0,
+    center: bool = True,
+    pad_mode: str = "reflect",
+    onesided: bool = True,
+    dither: float = 0.0,
+    preemphasis: Optional[float] = None,
+    mel_filters: Optional["torch.Tensor"] = None,
+    mel_floor: float = 1e-10,
+    log_mel: Optional[str] = None,
+    reference: float = 1.0,
+    min_value: float = 1e-10,
+    db_range: Optional[float] = None,
+    remove_dc_offset: Optional[bool] = False,
+    device: str = "cpu",
+    dtype: str = "float32",
+):
+    """
+    PyTorch version of spectrogram_batch().
+
+    For spectrogram computation, tensors are promoted to `torch.float64` for better precision,
+    and returned according to `dtype`.
+    """
+
+    window_length = len(window)
+    if fft_length is None:
+        fft_length = frame_length
+    if frame_length > fft_length:
+        raise ValueError(f"frame_length ({frame_length}) may not be larger than fft_length ({fft_length})")
+    if window_length != frame_length:
+        raise ValueError(f"window_length ({window_length}) must equal frame_length ({frame_length})")
+    if hop_length <= 0:
+        raise ValueError("hop_length must be greater than zero")
+    if dtype not in ["float16", "float32", "float64"]:
+        raise ValueError(f"dtype must be one of 'float16', 'float32', 'float64', got {dtype}")
+    dtype = getattr(torch, dtype)
+
+    # Convert list of waveforms → padded tensor [B, T]
+    max_len = max(w.shape[-1] for w in waveform_list)
+    padded_waveforms = torch.stack([F.pad(w, (0, max_len - w.shape[-1]), value=0.0) for w in waveform_list]).to(
+        device=device, dtype=torch.float64
+    )
+
+    # Optional centering (reflect pad)
+    if center:
+        pad_amt = frame_length // 2
+        padded_waveforms = F.pad(padded_waveforms, (pad_amt, pad_amt), mode=pad_mode)
+
+    B, T = padded_waveforms.shape
+    num_frames = 1 + (T - frame_length) // hop_length
+    fft_func = torch.fft.rfft if onesided else torch.fft.fft
+    num_bins = (fft_length // 2 + 1) if onesided else fft_length
+
+    # Promote to float64 for better precision
+    window = window.to(device=device, dtype=torch.float64)
+    mel_filters = mel_filters.to(device=device, dtype=torch.float64) if mel_filters is not None else None
+
+    # Create output buffer
+    spectrogram = torch.empty((B, num_frames, num_bins), dtype=torch.complex128, device=device)
+    buffer = torch.zeros((B, fft_length), dtype=torch.float64, device=device)
+
+    for frame_idx in range(num_frames):
+        t0 = frame_idx * hop_length
+        buffer[:, :frame_length] = padded_waveforms[:, t0 : t0 + frame_length]
+
+        # Dither
+        if dither != 0.0:
+            buffer[:, :frame_length] += dither * torch.randn_like(buffer[:, :frame_length])
+
+        # DC offset removal
+        if remove_dc_offset:
+            buffer[:, :frame_length] -= buffer[:, :frame_length].mean(dim=1, keepdim=True)
+
+        # Preemphasis
+        if preemphasis is not None:
+            buffer[:, 1:frame_length] -= preemphasis * buffer[:, : frame_length - 1]
+            buffer[:, 0] *= 1 - preemphasis
+
+        # Apply window
+        buffer[:, :frame_length] *= window
+
+        # FFT
+        spectrogram[:, frame_idx] = fft_func(buffer, n=fft_length)
+
+    # Magnitude / power
+    if power is not None:
+        spectrogram = torch.abs(spectrogram).pow(power)
+
+    # Mel projection
+    if mel_filters is not None:
+        # spectrogram: [batch, num_frames, num_bins], mel_filters: [num_bins, num_mels]
+        if mel_filters.shape[0] != spectrogram.shape[-1]:
+            raise ValueError(
+                f"Mel filter input bins ({mel_filters.shape[0]}) must match spectrogram frequency bins ({spectrogram.shape[-1]}). "
+                f"Please check that mel_filters were designed for fft_length={spectrogram.shape[-1] * 2 - 2 if spectrogram.shape[-1] > 1 else spectrogram.shape[-1]}."
+            )
+        spectrogram = torch.matmul(spectrogram, mel_filters)
+        spectrogram = torch.maximum(spectrogram, torch.tensor(mel_floor, device=device))
+
+    # Log scaling
+    if power is not None and log_mel is not None:
+        if log_mel == "log":
+            spectrogram = torch.log(torch.clamp(spectrogram, min=min_value))
+        elif log_mel == "log10":
+            spectrogram = torch.log10(torch.clamp(spectrogram, min=min_value))
+        elif log_mel == "dB":
+            ref = torch.tensor(reference, device=device)
+            spectrogram = 10.0 * torch.log10(torch.clamp(spectrogram / ref, min=min_value))
+            if db_range is not None:
+                max_val = spectrogram.amax(dim=-1, keepdim=True)
+                spectrogram = torch.maximum(spectrogram, max_val - db_range)
+        else:
+            raise ValueError(f"Unknown log_mel option: {log_mel}")
+
+    # Return list of [num_bins, num_frames_i]
+    true_frames = [1 + (w.shape[-1] - frame_length) // hop_length for w in waveform_list]
+    spec_list = [spectrogram[i, :n, :].T.to(dtype) for i, n in enumerate(true_frames)]
+    return spec_list
 
 
 def power_to_db(
