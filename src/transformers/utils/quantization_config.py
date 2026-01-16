@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 # Modifications Copyright (C) 2025, Advanced Micro Devices, Inc. All rights reserved.
@@ -28,16 +27,13 @@ from typing import Any, Optional, Union
 from packaging import version
 
 from ..utils import (
-    is_auto_awq_available,
     is_compressed_tensors_available,
-    is_gptqmodel_available,
     is_hqq_available,
     is_quark_available,
     is_torch_available,
     is_torchao_available,
     logging,
 )
-from .import_utils import is_auto_gptq_available
 
 
 if is_torch_available():
@@ -68,30 +64,27 @@ class QuantizationMethod(str, Enum):
     MXFP4 = "mxfp4"
 
 
-class AWQLinearVersion(str, Enum):
+class AwqFormat(str, Enum):
     GEMM = "gemm"
     GEMV = "gemv"
-    EXLLAMA = "exllama"
-    IPEX = "ipex"
-
-    @staticmethod
-    def from_str(version: str):
-        version = version.lower()
-        if version == "gemm":
-            return AWQLinearVersion.GEMM
-        elif version == "gemv":
-            return AWQLinearVersion.GEMV
-        elif version == "exllama":
-            return AWQLinearVersion.EXLLAMA
-        elif version == "ipex":
-            return AWQLinearVersion.IPEX
-        else:
-            raise ValueError(f"Unknown AWQLinearVersion {version}")
+    GEMV_FAST = "gemv_fast"
+    LLM_AWQ = "llm-awq"
 
 
-class AwqBackendPackingMethod(str, Enum):
-    AUTOAWQ = "autoawq"
-    LLMAWQ = "llm-awq"
+class AwqBackend(str, Enum):
+    LEGACY_AWQ = "autoawq"
+    AUTO = "auto"
+    AUTO_TRAINABLE = "auto_trainable"
+    MACHETE = "machete"
+    MARLIN = "marlin"
+    EXLLAMA_V2 = "exllama_v2"
+    EXLLAMA_V1 = "exllama_v1"
+    GEMM = "gemm"
+    GEMM_TRITON = "gemm_triton"
+    GEMV = "gemv"
+    GEMV_FAST = "gemv_fast"
+    TORCH_AWQ = "torch_awq"
+    TORCH_FUSED_AWQ = "torch_fused_awq"
 
 
 @dataclass
@@ -134,7 +127,7 @@ class QuantizationConfigMixin:
         else:
             return config
 
-    def to_json_file(self, json_file_path: Union[str, os.PathLike]):
+    def to_json_file(self, json_file_path: str | os.PathLike):
         """
         Save this instance to a JSON file.
 
@@ -160,8 +153,7 @@ class QuantizationConfigMixin:
 
     def __iter__(self):
         """allows `dict(obj)` for situations where obj may be a dict or QuantizationConfigMixin"""
-        for attr, value in copy.deepcopy(self.__dict__).items():
-            yield attr, value
+        yield from copy.deepcopy(self.__dict__).items()
 
     def __repr__(self):
         return f"{self.__class__.__name__} {self.to_json_string()}"
@@ -172,7 +164,7 @@ class QuantizationConfigMixin:
 
         Args:
             use_diff (`bool`, *optional*, defaults to `True`):
-                If set to `True`, only the difference between the config instance and the default `PretrainedConfig()`
+                If set to `True`, only the difference between the config instance and the default `PreTrainedConfig()`
                 is serialized to JSON string.
 
         Returns:
@@ -304,8 +296,8 @@ class HqqConfig(QuantizationConfigMixin):
         nbits: int = 4,
         group_size: int = 64,
         view_as_float: bool = False,
-        axis: Optional[int] = None,
-        dynamic_config: Optional[dict] = None,
+        axis: int | None = None,
+        dynamic_config: dict | None = None,
         skip_modules: list[str] = ["lm_head"],
         **kwargs,
     ):
@@ -315,12 +307,6 @@ class HqqConfig(QuantizationConfigMixin):
             raise ImportError(
                 "A valid HQQ version (>=0.2.1) is not available. Please follow the instructions to install it: `https://github.com/mobiusml/hqq/`."
             )
-
-        for deprecated_key in ["quant_zero", "quant_scale", "offload_meta"]:
-            if deprecated_key in kwargs:
-                logger.info(
-                    deprecated_key + " is deprecated. This parameter will be ignored in quantization settings."
-                )
 
         if axis is None:
             axis = 1
@@ -335,12 +321,7 @@ class HqqConfig(QuantizationConfigMixin):
                 self.quant_config[key] = HQQBaseQuantizeConfig(**dynamic_config[key])
         else:
             self.quant_config = HQQBaseQuantizeConfig(
-                **{
-                    "nbits": nbits,
-                    "group_size": group_size,
-                    "view_as_float": view_as_float,
-                    "axis": axis,
-                }
+                nbits=nbits, group_size=group_size, view_as_float=view_as_float, axis=axis
             )
 
         self.quant_method = QuantizationMethod.HQQ
@@ -352,7 +333,6 @@ class HqqConfig(QuantizationConfigMixin):
         r"""
         Safety checker that arguments are correct - also replaces some NoneType arguments with their default values.
         """
-        pass
 
     @classmethod
     def from_dict(cls, config: dict[str, Any]):
@@ -406,8 +386,6 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
     """
     This is a wrapper class about all possible attributes and features that you can play with a model that has been
     loaded using `bitsandbytes`.
-
-    This replaces `load_in_8bit` or `load_in_4bit`therefore both options are mutually exclusive.
 
     Currently only supports `LLM.int8()`, `FP4`, and `NF4` quantization. If more methods are added to `bitsandbytes`,
     then more arguments will be added to this class.
@@ -565,13 +543,6 @@ class BitsAndBytesConfig(QuantizationConfigMixin):
         if not isinstance(self.bnb_4bit_use_double_quant, bool):
             raise TypeError("bnb_4bit_use_double_quant must be a boolean")
 
-        if self.load_in_4bit and not version.parse(importlib.metadata.version("bitsandbytes")) >= version.parse(
-            "0.39.0"
-        ):
-            raise ValueError(
-                "4 bit quantization requires bitsandbytes>=0.39.0 - please upgrade your bitsandbytes version"
-            )
-
     def is_quantizable(self):
         r"""
         Returns `True` if the model is quantizable, `False` otherwise.
@@ -641,7 +612,7 @@ class ExllamaVersion(int, Enum):
 class GPTQConfig(QuantizationConfigMixin):
     """
     This is a wrapper class about all possible attributes and features that you can play with a model that has been
-    loaded using `optimum` api for gptq quantization relying on auto_gptq backend.
+    loaded using `optimum` api for GPTQ quantization relying on the gptqmodel backend.
 
     Args:
         bits (`int`):
@@ -662,22 +633,23 @@ class GPTQConfig(QuantizationConfigMixin):
         desc_act (`bool`, *optional*, defaults to `False`):
             Whether to quantize columns in order of decreasing activation size. Setting it to False can significantly
             speed up inference but the perplexity may become slightly worse. Also known as act-order.
+        act_group_aware (`bool`, *optional*, defaults to `True`):
+            Use GAR (group aware activation order) during quantization. Has measurable positive impact on quantization
+            quality. Only applicable when `desc_act = False`. Will forced to be `False` when `desc_act = True`.
         sym (`bool`, *optional*, defaults to `True`):
             Whether to use symmetric quantization.
         true_sequential (`bool`, *optional*, defaults to `True`):
             Whether to perform sequential quantization even within a single Transformer block. Instead of quantizing
             the entire block at once, we perform layer-wise quantization. As a result, each layer undergoes
             quantization using inputs that have passed through the previously quantized layers.
-        checkpoint_format (`str`, *optional*, defaults to `"gptq"`):
-            GPTQ weight format. `gptq`(v1) is supported by both gptqmodel and auto-gptq. `gptq_v2` is gptqmodel only.
+        format (`str`, *optional*, defaults to `"gptq"`):
+            GPTQ weight format. `gptq` (v1) is supported by gptqmodel. `gptq_v2` is gptqmodel only.
         meta (`dict[str, any]`, *optional*):
             Properties, such as tooling:version, that do not directly contributes to quantization or quant inference are stored in meta.
             i.e. `meta.quantizer`: ["optimum:_version_", "gptqmodel:_version_"]
         backend (`str`, *optional*):
-            Controls which gptq kernel to be used. Valid values for gptqmodel are `auto`, `auto_trainable` and more. For auto-gptq, only
-            valid value is None and `auto_trainable`. Ref gptqmodel backends: https://github.com/ModelCloud/GPTQModel/blob/main/gptqmodel/utils/backend.py
-        use_cuda_fp16 (`bool`, *optional*, defaults to `False`):
-            Whether or not to use optimized cuda kernel for fp16 model. Need to have model in fp16. Auto-gptq only.
+            Controls which kernel to use. Valid values for gptqmodel are `auto`, `auto_trainable` and more. Ref gptqmodel backends:
+            https://github.com/ModelCloud/GPTQModel/blob/main/gptqmodel/utils/backend.py
         model_seqlen (`int`, *optional*):
             The maximum sequence length that the model can take.
         block_name_to_quantize (`str`, *optional*):
@@ -688,14 +660,9 @@ class GPTQConfig(QuantizationConfigMixin):
             The batch size used when processing the dataset
         pad_token_id (`int`, *optional*):
             The pad token id. Needed to prepare the dataset when `batch_size` > 1.
-        use_exllama (`bool`, *optional*):
-            Whether to use exllama backend. Defaults to `True` if unset. Only works with `bits` = 4.
         max_input_length (`int`, *optional*):
             The maximum input length. This is needed to initialize a buffer that depends on the maximum expected input
             length. It is specific to the exllama backend with act-order.
-        exllama_config (`dict[str, Any]`, *optional*):
-            The exllama config. You can specify the version of the exllama kernel through the `version` key. Defaults
-            to `{"version": 1}` if unset.
         cache_block_outputs (`bool`, *optional*, defaults to `True`):
             Whether to cache block outputs to reuse as inputs for the succeeding block.
         modules_in_block_to_quantize (`list[list[str]]`, *optional*):
@@ -711,26 +678,24 @@ class GPTQConfig(QuantizationConfigMixin):
         self,
         bits: int,
         tokenizer: Any = None,
-        dataset: Optional[Union[list[str], str]] = None,
+        dataset: list[str] | str | None = None,
         group_size: int = 128,
         damp_percent: float = 0.1,
         desc_act: bool = False,
+        act_group_aware: bool = True,
         sym: bool = True,
         true_sequential: bool = True,
-        checkpoint_format: str = "gptq",
-        meta: Optional[dict[str, Any]] = None,
-        backend: Optional[str] = None,
-        use_cuda_fp16: bool = False,
-        model_seqlen: Optional[int] = None,
-        block_name_to_quantize: Optional[str] = None,
-        module_name_preceding_first_block: Optional[list[str]] = None,
+        format: str = "gptq",
+        meta: dict[str, Any] | None = None,
+        backend: str | None = None,
+        model_seqlen: int | None = None,
+        block_name_to_quantize: str | None = None,
+        module_name_preceding_first_block: list[str] | None = None,
         batch_size: int = 1,
-        pad_token_id: Optional[int] = None,
-        use_exllama: Optional[bool] = None,
-        max_input_length: Optional[int] = None,
-        exllama_config: Optional[dict[str, Any]] = None,
+        pad_token_id: int | None = None,
+        max_input_length: int | None = None,
         cache_block_outputs: bool = True,
-        modules_in_block_to_quantize: Optional[list[list[str]]] = None,
+        modules_in_block_to_quantize: list[list[str]] | None = None,
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.GPTQ
@@ -740,33 +705,28 @@ class GPTQConfig(QuantizationConfigMixin):
         self.group_size = group_size
         self.damp_percent = damp_percent
         self.desc_act = desc_act
+        self.act_group_aware = act_group_aware
         self.sym = sym
         self.true_sequential = true_sequential
-        self.checkpoint_format = checkpoint_format.lower()
+        self.format = format.lower()
+        # Compatible with legacy field: checkpoint_format
+        if kwargs.get("checkpoint_format") is not None:
+            self.format = kwargs.pop("checkpoint_format").lower()
         self.meta = meta
         self.backend = backend.lower() if isinstance(backend, str) else backend
-        self.use_cuda_fp16 = use_cuda_fp16
         self.model_seqlen = model_seqlen
         self.block_name_to_quantize = block_name_to_quantize
         self.module_name_preceding_first_block = module_name_preceding_first_block
         self.batch_size = batch_size
         self.pad_token_id = pad_token_id
-        self.use_exllama = use_exllama
         self.max_input_length = max_input_length
-        self.exllama_config = exllama_config
         self.cache_block_outputs = cache_block_outputs
         self.modules_in_block_to_quantize = modules_in_block_to_quantize
         self.post_init()
 
     def get_loading_attributes(self):
         attributes_dict = copy.deepcopy(self.__dict__)
-        loading_attributes = [
-            "use_exllama",
-            "exllama_config",
-            "use_cuda_fp16",
-            "max_input_length",
-            "backend",
-        ]
+        loading_attributes = ["max_input_length", "backend"]
         loading_attributes_dict = {i: j for i, j in attributes_dict.items() if i in loading_attributes}
         return loading_attributes_dict
 
@@ -782,11 +742,6 @@ class GPTQConfig(QuantizationConfigMixin):
             raise ValueError("damp_percent must between 0 and 1.")
         if self.dataset is not None:
             if isinstance(self.dataset, str):
-                if self.dataset in ["ptb", "ptb-new"]:
-                    raise ValueError(
-                        f"""{self.dataset} dataset was deprecated. You can only choose between
-                        ['wikitext2','c4','c4-new']"""
-                    )
                 if self.dataset not in ["wikitext2", "c4", "c4-new"]:
                     raise ValueError(
                         f"""You have entered a string value for dataset. You can only choose between
@@ -798,46 +753,14 @@ class GPTQConfig(QuantizationConfigMixin):
                     ['wikitext2','c4','c4-new'], but we found {self.dataset}"""
                 )
 
-        # make sure backend is back/forward compatible with both gptqmodel (full) and auto-gptq (partial)
-        if is_gptqmodel_available():
-            # convert auto-gptq control into gptqmodel backend
-            if self.backend is None:
-                self.backend = "auto_trainable" if self.use_exllama is not None and not self.use_exllama else "auto"
-        else:
-            # convert gptqmodel backend `auto_trainable` into auto-gptq control
-            if self.backend == "auto_trainable":
-                self.use_exllama = False
+        # act_group_order is only applicable when `desc_act = False`
+        if self.desc_act and self.act_group_aware:
+            self.act_group_aware = False
+            logger.warning("`act_group_aware` has been auto-disabled as it is not compatible with `desc_act = True`.")
 
-        # auto-gptq specific kernel control logic
-        if self.use_exllama is None:
-            # New default behaviour
-            self.use_exllama = True
-
-        if self.exllama_config is None:
-            self.exllama_config = {"version": ExllamaVersion.ONE}
-        else:
-            if "version" not in self.exllama_config:
-                raise ValueError("`exllama_config` needs to have a `version` key.")
-            elif self.exllama_config["version"] not in [ExllamaVersion.ONE, ExllamaVersion.TWO]:
-                exllama_version = self.exllama_config["version"]
-                raise ValueError(
-                    f"Only supported versions are in [ExllamaVersion.ONE, ExllamaVersion.TWO] - not recognized version {exllama_version}"
-                )
-
-        if self.bits == 4 and self.use_exllama:
-            if self.exllama_config["version"] == ExllamaVersion.ONE:
-                logger.info(
-                    "You have activated exllama backend. Note that you can get better inference "
-                    "speed using exllamav2 kernel by setting `exllama_config`."
-                )
-            elif self.exllama_config["version"] == ExllamaVersion.TWO:
-                if is_auto_gptq_available():
-                    optimum_version = version.parse(importlib.metadata.version("optimum"))
-                    autogptq_version = version.parse(importlib.metadata.version("auto_gptq"))
-                    if optimum_version <= version.parse("1.13.2") or autogptq_version <= version.parse("0.4.2"):
-                        raise ValueError(
-                            f"You need optimum > 1.13.2 and auto-gptq > 0.4.2 . Make sure to have that version installed - detected version : optimum {optimum_version} and autogptq {autogptq_version}"
-                        )
+        # make sure backend default stays consistent with gptqmodel expectations
+        if self.backend is None:
+            self.backend = "auto"
         if self.modules_in_block_to_quantize is not None:
             optimum_version = version.parse(importlib.metadata.version("optimum"))
             if optimum_version < version.parse("1.15.0"):
@@ -845,19 +768,17 @@ class GPTQConfig(QuantizationConfigMixin):
                     "You current version of `optimum` does not support `modules_in_block_to_quantize` quantization argument, please upgrade `optimum` package to a version superior than 1.15.0 ."
                 )
 
-    def to_dict(self):
+    def to_dict(self) -> dict[str, Any]:
         config_dict = super().to_dict()
-        config_dict.pop("disable_exllama", None)
+        # Compatible with legacy field: checkpoint_format
+        config_dict["checkpoint_format"] = self.format
         return config_dict
 
     def to_dict_optimum(self):
         """
         Get compatible dict for optimum gptq config
         """
-        quant_dict = self.to_dict()
-        # make it compatible with optimum config
-        quant_dict["disable_exllama"] = not self.use_exllama
-        return quant_dict
+        return self.to_dict()
 
     @classmethod
     def from_dict_optimum(cls, config_dict):
@@ -865,17 +786,12 @@ class GPTQConfig(QuantizationConfigMixin):
         Get compatible class with optimum gptq config dict
         """
 
-        if "disable_exllama" in config_dict:
-            config_dict["use_exllama"] = not config_dict["disable_exllama"]
-            # switch to None to not trigger the warning
-            config_dict.pop("disable_exllama")
-
         config = cls(**config_dict)
         return config
 
 
 @dataclass
-class AwqConfig(QuantizationConfigMixin):
+class AwqConfig(GPTQConfig):
     """
     This is a wrapper class about all possible attributes and features that you can play with a model that has been
     loaded using `auto-awq` library awq quantization relying on auto_awq backend.
@@ -887,26 +803,12 @@ class AwqConfig(QuantizationConfigMixin):
             The group size to use for quantization. Recommended value is 128 and -1 uses per-column quantization.
         zero_point (`bool`, *optional*, defaults to `True`):
             Whether to use zero point quantization.
-        version (`AWQLinearVersion`, *optional*, defaults to `AWQLinearVersion.GEMM`):
-            The version of the quantization algorithm to use. GEMM is better for big batch_size (e.g. >= 8) otherwise,
-            GEMV is better (e.g. < 8 ). GEMM models are compatible with Exllama kernels.
-        backend (`AwqBackendPackingMethod`, *optional*, defaults to `AwqBackendPackingMethod.AUTOAWQ`):
-            The quantization backend. Some models might be quantized using `llm-awq` backend. This is useful for users
-            that quantize their own models using `llm-awq` library.
-        do_fuse (`bool`, *optional*, defaults to `False`):
-            Whether to fuse attention and mlp layers together for faster inference
-        fuse_max_seq_len (`int`, *optional*):
-            The Maximum sequence length to generate when using fusing.
-        modules_to_fuse (`dict`, *optional*, default to `None`):
-            Overwrite the natively supported fusing scheme with the one specified by the users.
+        backend (`AwqBackend`, *optional*, defaults to `AwqBackend.AUTO`):
+            The quantization backend.
         modules_to_not_convert (`list`, *optional*, default to `None`):
             The list of modules to not quantize, useful for quantizing models that explicitly require to have
             some modules left in their original precision (e.g. Whisper encoder, Llava encoder, Mixtral gate layers).
             Note you cannot quantize directly with transformers, please refer to `AutoAWQ` documentation for quantizing HF models.
-        exllama_config (`dict[str, Any]`, *optional*):
-            You can specify the version of the exllama kernel through the `version` key, the maximum sequence
-            length through the `max_input_len` key, and the maximum batch size through the `max_batch_size` key.
-            Defaults to `{"version": 2, "max_input_len": 2048, "max_batch_size": 8}` if unset.
     """
 
     def __init__(
@@ -914,141 +816,44 @@ class AwqConfig(QuantizationConfigMixin):
         bits: int = 4,
         group_size: int = 128,
         zero_point: bool = True,
-        version: AWQLinearVersion = AWQLinearVersion.GEMM,
-        backend: AwqBackendPackingMethod = AwqBackendPackingMethod.AUTOAWQ,
-        do_fuse: Optional[bool] = None,
-        fuse_max_seq_len: Optional[int] = None,
-        modules_to_fuse: Optional[dict] = None,
-        modules_to_not_convert: Optional[list] = None,
-        exllama_config: Optional[dict[str, int]] = None,
+        backend: AwqBackend = AwqBackend.AUTO,
+        modules_to_not_convert: list | None = None,
         **kwargs,
     ):
-        self.quant_method = QuantizationMethod.AWQ
-
-        self.bits = bits
-        self.group_size = group_size
+        format = kwargs.pop("format", AwqFormat.GEMM)
+        # Compatible with legacy field: version
+        if kwargs.get("version") is not None:
+            format = kwargs.pop("version").lower()
+        # Compatible with legacy backend
+        if backend == AwqBackend.LEGACY_AWQ:
+            backend = AwqBackend.AUTO
         self.zero_point = zero_point
-        self.version = version
-        self.backend = backend
-        self.fuse_max_seq_len = fuse_max_seq_len
         self.modules_to_not_convert = modules_to_not_convert
-        self.exllama_config = exllama_config
 
-        self.modules_to_fuse = modules_to_fuse
-        if do_fuse is None:
-            self.do_fuse = modules_to_fuse is not None and len(modules_to_fuse) > 0
-        else:
-            self.do_fuse = do_fuse
-        self.fuse_max_seq_len = fuse_max_seq_len
-
-        self.post_init()
+        super().__init__(bits=bits, group_size=group_size, backend=backend, format=format, **kwargs)
+        self.quant_method = QuantizationMethod.AWQ
 
     def post_init(self):
         r"""
         Safety checker that arguments are correct
         """
-        if self.backend not in [AwqBackendPackingMethod.AUTOAWQ, AwqBackendPackingMethod.LLMAWQ]:
-            raise ValueError(
-                f"Only supported quantization backends in {AwqBackendPackingMethod.AUTOAWQ} and {AwqBackendPackingMethod.LLMAWQ} - not recognized backend {self.backend}"
-            )
 
-        self.version = AWQLinearVersion.from_str(self.version)
-        if self.version not in [
-            AWQLinearVersion.GEMM,
-            AWQLinearVersion.GEMV,
-            AWQLinearVersion.EXLLAMA,
-            AWQLinearVersion.IPEX,
-        ]:
-            raise ValueError(
-                f"Only supported versions are in [AWQLinearVersion.GEMM, AWQLinearVersion.GEMV, AWQLinearVersion.EXLLAMA, AWQLinearVersion.IPEX] - not recognized version {self.version}"
-            )
+        if self.backend == "llm-awq":
+            self.format = AwqFormat.LLM_AWQ
+            self.backend = AwqBackend.AUTO
 
-        if self.backend == AwqBackendPackingMethod.LLMAWQ:
-            # Only cuda device can run this function
-            if not (torch.cuda.is_available() or torch.xpu.is_available()):
-                raise ValueError("LLM-AWQ backend is only supported on CUDA and XPU")
-            if torch.cuda.is_available():
-                compute_capability = torch.cuda.get_device_capability()
-                major, minor = compute_capability
-                if major < 8:
-                    raise ValueError("LLM-AWQ backend is only supported on CUDA GPUs with compute capability >= 8.0")
+        if self.format not in AwqFormat.__members__.values():
+            raise ValueError(f"Invalid format '{self.format}'. Must be one of: {[b.value for b in AwqFormat]}")
 
-        if self.do_fuse and self.fuse_max_seq_len is None:
-            raise ValueError(
-                "You cannot enable fused modules without specifying a `fuse_max_seq_len`, make sure to pass a valid `fuse_max_seq_len` for your usecase"
-            )
+        if self.backend not in AwqBackend.__members__.values():
+            raise ValueError(f"Invalid backend '{self.backend}'. Must be one of: {[b.value for b in AwqBackend]}")
 
-        if self.do_fuse:
-            awq_version_supports_fusing = False
-            MIN_AWQ_VERSION = "0.1.7"
-            if is_auto_awq_available():
-                awq_version_supports_fusing = version.parse(importlib.metadata.version("autoawq")) >= version.parse(
-                    MIN_AWQ_VERSION
-                )
-
-            if not awq_version_supports_fusing:
-                raise ValueError(
-                    f"You current version of `autoawq` does not support module fusing, please upgrade `autoawq` package to at least {MIN_AWQ_VERSION}."
-                )
-
-        if self.modules_to_not_convert is not None:
-            awq_version_supports_non_conversion = False
-            MIN_AWQ_VERSION = "0.1.8"
-            if is_auto_awq_available():
-                awq_version_supports_non_conversion = version.parse(
-                    importlib.metadata.version("autoawq")
-                ) >= version.parse(MIN_AWQ_VERSION)
-
-            if not awq_version_supports_non_conversion:
-                raise ValueError(
-                    f"You current version of `autoawq` does not support module quantization skipping, please upgrade `autoawq` package to at least {MIN_AWQ_VERSION}."
-                )
-
-        if self.do_fuse and self.modules_to_fuse is not None:
-            required_keys = [
-                "hidden_size",
-                "num_attention_heads",
-                "num_key_value_heads",
-                "mlp",
-                "attention",
-                "layernorm",
-                "use_alibi",
-            ]
-            if not all(key in self.modules_to_fuse for key in required_keys):
-                raise ValueError(
-                    f"Required fields are missing in the fusing mapping, required fields are {required_keys}"
-                )
-
-        if self.version == AWQLinearVersion.EXLLAMA:
-            awq_version_supports_exllama = False
-            MIN_AWQ_VERSION = "0.2.0"
-            if is_auto_awq_available():
-                awq_version_supports_exllama = version.parse(importlib.metadata.version("autoawq")) >= version.parse(
-                    MIN_AWQ_VERSION
-                )
-
-            if not awq_version_supports_exllama:
-                raise ValueError(
-                    f"You current version of `autoawq` does not support exllama backend, "
-                    f"please upgrade `autoawq` package to at least {MIN_AWQ_VERSION}."
-                )
-
-            if self.exllama_config is None:
-                self.exllama_config = {"version": ExllamaVersion.TWO, "max_input_len": 2048, "max_batch_size": 8}
-            else:
-                if "version" not in self.exllama_config:
-                    raise ValueError("`exllama_config` needs to have a `version` key.")
-                elif self.exllama_config["version"] not in [ExllamaVersion.ONE, ExllamaVersion.TWO]:
-                    exllama_version = self.exllama_config["version"]
-                    raise ValueError(
-                        f"Only supported versions are in [ExllamaVersion.ONE, ExllamaVersion.TWO] - not recognized version {exllama_version}"
-                    )
-
-    def get_loading_attributes(self):
-        attributes_dict = copy.deepcopy(self.__dict__)
-        loading_attributes = ["version", "do_fuse", "modules_to_fuse", "fuse_max_seq_len", "exllama_config"]
-        loading_attributes_dict = {i: j for i, j in attributes_dict.items() if i in loading_attributes}
-        return loading_attributes_dict
+    def to_dict(self) -> dict[str, Any]:
+        config_dict = super().to_dict()
+        config_dict.pop("checkpoint_format")
+        # Compatible with legacy field: version
+        config_dict["version"] = self.format
+        return config_dict
 
 
 @dataclass
@@ -1077,7 +882,7 @@ class AqlmConfig(QuantizationConfigMixin):
         out_group_size: int = 1,
         num_codebooks: int = 1,
         nbits_per_codebook: int = 16,
-        linear_weights_not_to_quantize: Optional[list[str]] = None,
+        linear_weights_not_to_quantize: list[str] | None = None,
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.AQLM
@@ -1137,11 +942,11 @@ class VptqLayerConfig(QuantizationConfigMixin):
         in_features: int = -1,
         indices_as_float: bool = False,
         is_indice_packed: bool = True,
-        num_centroids: tuple = [-1, -1],
-        num_res_centroids: tuple = [-1, -1],
+        num_centroids: list = [-1, -1],
+        num_res_centroids: list = [-1, -1],
         out_features: int = -1,
         outlier_size: int = 0,
-        vector_lens: tuple = [-1, -1],
+        vector_lens: list = [-1, -1],
         **kwargs,
     ):
         self.enable_norm = enable_norm
@@ -1187,7 +992,7 @@ class VptqConfig(QuantizationConfigMixin):
         enable_proxy_error: bool = False,
         config_for_layers: dict[str, Any] = {},
         shared_layer_config: dict[str, Any] = {},
-        modules_to_not_convert: Optional[list] = None,
+        modules_to_not_convert: list | None = None,
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.VPTQ
@@ -1227,7 +1032,7 @@ class QuantoConfig(QuantizationConfigMixin):
         self,
         weights="int8",
         activations=None,
-        modules_to_not_convert: Optional[list] = None,
+        modules_to_not_convert: list | None = None,
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.QUANTO
@@ -1265,7 +1070,7 @@ class EetqConfig(QuantizationConfigMixin):
     def __init__(
         self,
         weights: str = "int8",
-        modules_to_not_convert: Optional[list] = None,
+        modules_to_not_convert: list | None = None,
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.EETQ
@@ -1310,13 +1115,13 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
 
     def __init__(
         self,
-        config_groups: Optional[dict[str, Union["QuantizationScheme", list[str]]]] = None,  # noqa: F821
+        config_groups: dict[str, Union["QuantizationScheme", list[str]]] | None = None,  # noqa: F821
         format: str = "dense",
         quantization_status: "QuantizationStatus" = "initialized",  # noqa: F821
         kv_cache_scheme: Optional["QuantizationArgs"] = None,  # noqa: F821
-        global_compression_ratio: Optional[float] = None,
-        ignore: Optional[list[str]] = None,
-        sparsity_config: Optional[dict[str, Any]] = None,
+        global_compression_ratio: float | None = None,
+        ignore: list[str] | None = None,
+        sparsity_config: dict[str, Any] | None = None,
         quant_method: str = "compressed-tensors",
         run_compressed: bool = True,
         **kwargs,
@@ -1481,7 +1286,7 @@ class FbgemmFp8Config(QuantizationConfigMixin):
     def __init__(
         self,
         activation_scale_ub: float = 1200.0,
-        modules_to_not_convert: Optional[list] = None,
+        modules_to_not_convert: list | None = None,
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.FBGEMM_FP8
@@ -1519,10 +1324,10 @@ class HiggsConfig(QuantizationConfigMixin):
         self,
         bits: int = 4,
         p: int = 2,
-        modules_to_not_convert: Optional[list[str]] = None,
+        modules_to_not_convert: list[str] | None = None,
         hadamard_size: int = 512,
         group_size: int = 256,
-        tune_metadata: Optional[dict[str, Any]] = None,
+        tune_metadata: dict[str, Any] | None = None,
         **kwargs,
     ):
         if tune_metadata is None:
@@ -1557,7 +1362,7 @@ class FPQuantConfig(QuantizationConfigMixin):
     FPQuantConfig is a configuration class for quantization using the FPQuant method.
 
     Args:
-        forward_dtype (`str`, *optional*, defaults to `"mxfp4"`):
+        forward_dtype (`str`, *optional*, defaults to `"nvfp4"`):
             The dtype to use for the forward pass.
         forward_method (`str`, *optional*, defaults to `"abs_max"`):
             The scaling to use for the forward pass. Can be `"abs_max"` or `"quest"`. `"abs_max"` is better for PTQ, `"quest"` is better for QAT.
@@ -1565,10 +1370,11 @@ class FPQuantConfig(QuantizationConfigMixin):
             The dtype to use for the backward pass.
         store_master_weights (`bool`, *optional*, defaults to `False`):
             Whether to store the master weights. Needed for QAT over layer weights.
-        hadamard_group_size (`int`, *optional*, defaults to 32):
-            The group size for the hadamard transform before quantization for `"quest"` it matches the MXFP4 group size (32).
+        hadamard_group_size (`int`, *optional*):
+            The group size for the hadamard transform before quantization for `"quest"` it matches the MXFP4 group size (32). If `None`, it will be set to 16 for `"nvfp4"` and 32 for `"mxfp4"`.
         pseudoquantization (`bool`, *optional*, defaults to `False`):
             Whether to use Triton-based pseudo-quantization. Is mandatory for non-Blackwell GPUs. Doesn't provide any speedup. For debugging purposes.
+        transform_init (`str`, *optional*, defaults to `"hadamard"`): a method to initialize the pre-processing matrix with. Can be `"hadamard"`, `"identity"` or `"gsr"`.
         modules_to_not_convert (`list`, *optional*):
             The list of modules to not quantize, useful for quantizing models that explicitly require to have
             some modules left in their original precision.
@@ -1576,13 +1382,14 @@ class FPQuantConfig(QuantizationConfigMixin):
 
     def __init__(
         self,
-        forward_dtype: str = "mxfp4",
+        forward_dtype: str = "nvfp4",
         forward_method: str = "abs_max",
         backward_dtype: str = "bf16",
         store_master_weights: bool = False,
-        hadamard_group_size: int = 32,
+        hadamard_group_size: int | None = None,
         pseudoquantization: bool = False,
-        modules_to_not_convert: Optional[list[str]] = None,
+        transform_init: str = "hadamard",
+        modules_to_not_convert: list[str] | None = None,
         **kwargs,
     ):
         self.forward_dtype = forward_dtype
@@ -1591,6 +1398,7 @@ class FPQuantConfig(QuantizationConfigMixin):
         self.store_master_weights = store_master_weights
         self.hadamard_group_size = hadamard_group_size
         self.pseudoquantization = pseudoquantization
+        self.transform_init = transform_init
         self.modules_to_not_convert = modules_to_not_convert
 
         self.quant_method = QuantizationMethod.FPQUANT
@@ -1600,14 +1408,39 @@ class FPQuantConfig(QuantizationConfigMixin):
         r"""
         Safety checker that arguments are correct - also replaces some NoneType arguments with their default values.
         """
-        if self.forward_dtype not in ["mxfp4"]:
-            raise ValueError("Only 'mxfp4' is supported for forward_dtype for now.")
-        if self.forward_method not in ["abs_max", "quest"]:
-            raise ValueError("Only 'abs_max' and 'quest' are supported for forward_method for now.")
-        if self.backward_dtype not in ["bf16"]:
-            raise ValueError("Only 'bf16' is supported for backward_dtype for now.")
-        if self.hadamard_group_size not in [32]:
-            raise ValueError("Only a hadamard_group_size of 32 is supported for now.")
+
+        if self.hadamard_group_size is None:
+            if self.forward_dtype == "nvfp4":
+                self.hadamard_group_size = 16
+            else:
+                self.hadamard_group_size = 32
+
+        if self.forward_dtype == "mxfp4":
+            if self.forward_method not in ["abs_max", "quest"]:
+                raise ValueError("Only 'abs_max' and 'quest' are supported for forward_method for 'mxfp4'.")
+            if self.hadamard_group_size is None:
+                self.hadamard_group_size = 32
+            if self.hadamard_group_size not in [32, 64, 128]:
+                raise ValueError("Only a `hadamard_group_size` of [32, 64, 128] is supported for 'mxfp4'.")
+        elif self.forward_dtype == "nvfp4":
+            if self.forward_method != "abs_max":
+                raise ValueError("Only 'abs_max' is supported for forward_method for 'nvfp4'.")
+            if self.hadamard_group_size is None:
+                self.hadamard_group_size = 16
+            if self.hadamard_group_size not in [16, 32, 64, 128]:
+                raise ValueError("Only a `hadamard_group_size` of [16, 32, 64, 128] is supported for 'nvfp4'.")
+        else:
+            raise ValueError("Only 'mxfp4' and 'nvfp4' are supported for forward_dtype for now.")
+
+        if self.backward_dtype not in ["bf16", "mxfp8", "mxfp4"]:
+            raise ValueError("Only 'bf16', 'mxfp8' and 'mxfp4' are supported for backward_dtype for now.")
+
+        if self.backward_dtype != "bf16" and self.forward_dtype != "mxfp4":
+            raise ValueError("Only 'mxfp4' forward is compatible with non-bf16 backwards for now.")
+
+        if self.transform_init not in ["hadamard", "identity", "gsr"]:
+            raise ValueError("Only 'hadamard', 'identity' and 'gsr' are supported for transform_init.")
+
         if self.modules_to_not_convert is None:
             self.modules_to_not_convert = ["lm_head"]
 
@@ -1616,7 +1449,7 @@ class FPQuantConfig(QuantizationConfigMixin):
 class TorchAoConfig(QuantizationConfigMixin):
     quant_method: QuantizationMethod
     quant_type: Union[str, "AOBaseConfig"]  # noqa: F821
-    modules_to_not_convert: Optional[list]
+    modules_to_not_convert: list | None
     quant_type_kwargs: dict[str, Any]
     include_input_output_embeddings: bool
     untie_embedding_weights: bool
@@ -1680,7 +1513,7 @@ class TorchAoConfig(QuantizationConfigMixin):
     def __init__(
         self,
         quant_type: Union[str, "AOBaseConfig"],  # noqa: F821
-        modules_to_not_convert: Optional[list] = None,
+        modules_to_not_convert: list | None = None,
         include_input_output_embeddings: bool = False,
         untie_embedding_weights: bool = False,
         **kwargs,
@@ -1881,11 +1714,11 @@ class BitNetQuantConfig(QuantizationConfigMixin):
 
     def __init__(
         self,
-        modules_to_not_convert: Optional[list] = None,
-        linear_class: Optional[str] = "bitlinear",
-        quantization_mode: Optional[str] = "offline",
-        use_rms_norm: Optional[bool] = False,
-        rms_norm_eps: Optional[float] = 1e-6,
+        modules_to_not_convert: list | None = None,
+        linear_class: str = "bitlinear",
+        quantization_mode: str = "offline",
+        use_rms_norm: bool = False,
+        rms_norm_eps: float | None = 1e-6,
         **kwargs,
     ):
         if linear_class not in ["bitlinear", "autobitlinear"]:
@@ -1904,7 +1737,6 @@ class BitNetQuantConfig(QuantizationConfigMixin):
         r"""
         Safety checker that arguments are correct
         """
-        pass
 
 
 @dataclass
@@ -1935,8 +1767,8 @@ class SpQRConfig(QuantizationConfigMixin):
         bits: int = 3,
         beta1: int = 16,
         beta2: int = 16,
-        shapes: Optional[dict[str, int]] = None,
-        modules_to_not_convert: Optional[list[str]] = None,
+        shapes: dict[str, int] | None = None,
+        modules_to_not_convert: list[str] | None = None,
         **kwargs,
     ):
         if shapes is None:
@@ -1980,6 +1812,8 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
             The scheme used for activation, the defaults and only support scheme for now is "dynamic".
         weight_block_size (`typing.tuple[int, int]`, *optional*, defaults to `(128, 128)`):
             The size of the weight blocks for quantization, default is (128, 128).
+        dequantize (`bool`, *optional*, defaults to `False`):
+            Whether to dequantize the model during loading.
         modules_to_not_convert (`list`, *optional*):
             A list of module names that should not be converted during quantization.
     """
@@ -1988,13 +1822,15 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
         self,
         activation_scheme: str = "dynamic",
         weight_block_size: tuple[int, int] = (128, 128),
-        modules_to_not_convert: Optional[list] = None,
+        dequantize: bool = False,
+        modules_to_not_convert: list | None = None,
         **kwargs,
     ):
         self.quant_method = QuantizationMethod.FP8
         self.modules_to_not_convert = modules_to_not_convert
         self.activation_scheme = activation_scheme
         self.weight_block_size = weight_block_size
+        self.dequantize = dequantize
         self.post_init()
 
     def post_init(self):
@@ -2002,12 +1838,15 @@ class FineGrainedFP8Config(QuantizationConfigMixin):
         Safety checker that arguments are correct
         """
         self.activation_scheme = self.activation_scheme.lower()
-        if self.activation_scheme not in ["dynamic"]:
+        if self.activation_scheme not in ["dynamic", "static"]:
             raise ValueError(f"Activation scheme {self.activation_scheme} not supported")
-        if len(self.weight_block_size) != 2:
+        if self.weight_block_size is not None and len(self.weight_block_size) != 2:
             raise ValueError("weight_block_size must be a tuple of two integers")
-        if self.weight_block_size[0] <= 0 or self.weight_block_size[1] <= 0:
+        if self.weight_block_size is not None and (self.weight_block_size[0] <= 0 or self.weight_block_size[1] <= 0):
             raise ValueError("weight_block_size must be a tuple of two positive integers")
+
+    def get_loading_attributes(self):
+        return {"dequantize": self.dequantize}
 
 
 class QuarkConfig(QuantizationConfigMixin):
@@ -2067,7 +1906,7 @@ class Mxfp4Config(QuantizationConfigMixin):
 
     def __init__(
         self,
-        modules_to_not_convert: Optional[list] = None,
+        modules_to_not_convert: list | None = None,
         dequantize: bool = False,
         **kwargs,
     ):

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -356,7 +355,7 @@ def convert_paligemma2_checkpoint(
         # convert to needed precision
 
         model.to(DTYPES[precision])
-        model.save_pretrained(pytorch_dump_folder_path, safe_serialization=True)
+        model.save_pretrained(pytorch_dump_folder_path)
         processor.save_pretrained(pytorch_dump_folder_path)
 
     else:

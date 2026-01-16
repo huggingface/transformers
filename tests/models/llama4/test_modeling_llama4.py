@@ -19,7 +19,6 @@ from transformers import is_torch_available
 from transformers.testing_utils import (
     Expectations,
     cleanup,
-    require_read_token,
     require_torch_large_accelerator,
     slow,
     torch_device,
@@ -37,7 +36,6 @@ if is_torch_available():
 
 @slow
 @require_torch_large_accelerator
-@require_read_token
 class Llama4IntegrationTest(unittest.TestCase):
     model_id = "meta-llama/Llama-4-Scout-17B-16E"
 
@@ -74,7 +72,10 @@ class Llama4IntegrationTest(unittest.TestCase):
                         "type": "image",
                         "url": "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/cow_beach_1.png",
                     },
-                    {"type": "image", "url": "https://www.ilankelman.org/stopsigns/australia.jpg"},
+                    {
+                        "type": "image",
+                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/australia.jpg",
+                    },
                     {"type": "text", "text": "Are these images identical?"},
                 ],
             },

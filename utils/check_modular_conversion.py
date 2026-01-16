@@ -7,12 +7,11 @@ import os
 import shutil
 import subprocess
 from functools import partial
-from io import StringIO
 
 from create_dependency_mapping import find_priority_list
 
 # Console for rich printing
-from modular_model_converter import convert_modular_file
+from modular_model_converter import convert_modular_file, run_ruff
 from rich.console import Console
 from rich.syntax import Syntax
 
@@ -30,17 +29,14 @@ def process_file(
     file_type="modeling_",
     show_diff=True,
 ):
-    file_name_prefix = file_type.split("*")[0]
-    file_name_suffix = file_type.split("*")[-1] if "*" in file_type else ""
+    file_name_prefix = file_type.split(".*")[0]
+    file_name_suffix = file_type.split(".*")[-1] if ".*" in file_type else ""
     file_path = modular_file_path.replace("modular_", f"{file_name_prefix}_").replace(".py", f"{file_name_suffix}.py")
     # Read the actual modeling file
     with open(file_path, "r", encoding="utf-8") as modeling_file:
         content = modeling_file.read()
-    output_buffer = StringIO(generated_modeling_content[file_type])
-    output_buffer.seek(0)
-    output_content = output_buffer.read()
     diff = difflib.unified_diff(
-        output_content.splitlines(),
+        generated_modeling_content[file_type].splitlines(),
         content.splitlines(),
         fromfile=f"{file_path}_generated",
         tofile=f"{file_path}",
@@ -50,12 +46,12 @@ def process_file(
     # Check for differences
     if diff_list:
         # first save the copy of the original file, to be able to restore it later
-        if os.path.exists(file_path):
-            shutil.copy(file_path, file_path + BACKUP_EXT)
+        shutil.copy(file_path, file_path + BACKUP_EXT)
         # we always save the generated content, to be able to update dependant files
         with open(file_path, "w", encoding="utf-8", newline="\n") as modeling_file:
             modeling_file.write(generated_modeling_content[file_type])
-        console.print(f"[bold blue]Overwritten {file_path} with the generated content.[/bold blue]")
+        if not show_diff:
+            console.print(f"[bold blue]Overwritten {file_path} with the generated content.[/bold blue]")
         if show_diff:
             console.print(f"\n[bold red]Differences found between the generated code and {file_path}:[/bold red]\n")
             diff_text = "\n".join(diff_list)
@@ -63,13 +59,38 @@ def process_file(
             console.print(syntax)
         return 1
     else:
-        console.print(f"[bold green]No differences found for {file_path}.[/bold green]")
         return 0
+
+
+def convert_and_run_ruff(modular_file_path: str) -> dict[str, str]:
+    """From a modular file, convert it and return all the contents of the file as string.
+    We need this function, because `ruff` needs the final filename to apply all rules correctly, so to get the
+    output as a string, we need to save a temporary file with similar name, run ruff, and re-read the temporary file"""
+    # Generate the expected modeling content
+    generated_modeling_content = convert_modular_file(modular_file_path)
+    # Temporary save the files with similar names to run `ruff` correctly, then re-read the result after linting/formatting
+    for file_type in generated_modeling_content:
+        file_name_prefix = file_type.split(".*")[0]
+        file_name_suffix = file_type.split(".*")[-1] if ".*" in file_type else ""
+        temp_file_name = modular_file_path.replace("modular_", f"{file_name_prefix}_").replace(
+            ".py", f"_temp_pattern__{file_name_suffix}.py"
+        )
+        # Write the file only temporarily
+        with open(temp_file_name, "w") as f:
+            f.write(generated_modeling_content[file_type])
+        # Run ruff on the new file (with similar name pattern as the original one)
+        run_ruff(temp_file_name)
+        with open(temp_file_name, "r") as f:
+            generated_modeling_content[file_type] = f.read()
+        # delete file
+        os.remove(temp_file_name)
+
+    return generated_modeling_content
 
 
 def compare_files(modular_file_path, show_diff=True):
     # Generate the expected modeling content
-    generated_modeling_content = convert_modular_file(modular_file_path)
+    generated_modeling_content = convert_and_run_ruff(modular_file_path)
     diff = 0
     for file_type in generated_modeling_content:
         diff += process_file(modular_file_path, generated_modeling_content, file_type, show_diff)
@@ -160,12 +181,8 @@ if __name__ == "__main__":
     else:
         models_in_diff = get_models_in_diff()
         if not models_in_diff and not args.check_all:
-            console.print(
-                "[bold green]No models files or model tests in the diff, skipping modular checks[/bold green]"
-            )
             exit(0)
 
-    skipped_models = set()
     non_matching_files = []
     ordered_files, dependencies = find_priority_list(args.files)
     flat_ordered_files = [item for sublist in ordered_files for item in sublist]
@@ -177,18 +194,12 @@ if __name__ == "__main__":
     #  - ... and so on
     # files (models) within the same list are *independent* of each other;
     # we start applying modular conversion to each list in parallel, starting from the first list
-
-    console.print(f"[bold yellow]Number of dependency levels: {len(ordered_files)}[/bold yellow]")
-    console.print(f"[bold yellow]Files per level: {tuple([len(x) for x in ordered_files])}[/bold yellow]")
-
     try:
         for dependency_level_files in ordered_files:
             # Filter files guaranteed no diff
             files_to_check = []
             for file_path in dependency_level_files:
-                if not args.check_all and guaranteed_no_diff(file_path, dependencies, models_in_diff):
-                    skipped_models.add(file_path.split("/")[-2])  # save model folder name
-                else:
+                if args.check_all or not guaranteed_no_diff(file_path, dependencies, models_in_diff):
                     files_to_check.append(file_path)
 
             if not files_to_check:
@@ -197,10 +208,25 @@ if __name__ == "__main__":
             # Process files with diff
             num_workers = min(args.num_workers, len(files_to_check))
             with multiprocessing.Pool(num_workers) as p:
-                is_changed_flags = p.map(
-                    partial(compare_files, show_diff=not args.fix_and_overwrite),
-                    files_to_check,
-                )
+                try:
+                    is_changed_flags = p.map(
+                        partial(compare_files, show_diff=not args.fix_and_overwrite),
+                        files_to_check,
+                    )
+                except Exception as e:
+                    console.print(
+                        f"[bold red]Failed to convert one or more files in batch: {files_to_check}[/bold red]"
+                    )
+                    console.print(f"[bold red]Error: {e}[/bold red]")
+                    # Try to process files individually to identify which one failed
+                    is_changed_flags = []
+                    for file_path in files_to_check:
+                        try:
+                            result = compare_files(file_path, show_diff=not args.fix_and_overwrite)
+                            is_changed_flags.append(result)
+                        except Exception as individual_error:
+                            console.print(f"[bold red]Failed to convert {file_path}: {individual_error}[/bold red]")
+                            is_changed_flags.append(0)  # Mark as no change to continue processing
 
             # Collect changed files and their original paths
             for is_changed, file_path in zip(is_changed_flags, files_to_check):
@@ -224,9 +250,3 @@ if __name__ == "__main__":
         diff_models = set(file_path.split("/")[-2] for file_path in non_matching_files)  # noqa
         models_str = "\n - " + "\n - ".join(sorted(diff_models))
         raise ValueError(f"Some diff and their modeling code did not match. Models in diff:{models_str}")
-
-    if skipped_models:
-        console.print(
-            f"[bold green]Skipped {len(skipped_models)} models and their dependencies that are not in the diff: "
-            f"{', '.join(sorted(skipped_models))}[/bold green]"
-        )

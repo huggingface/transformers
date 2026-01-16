@@ -16,31 +16,39 @@ rendered properly in your Markdown viewer.
 
 # Serving
 
-Transformer models can be efficiently deployed using libraries such as vLLM, Text Generation Inference (TGI), and others. These libraries are designed for production-grade user-facing services, and can scale to multiple servers and millions of concurrent users. Refer to [Transformers as Backend for Inference Servers](./transformers_as_backends) for usage examples.
+Transformer models can be efficiently deployed using libraries such as vLLM, Text Generation Inference (TGI), and others. These libraries are designed for production-grade user-facing services, and can scale to multiple servers and millions of concurrent users. Refer to [Transformers as Backend for Inference Servers](./transformers_as_backend) for usage examples.
 
 > [!TIP]
 > Responses API is now supported as an experimental API! Read more about it [here](#responses-api).
 
-Apart from that you can also serve transformer models easily using the `transformers serve` CLI. This is ideal for experimentation purposes, or to run models locally for personal and private use.
+You can also serve transformer models with the `transformers serve` CLI. With Continuous Batching, `serve` now delivers solid throughput and latency well suited for evaluation, experimentation, and moderate-load local or self-hosted deployments. While vLLM, SGLang, or other inference engines remain our recommendations for large-scale production, `serve` avoids the extra runtime and operational overhead, and is on track to gain more production-oriented features.
 
 In this document, we dive into the different supported endpoints and modalities; we also cover the setup of several user interfaces that can be used on top of `transformers serve` in the following guides:
-- [Jan (text and MCP user interface)](./jan.md)
-- [Cursor (IDE)](./cursor.md)
-- [Open WebUI (text, image, speech user interface)](./open_webui.md)
-- [Tiny-Agents (text and MCP CLI tool)](./tiny_agents.md)
+
+- [Jan (text and MCP user interface)](./jan)
+- [Cursor (IDE)](./cursor)
+- [Open WebUI (text, image, speech user interface)](./open_webui)
+- [Tiny-Agents (text and MCP CLI tool)](./tiny_agents)
 
 ## Serve CLI
 
 > [!WARNING]
 > This section is experimental and subject to change in future versions
 
-You can serve models of diverse modalities supported by `transformers` with the `transformers serve` CLI. It spawns a local server that offers compatibility with the OpenAI SDK, which is the _de facto_ standard for LLM conversations and other related tasks. This way, you can use the server from many third party applications, or test it using the `transformers chat` CLI ([docs](conversations.md#chat-cli)).
+You can serve models of diverse modalities supported by `transformers` with the `transformers serve` CLI. It spawns a local server that offers compatibility with the OpenAI SDK, which is the _de facto_ standard for LLM conversations and other related tasks. This way, you can use the server from many third party applications, or test it using the `transformers chat` CLI ([docs](conversations#chat-cli)).
 
 The server supports the following REST APIs:
+
 - `/v1/chat/completions`
 - `/v1/responses`
 - `/v1/audio/transcriptions`
 - `/v1/models`
+
+Please make sure to have the correct dependencies installed for the instructions below:
+
+```shell
+pip install transformers[serving]
+```
 
 To launch a server, simply use the `transformers serve` CLI command:
 
@@ -51,14 +59,14 @@ transformers serve
 The simplest way to interact with the server is through our `transformers chat` CLI
 
 ```shell
-transformers chat localhost:8000 --model-name-or-path Qwen/Qwen3-4B
+transformers chat Qwen/Qwen3-4B
 ```
 
 or by sending an HTTP request, like we'll see below.
 
 ## Chat Completions - text-based
 
-See below for examples for text-based requests. Both LLMs and VLMs should handle 
+See below for examples for text-based requests. Both LLMs and VLMs should handle
 
 <hfoptions id="chat-completion-http">
 <hfoption id="curl">
@@ -356,7 +364,6 @@ ResponseCompletedEvent(response=Response(id='resp_req_0', created_at=1754060400.
 </hfoption>
 </hfoptions>
 
-
 ## MCP integration
 
 The `transformers serve` server is also an MCP client, so it can interact with MCP tools in agentic use cases. This, of course, requires the use of an LLM that is designed to use tools.
@@ -366,6 +373,58 @@ The `transformers serve` server is also an MCP client, so it can interact with M
 
 <!-- TODO: example with a minimal python example, and explain that it is possible to pass a full generation config in the request -->
 
+## Continuous Batching
 
+Continuous Batching (CB) lets the server dynamically group and interleave requests so they can share forward passes on the GPU. Instead of processing each request sequentially, `serve` adds new requests as others progress (prefill) and drops finished ones during decode. The result is significantly higher GPU utilization and better throughput without sacrificing latency for most workloads.
 
+Thanks to this, evaluation, experimentation, and moderate-load local/self-hosted use can now be handled comfortably by `transformers serve` without introducing an extra runtime to operate.
 
+### Enable CB in serve
+
+CB is opt-in and currently applies to chat completions.
+
+```sh
+transformers serve \
+  --continuous-batching
+  --attn_implementation "sdpa"
+```
+
+### Quantization
+
+transformers serve is compatible with all [quantization methods](https://huggingface.co/docs/transformers/main/quantization/overview) supported in transformers. Quantization can significantly reduce memory usage and improve inference speed, with two main workflows: pre-quantized models and on-the-fly quantization.
+
+#### Pre-quantized Models
+
+For models that are already quantized (e.g., GPTQ, AWQ, bitsandbytes), simply choose a quantized model name for serving.
+Make sure to install the required libraries listed in the quantization documentation.
+
+> [!TIP]
+> Pre-quantized models generally provide the best balance of performance and accuracy.
+
+#### On the fly quantization
+
+If you want to quantize a model at runtime, you can specify the --quantization flag in the CLI. Note that not all quantization methods support on-the-fly conversion. The full list of supported methods is available in the quantization [overview](https://huggingface.co/docs/transformers/main/quantization/overview).
+
+Currently, with transformers serve, we only supports some methods: ["bnb-4bit", "bnb-8bit"]
+
+For example, to enable 4-bit quantization with bitsandbytes, you need to pass add `--quantization bnb-4bit`:
+
+```sh
+transformers serve --quantization bnb-4bit
+```
+
+### Performance tips
+
+- Use an efficient attention backend when available:
+
+```sh
+transformers serve \
+  --continuous_batching \
+  --attn_implementation "flash_attention_2"
+```
+
+> [!TIP]
+
+- `--dtype {bfloat16|float16}` typically improve throughput and memory use vs. `float32`
+
+- `--force-model <repo_id>` avoids per-request model hints and helps produce stable, repeatable runs

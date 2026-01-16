@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 Microsoft Research, Inc. and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,13 +14,11 @@
 """PyTorch ResNet model."""
 
 import math
-from typing import Optional
 
 import torch
-import torch.utils.checkpoint
 from torch import Tensor, nn
-from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_outputs import (
     BackboneOutput,
@@ -249,21 +246,28 @@ class ResNetPreTrainedModel(PreTrainedModel):
     config: ResNetConfig
     base_model_prefix = "resnet"
     main_input_name = "pixel_values"
+    input_modalities = ("image",)
     _no_split_modules = ["ResNetConvLayer", "ResNetShortCut"]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         if isinstance(module, nn.Conv2d):
-            nn.init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
+            init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
         # copied from the `reset_parameters` method of `class Linear(Module)` in `torch`.
         elif isinstance(module, nn.Linear):
-            nn.init.kaiming_uniform_(module.weight, a=math.sqrt(5))
+            init.kaiming_uniform_(module.weight, a=math.sqrt(5))
             if module.bias is not None:
-                fan_in, _ = nn.init._calculate_fan_in_and_fan_out(module.weight)
+                fan_in, _ = torch.nn.init._calculate_fan_in_and_fan_out(module.weight)
                 bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
-                nn.init.uniform_(module.bias, -bound, bound)
-        elif isinstance(module, (nn.BatchNorm2d, nn.GroupNorm)):
-            nn.init.constant_(module.weight, 1)
-            nn.init.constant_(module.bias, 0)
+                init.uniform_(module.bias, -bound, bound)
+        # We need to check it like that as some Detr models replace the BatchNorm2d by their own
+        elif "BatchNorm" in module.__class__.__name__:
+            init.ones_(module.weight)
+            init.zeros_(module.bias)
+            init.zeros_(module.running_mean)
+            init.ones_(module.running_var)
+            if getattr(module, "num_batches_tracked", None) is not None:
+                init.zeros_(module.num_batches_tracked)
 
 
 @auto_docstring
@@ -279,7 +283,11 @@ class ResNetModel(ResNetPreTrainedModel):
 
     @auto_docstring
     def forward(
-        self, pixel_values: Tensor, output_hidden_states: Optional[bool] = None, return_dict: Optional[bool] = None
+        self,
+        pixel_values: Tensor,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
     ) -> BaseModelOutputWithPoolingAndNoAttention:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -328,10 +336,11 @@ class ResNetForImageClassification(ResNetPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        pixel_values: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
     ) -> ImageClassifierOutputWithNoAttention:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
@@ -349,25 +358,7 @@ class ResNetForImageClassification(ResNetPreTrainedModel):
         loss = None
 
         if labels is not None:
-            if self.config.problem_type is None:
-                if self.num_labels == 1:
-                    self.config.problem_type = "regression"
-                elif self.num_labels > 1 and (labels.dtype == torch.long or labels.dtype == torch.int):
-                    self.config.problem_type = "single_label_classification"
-                else:
-                    self.config.problem_type = "multi_label_classification"
-            if self.config.problem_type == "regression":
-                loss_fct = MSELoss()
-                if self.num_labels == 1:
-                    loss = loss_fct(logits.squeeze(), labels.squeeze())
-                else:
-                    loss = loss_fct(logits, labels)
-            elif self.config.problem_type == "single_label_classification":
-                loss_fct = CrossEntropyLoss()
-                loss = loss_fct(logits.view(-1, self.num_labels), labels.view(-1))
-            elif self.config.problem_type == "multi_label_classification":
-                loss_fct = BCEWithLogitsLoss()
-                loss = loss_fct(logits, labels)
+            loss = self.loss_function(labels, logits, self.config)
 
         if not return_dict:
             output = (logits,) + outputs[2:]
@@ -397,7 +388,11 @@ class ResNetBackbone(ResNetPreTrainedModel, BackboneMixin):
 
     @auto_docstring
     def forward(
-        self, pixel_values: Tensor, output_hidden_states: Optional[bool] = None, return_dict: Optional[bool] = None
+        self,
+        pixel_values: Tensor,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
     ) -> BackboneOutput:
         r"""
         Examples:

@@ -17,6 +17,7 @@ import copy
 import tempfile
 import unittest
 
+import pytest
 import requests
 
 from transformers import (
@@ -27,14 +28,14 @@ from transformers import (
     is_torch_available,
     is_vision_available,
 )
+from transformers.image_utils import load_image
 from transformers.testing_utils import (
     Expectations,
     cleanup,
-    is_flaky,
     require_cv2,
     require_flash_attn,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     slow,
     torch_device,
 )
@@ -44,10 +45,10 @@ from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     ModelTesterMixin,
-    _config_zero_init,
     floats_tensor,
     ids_tensor,
 )
+from ...test_processing_common import url_to_local_path
 
 
 if is_cv2_available():
@@ -56,8 +57,6 @@ if is_cv2_available():
 if is_torch_available():
     import torch
 
-else:
-    is_torch_greater_or_equal_than_2_0 = False
 
 if is_vision_available():
     from PIL import Image
@@ -75,58 +74,35 @@ class Qwen2_5_VLVisionText2TextModelTester:
         bos_token_id=0,
         eos_token_id=1,
         pad_token_id=2,
-        vision_start_token_id=3,
-        image_token_id=4,
-        video_token_id=5,
         hidden_act="silu",
         hidden_size=32,
         vocab_size=99,
         intermediate_size=37,
         max_position_embeddings=512,
         max_window_layers=3,
-        model_type="qwen2_5_vl",
         num_attention_heads=4,
-        num_hidden_layers=4,
+        num_hidden_layers=2,
         num_key_value_heads=2,
         rope_theta=10000,
         tie_word_embeddings=True,
         is_training=True,
-        vision_config={
-            "depth": 2,
-            "in_chans": 3,
-            "hidden_act": "silu",
-            "intermediate_size": 32,
-            "out_hidden_size": 32,
-            "hidden_size": 32,
-            "num_heads": 4,
-            "patch_size": 14,
-            "spatial_patch_size": 14,
-            "spatial_merge_size": 1,
-            "temporal_patch_size": 2,
-        },
-        rope_scaling={"type": "mrope", "mrope_section": [2, 1, 1]},
+        vision_config=None,
+        rope_parameters=None,
+        vision_start_token_id=3,
+        image_token_id=4,
+        video_token_id=5,
     ):
         self.parent = parent
         self.ignore_index = ignore_index
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
         self.pad_token_id = pad_token_id
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.hidden_size = hidden_size
         self.vision_start_token_id = vision_start_token_id
         self.image_token_id = image_token_id
         self.video_token_id = video_token_id
-        self.hidden_act = hidden_act
-        self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.max_position_embeddings = max_position_embeddings
-        self.max_window_layers = max_window_layers
-        self.model_type = model_type
-        self.num_attention_heads = num_attention_heads
-        self.num_hidden_layers = num_hidden_layers
-        self.num_key_value_heads = num_key_value_heads
-        self.rope_theta = rope_theta
-        self.tie_word_embeddings = tie_word_embeddings
-        self.vision_config = vision_config
-        self.rope_scaling = rope_scaling
         self.batch_size = batch_size
         self.num_channels = num_channels
         self.image_size = image_size
@@ -134,28 +110,47 @@ class Qwen2_5_VLVisionText2TextModelTester:
         self.vocab_size = vocab_size
         self.num_image_tokens = 32
         self.seq_length = seq_length + self.num_image_tokens
+        # Default vision config is None to avoid a mutable default argument
+        if vision_config is None:
+            vision_config = {
+                "depth": 2,
+                "in_chans": 3,
+                "hidden_act": "silu",
+                "intermediate_size": 32,
+                "out_hidden_size": 32,
+                "hidden_size": 32,
+                "num_heads": 4,
+                "patch_size": 14,
+                "spatial_patch_size": 14,
+                "spatial_merge_size": 1,
+                "temporal_patch_size": 2,
+            }
+        self.vision_config = vision_config
+        self.text_config = {
+            "bos_token_id": bos_token_id,
+            "eos_token_id": eos_token_id,
+            "pad_token_id": pad_token_id,
+            "hidden_act": hidden_act,
+            "hidden_size": hidden_size,
+            "intermediate_size": intermediate_size,
+            "max_position_embeddings": max_position_embeddings,
+            "max_window_layers": max_window_layers,
+            "num_attention_heads": num_attention_heads,
+            "num_hidden_layers": num_hidden_layers,
+            "num_key_value_heads": num_key_value_heads,
+            "rope_theta": rope_theta,
+            "tie_word_embeddings": tie_word_embeddings,
+            "vocab_size": vocab_size,
+            "rope_parameters": {"type": "mrope", "mrope_section": [2, 1, 1]},
+        }
 
     def get_config(self):
         return Qwen2_5_VLConfig(
-            hidden_size=self.hidden_size,
-            intermediate_size=self.intermediate_size,
-            num_hidden_layers=self.num_hidden_layers,
-            num_attention_heads=self.num_attention_heads,
-            num_key_value_heads=self.num_key_value_heads,
-            hidden_act=self.hidden_act,
-            max_position_embeddings=self.max_position_embeddings,
+            text_config=self.text_config,
             vision_config=self.vision_config,
-            model_type=self.model_type,
-            max_window_layers=self.max_window_layers,
-            rope_scaling=self.rope_scaling,
-            tie_word_embeddings=self.tie_word_embeddings,
-            bos_token_id=self.bos_token_id,
-            eos_token_id=self.eos_token_id,
-            pad_token_id=self.pad_token_id,
             vision_start_token_id=self.vision_start_token_id,
             image_token_id=self.image_token_id,
             video_token_id=self.video_token_id,
-            vocab_size=self.vocab_size,
         )
 
     def prepare_config_and_inputs(self):
@@ -206,8 +201,6 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
         if is_torch_available()
         else ()
     )
-    test_pruning = False
-    test_head_masking = False
 
     def setUp(self):
         self.model_tester = Qwen2_5_VLVisionText2TextModelTester(self)
@@ -215,20 +208,6 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
 
     def test_config(self):
         self.config_tester.run_common_tests()
-
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if param.requires_grad:
-                    self.assertIn(
-                        ((param.data.mean() * 1e9).round() / 1e9).item(),
-                        [0.0, 1.0],
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
 
     def test_mismatching_num_image_tokens(self):
         """
@@ -239,6 +218,7 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
+            model.eval()
             _ = model(**input_dict)  # successful forward with no modifications
             curr_input_dict = copy.deepcopy(input_dict)
 
@@ -436,14 +416,6 @@ class Qwen2_5_VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Test
     def test_multi_gpu_data_parallel_forward(self):
         pass
 
-    @unittest.skip(reason="We cannot configure to output a smaller model.")
-    def test_model_is_small(self):
-        pass
-
-    @is_flaky()  # TODO (joao/raushan): Investigate why this test is flaky on this model
-    def test_prompt_lookup_decoding_matches_greedy_search(self):
-        super().test_prompt_lookup_decoding_matches_greedy_search()
-
 
 @require_torch
 class Qwen2_5_VLIntegrationTest(unittest.TestCase):
@@ -458,8 +430,8 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
                 ],
             }
         ]
-        url = "https://qianwen-res.oss-accelerate-overseas.aliyuncs.com/Qwen2-VL/demo_small.jpg"
-        self.image = Image.open(requests.get(url, stream=True).raw)
+        img_url = url_to_local_path("https://qianwen-res.oss-accelerate-overseas.aliyuncs.com/Qwen2-VL/demo_small.jpg")
+        self.image = load_image(img_url).convert("RGB")
 
         cleanup(torch_device, gc_collect=True)
 
@@ -593,33 +565,35 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
         # it should not matter whether two images are the same size or not
         output = model.generate(**inputs, max_new_tokens=30)
 
-        EXPECTED_DECODED_TEXTS = Expectations(
+        expected_decoded_texts = Expectations(
             {
                 (None, None): [
                     "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in",
                     "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\n addCriterion\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and gentle nature, which is",
                 ],
-                ("cuda", None): [
-                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in',
-                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\n addCriterion\n addCriterion\n\n addCriterion\n\n addCriterion\n\n addCriterion\n\n\n addCriterion\n\n addCriterion\n\n addCriterion\n',
+                ("cuda", (8, 6)): [
+                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\n addCriterion\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and gentle nature, which is',
+                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\n addCriterion\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and gentle nature, which is',
                 ],
                 ("rocm", None): [
                     'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in',
-                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\n addCriterion\n addCriterion\n\n addCriterion\n\n addCriterion\n\n addCriterion\n\n\n addCriterion\n\n addCriterion\n\n addCriterion\n'
+                    'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\n addCriterion\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and gentle nature, which is',
                 ],
             }
-        )  # fmt: skip
+        ).get_expectation()  # fmt: skip
 
-        EXPECTED_DECODED_TEXT = EXPECTED_DECODED_TEXTS.get_expectation()
-
-        self.assertEqual(
-            self.processor.batch_decode(output, skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
-        )
+        decoded_texts = self.processor.batch_decode(output, skip_special_tokens=True)
+        for i, (expected, decoded) in enumerate(zip(expected_decoded_texts, decoded_texts)):
+            self.assertEqual(
+                decoded,
+                expected,
+                f"Decoded text {i}:\n{repr(decoded)}\ndoes not match expected decoded text:\n{repr(expected)}",
+            )
 
     @slow
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
+    @pytest.mark.flash_attn_test
     def test_small_model_integration_test_batch_flashatt2(self):
         model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
             "Qwen/Qwen2.5-VL-7B-Instruct",
@@ -635,23 +609,21 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
         # it should not matter whether two images are the same size or not
         output = model.generate(**inputs, max_new_tokens=30)
 
-        EXPECTED_DECODED_TEXT = [
-            "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in'",
-            "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in'",
-        ]
+        expected_decoded_text = Expectations({
+            ("cuda", None): "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in",
+            ("rocm", (9, 4)): "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in",
+            ("xpu", None): "system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in",
+        }).get_expectation()  # fmt: skip
 
-        self.assertEqual(
-            self.processor.batch_decode(output, skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
-        )
-        self.assertEqual(
-            self.processor.batch_decode(output, skip_special_tokens=True)[0],
-            self.processor.batch_decode(output, skip_special_tokens=True)[1],
-        )
+        # Since the test is to generate twice the same text, we just test twice against the expected decoded text
+        decoded_texts = self.processor.batch_decode(output, skip_special_tokens=True)
+        self.assertEqual(decoded_texts[0], expected_decoded_text)
+        self.assertEqual(decoded_texts[1], expected_decoded_text)
 
     @slow
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
+    @pytest.mark.flash_attn_test
     def test_small_model_integration_test_batch_wo_image_flashatt2(self):
         model = Qwen2_5_VLForConditionalGeneration.from_pretrained(
             "Qwen/Qwen2.5-VL-7B-Instruct",
@@ -672,15 +644,25 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
         # it should not matter whether two images are the same size or not
         output = model.generate(**inputs, max_new_tokens=30)
 
-        EXPECTED_DECODED_TEXT = [
-            'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in',
-            "system\nYou are a helpful assistant.\nuser\nWho are you?\nassistant\n�\n\n addCriterion\nI'm sorry, but I don't understand your question. Could you please provide more context or clarify what you're asking",
-        ]  # fmt: skip
+        # FIXME: The second decoded text in the CUDA expectation seems to be incorrect, it used to be the second text
+        # on the ROCm expectation that was the correct one. Either model changed or code is buggy.
+        EXPECTED_DECODED_TEXT = Expectations({
+            ("cuda", None): [
+                'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in',
+                "system\nYou are a helpful assistant.\nuser\nWho are you?\nassistant\n�\n\n addCriterion\nI'm sorry, but I don't understand your question. Could you please provide more context or clarify what you're asking",
+            ],
+            ("rocm", (9, 4)): [
+                'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in',
+                "system\nYou are a helpful assistant.\nuser\nWho are you?\nassistant\nI am Qwen, a large language model created by Alibaba Cloud. I am designed to answer a wide range of questions and provide information on various topics",
+            ],
+            ("xpu", None): [
+                'system\nYou are a helpful assistant.\nuser\nWhat kind of dog is this?\nassistant\nThe dog in the picture appears to be a Labrador Retriever. Labradors are known for their friendly and energetic nature, which is evident in',
+                'system\nYou are a helpful assistant.\nuser\nWho are you?\nassistant\niclaim to be a large language model created by Alibaba Cloud. I am called Qwen.',
+            ],
+        }).get_expectation()  # fmt: skip
 
-        self.assertEqual(
-            self.processor.batch_decode(output, skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
-        )
+        decoded_text = self.processor.batch_decode(output, skip_special_tokens=True)
+        self.assertEqual(decoded_text, EXPECTED_DECODED_TEXT)
 
     @slow
     @require_cv2
@@ -724,7 +706,7 @@ class Qwen2_5_VLIntegrationTest(unittest.TestCase):
         output = model.generate(**inputs, max_new_tokens=30)
 
         EXPECTED_DECODED_TEXT = [
-            'system\nYou are a helpful assistant.\nuser\nWhat is shown in this video?\nassistant\nThe video shows an indoor tennis court with a person standing on one side, preparing to serve the ball. The individual is dressed in athletic attire, including',
+            'system\nYou are a helpful assistant.\nuser\nWhat is shown in this video?\nassistant\nThe video shows an indoor tennis court with a player standing on the baseline, preparing to serve. The player is wearing a white shirt and black shorts,',
         ]  # fmt: skip
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),

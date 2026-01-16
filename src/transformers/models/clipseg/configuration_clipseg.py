@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,22 +13,22 @@
 # limitations under the License.
 """CLIPSeg model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class CLIPSegTextConfig(PretrainedConfig):
+class CLIPSegTextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`CLIPSegModel`]. It is used to instantiate an
     CLIPSeg model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the CLIPSeg
     [CIDAS/clipseg-rd64](https://huggingface.co/CIDAS/clipseg-rd64) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 49408):
@@ -101,7 +100,10 @@ class CLIPSegTextConfig(PretrainedConfig):
         eos_token_id=49407,
         **kwargs,
     ):
-        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+        super().__init__(**kwargs)
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
 
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
@@ -116,15 +118,15 @@ class CLIPSegTextConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
 
 
-class CLIPSegVisionConfig(PretrainedConfig):
+class CLIPSegVisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`CLIPSegModel`]. It is used to instantiate an
     CLIPSeg model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the CLIPSeg
     [CIDAS/clipseg-rd64](https://huggingface.co/CIDAS/clipseg-rd64) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 768):
@@ -204,15 +206,15 @@ class CLIPSegVisionConfig(PretrainedConfig):
         self.hidden_act = hidden_act
 
 
-class CLIPSegConfig(PretrainedConfig):
+class CLIPSegConfig(PreTrainedConfig):
     r"""
     [`CLIPSegConfig`] is the configuration class to store the configuration of a [`CLIPSegModel`]. It is used to
     instantiate a CLIPSeg model according to the specified arguments, defining the text model and vision model configs.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the CLIPSeg
     [CIDAS/clipseg-rd64](https://huggingface.co/CIDAS/clipseg-rd64) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         text_config (`dict`, *optional*):
@@ -265,7 +267,7 @@ class CLIPSegConfig(PretrainedConfig):
     >>> config_text = CLIPSegTextConfig()
     >>> config_vision = CLIPSegVisionConfig()
 
-    >>> config = CLIPSegConfig.from_text_vision_configs(config_text, config_vision)
+    >>> config = CLIPSegConfig(text_config=config_text, vision_config=config_vision)
     ```"""
 
     model_type = "clipseg"
@@ -293,8 +295,6 @@ class CLIPSegConfig(PretrainedConfig):
         text_config_dict = kwargs.pop("text_config_dict", None)
         vision_config_dict = kwargs.pop("vision_config_dict", None)
 
-        super().__init__(**kwargs)
-
         # Instead of simply assigning `[text|vision]_config_dict` to `[text|vision]_config`, we use the values in
         # `[text|vision]_config_dict` to update the values in `[text|vision]_config`. The values should be same in most
         # cases, but we don't want to break anything regarding `_config_dict` that existed before commit `8827e1b2`.
@@ -307,7 +307,7 @@ class CLIPSegConfig(PretrainedConfig):
 
             # Give a warning if the values exist in both `_text_config_dict` and `text_config` but being different.
             for key, value in _text_config_dict.items():
-                if key in text_config and value != text_config[key] and key not in ["transformers_version"]:
+                if key in text_config and value != text_config[key] and key != "transformers_version":
                     # If specified in `text_config_dict`
                     if key in text_config_dict:
                         message = (
@@ -339,7 +339,7 @@ class CLIPSegConfig(PretrainedConfig):
 
             # Give a warning if the values exist in both `_vision_config_dict` and `vision_config` but being different.
             for key, value in _vision_config_dict.items():
-                if key in vision_config and value != vision_config[key] and key not in ["transformers_version"]:
+                if key in vision_config and value != vision_config[key] and key != "transformers_version":
                     # If specified in `vision_config_dict`
                     if key in vision_config_dict:
                         message = (
@@ -358,15 +358,19 @@ class CLIPSegConfig(PretrainedConfig):
             vision_config.update(_vision_config_dict)
 
         if text_config is None:
-            text_config = {}
-            logger.info("`text_config` is `None`. Initializing the `CLIPSegTextConfig` with default values.")
+            text_config = CLIPSegTextConfig()
+            logger.info("`text_config` is `None`. initializing the `CLIPSegTextConfig` with default values.")
+        elif isinstance(text_config, dict):
+            text_config = CLIPSegTextConfig(**text_config)
 
         if vision_config is None:
-            vision_config = {}
+            vision_config = CLIPSegVisionConfig()
             logger.info("`vision_config` is `None`. initializing the `CLIPSegVisionConfig` with default values.")
+        elif isinstance(vision_config, dict):
+            vision_config = CLIPSegVisionConfig(**vision_config)
 
-        self.text_config = CLIPSegTextConfig(**text_config)
-        self.vision_config = CLIPSegVisionConfig(**vision_config)
+        self.text_config = text_config
+        self.vision_config = vision_config
 
         self.projection_dim = projection_dim
         self.logit_scale_init_value = logit_scale_init_value
@@ -379,6 +383,7 @@ class CLIPSegConfig(PretrainedConfig):
         self.conditional_layer = conditional_layer
         self.initializer_factor = 1.0
         self.use_complex_transposed_convolution = use_complex_transposed_convolution
+        super().__init__(**kwargs)
 
 
 __all__ = ["CLIPSegConfig", "CLIPSegTextConfig", "CLIPSegVisionConfig"]

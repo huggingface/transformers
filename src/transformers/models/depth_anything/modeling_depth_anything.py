@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 TikTok and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,10 +13,7 @@
 # limitations under the License.
 """PyTorch Depth Anything model."""
 
-from typing import Optional, Union
-
 import torch
-import torch.utils.checkpoint
 from torch import nn
 
 from ...modeling_outputs import DepthEstimatorOutput
@@ -214,19 +210,8 @@ class DepthAnythingPreTrainedModel(PreTrainedModel):
     config: DepthAnythingConfig
     base_model_prefix = "depth_anything"
     main_input_name = "pixel_values"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = True
-
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
-            # Slightly different from the TF version which uses truncated_normal for initialization
-            # cf https://github.com/pytorch/pytorch/pull/5617
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
 
 
 class DepthAnythingNeck(nn.Module):
@@ -345,11 +330,12 @@ class DepthAnythingForDepthEstimation(DepthAnythingPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple[torch.Tensor], DepthEstimatorOutput]:
+        labels: torch.LongTensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple[torch.Tensor] | DepthEstimatorOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, height, width)`, *optional*):
             Ground truth depth estimation maps for computing the loss.

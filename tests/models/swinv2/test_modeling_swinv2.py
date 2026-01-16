@@ -16,14 +16,15 @@
 import collections
 import inspect
 import unittest
+from functools import cached_property
 
 from transformers import Swinv2Config
 from transformers.testing_utils import require_torch, require_vision, slow, torch_device
-from transformers.utils import cached_property, is_torch_available, is_vision_available
+from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_backbone_common import BackboneTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, _config_zero_init, floats_tensor, ids_tensor
+from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
 from ...test_pipeline_mixin import PipelineTesterMixin
 
 
@@ -175,7 +176,7 @@ class Swinv2ModelTester:
         model.eval()
         result = model(pixel_values)
         self.parent.assertEqual(
-            result.logits.shape, (self.batch_size, self.num_channels, self.image_size, self.image_size)
+            result.reconstruction.shape, (self.batch_size, self.num_channels, self.image_size, self.image_size)
         )
 
         # test greyscale images
@@ -186,7 +187,7 @@ class Swinv2ModelTester:
 
         pixel_values = floats_tensor([self.batch_size, 1, self.image_size, self.image_size])
         result = model(pixel_values)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, 1, self.image_size, self.image_size))
+        self.parent.assertEqual(result.reconstruction.shape, (self.batch_size, 1, self.image_size, self.image_size))
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
         config.num_labels = self.type_sequence_label_size
@@ -221,10 +222,7 @@ class Swinv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else {}
     )
 
-    fx_compatible = False
-    test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
     test_torch_exportable = True
 
     def setUp(self):
@@ -441,20 +439,6 @@ class Swinv2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     @unittest.skip(reason="Swinv2 does not support feedforward chunking yet")
     def test_feed_forward_chunking(self):
         pass
-
-    def test_initialization(self):
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                if "embeddings" not in name and "logit_scale" not in name and param.requires_grad:
-                    self.assertIn(
-                        ((param.data.mean() * 1e9).round() / 1e9).item(),
-                        [0.0, 1.0],
-                        msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                    )
 
 
 @require_vision

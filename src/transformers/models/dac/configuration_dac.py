@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 Descript and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,22 +17,22 @@ import math
 
 import numpy as np
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class DacConfig(PretrainedConfig):
+class DacConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of an [`DacModel`]. It is used to instantiate a
     Dac model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the
     [descript/dac_16khz](https://huggingface.co/descript/dac_16khz) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         encoder_hidden_size (`int`, *optional*, defaults to 64):

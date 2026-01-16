@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,28 +13,22 @@
 # limitations under the License.
 """YOLOS model configuration"""
 
-from collections import OrderedDict
-from collections.abc import Mapping
-
-from packaging import version
-
-from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class YolosConfig(PretrainedConfig):
+class YolosConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`YolosModel`]. It is used to instantiate a YOLOS
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the YOLOS
     [hustvl/yolos-base](https://huggingface.co/hustvl/yolos-base) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 768):
@@ -155,24 +148,4 @@ class YolosConfig(PretrainedConfig):
         self.eos_coefficient = eos_coefficient
 
 
-class YolosOnnxConfig(OnnxConfig):
-    torch_onnx_minimum_version = version.parse("1.11")
-
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        return OrderedDict(
-            [
-                ("pixel_values", {0: "batch", 1: "num_channels", 2: "height", 3: "width"}),
-            ]
-        )
-
-    @property
-    def atol_for_validation(self) -> float:
-        return 1e-4
-
-    @property
-    def default_onnx_opset(self) -> int:
-        return 12
-
-
-__all__ = ["YolosConfig", "YolosOnnxConfig"]
+__all__ = ["YolosConfig"]

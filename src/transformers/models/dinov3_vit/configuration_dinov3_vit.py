@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,24 +13,23 @@
 # limitations under the License.
 """DINOv3 model configuration"""
 
-from typing import Optional
-
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
+from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
 
 
 logger = logging.get_logger(__name__)
 
 
-class DINOv3ViTConfig(PretrainedConfig):
+class DINOv3ViTConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`DINOv3Model`]. It is used to instantiate an
     DINOv3 model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the DINOv3
     [facebook/dinov3-vits16-pretrain-lvd1689m](https://huggingface.co/facebook/dinov3-vits16-pretrain-lvd1689m) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         patch_size (`int`, *optional*, defaults to 16):
@@ -86,6 +84,16 @@ class DINOv3ViTConfig(PretrainedConfig):
         pos_embed_rescale (`float`, *optional*, defaults to 2.0):
             Amount to randomly rescale position embedding coordinates in log-uniform value in [1/rescale, rescale],
             applied only in training mode if not `None`.
+        out_features (`list[str]`, *optional*):
+            If used as backbone, list of features to output. Can be any of `"stem"`, `"stage1"`, `"stage2"`, etc.
+            (depending on how many stages the model has). Will default to the last stage if unset.
+        out_indices (`list[int]`, *optional*):
+            If used as backbone, list of indices of features to output. Can be any of 0, 1, 2, etc.
+            (depending on how many stages the model has). Will default to the last stage if unset.
+        apply_layernorm (`bool`, *optional*, defaults to `True`):
+            Whether to apply layer normalization to the feature maps when used as backbone.
+        reshape_hidden_states (`bool`, *optional*, defaults to `True`):
+            Whether to reshape the hidden states to spatial dimensions when used as backbone.
 
     Example:
 
@@ -128,9 +136,13 @@ class DINOv3ViTConfig(PretrainedConfig):
         use_gated_mlp: bool = False,
         num_register_tokens: int = 0,
         # train augs
-        pos_embed_shift: Optional[float] = None,
-        pos_embed_jitter: Optional[float] = None,
-        pos_embed_rescale: Optional[float] = 2.0,
+        pos_embed_shift: float | None = None,
+        pos_embed_jitter: float | None = None,
+        pos_embed_rescale: float | None = 2.0,
+        out_features: list[str] | None = None,
+        out_indices: list[int] | None = None,
+        apply_layernorm: bool = True,
+        reshape_hidden_states: bool = True,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -161,6 +173,18 @@ class DINOv3ViTConfig(PretrainedConfig):
         self.pos_embed_shift = pos_embed_shift
         self.pos_embed_jitter = pos_embed_jitter
         self.pos_embed_rescale = pos_embed_rescale
+        # Initialize backbone-specific configuration
+        self.apply_layernorm = apply_layernorm
+        self.reshape_hidden_states = reshape_hidden_states
+
+        # Initialize backbone stage names
+        stage_names = ["stem"] + [f"stage{i}" for i in range(1, num_hidden_layers + 1)]
+        self.stage_names = stage_names
+
+        # Initialize backbone features/indices
+        self._out_features, self._out_indices = get_aligned_output_features_output_indices(
+            out_features=out_features, out_indices=out_indices, stage_names=stage_names
+        )
 
 
 __all__ = ["DINOv3ViTConfig"]

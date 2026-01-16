@@ -33,9 +33,10 @@ The X-Codec model is a neural audio codec that integrates semantic information f
 
 The abstract of the paper states the following:
 
-*Recent advancements in audio generation have been significantly propelled by the capabilities of Large Language Models (LLMs). The existing research on audio LLM has primarily focused on enhancing the architecture and scale of audio language models, as well as leveraging larger datasets, and generally, acoustic codecs, such as EnCodec, are used for audio tokenization. However, these codecs were originally designed for audio compression, which may lead to suboptimal performance in the context of audio LLM. Our research aims to address the shortcomings of current audio LLM codecs, particularly their challenges in maintaining semantic integrity in generated audio. For instance, existing methods like VALL-E, which condition acoustic token generation on text transcriptions, often suffer from content inaccuracies and elevated word error rates (WER) due to semantic misinterpretations of acoustic tokens, resulting in word skipping and errors. To overcome these issues, we propose a straightforward yet effective approach called X-Codec. X-Codec incorporates semantic features from a pre-trained semantic encoder before the Residual Vector Quantization (RVQ) stage and introduces a semantic reconstruction loss after RVQ. By enhancing the semantic ability of the codec, X-Codec significantly reduces WER in speech synthesis tasks and extends these benefits to non-speech applications, including music and sound generation. Our experiments in text-to-speech, music continuation, and text-to-sound tasks demonstrate that integrating semantic information substantially improves the overall performance of language models in audio generation.* 
+*Recent advancements in audio generation have been significantly propelled by the capabilities of Large Language Models (LLMs). The existing research on audio LLM has primarily focused on enhancing the architecture and scale of audio language models, as well as leveraging larger datasets, and generally, acoustic codecs, such as EnCodec, are used for audio tokenization. However, these codecs were originally designed for audio compression, which may lead to suboptimal performance in the context of audio LLM. Our research aims to address the shortcomings of current audio LLM codecs, particularly their challenges in maintaining semantic integrity in generated audio. For instance, existing methods like VALL-E, which condition acoustic token generation on text transcriptions, often suffer from content inaccuracies and elevated word error rates (WER) due to semantic misinterpretations of acoustic tokens, resulting in word skipping and errors. To overcome these issues, we propose a straightforward yet effective approach called X-Codec. X-Codec incorporates semantic features from a pre-trained semantic encoder before the Residual Vector Quantization (RVQ) stage and introduces a semantic reconstruction loss after RVQ. By enhancing the semantic ability of the codec, X-Codec significantly reduces WER in speech synthesis tasks and extends these benefits to non-speech applications, including music and sound generation. Our experiments in text-to-speech, music continuation, and text-to-sound tasks demonstrate that integrating semantic information substantially improves the overall performance of language models in audio generation.*
 
 Model cards:
+
 - [xcodec-hubert-librispeech](https://huggingface.co/hf-audio/xcodec-hubert-librispeech) (for speech)
 - [xcodec-wavlm-mls](https://huggingface.co/hf-audio/xcodec-wavlm-mls) (for speech)
 - [xcodec-wavlm-more-data](https://huggingface.co/hf-audio/xcodec-wavlm-more-data) (for speech)
@@ -46,12 +47,11 @@ This model was contributed by [Manal El Aidouni](https://huggingface.co/Manel).
 
 Demos can be found on this [page](https://x-codec-audio.github.io/).
 
-
-## Usage example 
+## Usage example
 
 Here is a quick example of how to encode and decode an audio using this model:
 
-```python 
+```python
 from datasets import load_dataset, Audio
 from transformers import XcodecModel, AutoFeatureExtractor
 dummy_dataset = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
@@ -75,6 +75,7 @@ audio_values = decoder_outputs.audio_values
 audio_values = model(inputs["input_values"]).audio_values
 
 ```
+
 To listen to the original and reconstructed audio, run the snippet below and then open the generated `original.wav` and `reconstruction.wav` files in your music player to compare.
 
 ```python
@@ -88,11 +89,9 @@ sf.write("original.wav", original, sampling_rate)
 sf.write("reconstruction.wav", reconstruction.T, sampling_rate)
 ```
 
-
 ## XcodecConfig
 
 [[autodoc]] XcodecConfig
-
 
 ## XcodecModel
 

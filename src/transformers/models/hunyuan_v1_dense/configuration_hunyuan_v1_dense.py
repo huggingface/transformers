@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright (C) 2025 THL A29 Limited, a Tencent company and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,22 +13,23 @@
 # limitations under the License.
 """HunYuanDenseV1 model configuration"""
 
-from transformers.configuration_utils import PretrainedConfig
-from transformers.utils import logging
+from ...configuration_utils import PreTrainedConfig
+from ...modeling_rope_utils import RopeParameters
+from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class HunYuanDenseV1Config(PretrainedConfig):
+class HunYuanDenseV1Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`HunYuanDenseV1Config`]. It is used to instantiate an
     HunYuan model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the HunYuan-7B.
     Hunyuan-7B-Instruct [tencent/Hunyuan-7B-Instruct](https://huggingface.co/tencent/Hunyuan-7B-Instruct).
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -79,16 +79,10 @@ class HunYuanDenseV1Config(PretrainedConfig):
             issue](https://github.com/pytorch/pytorch/issues/76232).
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings.
-        rope_scaling (`Dict`, *optional*):
-            Dictionary containing the scaling configuration for the RoPE embeddings. Currently supports two scaling
-            strategies: linear and dynamic. Their scaling factor must be a float greater than 1. The expected format is
-            `{"type": strategy name, "factor": scaling factor}`. When using this flag, don't update
-            `max_position_embeddings` to the expected new maximum. See the following thread for more information on how
-            these scaling strategies behave:
-            https://www.reddit.com/r/LocalLLaMA/comments/14mrgpr/dynamically_scaled_rope_further_increases/. This is an
-            experimental feature, subject to breaking API changes in future versions.
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -102,28 +96,27 @@ class HunYuanDenseV1Config(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=290943,
-        hidden_size=4096,
-        intermediate_size: int = 11008,
-        num_hidden_layers=32,
-        num_attention_heads=32,
-        num_key_value_heads=None,
-        hidden_act="silu",
-        max_position_embeddings=2048,
-        initializer_range=0.02,
-        rms_norm_eps=1e-5,
-        use_cache=True,
-        pad_token_id=0,
-        bos_token_id=1,
-        eos_token_id=2,
-        eod_token_id=3,
-        pretraining_tp=1,
-        tie_word_embeddings=False,
-        rope_theta=10000.0,
-        rope_scaling=None,
-        attention_bias=False,
-        attention_dropout=0.0,
-        head_dim=None,
+        vocab_size: int | None = 290943,
+        hidden_size: int | None = 4096,
+        intermediate_size: int | None = 11008,
+        num_hidden_layers: int | None = 32,
+        num_attention_heads: int | None = 32,
+        num_key_value_heads: int | None = None,
+        hidden_act: str | None = "silu",
+        max_position_embeddings: int | None = 2048,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: float | None = 1e-5,
+        use_cache: bool | None = True,
+        pad_token_id: int | None = 0,
+        bos_token_id: int | None = 1,
+        eos_token_id: int | None = 2,
+        eod_token_id: int | None = 3,
+        pretraining_tp: int | None = 1,
+        tie_word_embeddings: bool | None = False,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        attention_bias: bool | None = False,
+        attention_dropout: float | None = 0.0,
+        head_dim: int | None = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -143,47 +136,15 @@ class HunYuanDenseV1Config(PretrainedConfig):
         self.rms_norm_eps = rms_norm_eps
         self.pretraining_tp = pretraining_tp
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
-        # self._rope_scaling_validation()   # TODO: Need validation?
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
+        self.rope_parameters = rope_parameters
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
-
-    def _rope_scaling_validation(self):
-        """
-        Validate the `rope_scaling` configuration.
-        """
-        if self.rope_scaling is None:
-            return
-
-        if not isinstance(self.rope_scaling, dict) or len(self.rope_scaling) != 2:
-            raise ValueError(
-                "`rope_scaling` must be a dictionary with with two fields, `type` and `factor` or `type` and `alpha`, "
-                f"got {self.rope_scaling}"
-            )
-        rope_scaling_type = self.rope_scaling.get("type", None)
-        rope_scaling_factor = self.rope_scaling.get("factor", None)
-        rope_scaling_alpha = self.rope_scaling.get("alpha", None)
-        if rope_scaling_type is None or rope_scaling_type not in ["linear", "dynamic"]:
-            raise ValueError(
-                f"`rope_scaling`'s type field must be one of ['linear', 'dynamic'], got {rope_scaling_type}"
-            )
-        if rope_scaling_factor is None and rope_scaling_alpha is None:
-            raise ValueError("`rope_scaling`'s factor or alpha field must be have one, got both of none")
-        if rope_scaling_factor is not None:
-            if not isinstance(rope_scaling_factor, float) or rope_scaling_factor <= 1.0:
-                raise ValueError(f"`rope_scaling`'s factor field must be a float > 1.0, got {rope_scaling_factor}")
-        if rope_scaling_alpha is not None:
-            if not isinstance(rope_scaling_alpha, float) or rope_scaling_alpha <= 1.0:
-                raise ValueError(f"`rope_scaling`'s alpha field must be a float > 1.0, got {rope_scaling_alpha}")
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        super().__init__(**kwargs)
 
 
 __all__ = ["HunYuanDenseV1Config"]

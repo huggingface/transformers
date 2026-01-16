@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_smolvlm.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 the HuggingFace Inc. team. All rights reserved.
 # Written by Orr Zohar
 #
@@ -19,7 +18,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from ...configuration_utils import PretrainedConfig
+
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 
@@ -27,7 +27,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 logger = logging.get_logger(__name__)
 
 
-class SmolVLMVisionConfig(PretrainedConfig):
+class SmolVLMVisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`SmolVLMVisionModel`]. It is used to instantiate a
     SmolVLM vision encoder according to the specified arguments, defining the model architecture. Instantiating a
@@ -35,8 +35,8 @@ class SmolVLMVisionConfig(PretrainedConfig):
     [google/siglip-so400m-patch14-384](https://huggingface.co/google/siglip-so400m-patch14-384) used in SmolVLM
     [HuggingFaceTB/SmolVLM2-2.2B-Instruct](https://huggingface.co/HuggingFaceTB/SmolVLM2-2.2B-Instruct).
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 1152):
@@ -112,15 +112,15 @@ class SmolVLMVisionConfig(PretrainedConfig):
         self.initializer_range = initializer_range
 
 
-class SmolVLMConfig(PretrainedConfig):
+class SmolVLMConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`SmolVLMModel`]. It is used to instantiate a
     SmolVLM model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the model of the SmolVLM
     [HuggingFaceTB/SmolVLM2-2.2B-Instruct](https://huggingface.co/HuggingFaceTB/SmolVLM2-2.2B-Instruct) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         use_cache (`bool`, *optional*, defaults to `True`):
@@ -132,7 +132,7 @@ class SmolVLMConfig(PretrainedConfig):
             Whether or not to tie the word embeddings with the token embeddings.
         vision_config (`IdeficsVisionConfig` or `dict`, *optional*, defaults to `IdeficsVisionConfig`):
             Custom vision config or dict for the vision tower
-        text_config (`PretrainedConfig` or `dict`, *optional*, defaults to `LlamaConfig`):
+        text_config (`PreTrainedConfig` or `dict`, *optional*, defaults to `LlamaConfig`):
             Custom text config or dict for the text model
         scale_factor (`int`, *optional*, defaults to 2):
             The scale factor for the image encoder.
@@ -184,13 +184,11 @@ class SmolVLMConfig(PretrainedConfig):
             text_config = CONFIG_MAPPING["llama"](
                 rms_norm_eps=1e-5,
                 pad_token_id=pad_token_id,
-                tie_word_embeddings=False,
             )
-
         self.text_config = text_config
         self.scale_factor = scale_factor
 
-        super().__init__(**kwargs, pad_token_id=pad_token_id, tie_word_embeddings=tie_word_embeddings)
+        super().__init__(**kwargs)
 
 
 __all__ = ["SmolVLMVisionConfig", "SmolVLMConfig"]

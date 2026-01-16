@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The Fairseq Authors and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,28 +16,28 @@
 import functools
 import operator
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class Wav2Vec2Config(PretrainedConfig):
+class Wav2Vec2Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Wav2Vec2Model`]. It is used to instantiate an
     Wav2Vec2 model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the Wav2Vec2
     [facebook/wav2vec2-base-960h](https://huggingface.co/facebook/wav2vec2-base-960h) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
         vocab_size (`int`, *optional*, defaults to 32):
             Vocabulary size of the Wav2Vec2 model. Defines the number of different tokens that can be represented by
-            the `inputs_ids` passed when calling [`Wav2Vec2Model`] or [`TFWav2Vec2Model`]. Vocabulary size of the
+            the `inputs_ids` passed when calling [`Wav2Vec2Model`]. Vocabulary size of the
             model. Defines the different tokens that can be represented by the *inputs_ids* passed to the forward
             method of [`Wav2Vec2Model`].
         hidden_size (`int`, *optional*, defaults to 768):
@@ -260,7 +259,10 @@ class Wav2Vec2Config(PretrainedConfig):
         adapter_attn_dim=None,
         **kwargs,
     ):
-        super().__init__(**kwargs, pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id)
+        super().__init__(**kwargs)
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
         self.hidden_size = hidden_size
         self.feat_extract_norm = feat_extract_norm
         self.feat_extract_activation = feat_extract_activation

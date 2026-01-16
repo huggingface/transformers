@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,28 +15,28 @@
 
 import math
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class Data2VecAudioConfig(PretrainedConfig):
+class Data2VecAudioConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Data2VecAudioModel`]. It is used to instantiate
     an Data2VecAudio model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the Data2VecAudio
     [facebook/data2vec-audio-base-960h](https://huggingface.co/facebook/data2vec-audio-base-960h) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
         vocab_size (`int`, *optional*, defaults to 32):
             Vocabulary size of the Data2VecAudio model. Defines the number of different tokens that can be represented
-            by the `inputs_ids` passed when calling [`Data2VecAudioModel`] or [`TFData2VecAudioModel`]. Vocabulary size
+            by the `inputs_ids` passed when calling [`Data2VecAudioModel`]. Vocabulary size
             of the model. Defines the different tokens that can be represented by the *inputs_ids* passed to the
             forward method of [`Data2VecAudioModel`].
         hidden_size (`int`, *optional*, defaults to 768):
@@ -214,7 +213,10 @@ class Data2VecAudioConfig(PretrainedConfig):
         output_hidden_size=None,
         **kwargs,
     ):
-        super().__init__(**kwargs, pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id)
+        super().__init__(**kwargs)
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
         self.hidden_size = hidden_size
         self.feat_extract_activation = feat_extract_activation
         self.conv_dim = list(conv_dim)

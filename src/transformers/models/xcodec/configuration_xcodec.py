@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,28 +14,27 @@
 """Xcodec model configuration"""
 
 import math
-from typing import Optional, Union
 
 import numpy as np
 
 from transformers import AutoConfig, DacConfig, HubertConfig, WavLMConfig
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class XcodecConfig(PretrainedConfig):
+class XcodecConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of an [`XcodecModel`]. It is used to instantiate a
     Xcodec model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the
     [Manel/X-Codec](https://huggingface.co/Manel/X-Codec) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         target_bandwidths (`List[float]`, *optional*, defaults to `[0.5, 1, 1.5, 2, 4]`):
@@ -88,7 +86,7 @@ class XcodecConfig(PretrainedConfig):
 
     def __init__(
         self,
-        target_bandwidths: Optional[list[float]] = None,
+        target_bandwidths: list[float] | None = None,
         sample_rate: int = 16000,
         kernel_size: int = 3,
         channel_ratios: list[float] = [1, 1],
@@ -96,14 +94,12 @@ class XcodecConfig(PretrainedConfig):
         block_dilations: list[int] = [1, 1],
         unit_kernel_size: int = 3,
         codebook_size: int = 1024,
-        codebook_dim: Optional[int] = None,
+        codebook_dim: int | None = None,
         initializer_range: float = 0.02,
-        acoustic_model_config: Union[dict, DacConfig] = None,
-        semantic_model_config: Union[dict, HubertConfig] = None,
+        acoustic_model_config: dict | DacConfig | None = None,
+        semantic_model_config: dict | HubertConfig | None = None,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
         if acoustic_model_config is None:
             self.acoustic_model_config = DacConfig(
                 encoder_hidden_size=64,
@@ -157,6 +153,8 @@ class XcodecConfig(PretrainedConfig):
         if codebook_dim is None:
             codebook_dim = self.acoustic_model_config.hidden_size + self.semantic_model_config.hidden_size
         self.codebook_dim = codebook_dim
+
+        super().__init__(**kwargs)
 
     @property
     def frame_rate(self) -> int:

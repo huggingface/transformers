@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The Meta AI Team Authors and The HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
@@ -15,26 +14,22 @@
 # limitations under the License.
 """X-MOD configuration"""
 
-from collections import OrderedDict
-from collections.abc import Mapping
-
-from ...configuration_utils import PretrainedConfig
-from ...onnx import OnnxConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class XmodConfig(PretrainedConfig):
+class XmodConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`XmodModel`]. It is used to instantiate an X-MOD
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the
     [facebook/xmod-base](https://huggingface.co/facebook/xmod-base) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -65,12 +60,6 @@ class XmodConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
-        position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
-            Type of position embedding. Choose one of `"absolute"`, `"relative_key"`, `"relative_key_query"`. For
-            positional embeddings use `"absolute"`. For more information on `"relative_key"`, please refer to
-            [Self-Attention with Relative Position Representations (Shaw et al.)](https://huggingface.co/papers/1803.02155).
-            For more information on `"relative_key_query"`, please refer to *Method 4* in [Improve Transformer Models
-            with Better Relative Position Embeddings (Huang et al.)](https://huggingface.co/papers/2009.13658).
         is_decoder (`bool`, *optional*, defaults to `False`):
             Whether the model is used as a decoder or not. If `False`, the model is used as an encoder.
         use_cache (`bool`, *optional*, defaults to `True`):
@@ -128,7 +117,6 @@ class XmodConfig(PretrainedConfig):
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
-        position_embedding_type="absolute",
         use_cache=True,
         classifier_dropout=None,
         pre_norm=False,
@@ -138,10 +126,19 @@ class XmodConfig(PretrainedConfig):
         ln_before_adapter=True,
         languages=("en_XX",),
         default_language=None,
+        is_decoder=False,
+        add_cross_attention=False,
+        tie_word_embeddings=True,
         **kwargs,
     ):
-        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+        super().__init__(**kwargs)
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
 
+        self.is_decoder = is_decoder
+        self.add_cross_attention = add_cross_attention
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
@@ -154,7 +151,6 @@ class XmodConfig(PretrainedConfig):
         self.type_vocab_size = type_vocab_size
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
-        self.position_embedding_type = position_embedding_type
         self.use_cache = use_cache
         self.classifier_dropout = classifier_dropout
         self.pre_norm = pre_norm
@@ -166,20 +162,4 @@ class XmodConfig(PretrainedConfig):
         self.default_language = default_language
 
 
-# Copied from transformers.models.roberta.configuration_roberta.RobertaOnnxConfig with Roberta->Xmod
-class XmodOnnxConfig(OnnxConfig):
-    @property
-    def inputs(self) -> Mapping[str, Mapping[int, str]]:
-        if self.task == "multiple-choice":
-            dynamic_axis = {0: "batch", 1: "choice", 2: "sequence"}
-        else:
-            dynamic_axis = {0: "batch", 1: "sequence"}
-        return OrderedDict(
-            [
-                ("input_ids", dynamic_axis),
-                ("attention_mask", dynamic_axis),
-            ]
-        )
-
-
-__all__ = ["XmodConfig", "XmodOnnxConfig"]
+__all__ = ["XmodConfig"]

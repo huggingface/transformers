@@ -55,7 +55,6 @@ found [here](https://github.com/facebookresearch/ParlAI).
 Blenderbot Small is a model with absolute position embeddings so it's usually advised to pad the inputs on the right rather than
 the left.
 
-
 ## Resources
 
 - [Causal language modeling task guide](../tasks/language_modeling)
@@ -69,9 +68,7 @@ the left.
 ## BlenderbotSmallTokenizer
 
 [[autodoc]] BlenderbotSmallTokenizer
-    - build_inputs_with_special_tokens
     - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
     - save_vocabulary
 
 ## BlenderbotSmallTokenizerFast

@@ -46,7 +46,6 @@ BLIP-2를 시작하는 데 도움이 되는 공식 Hugging Face 및 커뮤니티
 ## Blip2Config[[transformers.Blip2Config]]
 
 [[autodoc]] Blip2Config
-    - from_vision_qformer_text_configs
 
 ## Blip2VisionConfig[[transformers.Blip2VisionConfig]]
 

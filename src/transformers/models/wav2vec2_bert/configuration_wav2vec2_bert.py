@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The Fairseq Authors and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,14 +13,14 @@
 # limitations under the License.
 """Wav2Vec2Bert model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class Wav2Vec2BertConfig(PretrainedConfig):
+class Wav2Vec2BertConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Wav2Vec2BertModel`]. It is used to
     instantiate an Wav2Vec2Bert model according to the specified arguments, defining the model architecture.
@@ -29,8 +28,8 @@ class Wav2Vec2BertConfig(PretrainedConfig):
     [facebook/wav2vec2-bert-rel-pos-large](https://huggingface.co/facebook/wav2vec2-bert-rel-pos-large)
     architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -230,7 +229,10 @@ class Wav2Vec2BertConfig(PretrainedConfig):
         conformer_conv_dropout=0.1,
         **kwargs,
     ):
-        super().__init__(**kwargs, pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id)
+        super().__init__(**kwargs)
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.intermediate_size = intermediate_size

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The Qwen team, Alibaba Group and the HuggingFace Inc. team. All rights reserved.
 #
 # This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
@@ -20,58 +19,35 @@
 """video processor class for Qwen2-VL."""
 
 import math
-from typing import Optional, Union
+from typing import Optional
 
-from ...image_processing_utils import (
-    BatchFeature,
-)
+import torch
+from torchvision.transforms.v2 import functional as F
+
+from ...image_processing_utils import BatchFeature
 from ...image_utils import (
     OPENAI_CLIP_MEAN,
     OPENAI_CLIP_STD,
     ChannelDimension,
+    PILImageResampling,
     SizeDict,
     get_image_size,
 )
 from ...processing_utils import Unpack, VideosKwargs
-from ...utils import (
-    TensorType,
-    add_start_docstrings,
-    is_torch_available,
-    is_torchvision_available,
-    is_torchvision_v2_available,
-    is_vision_available,
-)
-from ...utils.import_utils import requires
-from ...video_processing_utils import (
-    BASE_VIDEO_PROCESSOR_DOCSTRING,
-    BaseVideoProcessor,
-)
+from ...utils import TensorType, add_start_docstrings
+from ...video_processing_utils import BASE_VIDEO_PROCESSOR_DOCSTRING, BaseVideoProcessor
 from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
+from .image_processing_qwen2_vl import smart_resize
 
 
-if is_vision_available():
-    from ...image_utils import PILImageResampling
-    from .image_processing_qwen2_vl import smart_resize
-
-if is_torchvision_available():
-    if is_torchvision_v2_available():
-        from torchvision.transforms.v2 import functional as F
-    else:
-        from torchvision.transforms import functional as F
-
-
-if is_torch_available():
-    import torch
-
-
-class Qwen2VLVideoProcessorInitKwargs(VideosKwargs):
-    min_pixels: Optional[int]
-    max_pixels: Optional[int]
-    patch_size: Optional[int]
-    temporal_patch_size: Optional[int]
-    merge_size: Optional[int]
-    min_frames: Optional[int]
-    max_frames: Optional[int]
+class Qwen2VLVideoProcessorInitKwargs(VideosKwargs, total=False):
+    min_pixels: int
+    max_pixels: int
+    patch_size: int
+    temporal_patch_size: int
+    merge_size: int
+    min_frames: int
+    max_frames: int
 
 
 @add_start_docstrings(
@@ -94,7 +70,6 @@ class Qwen2VLVideoProcessorInitKwargs(VideosKwargs):
             The maximum number of frames that can be sampled.
     """,
 )
-@requires(backends=("torchvision",))
 class Qwen2VLVideoProcessor(BaseVideoProcessor):
     resample = PILImageResampling.BICUBIC
     size = {"shortest_edge": 128 * 28 * 28, "longest_edge": 28 * 28 * 768}
@@ -104,8 +79,6 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
     do_rescale = True
     do_normalize = True
     do_convert_rgb = True
-    min_pixels = 128 * 28 * 28
-    max_pixels = 28 * 28 * 768
     patch_size = 14
     temporal_patch_size = 2
     merge_size = 2
@@ -130,16 +103,39 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
         if "shortest_edge" not in size or "longest_edge" not in size:
             raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
 
-        super().__init__(size=size, min_pixels=min_pixels, max_pixels=max_pixels, **kwargs)
+        super().__init__(size=size, **kwargs)
+
+    def _further_process_kwargs(
+        self,
+        size: SizeDict | None = None,
+        min_pixels: int | None = None,
+        max_pixels: int | None = None,
+        **kwargs,
+    ) -> dict:
+        """
+        Update kwargs that need further processing before being validated
+        Can be overridden by subclasses to customize the processing of kwargs.
+        """
+        if min_pixels is not None and max_pixels is not None:
+            size = {"shortest_edge": min_pixels, "longest_edge": max_pixels}
+        elif size is not None:
+            if "shortest_edge" not in size or "longest_edge" not in size:
+                raise ValueError("dictionary `size` must contain 'shortest_edge' and 'longest_edge' keys.")
+            min_pixels = size["shortest_edge"]
+            max_pixels = size["longest_edge"]
+        else:
+            size = {**self.size}
+
+        return super()._further_process_kwargs(size=size, **kwargs)
 
     def sample_frames(
         self,
         metadata: VideoMetadata,
-        temporal_patch_size: Optional[int] = None,
-        min_frames: Optional[int] = None,
-        max_frames: Optional[int] = None,
-        num_frames: Optional[int] = None,
-        fps: Optional[Union[int, float]] = None,
+        temporal_patch_size: int | None = None,
+        min_frames: int | None = None,
+        max_frames: int | None = None,
+        num_frames: int | None = None,
+        fps: int | float | None = None,
         **kwargs,
     ):
         """
@@ -186,7 +182,7 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
                 )
             max_frames = math.floor(min(max_frames, total_num_frames) / temporal_patch_size) * temporal_patch_size
             num_frames = total_num_frames / metadata.fps * fps
-            num_frames = min(min(max(num_frames, min_frames), max_frames), total_num_frames)
+            num_frames = min(max(num_frames, min_frames), max_frames, total_num_frames)
             num_frames = math.floor(num_frames / temporal_patch_size) * temporal_patch_size
 
         if num_frames > total_num_frames:
@@ -205,22 +201,18 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
     def _preprocess(
         self,
         videos: list["torch.Tensor"],
-        do_convert_rgb: bool,
         do_resize: bool,
         size: SizeDict,
         interpolation: Optional["F.InterpolationMode"],
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        min_pixels: Optional[int] = None,
-        max_pixels: Optional[int] = None,
-        patch_size: Optional[int] = None,
-        temporal_patch_size: Optional[int] = None,
-        merge_size: Optional[int] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        device: Optional["torch.Tensor"] = None,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        patch_size: int | None = None,
+        temporal_patch_size: int | None = None,
+        merge_size: int | None = None,
+        return_tensors: str | TensorType | None = None,
         **kwargs,
     ):
         # Group videos by size for batched resizing
@@ -234,8 +226,8 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
                     height,
                     width,
                     factor=patch_size * merge_size,
-                    min_pixels=min_pixels,
-                    max_pixels=max_pixels,
+                    min_pixels=size["shortest_edge"],
+                    max_pixels=size["longest_edge"],
                 )
                 stacked_videos = self.resize(
                     image=stacked_videos,
@@ -260,9 +252,10 @@ class Qwen2VLVideoProcessor(BaseVideoProcessor):
             patches = stacked_videos
 
             # Check that videos have `num_frames` divisible by `temporal_patch_size`
-            if patches.shape[1] % temporal_patch_size != 0:
-                repeats = patches[:, -1:].repeat(1, self.temporal_patch_size - 1, 1, 1, 1)
-                patches = torch.cat([patches, repeats], dim=1)
+            T = patches.shape[1]
+            if pad := -T % temporal_patch_size:
+                repeats = patches[:, -1:].expand(-1, pad, -1, -1, -1)
+                patches = torch.cat((patches, repeats), dim=1)
 
             batch_size, grid_t, channel = patches.shape[:3]
             grid_t = grid_t // temporal_patch_size

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """PyTorch VisionTextDualEncoder model."""
-
-from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -47,14 +44,15 @@ def clip_loss(similarity: torch.Tensor) -> torch.Tensor:
 class VisionTextDualEncoderModel(PreTrainedModel):
     config: VisionTextDualEncoderConfig
     base_model_prefix = "vision_text_dual_encoder"
+    input_modalities = ("image", "text")
     _supports_flash_attn = True
     _supports_sdpa = True
 
     def __init__(
         self,
-        config: Optional[VisionTextDualEncoderConfig] = None,
-        vision_model: Optional[PreTrainedModel] = None,
-        text_model: Optional[PreTrainedModel] = None,
+        config: VisionTextDualEncoderConfig | None = None,
+        vision_model: PreTrainedModel | None = None,
+        text_model: PreTrainedModel | None = None,
     ):
         r"""
         vision_model (`PreTrainedModel`):
@@ -101,14 +99,16 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         self.text_projection = nn.Linear(self.text_embed_dim, self.projection_dim, bias=False)
         self.logit_scale = nn.Parameter(torch.tensor(self.config.logit_scale_init_value))
 
+        self.post_init()
+
     @filter_out_non_signature_kwargs()
     @auto_docstring
     def get_text_features(
         self,
         input_ids: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.Tensor] = None,
-        token_type_ids: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.Tensor | None = None,
+        token_type_ids: torch.Tensor | None = None,
     ) -> torch.FloatTensor:
         r"""
         Returns:
@@ -172,16 +172,17 @@ class VisionTextDualEncoderModel(PreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        return_loss: Optional[bool] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple[torch.Tensor], CLIPOutput]:
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        return_loss: bool | None = None,
+        token_type_ids: torch.LongTensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple[torch.Tensor] | CLIPOutput:
         r"""
         return_loss (`bool`, *optional*):
             Whether or not to return the contrastive loss.
@@ -286,8 +287,8 @@ class VisionTextDualEncoderModel(PreTrainedModel):
     @classmethod
     def from_vision_text_pretrained(
         cls,
-        vision_model_name_or_path: Optional[str] = None,
-        text_model_name_or_path: Optional[str] = None,
+        vision_model_name_or_path: str | None = None,
+        text_model_name_or_path: str | None = None,
         *model_args,
         **kwargs,
     ) -> PreTrainedModel:
@@ -299,10 +300,8 @@ class VisionTextDualEncoderModel(PreTrainedModel):
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
                     - A path to a *directory* containing model weights saved using
                       [`~PreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
-                    - A path or url to a *PyTorch checkpoint folder* (e.g, `./pt_model`). In this case, `from_pt`
-                      should be set to `True` and a configuration object should be provided as `config` argument. This
-                      loading path is slower than converting the PyTorch checkpoint in a Flax model using the provided
-                      conversion scripts and loading the Flax model afterwards.
+                    - A path or url to a *PyTorch checkpoint folder* (e.g, `./pt_model`). In this case, a configuration
+                      object should be provided as `config` argument.
 
             text_model_name_or_path (`str`, *optional*):
                 Information necessary to initiate the text model. Can be either:
@@ -310,10 +309,8 @@ class VisionTextDualEncoderModel(PreTrainedModel):
                     - A string, the *model id* of a pretrained model hosted inside a model repo on huggingface.co.
                     - A path to a *directory* containing model weights saved using
                       [`~PreTrainedModel.save_pretrained`], e.g., `./my_model_directory/`.
-                    - A path or url to a *PyTorch checkpoint folder* (e.g, `./pt_model`). In this case, `from_pt`
-                      should be set to `True` and a configuration object should be provided as `config` argument. This
-                      loading path is slower than converting the PyTorch checkpoint in a Flax model using the provided
-                      conversion scripts and loading the Flax model afterwards.
+                    - A path or url to a *PyTorch checkpoint folder* (e.g, `./pt_model`). In this case, a configuration
+                      object should be provided as `config` argument.
 
             model_args (remaining positional arguments, *optional*):
                 All remaining positional arguments will be passed to the underlying model's `__init__` method.

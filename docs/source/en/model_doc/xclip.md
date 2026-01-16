@@ -53,11 +53,11 @@ If you're interested in submitting a resource to be included here, please feel f
 ## XCLIPProcessor
 
 [[autodoc]] XCLIPProcessor
+    - __call__
 
 ## XCLIPConfig
 
 [[autodoc]] XCLIPConfig
-    - from_text_vision_configs
 
 ## XCLIPTextConfig
 

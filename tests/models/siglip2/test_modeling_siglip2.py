@@ -27,7 +27,7 @@ from transformers.testing_utils import (
     is_flaky,
     require_flash_attn,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     require_vision,
     slow,
     torch_device,
@@ -90,7 +90,7 @@ class Siglip2ModelTesterMixin(ModelTesterMixin):
             self.assertTrue(model_eager.config._attn_implementation == "eager")
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @mark.flash_attn_test
     @slow
     def test_flash_attn_2_inference_equivalence(self):
@@ -267,10 +267,8 @@ class Siglip2VisionModelTest(Siglip2ModelTesterMixin, unittest.TestCase):
 
     all_model_classes = (Siglip2VisionModel,) if is_torch_available() else ()
     additional_model_inputs = ["pixel_attention_mask", "spatial_shapes"]
-    fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = False
-    test_head_masking = False
     # MP works but offload doesn't work when the MultiheadAttention is offloaded
     # TODO: One potential solution would be to add to set preload_module_classes = ["Siglip2MultiheadAttentionPoolingHead"]
     # in the dispatch_model function
@@ -330,10 +328,6 @@ class Siglip2VisionModelTest(Siglip2ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="Siglip2VisionModel does not support standalone training")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(reason="Siglip2 uses the same initialization scheme as the Flax original implementation")
-    def test_initialization(self):
         pass
 
     @slow
@@ -437,10 +431,8 @@ class Siglip2TextModelTester:
 @require_torch
 class Siglip2TextModelTest(Siglip2ModelTesterMixin, unittest.TestCase):
     all_model_classes = (Siglip2TextModel,) if is_torch_available() else ()
-    fx_compatible = False
     test_resize_embeddings = False
-    test_pruning = False
-    test_head_masking = False
+
     model_split_percents = [0.5, 0.8, 0.9]
 
     def setUp(self):
@@ -472,10 +464,6 @@ class Siglip2TextModelTest(Siglip2ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="Siglip2 does not use inputs_embeds")
     def test_inputs_embeds(self):
-        pass
-
-    @unittest.skip(reason="Siglip2 uses the same initialization scheme as the Flax original implementation")
-    def test_initialization(self):
         pass
 
     @slow
@@ -551,9 +539,7 @@ class Siglip2ModelTest(Siglip2ModelTesterMixin, PipelineTesterMixin, unittest.Te
         "pixel_attention_mask",
         "spatial_shapes",
     ]
-    fx_compatible = False
-    test_head_masking = False
-    test_pruning = False
+
     test_resize_embeddings = False
     test_attention_outputs = False
     # MP works but offload doesn't work when the MultiheadAttention is offloaded
@@ -591,10 +577,6 @@ class Siglip2ModelTest(Siglip2ModelTesterMixin, PipelineTesterMixin, unittest.Te
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(reason="Siglip2 uses the same initialization scheme as the Flax original implementation")
-    def test_initialization(self):
-        pass
-
     def test_load_vision_text_config(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -617,7 +599,7 @@ class Siglip2ModelTest(Siglip2ModelTesterMixin, PipelineTesterMixin, unittest.Te
         self.assertIsNotNone(model)
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @mark.flash_attn_test
     def test_flash_attn_2_inference_equivalence_right_padding(self):
         self.skipTest("Siglip2 does not support right padding")
@@ -653,9 +635,7 @@ class Siglip2ForImageClassificationModelTest(Siglip2ModelTesterMixin, PipelineTe
     all_model_classes = (Siglip2ForImageClassification,) if is_torch_available() else ()
     pipeline_model_mapping = {"image-classification": Siglip2ForImageClassification} if is_torch_available() else {}
     additional_model_inputs = ["pixel_values", "pixel_attention_mask", "spatial_shapes"]
-    fx_compatible = False
-    test_head_masking = False
-    test_pruning = False
+
     test_resize_embeddings = False
     test_attention_outputs = False
     # MP works but offload doesn't work when the MultiheadAttention is offloaded
@@ -687,10 +667,6 @@ class Siglip2ForImageClassificationModelTest(Siglip2ModelTesterMixin, PipelineTe
 
     @unittest.skip(reason="Siglip2ForImageClassification does not support gradient checkpointing yet")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(reason="Siglip2 uses the same initialization scheme as the Flax original implementation")
-    def test_initialization(self):
         pass
 
 
@@ -766,6 +742,11 @@ class Siglip2ModelIntegrationTest(unittest.TestCase):
                 [  1.0236,  -0.0376,  -1.4464], [ -4.5358,  -6.2235,  -1.5628], [  4.1708,   5.0334,   3.5187],
                 [  9.4241,  10.1828,   6.3366], [  2.4371,   3.1062,   4.5530], [-12.3173, -13.7240, -13.4580],
                 [  1.1502,   1.1716,  -1.9623]
+            ],
+            ("xpu", 3): [
+                [  1.0195,  -0.0280,  -1.4468], [ -4.5395,  -6.2269,  -1.5667], [  4.1757,   5.0358,   3.5159],
+                [  9.4264,  10.1879,   6.3353], [  2.4409,   3.1058,   4.5491], [-12.3230, -13.7355, -13.4632],
+                [  1.1520,   1.1687,  -1.9647]
             ],
         })
         EXPECTED_LOGITS_PER_TEXT = torch.tensor(expected_logits_per_texts.get_expectation()).to(torch_device)

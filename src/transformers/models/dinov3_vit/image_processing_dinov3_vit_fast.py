@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,7 +13,10 @@
 # limitations under the License.
 """Fast Image processor class for DINOv3."""
 
-from typing import Optional, Union
+from typing import Optional
+
+import torch
+from torchvision.transforms.v2 import functional as F
 
 from transformers.image_processing_base import BatchFeature
 from transformers.image_processing_utils_fast import BaseImageProcessorFast, group_images_by_shape, reorder_images
@@ -22,24 +24,12 @@ from transformers.image_utils import IMAGENET_DEFAULT_MEAN, IMAGENET_DEFAULT_STD
 from transformers.utils import (
     TensorType,
     auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
-    is_torchvision_v2_available,
     logging,
 )
 from transformers.utils.import_utils import requires
 
 
 logger = logging.get_logger(__name__)
-
-
-if is_torch_available():
-    import torch
-
-if is_torchvision_v2_available():
-    from torchvision.transforms.v2 import functional as F
-elif is_torchvision_available():
-    from torchvision.transforms import functional as F
 
 
 @auto_docstring
@@ -66,10 +56,11 @@ class DINOv3ViTImageProcessorFast(BaseImageProcessorFast):
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        disable_grouping: Optional[bool],
-        return_tensors: Optional[Union[str, TensorType]],
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
+        **kwargs,
     ) -> BatchFeature:
         # Group images by size for batched resizing
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
@@ -96,7 +87,6 @@ class DINOv3ViTImageProcessorFast(BaseImageProcessorFast):
             processed_images_grouped[shape] = stacked_images
 
         processed_images = reorder_images(processed_images_grouped, grouped_images_index)
-        processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
 
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,7 +22,7 @@ python utils/sort_auto_mappings.py
 
 to auto-fix all the auto mappings (used in `make style`).
 
-To only check if the mappings are properly sorted (as used in `make quality`), do:
+To only check if the mappings are properly sorted (as used in `make check-repo`), do:
 
 ```bash
 python utils/sort_auto_mappings.py --check_only
@@ -33,7 +32,6 @@ python utils/sort_auto_mappings.py --check_only
 import argparse
 import os
 import re
-from typing import Optional
 
 
 # Path are set with the intent you should run this script from the root of the repo.
@@ -47,7 +45,7 @@ _re_intro_mapping = re.compile(r"[A-Z_]+_MAPPING(\s+|_[A-Z_]+\s+)=\s+OrderedDict
 _re_identifier = re.compile(r'\s*\(\s*"(\S[^"]+)"')
 
 
-def sort_auto_mapping(fname: str, overwrite: bool = False) -> Optional[bool]:
+def sort_auto_mapping(fname: str, overwrite: bool = False) -> bool | None:
     """
     Sort all auto mappings in a file.
 

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 Meta AI and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,7 +13,7 @@
 # limitations under the License.
 """Musicgen Melody model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ..auto.configuration_auto import AutoConfig
 
@@ -22,15 +21,15 @@ from ..auto.configuration_auto import AutoConfig
 logger = logging.get_logger(__name__)
 
 
-class MusicgenMelodyDecoderConfig(PretrainedConfig):
+class MusicgenMelodyDecoderConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of an [`MusicgenMelodyDecoder`]. It is used to instantiate a
     Musicgen Melody decoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the Musicgen Melody
     [facebook/musicgen-melody](https://huggingface.co/facebook/musicgen-melody) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -75,6 +74,11 @@ class MusicgenMelodyDecoderConfig(PretrainedConfig):
         bos_token_id (`int`, *optional*, defaults to 2048): The id of the *beginning-of-sequence* token.
         eos_token_id (`int`, *optional*): The id of the *end-of-sequence* token.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`): Whether to tie word embeddings with the text encoder.
+        is_decoder (`bool`, *optional*, defaults to `False`):
+            Whether to only use the decoder in an encoder-decoder architecture, otherwise it has no effect on
+            decoder-only or encoder-only architectures.
+        add_cross_attention (`bool`, *optional*, defaults to `False`):
+            Whether cross-attention layers should be added to the model.
     """
 
     model_type = "musicgen_melody_decoder"
@@ -103,8 +107,12 @@ class MusicgenMelodyDecoderConfig(PretrainedConfig):
         bos_token_id=2048,
         eos_token_id=None,
         tie_word_embeddings=False,
+        is_decoder=False,
+        add_cross_attention=False,
         **kwargs,
     ):
+        self.is_decoder = is_decoder
+        self.add_cross_attention = add_cross_attention
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -125,38 +133,34 @@ class MusicgenMelodyDecoderConfig(PretrainedConfig):
             raise ValueError(f"Expected 1 (mono) or 2 (stereo) audio channels, got {audio_channels} channels.")
         self.audio_channels = audio_channels
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        super().__init__(**kwargs)
 
 
-class MusicgenMelodyConfig(PretrainedConfig):
+class MusicgenMelodyConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MusicgenMelodyModel`]. It is used to instantiate a
     Musicgen Melody model according to the specified arguments, defining the text encoder, audio encoder and Musicgen Melody decoder
     configs. Instantiating a configuration with the defaults will yield a similar configuration to that of the Musicgen Melody
     [facebook/musicgen-melody](https://huggingface.co/facebook/musicgen-melody) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
-        num_chroma (`int`, *optional*, defaults to 12): Number of chroma bins to use.
+        text_encoder (`Union[dict, `PretrainedConfig`]`):
+            An instance of a configuration object that defines the text encoder config.
+        audio_encoder (`Union[dict, `PretrainedConfig`]`):
+            An instance of a configuration object that defines the audio encoder config.
+        decoder (`Union[dict, `PretrainedConfig`]`):
+            An instance of a configuration object that defines the decoder config.
+        num_chroma (`int`, *optional*, defaults to 12):
+            Number of chroma bins to use.
         chroma_length (`int`, *optional*, defaults to 235):
             Maximum chroma duration if audio is used to condition the model. Corresponds to the maximum duration used during training.
-        kwargs (*optional*):
-            Dictionary of keyword arguments. Notably:
-
-                - **text_encoder** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that
-                  defines the text encoder config.
-                - **audio_encoder** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that
-                  defines the audio encoder config.
-                - **decoder** ([`PretrainedConfig`], *optional*) -- An instance of a configuration object that defines
-                  the decoder config.
 
     Example:
 
@@ -174,8 +178,8 @@ class MusicgenMelodyConfig(PretrainedConfig):
     >>> audio_encoder_config = EncodecConfig()
     >>> decoder_config = MusicgenMelodyDecoderConfig()
 
-    >>> configuration = MusicgenMelodyConfig.from_sub_models_config(
-    ...     text_encoder_config, audio_encoder_config, decoder_config
+    >>> configuration = MusicgenMelodyConfig(
+    ...     text_encoder=text_encoder_config, audio_encoder=audio_encoder_config, decoder=decoder_config
     ... )
 
     >>> # Initializing a MusicgenMelodyForConditionalGeneration (with random weights) from the facebook/musicgen-melody style configuration
@@ -205,52 +209,32 @@ class MusicgenMelodyConfig(PretrainedConfig):
 
     def __init__(
         self,
+        text_encoder,
+        audio_encoder,
+        decoder,
         num_chroma=12,
         chroma_length=235,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-        if "text_encoder" not in kwargs or "audio_encoder" not in kwargs or "decoder" not in kwargs:
-            raise ValueError("Config has to be initialized with text_encoder, audio_encoder and decoder config")
+        if isinstance(text_encoder, dict):
+            text_encoder_model_type = text_encoder.pop("model_type")
+            text_encoder = AutoConfig.for_model(text_encoder_model_type, **text_encoder)
 
-        text_encoder_config = kwargs.pop("text_encoder")
-        text_encoder_model_type = text_encoder_config.pop("model_type")
+        if isinstance(audio_encoder, dict):
+            audio_encoder_model_type = audio_encoder.pop("model_type")
+            audio_encoder = AutoConfig.for_model(audio_encoder_model_type, **audio_encoder)
 
-        audio_encoder_config = kwargs.pop("audio_encoder")
-        audio_encoder_model_type = audio_encoder_config.pop("model_type")
+        if isinstance(decoder, dict):
+            decoder = MusicgenMelodyDecoderConfig(**decoder)
 
-        decoder_config = kwargs.pop("decoder")
-
-        self.text_encoder = AutoConfig.for_model(text_encoder_model_type, **text_encoder_config)
-        self.audio_encoder = AutoConfig.for_model(audio_encoder_model_type, **audio_encoder_config)
-        self.decoder = MusicgenMelodyDecoderConfig(**decoder_config)
-        self.is_encoder_decoder = False
-
+        self.text_encoder = text_encoder
+        self.audio_encoder = audio_encoder
+        self.decoder = decoder
         self.num_chroma = num_chroma
         self.chroma_length = chroma_length
-
-    @classmethod
-    def from_sub_models_config(
-        cls,
-        text_encoder_config: PretrainedConfig,
-        audio_encoder_config: PretrainedConfig,
-        decoder_config: MusicgenMelodyDecoderConfig,
-        **kwargs,
-    ):
-        r"""
-        Instantiate a [`MusicgenMelodyConfig`] (or a derived class) from text encoder, audio encoder and decoder
-        configurations.
-
-        Returns:
-            [`MusicgenMelodyConfig`]: An instance of a configuration object
-        """
-
-        return cls(
-            text_encoder=text_encoder_config.to_dict(),
-            audio_encoder=audio_encoder_config.to_dict(),
-            decoder=decoder_config.to_dict(),
-            **kwargs,
-        )
+        self.tie_encoder_decoder = kwargs.get("tie_encoder_decoder", False)
+        kwargs["is_encoder_decoder"] = False
+        super().__init__(**kwargs)
 
     @property
     # This is a property because you might want to change the codec model on the fly

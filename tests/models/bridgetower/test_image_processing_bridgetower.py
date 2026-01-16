@@ -14,19 +14,16 @@
 
 
 import unittest
-from typing import Optional, Union
 
-import requests
-
+from transformers.image_utils import load_image
 from transformers.testing_utils import require_torch, require_vision
 from transformers.utils import is_torchvision_available, is_vision_available
 
 from ...test_image_processing_common import ImageProcessingTestMixin, prepare_image_inputs
+from ...test_processing_common import url_to_local_path
 
 
 if is_vision_available():
-    from PIL import Image
-
     from transformers import BridgeTowerImageProcessor
 
     if is_torchvision_available():
@@ -38,14 +35,14 @@ class BridgeTowerImageProcessingTester:
         self,
         parent,
         do_resize: bool = True,
-        size: Optional[dict[str, int]] = None,
+        size: dict[str, int] | None = None,
         size_divisor: int = 32,
         do_rescale: bool = True,
-        rescale_factor: Union[int, float] = 1 / 255,
+        rescale_factor: int | float = 1 / 255,
         do_normalize: bool = True,
         do_center_crop: bool = True,
-        image_mean: Optional[Union[float, list[float]]] = [0.48145466, 0.4578275, 0.40821073],
-        image_std: Optional[Union[float, list[float]]] = [0.26862954, 0.26130258, 0.27577711],
+        image_mean: float | list[float] | None = [0.48145466, 0.4578275, 0.40821073],
+        image_std: float | list[float] | None = [0.26862954, 0.26130258, 0.27577711],
         do_pad: bool = True,
         batch_size=7,
         min_resolution=30,
@@ -130,9 +127,7 @@ class BridgeTowerImageProcessingTest(ImageProcessingTestMixin, unittest.TestCase
         if self.image_processing_class is None or self.fast_image_processing_class is None:
             self.skipTest(reason="Skipping slow/fast equivalence test as one of the image processors is not defined")
 
-        dummy_image = Image.open(
-            requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw
-        )
+        dummy_image = load_image(url_to_local_path("http://images.cocodataset.org/val2017/000000039769.jpg"))
         image_processor_slow = self.image_processing_class(**self.image_processor_dict)
         image_processor_fast = self.fast_image_processing_class(**self.image_processor_dict)
 

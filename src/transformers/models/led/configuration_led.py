@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 Iz Beltagy, Matthew E. Peters, Arman Cohan and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,30 +13,28 @@
 # limitations under the License.
 """LED model configuration"""
 
-from typing import Union
-
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class LEDConfig(PretrainedConfig):
+class LEDConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`LEDModel`]. It is used to instantiate an LED
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the LED
     [allenai/led-base-16384](https://huggingface.co/allenai/led-base-16384) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
         vocab_size (`int`, *optional*, defaults to 50265):
             Vocabulary size of the LED model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`LEDModel`] or [`TFLEDModel`].
+            `inputs_ids` passed when calling [`LEDModel`].
         d_model (`int`, *optional*, defaults to 1024):
             Dimensionality of the layers and the pooler layer.
         encoder_layers (`int`, *optional*, defaults to 12):
@@ -127,7 +124,8 @@ class LEDConfig(PretrainedConfig):
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
-        attention_window: Union[list[int], int] = 512,
+        attention_window: list[int] | int = 512,
+        tie_word_embeddings: bool | None = True,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -152,14 +150,12 @@ class LEDConfig(PretrainedConfig):
         self.num_hidden_layers = encoder_layers
         self.attention_window = attention_window
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            is_encoder_decoder=is_encoder_decoder,
-            decoder_start_token_id=decoder_start_token_id,
-            **kwargs,
-        )
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.decoder_start_token_id = decoder_start_token_id
+        self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
 
 __all__ = ["LEDConfig"]

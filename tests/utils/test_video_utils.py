@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -98,7 +97,7 @@ class BaseVideoProcessorTester(unittest.TestCase):
         self.assertEqual(videos_list[0].shape, (1, 16, 32, 3))
         self.assertTrue(np.array_equal(videos_list[0][0], video))
 
-        # Test a 4d array of videos is converted to a a list of 1 video
+        # Test a 4d array of videos is converted to a list of 1 video
         video = get_random_video(16, 32)
         videos_list = make_batched_videos(video)
         self.assertIsInstance(videos_list, list)
@@ -122,11 +121,11 @@ class BaseVideoProcessorTester(unittest.TestCase):
         torch_video = torch.from_numpy(video)
         videos_list = make_batched_videos(torch_video)
         self.assertIsInstance(videos_list, list)
-        self.assertIsInstance(videos_list[0], np.ndarray)
+        self.assertIsInstance(videos_list[0], torch.Tensor)
         self.assertEqual(videos_list[0].shape, (1, 16, 32, 3))
         self.assertTrue(np.array_equal(videos_list[0][0], video))
 
-        # Test a 4d array of videos is converted to a a list of 1 video
+        # Test a 4d array of videos is converted to a list of 1 video
         video = get_random_video(16, 32)
         torch_video = torch.from_numpy(video)
         videos_list = make_batched_videos(torch_video)

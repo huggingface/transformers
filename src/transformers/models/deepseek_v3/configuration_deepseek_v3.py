@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 bzantium and the HuggingFace Inc. team. All rights reserved.
 #
 # This code is based on the DeepSeekV3 implementations from the DeepSeek AI team. (https://huggingface.co/deepseek-ai/DeepSeek-V3)
@@ -16,21 +15,21 @@
 # limitations under the License.
 """DeepSeekV3 model configuration"""
 
-from ...configuration_utils import PretrainedConfig
-from ...modeling_rope_utils import rope_config_validation
+from ...configuration_utils import PreTrainedConfig
+from ...modeling_rope_utils import RopeParameters
 
 
 DEEPSEEK_PRETRAINED_CONFIG_ARCHIVE_MAP = {}
 
 
-class DeepseekV3Config(PretrainedConfig):
+class DeepseekV3Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`DeepseekV3Model`]. It is used to instantiate an DeepSeek
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the DeepSeek-V3.
     e.g. [bzantium/tiny-deepseek-v3](https://huggingface.co/bzantium/tiny-deepseek-v3)
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -106,13 +105,10 @@ class DeepseekV3Config(PretrainedConfig):
             issue](https://github.com/pytorch/pytorch/issues/76232).
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings.
-        rope_scaling (`Dict`, *optional*):
-            Dictionary containing the scaling configuration for the RoPE embeddings. Currently supports two scaling
-            strategies: linear and dynamic. Their scaling factor must be a float greater than 1. The expected format is
-            `{"type": strategy name, "factor": scaling factor}`. When using this flag, don't update
-            `max_position_embeddings` to the expected new maximum.
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
         rope_interleave (`bool`, *optional*, defaults to `True`):
             Whether to interleave the rotary position embeddings.
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
@@ -132,63 +128,62 @@ class DeepseekV3Config(PretrainedConfig):
 
     model_type = "deepseek_v3"
     keys_to_ignore_at_inference = ["past_key_values"]
-    base_model_tp_plan = {  # TODO: only replicate attention layers when > first_k_dense_replace
-        "layers.*.mlp.experts.*.gate_proj": "local_colwise",
-        "layers.*.mlp.experts.*.up_proj": "local_colwise",
-        "layers.*.mlp.experts.*.down_proj": "local_rowwise",
-        "layers.*.mlp.experts.*": "local",  # each expert is wrapped in a module list
-        "layers.*.mlp.shared_experts.gate_proj": "local_colwise",
-        "layers.*.mlp.shared_experts.up_proj": "local_colwise",
-        "layers.*.mlp.shared_experts.down_proj": "local_rowwise",
-        "layers.*.mlp.shared_experts": "local",
-        "layers.*.mlp.gate_proj": "local_colwise",
-        "layers.*.mlp.up_proj": "local_colwise",
-        "layers.*.mlp.down_proj": "local_rowwise",
-        "layers.*.mlp": "gather",  # This is the only moment where results are gathered
+    base_model_tp_plan = {
+        "layers.*.mlp.experts.gate_up_proj": "local_rowwise",
+        "layers.*.mlp.experts.down_proj": "local_rowwise",
+        "layers.*.mlp.experts": "gather",
+        "layers.*.mlp.shared_experts.gate_proj": "colwise",
+        "layers.*.mlp.shared_experts.up_proj": "colwise",
+        "layers.*.mlp.shared_experts.down_proj": "rowwise",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    attribute_map = {
+        "num_local_experts": "n_routed_experts",
+    }
 
     def __init__(
         self,
-        vocab_size=129280,
-        hidden_size=7168,
-        intermediate_size=18432,
-        moe_intermediate_size=2048,
-        num_hidden_layers=61,
-        num_attention_heads=128,
-        num_key_value_heads=128,
-        n_shared_experts=1,
-        n_routed_experts=256,
-        routed_scaling_factor=2.5,
-        kv_lora_rank=512,
-        q_lora_rank=1536,
-        qk_rope_head_dim=64,
-        v_head_dim=128,
-        qk_nope_head_dim=128,
-        n_group=8,
-        topk_group=4,
-        num_experts_per_tok=8,
-        first_k_dense_replace=3,
-        norm_topk_prob=True,
-        hidden_act="silu",
-        max_position_embeddings=4096,
-        initializer_range=0.02,
-        rms_norm_eps=1e-6,
-        use_cache=True,
-        pad_token_id=None,
-        bos_token_id=0,
-        eos_token_id=1,
-        pretraining_tp=1,
-        tie_word_embeddings=False,
-        rope_theta=10000.0,
-        rope_scaling=None,
-        rope_interleave=True,
-        attention_bias=False,
-        attention_dropout=0.0,
+        vocab_size: int | None = 129280,
+        hidden_size: int | None = 7168,
+        intermediate_size: int | None = 18432,
+        moe_intermediate_size: int | None = 2048,
+        num_hidden_layers: int | None = 61,
+        num_attention_heads: int | None = 128,
+        num_key_value_heads: int | None = 128,
+        n_shared_experts: int | None = 1,
+        n_routed_experts: int | None = 256,
+        routed_scaling_factor: float | None = 2.5,
+        kv_lora_rank: int | None = 512,
+        q_lora_rank: int | None = 1536,
+        qk_rope_head_dim: int | None = 64,
+        v_head_dim: int | None = 128,
+        qk_nope_head_dim: int | None = 128,
+        n_group: int | None = 8,
+        topk_group: int | None = 4,
+        num_experts_per_tok: int | None = 8,
+        first_k_dense_replace: int | None = 3,
+        norm_topk_prob: bool | None = True,
+        hidden_act: str | None = "silu",
+        max_position_embeddings: int | None = 4096,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: int | None = 1e-6,
+        use_cache: bool | None = True,
+        pad_token_id: int | None = None,
+        bos_token_id: int | None = 0,
+        eos_token_id: int | None = 1,
+        pretraining_tp: int | None = 1,
+        tie_word_embeddings: bool | None = False,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        rope_interleave: bool | None = True,
+        attention_bias: bool | None = False,
+        attention_dropout: float | None = 0.0,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -225,29 +220,31 @@ class DeepseekV3Config(PretrainedConfig):
         self.rms_norm_eps = rms_norm_eps
         self.pretraining_tp = pretraining_tp
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
-        # Validate the correctness of rotary position embeddings parameters
-        # BC: if there is a 'type' field, copy it it to 'rope_type'.
-        if self.rope_scaling is not None and "type" in self.rope_scaling:
-            self.rope_scaling["rope_type"] = self.rope_scaling["type"]
+        self.rope_parameters = rope_parameters
 
-        if self.rope_scaling is not None:
-            for key in ["beta_fast", "beta_slow", "factor"]:
-                if key in self.rope_scaling:
-                    self.rope_scaling[key] = float(self.rope_scaling[key])
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        super().__init__(**kwargs)
 
-        rope_config_validation(self)
+    def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation: set | None = None, **kwargs):
+        rope_scaling = kwargs.pop("rope_scaling", None)
+        self.rope_parameters = rope_scaling or self.rope_parameters
+        self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else {}
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        # Standardize and validate the correctness of rotary position embeddings parameters
+        self.rope_parameters.setdefault("rope_theta", kwargs.pop("rope_theta", self.default_theta))
+        self.standardize_rope_params()
+        self.validate_rope(ignore_keys=ignore_keys_at_rope_validation)
+
+        # Convert to float because RoPE fn expect a float. Models on the hub were saved as int
+        for key in ["beta_fast", "beta_slow", "factor"]:
+            if key in self.rope_parameters:
+                self.rope_parameters[key] = float(self.rope_parameters[key])
+        return kwargs
 
 
 __all__ = ["DeepseekV3Config"]

@@ -44,7 +44,6 @@ showing in particular that it enables cross-lingual in-context learning on some 
 on surface form robustness and adaptation to tasks that do not have a natural cloze form. Finally, we evaluate our models
 in social value tasks such as hate speech detection in five languages and find it has limitations similar to comparable sized GPT-3 models.*
 
-
 This model was contributed by [Suraj](https://huggingface.co/valhalla). The original code can be found [here](https://github.com/pytorch/fairseq/tree/main/examples/xglm).
 
 ## Resources
@@ -58,17 +57,12 @@ This model was contributed by [Suraj](https://huggingface.co/valhalla). The orig
 ## XGLMTokenizer
 
 [[autodoc]] XGLMTokenizer
-    - build_inputs_with_special_tokens
     - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
     - save_vocabulary
 
 ## XGLMTokenizerFast
 
 [[autodoc]] XGLMTokenizerFast
-
-<frameworkcontent>
-<pt>
 
 ## XGLMModel
 

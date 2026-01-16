@@ -81,9 +81,6 @@ class XGLMModelTester:
         self.eos_token_id = 2
         self.pad_token_id = 1
 
-    def get_large_model_config(self):
-        return XGLMConfig.from_pretrained("facebook/xglm-564M")
-
     def prepare_config_and_inputs(
         self, gradient_checkpointing=False, scale_attn_by_inverse_layer_idx=False, reorder_and_upcast_attn=False
     ):
@@ -95,13 +92,10 @@ class XGLMModelTester:
 
         config = self.get_config(gradient_checkpointing=gradient_checkpointing)
 
-        head_mask = ids_tensor([self.num_hidden_layers, self.num_attention_heads], 2)
-
         return (
             config,
             input_ids,
             input_mask,
-            head_mask,
         )
 
     def get_config(
@@ -125,18 +119,18 @@ class XGLMModelTester:
             gradient_checkpointing=gradient_checkpointing,
         )
 
-    def create_and_check_xglm_model(self, config, input_ids, input_mask, head_mask, *args):
+    def create_and_check_xglm_model(self, config, input_ids, input_mask, *args):
         model = XGLMModel(config=config)
         model.to(torch_device)
         model.eval()
 
-        result = model(input_ids, head_mask=head_mask)
+        result = model(input_ids)
         result = model(input_ids)
 
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
         self.parent.assertEqual(len(result.past_key_values), config.num_hidden_layers)
 
-    def create_and_check_xglm_model_past(self, config, input_ids, input_mask, head_mask, *args):
+    def create_and_check_xglm_model_past(self, config, input_ids, input_mask, *args):
         model = XGLMModel(config=config)
         model.to(torch_device)
         model.eval()
@@ -166,7 +160,7 @@ class XGLMModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
-    def create_and_check_xglm_model_attention_mask_past(self, config, input_ids, input_mask, head_mask, *args):
+    def create_and_check_xglm_model_attention_mask_past(self, config, input_ids, input_mask, *args):
         model = XGLMModel(config=config)
         model.to(torch_device)
         model.eval()
@@ -201,7 +195,7 @@ class XGLMModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
-    def create_and_check_xglm_model_past_large_inputs(self, config, input_ids, input_mask, head_mask, *args):
+    def create_and_check_xglm_model_past_large_inputs(self, config, input_ids, input_mask, *args):
         model = XGLMModel(config=config)
         model.to(torch_device)
         model.eval()
@@ -233,7 +227,7 @@ class XGLMModelTester:
         # test that outputs are equal for slice
         self.parent.assertTrue(torch.allclose(output_from_past_slice, output_from_no_past_slice, atol=1e-3))
 
-    def create_and_check_lm_head_model(self, config, input_ids, input_mask, head_mask, *args):
+    def create_and_check_lm_head_model(self, config, input_ids, input_mask, *args):
         model = XGLMForCausalLM(config)
         model.to(torch_device)
         model.eval()
@@ -243,7 +237,7 @@ class XGLMModelTester:
         self.parent.assertEqual(result.logits.shape, (self.batch_size, self.seq_length, self.vocab_size))
 
     def create_and_check_forward_and_backwards(
-        self, config, input_ids, input_mask, head_mask, *args, gradient_checkpointing=False
+        self, config, input_ids, input_mask, *args, gradient_checkpointing=False
     ):
         model = XGLMForCausalLM(config)
         model.to(torch_device)
@@ -270,12 +264,10 @@ class XGLMModelTester:
             config,
             input_ids,
             input_mask,
-            head_mask,
         ) = config_and_inputs
 
         inputs_dict = {
             "input_ids": input_ids,
-            "head_mask": head_mask,
         }
 
         return config, inputs_dict
@@ -287,9 +279,7 @@ class XGLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     pipeline_model_mapping = (
         {"feature-extraction": XGLMModel, "text-generation": XGLMForCausalLM} if is_torch_available() else {}
     )
-    fx_compatible = True
     test_missing_keys = False
-    test_pruning = False
 
     def setUp(self):
         self.model_tester = XGLMModelTester(self)
@@ -395,13 +385,22 @@ class XGLMModelLanguageGenerationTest(unittest.TestCase):
         non_padded_sentence = tokenizer.decode(output_non_padded[0], skip_special_tokens=True)
         padded_sentence = tokenizer.decode(output_padded[0], skip_special_tokens=True)
 
-        expected_output_sentence = [
-            "This is an extremely long sentence that only exists to test the ability of the model to cope with "
-            "left-padding, such as in batched generation. The output for the sequence below should be the same "
-            "regardless of whether left padding is applied or not. When left padding is applied, the sequence will be "
-            "a single",
-            "Hello, my dog is a little bit of a shy one, but he is very friendly",
-        ]
+        #  fmt: off
+        expected_output_sentences = Expectations(
+            {
+                ("xpu", None): [
+                    'This is an extremely long sentence that only exists to test the ability of the model to cope with left-padding, such as in batched generation. The output for the sequence below should be the same regardless of whether left padding is applied or not. When left padding is applied, the model will not be able',
+                 'Hello, my dog is a little bit of a shy one, but he is very friendly'
+                ],
+                ("cuda", None): [
+                    "This is an extremely long sentence that only exists to test the ability of the model to cope with left-padding, such as in batched generation. The output for the sequence below should be the same regardless of whether left padding is applied or not. When left padding is applied, the sequence will be a single",
+                    "Hello, my dog is a little bit of a shy one, but he is very friendly",
+                ],
+            }
+        )
+        #  fmt: on
+        expected_output_sentence = expected_output_sentences.get_expectation()
+
         self.assertListEqual(expected_output_sentence, batch_out_sentence)
         self.assertListEqual(expected_output_sentence, [non_padded_sentence, padded_sentence])
 
@@ -433,6 +432,7 @@ class XGLMModelLanguageGenerationTest(unittest.TestCase):
 
         expected_output_strings = Expectations(
             {
+                ("xpu", None): "Today is a nice day and the sun is shining. A nice day with warm rainy and windy weather today.",
                 ("rocm", (9, 5)): "Today is a nice day and the sun is shining. A nice day with warm rainy and windy weather today.",
                 ("cuda", None): cuda_expectation,
             }

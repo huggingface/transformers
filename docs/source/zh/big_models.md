@@ -105,11 +105,11 @@ dict_keys(['metadata', 'weight_map'])
  ...
 ```
 
-如果您想直接在模型内部加载这样的分片`checkpoint`，而不使用 [`PreTrainedModel.from_pretrained`](就像您会为完整`checkpoint`执行 `model.load_state_dict()` 一样)，您应该使用 [`modeling_utils.load_sharded_checkpoint`]：
+如果您想直接在模型内部加载这样的分片`checkpoint`，而不使用 [`PreTrainedModel.from_pretrained`](就像您会为完整`checkpoint`执行 `model.load_state_dict()` 一样)，您应该使用 [`trainer_utils.load_sharded_checkpoint`]：
 
 
 ```py
->>> from transformers.modeling_utils import load_sharded_checkpoint
+>>> from transformers.trainer_utils import load_sharded_checkpoint
 
 >>> with tempfile.TemporaryDirectory() as tmp_dir:
 ...     model.save_pretrained(tmp_dir, max_shard_size="200MB")

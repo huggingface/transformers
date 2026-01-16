@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Google Inc. HuggingFace Inc. team. All rights reserved.
 #
 #
@@ -519,7 +518,7 @@ def convert_vision_weights(
     weights: np.ndarray,
 ) -> Iterable[tuple[str, np.ndarray]]:
     def generate_base_path(path: str, block_type: str) -> tuple[str, tuple[int, int]]:
-        re_str = r"{}(\d+)/".format(block_type)
+        re_str = rf"{block_type}(\d+)/"
         re_pattern = re.compile(re_str)
         match = re.search(re_pattern, path).group(1)
         idx = abs(int(match)) - 1
@@ -730,7 +729,7 @@ def main(*args):
         variant,
         type(model).__name__,
     )
-    model.save_pretrained(output_path, state_dict=state_tree, safe_serialization=True)
+    model.save_pretrained(output_path, state_dict=state_tree)
     logging.info(
         "Saved Gemma 3 (%s) to SafeTensors in %s using %s",
         variant,

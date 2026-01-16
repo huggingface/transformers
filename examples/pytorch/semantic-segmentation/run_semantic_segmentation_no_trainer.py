@@ -30,7 +30,6 @@ import argparse
 import json
 import math
 import os
-import warnings
 from functools import partial
 from pathlib import Path
 
@@ -57,7 +56,7 @@ from transformers import (
     default_data_collator,
     get_scheduler,
 )
-from transformers.utils import check_min_version, send_example_telemetry
+from transformers.utils import check_min_version
 from transformers.utils.versions import require_version
 
 
@@ -104,11 +103,6 @@ def parse_args():
         help="Whether or not to reduce all labels by 1 and replace background by 255.",
     )
     parser.add_argument(
-        "--reduce_labels",
-        action="store_true",
-        help="Whether or not to reduce all labels by 1 and replace background by 255.",
-    )
-    parser.add_argument(
         "--train_val_split",
         type=float,
         default=0.15,
@@ -118,11 +112,6 @@ def parse_args():
         "--cache_dir",
         type=str,
         help="Path to a folder in which the model and dataset will be cached.",
-    )
-    parser.add_argument(
-        "--use_auth_token",
-        action="store_true",
-        help="Whether to use an authentication token to access the model repository.",
     )
     parser.add_argument(
         "--per_device_train_batch_size",
@@ -236,14 +225,6 @@ def parse_args():
                 "Need an `output_dir` to create a repo when `--push_to_hub` or `with_tracking` is specified."
             )
 
-    # Deprecation
-    if args.reduce_labels:
-        args.do_reduce_labels = args.reduce_labels
-        warnings.warn(
-            "The `reduce_labels` argument is deprecated and will be removed in v4.45. Please use `do_reduce_labels` instead.",
-            FutureWarning,
-        )
-
     if args.output_dir is not None:
         os.makedirs(args.output_dir, exist_ok=True)
 
@@ -252,10 +233,6 @@ def parse_args():
 
 def main():
     args = parse_args()
-
-    # Sending telemetry. Tracking the example usage helps us better allocate resources to maintain them. The
-    # information sent is the one passed as arguments along with your Python/PyTorch versions.
-    send_example_telemetry("run_semantic_segmentation_no_trainer", args)
 
     # Initialize the accelerator. We will let the accelerator handle device placement for us in this example.
     # If we're using tracking, we also need to initialize it here and it will by default pick up all supported trackers

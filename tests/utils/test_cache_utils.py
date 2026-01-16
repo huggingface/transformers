@@ -28,7 +28,6 @@ from transformers.testing_utils import (
     cleanup,
     get_gpu_count,
     is_torch_available,
-    require_read_token,
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
@@ -59,65 +58,19 @@ if is_torch_available():
     from transformers.integrations.executorch import export_with_dynamic_cache
 
 
+# FIXME: offloaded cache is skipped becase it needs `offload_only_non_sliding=False`
+# but we can't configure cache through `generate()`
 TEST_CACHE_IMPLEMENTATIONS = [
     cache_name
     for cache_name in ALL_CACHE_IMPLEMENTATIONS
     # TODO (joao): offloaded_hybrid == offloaded_hybrid_chunked, deprecate one of them
-    if cache_name != "offloaded_hybrid"
+    if cache_name not in ["offloaded_hybrid", "offloaded_static", "offloaded_hybrid_chunked"]
 ]
 
 
 @require_torch
 class CacheTest(unittest.TestCase):
     """Cache tests that don't require loading models"""
-
-    def test_dynamic_cache_retrocompatibility(self):
-        """Tests that we can convert back and forth between the legacy cache format and DynamicCache"""
-        legacy_cache = ()
-        new_cache = DynamicCache()
-
-        # Creates a new cache with 10 layers in both formats
-        for layer_idx in range(10):
-            new_key = torch.rand((2, 4, 8, 16))
-            new_value = torch.rand((2, 4, 8, 16))
-            new_cache.update(new_key, new_value, layer_idx)
-            legacy_cache += ((new_key, new_value),)
-
-        # Sanity check 1: they must have the same shapes
-        self.assertTrue(len(legacy_cache), len(new_cache))
-        for layer_idx in range(10):
-            self.assertTrue(len(legacy_cache[layer_idx]), len(legacy_cache[layer_idx]))
-            for key_value_idx in range(2):
-                self.assertTrue(
-                    legacy_cache[layer_idx][key_value_idx].shape == new_cache[layer_idx][key_value_idx].shape
-                )
-
-        # Sanity check 2: we can get the sequence length in multiple ways with DynamicCache, and they return the
-        # expected value
-        self.assertTrue(legacy_cache[0][0].shape[-2] == new_cache[0][0].shape[-2] == new_cache.get_seq_length() == 8)
-
-        # Sanity check 3: they must be equal, and both support indexing
-        for layer_idx in range(10):
-            for key_value_idx in range(2):
-                self.assertTrue(
-                    torch.allclose(new_cache[layer_idx][key_value_idx], legacy_cache[layer_idx][key_value_idx])
-                )
-
-        # Test 1: We can convert from legacy to new with no changes
-        from_legacy = DynamicCache.from_legacy_cache(legacy_cache)
-        for layer_idx in range(10):
-            for key_value_idx in range(2):
-                self.assertTrue(
-                    torch.allclose(from_legacy[layer_idx][key_value_idx], legacy_cache[layer_idx][key_value_idx])
-                )
-
-        # Test 2: We can convert from new to legacy with no changes
-        to_legacy = new_cache.to_legacy_cache()
-        for layer_idx in range(10):
-            for key_value_idx in range(2):
-                self.assertTrue(
-                    torch.allclose(to_legacy[layer_idx][key_value_idx], new_cache[layer_idx][key_value_idx])
-                )
 
     def test_static_cache_mha_mqa_gqa(self):
         """
@@ -212,7 +165,7 @@ class CacheIntegrationTest(unittest.TestCase):
         # Sanity check: a cache was used
         self.assertIsInstance(gen_out.past_key_values, Cache)
         # Confirm that the output matches expectations
-        decoded = self.tokenizer.batch_decode(gen_out.sequences, skip_special_tokens=True)
+        decoded = self.tokenizer.decode(gen_out.sequences, skip_special_tokens=True)
         self.assertListEqual(decoded, EXPECTED_GENERATION)
 
     @parameterized.expand(TEST_CACHE_IMPLEMENTATIONS)
@@ -223,7 +176,7 @@ class CacheIntegrationTest(unittest.TestCase):
         """
         _skip_on_failed_cache_prerequisites(self, cache_implementation)
         if cache_implementation == "offloaded_hybrid_chunked":
-            # TODO (joao, cyril): something is off with `offloaded_hybrid_chunked` aka `OffloadedHybridCache`: the
+            # TODO (joao, cyril): something is off with `offloaded_hybrid_chunked`: the
             # output sequence (and the corresponding beam scores, if we add `output_scores=True`) are significantly
             # different from the other caches.
             self.skipTest("`offloaded_hybrid_chunked` fails this test")
@@ -249,7 +202,7 @@ class CacheIntegrationTest(unittest.TestCase):
         # At least one of the sequences requires multiple beam indices -> `reorder_cache` had to shift things around
         self.assertTrue(any(len(set(beams_in_sequence)) > 1 for beams_in_sequence in gen_out.beam_indices))
         # Confirm that the output matches expectations
-        decoded = self.tokenizer.batch_decode(gen_out.sequences, skip_special_tokens=True)
+        decoded = self.tokenizer.decode(gen_out.sequences, skip_special_tokens=True)
         self.assertListEqual(decoded, EXPECTED_GENERATION)
 
     @parameterized.expand([("quanto"), ("HQQ")])
@@ -291,7 +244,7 @@ class CacheIntegrationTest(unittest.TestCase):
 
         self.assertIsInstance(gen_out.past_key_values, QuantizedCache)
 
-        decoded = self.tokenizer.batch_decode(gen_out.sequences, skip_special_tokens=True)
+        decoded = self.tokenizer.decode(gen_out.sequences, skip_special_tokens=True)
         self.assertListEqual(decoded, expected_generation)
 
         # Check that something is actually quantized
@@ -312,7 +265,7 @@ class CacheIntegrationTest(unittest.TestCase):
         }
 
         gen_out = self.model.generate(**inputs, **generation_kwargs)
-        decoded = self.tokenizer.batch_decode(gen_out, skip_special_tokens=True)
+        decoded = self.tokenizer.decode(gen_out, skip_special_tokens=True)
         self.assertListEqual(decoded, EXPECTED_GENERATION)
 
         # Now with extra left-padding
@@ -320,7 +273,7 @@ class CacheIntegrationTest(unittest.TestCase):
         inputs_expanded = inputs_expanded.to(self.model.device)
         self.assertTrue(inputs.input_ids.shape[1] < inputs_expanded.input_ids.shape[1])
         gen_out = self.model.generate(**inputs_expanded, **generation_kwargs)
-        decoded = self.tokenizer.batch_decode(gen_out, skip_special_tokens=True)
+        decoded = self.tokenizer.decode(gen_out, skip_special_tokens=True)
         self.assertListEqual(decoded, EXPECTED_GENERATION)
 
 
@@ -349,12 +302,10 @@ class CacheHardIntegrationTest(unittest.TestCase):
         gen_out = model.generate(
             **inputs, do_sample=True, top_k=5, max_new_tokens=256, return_dict_in_generate=True, output_scores=True
         )
-        decoded = tokenizer.batch_decode(gen_out.sequences, skip_special_tokens=True)
+        decoded = tokenizer.decode(gen_out.sequences, skip_special_tokens=True)
         # sum of the scores for the generated tokens
         input_length = inputs.input_ids.shape[1]
-        score_sum = sum(
-            [score[0][gen_out.sequences[0][input_length + idx]] for idx, score in enumerate(gen_out.scores)]
-        )
+        score_sum = sum(score[0][gen_out.sequences[0][input_length + idx]] for idx, score in enumerate(gen_out.scores))
 
         EXPECTED_GENERATION = (
             "Here's everything I know about cats. Cats are mammals, they have four legs, they have a tail, they have "
@@ -399,21 +350,21 @@ class CacheHardIntegrationTest(unittest.TestCase):
 
         set_seed(0)
         gen_out = model.generate(**inputs, **generation_kwargs)
-        decoded = tokenizer.batch_decode(gen_out.sequences, skip_special_tokens=True)
+        decoded = tokenizer.decode(gen_out.sequences, skip_special_tokens=True)
         with self.subTest(f"{attn_implementation}, dynamic"):
             self.assertListEqual(decoded, EXPECTED_GENERATION)
             self.assertIsInstance(gen_out.past_key_values, DynamicCache)  # sanity check
 
         set_seed(0)
         gen_out = model.generate(**inputs, **generation_kwargs, cache_implementation="static", disable_compile=True)
-        decoded = tokenizer.batch_decode(gen_out.sequences, skip_special_tokens=True)
+        decoded = tokenizer.decode(gen_out.sequences, skip_special_tokens=True)
         with self.subTest(f"{attn_implementation}, static, eager"):
             self.assertListEqual(decoded, EXPECTED_GENERATION)
             self.assertIsInstance(gen_out.past_key_values, StaticCache)  # sanity check
 
         set_seed(0)
         gen_out = model.generate(**inputs, **generation_kwargs, cache_implementation="static")
-        decoded = tokenizer.batch_decode(gen_out.sequences, skip_special_tokens=True)
+        decoded = tokenizer.decode(gen_out.sequences, skip_special_tokens=True)
         with self.subTest(f"{attn_implementation}, static, compiled"):
             self.assertListEqual(decoded, EXPECTED_GENERATION)
             self.assertIsInstance(gen_out.past_key_values, StaticCache)  # sanity check
@@ -477,7 +428,7 @@ class CacheHardIntegrationTest(unittest.TestCase):
             outputs = model.generate(
                 **new_inputs, past_key_values=past_key_values, max_new_tokens=40, disable_compile=True
             )
-            response = tokenizer.batch_decode(outputs)[0]
+            response = tokenizer.decode(outputs)[0]
             responses.append(response)
 
         EXPECTED_DECODED_TEXT = [
@@ -517,10 +468,13 @@ class CacheHardIntegrationTest(unittest.TestCase):
 
         # Check that the caches are the same
         for layer_idx in range(len(no_parallelism_cache)):
-            for kv_idx in range(2):  # 0 = key, 1 = value
-                torch.testing.assert_close(
-                    actual=parallelism_cache[layer_idx][kv_idx], expected=no_parallelism_cache[layer_idx][kv_idx]
-                )
+            torch.testing.assert_close(
+                actual=parallelism_cache.layers[layer_idx].keys, expected=no_parallelism_cache.layers[layer_idx].keys
+            )
+            torch.testing.assert_close(
+                actual=parallelism_cache.layers[layer_idx].values,
+                expected=no_parallelism_cache.layers[layer_idx].values,
+            )
 
     @require_torch_gpu
     def test_static_cache_no_cuda_graph_skips(self):
@@ -542,7 +496,6 @@ class CacheHardIntegrationTest(unittest.TestCase):
 
     @require_torch_multi_accelerator
     @slow
-    @require_read_token
     def test_static_cache_multi_accelerator(self):
         """Regression test for #35164: static cache with multi-accelerator"""
 
@@ -678,7 +631,7 @@ class CacheExportIntegrationTest(unittest.TestCase):
         past_key_values = res.past_key_values
 
         shapes = torch.export.ShapesCollection()
-        dyn = torch.export.Dim("seq", max=512)
+        dyn = torch.export.Dim.DYNAMIC(max=512)
 
         for ix in range(len(past_key_values)):
             shapes[past_key_values.layers[ix].keys] = (None, None, dyn, None)

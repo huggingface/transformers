@@ -22,13 +22,11 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
-
 # Cohere
 
 Cohere [Command-R](https://cohere.com/blog/command-r) is a 35B parameter multilingual large language model designed for long context tasks like retrieval-augmented generation (RAG) and calling external APIs and tools. The model is specifically trained for grounded generation and supports both single-step and multi-step tool use. It supports a context length of 128K tokens.
 
 You can find all the original Command-R checkpoints under the [Command Models](https://huggingface.co/collections/CohereForAI/command-models-67652b401665205e17b192ad) collection.
-
 
 > [!TIP]
 > Click on the Cohere models in the right sidebar for more examples of how to apply Cohere to different language tasks.
@@ -123,28 +121,22 @@ visualizer("Plants create energy through a process known as")
     <img src="https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/cohere-attn-mask.png"/>
 </div>
 
-
 ## Notes
-- Don’t use the dtype parameter in [`~AutoModel.from_pretrained`] if you’re using FlashAttention-2 because it only supports fp16 or bf16. You should use [Automatic Mixed Precision](https://pytorch.org/tutorials/recipes/recipes/amp_recipe.html), set fp16 or bf16 to True if using [`Trainer`], or use [torch.autocast](https://pytorch.org/docs/stable/amp.html#torch.autocast).
+
+- Don't use the dtype parameter in [`~AutoModel.from_pretrained`] if you're using FlashAttention-2 because it only supports fp16 or bf16. You should use [Automatic Mixed Precision](https://pytorch.org/tutorials/recipes/recipes/amp_recipe.html), set fp16 or bf16 to True if using [`Trainer`], or use [torch.autocast](https://pytorch.org/docs/stable/amp.html#torch.autocast).
 
 ## CohereConfig
 
 [[autodoc]] CohereConfig
 
-## CohereTokenizerFast
+## CohereTokenizer
 
-[[autodoc]] CohereTokenizerFast
-    - build_inputs_with_special_tokens
-    - get_special_tokens_mask
-    - create_token_type_ids_from_sequences
-    - update_post_processor
-    - save_vocabulary
+[[autodoc]] CohereTokenizer
 
 ## CohereModel
 
 [[autodoc]] CohereModel
     - forward
-
 
 ## CohereForCausalLM
 

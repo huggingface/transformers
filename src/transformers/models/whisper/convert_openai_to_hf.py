@@ -21,7 +21,7 @@ import os
 import tempfile
 import urllib
 import warnings
-from typing import Any, Optional
+from typing import Any
 
 import torch
 from huggingface_hub.utils import insecure_hashlib
@@ -65,7 +65,7 @@ _TOKENIZERS = {
 def _get_generation_config(
     is_multilingual: bool,
     num_languages: int = 100,
-    openai_version: Optional[str] = None,
+    openai_version: str | None = None,
 ) -> GenerationConfig:
     """
     Loads the appropriate generation config from HF repo
@@ -317,8 +317,7 @@ def convert_tiktoken_to_hf(
 
         with open(merge_file, "w", encoding="utf-8") as writer:
             writer.write("#version: 0.2\n")
-            for bpe_tokens in merges:
-                writer.write(bpe_tokens + "\n")
+            writer.writelines(bpe_tokens + "\n" for bpe_tokens in merges)
 
         hf_tokenizer = WhisperTokenizer(vocab_file, merge_file)
 

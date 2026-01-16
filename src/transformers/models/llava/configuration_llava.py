@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 Microsoft Research & University of Wisconsin-Madison and the HuggingFace Inc. team. All rights reserved.
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,7 +12,7 @@
 # limitations under the License.
 """Llava model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 
@@ -21,7 +20,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 logger = logging.get_logger(__name__)
 
 
-class LlavaConfig(PretrainedConfig):
+class LlavaConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`LlavaForConditionalGeneration`]. It is used to instantiate an
     Llava model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -29,8 +28,8 @@ class LlavaConfig(PretrainedConfig):
 
     e.g. [llava-hf/llava-9b](https://huggingface.co/llava-hf/llava-9b)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vision_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `CLIPVisionConfig`):
@@ -52,6 +51,8 @@ class LlavaConfig(PretrainedConfig):
             Sequence length of one image embedding.
         multimodal_projector_bias (`bool`, *optional*, defaults to `True`):
             Whether to use bias in the multimodal projector.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether to tie weight embeddings
 
     Example:
 
@@ -90,11 +91,13 @@ class LlavaConfig(PretrainedConfig):
         vision_feature_layer=-2,
         image_seq_length=576,
         multimodal_projector_bias=True,
+        tie_word_embeddings=False,
         **kwargs,
     ):
         self.image_token_index = image_token_index
         self.projector_hidden_act = projector_hidden_act
         self.image_seq_length = image_seq_length
+        self.tie_word_embeddings = tie_word_embeddings
 
         if vision_feature_select_strategy not in ["default", "full"]:
             raise ValueError(
@@ -130,6 +133,12 @@ class LlavaConfig(PretrainedConfig):
 
         self.text_config = text_config
         self.multimodal_projector_bias = multimodal_projector_bias
+
+        # The default value is `False` but this config is used with many model types
+        # Attr `tie_word_embeddings` was saved in text config for those models, so we
+        # need an ugly workaround and forward-pass the attr from text config
+        if not tie_word_embeddings and self.text_config.tie_word_embeddings:
+            self.tie_word_embeddings = self.text_config.tie_word_embeddings
 
         super().__init__(**kwargs)
 

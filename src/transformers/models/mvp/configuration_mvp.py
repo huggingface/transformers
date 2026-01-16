@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The Fairseq Authors and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,24 +13,22 @@
 # limitations under the License.
 """MVP model configuration"""
 
-import warnings
-
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class MvpConfig(PretrainedConfig):
+class MvpConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MvpModel`]. It is used to instantiate a MVP model
     according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the MVP [RUCAIBox/mvp](https://huggingface.co/RUCAIBox/mvp)
     architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -78,9 +75,6 @@ class MvpConfig(PretrainedConfig):
             Scale embeddings by diving by sqrt(d_model).
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
-        forced_eos_token_id (`int`, *optional*, defaults to 2):
-            The id of the token to force as the last generated token when `max_length` is reached. Usually set to
-            `eos_token_id`.
         use_prompt (`bool`, *optional*, defaults to `False`):
             Whether or not to use prompt.
         prompt_length (`int`, *optional*, defaults to 100):
@@ -132,12 +126,15 @@ class MvpConfig(PretrainedConfig):
         eos_token_id=2,
         is_encoder_decoder=True,
         decoder_start_token_id=2,
-        forced_eos_token_id=2,
         use_prompt=False,
         prompt_length=100,
         prompt_mid_dim=800,
+        is_decoder=False,
+        tie_word_embeddings=True,
         **kwargs,
     ):
+        self.is_decoder = is_decoder
+        self.tie_word_embeddings = tie_word_embeddings
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.d_model = d_model
@@ -162,22 +159,14 @@ class MvpConfig(PretrainedConfig):
         self.prompt_length = prompt_length
         self.prompt_mid_dim = prompt_mid_dim
 
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.decoder_start_token_id = decoder_start_token_id
         super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
             is_encoder_decoder=is_encoder_decoder,
-            decoder_start_token_id=decoder_start_token_id,
-            forced_eos_token_id=forced_eos_token_id,
             **kwargs,
         )
-
-        if self.forced_bos_token_id is None and kwargs.get("force_bos_token_to_be_generated", False):
-            self.forced_bos_token_id = self.bos_token_id
-            warnings.warn(
-                f"Please make sure the config includes `forced_bos_token_id={self.bos_token_id}` in future versions. "
-                "The config can simply be saved and uploaded again to be fixed."
-            )
 
 
 __all__ = ["MvpConfig"]

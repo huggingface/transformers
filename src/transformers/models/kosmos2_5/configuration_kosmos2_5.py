@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 Microsoft Research and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,22 +13,22 @@
 # limitations under the License.
 """KOSMOS-2.5 model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class Kosmos2_5TextConfig(PretrainedConfig):
+class Kosmos2_5TextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Kosmos2_5TextModel`]. It is used to instantiate a
     KOSMOS-2.5 text decoder according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the text decoder of the KOSMOS-2.5
     [microsoft/kosmos-2.5](https://huggingface.co/microsoft/kosmos-2.5) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 108481):
@@ -99,12 +98,10 @@ class Kosmos2_5TextConfig(PretrainedConfig):
         eos_token_id=2,
         **kwargs,
     ):
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            **kwargs,
-        )
+        super().__init__(**kwargs)
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
 
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
@@ -123,15 +120,15 @@ class Kosmos2_5TextConfig(PretrainedConfig):
         self.use_cache = use_cache
 
 
-class Kosmos2_5VisionConfig(PretrainedConfig):
+class Kosmos2_5VisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Kosmos2_5VisionModel`]. It is used to
     instantiate a KOSMOS-2.5 vision encoder according to the specified arguments, defining the model architecture.
     Instantiating a configuration defaults will yield a similar configuration to that of the vision encoder of the KOSMOS-2.5
     [microsoft/kosmos-2.5](https://huggingface.co/microsoft/kosmos-2.5) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 1536):
@@ -209,7 +206,7 @@ class Kosmos2_5VisionConfig(PretrainedConfig):
         self.initializer_range = initializer_range
 
 
-class Kosmos2_5Config(PretrainedConfig):
+class Kosmos2_5Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Kosmos2_5Model`]. It is used to instantiate a
     KOSMOS-2.5 model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -223,8 +220,8 @@ class Kosmos2_5Config(PretrainedConfig):
             Dictionary of configuration options used to initialize [`Kosmos2_5VisionConfig`].
         latent_query_num (`int`, *optional*, defaults to 2048):
             The number of latent query tokens that represent the image features used in the text decoder component.
-        kwargs (*optional*):
-            Dictionary of keyword arguments.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether the model's input and output word embeddings should be tied.
     """
 
     model_type = "kosmos-2.5"
@@ -235,20 +232,26 @@ class Kosmos2_5Config(PretrainedConfig):
         text_config=None,
         vision_config=None,
         latent_query_num=2048,
+        tie_word_embeddings=True,
         **kwargs,
     ):
-        super().__init__(**kwargs)
         if text_config is None:
-            text_config = {}
-            logger.info("text_config is None. Initializing the Kosmos2_5TextConfig with default values.")
+            text_config = Kosmos2_5TextConfig()
+            logger.info("`text_config` is `None`. initializing the `Kosmos2_5TextConfig` with default values.")
+        elif isinstance(text_config, dict):
+            text_config = Kosmos2_5TextConfig(**text_config)
+
         if vision_config is None:
-            vision_config = {}
-            logger.info("vision_config is None. Initializing the Kosmos2_5VisionConfig with default values.")
+            vision_config = Kosmos2_5VisionConfig()
+            logger.info("`vision_config` is `None`. initializing the `Kosmos2_5VisionConfig` with default values.")
+        elif isinstance(vision_config, dict):
+            vision_config = Kosmos2_5VisionConfig(**vision_config)
 
-        self.text_config = Kosmos2_5TextConfig(**text_config)
-        self.vision_config = Kosmos2_5VisionConfig(**vision_config)
-
+        self.text_config = text_config
+        self.vision_config = vision_config
         self.latent_query_num = latent_query_num
+        self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(**kwargs)
 
 
 __all__ = ["Kosmos2_5Config"]

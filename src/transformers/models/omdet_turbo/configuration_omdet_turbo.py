@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,29 +13,29 @@
 # limitations under the License.
 """OmDet-Turbo model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
 
 
-class OmDetTurboConfig(PretrainedConfig):
+class OmDetTurboConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`OmDetTurboForObjectDetection`].
     It is used to instantiate a OmDet-Turbo model according to the specified arguments, defining the model architecture
     Instantiating a configuration with the defaults will yield a similar configuration to that of the OmDet-Turbo
     [omlab/omdet-turbo-swin-tiny-hf](https://huggingface.co/omlab/omdet-turbo-swin-tiny-hf) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
-        text_config (`PretrainedConfig`, *optional*):
+        text_config (`PreTrainedConfig`, *optional*):
             The configuration of the text backbone.
-        backbone_config (`PretrainedConfig`, *optional*):
+        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `SwinConfig()`):
             The configuration of the vision backbone.
         use_timm_backbone (`bool`, *optional*, defaults to `True`):
             Whether to use the timm for the vision backbone.
@@ -68,7 +67,7 @@ class OmDetTurboConfig(PretrainedConfig):
         class_embed_dim (`int`, *optional*, defaults to 512):
             The dimension of the classes embeddings.
         class_distance_type (`str`, *optional*, defaults to `"cosine"`):
-            The type of of distance to compare predicted classes to projected classes embeddings.
+            The type of distance to compare predicted classes to projected classes embeddings.
             Can be `"cosine"` or `"dot"`.
         num_queries (`int`, *optional*, defaults to 900):
             The number of queries.
@@ -145,6 +144,7 @@ class OmDetTurboConfig(PretrainedConfig):
     ```"""
 
     model_type = "omdet-turbo"
+    sub_configs = {"backbone_config": AutoConfig, "text_config": AutoConfig}
     attribute_map = {
         "encoder_hidden_dim": "d_model",
         "num_attention_heads": "encoder_attention_heads",
@@ -285,20 +285,8 @@ class OmDetTurboConfig(PretrainedConfig):
         self.eval_size = eval_size
         self.learn_initial_query = learn_initial_query
         self.cache_size = cache_size
-        self.is_encoder_decoder = is_encoder_decoder
 
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
-
-    @property
-    def sub_configs(self):
-        sub_configs = {}
-        backbone_config = getattr(self, "backbone_config", None)
-        text_config = getattr(self, "text_config", None)
-        if isinstance(backbone_config, PretrainedConfig):
-            sub_configs["backbone_config"] = type(backbone_config)
-        if isinstance(text_config, PretrainedConfig):
-            sub_configs["text_config"] = type(text_config)
-        return sub_configs
 
 
 __all__ = ["OmDetTurboConfig"]

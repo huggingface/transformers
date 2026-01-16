@@ -44,7 +44,7 @@ open-source contribution to Transformers. Along the way, you will:
     libraries
 -   learn how to do efficiently test large NLP models
 -   learn how to integrate Python utilities like `black`, `ruff`,
-    `make fix-copies` into a library to always ensure clean and readable
+    `make fix-repo` into a library to always ensure clean and readable
     code
 
 To start, let's try to get a general overview of the Transformers
@@ -85,7 +85,7 @@ design.
 
 To successfully add a model, it is important to understand the
 interaction between your model and its config,
-`PreTrainedModel`, and `PretrainedConfig`. For
+`PreTrainedModel`, and `PreTrainedConfig`. For
 exemplary purposes, we will call the PyTorch model to be added to 🤗 Transformers
 `BrandNewBert`.
 
@@ -128,12 +128,12 @@ model.config  # model has access to its config
 
 Similar to the model, the configuration inherits basic serialization and
 deserialization functionalities from
-`PretrainedConfig`. Note
+`PreTrainedConfig`. Note
 that the configuration and the model are always serialized into two
 different formats - the model to a `pytorch_model.bin` file
 and the configuration to a `config.json` file. Calling
 `PreTrainedModel.save_pretrained` will automatically call
-`PretrainedConfig.save_pretrained`, so that both model and configuration are saved.
+`PreTrainedConfig.save_pretrained`, so that both model and configuration are saved.
 
 ### Overview of tokenizers
 
@@ -491,7 +491,7 @@ precision of 0.001! Since it is normal that the exact same model written
 in different libraries can give a slightly different output depending on
 the library framework, we accept an error tolerance of 1e-3 (0.001). It
 is not enough if the model gives nearly the same output, they have to be
-the almost identical. Therefore, you will certainly compare the
+almost identical. Therefore, you will certainly compare the
 intermediate outputs of the 🤗 Transformers version multiple times
 against the intermediate outputs of the original implementation of
 *[camelcase name of model]* in which case an **efficient** debugging environment
@@ -1080,7 +1080,7 @@ make style
 and verify that your coding style passes the quality check:
 
 ```bash
-make quality
+make check-repo
 ```
 
 There are a couple of other very strict design tests in 🤗 Transformers

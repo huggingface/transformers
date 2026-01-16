@@ -14,7 +14,6 @@
 """Testing suite for the PyTorch SigLIP model."""
 
 import inspect
-import os
 import tempfile
 import unittest
 
@@ -38,7 +37,6 @@ from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
-    _config_zero_init,
     floats_tensor,
     ids_tensor,
     random_attention_mask,
@@ -51,6 +49,7 @@ if is_torch_available():
     from torch import nn
 
     from transformers import SiglipForImageClassification, SiglipModel, SiglipTextModel, SiglipVisionModel
+    from transformers.models.siglip.modeling_siglip import SiglipVisionTransformer
 
 if is_vision_available():
     from PIL import Image
@@ -175,10 +174,8 @@ class SiglipVisionModelTest(SiglipModelTesterMixin, unittest.TestCase):
     """
 
     all_model_classes = (SiglipVisionModel,) if is_torch_available() else ()
-    fx_compatible = False
-    test_pruning = False
+
     test_resize_embeddings = False
-    test_head_masking = False
     # MP works but offload doesn't work when the MultiheadAttention is offloaded
     # TODO: One potential solution would be to add to set preload_module_classes = ["SiglipMultiheadAttentionPoolingHead"]
     # in the dispatch_model function
@@ -207,6 +204,22 @@ class SiglipVisionModelTest(SiglipModelTesterMixin, unittest.TestCase):
             self.assertIsInstance(model.get_input_embeddings(), (nn.Module))
             x = model.get_output_embeddings()
             self.assertTrue(x is None or isinstance(x, nn.Linear))
+
+    def test_vision_transformer_get_set_input_embeddings(self):
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        transformer = SiglipVisionTransformer(config)
+
+        self.assertIsInstance(transformer.get_input_embeddings(), nn.Conv2d)
+
+        new_embeddings = nn.Conv2d(
+            in_channels=config.num_channels,
+            out_channels=config.hidden_size,
+            kernel_size=config.patch_size,
+            stride=config.patch_size,
+            padding="valid",
+        )
+        transformer.set_input_embeddings(new_embeddings)
+        self.assertIs(transformer.get_input_embeddings(), new_embeddings)
 
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
@@ -238,10 +251,6 @@ class SiglipVisionModelTest(SiglipModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="SiglipVisionModel does not support standalone training")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(reason="Siglip uses the same initialization scheme as the Flax original implementation")
-    def test_initialization(self):
         pass
 
     @slow
@@ -346,9 +355,7 @@ class SiglipTextModelTester:
 @require_torch
 class SiglipTextModelTest(SiglipModelTesterMixin, unittest.TestCase):
     all_model_classes = (SiglipTextModel,) if is_torch_available() else ()
-    fx_compatible = False
-    test_pruning = False
-    test_head_masking = False
+
     model_split_percents = [0.5, 0.8, 0.9]
 
     # Copied from tests.models.clip.test_modeling_clip.CLIPTextModelTest.setUp with CLIP->Siglip
@@ -384,10 +391,6 @@ class SiglipTextModelTest(SiglipModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="Siglip does not use inputs_embeds")
     # Copied from tests.models.clip.test_modeling_clip.CLIPTextModelTest.test_inputs_embeds
     def test_inputs_embeds(self):
-        pass
-
-    @unittest.skip(reason="Siglip uses the same initialization scheme as the Flax original implementation")
-    def test_initialization(self):
         pass
 
     @slow
@@ -453,9 +456,7 @@ class SiglipModelTest(SiglipModelTesterMixin, PipelineTesterMixin, unittest.Test
     additional_model_inputs = ["pixel_values"]
     all_model_classes = (SiglipModel,) if is_torch_available() else ()
     pipeline_model_mapping = {"feature-extraction": SiglipModel} if is_torch_available() else {}
-    fx_compatible = False
-    test_head_masking = False
-    test_pruning = False
+
     test_resize_embeddings = False
     test_attention_outputs = False
     # MP works but offload doesn't work when the MultiheadAttention is offloaded
@@ -497,82 +498,6 @@ class SiglipModelTest(SiglipModelTesterMixin, PipelineTesterMixin, unittest.Test
     # Copied from tests.models.clip.test_modeling_clip.CLIPModelTest.test_model_get_set_embeddings
     def test_model_get_set_embeddings(self):
         pass
-
-    @unittest.skip(reason="Siglip uses the same initialization scheme as the Flax original implementation")
-    def test_initialization(self):
-        pass
-
-    # Copied from tests.models.clip.test_modeling_clip.CLIPModelTest._create_and_check_torchscript with CLIP->Siglip
-    def _create_and_check_torchscript(self, config, inputs_dict):
-        if not self.test_torchscript:
-            self.skipTest(reason="test_torchscript is set to False")
-
-        configs_no_init = _config_zero_init(config)  # To be sure we have no Nan
-        configs_no_init.torchscript = True
-        configs_no_init.return_dict = False
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            model.to(torch_device)
-            model.eval()
-
-            try:
-                input_ids = inputs_dict["input_ids"]
-                pixel_values = inputs_dict["pixel_values"]  # Siglip needs pixel_values
-                traced_model = torch.jit.trace(model, (input_ids, pixel_values))
-            except RuntimeError:
-                self.fail("Couldn't trace module.")
-
-            with tempfile.TemporaryDirectory() as tmp_dir_name:
-                pt_file_name = os.path.join(tmp_dir_name, "traced_model.pt")
-
-                try:
-                    torch.jit.save(traced_model, pt_file_name)
-                except Exception:
-                    self.fail("Couldn't save module.")
-
-                try:
-                    loaded_model = torch.jit.load(pt_file_name)
-                except Exception:
-                    self.fail("Couldn't load module.")
-
-            model.to(torch_device)
-            model.eval()
-
-            loaded_model.to(torch_device)
-            loaded_model.eval()
-
-            model_state_dict = model.state_dict()
-            loaded_model_state_dict = loaded_model.state_dict()
-
-            non_persistent_buffers = {}
-            for key in loaded_model_state_dict:
-                if key not in model_state_dict:
-                    non_persistent_buffers[key] = loaded_model_state_dict[key]
-
-            loaded_model_state_dict = {
-                key: value for key, value in loaded_model_state_dict.items() if key not in non_persistent_buffers
-            }
-
-            self.assertEqual(set(model_state_dict.keys()), set(loaded_model_state_dict.keys()))
-
-            model_buffers = list(model.buffers())
-            for non_persistent_buffer in non_persistent_buffers.values():
-                found_buffer = False
-                for i, model_buffer in enumerate(model_buffers):
-                    if torch.equal(non_persistent_buffer, model_buffer):
-                        found_buffer = True
-                        break
-
-                self.assertTrue(found_buffer)
-                model_buffers.pop(i)
-
-            models_equal = True
-            for layer_name, p1 in model_state_dict.items():
-                p2 = loaded_model_state_dict[layer_name]
-                if p1.data.ne(p2.data).sum() > 0:
-                    models_equal = False
-
-            self.assertTrue(models_equal)
 
     # Copied from tests.models.clip.test_modeling_clip.CLIPModelTest.test_load_vision_text_config with CLIP->Siglip
     def test_load_vision_text_config(self):
@@ -622,9 +547,7 @@ class SiglipForImageClassificationModelTester(SiglipModelTester):
 class SiglipForImageClassificationModelTest(SiglipModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (SiglipForImageClassification,) if is_torch_available() else ()
     pipeline_model_mapping = {"image-classification": SiglipForImageClassification} if is_torch_available() else {}
-    fx_compatible = False
-    test_head_masking = False
-    test_pruning = False
+
     test_resize_embeddings = False
     test_attention_outputs = False
     # MP works but offload doesn't work when the MultiheadAttention is offloaded
@@ -656,10 +579,6 @@ class SiglipForImageClassificationModelTest(SiglipModelTesterMixin, PipelineTest
 
     @unittest.skip(reason="SiglipForImageClassification does not support gradient checkpointing yet")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(reason="Siglip uses the same initialization scheme as the Flax original implementation")
-    def test_initialization(self):
         pass
 
 

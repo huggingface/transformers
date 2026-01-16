@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The Kyutai and HuggingFace Inc. teams. All rights reserved.
 #
 #
@@ -14,17 +13,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from ...configuration_utils import PretrainedConfig
+
+from ...configuration_utils import PreTrainedConfig
+from ...modeling_rope_utils import RopeParameters
 
 
-class HeliumConfig(PretrainedConfig):
+class HeliumConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`HeliumModel`]. It is used to instantiate an Helium
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the Helium 2b model.
     e.g. [kyutai/helium-2b](https://huggingface.co/kyutai/helium-2b)
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
+
     Args:
         vocab_size (`int`, *optional*, defaults to 48000):
             Vocabulary size of the Helium model. Defines the number of different tokens that can be represented by the
@@ -62,8 +64,10 @@ class HeliumConfig(PretrainedConfig):
             relevant if `config.is_decoder=True`.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
-        rope_theta (`float`, *optional*, defaults to 100000.0):
-            The base period of the RoPE embeddings.
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
         pad_token_id (`int`, *optional*, defaults to 3):
             Padding token id.
         eos_token_id (`int` | `list`, *optional*, defaults to 2):
@@ -74,6 +78,7 @@ class HeliumConfig(PretrainedConfig):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         mlp_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in up_proj, down_proj and gate_proj layers in the MLP layers.
+
     ```python
     >>> from transformers import HeliumModel, HeliumConfig
     >>> # Initializing a Helium 2b style configuration
@@ -86,6 +91,7 @@ class HeliumConfig(PretrainedConfig):
 
     model_type = "helium"
     keys_to_ignore_at_inference = ["past_key_values"]
+    default_theta = 100000.0
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
@@ -103,26 +109,26 @@ class HeliumConfig(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=48000,
-        hidden_size=2560,
-        intermediate_size=7040,
-        num_hidden_layers=24,
-        num_attention_heads=20,
-        num_key_value_heads=20,
-        head_dim=128,
-        hidden_act="silu",
-        attention_dropout=0.0,
-        max_position_embeddings=4096,
-        initializer_range=0.02,
-        rms_norm_eps=1e-8,
-        use_cache=True,
-        tie_word_embeddings=False,
-        rope_theta=100000.0,
-        pad_token_id=3,
-        eos_token_id=2,
-        bos_token_id=1,
-        attention_bias=False,
-        mlp_bias=False,
+        vocab_size: int | None = 48000,
+        hidden_size: int | None = 2560,
+        intermediate_size: int | None = 7040,
+        num_hidden_layers: int | None = 24,
+        num_attention_heads: int | None = 20,
+        num_key_value_heads: int | None = 20,
+        head_dim: int | None = 128,
+        hidden_act: str | None = "silu",
+        attention_dropout: float | None = 0.0,
+        max_position_embeddings: int | None = 4096,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: int | None = 1e-8,
+        use_cache: bool | None = True,
+        tie_word_embeddings: bool | None = False,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        pad_token_id: int | None = 3,
+        eos_token_id: int | None = 2,
+        bos_token_id: int | None = 1,
+        attention_bias: bool | None = False,
+        mlp_bias: bool | None = False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -137,18 +143,16 @@ class HeliumConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.mlp_bias = mlp_bias
+        self.rope_parameters = rope_parameters
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        super().__init__(**kwargs)
 
 
 __all__ = ["HeliumConfig"]

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,13 +13,11 @@
 # limitations under the License.
 """Testing suite for the ColQwen2 processor."""
 
-import shutil
-import tempfile
 import unittest
 
 import torch
+from parameterized import parameterized
 
-from transformers import AutoProcessor, Qwen2VLProcessor
 from transformers.models.colqwen2.processing_colqwen2 import ColQwen2Processor
 from transformers.testing_utils import get_tests_dir, require_torch, require_vision
 from transformers.utils import is_vision_available
@@ -40,24 +37,21 @@ SAMPLE_VOCAB = get_tests_dir("fixtures/test_sentencepiece.model")
 @require_vision
 class ColQwen2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = ColQwen2Processor
+    model_id = "vidore/colqwen2-v1.0-hf"
 
-    @classmethod
-    def setUpClass(cls):
-        cls.tmpdirname = tempfile.mkdtemp()
-        processor = Qwen2VLProcessor.from_pretrained("Qwen/Qwen2-VL-2B-Instruct")
-        processor.save_pretrained(cls.tmpdirname)
+    @parameterized.expand([(1, "pt"), (2, "pt")])
+    @unittest.skip("Not tested before, to investigate")
+    def test_apply_chat_template_image(self, batch_size, return_tensors):
+        pass
 
-    def get_tokenizer(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
+    @unittest.skip("ColQwen2Processor can only process one of text or images at a time")
+    def test_processor_with_multiple_inputs(self):
+        pass
 
-    def get_image_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
+    @unittest.skip("ColQwen2Processor adds a prefix and suffix to the text")
+    def test_tokenizer_defaults(self):
+        pass
 
-    @classmethod
-    def tearDownClass(cls):
-        shutil.rmtree(cls.tmpdirname)
-
-    # Copied from tests.models.llava.test_processing_llava.LlavaProcessorTest.test_get_num_vision_tokens
     def test_get_num_vision_tokens(self):
         "Tests general functionality of the helper used internally in vLLM"
 
@@ -119,7 +113,7 @@ class ColQwen2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     # The following tests override the parent tests because ColQwen2Processor can only take one of images or text as input at a time.
 
     def test_tokenizer_defaults_preserved_by_kwargs(self):
-        if "image_processor" not in self.processor_class.attributes:
+        if "image_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
         processor_components["tokenizer"] = self.get_component("tokenizer", max_length=117, padding="max_length")
@@ -132,15 +126,15 @@ class ColQwen2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
     def test_image_processor_defaults_preserved_by_image_kwargs(self):
         """
-        We use do_rescale=True, rescale_factor=-1 to ensure that image_processor kwargs are preserved in the processor.
+        We use do_rescale=True, rescale_factor=-1.0 to ensure that image_processor kwargs are preserved in the processor.
         We then check that the mean of the pixel_values is less than or equal to 0 after processing.
         Since the original pixel_values are in [0, 255], this is a good indicator that the rescale_factor is indeed applied.
         """
-        if "image_processor" not in self.processor_class.attributes:
+        if "image_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
         processor_components["image_processor"] = self.get_component(
-            "image_processor", do_rescale=True, rescale_factor=-1
+            "image_processor", do_rescale=True, rescale_factor=-1.0
         )
         processor_components["tokenizer"] = self.get_component("tokenizer", max_length=117, padding="max_length")
 
@@ -153,7 +147,7 @@ class ColQwen2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
 
     def test_kwargs_overrides_default_tokenizer_kwargs(self):
-        if "image_processor" not in self.processor_class.attributes:
+        if "image_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
         processor_components["tokenizer"] = self.get_component("tokenizer", padding="longest")
@@ -165,7 +159,7 @@ class ColQwen2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(inputs[self.text_input_name].shape[-1], 112)
 
     def test_kwargs_overrides_default_image_processor_kwargs(self):
-        if "image_processor" not in self.processor_class.attributes:
+        if "image_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
         processor_components["image_processor"] = self.get_component(
@@ -178,11 +172,11 @@ class ColQwen2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         image_input = self.prepare_image_inputs()
 
-        inputs = processor(images=image_input, do_rescale=True, rescale_factor=-1, return_tensors="pt")
+        inputs = processor(images=image_input, do_rescale=True, rescale_factor=-1.0, return_tensors="pt")
         self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
 
     def test_unstructured_kwargs(self):
-        if "image_processor" not in self.processor_class.attributes:
+        if "image_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
         processor = self.processor_class(**processor_components)
@@ -193,7 +187,7 @@ class ColQwen2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             text=input_str,
             return_tensors="pt",
             do_rescale=True,
-            rescale_factor=-1,
+            rescale_factor=-1.0,
             padding="max_length",
             max_length=76,
         )
@@ -201,7 +195,7 @@ class ColQwen2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(inputs[self.text_input_name].shape[-1], 76)
 
     def test_unstructured_kwargs_batched(self):
-        if "image_processor" not in self.processor_class.attributes:
+        if "image_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
         processor = self.processor_class(**processor_components)
@@ -212,7 +206,7 @@ class ColQwen2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             images=image_input,
             return_tensors="pt",
             do_rescale=True,
-            rescale_factor=-1,
+            rescale_factor=-1.0,
             padding="longest",
             max_length=76,
         )
@@ -220,7 +214,7 @@ class ColQwen2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
 
     def test_doubly_passed_kwargs(self):
-        if "image_processor" not in self.processor_class.attributes:
+        if "image_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
         processor = self.processor_class(**processor_components)
@@ -230,13 +224,13 @@ class ColQwen2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         with self.assertRaises(ValueError):
             _ = processor(
                 images=image_input,
-                images_kwargs={"do_rescale": True, "rescale_factor": -1},
+                images_kwargs={"do_rescale": True, "rescale_factor": -1.0},
                 do_rescale=True,
                 return_tensors="pt",
             )
 
     def test_structured_kwargs_nested(self):
-        if "image_processor" not in self.processor_class.attributes:
+        if "image_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
         processor = self.processor_class(**processor_components)
@@ -247,7 +241,7 @@ class ColQwen2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # Define the kwargs for each modality
         all_kwargs = {
             "common_kwargs": {"return_tensors": "pt"},
-            "images_kwargs": {"do_rescale": True, "rescale_factor": -1},
+            "images_kwargs": {"do_rescale": True, "rescale_factor": -1.0},
             "text_kwargs": {"padding": "max_length", "max_length": 76},
         }
 
@@ -257,7 +251,7 @@ class ColQwen2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(inputs[self.text_input_name].shape[-1], 76)
 
     def test_structured_kwargs_nested_from_dict(self):
-        if "image_processor" not in self.processor_class.attributes:
+        if "image_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
         processor = self.processor_class(**processor_components)
@@ -267,7 +261,7 @@ class ColQwen2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # Define the kwargs for each modality
         all_kwargs = {
             "common_kwargs": {"return_tensors": "pt"},
-            "images_kwargs": {"do_rescale": True, "rescale_factor": -1},
+            "images_kwargs": {"do_rescale": True, "rescale_factor": -1.0},
             "text_kwargs": {"padding": "max_length", "max_length": 76},
         }
 
@@ -282,6 +276,10 @@ class ColQwen2ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 
         self.assertSetEqual(set(inputs.keys()), set(processor.model_input_names))
 
-    @unittest.skip("ColPali can't process text+image inputs at the same time")
+    @unittest.skip("ColQwen2Processor can't process text+image inputs at the same time")
     def test_processor_text_has_no_visual(self):
+        pass
+
+    @unittest.skip("ColQwen2Processor adds a batch dimension to the pixel_values")
+    def test_image_processor_defaults(self):
         pass

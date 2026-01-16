@@ -18,17 +18,18 @@ from torch import nn
 
 from ...modeling_rope_utils import dynamic_rope_update
 from ...utils import auto_docstring, can_return_tuple
+from ...utils.generic import maybe_autocast
 from ..glm.modeling_glm import rotate_half
 from ..llama.modeling_llama import (
     LlamaAttention,
     LlamaForCausalLM,
     LlamaMLP,
-    LlamaRotaryEmbedding,
 )
+from ..olmo.modeling_olmo import OlmoRotaryEmbedding
 from .configuration_ernie4_5 import Ernie4_5Config
 
 
-class Ernie4_5RotaryEmbedding(LlamaRotaryEmbedding):
+class Ernie4_5RotaryEmbedding(OlmoRotaryEmbedding):
     @torch.no_grad()
     @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
     def forward(self, x, position_ids):
@@ -36,7 +37,7 @@ class Ernie4_5RotaryEmbedding(LlamaRotaryEmbedding):
         position_ids_expanded = position_ids[:, None, :].float()
 
         device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with torch.autocast(device_type=device_type, enabled=False):  # Force float32
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
             freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
             emb = torch.cat((freqs, freqs), dim=-1)
             cos = emb.cos() * self.attention_scaling
@@ -46,7 +47,7 @@ class Ernie4_5RotaryEmbedding(LlamaRotaryEmbedding):
         return cos, sin
 
 
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
     Args:
@@ -54,8 +55,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
         k (`torch.Tensor`): The key tensor.
         cos (`torch.Tensor`): The cosine part of the rotary embedding.
         sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`, *optional*):
-            Deprecated and unused.
         unsqueeze_dim (`int`, *optional*, defaults to 1):
             The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
             sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note

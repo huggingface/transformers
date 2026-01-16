@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,8 +15,6 @@
 """
 Feature extractor class for CLVP
 """
-
-from typing import Optional, Union
 
 import numpy as np
 
@@ -106,7 +103,7 @@ class ClvpFeatureExtractor(SequenceFeatureExtractor):
             mel_scale="htk",
         )
 
-    def _np_extract_fbank_features(self, waveform: np.array) -> np.ndarray:
+    def _np_extract_fbank_features(self, waveform: np.ndarray) -> np.ndarray:
         """
         This method first computes the log-mel spectrogram of the provided audio then applies normalization along the
         each mel-filterbank, if `mel_norms` is provided.
@@ -130,14 +127,14 @@ class ClvpFeatureExtractor(SequenceFeatureExtractor):
 
     def __call__(
         self,
-        raw_speech: Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]],
-        sampling_rate: Optional[int] = None,
+        raw_speech: np.ndarray | list[float] | list[np.ndarray] | list[list[float]],
+        sampling_rate: int | None = None,
         truncation: bool = True,
-        pad_to_multiple_of: Optional[int] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        return_attention_mask: Optional[bool] = True,
-        padding: Optional[str] = "max_length",
-        max_length: Optional[int] = None,
+        pad_to_multiple_of: int | None = None,
+        return_tensors: str | TensorType | None = None,
+        return_attention_mask: bool | None = True,
+        padding: str | None = "max_length",
+        max_length: int | None = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -170,7 +167,6 @@ class ClvpFeatureExtractor(SequenceFeatureExtractor):
             return_tensors (`str` or [`~utils.TensorType`], *optional*):
                 If set, will return tensors instead of list of python integers. Acceptable values are:
 
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return Numpy `np.ndarray` objects.
             padding_value (`float`, *optional*, defaults to 0.0):

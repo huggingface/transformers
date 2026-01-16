@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The BitNet Team and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,7 +12,7 @@
 # See the License for the specific language governing permissions and
 """PyTorch BitNet model."""
 
-from typing import Callable, Optional
+from collections.abc import Callable
 
 import torch
 
@@ -23,7 +22,6 @@ from ...modeling_outputs import CausalLMOutputWithPast
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import logging
-from ...utils.deprecation import deprecate_kwarg
 from ..gemma.modeling_gemma import GemmaMLP
 from ..llama.modeling_llama import (
     LlamaAttention,
@@ -59,16 +57,15 @@ class BitNetAttention(LlamaAttention):
         super().__init__(config, layer_idx)
         self.attn_sub_norm = BitNetRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
 
-    @deprecate_kwarg("past_key_value", new_name="past_key_values", version="4.58")
     def forward(
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: Optional[torch.Tensor],
-        past_key_values: Optional[Cache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        attention_mask: torch.Tensor | None,
+        past_key_values: Cache | None = None,
+        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -115,7 +112,7 @@ class BitNetModel(LlamaModel):
 
 
 class BitNetForCausalLM(LlamaForCausalLM):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
     _tp_plan = None
     _pp_plan = None
 

@@ -26,7 +26,7 @@ rendered properly in your Markdown viewer.
 
 在实例化你的 [`Trainer`] 之前，创建一个 [`TrainingArguments`]，以便在训练期间访问所有定制点。
 
-这个 API 支持在多个 GPU/TPU 上进行分布式训练，支持 [NVIDIA Apex](https://github.com/NVIDIA/apex) 的混合精度和 PyTorch 的原生 AMP。
+这个 API 支持在多个 GPU/TPU 上进行分布式训练，支持 PyTorch 的原生 AMP。
 
 [`Trainer`] 包含基本的训练循环，支持上述功能。如果需要自定义训练，你可以继承 `Trainer` 并覆盖以下方法：
 
@@ -471,7 +471,6 @@ python examples/pytorch/text-classification/run_glue.py \
   --learning_rate 2e-5 \
   --num_train_epochs 3 \
   --output_dir /tmp/$TASK_NAME/ \
-  --overwrite_output_dir
 ```
 
 **需要注意的一些注意事项**
@@ -606,7 +605,6 @@ accelerate launch \
 --learning_rate 5e-5 \
 --num_train_epochs 3 \
 --output_dir /tmp/$TASK_NAME/ \
---overwrite_output_dir
 ```
 
 4. 你也可以直接使用`accelerate launch`的cmd参数。上面的示例将映射到：
@@ -631,7 +629,6 @@ accelerate launch --num_processes=2 \
 --learning_rate 5e-5 \
 --num_train_epochs 3 \
 --output_dir /tmp/$TASK_NAME/ \
---overwrite_output_dir
 ```
 
 有关更多信息，请参阅 🤗 Accelerate CLI 指南：[启动您的 🤗 Accelerate 脚本](https://huggingface.co/docs/accelerate/basic_tutorials/launch)。

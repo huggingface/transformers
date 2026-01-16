@@ -2,6 +2,10 @@ name: Build docker images (Nightly CI)
 
 on:
   workflow_call:
+    inputs:
+      job:
+        required: true
+        type: string
   push:
     branches:
       - build_nightly_ci_docker_image*
@@ -12,7 +16,8 @@ concurrency:
 
 jobs:
   latest-with-torch-nightly-docker:
-    name: "Nightly PyTorch + Stable TensorFlow"
+    name: "Nightly PyTorch"
+    if: inputs.job == 'latest-with-torch-nightly-docker' || inputs.job == ''
     runs-on:
       group: aws-general-8-plus
     steps:
@@ -41,6 +46,7 @@ jobs:
 
   nightly-torch-deepspeed-docker:
     name: "Nightly PyTorch + DeepSpeed"
+    if: inputs.job == 'nightly-torch-deepspeed-docker' || inputs.job == ''
     runs-on:
       group: aws-g4dn-2xlarge-cache
     steps:

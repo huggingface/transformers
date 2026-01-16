@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 The OpenAI Team Authors and HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
@@ -15,27 +14,27 @@
 # limitations under the License.
 """OpenAI GPT configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class OpenAIGPTConfig(PretrainedConfig):
+class OpenAIGPTConfig(PreTrainedConfig):
     """
-    This is the configuration class to store the configuration of a [`OpenAIGPTModel`] or a [`TFOpenAIGPTModel`]. It is
+    This is the configuration class to store the configuration of a [`OpenAIGPTModel`]. It is
     used to instantiate a GPT model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the GPT
     [openai-community/openai-gpt](https://huggingface.co/openai-community/openai-gpt) architecture from OpenAI.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 40478):
             Vocabulary size of the GPT-2 model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`OpenAIGPTModel`] or [`TFOpenAIGPTModel`].
+            `inputs_ids` passed when calling [`OpenAIGPTModel`].
         n_positions (`int`, *optional*, defaults to 512):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
@@ -89,6 +88,14 @@ class OpenAIGPTConfig(PretrainedConfig):
             [`OpenAIGPTDoubleHeadsModel`].
 
             The dropout ratio to be used after the projection and activation.
+        pad_token_id (`int`, *optional*):
+            Padding token id.
+        bos_token_id (`int`, *optional*):
+            Beginning of stream token id.
+        eos_token_id (`int`, *optional*):
+            End of stream token id.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
 
     Examples:
@@ -132,6 +139,10 @@ class OpenAIGPTConfig(PretrainedConfig):
         summary_activation=None,
         summary_proj_to_labels=True,
         summary_first_dropout=0.1,
+        pad_token_id=None,
+        bos_token_id=None,
+        eos_token_id=None,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -150,6 +161,10 @@ class OpenAIGPTConfig(PretrainedConfig):
         self.summary_activation = summary_activation
         self.summary_first_dropout = summary_first_dropout
         self.summary_proj_to_labels = summary_proj_to_labels
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
         super().__init__(**kwargs)
 
 

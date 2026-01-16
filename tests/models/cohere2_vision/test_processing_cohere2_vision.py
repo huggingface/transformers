@@ -12,66 +12,40 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import shutil
-import tempfile
 import unittest
 
-from transformers import AutoProcessor, AutoTokenizer, Cohere2VisionProcessor
-from transformers.testing_utils import require_read_token, require_torch, require_vision
+from transformers import Cohere2VisionProcessor
+from transformers.testing_utils import require_vision
 from transformers.utils import is_torch_available, is_torchvision_available
 
-from ...test_processing_common import ProcessorTesterMixin
+from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 
 
 if is_torch_available():
     import torch
 
 if is_torchvision_available():
-    from transformers import Cohere2VisionImageProcessorFast
+    pass
 
 
-@require_read_token
 @require_vision
 @unittest.skip("Model not released yet!")
 class Cohere2VisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Cohere2VisionProcessor
 
     @classmethod
-    def setUpClass(cls):
-        cls.tmpdirname = tempfile.mkdtemp()
-        image_processor = Cohere2VisionImageProcessorFast(
+    def _setup_tokenizer(cls):
+        tokenizer_class = cls._get_component_class_from_processor("tokenizer")
+        return tokenizer_class.from_pretrained("CohereLabs/command-a-vision-07-2025")
+
+    @classmethod
+    def _setup_image_processor(cls):
+        image_processor_class = cls._get_component_class_from_processor("image_processor")
+        return image_processor_class(
             size={"height": 20, "width": 20},
             max_patches=3,
         )
-        tokenizer = AutoTokenizer.from_pretrained("CohereLabs/command-a-vision-07-2025")
 
-        processor_kwargs = cls.prepare_processor_dict()
-        processor = Cohere2VisionProcessor(
-            image_processor=image_processor,
-            tokenizer=tokenizer,
-            **processor_kwargs,
-        )
-        processor.save_pretrained(cls.tmpdirname)
-        cls.image_token = processor.image_token
-
-    @staticmethod
-    def prepare_processor_dict():
-        return {}
-
-    def get_tokenizer(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
-
-    def get_image_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
-
-    def get_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs)
-
-    @classmethod
-    def tearDownClass(cls):
-        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
-
-    @require_torch
     def test_process_interleaved_images_videos(self):
         processor = self.get_processor()
 
@@ -82,11 +56,15 @@ class Cohere2VisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                     "content": [
                         {
                             "type": "image",
-                            "url": "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg",
+                            "url": url_to_local_path(
+                                "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
+                            ),
                         },
                         {
                             "type": "image",
-                            "url": "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg",
+                            "url": url_to_local_path(
+                                "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg"
+                            ),
                         },
                         {"type": "text", "text": "What are the differences between these two images?"},
                     ],
@@ -98,7 +76,7 @@ class Cohere2VisionProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                     "content": [
                         {
                             "type": "image",
-                            "url": "https://llava-vl.github.io/static/images/view.jpg",
+                            "url": url_to_local_path("https://llava-vl.github.io/static/images/view.jpg"),
                         },
                         {"type": "text", "text": "Write a haiku for this image"},
                     ],

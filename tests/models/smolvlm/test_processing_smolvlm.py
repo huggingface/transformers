@@ -12,25 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import shutil
-import tempfile
 import unittest
-from io import BytesIO
-from typing import Optional
 
 import numpy as np
-import requests
 
 from transformers import SmolVLMProcessor
-from transformers.models.auto.processing_auto import AutoProcessor
+from transformers.image_utils import load_image
 from transformers.testing_utils import require_av, require_torch, require_vision
-from transformers.utils import is_vision_available
 
-from ...test_processing_common import ProcessorTesterMixin
-
-
-if is_vision_available():
-    from PIL import Image
+from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 
 
 @require_torch
@@ -38,28 +28,23 @@ if is_vision_available():
 class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = SmolVLMProcessor
     videos_input_name = "pixel_values"
+    model_id = "HuggingFaceTB/SmolVLM2-256M-Video-Instruct"
 
     @classmethod
-    def setUpClass(cls):
-        cls.tmpdirname = tempfile.mkdtemp()
-        processor_kwargs = cls.prepare_processor_dict()
-        processor = SmolVLMProcessor.from_pretrained("HuggingFaceTB/SmolVLM2-256M-Video-Instruct", **processor_kwargs)
-        processor.save_pretrained(cls.tmpdirname)
-        cls.image1 = Image.open(
-            BytesIO(
-                requests.get(
-                    "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
-                ).content
+    def _setup_test_attributes(cls, processor):
+        cls.image1 = load_image(
+            url_to_local_path(
+                "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
             )
         )
-        cls.image2 = Image.open(
-            BytesIO(requests.get("https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg").content)
+        cls.image2 = load_image(
+            url_to_local_path(
+                url_to_local_path("https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg")
+            )
         )
-        cls.image3 = Image.open(
-            BytesIO(
-                requests.get(
-                    "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg"
-                ).content
+        cls.image3 = load_image(
+            url_to_local_path(
+                "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg"
             )
         )
         cls.bos_token = processor.tokenizer.bos_token
@@ -67,25 +52,12 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         cls.video_token = processor.video_token
         cls.fake_image_token = processor.fake_image_token
         cls.global_img_token = processor.global_image_token
-
         cls.bos_token_id = processor.tokenizer.convert_tokens_to_ids(cls.bos_token)
         cls.image_token_id = processor.tokenizer.convert_tokens_to_ids(cls.image_token)
         cls.fake_image_token_id = processor.tokenizer.convert_tokens_to_ids(cls.fake_image_token)
         cls.global_img_tokens_id = processor.tokenizer(cls.global_img_token, add_special_tokens=False)["input_ids"]
         cls.padding_token_id = processor.tokenizer.pad_token_id
         cls.image_seq_len = processor.image_seq_len
-
-    def get_tokenizer(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
-
-    def get_image_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
-
-    def get_video_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).video_processor
-
-    def get_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs)
 
     @staticmethod
     def prepare_processor_dict():
@@ -95,14 +67,14 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         }
 
     # Override as SmolVLM needs images/video to be an explicitly nested batch
-    def prepare_image_inputs(self, batch_size: Optional[int] = None):
+    def prepare_image_inputs(self, batch_size: int | None = None):
         """This function prepares a list of PIL images for testing"""
         images = super().prepare_image_inputs(batch_size)
         if isinstance(images, (list, tuple)):
             images = [[image] for image in images]
         return images
 
-    def prepare_video_inputs(self, batch_size: Optional[int] = None):
+    def prepare_video_inputs(self, batch_size: int | None = None):
         """This function prepares a list of numpy videos."""
         video_input = [np.random.randint(255, size=(3, 30, 400), dtype=np.uint8)] * 8
         if batch_size is None:
@@ -129,10 +101,6 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             + [self.fake_image_token_id]
         )
         return text_split_images
-
-    @classmethod
-    def tearDownClass(cls):
-        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     def test_process_interleaved_images_prompts_no_image_splitting(self):
         processor_components = self.prepare_components()
@@ -397,7 +365,9 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
                     "content": [
                         {
                             "type": "video",
-                            "url": "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/Big_Buck_Bunny_720_10s_10MB.mp4",
+                            "url": url_to_local_path(
+                                "https://huggingface.co/datasets/raushan-testing-hf/videos-test/resolve/main/tiny_video.mp4"
+                            ),
                         },
                         {"type": "text", "text": "What is shown in this video?"},
                     ],
@@ -417,10 +387,10 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
         # SmolVLM doesn't sample `num_frames` exactly, by uses other sampling method
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), 3)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), 1)
 
         # Load with `fps` arg
-        fps = 1
+        fps = 10
         out_dict_with_video = processor.apply_chat_template(
             messages,
             add_generation_prompt=True,
@@ -432,7 +402,7 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertTrue(self.videos_input_name in out_dict_with_video)
         self.assertEqual(len(out_dict_with_video[self.videos_input_name]), 1)
         # SmolVLM doesn't sample 1 frame per second exactly, by uses other sampling method
-        self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), fps * 10)
+        self.assertEqual(len(out_dict_with_video[self.videos_input_name][0]), 4)
 
         # NOTE: the last assert checks are removed
         # Loading video as a list of frames (i.e. images) is not supported in SmolVLM
@@ -440,7 +410,7 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @require_torch
     @require_vision
     def test_unstructured_kwargs_batched(self):
-        if "image_processor" not in self.processor_class.attributes:
+        if "image_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         image_processor = self.get_component("image_processor")
         video_processor = self.get_component("video_processor")
@@ -471,7 +441,7 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @require_torch
     @require_vision
     def test_unstructured_kwargs_batched_video(self):
-        if "video_processor" not in self.processor_class.attributes:
+        if "video_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"video_processor attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
         processor_kwargs = self.prepare_processor_dict()
@@ -485,7 +455,7 @@ class SmolVLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             videos=video_input,
             return_tensors="pt",
             do_rescale=True,
-            rescale_factor=-1,
+            rescale_factor=-1.0,
             padding="max_length",
             max_length=172,
         )

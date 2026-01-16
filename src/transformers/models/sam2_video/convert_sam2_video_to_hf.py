@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -190,7 +189,7 @@ def replace_keys(state_dict, config):
         if re.match(output_vision_encoder_neck_pattern, key):
             key = key.replace(".conv.", ".")
 
-        # memory_encoder.out_proj.weight -> memory_encoder.projection.weight
+        # memory_encoder.o_proj.weight -> memory_encoder.projection.weight
         if re.match(output_memory_encoder_projection_pattern, key):
             key = key.replace(".o_proj.", ".projection.")
 

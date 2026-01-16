@@ -50,10 +50,11 @@ Here's how to use the model for zero-shot object detection:
 
 >>> import torch
 >>> from PIL import Image
->>> from transformers import AutoProcessor, AutoModelForZeroShotObjectDetection, infer_device
+>>> from transformers import AutoProcessor, AutoModelForZeroShotObjectDetection
+from accelerate import Accelerator
 
 >>> model_id = "IDEA-Research/grounding-dino-tiny"
->>> device = infer_device()
+>>> device = Accelerator().device
 
 >>> processor = AutoProcessor.from_pretrained(model_id)
 >>> model = AutoModelForZeroShotObjectDetection.from_pretrained(model_id).to(device)
@@ -113,6 +114,7 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 ## GroundingDinoProcessor
 
 [[autodoc]] GroundingDinoProcessor
+    - __call__
     - post_process_grounded_object_detection
 
 ## GroundingDinoConfig

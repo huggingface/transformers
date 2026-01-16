@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The Nari Labs and HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,23 +13,21 @@
 # limitations under the License.
 """Dia model configuration"""
 
-from typing import Optional
-
-from ...configuration_utils import PretrainedConfig
-from ...modeling_rope_utils import rope_config_validation
+from ...configuration_utils import PreTrainedConfig
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class DiaEncoderConfig(PretrainedConfig):
+class DiaEncoderConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`DiaEncoder`]. It is used to instantiate a Dia
     encoder according to the specified arguments, defining the encoder architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         max_position_embeddings (`int`, *optional*, defaults to 1024):
@@ -55,45 +52,10 @@ class DiaEncoderConfig(PretrainedConfig):
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"swish"` and `"gelu_new"` are supported.
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings.
-        rope_scaling (`dict`, *optional*):
-            Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
-            and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
-            accordingly.
-            Expected contents:
-                `rope_type` (`str`):
-                    The sub-variant of RoPE to use. Can be one of ['default', 'linear', 'dynamic', 'yarn', 'longrope',
-                    'llama3'], with 'default' being the original RoPE implementation.
-                `factor` (`float`, *optional*):
-                    Used with all rope types except 'default'. The scaling factor to apply to the RoPE embeddings. In
-                    most scaling types, a `factor` of x will enable the model to handle sequences of length x *
-                    original maximum pre-trained length.
-                `original_max_position_embeddings` (`int`, *optional*):
-                    Used with 'dynamic', 'longrope' and 'llama3'. The original max position embeddings used during
-                    pretraining.
-                `attention_factor` (`float`, *optional*):
-                    Used with 'yarn' and 'longrope'. The scaling factor to be applied on the attention
-                    computation. If unspecified, it defaults to value recommended by the implementation, using the
-                    `factor` field to infer the suggested value.
-                `beta_fast` (`float`, *optional*):
-                    Only used with 'yarn'. Parameter to set the boundary for extrapolation (only) in the linear
-                    ramp function. If unspecified, it defaults to 32.
-                `beta_slow` (`float`, *optional*):
-                    Only used with 'yarn'. Parameter to set the boundary for interpolation (only) in the linear
-                    ramp function. If unspecified, it defaults to 1.
-                `short_factor` (`List[float]`, *optional*):
-                    Only used with 'longrope'. The scaling factor to be applied to short contexts (<
-                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
-                    size divided by the number of attention heads divided by 2
-                `long_factor` (`List[float]`, *optional*):
-                    Only used with 'longrope'. The scaling factor to be applied to long contexts (<
-                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
-                    size divided by the number of attention heads divided by 2
-                `low_freq_factor` (`float`, *optional*):
-                    Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
-                `high_freq_factor` (`float`, *optional*):
-                    Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
     """
@@ -112,8 +74,7 @@ class DiaEncoderConfig(PretrainedConfig):
         norm_eps: float = 1e-5,
         vocab_size: int = 256,
         hidden_act: str = "silu",
-        rope_theta: float = 10000.0,
-        rope_scaling: Optional[dict] = None,
+        rope_parameters: RopeParameters | None = None,
         initializer_range: float = 0.02,
         **kwargs,
     ):
@@ -127,24 +88,19 @@ class DiaEncoderConfig(PretrainedConfig):
         self.vocab_size = vocab_size
         self.num_key_value_heads = num_key_value_heads
         self.hidden_act = hidden_act
-        self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
-        # Validate the correctness of rotary position embeddings parameters
-        # BC: if there is a 'type' field, copy it it to 'rope_type'.
-        if self.rope_scaling is not None and "type" in self.rope_scaling:
-            self.rope_scaling["rope_type"] = self.rope_scaling["type"]
-        rope_config_validation(self)
         self.initializer_range = initializer_range
+        self.rope_parameters = rope_parameters
+
         super().__init__(**kwargs)
 
 
-class DiaDecoderConfig(PretrainedConfig):
+class DiaDecoderConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`DiaDecoder`]. It is used to instantiate a Dia
     decoder according to the specified arguments, defining the decoder architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         max_position_embeddings (`int`, *optional*, defaults to 3072):
@@ -179,45 +135,10 @@ class DiaDecoderConfig(PretrainedConfig):
             `"swish"` and `"gelu_new"` are supported.
         num_channels (`int`, *optional*, defaults to 9):
             Number of channels for the Dia decoder.
-        rope_theta (`float`, *optional*, defaults to 10000.0):
-            The base period of the RoPE embeddings.
-        rope_scaling (`dict`, *optional*):
-            Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
-            and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
-            accordingly.
-            Expected contents:
-                `rope_type` (`str`):
-                    The sub-variant of RoPE to use. Can be one of ['default', 'linear', 'dynamic', 'yarn', 'longrope',
-                    'llama3'], with 'default' being the original RoPE implementation.
-                `factor` (`float`, *optional*):
-                    Used with all rope types except 'default'. The scaling factor to apply to the RoPE embeddings. In
-                    most scaling types, a `factor` of x will enable the model to handle sequences of length x *
-                    original maximum pre-trained length.
-                `original_max_position_embeddings` (`int`, *optional*):
-                    Used with 'dynamic', 'longrope' and 'llama3'. The original max position embeddings used during
-                    pretraining.
-                `attention_factor` (`float`, *optional*):
-                    Used with 'yarn' and 'longrope'. The scaling factor to be applied on the attention
-                    computation. If unspecified, it defaults to value recommended by the implementation, using the
-                    `factor` field to infer the suggested value.
-                `beta_fast` (`float`, *optional*):
-                    Only used with 'yarn'. Parameter to set the boundary for extrapolation (only) in the linear
-                    ramp function. If unspecified, it defaults to 32.
-                `beta_slow` (`float`, *optional*):
-                    Only used with 'yarn'. Parameter to set the boundary for interpolation (only) in the linear
-                    ramp function. If unspecified, it defaults to 1.
-                `short_factor` (`List[float]`, *optional*):
-                    Only used with 'longrope'. The scaling factor to be applied to short contexts (<
-                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
-                    size divided by the number of attention heads divided by 2
-                `long_factor` (`List[float]`, *optional*):
-                    Only used with 'longrope'. The scaling factor to be applied to long contexts (<
-                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
-                    size divided by the number of attention heads divided by 2
-                `low_freq_factor` (`float`, *optional*):
-                    Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
-                `high_freq_factor` (`float`, *optional*):
-                    Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         use_cache (`bool`, *optional*, defaults to `True`):
@@ -245,8 +166,7 @@ class DiaDecoderConfig(PretrainedConfig):
         vocab_size: int = 1028,
         hidden_act: str = "silu",
         num_channels: int = 9,
-        rope_theta: float = 10000.0,
-        rope_scaling: Optional[dict] = None,
+        rope_parameters: RopeParameters | None = None,
         initializer_range: float = 0.02,
         use_cache: bool = True,
         is_encoder_decoder: bool = True,
@@ -267,27 +187,22 @@ class DiaDecoderConfig(PretrainedConfig):
         self.vocab_size = vocab_size
         self.hidden_act = hidden_act
         self.num_channels = num_channels
-        self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
-        # Validate the correctness of rotary position embeddings parameters
-        # BC: if there is a 'type' field, copy it it to 'rope_type'.
-        if self.rope_scaling is not None and "type" in self.rope_scaling:
-            self.rope_scaling["rope_type"] = self.rope_scaling["type"]
-        rope_config_validation(self)
         self.initializer_range = initializer_range
         self.use_cache = use_cache
+        self.rope_parameters = rope_parameters
+
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
 
-class DiaConfig(PretrainedConfig):
+class DiaConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`DiaModel`]. It is used to instantiate a
     Dia model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the
     [nari-labs/Dia-1.6B](https://huggingface.co/nari-labs/Dia-1.6B) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         encoder_config (`DiaEncoderConfig`, *optional*):
@@ -333,14 +248,14 @@ class DiaConfig(PretrainedConfig):
 
     def __init__(
         self,
-        encoder_config: Optional[DiaEncoderConfig] = None,
-        decoder_config: Optional[DiaDecoderConfig] = None,
+        encoder_config: DiaEncoderConfig | None = None,
+        decoder_config: DiaDecoderConfig | None = None,
         norm_eps: float = 1e-5,
         is_encoder_decoder: bool = True,
         pad_token_id: int = 1025,
         eos_token_id: int = 1024,
         bos_token_id: int = 1026,
-        delay_pattern: Optional[list[int]] = None,
+        delay_pattern: list[int] | None = None,
         initializer_range: float = 0.02,
         use_cache: bool = True,
         **kwargs,
@@ -355,18 +270,15 @@ class DiaConfig(PretrainedConfig):
         self.delay_pattern = delay_pattern if delay_pattern is not None else [0, 8, 9, 10, 11, 12, 13, 14, 15]
         self.initializer_range = initializer_range
         self.use_cache = use_cache
+        self.decoder_config.pad_token_id = pad_token_id
+        self.decoder_config.eos_token_id = eos_token_id
+        self.decoder_config.bos_token_id = bos_token_id
 
         assert self.decoder_config.num_channels == len(self.delay_pattern), (
             "Number of channels must match delay pattern length."
         )
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            eos_token_id=eos_token_id,
-            bos_token_id=bos_token_id,
-            is_encoder_decoder=is_encoder_decoder,
-            **kwargs,
-        )
+        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
     def get_text_config(self, *args, **kwargs):
         """Defaulting to audio config as it's the decoder in this case which is usually the text backbone"""

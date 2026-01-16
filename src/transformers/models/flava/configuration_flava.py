@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 Meta Platforms authors and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,16 +13,16 @@
 # limitations under the License.
 """FLAVA model configurations"""
 
-from typing import Any, Optional
+from typing import Any
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class FlavaImageConfig(PretrainedConfig):
+class FlavaImageConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`FlavaImageModel`]. It is used to instantiate an
     FLAVA model according to the specified arguments, defining the model architecture.
@@ -31,8 +30,8 @@ class FlavaImageConfig(PretrainedConfig):
     Instantiating a configuration with the defaults will yield a similar configuration to that of the FLAVA
     [facebook/flava-full](https://huggingface.co/facebook/flava-full) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -125,7 +124,7 @@ class FlavaImageConfig(PretrainedConfig):
         self.vocab_size = vocab_size
 
 
-class FlavaTextConfig(PretrainedConfig):
+class FlavaTextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`FlavaTextModel`]. It is used to instantiate an
     FLAVA model according to the specified arguments, defining the model architecture.
@@ -133,8 +132,8 @@ class FlavaTextConfig(PretrainedConfig):
     Instantiating a configuration with the defaults will yield a similar configuration to that of the FLAVA
     [facebook/flava-full](https://huggingface.co/facebook/flava-full) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -148,12 +147,6 @@ class FlavaTextConfig(PretrainedConfig):
         max_position_embeddings (`int`, *optional*, defaults to 512):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048). For VL, max_length passed to model is 77.
-        position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
-            Type of position embedding. Choose one of `"absolute"`, `"relative_key"`, `"relative_key_query"`. For
-            positional embeddings use `"absolute"`. For more information on `"relative_key"`, please refer to
-            [Self-Attention with Relative Position Representations (Shaw et al.)](https://huggingface.co/papers/1803.02155).
-            For more information on `"relative_key_query"`, please refer to *Method 4* in [Improve Transformer Models
-            with Better Relative Position Embeddings (Huang et al.)](https://huggingface.co/papers/2009.13658).
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):
@@ -205,7 +198,6 @@ class FlavaTextConfig(PretrainedConfig):
         vocab_size: int = 30522,
         type_vocab_size: int = 2,
         max_position_embeddings: int = 512,
-        position_embedding_type: str = "absolute",
         hidden_size: int = 768,
         num_hidden_layers: int = 12,
         num_attention_heads: int = 12,
@@ -224,7 +216,6 @@ class FlavaTextConfig(PretrainedConfig):
         self.vocab_size = vocab_size
         self.type_vocab_size = type_vocab_size
         self.max_position_embeddings = max_position_embeddings
-        self.position_embedding_type = position_embedding_type
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
@@ -238,7 +229,7 @@ class FlavaTextConfig(PretrainedConfig):
         self.pad_token_id = pad_token_id
 
 
-class FlavaMultimodalConfig(PretrainedConfig):
+class FlavaMultimodalConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`FlavaMultimodalModel`]. It is used to instantiate
     an FLAVA model according to the specified arguments, defining the model architecture.
@@ -246,8 +237,8 @@ class FlavaMultimodalConfig(PretrainedConfig):
     Instantiating a configuration with the defaults will yield a similar configuration to that of the FLAVA
     [facebook/flava-full](https://huggingface.co/facebook/flava-full) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -324,7 +315,7 @@ class FlavaMultimodalConfig(PretrainedConfig):
         self.use_cls_token = use_cls_token
 
 
-class FlavaImageCodebookConfig(PretrainedConfig):
+class FlavaImageCodebookConfig(PreTrainedConfig):
     model_type = "flava_image_codebook"
     base_config_key = "image_codebook_config"
 
@@ -334,8 +325,8 @@ class FlavaImageCodebookConfig(PretrainedConfig):
     Instantiating a configuration with the defaults will yield a similar configuration to that of the FLAVA
     [facebook/flava-image-codebook](https://huggingface.co/facebook/flava-image-codebook) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         num_groups (`int`, *optional*, defaults to 4):
@@ -392,15 +383,15 @@ class FlavaImageCodebookConfig(PretrainedConfig):
         self.initializer_range = initializer_range
 
 
-class FlavaConfig(PretrainedConfig):
+class FlavaConfig(PreTrainedConfig):
     r"""
     [`FlavaConfig`] is the configuration class to store the configuration of a [`FlavaModel`]. It is used to
     instantiate FLAVA model according to the specified arguments, defining the text model, image model, image codebook
     and multimodal model configs. Instantiating a configuration with the defaults will yield a similar configuration to
     that of the FLAVA [facebook/flava-full](https://huggingface.co/facebook/flava-full) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         text_config (`dict`, *optional*):
@@ -472,10 +463,10 @@ class FlavaConfig(PretrainedConfig):
 
     def __init__(
         self,
-        image_config: Optional[dict[str, Any]] = None,
-        text_config: Optional[dict[str, Any]] = None,
-        multimodal_config: Optional[dict[str, Any]] = None,
-        image_codebook_config: Optional[dict[str, Any]] = None,
+        image_config: dict[str, Any] | None = None,
+        text_config: dict[str, Any] | None = None,
+        multimodal_config: dict[str, Any] | None = None,
+        image_codebook_config: dict[str, Any] | None = None,
         hidden_size: int = 768,
         layer_norm_eps: float = 1e-12,
         projection_dim: int = 768,
@@ -502,8 +493,6 @@ class FlavaConfig(PretrainedConfig):
         multimodal_config_dict = kwargs.pop("multimodal_config_dict", None)
         image_codebook_config_dict = kwargs.pop("image_codebook_config_dict", None)
 
-        super().__init__(**kwargs)
-
         # Instead of simply assigning `[text|vision]_config_dict` to `[text|vision]_config`, we use the values in
         # `[text|vision]_config_dict` to update the values in `[text|vision]_config`. The values should be same in most
         # cases, but we don't want to break anything regarding `_config_dict` that existed before commit `8827e1b2`.
@@ -516,7 +505,7 @@ class FlavaConfig(PretrainedConfig):
 
             # Give a warning if the values exist in both `_text_config_dict` and `text_config` but being different.
             for key, value in _text_config_dict.items():
-                if key in text_config and value != text_config[key] and key not in ["transformers_version"]:
+                if key in text_config and value != text_config[key] and key != "transformers_version":
                     # If specified in `text_config_dict`
                     if key in text_config_dict:
                         message = (
@@ -548,7 +537,7 @@ class FlavaConfig(PretrainedConfig):
 
             # Give a warning if the values exist in both `_image_config_dict` and `image_config` but being different.
             for key, value in _image_config_dict.items():
-                if key in image_config and value != image_config[key] and key not in ["transformers_version"]:
+                if key in image_config and value != image_config[key] and key != "transformers_version":
                     # If specified in `image_config_dict`
                     if key in image_config_dict:
                         message = (
@@ -576,11 +565,7 @@ class FlavaConfig(PretrainedConfig):
             # Give a warning if the values exist in both `_multimodal_config_dict` and `multimodal_config` but being
             # different.
             for key, value in _multimodal_config_dict.items():
-                if (
-                    key in multimodal_config
-                    and value != multimodal_config[key]
-                    and key not in ["transformers_version"]
-                ):
+                if key in multimodal_config and value != multimodal_config[key] and key != "transformers_version":
                     # If specified in `multimodal_config_dict`
                     if key in multimodal_config_dict:
                         message = (
@@ -611,7 +596,7 @@ class FlavaConfig(PretrainedConfig):
                 if (
                     key in image_codebook_config
                     and value != image_codebook_config[key]
-                    and key not in ["transformers_version"]
+                    and key != "transformers_version"
                 ):
                     # If specified in `image_codebook_config_dict`
                     if key in image_codebook_config_dict:
@@ -631,28 +616,35 @@ class FlavaConfig(PretrainedConfig):
             # Update all values in `image_codebook_config` with the ones in `_image_codebook_config_dict`.
             image_codebook_config.update(_image_codebook_config_dict)
 
-        if image_config is None:
-            image_config = {}
-            logger.info("`image_config` is `None`. initializing the `FlavaImageConfig` with default values.")
-
         if text_config is None:
-            text_config = {}
-            logger.info("`text_config` is `None`. Initializing the `FlavaTextConfig` with default values.")
+            text_config = FlavaTextConfig()
+            logger.info("`text_config` is `None`. initializing the `FlavaTextConfig` with default values.")
+        elif isinstance(text_config, dict):
+            text_config = FlavaTextConfig(**text_config)
+
+        if image_config is None:
+            image_config = FlavaImageConfig()
+            logger.info("`image_config` is `None`. initializing the `FlavaImageConfig` with default values.")
+        elif isinstance(image_config, dict):
+            image_config = FlavaImageConfig(**image_config)
 
         if multimodal_config is None:
-            multimodal_config = {}
-            logger.info("`multimodal_config` is `None`. initializing the `FlavaMultimodalConfig` with default values.")
+            multimodal_config = FlavaMultimodalConfig()
+            logger.info("`image_config` is `None`. initializing the `FlavaMultimodalConfig` with default values.")
+        elif isinstance(multimodal_config, dict):
+            multimodal_config = FlavaMultimodalConfig(**multimodal_config)
 
         if image_codebook_config is None:
-            image_codebook_config = {}
-            logger.info(
-                "`image_codebook_config` is `None`. initializing the `FlavaImageCodebookConfig` with default values."
-            )
+            image_codebook_config = FlavaImageCodebookConfig()
+            logger.info("`image_config` is `None`. initializing the `FlavaImageCodebookConfig` with default values.")
+        elif isinstance(image_codebook_config, dict):
+            image_codebook_config = FlavaImageCodebookConfig(**image_codebook_config)
 
-        self.image_config = FlavaImageConfig(**image_config)
-        self.text_config = FlavaTextConfig(**text_config)
-        self.multimodal_config = FlavaMultimodalConfig(**multimodal_config)
-        self.image_codebook_config = FlavaImageCodebookConfig(**image_codebook_config)
+        self.text_config = text_config
+        self.image_config = image_config
+        self.multimodal_config = multimodal_config
+        self.image_codebook_config = image_codebook_config
+
         self.projection_dim = projection_dim
         self.init_codebook = init_codebook
 
@@ -671,31 +663,7 @@ class FlavaConfig(PretrainedConfig):
         self.global_backprop_contrastive = global_backprop_contrastive
         self.skip_unmasked_multimodal_encoder = skip_unmasked_multimodal_encoder
         self.return_loss = return_loss
-
-    @classmethod
-    def from_configs(
-        cls,
-        image_config: FlavaImageConfig,
-        text_config: FlavaTextConfig,
-        multimodal_config: FlavaMultimodalConfig,
-        image_codebook_config: FlavaImageCodebookConfig,
-        **kwargs,
-    ):
-        r"""
-        Instantiate a [`FlavaConfig`] (or a derived class) from flava text model configuration, flava image model
-        configuration, flava multimodal model and flava codebook model configuration.
-
-        Returns:
-            [`FlavaConfig`]: An instance of a configuration object
-        """
-
-        return cls(
-            image_config=image_config.to_dict(),
-            text_config=text_config.to_dict(),
-            multimodal_config=multimodal_config.to_dict(),
-            image_codebook_config=image_codebook_config.to_dict(),
-            **kwargs,
-        )
+        super().__init__(**kwargs)
 
 
 __all__ = ["FlavaConfig", "FlavaImageCodebookConfig", "FlavaImageConfig", "FlavaMultimodalConfig", "FlavaTextConfig"]

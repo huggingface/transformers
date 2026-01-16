@@ -25,7 +25,6 @@ rendered properly in your Markdown viewer.
 
 [BLIP](https://huggingface.co/papers/2201.12086) (Bootstrapped Language-Image Pretraining) is a vision-language pretraining (VLP) framework designed for *both* understanding and generation tasks. Most existing pretrained models are only good at one or the other. It uses a captioner to generate captions and a filter to remove the noisy captions. This increases training data quality and more effectively uses the messy web data.
 
-
 You can find all the original BLIP checkpoints under the [BLIP](https://huggingface.co/collections/Salesforce/blip-models-65242f40f1491fbf6a9e9472) collection.
 
 > [!TIP]
@@ -88,7 +87,6 @@ Refer to this [notebook](https://github.com/huggingface/notebooks/blob/main/exam
 ## BlipConfig
 
 [[autodoc]] BlipConfig
-    - from_text_vision_configs
 
 ## BlipTextConfig
 
@@ -101,6 +99,7 @@ Refer to this [notebook](https://github.com/huggingface/notebooks/blob/main/exam
 ## BlipProcessor
 
 [[autodoc]] BlipProcessor
+    - __call__
 
 ## BlipImageProcessor
 
@@ -129,7 +128,7 @@ Refer to this [notebook](https://github.com/huggingface/notebooks/blob/main/exam
 ## BlipTextLMHeadModel
 
 [[autodoc]] BlipTextLMHeadModel
-- forward
+    - forward
 
 ## BlipVisionModel
 

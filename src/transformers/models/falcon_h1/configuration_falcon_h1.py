@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 TII and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,22 +13,23 @@
 # limitations under the License.
 """FalconH1 model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class FalconH1Config(PretrainedConfig):
+class FalconH1Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`FalconH1Model`]. It is used to instantiate a
     FalconH1Model model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with defaults taken from [ibm-fms/FalconH1-9.8b-2.2T-hf](https://huggingface.co/ibm-fms/FalconH1-9.8b-2.2T-hf).
     The FalconH1Model is a hybrid [mamba2](https://github.com/state-spaces/mamba) architecture with SwiGLU.
     The checkpoints are  jointly trained by IBM, Princeton, and UIUC.
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
     Args:
         vocab_size (`int`, *optional*, defaults to 128000):
             Vocabulary size of the FalconH1 model. Defines the number of different tokens that can be represented by the
@@ -103,9 +103,7 @@ class FalconH1Config(PretrainedConfig):
             Whether to use RMSNorm instead of LayerNorm in the Mamba block
         projectors_bias (`bool`, *optional*, defaults to `False`):
             Flag indicating whether or not to use bias in the input and output projections (["in_proj", "out_proj"]) of the attention block
-        rope_theta (`float`, *optional*, defaults to 100000.0):
-            The theta value used for the RoPE embeddings.
-        rope_scaling (`float`, *optional*):
+        rope_parameters (`float`, *optional*):
             The scaling value used for the RoPE embeddings. If `None`, no scaling is applied.
         lm_head_multiplier (`float`, *optional*, defaults to 1.0):
             The multiplier for the LM head. This is used to scale the output of the LM head.
@@ -133,47 +131,46 @@ class FalconH1Config(PretrainedConfig):
 
     def __init__(
         self,
-        vocab_size=128000,
-        tie_word_embeddings=False,
-        hidden_size=4096,
-        intermediate_size=14336,
-        num_hidden_layers=32,
-        num_attention_heads=32,
-        num_key_value_heads=8,
-        hidden_act="silu",
-        initializer_range=0.02,
-        rms_norm_eps=1e-5,
-        use_cache=True,
-        num_logits_to_keep=1,
-        pad_token_id=0,
-        bos_token_id=1,
-        eos_token_id=2,
-        max_position_embeddings=8192,
-        attention_dropout=0.0,
-        mamba_d_ssm=1024,
-        mamba_n_heads=128,
-        mamba_d_head="auto",
-        mamba_n_groups=1,
-        mamba_d_state=256,
-        mamba_d_conv=4,
-        mamba_expand=2,
-        mamba_chunk_size=256,
-        mamba_conv_bias=True,
-        mamba_proj_bias=False,
-        mamba_norm_before_gate=True,
-        mamba_rms_norm=False,
-        projectors_bias=False,
-        rope_theta=100000.0,
-        rope_scaling=None,
-        lm_head_multiplier=1.0,
-        embedding_multiplier=1.0,
-        mlp_multipliers=None,
-        key_multiplier=None,
-        attention_out_multiplier=None,
-        attention_in_multiplier=None,
-        ssm_multipliers=None,
-        ssm_in_multiplier=None,
-        ssm_out_multiplier=None,
+        vocab_size: int | None = 128000,
+        tie_word_embeddings: bool | None = False,
+        hidden_size: int | None = 4096,
+        intermediate_size: int | None = 14336,
+        num_hidden_layers: int | None = 32,
+        num_attention_heads: int | None = 32,
+        num_key_value_heads: int | None = 8,
+        hidden_act: str | None = "silu",
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: int | None = 1e-5,
+        use_cache: int | None = True,
+        num_logits_to_keep: int | None = 1,
+        pad_token_id: int | None = 0,
+        bos_token_id: int | None = 1,
+        eos_token_id: int | None = 2,
+        max_position_embeddings: int | None = 8192,
+        attention_dropout: float | None = 0.0,
+        mamba_d_ssm: int | None = 1024,
+        mamba_n_heads: int | None = 128,
+        mamba_d_head: str | None = "auto",
+        mamba_n_groups: int | None = 1,
+        mamba_d_state: int | None = 256,
+        mamba_d_conv: int | None = 4,
+        mamba_expand: int | None = 2,
+        mamba_chunk_size: int | None = 256,
+        mamba_conv_bias: bool | None = True,
+        mamba_proj_bias: bool | None = False,
+        mamba_norm_before_gate: bool | None = True,
+        mamba_rms_norm: bool | None = False,
+        projectors_bias: bool | None = False,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        lm_head_multiplier: float | None = 1.0,
+        embedding_multiplier: float | None = 1.0,
+        mlp_multipliers: int | None = None,
+        key_multiplier: int | None = None,
+        attention_out_multiplier: int | None = None,
+        attention_in_multiplier: int | None = None,
+        ssm_multipliers: int | None = None,
+        ssm_in_multiplier: int | None = None,
+        ssm_out_multiplier: int | None = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -197,10 +194,6 @@ class FalconH1Config(PretrainedConfig):
 
         self.use_cache = use_cache
         self.num_logits_to_keep = num_logits_to_keep
-
-        self.rope_theta = rope_theta
-        self.rope_scaling = None
-        self.rope_scaling = rope_scaling
         self.projectors_bias = projectors_bias
         mamba_intermediate = mamba_expand * hidden_size if mamba_d_ssm is None else mamba_d_ssm
 
@@ -266,13 +259,12 @@ class FalconH1Config(PretrainedConfig):
         else:
             self.ssm_out_multiplier = 1.0
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.rope_parameters = rope_parameters
+        super().__init__(**kwargs)
 
     @property
     def layers_block_type(self):

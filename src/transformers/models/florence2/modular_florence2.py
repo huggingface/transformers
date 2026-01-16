@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Microsoft and the HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,30 +13,27 @@
 # limitations under the License.
 import math
 import re
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Optional, Union
+from typing import Any
 
 import numpy as np
+import torch.nn as nn
+import torch.nn.functional as F
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
-from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import Seq2SeqLMOutput, Seq2SeqModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import MultiModalData, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import (
-    TransformersKwargs,
-    auto_docstring,
-    can_return_tuple,
-    is_torch_available,
-    logging,
-)
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torch_available, logging
 from ..auto import CONFIG_MAPPING, AutoConfig
-from ..bart.modeling_bart import eager_attention_forward
+from ..bart.modeling_bart import eager_attention_forward, shift_tokens_right
 from ..beit.modeling_beit import BeitDropPath
 from ..llama4.modeling_llama4 import Llama4VisionMLP
 from ..llava.modeling_llava import LlavaForConditionalGeneration, LlavaModel, LlavaPreTrainedModel
@@ -46,21 +42,18 @@ from ..llava.processing_llava import LlavaProcessorKwargs
 
 if is_torch_available():
     import torch
-    import torch.nn as nn
-    import torch.nn.functional as F
-
 
 logger = logging.get_logger(__name__)
 
 
-class Florence2VisionConfig(PretrainedConfig):
+class Florence2VisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Florence2VisionModel`]. It is used to instantiate a Florence2VisionModel
     according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the Florence2VisionModel architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         in_channels (`int`, *optional*, defaults to 3):
@@ -161,16 +154,16 @@ class Florence2VisionConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
 
-class Florence2Config(PretrainedConfig):
+class Florence2Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Florence2ForConditionalGeneration`]. It is used to instantiate an
     Florence-2 model according to the specified arguments, defining the model architecture.
 
     Instantiating a configuration with the defaults will yield a similar configuration to that of the Florence-2
-    [microsoft/Florence-2-base](https://huggingface.co/microsoft/Florence-2-base) architecture.
+    [florence-community/Florence-2-base](https://huggingface.co/florence-community/Florence-2-base) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         text_config (`dict`, *optional*):
@@ -243,38 +236,24 @@ class Florence2ProcessorKwargs(LlavaProcessorKwargs):
     pass
 
 
+@auto_docstring
 class Florence2Processor(ProcessorMixin):
-    r"""
-    Constructs a Florence2 processor which wraps a Florence2 image processor and a Florence2 tokenizer into a single processor.
-
-    [`Florence2Processor`] offers all the functionalities of [`AutoImageProcessor`] and [`BartTokenizerFast`]. See the
-    [`~Florence2Processor.__call__`] and [`~Florence2Processor.decode`] for more information.
-
-    Args:
-        image_processor (`AutoImageProcessor`, *optional*):
-            The image processor is a required input.
-        tokenizer (`Union[BartTokenizer, BartTokenizerFast]`, *optional*):
-            The tokenizer is a required input.
+    def __init__(
+        self,
+        image_processor=None,
+        tokenizer=None,
+        num_additional_image_tokens: int = 0,
+        post_processor_config: dict | None = None,
+        **kwargs,
+    ):
+        r"""
         num_additional_image_tokens (`int`, *optional*, defaults to 0):
             Number of additional tokens added to the image embeddings, such as CLS (+1). If the backbone has no CLS or other
             extra tokens appended, no need to set this arg.
         post_processor_config (`dict`,  *optional*, defaults to 0):
             Task-specific parsing rules for [`Florence2PostProcessor`], e.g. regex patterns,
             thresholds, or banned tokens.
-    """
-
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "AutoImageProcessor"
-    tokenizer_class = ("BartTokenizer", "BartTokenizerFast")
-
-    def __init__(
-        self,
-        image_processor=None,
-        tokenizer=None,
-        num_additional_image_tokens: int = 0,
-        post_processor_config: Optional[dict] = None,
-        **kwargs,
-    ):
+        """
         self.tasks_answer_post_processing_type = {
             "<OCR>": "pure_text",
             "<OCR_WITH_REGION>": "ocr",
@@ -323,7 +302,7 @@ class Florence2Processor(ProcessorMixin):
 
         super().__init__(image_processor, tokenizer, **kwargs)
 
-    def _construct_prompts(self, text: Union[str, list[str]]) -> list[str]:
+    def _construct_prompts(self, text: str | list[str]) -> list[str]:
         """
         Construct prompts by replacing task tokens with corresponding prompt strings.
         """
@@ -348,34 +327,14 @@ class Florence2Processor(ProcessorMixin):
             prompts.append(prompt)
         return prompts
 
+    @auto_docstring
     def __call__(
         self,
-        images: Optional[ImageInput] = None,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         **kwargs: Unpack[Florence2ProcessorKwargs],
     ) -> BatchFeature:
-        """
-        Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
-        and `kwargs` arguments to BartTokenizerFast's [`~BartTokenizerFast.__call__`] if `text` is not `None` to encode
-        the text. To prepare the image(s), this method forwards the `images` and `kwrags` arguments to
-        CLIPImageProcessor's [`~CLIPImageProcessor.__call__`] if `images` is not `None`. Please refer to the docstring
-        of the above two methods for more information.
-
-        Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. Both channels-first and channels-last formats are supported.
-            text (`str`, `list[str]`, `list[list[str]]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-                - `'tf'`: Return TensorFlow `tf.constant` objects.
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
-                - `'jax'`: Return JAX `jnp.ndarray` objects.
-
+        r"""
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 
@@ -695,7 +654,7 @@ class Florence2PostProcessor:
         return text, spans
 
     def parse_ocr_from_text_and_spans(
-        self, text: str, pattern: Optional[str], image_size: tuple[int, int], area_threshold: float = 0.0
+        self, text: str, pattern: str | None, image_size: tuple[int, int], area_threshold: float = 0.0
     ) -> list[dict[str, Any]]:
         """
         Parse OCR results with quadrilateral boxes.
@@ -994,7 +953,7 @@ class Florence2PostProcessor:
                     instances = self.parse_description_with_bboxes_from_text_and_spans(text, image_size=image_size)
                 parsed_dict["description_with_bboxes_or_polygons"] = instances
             else:
-                raise ValueError("task {} is not supported".format(task))
+                raise ValueError(f"task {task} is not supported")
 
         return parsed_dict
 
@@ -1379,6 +1338,7 @@ class Florence2VisionBlock(nn.Module):
 class Florence2VisionPreTrainedModel(PreTrainedModel):
     config_class = Florence2VisionConfig
     main_input_name = "pixel_values"
+    input_modalities = ("image",)
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_flex_attn = True
@@ -1434,7 +1394,7 @@ class Florence2VisionBackbone(Florence2VisionPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def forward(self, hidden_states: torch.Tensor):
+    def forward(self, hidden_states: torch.Tensor, **kwargs):
         for conv, block in zip(self.convs, self.blocks):
             hidden_states = conv(hidden_states)
             for layer in block:
@@ -1481,7 +1441,7 @@ class Florence2Seq2SeqModelOutput(Seq2SeqModelOutput):
         image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
-    image_hidden_states: Optional[torch.FloatTensor] = None
+    image_hidden_states: torch.FloatTensor | None = None
 
 
 @dataclass
@@ -1502,14 +1462,27 @@ class Florence2Seq2SeqLMOutput(Seq2SeqLMOutput):
         image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
-    image_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    image_hidden_states: tuple[torch.FloatTensor, ...] | None = None
 
 
 @auto_docstring
 class Florence2PreTrainedModel(LlavaPreTrainedModel):
     config_class = Florence2Config
+    base_model_prefix = "model"
 
     _supports_attention_backend = False
+
+    def _init_weights(self, module):
+        PreTrainedModel._init_weights(self, module)
+        if isinstance(module, Florence2VisionPositionalEmbeddingCosine1D):
+            pos_idx_to_embed = torch.empty((module.max_seq_len, module.embed_dim))
+            sine, cosine = module.get_sinusoid_embeddings(
+                max_positions=module.max_seq_len,
+                embed_dim=module.embed_dim,
+            )
+            pos_idx_to_embed[:, 0::2] = sine
+            pos_idx_to_embed[:, 1::2] = cosine
+            init.copy_(module.pos_idx_to_embed, pos_idx_to_embed)
 
 
 @auto_docstring(
@@ -1519,20 +1492,16 @@ class Florence2PreTrainedModel(LlavaPreTrainedModel):
 )
 class Florence2Model(LlavaModel):
     _checkpoint_conversion_mapping = {}
-    _tied_weights_keys = [
-        "language_model.encoder.embed_tokens.weight",
-        "language_model.decoder.embed_tokens.weight",
-    ]
 
     def __init__(self, config: Florence2Config):
         super().__init__(config)
         self.vision_tower = Florence2VisionBackbone(config=config.vision_config)
 
-    def get_encoder(self):
-        return self.language_model.get_encoder()
-
-    def get_decoder(self):
-        return self.language_model.get_decoder()
+    def get_encoder(self, modality=None):
+        if modality is None:
+            return self.language_model.get_encoder()
+        else:
+            return super().get_encoder(modality=modality)
 
     def get_image_features(self, pixel_values: torch.Tensor, **kwargs):
         """
@@ -1552,25 +1521,22 @@ class Florence2Model(LlavaModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.LongTensor] = None,
-        decoder_head_mask: Optional[torch.Tensor] = None,
-        cross_attn_head_mask: Optional[torch.Tensor] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
-        encoder_outputs: Optional[list[torch.FloatTensor]] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Union[tuple, Florence2Seq2SeqModelOutput]:
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.LongTensor | None = None,
+        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        encoder_outputs: list[torch.FloatTensor] | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
+        **kwargs,
+    ) -> tuple | Florence2Seq2SeqModelOutput:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1594,7 +1560,6 @@ class Florence2Model(LlavaModel):
 
             encoder_outputs = self.language_model.encoder(
                 attention_mask=attention_mask,
-                head_mask=head_mask,
                 inputs_embeds=inputs_embeds,
                 output_attentions=output_attentions,
                 output_hidden_states=output_hidden_states,
@@ -1611,8 +1576,6 @@ class Florence2Model(LlavaModel):
             attention_mask=decoder_attention_mask,
             encoder_hidden_states=encoder_outputs[0],
             encoder_attention_mask=attention_mask,
-            head_mask=decoder_head_mask,
-            cross_attn_head_mask=cross_attn_head_mask,
             past_key_values=past_key_values,
             inputs_embeds=decoder_inputs_embeds,
             use_cache=use_cache,
@@ -1620,7 +1583,6 @@ class Florence2Model(LlavaModel):
             output_hidden_states=output_hidden_states,
             cache_position=cache_position,
             return_dict=True,
-            **kwargs,
         )
 
         return Florence2Seq2SeqModelOutput(
@@ -1643,14 +1605,9 @@ class Florence2Model(LlavaModel):
 )
 class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
     _checkpoint_conversion_mapping = {}
-    _tied_weights_keys = [
-        "model.language_model.encoder.embed_tokens.weight",
-        "model.language_model.decoder.embed_tokens.weight",
-        "lm_head.weight",
-    ]
-
-    def get_encoder(self):
-        return self.model.get_encoder()
+    _tied_weights_keys = {
+        "lm_head.weight": "model.language_model.shared.weight",
+    }
 
     def get_image_features(self, pixel_values: torch.Tensor, **kwargs):
         return self.model.get_image_features(pixel_values=pixel_values, **kwargs)
@@ -1659,27 +1616,24 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.LongTensor] = None,
-        head_mask: Optional[torch.Tensor] = None,
-        decoder_head_mask: Optional[torch.Tensor] = None,
-        cross_attn_head_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[list[torch.FloatTensor]] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.LongTensor | None = None,
+        encoder_outputs: list[torch.FloatTensor] | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, Florence2Seq2SeqLMOutput]:
+    ) -> tuple | Florence2Seq2SeqLMOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
@@ -1693,8 +1647,8 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
         >>> import requests
         >>> from transformers import AutoProcessor, Florence2ForConditionalGeneration
 
-        >>> model = Florence2ForConditionalGeneration.from_pretrained("microsoft/Florence-2-large")
-        >>> processor = AutoProcessor.from_pretrained("microsoft/Florence-2-large")
+        >>> model = Florence2ForConditionalGeneration.from_pretrained("florence-community/Florence-2-large")
+        >>> processor = AutoProcessor.from_pretrained("florence-community/Florence-2-large")
 
         >>> prompt = "<CAPTION>"
         >>> url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/car.jpg"
@@ -1713,6 +1667,15 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        if labels is not None:
+            if use_cache:
+                logger.warning("The `use_cache` argument is changed to `False` since `labels` is provided.")
+            use_cache = False
+            if decoder_input_ids is None and decoder_inputs_embeds is None:
+                decoder_input_ids = shift_tokens_right(
+                    labels, self.config.text_config.pad_token_id, self.config.text_config.decoder_start_token_id
+                )
+
         outputs = self.model(
             input_ids=input_ids,
             pixel_values=pixel_values,
@@ -1720,9 +1683,6 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
             decoder_input_ids=decoder_input_ids,
             encoder_outputs=encoder_outputs,
             decoder_attention_mask=decoder_attention_mask,
-            head_mask=head_mask,
-            decoder_head_mask=decoder_head_mask,
-            cross_attn_head_mask=cross_attn_head_mask,
             past_key_values=past_key_values,
             inputs_embeds=inputs_embeds,
             decoder_inputs_embeds=decoder_inputs_embeds,
@@ -1731,7 +1691,7 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
             output_hidden_states=output_hidden_states,
             return_dict=True,
             cache_position=cache_position,
-            **kwargs,
+            # **kwargs, ## TODO: add back when Bart attention is refactored and takes kwargs
         )
 
         hidden_states = outputs[0]
@@ -1769,7 +1729,7 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
         self,
         inputs_tensor: torch.Tensor,
         model_kwargs,
-        model_input_name: Optional[str],
+        model_input_name: str | None,
         generation_config,
     ) -> dict[str, Any]:
         # override to handle merging image and text embeddings before passing to language encoder

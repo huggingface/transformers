@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 SenseTime and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,30 +13,30 @@
 # limitations under the License.
 """Deformable DETR model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
 
 
-class DeformableDetrConfig(PretrainedConfig):
+class DeformableDetrConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`DeformableDetrModel`]. It is used to instantiate
     a Deformable DETR model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the Deformable DETR
     [SenseTime/deformable-detr](https://huggingface.co/SenseTime/deformable-detr) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         use_timm_backbone (`bool`, *optional*, defaults to `True`):
             Whether or not to use the `timm` library for the backbone. If set to `False`, will use the [`AutoBackbone`]
             API.
-        backbone_config (`PretrainedConfig` or `dict`, *optional*):
+        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `ResNetConfig()`):
             The configuration of the backbone model. Only used in case `use_timm_backbone` is set to `False` in which
             case it will default to `ResNetConfig()`.
         num_channels (`int`, *optional*, defaults to 3):
@@ -144,6 +143,7 @@ class DeformableDetrConfig(PretrainedConfig):
     ```"""
 
     model_type = "deformable_detr"
+    sub_configs = {"backbone_config": AutoConfig}
     attribute_map = {
         "hidden_size": "d_model",
         "num_attention_heads": "encoder_attention_heads",
@@ -268,23 +268,8 @@ class DeformableDetrConfig(PretrainedConfig):
         self.eos_coefficient = eos_coefficient
         self.focal_alpha = focal_alpha
         self.disable_custom_kernels = disable_custom_kernels
+
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
-
-    @property
-    def num_attention_heads(self) -> int:
-        return self.encoder_attention_heads
-
-    @property
-    def hidden_size(self) -> int:
-        return self.d_model
-
-    @property
-    def sub_configs(self):
-        return (
-            {"backbone_config": type(self.backbone_config)}
-            if getattr(self, "backbone_config", None) is not None
-            else {}
-        )
 
 
 __all__ = ["DeformableDetrConfig"]

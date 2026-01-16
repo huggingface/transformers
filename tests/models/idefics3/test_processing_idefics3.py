@@ -12,51 +12,42 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import shutil
-import tempfile
 import unittest
-from io import BytesIO
 
 import numpy as np
-import requests
 
 from transformers import Idefics3Processor
-from transformers.models.auto.processing_auto import AutoProcessor
+from transformers.image_utils import load_image
 from transformers.testing_utils import require_torch, require_vision
-from transformers.utils import is_vision_available
 
-from ...test_processing_common import ProcessorTesterMixin
-
-
-if is_vision_available():
-    from PIL import Image
+from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 
 
 @require_torch
 @require_vision
 class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = Idefics3Processor
+    model_id = "HuggingFaceM4/Idefics3-8B-Llama3"
+
+    def get_processor(self):
+        processor = self.processor_class.from_pretrained(self.tmpdirname)
+        processor.tokenizer.add_bos_token = True
+        processor.tokenizer.add_eos_token = False
+        return processor
 
     @classmethod
-    def setUpClass(cls):
-        cls.tmpdirname = tempfile.mkdtemp()
-        processor = Idefics3Processor.from_pretrained("HuggingFaceM4/Idefics3-8B-Llama3", image_seq_len=2)
-        processor.save_pretrained(cls.tmpdirname)
-        cls.image1 = Image.open(
-            BytesIO(
-                requests.get(
-                    "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
-                ).content
+    def _setup_test_attributes(cls, processor):
+        cls.image1 = load_image(
+            url_to_local_path(
+                "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
             )
         )
-        cls.image2 = Image.open(
-            BytesIO(requests.get("https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg").content)
+        cls.image2 = load_image(
+            url_to_local_path("https://cdn.britannica.com/59/94459-050-DBA42467/Skyline-Chicago.jpg")
         )
-        cls.image3 = Image.open(
-            BytesIO(
-                requests.get(
-                    "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg"
-                ).content
+        cls.image3 = load_image(
+            url_to_local_path(
+                "https://thumbs.dreamstime.com/b/golden-gate-bridge-san-francisco-purple-flowers-california-echium-candicans-36805947.jpg"
             )
         )
         cls.bos_token = processor.tokenizer.bos_token
@@ -70,15 +61,6 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         cls.global_img_tokens_id = processor.tokenizer(cls.global_img_token, add_special_tokens=False)["input_ids"]
         cls.padding_token_id = processor.tokenizer.pad_token_id
         cls.image_seq_len = processor.image_seq_len
-
-    def get_tokenizer(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
-
-    def get_image_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
-
-    def get_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs)
 
     @staticmethod
     def prepare_processor_dict():
@@ -117,10 +99,6 @@ class Idefics3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             + [self.fake_image_token_id]
         )
         return text_split_images
-
-    @classmethod
-    def tearDownClass(cls):
-        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
 
     def test_process_interleaved_images_prompts_no_image_splitting(self):
         processor = self.get_processor()

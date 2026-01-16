@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 The Google AI Language Team Authors and The HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
@@ -17,31 +16,26 @@
 
 import os
 import warnings
-from dataclasses import asdict
 from enum import Enum
-from typing import Optional, Union
 
-from ...tokenization_utils import PreTrainedTokenizer
-from ...utils import is_tf_available, logging
+from ...tokenization_python import PreTrainedTokenizer
+from ...utils import logging
 from .utils import DataProcessor, InputExample, InputFeatures
 
-
-if is_tf_available():
-    import tensorflow as tf
 
 logger = logging.get_logger(__name__)
 
 DEPRECATION_WARNING = (
-    "This {0} will be removed from the library soon, preprocessing should be handled with the 🤗 Datasets "
+    "This {0} will be removed from the library soon, preprocessing should be handled with the Hugging Face Datasets "
     "library. You can have a look at this example script for pointers: "
     "https://github.com/huggingface/transformers/blob/main/examples/pytorch/text-classification/run_glue.py"
 )
 
 
 def glue_convert_examples_to_features(
-    examples: Union[list[InputExample], "tf.data.Dataset"],
+    examples: list[InputExample],
     tokenizer: PreTrainedTokenizer,
-    max_length: Optional[int] = None,
+    max_length: int | None = None,
     task=None,
     label_list=None,
     output_mode=None,
@@ -50,7 +44,7 @@ def glue_convert_examples_to_features(
     Loads a data file into a list of `InputFeatures`
 
     Args:
-        examples: List of `InputExamples` or `tf.data.Dataset` containing the examples.
+        examples: List of `InputExamples` containing the examples.
         tokenizer: Instance of a tokenizer that will tokenize the examples
         max_length: Maximum example length. Defaults to the tokenizer's max_len
         task: GLUE task
@@ -58,58 +52,19 @@ def glue_convert_examples_to_features(
         output_mode: String indicating the output mode. Either `regression` or `classification`
 
     Returns:
-        If the `examples` input is a `tf.data.Dataset`, will return a `tf.data.Dataset` containing the task-specific
-        features. If the input is a list of `InputExamples`, will return a list of task-specific `InputFeatures` which
-        can be fed to the model.
+        Will return a list of task-specific `InputFeatures` which can be fed to the model.
 
     """
     warnings.warn(DEPRECATION_WARNING.format("function"), FutureWarning)
-    if is_tf_available() and isinstance(examples, tf.data.Dataset):
-        if task is None:
-            raise ValueError("When calling glue_convert_examples_to_features from TF, the task parameter is required.")
-        return _tf_glue_convert_examples_to_features(examples, tokenizer, max_length=max_length, task=task)
     return _glue_convert_examples_to_features(
         examples, tokenizer, max_length=max_length, task=task, label_list=label_list, output_mode=output_mode
     )
 
 
-if is_tf_available():
-
-    def _tf_glue_convert_examples_to_features(
-        examples: tf.data.Dataset,
-        tokenizer: PreTrainedTokenizer,
-        task=str,
-        max_length: Optional[int] = None,
-    ) -> tf.data.Dataset:
-        """
-        Returns:
-            A `tf.data.Dataset` containing the task-specific features.
-
-        """
-        processor = glue_processors[task]()
-        examples = [processor.tfds_map(processor.get_example_from_tensor_dict(example)) for example in examples]
-        features = glue_convert_examples_to_features(examples, tokenizer, max_length=max_length, task=task)
-        label_type = tf.float32 if task == "sts-b" else tf.int64
-
-        def gen():
-            for ex in features:
-                d = {k: v for k, v in asdict(ex).items() if v is not None}
-                label = d.pop("label")
-                yield (d, label)
-
-        input_names = tokenizer.model_input_names
-
-        return tf.data.Dataset.from_generator(
-            gen,
-            (dict.fromkeys(input_names, tf.int32), label_type),
-            ({k: tf.TensorShape([None]) for k in input_names}, tf.TensorShape([])),
-        )
-
-
 def _glue_convert_examples_to_features(
     examples: list[InputExample],
     tokenizer: PreTrainedTokenizer,
-    max_length: Optional[int] = None,
+    max_length: int | None = None,
     task=None,
     label_list=None,
     output_mode=None,
@@ -128,7 +83,7 @@ def _glue_convert_examples_to_features(
 
     label_map = {label: i for i, label in enumerate(label_list)}
 
-    def label_from_example(example: InputExample) -> Union[int, float, None]:
+    def label_from_example(example: InputExample) -> int | float | None:
         if example.label is None:
             return None
         if output_mode == "classification":

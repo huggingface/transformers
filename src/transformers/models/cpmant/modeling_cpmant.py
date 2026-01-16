@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The OpenBMB Team and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,14 +14,13 @@
 """PyTorch CPMAnt"""
 
 import math
-from typing import Optional, Union
 
 import torch
 import torch.nn.functional as F
-import torch.utils.checkpoint
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationMixin
@@ -87,10 +85,10 @@ class CpmAntAttention(nn.Module):
         hidden_kv: torch.Tensor,
         attention_mask: torch.BoolTensor,
         position_bias: torch.Tensor,
-        output_attentions: Optional[bool] = False,
-        past_key_values: Optional[Cache] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.Tensor] = None,
+        output_attentions: bool | None = False,
+        past_key_values: Cache | None = None,
+        use_cache: bool | None = None,
+        cache_position: torch.Tensor | None = None,
     ):
         """
         Args:
@@ -104,7 +102,7 @@ class CpmAntAttention(nn.Module):
                 Provide positional information to self-attention block.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers.
-            past_key_values (`tuple[torch.Tensor, torch.Tensor]`, *optional*):
+            past_key_values (`Cache`, *optional*):
                 Cached past key and value projection states.
             use_cache (`bool`, *optional*):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
@@ -175,11 +173,11 @@ class CpmAntSelfAttentionBlock(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
-        position_bias: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
-        past_key_values: Optional[Cache] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.Tensor] = None,
+        position_bias: torch.Tensor | None = None,
+        output_attentions: bool | None = False,
+        past_key_values: Cache | None = None,
+        use_cache: bool | None = None,
+        cache_position: torch.Tensor | None = None,
     ):
         """
         Args:
@@ -191,7 +189,7 @@ class CpmAntSelfAttentionBlock(nn.Module):
                 Provide positional information to self-attention block.
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers.
-            past_key_values (`Tuple(torch.FloatTensor)`, *optional*):
+            past_key_values (`Cache`, *optional*):
                 Cached past key and value projection states.
             use_cache (`bool`, *optional*):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
@@ -299,11 +297,11 @@ class CpmAntTransformerBlock(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
-        position_bias: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
-        past_key_values: Optional[Cache] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.Tensor] = None,
+        position_bias: torch.Tensor | None = None,
+        output_attentions: bool | None = False,
+        past_key_values: Cache | None = None,
+        use_cache: bool | None = None,
+        cache_position: torch.Tensor | None = None,
     ):
         """
         Args:
@@ -315,7 +313,7 @@ class CpmAntTransformerBlock(nn.Module):
                 Provides position information to attention mechanism of shape `(num_heads, seq_len, seq_len)`
             output_attentions (`bool`, *optional*):
                 Whether or not to return the attentions tensors of all attention layers.
-            past_key_values (`tuple[torch.Tensor, torch.Tensor])`, *optional*):
+            past_key_values (`Cache`, *optional*):
                 Cached past key and value projection states
             use_cache (`bool`, *optional*):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
@@ -348,11 +346,11 @@ class CpmAntEncoder(nn.Module):
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
         position_bias: torch.Tensor,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        past_key_values: Optional[Cache] = None,
-        use_cache: Optional[bool] = None,
-        cache_postion: Optional[torch.Tensor] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        past_key_values: Cache | None = None,
+        use_cache: bool | None = None,
+        cache_position: torch.Tensor | None = None,
     ):
         """
         Args:
@@ -366,7 +364,7 @@ class CpmAntEncoder(nn.Module):
                 Whether or not to return the attentions tensors of all attention layers.
             output_hidden_states (`bool`, *optional*):
                 Whether or not to return the hidden states of all layers.
-            past_key_values (`tuple[torch.Tensor, torch.Tensor])`, *optional*):
+            past_key_values (`Cache`, *optional*):
                 Cached past key and value projection states
             use_cache (`bool`, *optional*):
                 If set to `True`, `past_key_values` key value states are returned and can be used to speed up decoding
@@ -493,16 +491,16 @@ class CpmAntSegmentPositionEmbedding(nn.Module):
         relative_position = torch.abs(relative_position)
         max_exact = num_buckets // 2
         is_small = relative_position < max_exact
-        relative_postion_if_large = max_exact + (
+        relative_position_if_large = max_exact + (
             torch.log(relative_position.float() / max_exact)
             / math.log(max_distance / max_exact)
             * (num_buckets - max_exact)
         ).to(torch.int32)
-        relative_postion_if_large = torch.min(
-            relative_postion_if_large,
-            torch.full_like(relative_postion_if_large, num_buckets - 1),
+        relative_position_if_large = torch.min(
+            relative_position_if_large,
+            torch.full_like(relative_position_if_large, num_buckets - 1),
         )
-        relative_buckets += torch.where(is_small, relative_position.to(torch.int32), relative_postion_if_large)
+        relative_buckets += torch.where(is_small, relative_position.to(torch.int32), relative_position_if_large)
         return relative_buckets
 
 
@@ -526,23 +524,14 @@ class CpmAntPreTrainedModel(PreTrainedModel):
     config: CpmAntConfig
     base_model_prefix = "cpmant"
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.init_std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=self.config.init_std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-        elif isinstance(module, CpmAntLayerNorm):
-            module.weight.data.fill_(1.0)
+        super()._init_weights(module)
+        if isinstance(module, CpmAntLayerNorm):
+            init.ones_(module.weight)
         elif isinstance(module, CpmAntSegmentPositionEmbedding):
-            module.relative_attention_bias.data.normal_(mean=0.0, std=self.config.init_std)
+            init.normal_(module.relative_attention_bias, mean=0.0, std=self.config.init_std)
 
 
 @auto_docstring
@@ -587,15 +576,15 @@ class CpmAntModel(CpmAntPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        past_key_values: Optional[tuple[tuple[torch.Tensor]]] = None,
-        use_cache: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.Tensor] = None,
+        input_ids: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        past_key_values: Cache | None = None,
+        use_cache: bool | None = None,
+        return_dict: bool | None = None,
+        cache_position: torch.Tensor | None = None,
         **kwargs,
-    ) -> Union[tuple[torch.Tensor], BaseModelOutputWithPast]:
+    ) -> tuple[torch.Tensor] | BaseModelOutputWithPast:
         r"""
         input_ids (`torch.Tensor` of shape `(batch_size, seq_len)`):
             Indices of input sequence tokens in the vocabulary.
@@ -638,13 +627,6 @@ class CpmAntModel(CpmAntPreTrainedModel):
 
         if use_cache and past_key_values is None:
             past_key_values = DynamicCache(config=self.config)
-        if use_cache and isinstance(past_key_values, tuple):
-            logger.warning_once(
-                "Passing a tuple of `past_key_values` is deprecated and will be removed in Transformers v4.58.0. "
-                "You should pass an instance of `DynamicCache` instead, e.g. "
-                "`past_key_values=DynamicCache.from_legacy_cache(past_key_values)`."
-            )
-            past_key_values = DynamicCache.from_legacy_cache(past_key_values)
 
         past_length = past_key_values.get_seq_length() if past_key_values is not None else 0
         input_ids = input_ids.contiguous()
@@ -706,7 +688,7 @@ class CpmAntModel(CpmAntPreTrainedModel):
     """
 )
 class CpmAntForCausalLM(CpmAntPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "cpmant.input_embedding.weight"}
 
     def __init__(self, config: CpmAntConfig):
         super().__init__(config)
@@ -721,17 +703,18 @@ class CpmAntForCausalLM(CpmAntPreTrainedModel, GenerationMixin):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        past_key_values: Optional[list[tuple[torch.Tensor, torch.Tensor]]] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        labels: Optional[torch.Tensor] = None,
-        return_dict: Optional[bool] = None,
-        attention_mask: Optional[torch.Tensor] = None,  # dummy parameter for text-generation pipeline
-        cache_position: Optional[torch.Tensor] = None,
+        input_ids: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        labels: torch.Tensor | None = None,
+        return_dict: bool | None = None,
+        attention_mask: torch.Tensor | None = None,  # dummy parameter for text-generation pipeline
+        cache_position: torch.Tensor | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
         **kwargs,
-    ) -> Union[tuple, CausalLMOutputWithPast]:
+    ) -> tuple | CausalLMOutputWithPast:
         r"""
         input_ids (`torch.Tensor` of shape `(batch_size, seq_len)`):
             Indices of input sequence tokens in the vocabulary.
@@ -771,8 +754,9 @@ class CpmAntForCausalLM(CpmAntPreTrainedModel, GenerationMixin):
             cache_position,
         )
         hidden_states = model_output.last_hidden_state if return_dict else model_output[0]
-
-        logits = self.lm_head(hidden_states)
+        # Only compute necessary logits
+        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+        logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
         if labels is not None:
@@ -796,13 +780,6 @@ class CpmAntForCausalLM(CpmAntPreTrainedModel, GenerationMixin):
 
     def set_input_embeddings(self, embeddings):
         self.cpmant.input_embedding = embeddings
-
-    def _reorder_cache(self, past_key_values, beam_idx):
-        past_key_values = [list(each) if each is not None else each for each in past_key_values]
-        for key_value_layer in past_key_values:
-            key_value_layer[0] = key_value_layer[0][beam_idx]
-            key_value_layer[1] = key_value_layer[1][beam_idx]
-        return past_key_values
 
 
 __all__ = ["CpmAntForCausalLM", "CpmAntModel", "CpmAntPreTrainedModel"]

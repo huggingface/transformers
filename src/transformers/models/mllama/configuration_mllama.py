@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 HuggingFace Inc. team. All rights reserved.
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,17 +12,14 @@
 # limitations under the License.
 """Mllama model configuration"""
 
-from typing import Optional
-
-from ...configuration_utils import PretrainedConfig
-from ...modeling_rope_utils import rope_config_validation
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class MllamaVisionConfig(PretrainedConfig):
+class MllamaVisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MllamaVisionModel`]. It is used to instantiate an
     Mllama vision model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -31,8 +27,8 @@ class MllamaVisionConfig(PretrainedConfig):
 
     e.g. [meta-llama/Llama-3.2-11B-Vision](https://huggingface.co/meta-llama/Llama-3.2-11B-Vision)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 1280):
@@ -103,8 +99,8 @@ class MllamaVisionConfig(PretrainedConfig):
         patch_size: int = 14,
         norm_eps: float = 1e-5,
         max_num_tiles: int = 4,
-        intermediate_layers_indices: Optional[list[int]] = None,
-        supported_aspect_ratios: Optional[list[list[int]]] = None,
+        intermediate_layers_indices: list[int] | None = None,
+        supported_aspect_ratios: list[list[int]] | None = None,
         initializer_range: float = 0.02,
         **kwargs,
     ):
@@ -138,7 +134,7 @@ class MllamaVisionConfig(PretrainedConfig):
         return len(self.supported_aspect_ratios)
 
 
-class MllamaTextConfig(PretrainedConfig):
+class MllamaTextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MllamaTextModel`]. It is used to instantiate an
     Mllama text model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -146,8 +142,8 @@ class MllamaTextConfig(PretrainedConfig):
 
     e.g. [meta-llama/Llama-3.2-11B-Vision](https://huggingface.co/meta-llama/Llama-3.2-11B-Vision)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 128256):
@@ -166,45 +162,10 @@ class MllamaTextConfig(PretrainedConfig):
             specified, will default to `num_attention_heads`.
         intermediate_size (`int`, *optional*, defaults to 14336):
             Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
-        rope_theta (`float`, *optional*, defaults to `500000.0`):
-            The base period of the RoPE embeddings.
-        rope_scaling (`Dict`, *optional*):
-            Dictionary containing the scaling configuration for the RoPE embeddings. NOTE: if you apply new rope type
-            and you expect the model to work on longer `max_position_embeddings`, we recommend you to update this value
-            accordingly.
-            Expected contents:
-                `rope_type` (`str`):
-                    The sub-variant of RoPE to use. Can be one of ['default', 'linear', 'dynamic', 'yarn', 'longrope',
-                    'llama3'], with 'default' being the original RoPE implementation.
-                `factor` (`float`, *optional*):
-                    Used with all rope types except 'default'. The scaling factor to apply to the RoPE embeddings. In
-                    most scaling types, a `factor` of x will enable the model to handle sequences of length x *
-                    original maximum pre-trained length.
-                `original_max_position_embeddings` (`int`, *optional*):
-                    Used with 'dynamic', 'longrope' and 'llama3'. The original max position embeddings used during
-                    pretraining.
-                `attention_factor` (`float`, *optional*):
-                    Used with 'yarn' and 'longrope'. The scaling factor to be applied on the attention
-                    computation. If unspecified, it defaults to value recommended by the implementation, using the
-                    `factor` field to infer the suggested value.
-                `beta_fast` (`float`, *optional*):
-                    Only used with 'yarn'. Parameter to set the boundary for extrapolation (only) in the linear
-                    ramp function. If unspecified, it defaults to 32.
-                `beta_slow` (`float`, *optional*):
-                    Only used with 'yarn'. Parameter to set the boundary for interpolation (only) in the linear
-                    ramp function. If unspecified, it defaults to 1.
-                `short_factor` (`list[float]`, *optional*):
-                    Only used with 'longrope'. The scaling factor to be applied to short contexts (<
-                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
-                    size divided by the number of attention heads divided by 2
-                `long_factor` (`list[float]`, *optional*):
-                    Only used with 'longrope'. The scaling factor to be applied to long contexts (<
-                    `original_max_position_embeddings`). Must be a list of numbers with the same length as the hidden
-                    size divided by the number of attention heads divided by 2
-                `low_freq_factor` (`float`, *optional*):
-                    Only used with 'llama3'. Scaling factor applied to low frequency components of the RoPE
-                `high_freq_factor` (`float`, *optional*):
-                    Only used with 'llama3'. Scaling factor applied to high frequency components of the RoPE
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
         rms_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the rms normalization layers.
         max_position_embeddings (`int`, *optional*, defaults to 131072):
@@ -243,6 +204,7 @@ class MllamaTextConfig(PretrainedConfig):
 
     model_type = "mllama_text_model"
     base_config_key = "text_config"
+    default_theta = 500000.0
 
     def __init__(
         self,
@@ -253,18 +215,17 @@ class MllamaTextConfig(PretrainedConfig):
         num_attention_heads: int = 32,
         num_key_value_heads: int = 8,
         intermediate_size: int = 14_336,
-        rope_theta: float = 500_000,
-        rope_scaling: Optional[dict] = None,
+        rope_parameters: dict | None = None,
         rms_norm_eps: float = 1e-5,
         max_position_embeddings: int = 131_072,
         initializer_range: float = 0.02,
         use_cache: bool = True,
         tie_word_embeddings: bool = False,
-        cross_attention_layers: Optional[list[int]] = None,
+        cross_attention_layers: list[int] | None = None,
         dropout: float = 0,
         bos_token_id: int = 128000,
         eos_token_id: int = 128001,
-        pad_token_id: Optional[int] = 128004,
+        pad_token_id: int | None = 128004,
         **kwargs,
     ):
         if cross_attention_layers is None:
@@ -278,25 +239,21 @@ class MllamaTextConfig(PretrainedConfig):
         self.num_key_value_heads = num_key_value_heads
         self.initializer_range = initializer_range
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
         self.rms_norm_eps = rms_norm_eps
         self.intermediate_size = intermediate_size
         self.dropout = dropout
         self.hidden_act = hidden_act
-        self.rope_scaling = rope_scaling
         self.max_position_embeddings = max_position_embeddings
-        rope_config_validation(self)
+        self.rope_parameters = rope_parameters
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        super().__init__(**kwargs)
 
 
-class MllamaConfig(PretrainedConfig):
+class MllamaConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MllamaForConditionalGeneration`]. It is used to instantiate an
     Mllama model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -304,8 +261,8 @@ class MllamaConfig(PretrainedConfig):
 
     e.g. [meta-llama/Llama-3.2-11B-Vision](https://huggingface.co/meta-llama/Llama-3.2-11B-Vision)
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vision_config (`Union[AutoConfig, dict]`, *optional*, defaults to `MllamaVisionConfig`):

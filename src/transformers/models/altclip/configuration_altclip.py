@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 WenXiang ZhongzhiCheng LedellWu LiuGuang BoWenZhang and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,22 +13,22 @@
 # limitations under the License.
 """AltCLIP model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class AltCLIPTextConfig(PretrainedConfig):
+class AltCLIPTextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`AltCLIPTextModel`]. It is used to instantiate a
     AltCLIP text model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the AltCLIP
     [BAAI/AltCLIP](https://huggingface.co/BAAI/AltCLIP) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -67,15 +66,6 @@ class AltCLIPTextConfig(PretrainedConfig):
         bos_token_id (`int`, *optional*, defaults to 0): The id of the *beginning-of-sequence* token.
         eos_token_id (`Union[int, list[int]]`, *optional*, defaults to 2):
             The id of the *end-of-sequence* token. Optionally, use a list to set multiple *end-of-sequence* tokens.
-        position_embedding_type (`str`, *optional*, defaults to `"absolute"`):
-            Type of position embedding. Choose one of `"absolute"`, `"relative_key"`, `"relative_key_query"`. For
-            positional embeddings use `"absolute"`. For more information on `"relative_key"`, please refer to
-            [Self-Attention with Relative Position Representations (Shaw et al.)](https://huggingface.co/papers/1803.02155).
-            For more information on `"relative_key_query"`, please refer to *Method 4* in [Improve Transformer Models
-            with Better Relative Position Embeddings (Huang et al.)](https://huggingface.co/papers/2009.13658).
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
         project_dim (`int`, *optional*, defaults to 768):
             The dimensions of the teacher model before the mapping layer.
 
@@ -114,12 +104,13 @@ class AltCLIPTextConfig(PretrainedConfig):
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
-        position_embedding_type="absolute",
-        use_cache=True,
         project_dim=768,
         **kwargs,
     ):
-        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+        super().__init__(**kwargs)
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
 
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
@@ -134,20 +125,18 @@ class AltCLIPTextConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.initializer_factor = initializer_factor
         self.layer_norm_eps = layer_norm_eps
-        self.position_embedding_type = position_embedding_type
-        self.use_cache = use_cache
         self.project_dim = project_dim
 
 
-class AltCLIPVisionConfig(PretrainedConfig):
+class AltCLIPVisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`AltCLIPModel`]. It is used to instantiate an
     AltCLIP model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the AltCLIP
     [BAAI/AltCLIP](https://huggingface.co/BAAI/AltCLIP) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -232,15 +221,15 @@ class AltCLIPVisionConfig(PretrainedConfig):
         self.hidden_act = hidden_act
 
 
-class AltCLIPConfig(PretrainedConfig):
+class AltCLIPConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`AltCLIPModel`]. It is used to instantiate an
     AltCLIP model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the AltCLIP
     [BAAI/AltCLIP](https://huggingface.co/BAAI/AltCLIP) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         text_config (`dict`, *optional*):
@@ -274,7 +263,7 @@ class AltCLIPConfig(PretrainedConfig):
     >>> config_text = AltCLIPTextConfig()
     >>> config_vision = AltCLIPVisionConfig()
 
-    >>> config = AltCLIPConfig.from_text_vision_configs(config_text, config_vision)
+    >>> config = AltCLIPConfig(text_config=config_text, vision_config=config_vision)
     ```"""
 
     model_type = "altclip"
@@ -289,8 +278,6 @@ class AltCLIPConfig(PretrainedConfig):
         text_config_dict = kwargs.pop("text_config_dict", None)
         vision_config_dict = kwargs.pop("vision_config_dict", None)
 
-        super().__init__(**kwargs)
-
         # Instead of simply assigning `[text|vision]_config_dict` to `[text|vision]_config`, we use the values in
         # `[text|vision]_config_dict` to update the values in `[text|vision]_config`. The values should be same in most
         # cases, but we don't want to break anything regarding `_config_dict` that existed before commit `8827e1b2`.
@@ -303,7 +290,7 @@ class AltCLIPConfig(PretrainedConfig):
 
             # Give a warning if the values exist in both `_text_config_dict` and `text_config` but being different.
             for key, value in _text_config_dict.items():
-                if key in text_config and value != text_config[key] and key not in ["transformers_version"]:
+                if key in text_config and value != text_config[key] and key != "transformers_version":
                     # If specified in `text_config_dict`
                     if key in text_config_dict:
                         message = (
@@ -335,7 +322,7 @@ class AltCLIPConfig(PretrainedConfig):
 
             # Give a warning if the values exist in both `_vision_config_dict` and `vision_config` but being different.
             for key, value in _vision_config_dict.items():
-                if key in vision_config and value != vision_config[key] and key not in ["transformers_version"]:
+                if key in vision_config and value != vision_config[key] and key != "transformers_version":
                     # If specified in `vision_config_dict`
                     if key in vision_config_dict:
                         message = (
@@ -354,19 +341,24 @@ class AltCLIPConfig(PretrainedConfig):
             vision_config.update(_vision_config_dict)
 
         if text_config is None:
-            text_config = {}
+            text_config = AltCLIPTextConfig()
             logger.info("`text_config` is `None`. Initializing the `AltCLIPTextConfig` with default values.")
+        elif isinstance(text_config, dict):
+            text_config = AltCLIPTextConfig(**text_config)
 
         if vision_config is None:
-            vision_config = {}
+            vision_config = AltCLIPVisionConfig()
             logger.info("`vision_config` is `None`. initializing the `AltCLIPVisionConfig` with default values.")
+        elif isinstance(vision_config, dict):
+            vision_config = AltCLIPVisionConfig(**vision_config)
 
-        self.text_config = AltCLIPTextConfig(**text_config)
-        self.vision_config = AltCLIPVisionConfig(**vision_config)
+        self.text_config = text_config
+        self.vision_config = vision_config
 
         self.projection_dim = projection_dim
         self.logit_scale_init_value = logit_scale_init_value
         self.initializer_factor = 1.0
+        super().__init__(**kwargs)
 
 
 __all__ = ["AltCLIPTextConfig", "AltCLIPVisionConfig", "AltCLIPConfig"]

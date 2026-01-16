@@ -4,13 +4,35 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_grounding_dino.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+# Copyright 2025 the HuggingFace Inc. team. All rights reserved.
+#
+# This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
+# and OPT implementations in this library. It has been modified from its
+# original forms to accommodate minor architectural differences compared
+# to GPT-NeoX and OPT used by the Meta AI team that trained the model.
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import pathlib
-from typing import TYPE_CHECKING, Any, Optional, Union
+from typing import TYPE_CHECKING, Any, Optional
+
+import torch
+from torchvision.io import read_image
+from torchvision.transforms.v2 import functional as F
 
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
     SizeDict,
     get_image_size_for_max_height_width,
     get_max_height_width,
@@ -23,70 +45,18 @@ from ...image_utils import (
     AnnotationFormat,
     AnnotationType,
     ChannelDimension,
-    ImageInput,
     PILImageResampling,
     get_image_size,
     validate_annotations,
 )
 from ...processing_utils import Unpack
-from ...utils import (
-    TensorType,
-    auto_docstring,
-    is_torch_available,
-    is_torchvision_available,
-    is_torchvision_v2_available,
-    logging,
-)
+from ...utils import TensorType, auto_docstring
 from ...utils.import_utils import requires
-from .image_processing_grounding_dino import get_size_with_aspect_ratio
+from .image_processing_grounding_dino import GroundingDinoImageProcessorKwargs, get_size_with_aspect_ratio
 
 
 if TYPE_CHECKING:
     from .modeling_grounding_dino import GroundingDinoObjectDetectionOutput
-
-if is_torch_available():
-    import torch
-
-
-if is_torchvision_v2_available():
-    from torchvision.io import read_image
-    from torchvision.transforms.v2 import functional as F
-
-elif is_torchvision_available():
-    from torchvision.io import read_image
-    from torchvision.transforms import functional as F
-
-
-logger = logging.get_logger(__name__)
-
-
-class GroundingDinoFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    r"""
-    format (`str`, *optional*, defaults to `AnnotationFormat.COCO_DETECTION`):
-        Data format of the annotations. One of "coco_detection" or "coco_panoptic".
-    do_convert_annotations (`bool`, *optional*, defaults to `True`):
-        Controls whether to convert the annotations to the format expected by the GROUNDING_DINO model. Converts the
-        bounding boxes to the format `(center_x, center_y, width, height)` and in the range `[0, 1]`.
-        Can be overridden by the `do_convert_annotations` parameter in the `preprocess` method.
-    do_pad (`bool`, *optional*, defaults to `True`):
-        Controls whether to pad the image. Can be overridden by the `do_pad` parameter in the `preprocess`
-        method. If `True`, padding will be applied to the bottom and right of the image with zeros.
-        If `pad_size` is provided, the image will be padded to the specified dimensions.
-        Otherwise, the image will be padded to the maximum height and width of the batch.
-    pad_size (`dict[str, int]`, *optional*):
-        The size `{"height": int, "width" int}` to pad the images to. Must be larger than any image size
-        provided for preprocessing. If `pad_size` is not provided, images will be padded to the largest
-        height and width in the batch.
-    return_segmentation_masks (`bool`, *optional*, defaults to `False`):
-        Whether to return segmentation masks.
-    """
-
-    format: Optional[Union[str, AnnotationFormat]]
-    do_convert_annotations: Optional[bool]
-    do_pad: Optional[bool]
-    pad_size: Optional[dict[str, int]]
-    return_segmentation_masks: Optional[bool]
-
 
 SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION, AnnotationFormat.COCO_PANOPTIC)
 
@@ -131,7 +101,7 @@ def prepare_coco_detection_annotation(
     image,
     target,
     return_segmentation_masks: bool = False,
-    input_data_format: Optional[Union[ChannelDimension, str]] = None,
+    input_data_format: ChannelDimension | str | None = None,
 ):
     """
     Convert the target in COCO format into the format expected by GROUNDING_DINO.
@@ -242,9 +212,9 @@ def rgb_to_id(color):
 def prepare_coco_panoptic_annotation(
     image: torch.Tensor,
     target: dict,
-    masks_path: Union[str, pathlib.Path],
+    masks_path: str | pathlib.Path,
     return_masks: bool = True,
-    input_data_format: Union[ChannelDimension, str] = None,
+    input_data_format: ChannelDimension | str = None,
 ) -> dict:
     """
     Prepare a coco panoptic annotation for GROUNDING_DINO.
@@ -330,22 +300,13 @@ class GroundingDinoImageProcessorFast(BaseImageProcessorFast):
     size = {"shortest_edge": 800, "longest_edge": 1333}
     default_to_square = False
     model_input_names = ["pixel_values", "pixel_mask"]
-    valid_kwargs = GroundingDinoFastImageProcessorKwargs
+    valid_kwargs = GroundingDinoImageProcessorKwargs
 
-    def __init__(self, **kwargs: Unpack[GroundingDinoFastImageProcessorKwargs]) -> None:
-        if "pad_and_return_pixel_mask" in kwargs:
-            kwargs["do_pad"] = kwargs.pop("pad_and_return_pixel_mask")
+    def __init__(self, **kwargs: Unpack[GroundingDinoImageProcessorKwargs]) -> None:
+        kwargs.setdefault("do_pad", kwargs.pop("pad_and_return_pixel_mask", self.do_pad))
 
         size = kwargs.pop("size", None)
-        if "max_size" in kwargs:
-            logger.warning_once(
-                "The `max_size` parameter is deprecated and will be removed in v4.26. "
-                "Please specify in `size['longest_edge'] instead`.",
-            )
-            max_size = kwargs.pop("max_size")
-        else:
-            max_size = None if size is None else 1333
-
+        max_size = None if size is None else kwargs.pop("max_size", 1333)
         size = size if size is not None else {"shortest_edge": 800, "longest_edge": 1333}
         self.size = get_size_dict(size, max_size=max_size, default_to_square=False)
 
@@ -357,28 +318,14 @@ class GroundingDinoImageProcessorFast(BaseImageProcessorFast):
 
         super().__init__(**kwargs)
 
-    @classmethod
-    def from_dict(cls, image_processor_dict: dict[str, Any], **kwargs):
-        """
-        Overrides the `from_dict` method from the base class to make sure parameters are updated if image processor is
-        created using from_dict and kwargs e.g. `GroundingDinoImageProcessorFast.from_pretrained(checkpoint, size=600,
-        max_size=800)`
-        """
-        image_processor_dict = image_processor_dict.copy()
-        if "max_size" in kwargs:
-            image_processor_dict["max_size"] = kwargs.pop("max_size")
-        if "pad_and_return_pixel_mask" in kwargs:
-            image_processor_dict["pad_and_return_pixel_mask"] = kwargs.pop("pad_and_return_pixel_mask")
-        return super().from_dict(image_processor_dict, **kwargs)
-
     def prepare_annotation(
         self,
         image: torch.Tensor,
         target: dict,
-        format: Optional[AnnotationFormat] = None,
-        return_segmentation_masks: Optional[bool] = None,
-        masks_path: Optional[Union[str, pathlib.Path]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        format: AnnotationFormat | None = None,
+        return_segmentation_masks: bool | None = None,
+        masks_path: str | pathlib.Path | None = None,
+        input_data_format: str | ChannelDimension | None = None,
     ) -> dict:
         """
         Prepare an annotation for feeding into GROUNDING_DINO model.
@@ -407,7 +354,7 @@ class GroundingDinoImageProcessorFast(BaseImageProcessorFast):
         self,
         image: torch.Tensor,
         size: SizeDict,
-        interpolation: "F.InterpolationMode" = None,
+        interpolation: Optional["F.InterpolationMode"] = None,
         **kwargs,
     ) -> torch.Tensor:
         """
@@ -463,7 +410,7 @@ class GroundingDinoImageProcessorFast(BaseImageProcessorFast):
         orig_size: tuple[int, int],
         target_size: tuple[int, int],
         threshold: float = 0.5,
-        interpolation: "F.InterpolationMode" = None,
+        interpolation: Optional["F.InterpolationMode"] = None,
     ):
         """
         Resizes an annotation to a target size.
@@ -480,13 +427,7 @@ class GroundingDinoImageProcessorFast(BaseImageProcessorFast):
             resample (`InterpolationMode`, defaults to `F.InterpolationMode.NEAREST_EXACT`):
                 The resampling filter to use when resizing the masks.
         """
-        interpolation = (
-            interpolation
-            if interpolation is not None
-            else F.InterpolationMode.NEAREST_EXACT
-            if is_torchvision_v2_available()
-            else F.InterpolationMode.NEAREST
-        )
+        interpolation = interpolation if interpolation is not None else F.InterpolationMode.NEAREST_EXACT
         ratio_height, ratio_width = [target / orig for target, orig in zip(target_size, orig_size)]
 
         new_annotation = {}
@@ -570,7 +511,7 @@ class GroundingDinoImageProcessorFast(BaseImageProcessorFast):
         self,
         image: torch.Tensor,
         padded_size: tuple[int, int],
-        annotation: Optional[dict[str, Any]] = None,
+        annotation: dict[str, Any] | None = None,
         update_bboxes: bool = True,
         fill: int = 0,
     ):
@@ -596,50 +537,11 @@ class GroundingDinoImageProcessorFast(BaseImageProcessorFast):
 
         return image, pixel_mask, annotation
 
-    @auto_docstring
-    def preprocess(
-        self,
-        images: ImageInput,
-        annotations: Optional[Union[AnnotationType, list[AnnotationType]]] = None,
-        masks_path: Optional[Union[str, pathlib.Path]] = None,
-        **kwargs: Unpack[GroundingDinoFastImageProcessorKwargs],
-    ) -> BatchFeature:
-        r"""
-        annotations (`AnnotationType` or `list[AnnotationType]`, *optional*):
-            List of annotations associated with the image or batch of images. If annotation is for object
-            detection, the annotations should be a dictionary with the following keys:
-            - "image_id" (`int`): The image id.
-            - "annotations" (`list[Dict]`): List of annotations for an image. Each annotation should be a
-                dictionary. An image can have no annotations, in which case the list should be empty.
-            If annotation is for segmentation, the annotations should be a dictionary with the following keys:
-            - "image_id" (`int`): The image id.
-            - "segments_info" (`list[Dict]`): List of segments for an image. Each segment should be a dictionary.
-                An image can have no segments, in which case the list should be empty.
-            - "file_name" (`str`): The file name of the image.
-        masks_path (`str` or `pathlib.Path`, *optional*):
-            Path to the directory containing the segmentation masks.
-        """
-        if "pad_and_return_pixel_mask" in kwargs:
-            kwargs["do_pad"] = kwargs.pop("pad_and_return_pixel_mask")
-            logger.warning_once(
-                "The `pad_and_return_pixel_mask` argument is deprecated and will be removed in a future version, "
-                "use `do_pad` instead."
-            )
-
-        if "max_size" in kwargs:
-            logger.warning_once(
-                "The `max_size` argument is deprecated and will be removed in a future version, use"
-                " `size['longest_edge']` instead."
-            )
-            kwargs["size"] = kwargs.pop("max_size")
-
-        return super().preprocess(images, annotations, masks_path, **kwargs)
-
     def _preprocess(
         self,
         images: list["torch.Tensor"],
-        annotations: Optional[Union[AnnotationType, list[AnnotationType]]],
-        masks_path: Optional[Union[str, pathlib.Path]],
+        annotations: AnnotationType | list[AnnotationType] | None,
+        masks_path: str | pathlib.Path | None,
         return_segmentation_masks: bool,
         do_resize: bool,
         size: SizeDict,
@@ -648,12 +550,12 @@ class GroundingDinoImageProcessorFast(BaseImageProcessorFast):
         rescale_factor: float,
         do_normalize: bool,
         do_convert_annotations: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
         do_pad: bool,
-        pad_size: Optional[dict[str, int]],
-        format: Optional[Union[str, AnnotationFormat]],
-        return_tensors: Optional[Union[str, TensorType]],
+        pad_size: SizeDict | None,
+        format: str | AnnotationFormat | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -720,7 +622,7 @@ class GroundingDinoImageProcessorFast(BaseImageProcessorFast):
         if do_pad:
             # depends on all resized image shapes so we need another loop
             if pad_size is not None:
-                padded_size = (pad_size["height"], pad_size["width"])
+                padded_size = (pad_size.height, pad_size.width)
             else:
                 padded_size = get_max_height_width(images)
 
@@ -755,7 +657,7 @@ class GroundingDinoImageProcessorFast(BaseImageProcessorFast):
         self,
         outputs: "GroundingDinoObjectDetectionOutput",
         threshold: float = 0.1,
-        target_sizes: Optional[Union[TensorType, list[tuple]]] = None,
+        target_sizes: TensorType | list[tuple] | None = None,
     ):
         """
         Converts the raw output of [`GroundingDinoForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,

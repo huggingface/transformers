@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -153,7 +152,6 @@ def convert_state_dict(orig_state_dict, config):
                 orig_state_dict[f"swin2sr.encoder.stages.{stage_num}.layers.{block_num}.attention.self.value.bias"] = (
                     val[-dim:]
                 )
-            pass
         else:
             orig_state_dict[rename_key(key, config)] = val
 

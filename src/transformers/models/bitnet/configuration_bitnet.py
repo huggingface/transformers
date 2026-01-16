@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The BitNet Team and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,22 +12,23 @@
 # See the License for the specific language governing permissions and
 """BitNet model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class BitNetConfig(PretrainedConfig):
+class BitNetConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`BitNetModel`]. It is used to instantiate an BitNet
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of
     BitNet b1.58 2B4T [microsoft/bitnet-b1.58-2B-4T](https://huggingface.co/microsoft/bitnet-b1.58-2B-4T).
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -70,12 +70,14 @@ class BitNetConfig(PretrainedConfig):
             End of stream token id.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
-        rope_theta (`float`, *optional*, defaults to 500000.0):
-            The base period of the RoPE embeddings.
         attention_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
 
     ```python
     >>> from transformers import BitNetModel, BitNetConfig
@@ -92,27 +94,28 @@ class BitNetConfig(PretrainedConfig):
 
     model_type = "bitnet"
     keys_to_ignore_at_inference = ["past_key_values"]
+    default_theta = 500000.0
 
     def __init__(
         self,
-        vocab_size=128256,
-        hidden_size=2560,
-        intermediate_size=6912,
-        num_hidden_layers=30,
-        num_attention_heads=20,
-        num_key_value_heads=5,
-        hidden_act="relu2",
-        max_position_embeddings=2048,
-        initializer_range=0.02,
-        rms_norm_eps=1e-5,
-        use_cache=True,
-        pad_token_id=None,
-        bos_token_id=128000,
-        eos_token_id=128001,
-        tie_word_embeddings=False,
-        rope_theta=500000.0,
-        attention_bias=False,
-        attention_dropout=0.0,
+        vocab_size: int | None = 128256,
+        hidden_size: int | None = 2560,
+        intermediate_size: int | None = 6912,
+        num_hidden_layers: int | None = 30,
+        num_attention_heads: int | None = 20,
+        num_key_value_heads: int | None = 5,
+        hidden_act: str | None = "relu2",
+        max_position_embeddings: int | None = 2048,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: int | None = 1e-5,
+        use_cache: bool | None = True,
+        pad_token_id: int | None = None,
+        bos_token_id: int | None = 128000,
+        eos_token_id: int | None = 128001,
+        tie_word_embeddings: bool | None = False,
+        attention_bias: bool | None = False,
+        attention_dropout: str | None = 0.0,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -131,17 +134,15 @@ class BitNetConfig(PretrainedConfig):
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
+        self.rope_parameters = rope_parameters
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        super().__init__(**kwargs)
 
 
 __all__ = ["BitNetConfig"]

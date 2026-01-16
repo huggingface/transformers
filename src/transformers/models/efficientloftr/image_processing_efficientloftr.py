@@ -13,8 +13,6 @@
 # limitations under the License.
 """Image processor class for SuperPoint."""
 
-from typing import Optional, Union
-
 import numpy as np
 
 from ... import is_torch_available, is_vision_available
@@ -34,6 +32,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
+from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, logging, requires_backends
 
 
@@ -44,15 +43,24 @@ if is_vision_available():
     import PIL
     from PIL import Image, ImageDraw
 
-    from .modeling_efficientloftr import KeypointMatchingOutput
+    from .modeling_efficientloftr import EfficientLoFTRKeypointMatchingOutput
 
 logger = logging.get_logger(__name__)
+
+
+class EfficientLoFTRImageProcessorKwargs(ImagesKwargs, total=False):
+    r"""
+    do_grayscale (`bool`, *optional*, defaults to `True`):
+        Whether to convert the image to grayscale. Can be overridden by `do_grayscale` in the `preprocess` method.
+    """
+
+    do_grayscale: bool
 
 
 # Copied from transformers.models.superpoint.image_processing_superpoint.is_grayscale
 def is_grayscale(
     image: np.ndarray,
-    input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    input_data_format: str | ChannelDimension | None = None,
 ):
     if input_data_format == ChannelDimension.FIRST:
         if image.shape[0] == 1:
@@ -67,11 +75,10 @@ def is_grayscale(
 # Copied from transformers.models.superpoint.image_processing_superpoint.convert_to_grayscale
 def convert_to_grayscale(
     image: ImageInput,
-    input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    input_data_format: str | ChannelDimension | None = None,
 ) -> ImageInput:
     """
-    Converts an image to grayscale format using the NTSC formula. Only support numpy and PIL Image. TODO support torch
-    and tensorflow grayscale conversion
+    Converts an image to grayscale format using the NTSC formula. Only support numpy and PIL Image.
 
     This function is supposed to return a 1-channel image, but it returns a 3-channel image with the same value in each
     channel, because of an issue that is discussed in :
@@ -156,11 +163,12 @@ class EfficientLoFTRImageProcessor(BaseImageProcessor):
     """
 
     model_input_names = ["pixel_values"]
+    valid_kwargs = EfficientLoFTRImageProcessorKwargs
 
     def __init__(
         self,
         do_resize: bool = True,
-        size: Optional[dict[str, int]] = None,
+        size: dict[str, int] | None = None,
         resample: PILImageResampling = PILImageResampling.BILINEAR,
         do_rescale: bool = True,
         rescale_factor: float = 1 / 255,
@@ -183,8 +191,8 @@ class EfficientLoFTRImageProcessor(BaseImageProcessor):
         self,
         image: np.ndarray,
         size: dict[str, int],
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        data_format: str | ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
         **kwargs,
     ):
         """
@@ -222,15 +230,15 @@ class EfficientLoFTRImageProcessor(BaseImageProcessor):
     def preprocess(
         self,
         images,
-        do_resize: Optional[bool] = None,
-        size: Optional[dict[str, int]] = None,
-        resample: PILImageResampling = None,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[float] = None,
-        do_grayscale: Optional[bool] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        do_resize: bool | None = None,
+        size: dict[str, int] | None = None,
+        resample: PILImageResampling | None = None,
+        do_rescale: bool | None = None,
+        rescale_factor: float | None = None,
+        do_grayscale: bool | None = None,
+        return_tensors: str | TensorType | None = None,
         data_format: ChannelDimension = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        input_data_format: str | ChannelDimension | None = None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -260,10 +268,8 @@ class EfficientLoFTRImageProcessor(BaseImageProcessor):
             return_tensors (`str` or `TensorType`, *optional*):
                 The type of tensors to return. Can be one of:
                     - Unset: Return a list of `np.ndarray`.
-                    - `TensorType.TENSORFLOW` or `'tf'`: Return a batch of type `tf.Tensor`.
                     - `TensorType.PYTORCH` or `'pt'`: Return a batch of type `torch.Tensor`.
                     - `TensorType.NUMPY` or `'np'`: Return a batch of type `np.ndarray`.
-                    - `TensorType.JAX` or `'jax'`: Return a batch of type `jax.numpy.ndarray`.
             data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
                 The channel dimension format for the output image. Can be one of:
                 - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
@@ -290,10 +296,7 @@ class EfficientLoFTRImageProcessor(BaseImageProcessor):
         images = validate_and_format_image_pairs(images)
 
         if not valid_images(images):
-            raise ValueError(
-                "Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, "
-                "torch.Tensor, tf.Tensor or jax.ndarray."
-            )
+            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
 
         validate_preprocess_arguments(
             do_resize=do_resize,
@@ -339,15 +342,15 @@ class EfficientLoFTRImageProcessor(BaseImageProcessor):
 
     def post_process_keypoint_matching(
         self,
-        outputs: "KeypointMatchingOutput",
-        target_sizes: Union[TensorType, list[tuple]],
+        outputs: "EfficientLoFTRKeypointMatchingOutput",
+        target_sizes: TensorType | list[tuple],
         threshold: float = 0.0,
     ) -> list[dict[str, torch.Tensor]]:
         """
-        Converts the raw output of [`KeypointMatchingOutput`] into lists of keypoints, scores and descriptors
+        Converts the raw output of [`EfficientLoFTRKeypointMatchingOutput`] into lists of keypoints, scores and descriptors
         with coordinates absolute to the original image sizes.
         Args:
-            outputs ([`KeypointMatchingOutput`]):
+            outputs ([`EfficientLoFTRKeypointMatchingOutput`]):
                 Raw outputs of the model.
             target_sizes (`torch.Tensor` or `List[Tuple[Tuple[int, int]]]`, *optional*):
                 Tensor of shape `(batch_size, 2, 2)` or list of tuples of tuples (`Tuple[int, int]`) containing the

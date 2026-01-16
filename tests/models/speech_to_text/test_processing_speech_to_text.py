@@ -21,7 +21,6 @@ from shutil import copyfile
 from transformers import Speech2TextFeatureExtractor, Speech2TextProcessor, Speech2TextTokenizer
 from transformers.models.speech_to_text.tokenization_speech_to_text import VOCAB_FILES_NAMES, save_json
 from transformers.testing_utils import get_tests_dir, require_sentencepiece, require_torch, require_torchaudio
-from transformers.utils import FEATURE_EXTRACTOR_NAME
 
 from .test_feature_extraction_speech_to_text import floats_list
 
@@ -55,7 +54,10 @@ class Speech2TextProcessorTest(unittest.TestCase):
             "return_attention_mask": False,
             "do_normalize": True,
         }
-        save_json(feature_extractor_map, save_dir / FEATURE_EXTRACTOR_NAME)
+        feature_extractor = Speech2TextFeatureExtractor(**feature_extractor_map)
+        tokenizer = Speech2TextTokenizer.from_pretrained(cls.tmpdirname)
+        processor = Speech2TextProcessor(tokenizer=tokenizer, feature_extractor=feature_extractor)
+        processor.save_pretrained(cls.tmpdirname)
 
     def get_tokenizer(self, **kwargs):
         return Speech2TextTokenizer.from_pretrained(self.tmpdirname, **kwargs)

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,22 +13,22 @@
 # limitations under the License.
 """X-CLIP model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class XCLIPTextConfig(PretrainedConfig):
+class XCLIPTextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`XCLIPModel`]. It is used to instantiate an X-CLIP
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the X-CLIP
     [microsoft/xclip-base-patch32](https://huggingface.co/microsoft/xclip-base-patch32) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -96,7 +95,10 @@ class XCLIPTextConfig(PretrainedConfig):
         eos_token_id=2,
         **kwargs,
     ):
-        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+        super().__init__(**kwargs)
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
 
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
@@ -111,15 +113,15 @@ class XCLIPTextConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
 
 
-class XCLIPVisionConfig(PretrainedConfig):
+class XCLIPVisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`XCLIPModel`]. It is used to instantiate an X-CLIP
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the X-CLIP
     [microsoft/xclip-base-patch32](https://huggingface.co/microsoft/xclip-base-patch32) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -221,15 +223,15 @@ class XCLIPVisionConfig(PretrainedConfig):
         self.drop_path_rate = drop_path_rate
 
 
-class XCLIPConfig(PretrainedConfig):
+class XCLIPConfig(PreTrainedConfig):
     r"""
     [`XCLIPConfig`] is the configuration class to store the configuration of a [`XCLIPModel`]. It is used to
     instantiate X-CLIP model according to the specified arguments, defining the text model and vision model configs.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the X-CLIP
     [microsoft/xclip-base-patch32](https://huggingface.co/microsoft/xclip-base-patch32) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         text_config (`dict`, *optional*):
@@ -280,8 +282,6 @@ class XCLIPConfig(PretrainedConfig):
         text_config_dict = kwargs.pop("text_config_dict", None)
         vision_config_dict = kwargs.pop("vision_config_dict", None)
 
-        super().__init__(**kwargs)
-
         # Instead of simply assigning `[text|vision]_config_dict` to `[text|vision]_config`, we use the values in
         # `[text|vision]_config_dict` to update the values in `[text|vision]_config`. The values should be same in most
         # cases, but we don't want to break anything regarding `_config_dict` that existed before commit `8827e1b2`.
@@ -294,7 +294,7 @@ class XCLIPConfig(PretrainedConfig):
 
             # Give a warning if the values exist in both `_text_config_dict` and `text_config` but being different.
             for key, value in _text_config_dict.items():
-                if key in text_config and value != text_config[key] and key not in ["transformers_version"]:
+                if key in text_config and value != text_config[key] and key != "transformers_version":
                     # If specified in `text_config_dict`
                     if key in text_config_dict:
                         message = (
@@ -326,7 +326,7 @@ class XCLIPConfig(PretrainedConfig):
 
             # Give a warning if the values exist in both `_vision_config_dict` and `vision_config` but being different.
             for key, value in _vision_config_dict.items():
-                if key in vision_config and value != vision_config[key] and key not in ["transformers_version"]:
+                if key in vision_config and value != vision_config[key] and key != "transformers_version":
                     # If specified in `vision_config_dict`
                     if key in vision_config_dict:
                         message = (
@@ -345,15 +345,19 @@ class XCLIPConfig(PretrainedConfig):
             vision_config.update(_vision_config_dict)
 
         if text_config is None:
-            text_config = {}
-            logger.info("`text_config` is `None`. Initializing the `XCLIPTextConfig` with default values.")
+            text_config = XCLIPTextConfig()
+            logger.info("`text_config` is `None`. initializing the `XCLIPTextConfig` with default values.")
+        elif isinstance(text_config, dict):
+            text_config = XCLIPTextConfig(**text_config)
 
         if vision_config is None:
-            vision_config = {}
+            vision_config = XCLIPVisionConfig()
             logger.info("`vision_config` is `None`. initializing the `XCLIPVisionConfig` with default values.")
+        elif isinstance(vision_config, dict):
+            vision_config = XCLIPVisionConfig(**vision_config)
 
-        self.text_config = XCLIPTextConfig(**text_config)
-        self.vision_config = XCLIPVisionConfig(**vision_config)
+        self.text_config = text_config
+        self.vision_config = vision_config
 
         self.projection_dim = projection_dim
         self.prompt_layers = prompt_layers
@@ -364,6 +368,8 @@ class XCLIPConfig(PretrainedConfig):
         self.prompt_projection_dropout = prompt_projection_dropout
         self.logit_scale_init_value = logit_scale_init_value
         self.initializer_factor = 1.0
+
+        super().__init__(**kwargs)
 
 
 __all__ = ["XCLIPConfig", "XCLIPTextConfig", "XCLIPVisionConfig"]

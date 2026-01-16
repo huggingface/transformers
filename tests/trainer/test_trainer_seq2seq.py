@@ -22,11 +22,14 @@ from transformers import (
     T5Tokenizer,
 )
 from transformers.testing_utils import TestCasePlus, require_sentencepiece, require_torch, slow
-from transformers.utils import is_datasets_available
+from transformers.utils import is_datasets_available, is_torch_available
 
 
 if is_datasets_available():
     import datasets
+
+if is_torch_available():
+    import torch
 
 
 @require_sentencepiece
@@ -34,13 +37,15 @@ class Seq2seqTrainerTester(TestCasePlus):
     @slow
     @require_torch
     def test_finetune_bert2bert(self):
-        bert2bert = EncoderDecoderModel.from_encoder_decoder_pretrained("prajjwal1/bert-tiny", "prajjwal1/bert-tiny")
+        bert2bert = EncoderDecoderModel.from_encoder_decoder_pretrained(
+            "prajjwal1/bert-tiny", "prajjwal1/bert-tiny", dtype=torch.float32
+        )
         tokenizer = BertTokenizer.from_pretrained("google-bert/bert-base-uncased")
 
         bert2bert.config.vocab_size = bert2bert.config.encoder.vocab_size
-        bert2bert.config.eos_token_id = tokenizer.sep_token_id
-        bert2bert.config.decoder_start_token_id = tokenizer.cls_token_id
-        bert2bert.config.max_length = 128
+        tokenizer.eos_token_id = tokenizer.sep_token_id
+        bert2bert.generation_config.decoder_start_token_id = tokenizer.cls_token_id
+        bert2bert.generation_config.max_length = 128
 
         train_dataset = datasets.load_dataset("abisee/cnn_dailymail", "3.0.0", split="train[:1%]")
         val_dataset = datasets.load_dataset("abisee/cnn_dailymail", "3.0.0", split="validation[:1%]")
@@ -77,7 +82,7 @@ class Seq2seqTrainerTester(TestCasePlus):
             pred_str = tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
             label_str = tokenizer.batch_decode(labels_ids, skip_special_tokens=True)
 
-            accuracy = sum([int(pred_str[i] == label_str[i]) for i in range(len(pred_str))]) / len(pred_str)
+            accuracy = sum(int(pred_str[i] == label_str[i]) for i in range(len(pred_str))) / len(pred_str)
 
             return {"accuracy": accuracy}
 

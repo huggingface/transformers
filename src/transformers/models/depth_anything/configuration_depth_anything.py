@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,31 +13,28 @@
 # limitations under the License.
 """DepthAnything model configuration"""
 
-import copy
-
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
-from ..auto.configuration_auto import CONFIG_MAPPING
+from ..auto.configuration_auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
 
 
-class DepthAnythingConfig(PretrainedConfig):
+class DepthAnythingConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`DepthAnythingModel`]. It is used to instantiate a DepthAnything
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
     defaults will yield a similar configuration to that of the DepthAnything
     [LiheYoung/depth-anything-small-hf](https://huggingface.co/LiheYoung/depth-anything-small-hf) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
-        backbone_config (`Union[dict[str, Any], PretrainedConfig]`, *optional*):
-            The configuration of the backbone model. Only used in case `is_hybrid` is `True` or in case you want to
-            leverage the [`AutoBackbone`] API.
+        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `Dinov2Config()`):
+            The configuration of the backbone model.
         backbone (`str`, *optional*):
             Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
             will load the corresponding pretrained weights from the timm or transformers library. If `use_pretrained_backbone`
@@ -89,6 +85,7 @@ class DepthAnythingConfig(PretrainedConfig):
     ```"""
 
     model_type = "depth_anything"
+    sub_configs = {"backbone_config": AutoConfig}
 
     def __init__(
         self,
@@ -109,7 +106,6 @@ class DepthAnythingConfig(PretrainedConfig):
         max_depth=None,
         **kwargs,
     ):
-        super().__init__(**kwargs)
         if backbone_config is None and backbone is None:
             logger.info("`backbone_config` is `None`. Initializing the config with the default `Dinov2` backbone.")
             backbone_config = CONFIG_MAPPING["dinov2"](
@@ -151,26 +147,7 @@ class DepthAnythingConfig(PretrainedConfig):
         self.depth_estimation_type = depth_estimation_type
         self.max_depth = max_depth if max_depth else 1
 
-    @property
-    def sub_configs(self):
-        return (
-            {"backbone_config": type(self.backbone_config)}
-            if getattr(self, "backbone_config", None) is not None
-            else {}
-        )
-
-    def to_dict(self):
-        """
-        Serializes this instance to a Python dictionary. Override the default [`~PretrainedConfig.to_dict`]. Returns:
-            `dict[str, any]`: Dictionary of all the attributes that make up this configuration instance,
-        """
-        output = copy.deepcopy(self.__dict__)
-
-        if output["backbone_config"] is not None:
-            output["backbone_config"] = self.backbone_config.to_dict()
-
-        output["model_type"] = self.__class__.model_type
-        return output
+        super().__init__(**kwargs)
 
 
 __all__ = ["DepthAnythingConfig"]

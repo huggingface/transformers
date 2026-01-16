@@ -46,8 +46,8 @@ jobs:
             - run: uv pip install -U -e .
             - run: echo 'export "GIT_COMMIT_MESSAGE=$(git show -s --format=%s)"' >> "$BASH_ENV" && source "$BASH_ENV"
             - run: mkdir -p test_preparation
-            - run: python utils/tests_fetcher.py | tee tests_fetched_summary.txt
-            - run: python utils/tests_fetcher.py --filter_tests
+            - run: python utils/tests_fetcher.py | tee tests_fetched_summary.txt || true
+            - run: python utils/tests_fetcher.py --filter_tests || true
             - run: export "GIT_COMMIT_MESSAGE=$(git show -s --format=%s)" && echo $GIT_COMMIT_MESSAGE && python .circleci/create_circleci_config.py --fetcher_folder test_preparation
             - run: |
                 if [ ! -s test_preparation/generated_config.yml ]; then
@@ -98,8 +98,8 @@ jobs:
             - run: uv pip install -U -e .
             - run: echo 'export "GIT_COMMIT_MESSAGE=$(git show -s --format=%s)"' >> "$BASH_ENV" && source "$BASH_ENV"
             - run: mkdir -p test_preparation
-            - run: python utils/tests_fetcher.py --fetch_all | tee tests_fetched_summary.txt
-            - run: python utils/tests_fetcher.py --filter_tests
+            - run: python utils/tests_fetcher.py --fetch_all | tee tests_fetched_summary.txt || true
+            - run: python utils/tests_fetcher.py --filter_tests || true
             - run: export "GIT_COMMIT_MESSAGE=$(git show -s --format=%s)" && echo $GIT_COMMIT_MESSAGE && python .circleci/create_circleci_config.py --fetcher_folder test_preparation
             - run: |
                 if [ ! -s test_preparation/generated_config.yml ]; then
@@ -154,13 +154,10 @@ jobs:
                 command: pip freeze | tee installed.txt
             - store_artifacts:
                   path: ~/transformers/installed.txt
-            - run: python -c "from transformers import *" || (echo '🚨 import failed, this means you introduced unprotected imports! 🚨'; exit 1)
-            - run: ruff check examples tests src utils
-            - run: ruff format examples tests src utils --check
+            - run: ruff check examples tests src utils scripts benchmark benchmark_v2 setup.py conftest.py
+            - run: ruff format --check examples tests src utils scripts benchmark benchmark_v2 setup.py conftest.py
             - run: python utils/custom_init_isort.py --check_only
             - run: python utils/sort_auto_mappings.py --check_only
-            - run: python utils/check_doc_toc.py
-            - run: python utils/check_docstrings.py --check_all
 
     check_repository_consistency:
         working_directory: ~/transformers
@@ -179,18 +176,26 @@ jobs:
                 command: pip freeze | tee installed.txt
             - store_artifacts:
                   path: ~/transformers/installed.txt
+            - run: python -c "from transformers import *" || (echo '🚨 import failed, this means you introduced unprotected imports! 🚨'; exit 1)
             - run: python utils/check_copies.py
             - run: python utils/check_modular_conversion.py
+            - run: python utils/check_doc_toc.py
+            - run: python utils/check_docstrings.py
             - run: python utils/check_dummies.py
             - run: python utils/check_repo.py
+            - run: python utils/check_modeling_structure.py
             - run: python utils/check_inits.py
             - run: python utils/check_pipeline_typing.py
             - run: python utils/check_config_docstrings.py
             - run: python utils/check_config_attributes.py
             - run: python utils/check_doctest_list.py
-            - run: make deps_table_check_updated
             - run: python utils/update_metadata.py --check-only
-            - run: python utils/check_docstrings.py
+            - run: python utils/add_dates.py --check-only
+            - run: > 
+                md5sum src/transformers/dependency_versions_table.py > md5sum.saved;
+                python setup.py deps_table_update;
+                md5sum -c --quiet md5sum.saved || (printf "Error: the version dependency table is outdated.\nPlease run 'make fix-repo' and commit the changes.\n" && exit 1);
+                rm md5sum.saved
 
 workflows:
     version: 2

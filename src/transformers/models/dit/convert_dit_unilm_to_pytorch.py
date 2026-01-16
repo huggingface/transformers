@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -196,18 +195,8 @@ def convert_dit_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to_hub
             model_name = "dit-base" if "base" in checkpoint_url else "dit-large"
         else:
             model_name = "dit-base-finetuned-rvlcdip" if "dit-b" in checkpoint_url else "dit-large-finetuned-rvlcdip"
-        image_processor.push_to_hub(
-            repo_path_or_name=Path(pytorch_dump_folder_path, model_name),
-            organization="nielsr",
-            commit_message="Add image processor",
-            use_temp_dir=True,
-        )
-        model.push_to_hub(
-            repo_path_or_name=Path(pytorch_dump_folder_path, model_name),
-            organization="nielsr",
-            commit_message="Add model",
-            use_temp_dir=True,
-        )
+        image_processor.push_to_hub(repo_id=f"nielsr/{model_name}")
+        model.push_to_hub(repo_id=f"nielsr/{model_name}")
 
 
 if __name__ == "__main__":

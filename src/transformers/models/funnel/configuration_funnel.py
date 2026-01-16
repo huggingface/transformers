@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020, Hugging Face
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,27 +13,27 @@
 # limitations under the License.
 """Funnel Transformer model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class FunnelConfig(PretrainedConfig):
+class FunnelConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`FunnelModel`] or a [`TFBertModel`]. It is used to
+    This is the configuration class to store the configuration of a [`FunnelModel`]. It is used to
     instantiate a Funnel Transformer model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the Funnel
     Transformer [funnel-transformer/small](https://huggingface.co/funnel-transformer/small) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         vocab_size (`int`, *optional*, defaults to 30522):
             Vocabulary size of the Funnel transformer. Defines the number of different tokens that can be represented
-            by the `inputs_ids` passed when calling [`FunnelModel`] or [`TFFunnelModel`].
+            by the `inputs_ids` passed when calling [`FunnelModel`].
         block_sizes (`list[int]`, *optional*, defaults to `[4, 4, 4]`):
             The sizes of the blocks used in the model.
         block_repeats (`list[int]`, *optional*):
@@ -78,6 +77,10 @@ class FunnelConfig(PretrainedConfig):
             sequence length that is not a multiple of 2.
         pool_q_only (`bool`, *optional*, defaults to `True`):
             Whether or not to apply the pooling only to the query or to query, key and values for the attention layers.
+        pad_token_id (`int`, *optional*):
+            Padding token id.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
     """
 
     model_type = "funnel"
@@ -108,8 +111,12 @@ class FunnelConfig(PretrainedConfig):
         separate_cls=True,
         truncate_seq=True,
         pool_q_only=True,
+        pad_token_id=None,
+        tie_word_embeddings=True,
         **kwargs,
     ):
+        self.pad_token_id = pad_token_id
+        self.tie_word_embeddings = tie_word_embeddings
         self.vocab_size = vocab_size
         self.block_sizes = block_sizes
         self.block_repeats = [1] * len(block_sizes) if block_repeats is None else block_repeats

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The Fairseq Authors and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,13 +14,12 @@
 """PyTorch UniSpeech model."""
 
 import math
-import warnings
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import torch
 import torch.nn as nn
 
+from ... import initialization as init
 from ...modeling_outputs import ModelOutput, Wav2Vec2BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
@@ -63,12 +61,12 @@ class UniSpeechForPreTrainingOutput(ModelOutput):
         The perplexity of the codevector distribution, used to measure the diversity of the codebook.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    projected_states: Optional[torch.FloatTensor] = None
-    projected_quantized_states: Optional[torch.FloatTensor] = None
-    codevector_perplexity: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
+    loss: torch.FloatTensor | None = None
+    projected_states: torch.FloatTensor | None = None
+    projected_quantized_states: torch.FloatTensor | None = None
+    codevector_perplexity: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
 
 
 class UniSpeechPositionalConvEmbedding(Wav2Vec2PositionalConvEmbedding):
@@ -141,45 +139,47 @@ class UniSpeechPreTrainedModel(PreTrainedModel):
     config: UniSpeechConfig
     base_model_prefix = "unispeech"
     main_input_name = "input_values"
+    input_modalities = "audio"
     supports_gradient_checkpointing = True
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         # gumbel softmax requires special init
         if isinstance(module, UniSpeechGumbelVectorQuantizer):
-            module.weight_proj.weight.data.normal_(mean=0.0, std=1)
-            module.weight_proj.bias.data.zero_()
-            nn.init.uniform_(module.codevectors)
+            init.normal_(module.weight_proj.weight, mean=0.0, std=1)
+            init.zeros_(module.weight_proj.bias)
+            init.uniform_(module.codevectors)
         elif isinstance(module, UniSpeechPositionalConvEmbedding):
-            nn.init.normal_(
+            init.normal_(
                 module.conv.weight,
                 mean=0,
                 std=2 * math.sqrt(1 / (module.conv.kernel_size[0] * module.conv.in_channels)),
             )
-            nn.init.constant_(module.conv.bias, 0)
+            init.constant_(module.conv.bias, 0)
         elif isinstance(module, UniSpeechFeatureProjection):
             k = math.sqrt(1 / module.projection.in_features)
-            nn.init.uniform_(module.projection.weight, a=-k, b=k)
-            nn.init.uniform_(module.projection.bias, a=-k, b=k)
+            init.uniform_(module.projection.weight, a=-k, b=k)
+            init.uniform_(module.projection.bias, a=-k, b=k)
         elif isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
 
             if module.bias is not None:
-                module.bias.data.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
         elif isinstance(module, nn.Conv1d):
-            nn.init.kaiming_normal_(module.weight)
+            init.kaiming_normal_(module.weight)
 
             if module.bias is not None:
                 k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
-                nn.init.uniform_(module.bias, a=-k, b=k)
+                init.uniform_(module.bias, a=-k, b=k)
 
-    def _get_feat_extract_output_lengths(self, input_lengths: Union[torch.LongTensor, int]):
+    def _get_feat_extract_output_lengths(self, input_lengths: torch.LongTensor | int):
         """
         Computes the output length of the convolutional layers
         """
@@ -231,21 +231,19 @@ class UniSpeechModel(UniSpeechPreTrainedModel, Wav2Vec2Model):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def freeze_feature_extractor(self):
-        raise AttributeError("Not needed for UniSpeech")
-
     def freeze_feature_encoder(self):
         raise AttributeError("Not needed for UniSpeech")
 
     def forward(
         self,
-        input_values: Optional[torch.Tensor],
-        attention_mask: Optional[torch.Tensor] = None,
-        mask_time_indices: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, UniSpeechBaseModelOutput]:
+        input_values: torch.Tensor | None,
+        attention_mask: torch.Tensor | None = None,
+        mask_time_indices: torch.FloatTensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple | UniSpeechBaseModelOutput:
         r"""
         mask_time_indices (`torch.BoolTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices to mask extracted features for contrastive loss. When in training mode, model learns to predict
@@ -317,18 +315,6 @@ class UniSpeechForPreTraining(UniSpeechPreTrainedModel):
         """
         self.quantizer.temperature = temperature
 
-    def freeze_feature_extractor(self):
-        """
-        Calling this function will disable the gradient computation for the feature encoder so that its parameters will
-        not be updated during training.
-        """
-        warnings.warn(
-            "The method `freeze_feature_extractor` is deprecated and will be removed in Transformers v5. "
-            "Please use the equivalent `freeze_feature_encoder` method instead.",
-            FutureWarning,
-        )
-        self.freeze_feature_encoder()
-
     def freeze_feature_encoder(self):
         """
         Calling this function will disable the gradient computation for the feature encoder so that its parameter will
@@ -359,12 +345,13 @@ class UniSpeechForPreTraining(UniSpeechPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_values: Optional[torch.Tensor],
-        attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, UniSpeechForPreTrainingOutput]:
+        input_values: torch.Tensor | None,
+        attention_mask: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple | UniSpeechForPreTrainingOutput:
         r"""
         Example:
 

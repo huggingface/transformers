@@ -14,7 +14,6 @@
 """Testing suite for the PyTorch Moshi ASR model."""
 
 import gc
-import inspect
 import tempfile
 import unittest
 
@@ -36,13 +35,13 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
+from transformers.utils.generic import is_flash_attention_requested
 
 from ...generation.test_utils import GenerationTesterMixin, has_similar_generate_outputs
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import (
     TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION,
     ModelTesterMixin,
-    _config_zero_init,
     floats_tensor,
     ids_tensor,
 )
@@ -250,13 +249,11 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
         {
             "feature-extraction": KyutaiSpeechToTextModel,
             "automatic-speech-recognition": KyutaiSpeechToTextForConditionalGeneration,
+            "any-to-any": KyutaiSpeechToTextForConditionalGeneration,
         }
         if is_torch_available()
         else {}
     )
-    test_headmasking = False
-    test_pruning = False
-    fx_compatible = False  # Broken by attention refactor cc @Cyrilvallez
 
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
     # This is because we are hitting edge cases with the causal_mask buffer
@@ -300,10 +297,6 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
         pass
 
     @pytest.mark.skip(reason="Moshi ASR has custom embedding approach (text and audio embeddings).")
-    def test_tie_model_weights(self):
-        pass
-
-    @pytest.mark.skip(reason="Moshi ASR has custom embedding approach (text and audio embeddings).")
     def test_resize_embeddings_untied(self):
         pass
 
@@ -318,25 +311,6 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
     @pytest.mark.skip(reason="Does not apply to Moshi ASR that requires input_values.")
     def test_generate_without_input_ids(self):
         pass
-
-    def test_initialization(self):
-        """
-        Overrides [ModelTesterMixin.test_initialization] because of specificities of Mimi codec model.
-        See https://github.com/huggingface/transformers/blob/1077603410cd73ba71d64a522033574d66d64b55/tests/models/mimi/test_modeling_mimi.py#L384-L397
-        """
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        configs_no_init = _config_zero_init(config)
-        for model_class in self.all_model_classes:
-            model = model_class(config=configs_no_init)
-            for name, param in model.named_parameters():
-                uniform_init_parms = ["conv", "input_proj", "output_proj"]
-                if param.requires_grad:
-                    if any(x in name for x in uniform_init_parms):
-                        self.assertTrue(
-                            -1.0 <= ((param.data.mean() * 1e9).round() / 1e9).item() <= 1.0,
-                            msg=f"Parameter {name} of model {model_class} seems not properly initialized",
-                        )
 
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
     def test_eager_matches_sdpa_inference(
@@ -361,86 +335,11 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
 
     @pytest.mark.generate
     def test_left_padding_compatibility(self):
-        # NOTE: left-padding results in small numerical differences. This is expected.
-        # See https://github.com/huggingface/transformers/issues/25420#issuecomment-1775317535
-
-        # First, filter out models that don't support left padding
-        # - The model must have generative capabilities
-        if len(self.all_generative_model_classes) == 0:
-            self.skipTest(reason="No generative architecture available for this model.")
-
-        # - The model must support padding
-        if not self.has_attentions:
-            self.skipTest(reason="This model doesn't support padding.")
-
-        # - The model must be a decoder-only architecture (encoder-based architectures use right-padding)
-        decoder_only_classes = []
-        for model_class in self.all_generative_model_classes:
-            config, _ = self.prepare_config_and_inputs_for_generate()
-            if config.is_encoder_decoder:
-                continue
-            else:
-                decoder_only_classes.append(model_class)
-        if len(decoder_only_classes) == 0:
-            self.skipTest(reason="No decoder-only architecture available for this model.")
-
-        # - Decoder-only architectures derived from encoder-decoder models could support it in theory, but we haven't
-        #   added support for it yet. We skip these models for now.
-        has_encoder_attributes = any(
-            attr_name
-            for attr_name in config.to_dict()
-            if attr_name.startswith("encoder") and attr_name != "encoder_no_repeat_ngram_size"
-        )
-        if has_encoder_attributes:
-            self.skipTest(
-                reason="The decoder-only derived from encoder-decoder models are not expected to support left-padding."
-            )
-
-        # Then, test left-padding
-        def _prepare_model_kwargs(input_ids, attention_mask, signature):
-            model_kwargs = {"input_ids": input_ids, "attention_mask": attention_mask}
-            if "position_ids" in signature:
-                position_ids = torch.cumsum(attention_mask, dim=-1) - 1
-                position_ids.masked_fill_(attention_mask == 0, 1)
-                model_kwargs["position_ids"] = position_ids
-            if "cache_position" in signature:
-                cache_position = torch.arange(input_ids.shape[1], device=torch_device)
-                model_kwargs["cache_position"] = cache_position
-            return model_kwargs
-
-        for model_class in decoder_only_classes:
-            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-            input_ids = inputs_dict["input_ids"]
-            attention_mask = inputs_dict.get("attention_mask")
-            if attention_mask is None:
-                attention_mask = torch.ones_like(input_ids)
-
-            model = model_class(config).to(torch_device).eval()
-            signature = inspect.signature(model.forward).parameters.keys()
-
-            # no cache as some models require special cache classes to be init outside forward
-            model.generation_config.use_cache = False
-
-            # Without padding
-            model_kwargs = _prepare_model_kwargs(input_ids, attention_mask, signature)
-            next_logits_wo_padding = model(**model_kwargs).logits[:, -1, :]
-
-            # With left-padding (length 32)
-            # can hardcode pad_token to be 0 as we'll do attn masking anyway
-            pad_token_id = (
-                config.get_text_config().pad_token_id if config.get_text_config().pad_token_id is not None else 0
-            )
-            pad_size = (input_ids.shape[0], 32, *input_ids.shape[2:])
-            padding = torch.ones(pad_size, dtype=input_ids.dtype, device=torch_device) * pad_token_id
-            padded_input_ids = torch.cat((padding, input_ids), dim=1)
-            padded_attention_mask = torch.cat(
-                (torch.zeros(pad_size[:2], dtype=input_ids.dtype, device=torch_device), attention_mask), dim=1
-            )
-            model_kwargs = _prepare_model_kwargs(padded_input_ids, padded_attention_mask, signature)
-            next_logits_with_padding = model(**model_kwargs).logits[:, -1, :]
-
-            # They should result in very similar logits
-            torch.testing.assert_close(next_logits_wo_padding, next_logits_with_padding, rtol=1e-5, atol=1e-5)
+        # TODO: this tester has non-standard input monkey-patching in `prepare_config_and_inputs_for_generate`,
+        # and the test fails with the monkey-patched test inputs (bad shapes for the test) ☠️ The base inputs work
+        # fine, though.
+        unpadded_custom_inputs = self.model_tester.prepare_config_and_inputs_for_common()[1]
+        super().test_left_padding_compatibility(unpadded_custom_inputs=unpadded_custom_inputs)
 
     def test_generate_continue_from_past_key_values(self):
         # Tests that we can continue generating from past key values, returned from a previous `generate` call
@@ -526,14 +425,19 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
 
             # The two sets of generated text and past kv should be equal to each other
             self.assertTrue(has_similar_generate_outputs(outputs, outputs_cached))
-            for layer_idx in range(len(outputs_cached.past_key_values)):
-                for kv_idx in range(len(outputs_cached.past_key_values[layer_idx])):
-                    self.assertTrue(
-                        torch.allclose(
-                            outputs.past_key_values[layer_idx][kv_idx],
-                            outputs_cached.past_key_values[layer_idx][kv_idx],
-                        )
-                    )
+            self._check_caches_are_equal(outputs.past_key_values, outputs_cached.past_key_values)
+
+    # skipping for anything FA related that is not FA2 (no attn interface implemented)
+    def flash_attn_inference_equivalence(
+        self, attn_implementation: str, padding_side: str, atol: float = 4e-2, rtol: float = 4e-2
+    ):
+        if (
+            is_flash_attention_requested(requested_attention_implementation=attn_implementation)
+            and attn_implementation != "flash_attention_2"
+        ):
+            self.skipTest(reason="Model fails for every other FA implementation than FA2 (no attention interface).")
+
+        super().flash_attn_inference_equivalence(attn_implementation, padding_side, atol, rtol)
 
     # needs to be overridden to avoid to avoid casting of input_values to float16
     # indeed, the codec model is kept in fp32, so we need to avoid casting input_values to float16
@@ -548,6 +452,12 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
             "sdpa": "_supports_sdpa",
             "flash_attention_2": "_supports_flash_attn",
         }
+
+        if (
+            is_flash_attention_requested(requested_attention_implementation=attn_implementation)
+            and attn_implementation != "flash_attention_2"
+        ):
+            self.skipTest(reason="Model fails for every other FA implementation than FA2 (no attention interface).")
 
         for model_class in self.all_generative_model_classes:
             if attn_implementation != "eager" and not getattr(model_class, support_flag[attn_implementation]):
@@ -566,10 +476,10 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
                     inputs_dict[input_name] = input_data
             main_input = inputs_dict[model_class.main_input_name]
 
-            # FA2 doesn't accept masking in the middle of the sequence for now. We usually generate right-padded
+            # FA doesn't accept masking in the middle of the sequence for now. We usually generate right-padded
             # attention masks at test time and, with generate, the mask will be appended with 1s on the right,
-            # resulting in a mask with holes (not supported properly by FA2).
-            if attn_implementation == "flash_attention_2":
+            # resulting in a mask with holes (not supported properly by FA).
+            if is_flash_attention_requested(requested_attention_implementation=attn_implementation):
                 for input_name in ("attention_mask", "decoder_attention_mask", "encoder_attention_mask"):
                     if input_name in inputs_dict:
                         inputs_dict[input_name] = torch.ones_like(inputs_dict[input_name])
@@ -717,7 +627,7 @@ class KyutaiSpeechToTextForConditionalGenerationIntegrationTests(unittest.TestCa
         reproduce test expected outputs using original codebase: https://gist.github.com/eustlb/7a9aa6139d11e0103c6b65bac103da52
 
         DISCLAIMER: we are testing for pretty short inputs. Indeed, reproducing correct expected outputs for longer is not possible
-        as implementation choices (qkv matrix in one linear for original code vs three for hf) create growing divergence with context lenght,
+        as implementation choices (qkv matrix in one linear for original code vs three for hf) create growing divergence with context length,
         ultimately giving different outputs.
         """
         processor = KyutaiSpeechToTextProcessor.from_pretrained(self.model_checkpoint)
@@ -747,7 +657,7 @@ class KyutaiSpeechToTextForConditionalGenerationIntegrationTests(unittest.TestCa
         reproduce test expected outputs using original codebase: https://gist.github.com/eustlb/b58c217c75124d405ec1c13877c7ece8
 
         DISCLAIMER: we are testing for pretty short inputs. Indeed, reproducing correct expected outputs for longer is not possible
-        as implementation choices (qkv matrix in one linear for original code vs three for hf) create growing divergence with context lenght,
+        as implementation choices (qkv matrix in one linear for original code vs three for hf) create growing divergence with context length,
         ultimately giving different outputs.
         """
         processor = KyutaiSpeechToTextProcessor.from_pretrained(self.model_checkpoint)

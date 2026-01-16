@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_mm_grounding_dino.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,28 +17,27 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
 
 
-class MMGroundingDinoConfig(PretrainedConfig):
+class MMGroundingDinoConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MMGroundingDinoModel`]. It is used to instantiate a
     MM Grounding DINO model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the MM Grounding DINO tiny architecture
     [openmmlab-community/mm_grounding_dino_tiny_o365v1_goldg_v3det](https://huggingface.co/openmmlab-community/mm_grounding_dino_tiny_o365v1_goldg_v3det).
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
-        backbone_config (`PretrainedConfig` or `dict`, *optional*, defaults to `ResNetConfig()`):
+        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `SwinConfig()`):
             The configuration of the backbone model.
         backbone (`str`, *optional*):
             Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
@@ -129,6 +127,8 @@ class MMGroundingDinoConfig(PretrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization layers.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
     Examples:
 
@@ -146,6 +146,7 @@ class MMGroundingDinoConfig(PretrainedConfig):
     ```"""
 
     model_type = "mm-grounding-dino"
+    sub_configs = {"backbone_config": AutoConfig, "text_config": AutoConfig}
     attribute_map = {
         "hidden_size": "d_model",
         "num_attention_heads": "encoder_attention_heads",
@@ -195,9 +196,9 @@ class MMGroundingDinoConfig(PretrainedConfig):
         positional_embedding_temperature=20,
         init_std=0.02,
         layer_norm_eps=1e-5,
+        tie_word_embeddings=True,
         **kwargs,
     ):
-        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
         if backbone_config is None and backbone is None:
             logger.info("`backbone_config` is `None`. Initializing the config with the default `Swin` backbone.")
             backbone_config = CONFIG_MAPPING["swin"](
@@ -279,25 +280,9 @@ class MMGroundingDinoConfig(PretrainedConfig):
         self.positional_embedding_temperature = positional_embedding_temperature
         self.init_std = init_std
         self.layer_norm_eps = layer_norm_eps
+        self.tie_word_embeddings = tie_word_embeddings
 
-    @property
-    def num_attention_heads(self) -> int:
-        return self.encoder_attention_heads
-
-    @property
-    def hidden_size(self) -> int:
-        return self.d_model
-
-    @property
-    def sub_configs(self):
-        sub_configs = {}
-        backbone_config = getattr(self, "backbone_config", None)
-        text_config = getattr(self, "text_config", None)
-        if isinstance(backbone_config, PretrainedConfig):
-            sub_configs["backbone_config"] = type(backbone_config)
-        if isinstance(text_config, PretrainedConfig):
-            sub_configs["text_config"] = type(self.text_config)
-        return sub_configs
+        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
 
 __all__ = ["MMGroundingDinoConfig"]

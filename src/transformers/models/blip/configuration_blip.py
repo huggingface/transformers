@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,22 +13,22 @@
 # limitations under the License.
 """Blip model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class BlipTextConfig(PretrainedConfig):
+class BlipTextConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`BlipTextModel`]. It is used to instantiate a BLIP
     text model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the `BlipText` used by the [base
     architectures](https://huggingface.co/Salesforce/blip-vqa-base).
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -119,14 +118,12 @@ class BlipTextConfig(PretrainedConfig):
         label_smoothing=0.0,
         **kwargs,
     ):
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            sep_token_id=sep_token_id,
-            **kwargs,
-        )
+        super().__init__(**kwargs)
 
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.sep_token_id = sep_token_id
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.encoder_hidden_size = encoder_hidden_size
@@ -145,15 +142,15 @@ class BlipTextConfig(PretrainedConfig):
         self.label_smoothing = label_smoothing
 
 
-class BlipVisionConfig(PretrainedConfig):
+class BlipVisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`BlipVisionModel`]. It is used to instantiate a
     BLIP vision model according to the specified arguments, defining the model architecture. Instantiating a
     configuration defaults will yield a similar configuration to that of the Blip-base
     [Salesforce/blip-vqa-base](https://huggingface.co/Salesforce/blip-vqa-base) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -227,15 +224,15 @@ class BlipVisionConfig(PretrainedConfig):
         self.hidden_act = hidden_act
 
 
-class BlipConfig(PretrainedConfig):
+class BlipConfig(PreTrainedConfig):
     r"""
     [`BlipConfig`] is the configuration class to store the configuration of a [`BlipModel`]. It is used to instantiate
     a BLIP model according to the specified arguments, defining the text model and vision model configs. Instantiating
     a configuration with the defaults will yield a similar configuration to that of the BLIP-base
     [Salesforce/blip-vqa-base](https://huggingface.co/Salesforce/blip-vqa-base) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         text_config (`dict`, *optional*):
@@ -252,8 +249,8 @@ class BlipConfig(PretrainedConfig):
             A float in [0.0, 1.0]. Specifies the amount of smoothing when computing the loss, where 0.0 means no smoothing. The targets
             become a mixture of the original ground truth and a uniform distribution as described in
             `Rethinking the Inception Architecture for Computer Vision <https://huggingface.co/papers/1512.00567>`__. Default: :math:`0.0`.
-        kwargs (*optional*):
-            Dictionary of keyword arguments.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
     Example:
 
@@ -275,7 +272,7 @@ class BlipConfig(PretrainedConfig):
     >>> config_text = BlipTextConfig()
     >>> config_vision = BlipVisionConfig()
 
-    >>> config = BlipConfig.from_text_vision_configs(config_text, config_vision)
+    >>> config = BlipConfig(text_config=config_text, vision_config=config_vision)
     ```"""
 
     model_type = "blip"
@@ -289,20 +286,23 @@ class BlipConfig(PretrainedConfig):
         logit_scale_init_value=2.6592,
         image_text_hidden_size=256,
         label_smoothing=0.0,
+        tie_word_embeddings=True,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
         if text_config is None:
-            text_config = {}
+            text_config = BlipTextConfig()
             logger.info("`text_config` is `None`. Initializing the `BlipTextConfig` with default values.")
+        elif isinstance(text_config, dict):
+            text_config = BlipTextConfig(**text_config)
 
         if vision_config is None:
-            vision_config = {}
-            logger.info("`vision_config` is `None`. Initializing the `BlipVisionConfig` with default values.")
+            vision_config = BlipVisionConfig()
+            logger.info("`vision_config` is `None`. initializing the `BlipVisionConfig` with default values.")
+        elif isinstance(vision_config, dict):
+            vision_config = BlipVisionConfig(**vision_config)
 
-        self.text_config = BlipTextConfig(**text_config)
-        self.vision_config = BlipVisionConfig(**vision_config)
+        self.text_config = text_config
+        self.vision_config = vision_config
 
         self.text_config.encoder_hidden_size = self.vision_config.hidden_size
 
@@ -312,6 +312,8 @@ class BlipConfig(PretrainedConfig):
         self.initializer_range = 0.02
         self.image_text_hidden_size = image_text_hidden_size
         self.label_smoothing = label_smoothing
+        self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(**kwargs)
 
 
 __all__ = ["BlipConfig", "BlipTextConfig", "BlipVisionConfig"]

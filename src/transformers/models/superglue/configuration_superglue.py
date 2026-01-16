@@ -11,11 +11,11 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 if TYPE_CHECKING:
@@ -24,15 +24,15 @@ if TYPE_CHECKING:
 logger = logging.get_logger(__name__)
 
 
-class SuperGlueConfig(PretrainedConfig):
+class SuperGlueConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`SuperGlueModel`]. It is used to instantiate a
     SuperGlue model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the SuperGlue
     [magic-leap-community/superglue_indoor](https://huggingface.co/magic-leap-community/superglue_indoor) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         keypoint_detector_config (`Union[AutoConfig, dict]`,  *optional*, defaults to `SuperPointConfig`):
@@ -51,6 +51,9 @@ class SuperGlueConfig(PretrainedConfig):
             The matching threshold.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        is_decoder (`bool`, *optional*, defaults to `False`):
+            Whether to only use the decoder in an encoder-decoder architecture, otherwise it has no effect on
+            decoder-only or encoder-only architectures.
 
     Examples:
         ```python
@@ -68,17 +71,19 @@ class SuperGlueConfig(PretrainedConfig):
     """
 
     model_type = "superglue"
+    sub_configs = {"keypoint_detector_config": AutoConfig}
 
     def __init__(
         self,
         keypoint_detector_config: "SuperPointConfig" = None,
         hidden_size: int = 256,
-        keypoint_encoder_sizes: Optional[list[int]] = None,
-        gnn_layers_types: Optional[list[str]] = None,
+        keypoint_encoder_sizes: list[int] | None = None,
+        gnn_layers_types: list[str] | None = None,
         num_attention_heads: int = 4,
         sinkhorn_iterations: int = 100,
         matching_threshold: float = 0.0,
         initializer_range: float = 0.02,
+        is_decoder=False,
         **kwargs,
     ):
         self.gnn_layers_types = gnn_layers_types if gnn_layers_types is not None else ["self", "cross"] * 9
@@ -113,10 +118,6 @@ class SuperGlueConfig(PretrainedConfig):
         self.is_decoder = False
 
         super().__init__(**kwargs)
-
-    @property
-    def sub_configs(self):
-        return {"keypoint_detector_config": type(self.keypoint_detector_config)}
 
 
 __all__ = ["SuperGlueConfig"]

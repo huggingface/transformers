@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,30 +13,30 @@
 # limitations under the License.
 """DAB-DETR model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ...utils.backbone_utils import verify_backbone_config_arguments
-from ..auto import CONFIG_MAPPING
+from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 logger = logging.get_logger(__name__)
 
 
-class DabDetrConfig(PretrainedConfig):
+class DabDetrConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`DabDetrModel`]. It is used to instantiate
     a DAB-DETR model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the DAB-DETR
     [IDEA-Research/dab_detr-base](https://huggingface.co/IDEA-Research/dab_detr-base) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         use_timm_backbone (`bool`, *optional*, defaults to `True`):
             Whether or not to use the `timm` library for the backbone. If set to `False`, will use the [`AutoBackbone`]
             API.
-        backbone_config (`PretrainedConfig` or `dict`, *optional*):
+        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `ResNetConfig()`):
             The configuration of the backbone model. Only used in case `use_timm_backbone` is set to `False` in which
             case it will default to `ResNetConfig()`.
         backbone (`str`, *optional*, defaults to `"resnet50"`):
@@ -118,6 +117,8 @@ class DabDetrConfig(PretrainedConfig):
         initializer_bias_prior_prob (`float`, *optional*):
             The prior probability used by the bias initializer to initialize biases for `enc_score_head` and `class_embed`.
             If `None`, `prior_prob` computed as `prior_prob = 1 / (num_labels + 1)` while initializing model weights.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
 
     Examples:
@@ -136,6 +137,7 @@ class DabDetrConfig(PretrainedConfig):
     ```"""
 
     model_type = "dab-detr"
+    sub_configs = {"backbone_config": AutoConfig}
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {
         "num_attention_heads": "encoder_attention_heads",
@@ -181,6 +183,7 @@ class DabDetrConfig(PretrainedConfig):
         normalize_before=False,
         sine_position_embedding_scale=None,
         initializer_bias_prior_prob=None,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         if query_dim != 4:
@@ -254,15 +257,9 @@ class DabDetrConfig(PretrainedConfig):
         self.temperature_height = temperature_height
         self.sine_position_embedding_scale = sine_position_embedding_scale
         self.initializer_bias_prior_prob = initializer_bias_prior_prob
-        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
+        self.tie_word_embeddings = tie_word_embeddings
 
-    @property
-    def sub_configs(self):
-        return (
-            {"backbone_config": type(self.backbone_config)}
-            if getattr(self, "backbone_config", None) is not None
-            else {}
-        )
+        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
 
 __all__ = ["DabDetrConfig"]

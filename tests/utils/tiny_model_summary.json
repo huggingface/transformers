@@ -2987,17 +2987,6 @@
         ],
         "sha": "47c7a75a1e650dae60ff6e9bbab0f2386946670c"
     },
-    "LEDForSequenceClassification": {
-        "tokenizer_classes": [
-            "LEDTokenizer",
-            "LEDTokenizerFast"
-        ],
-        "processor_classes": [],
-        "model_classes": [
-            "LEDForSequenceClassification"
-        ],
-        "sha": "3571e2c9d9f2f2ec0b8fe47090330b128be05126"
-    },
     "LEDModel": {
         "tokenizer_classes": [
             "LEDTokenizer",
@@ -5000,6 +4989,17 @@
         ],
         "sha": "c40765c382515ae627652d60e9077b6478448d48"
     },
+    "Qwen2_5OmniForConditionalGeneration": {
+        "tokenizer_classes": [
+            "Qwen2Tokenizer",
+            "Qwen2TokenizerFast"
+        ],
+        "processor_classes": ["Qwen2_5OmniProcessor"],
+        "model_classes": [
+            "Qwen2_5OmniForConditionalGeneration"
+        ],
+        "sha": "9bc7a812cc447b430acb994f8d42e8e64c7b61f6"
+    },
     "ReformerForMaskedLM": {
         "tokenizer_classes": [
             "ReformerTokenizer",
@@ -6659,18 +6659,6 @@
             "Wav2Vec2ForCTC"
         ],
         "sha": "6245fbb1cb99cea5c4de1e73f81fba978fb275ac"
-    },
-    "Wav2Vec2ForMaskedLM": {
-        "tokenizer_classes": [
-            "Wav2Vec2CTCTokenizer"
-        ],
-        "processor_classes": [
-            "Wav2Vec2FeatureExtractor"
-        ],
-        "model_classes": [
-            "Wav2Vec2ForMaskedLM"
-        ],
-        "sha": "e083cf4fefec4df3c241dbbe5e17a84a794a89bd"
     },
     "Wav2Vec2ForPreTraining": {
         "tokenizer_classes": [

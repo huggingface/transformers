@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,22 +13,22 @@
 # limitations under the License.
 """SeamlessM4T model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class SeamlessM4TConfig(PretrainedConfig):
+class SeamlessM4TConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`~SeamlessM4TModel`]. It is used to instantiate an
     SeamlessM4T model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the SeamlessM4T
     ["facebook/hf-seamless-m4t-medium"](https://huggingface.co/"facebook/hf-seamless-m4t-medium") architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
 
     Args:
@@ -317,6 +316,7 @@ class SeamlessM4TConfig(PretrainedConfig):
         variance_predictor_kernel_size=3,
         var_pred_dropout=0.5,
         vocoder_offset=4,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         # overall_config
@@ -335,6 +335,7 @@ class SeamlessM4TConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.activation_dropout = activation_dropout
         self.scale_embedding = scale_embedding
+        self.tie_word_embeddings = tie_word_embeddings
         # for proper config init
         self.num_attention_heads = decoder_attention_heads
         self.num_hidden_layers = decoder_layers
@@ -401,16 +402,13 @@ class SeamlessM4TConfig(PretrainedConfig):
         self.variance_predictor_kernel_size = variance_predictor_kernel_size
         self.var_pred_dropout = var_pred_dropout
         self.vocoder_offset = vocoder_offset
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.max_position_embeddings = max_position_embeddings
+        self.decoder_start_token_id = decoder_start_token_id
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            decoder_start_token_id=decoder_start_token_id,
-            is_encoder_decoder=is_encoder_decoder,
-            max_position_embeddings=max_position_embeddings,
-            **kwargs,
-        )
+        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
 
 __all__ = ["SeamlessM4TConfig"]

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -13,7 +12,7 @@
 # limitations under the License.
 """Idefics2 model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ..auto import CONFIG_MAPPING, AutoConfig
 
@@ -21,7 +20,7 @@ from ..auto import CONFIG_MAPPING, AutoConfig
 logger = logging.get_logger(__name__)
 
 
-class Idefics2VisionConfig(PretrainedConfig):
+class Idefics2VisionConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Idefics2VisionModel`]. It is used to instantiate a
     Idefics2 vision encoder according to the specified arguments, defining the model architecture. Instantiating a
@@ -29,8 +28,8 @@ class Idefics2VisionConfig(PretrainedConfig):
     [google/siglip-base-patch16-224](https://huggingface.co/google/siglip-base-patch16-224) used in the Idefics2 model
     [HuggingFaceM4/idefics2-8b](https://huggingface.co/HuggingFaceM4/idefics2-8b).
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_size (`int`, *optional*, defaults to 768):
@@ -106,10 +105,10 @@ class Idefics2VisionConfig(PretrainedConfig):
         self.initializer_range = initializer_range
 
 
-class Idefics2PerceiverConfig(PretrainedConfig):
+class Idefics2PerceiverConfig(PreTrainedConfig):
     r"""
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
@@ -168,15 +167,15 @@ class Idefics2PerceiverConfig(PretrainedConfig):
         super().__init__(**kwargs)
 
 
-class Idefics2Config(PretrainedConfig):
+class Idefics2Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`Idefics2Model`]. It is used to instantiate a
     Idefics2 model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the model of the Idefics2
     [HuggingFaceM4/idefics2-8b](https://huggingface.co/HuggingFaceM4/idefics2-8b) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         use_cache (`bool`, *optional*, defaults to `True`):
@@ -250,7 +249,6 @@ class Idefics2Config(PretrainedConfig):
                 rms_norm_eps=1e-5,
                 # None in the original configuration_mistral, we set it to the unk_token_id
                 pad_token_id=0,
-                tie_word_embeddings=False,
             )
 
         self.text_config = text_config
@@ -262,7 +260,7 @@ class Idefics2Config(PretrainedConfig):
                 "In your model's config on the hub, add `hidden_size` and `rms_norm_eps` keys under the `perceiver_config` dict. "
             )
 
-        super().__init__(**kwargs, tie_word_embeddings=tie_word_embeddings)
+        super().__init__(**kwargs)
 
 
 __all__ = ["Idefics2Config"]

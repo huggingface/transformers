@@ -27,14 +27,13 @@ rendered properly in your Markdown viewer.
 
 **JetMoe-8B** is an 8B Mixture-of-Experts (MoE) language model developed by [Yikang Shen](https://scholar.google.com.hk/citations?user=qff5rRYAAAAJ) and [MyShell](https://myshell.ai/).
 JetMoe project aims to provide a LLaMA2-level performance and efficient language model with a limited budget.
-To achieve this goal, JetMoe uses a sparsely activated architecture inspired by the [ModuleFormer](https://huggingface.co/papers/2306.04640). 
+To achieve this goal, JetMoe uses a sparsely activated architecture inspired by the [ModuleFormer](https://huggingface.co/papers/2306.04640).
 Each JetMoe block consists of two MoE layers: Mixture of Attention Heads and Mixture of MLP Experts.
 Given the input tokens, it activates a subset of its experts to process them.
-This sparse activation schema enables JetMoe to achieve much better training throughput than similar size dense models. 
+This sparse activation schema enables JetMoe to achieve much better training throughput than similar size dense models.
 The training throughput of JetMoe-8B is around 100B tokens per day on a cluster of 96 H100 GPUs with a straightforward 3-way pipeline parallelism strategy.
 
 This model was contributed by [Yikang Shen](https://huggingface.co/YikangS).
-
 
 ## JetMoeConfig
 

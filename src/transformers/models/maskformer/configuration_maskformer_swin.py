@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,7 +13,7 @@
 # limitations under the License.
 """MaskFormer Swin Transformer model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
 
@@ -22,7 +21,7 @@ from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_feat
 logger = logging.get_logger(__name__)
 
 
-class MaskFormerSwinConfig(BackboneConfigMixin, PretrainedConfig):
+class MaskFormerSwinConfig(BackboneConfigMixin, PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MaskFormerSwinModel`]. It is used to instantiate
     a Donut model according to the specified arguments, defining the model architecture. Instantiating a configuration
@@ -30,8 +29,8 @@ class MaskFormerSwinConfig(BackboneConfigMixin, PretrainedConfig):
     [microsoft/swin-tiny-patch4-window7-224](https://huggingface.co/microsoft/swin-tiny-patch4-window7-224)
     architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         image_size (`int`, *optional*, defaults to 224):

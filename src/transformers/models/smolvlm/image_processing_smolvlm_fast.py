@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_smolvlm.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 the HuggingFace Inc. team. All rights reserved.
 # Written by Orr Zohar
 #
@@ -19,19 +18,14 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 import math
-from typing import Optional, Union
+from typing import Optional
 
 import torch
 
 from ...image_processing_utils import BatchFeature
-from ...image_processing_utils_fast import (
-    BaseImageProcessorFast,
-    DefaultFastImageProcessorKwargs,
-    SizeDict,
-    group_images_by_shape,
-    reorder_images,
-)
+from ...image_processing_utils_fast import BaseImageProcessorFast, SizeDict, group_images_by_shape, reorder_images
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
     IMAGENET_STANDARD_STD,
@@ -41,6 +35,7 @@ from ...image_utils import (
 )
 from ...processing_utils import Unpack
 from ...utils import TensorType, auto_docstring, is_torchvision_available, logging
+from .image_processing_smolvlm import SmolVLMImageProcessorKwargs
 
 
 if is_torchvision_available():
@@ -49,32 +44,11 @@ if is_torchvision_available():
 
 logger = logging.get_logger(__name__)
 
-
-class SmolVLMFastImageProcessorKwargs(DefaultFastImageProcessorKwargs):
-    """
-    do_pad (`bool`, *optional*):
-        Whether to pad the image. If `True`, will pad the patch dimension of the images in the batch to the largest
-        number of patches in the batch. Padding will be applied to the bottom and right with zeros.
-    do_image_splitting (`bool`, *optional*, defaults to `True`):
-        Whether to split the image into sub-images concatenated with the original image. They are split into patches
-        such that each patch has a size of `max_image_size["height"]` x `max_image_size["width"]`.
-    max_image_size (`Dict`, *optional*, defaults to `{"longest_edge": 364}`):
-        Maximum resolution of the patches of images accepted by the model. This is a dictionary containing the key "longest_edge".
-    return_row_col_info (`bool`, *optional*, defaults to `False`):
-        Whether to return the row and column information of the images.
-    """
-
-    do_pad: Optional[bool]
-    do_image_splitting: Optional[bool]
-    max_image_size: Optional[dict[str, int]]
-    return_row_col_info: Optional[bool]
-
-
 MAX_IMAGE_SIZE = 4096  # 4k resolution as absolute maximum
 
 
 def _resize_output_size_rescale_to_max_len(
-    height: int, width: int, min_len: Optional[int] = 1, max_len: Optional[int] = None
+    height: int, width: int, min_len: int | None = 1, max_len: int | None = None
 ) -> tuple[int, int]:
     """
     Get the output size of the image after resizing given a dictionary specifying the max and min sizes.
@@ -111,7 +85,7 @@ def _resize_output_size_rescale_to_max_len(
 
 
 def _resize_output_size_scale_below_upper_bound(
-    height: int, width: int, max_len: Optional[dict[str, int]] = None
+    height: int, width: int, max_len: dict[str, int] | None = None
 ) -> tuple[int, int]:
     """
     Get the output size of the image after resizing given a dictionary specifying the max and min sizes.
@@ -193,7 +167,7 @@ class SmolVLMImageProcessorFast(BaseImageProcessorFast):
     do_image_splitting = True
     do_pad = True
     return_row_col_info = False
-    valid_kwargs = SmolVLMFastImageProcessorKwargs
+    valid_kwargs = SmolVLMImageProcessorKwargs
 
     def _prepare_images_structure(self, images: ImageInput, expected_ndims: int = 3) -> ImageInput:
         """
@@ -205,7 +179,7 @@ class SmolVLMImageProcessorFast(BaseImageProcessorFast):
         self,
         image: "torch.Tensor",
         size: SizeDict,
-        interpolation: "F.InterpolationMode" = None,
+        interpolation: Optional["F.InterpolationMode"] = None,
         antialias: bool = True,
         **kwargs,
     ) -> "torch.Tensor":
@@ -244,7 +218,7 @@ class SmolVLMImageProcessorFast(BaseImageProcessorFast):
         self,
         images: torch.Tensor,
         max_image_size: dict[str, int],
-        interpolation: "F.InterpolationMode" = None,
+        interpolation: Optional["F.InterpolationMode"] = None,
     ):
         """
         Split an image into squares of side max_image_size and the original image resized to max_image_size.
@@ -303,7 +277,7 @@ class SmolVLMImageProcessorFast(BaseImageProcessorFast):
         self,
         image: torch.Tensor,
         vision_encoder_max_size: int,
-        interpolation: "F.InterpolationMode" = None,
+        interpolation: Optional["F.InterpolationMode"] = None,
     ):
         """
         Resize images to be multiples of `vision_encoder_max_size` while preserving the aspect ratio.
@@ -361,7 +335,7 @@ class SmolVLMImageProcessorFast(BaseImageProcessorFast):
         return image, pixel_mask
 
     @auto_docstring
-    def preprocess(self, images: ImageInput, **kwargs: Unpack[SmolVLMFastImageProcessorKwargs]) -> BatchFeature:
+    def preprocess(self, images: ImageInput, **kwargs: Unpack[SmolVLMImageProcessorKwargs]) -> BatchFeature:
         return super().preprocess(images, **kwargs)
 
     def _preprocess(
@@ -373,14 +347,14 @@ class SmolVLMImageProcessorFast(BaseImageProcessorFast):
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        do_pad: Optional[bool],
-        do_image_splitting: Optional[bool],
-        max_image_size: Optional[dict[str, int]],
-        return_row_col_info: Optional[bool],
-        disable_grouping: Optional[bool],
-        return_tensors: Optional[Union[str, TensorType]],
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        do_pad: bool | None,
+        do_image_splitting: bool | None,
+        max_image_size: dict[str, int] | None,
+        return_row_col_info: bool | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         """

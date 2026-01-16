@@ -38,10 +38,8 @@ video captions. Additionally, we introduce PLM–VideoBench, a suite for evaluat
 understanding tasks focusing on the ability to reason about “what”, “where”, “when”, and “how” of a
 video. We make our work fully reproducible by providing data, training recipes, code & models.*
 
-
 This model was contributed by [shumingh](https://huggingface.co/shumingh).
 The original code can be found [here](https://github.com/facebookresearch/perception_models).
-
 
 ## PerceptionLMConfig
 
@@ -50,6 +48,7 @@ The original code can be found [here](https://github.com/facebookresearch/percep
 ## PerceptionLMProcessor
 
 [[autodoc]] PerceptionLMProcessor
+    - __call__
 
 ## PerceptionLMImageProcessorFast
 

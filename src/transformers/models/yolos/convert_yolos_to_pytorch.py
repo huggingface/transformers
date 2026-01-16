@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -237,8 +236,8 @@ def convert_yolos_checkpoint(
 
         print("Pushing to the hub...")
         model_name = model_mapping[yolos_name]
-        image_processor.push_to_hub(model_name, organization="hustvl")
-        model.push_to_hub(model_name, organization="hustvl")
+        image_processor.push_to_hub(repo_id=f"hustvl/{model_name}")
+        model.push_to_hub(repo_id=f"hustvl/{model_name}")
 
 
 if __name__ == "__main__":
@@ -260,7 +259,9 @@ if __name__ == "__main__":
         "--pytorch_dump_folder_path", default=None, type=str, help="Path to the output PyTorch model directory."
     )
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the converted model to the Hugging Face hub.",
     )
 
     args = parser.parse_args()

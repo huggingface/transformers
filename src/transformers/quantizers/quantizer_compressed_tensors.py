@@ -31,7 +31,6 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
     """
 
     requires_calibration = True
-    required_packages = ["compressed_tensors"]
 
     def __init__(self, quantization_config: CompressedTensorsConfig, **kwargs):
         super().__init__(quantization_config, **kwargs)
@@ -58,15 +57,9 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
                 "Using `compressed_tensors` quantized models requires the compressed-tensors library: "
                 "`pip install compressed-tensors`"
             )
-        if not is_torch_available():
-            # torch already should be installed as part of compressed tensors
-            raise ImportError("torch is required for using compressed-tensors quantization")
 
     def update_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
-        if dtype is None:
-            logger.info("Loading model using torch.float16 for compressed-tensors quantization")
-            dtype = torch.float16
-        elif dtype != torch.float16:
+        if dtype != torch.float16:
             logger.info("We suggest you to set `dtype=torch.float16` for better efficiency with compressed_tensors.")
         return dtype
 
@@ -113,6 +106,6 @@ class CompressedTensorsHfQuantizer(HfQuantizer):
         # models need to be decompressed carry out qat
         return not self.run_compressed or not self.quantization_config.is_quantization_compressed
 
-    def is_serializable(self, safe_serialization=None) -> bool:
+    def is_serializable(self) -> bool:
         """Models quantized using compressed tensors can be saved to disk"""
         return True

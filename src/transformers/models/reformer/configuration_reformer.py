@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The Trax Authors and The HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
@@ -15,22 +14,22 @@
 # limitations under the License.
 """Reformer model configuration"""
 
-from ...configuration_utils import PretrainedConfig
+from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class ReformerConfig(PretrainedConfig):
+class ReformerConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ReformerModel`]. It is used to instantiate a
     Reformer model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the ReFormer
     [google/reformer-crime-and-punishment](https://huggingface.co/google/reformer-crime-and-punishment) architecture.
 
-    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs. Read the
-    documentation from [`PretrainedConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         attention_head_size (`int`, *optional*, defaults to 64):
@@ -191,6 +190,7 @@ class ReformerConfig(PretrainedConfig):
         tie_word_embeddings=False,
         use_cache=True,
         classifier_dropout=None,
+        bos_token_id=None,
         **kwargs,
     ):
         self.hash_seed = hash_seed
@@ -223,13 +223,12 @@ class ReformerConfig(PretrainedConfig):
         self.attn_layers = attn_layers
         self.use_cache = use_cache
         self.classifier_dropout = classifier_dropout
-        super().__init__(
-            pad_token_id=pad_token_id,
-            eos_token_id=eos_token_id,
-            is_decoder=is_decoder,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.pad_token_id = pad_token_id
+        self.eos_token_id = eos_token_id
+        self.bos_token_id = bos_token_id
+        self.is_decoder = is_decoder
+        self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(**kwargs)
 
 
 __all__ = ["ReformerConfig"]
