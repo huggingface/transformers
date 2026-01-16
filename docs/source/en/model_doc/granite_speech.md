@@ -160,6 +160,7 @@ for i, transcription in enumerate(transcriptions):
 ## GraniteSpeechProcessor
 
 [[autodoc]] GraniteSpeechProcessor
+    - __call__
 
 ## GraniteSpeechFeatureExtractor
 

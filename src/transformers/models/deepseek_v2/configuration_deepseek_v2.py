@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_deepseek_v2.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,8 +17,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
@@ -142,40 +139,40 @@ class DeepseekV2Config(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 32000,
-        hidden_size: Optional[int] = 4096,
-        intermediate_size: Optional[int] = 11008,
-        num_hidden_layers: Optional[int] = 32,
-        num_attention_heads: Optional[int] = 32,
-        num_key_value_heads: Optional[int] = None,
-        hidden_act: Optional[str] = "silu",
-        max_position_embeddings: Optional[int] = 2048,
-        initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[int] = 1e-6,
-        use_cache: Optional[bool] = True,
-        pad_token_id: Optional[int] = None,
-        bos_token_id: Optional[int] = 1,
-        eos_token_id: Optional[int] = 2,
-        tie_word_embeddings: Optional[bool] = False,
-        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        attention_bias: Optional[bool] = False,
-        attention_dropout: Optional[float] = 0.0,
-        mlp_bias: Optional[bool] = False,
-        first_k_dense_replace: Optional[int] = 0,
-        kv_lora_rank: Optional[int] = 512,
-        q_lora_rank: Optional[int] = 1536,
-        n_group: Optional[int] = None,
-        n_routed_experts: Optional[int] = 64,
-        n_shared_experts: Optional[int] = 2,
-        qk_nope_head_dim: Optional[int] = 128,
-        qk_rope_head_dim: Optional[int] = 64,
-        routed_scaling_factor: Optional[float] = 1.0,
-        topk_group: Optional[int] = None,
-        topk_method: Optional[str] = "greedy",
-        norm_topk_prob: Optional[bool] = False,
-        v_head_dim: Optional[int] = 128,
-        num_experts_per_tok: Optional[int] = None,
-        moe_intermediate_size: Optional[int] = 1407,
+        vocab_size: int | None = 32000,
+        hidden_size: int | None = 4096,
+        intermediate_size: int | None = 11008,
+        num_hidden_layers: int | None = 32,
+        num_attention_heads: int | None = 32,
+        num_key_value_heads: int | None = None,
+        hidden_act: str | None = "silu",
+        max_position_embeddings: int | None = 2048,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: int | None = 1e-6,
+        use_cache: bool | None = True,
+        pad_token_id: int | None = None,
+        bos_token_id: int | None = 1,
+        eos_token_id: int | None = 2,
+        tie_word_embeddings: bool | None = False,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        attention_bias: bool | None = False,
+        attention_dropout: float | None = 0.0,
+        mlp_bias: bool | None = False,
+        first_k_dense_replace: int | None = 0,
+        kv_lora_rank: int | None = 512,
+        q_lora_rank: int | None = 1536,
+        n_group: int | None = None,
+        n_routed_experts: int | None = 64,
+        n_shared_experts: int | None = 2,
+        qk_nope_head_dim: int | None = 128,
+        qk_rope_head_dim: int | None = 64,
+        routed_scaling_factor: float | None = 1.0,
+        topk_group: int | None = None,
+        topk_method: str | None = "greedy",
+        norm_topk_prob: bool | None = False,
+        v_head_dim: int | None = 128,
+        num_experts_per_tok: int | None = None,
+        moe_intermediate_size: int | None = 1407,
         **kwargs,
     ):
         self.first_k_dense_replace = first_k_dense_replace
@@ -216,13 +213,11 @@ class DeepseekV2Config(PreTrainedConfig):
         self.head_dim = qk_rope_head_dim
         self.rope_parameters = rope_parameters
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        super().__init__(**kwargs)
 
 
 __all__ = ["DeepseekV2Config"]

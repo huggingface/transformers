@@ -19,6 +19,7 @@ import tempfile
 import unittest
 
 import numpy as np
+import pytest
 import requests
 
 from transformers import Pix2StructConfig, Pix2StructTextConfig, Pix2StructVisionConfig
@@ -454,6 +455,11 @@ class Pix2StructModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     def test_model_get_set_embeddings(self):
         pass
 
+    @pytest.mark.generate
+    @unittest.skip(reason="`Pix2Struct` cannot generate with no inputs provided")
+    def test_generate_without_input_ids(self):
+        pass
+
     def test_forward_signature(self):
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -683,9 +689,7 @@ class Pix2StructIntegrationTest(unittest.TestCase):
         processor = Pix2StructProcessor.from_pretrained("google/pix2struct-textcaps-base")
         image_1 = prepare_img()
 
-        second_url = (
-            "https://www.connollycove.com/wp-content/uploads/2019/06/temple-bar-dublin-world-famous-irish-pub.jpg"
-        )
+        second_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/temple-bar-dublin-world-famous-irish-pub.jpg"
         image_2 = Image.open(requests.get(second_url, stream=True).raw)
 
         # image only

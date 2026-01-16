@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The Meta AI Authors and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,7 +16,6 @@
 import math
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -40,7 +38,7 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import auto_docstring, logging
-from ...utils.generic import TransformersKwargs, check_model_inputs
+from ...utils.generic import TransformersKwargs, check_model_inputs, is_flash_attention_requested
 from ..auto import AutoModel
 from .configuration_sam3 import (
     Sam3Config,
@@ -73,8 +71,8 @@ class Sam3VisionEncoderOutput(ModelOutput):
     last_hidden_state: torch.FloatTensor = None
     fpn_hidden_states: tuple[torch.FloatTensor, ...] = None
     fpn_position_encoding: tuple[torch.FloatTensor, ...] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
 
 
 @dataclass
@@ -88,7 +86,7 @@ class Sam3GeometryEncoderOutput(ModelOutput):
     """
 
     last_hidden_state: torch.FloatTensor = None
-    attention_mask: Optional[torch.BoolTensor] = None
+    attention_mask: torch.BoolTensor | None = None
 
 
 @dataclass
@@ -110,11 +108,11 @@ class Sam3DETREncoderOutput(ModelOutput):
     """
 
     last_hidden_state: torch.FloatTensor = None
-    pos_embeds_flattened: Optional[torch.FloatTensor] = None
-    text_features: Optional[torch.FloatTensor] = None
-    spatial_shapes: Optional[torch.LongTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
+    pos_embeds_flattened: torch.FloatTensor | None = None
+    text_features: torch.FloatTensor | None = None
+    spatial_shapes: torch.LongTensor | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
 
 
 @dataclass
@@ -136,8 +134,8 @@ class Sam3DETRDecoderOutput(ModelOutput):
     intermediate_hidden_states: torch.FloatTensor = None
     reference_boxes: torch.FloatTensor = None
     presence_logits: torch.FloatTensor = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
 
 
 @dataclass
@@ -153,8 +151,8 @@ class Sam3MaskDecoderOutput(ModelOutput):
     """
 
     pred_masks: torch.FloatTensor = None
-    semantic_seg: Optional[torch.FloatTensor] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
+    semantic_seg: torch.FloatTensor | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
 
 
 @dataclass
@@ -194,17 +192,17 @@ class Sam3ImageSegmentationOutput(ModelOutput):
 
     pred_masks: torch.FloatTensor = None
     pred_boxes: torch.FloatTensor = None
-    pred_logits: Optional[torch.FloatTensor] = None
-    presence_logits: Optional[torch.FloatTensor] = None
-    semantic_seg: Optional[torch.FloatTensor] = None
-    decoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    decoder_reference_boxes: Optional[torch.FloatTensor] = None
-    encoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    vision_hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    vision_attentions: Optional[tuple[torch.FloatTensor]] = None
-    detr_encoder_attentions: Optional[tuple[torch.FloatTensor]] = None
-    detr_decoder_attentions: Optional[tuple[torch.FloatTensor]] = None
-    mask_decoder_attentions: Optional[tuple[torch.FloatTensor]] = None
+    pred_logits: torch.FloatTensor | None = None
+    presence_logits: torch.FloatTensor | None = None
+    semantic_seg: torch.FloatTensor | None = None
+    decoder_hidden_states: tuple[torch.FloatTensor] | None = None
+    decoder_reference_boxes: torch.FloatTensor | None = None
+    encoder_hidden_states: tuple[torch.FloatTensor] | None = None
+    vision_hidden_states: tuple[torch.FloatTensor] | None = None
+    vision_attentions: tuple[torch.FloatTensor] | None = None
+    detr_encoder_attentions: tuple[torch.FloatTensor] | None = None
+    detr_decoder_attentions: tuple[torch.FloatTensor] | None = None
+    mask_decoder_attentions: tuple[torch.FloatTensor] | None = None
 
 
 def inverse_sigmoid(x: torch.Tensor, eps: float = 1e-3) -> torch.Tensor:
@@ -277,7 +275,7 @@ def box_cxcywh_to_xyxy(x):
 
 
 class Sam3MLP(nn.Module):
-    def __init__(self, config: Union[Sam3ViTConfig]):
+    def __init__(self, config: Sam3ViTConfig):
         super().__init__()
         self.config = config
         self.activation_fn = ACT2FN[config.hidden_act]
@@ -298,8 +296,8 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
-    scaling: Optional[float] = None,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
     dropout: float = 0.0,
     **kwargs: Unpack[TransformersKwargs],
 ):
@@ -347,7 +345,7 @@ class Sam3Attention(nn.Module):
         query: torch.Tensor,
         key: torch.Tensor,
         value: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
@@ -375,7 +373,7 @@ class Sam3Attention(nn.Module):
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
         if (
-            "flash" in self.config._attn_implementation
+            is_flash_attention_requested(self.config)
             and attention_mask is not None
             and attention_mask.dtype != torch.bool
         ):
@@ -847,7 +845,7 @@ class Sam3SinePositionEmbedding(nn.Module):
     """
 
     def __init__(
-        self, num_pos_feats: int = 64, temperature: int = 10000, normalize: bool = False, scale: Optional[float] = None
+        self, num_pos_feats: int = 64, temperature: int = 10000, normalize: bool = False, scale: float | None = None
     ):
         super().__init__()
         if scale is not None and normalize is False:
@@ -917,9 +915,9 @@ class Sam3SinePositionEmbedding(nn.Module):
     def forward(
         self,
         shape: torch.Size,
-        device: Union[torch.device, str],
+        device: torch.device | str,
         dtype: torch.dtype,
-        mask: Optional[Tensor] = None,
+        mask: Tensor | None = None,
     ) -> Tensor:
         if mask is None:
             mask = torch.zeros((shape[0], shape[2], shape[3]), device=device, dtype=torch.bool)
@@ -1038,9 +1036,9 @@ class Sam3VisionModel(Sam3PreTrainedModel):
     @check_model_inputs
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_values: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, Sam3VisionEncoderOutput]:
+    ) -> tuple | Sam3VisionEncoderOutput:
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
@@ -1200,7 +1198,7 @@ class Sam3GeometryEncoder(nn.Module):
         box_mask: torch.Tensor,
         box_labels: torch.Tensor,
         img_feats: tuple[torch.Tensor, ...],
-        img_pos_embeds: Optional[tuple[torch.Tensor, ...]] = None,
+        img_pos_embeds: tuple[torch.Tensor, ...] | None = None,
     ):
         """
         Forward pass for encoding geometric prompts.
@@ -1286,7 +1284,7 @@ class Sam3DetrEncoderLayer(nn.Module):
         vision_feats: Tensor,
         prompt_feats: Tensor,
         vision_pos_encoding: Tensor,
-        prompt_cross_attn_mask: Optional[Tensor] = None,
+        prompt_cross_attn_mask: Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
         """
@@ -1404,9 +1402,9 @@ class Sam3DetrEncoder(Sam3PreTrainedModel):
         self,
         vision_features: list[torch.Tensor],
         text_features: torch.Tensor,
-        vision_pos_embeds: Optional[list[torch.Tensor]] = None,
-        text_mask: Optional[torch.Tensor] = None,
-        spatial_sizes: Optional[list[tuple[int, int]]] = None,
+        vision_pos_embeds: list[torch.Tensor] | None = None,
+        text_mask: torch.Tensor | None = None,
+        spatial_sizes: list[tuple[int, int]] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
         """
@@ -1519,8 +1517,8 @@ class Sam3DetrDecoderLayer(nn.Module):
         text_features: torch.Tensor,
         vision_features: torch.Tensor,
         vision_pos_encoding: torch.Tensor,
-        text_cross_attn_mask: Optional[torch.Tensor] = None,
-        vision_cross_attn_mask: Optional[torch.Tensor] = None,
+        text_cross_attn_mask: torch.Tensor | None = None,
+        vision_cross_attn_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         """
@@ -1700,10 +1698,10 @@ class Sam3DetrDecoder(Sam3PreTrainedModel):
         vision_features: torch.Tensor,
         text_features: torch.Tensor,
         vision_pos_encoding: torch.Tensor,
-        text_mask: Optional[torch.Tensor] = None,
-        spatial_shapes: Optional[torch.Tensor] = None,
+        text_mask: torch.Tensor | None = None,
+        spatial_shapes: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor, Optional[torch.Tensor], Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor | None, torch.Tensor | None]:
         """
         Forward pass for the DETR decoder.
 
@@ -1829,7 +1827,7 @@ class Sam3DotProductScoring(nn.Module):
         self.clamp_logits = True
         self.clamp_max_val = 12.0
 
-    def _pool_text_features(self, text_features: torch.Tensor, text_mask: Optional[torch.Tensor]) -> torch.Tensor:
+    def _pool_text_features(self, text_features: torch.Tensor, text_mask: torch.Tensor | None) -> torch.Tensor:
         """
         Mean pool text features, accounting for padding.
 
@@ -1858,7 +1856,7 @@ class Sam3DotProductScoring(nn.Module):
         self,
         decoder_hidden_states: torch.Tensor,
         text_features: torch.Tensor,
-        text_mask: Optional[torch.Tensor] = None,
+        text_mask: torch.Tensor | None = None,
     ) -> torch.Tensor:
         """
         Compute classification scores via dot product.
@@ -2016,8 +2014,8 @@ class Sam3MaskDecoder(Sam3PreTrainedModel):
         decoder_queries: torch.Tensor,
         backbone_features: list[torch.Tensor],
         encoder_hidden_states: torch.Tensor,
-        prompt_features: Optional[torch.Tensor] = None,
-        prompt_mask: Optional[torch.Tensor] = None,
+        prompt_features: torch.Tensor | None = None,
+        prompt_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> dict[str, torch.Tensor]:
         """
@@ -2153,7 +2151,7 @@ class Sam3Model(Sam3PreTrainedModel):
     def get_text_features(
         self,
         input_ids: torch.LongTensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.FloatTensor:
         r"""
@@ -2227,13 +2225,13 @@ class Sam3Model(Sam3PreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        vision_embeds: Optional[Sam3VisionEncoderOutput] = None,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        text_embeds: Optional[torch.FloatTensor] = None,
-        input_boxes: Optional[torch.FloatTensor] = None,
-        input_boxes_labels: Optional[torch.LongTensor] = None,
+        pixel_values: torch.FloatTensor | None = None,
+        vision_embeds: Sam3VisionEncoderOutput | None = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        text_embeds: torch.FloatTensor | None = None,
+        input_boxes: torch.FloatTensor | None = None,
+        input_boxes_labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Sam3ImageSegmentationOutput:
         r"""

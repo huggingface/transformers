@@ -82,6 +82,7 @@ processor.batch_decode(outputs, skip_special_tokens=True)[0]
 ## Lfm2VlProcessor
 
 [[autodoc]] Lfm2VlProcessor
+    - __call__
 
 ## Lfm2VlConfig
 
