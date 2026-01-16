@@ -69,7 +69,6 @@ from .image_to_image import ImageToImagePipeline
 from .keypoint_matching import KeypointMatchingPipeline
 from .mask_generation import MaskGenerationPipeline
 from .object_detection import ObjectDetectionPipeline
-from .question_answering import QuestionAnsweringArgumentHandler, QuestionAnsweringPipeline
 from .table_question_answering import TableQuestionAnsweringArgumentHandler, TableQuestionAnsweringPipeline
 from .text_classification import TextClassificationPipeline
 from .text_embedding import TextEmbeddingPipeline
@@ -82,7 +81,6 @@ from .token_classification import (
     TokenClassificationPipeline,
 )
 from .video_classification import VideoClassificationPipeline
-from .visual_question_answering import VisualQuestionAnsweringPipeline
 from .zero_shot_audio_classification import ZeroShotAudioClassificationPipeline
 from .zero_shot_classification import ZeroShotClassificationArgumentHandler, ZeroShotClassificationPipeline
 from .zero_shot_image_classification import ZeroShotImageClassificationPipeline
