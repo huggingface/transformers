@@ -661,7 +661,6 @@ if TYPE_CHECKING:
     from .pipelines import PipedPipelineDataFormat as PipedPipelineDataFormat
     from .pipelines import Pipeline as Pipeline
     from .pipelines import PipelineDataFormat as PipelineDataFormat
-    from .pipelines import QuestionAnsweringPipeline as QuestionAnsweringPipeline
     from .pipelines import TableQuestionAnsweringPipeline as TableQuestionAnsweringPipeline
     from .pipelines import TextClassificationPipeline as TextClassificationPipeline
     from .pipelines import TextEmbeddingPipeline as TextEmbeddingPipeline
