@@ -236,6 +236,14 @@
     - local: community_integrations/llama_cpp
       title: llama.cpp
     title: Local deployment
+  - sections:
+    - local: community_integrations/axolotl
+      title: Axolotl
+    - local: community_integrations/trl
+      title: TRL
+    - local: community_integrations/unsloth
+      title: Unsloth
+    title: Fine-tuning
   title: Community integrations
 - isExpanded: false
   sections:
