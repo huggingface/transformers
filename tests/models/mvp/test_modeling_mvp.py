@@ -407,14 +407,9 @@ class MvpModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     )
     pipeline_model_mapping = (
         {
-            "feature-extraction": MvpModel,
-            "fill-mask": MvpForConditionalGeneration,
-            "question-answering": MvpForQuestionAnswering,
-            "summarization": MvpForConditionalGeneration,
+            "text-embedding": MvpModel,
             "text-classification": MvpForSequenceClassification,
             "text-generation": MvpForCausalLM,
-            "text2text-generation": MvpForConditionalGeneration,
-            "translation": MvpForConditionalGeneration,
             "zero-shot": MvpForSequenceClassification,
         }
         if is_torch_available()

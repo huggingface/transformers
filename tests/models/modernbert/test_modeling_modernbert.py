@@ -251,12 +251,10 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     )
     pipeline_model_mapping = (
         {
-            "feature-extraction": ModernBertModel,
-            "fill-mask": ModernBertForMaskedLM,
+            "text-embedding": ModernBertModel,
             "text-classification": ModernBertForSequenceClassification,
             "token-classification": ModernBertForTokenClassification,
             "zero-shot": ModernBertForSequenceClassification,
-            "question-answering": ModernBertForQuestionAnswering,
         }
         if is_torch_available()
         else {}

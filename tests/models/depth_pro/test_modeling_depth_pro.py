@@ -204,7 +204,7 @@ class DepthProModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     pipeline_model_mapping = (
         {
             "depth-estimation": DepthProForDepthEstimation,
-            "image-feature-extraction": DepthProModel,
+            "image-embedding": DepthProModel,
         }
         if is_torch_available()
         else {}

@@ -273,9 +273,7 @@ class MobileBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     )
     pipeline_model_mapping = (
         {
-            "feature-extraction": MobileBertModel,
-            "fill-mask": MobileBertForMaskedLM,
-            "question-answering": MobileBertForQuestionAnswering,
+            "text-embedding": MobileBertModel,
             "text-classification": MobileBertForSequenceClassification,
             "token-classification": MobileBertForTokenClassification,
             "zero-shot": MobileBertForSequenceClassification,

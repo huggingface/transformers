@@ -12,7 +12,7 @@ from .base import GenericTensor, Pipeline, build_pipeline_init_args
         return_tensors (`bool`, *optional*):
             If `True`, returns a tensor according to the specified framework, otherwise returns a list.""",
 )
-class FeatureExtractionPipeline(Pipeline):
+class TextEmbeddingPipeline(Pipeline):
     """
     Feature extraction pipeline uses no model head. This pipeline extracts the hidden states from the base
     transformer, which can be used as features in downstream tasks.
@@ -22,7 +22,7 @@ class FeatureExtractionPipeline(Pipeline):
     ```python
     >>> from transformers import pipeline
 
-    >>> extractor = pipeline(model="google-bert/bert-base-uncased", task="feature-extraction")
+    >>> extractor = pipeline(model="google-bert/bert-base-uncased", task="text-embedding")
     >>> result = extractor("This is a simple test.", return_tensors=True)
     >>> result.shape  # This is a tensor of shape [1, sequence_length, hidden_dimension] representing the input string.
     torch.Size([1, 8, 768])
@@ -30,8 +30,8 @@ class FeatureExtractionPipeline(Pipeline):
 
     Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)
 
-    This feature extraction pipeline can currently be loaded from [`pipeline`] using the task identifier:
-    `"feature-extraction"`.
+    This text embedding pipeline can currently be loaded from [`pipeline`] using the task identifier:
+    `"text-embedding"`.
 
     All models may be used for this pipeline. See a list of all models, including community-contributed models on
     [huggingface.co/models](https://huggingface.co/models).

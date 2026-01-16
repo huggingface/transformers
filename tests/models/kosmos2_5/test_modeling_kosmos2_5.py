@@ -293,7 +293,7 @@ class Kosmos2_5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     all_generative_model_classes = (Kosmos2_5ForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "feature-extraction": Kosmos2_5Model,
+            "text-embedding": Kosmos2_5Model,
             "image-to-text": Kosmos2_5ForConditionalGeneration,
         }
         if is_torch_available()

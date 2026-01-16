@@ -379,9 +379,7 @@ class RobertaPreLayerNormModelTest(ModelTesterMixin, GenerationTesterMixin, Pipe
     )
     pipeline_model_mapping = (
         {
-            "feature-extraction": RobertaPreLayerNormModel,
-            "fill-mask": RobertaPreLayerNormForMaskedLM,
-            "question-answering": RobertaPreLayerNormForQuestionAnswering,
+            "text-embedding": RobertaPreLayerNormModel,
             "text-classification": RobertaPreLayerNormForSequenceClassification,
             "text-generation": RobertaPreLayerNormForCausalLM,
             "token-classification": RobertaPreLayerNormForTokenClassification,

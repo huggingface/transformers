@@ -786,9 +786,8 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixi
     additional_model_inputs = ["input_ids", "decoder_input_ids"]
     pipeline_model_mapping = (
         {
-            "feature-extraction": Blip2Model,
+            "text-embedding": Blip2Model,
             "image-to-text": Blip2ForConditionalGeneration,
-            "visual-question-answering": Blip2ForConditionalGeneration,
             "image-text-to-text": Blip2ForConditionalGeneration,
             "any-to-any": Blip2ForConditionalGeneration,
         }

@@ -252,7 +252,7 @@ class BeitModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     )
     pipeline_model_mapping = (
         {
-            "image-feature-extraction": BeitModel,
+            "image-embedding": BeitModel,
             "image-classification": BeitForImageClassification,
             "image-segmentation": BeitForSemanticSegmentation,
         }

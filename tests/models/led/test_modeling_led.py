@@ -267,11 +267,7 @@ class LEDModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     )
     pipeline_model_mapping = (
         {
-            "feature-extraction": LEDModel,
-            "question-answering": LEDForQuestionAnswering,
-            "summarization": LEDForConditionalGeneration,
-            "text2text-generation": LEDForConditionalGeneration,
-            "translation": LEDForConditionalGeneration,
+            "text-embedding": LEDModel,
         }
         if is_torch_available()
         else {}

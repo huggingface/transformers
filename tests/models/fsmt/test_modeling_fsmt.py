@@ -152,10 +152,7 @@ class FSMTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     all_model_classes = (FSMTModel, FSMTForConditionalGeneration) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "feature-extraction": FSMTModel,
-            "summarization": FSMTForConditionalGeneration,
-            "text2text-generation": FSMTForConditionalGeneration,
-            "translation": FSMTForConditionalGeneration,
+            "text-embedding": FSMTModel,
         }
         if is_torch_available()
         else {}

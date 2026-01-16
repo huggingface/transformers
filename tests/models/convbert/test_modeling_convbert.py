@@ -258,9 +258,7 @@ class ConvBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     )
     pipeline_model_mapping = (
         {
-            "feature-extraction": ConvBertModel,
-            "fill-mask": ConvBertForMaskedLM,
-            "question-answering": ConvBertForQuestionAnswering,
+            "text-embedding": ConvBertModel,
             "text-classification": ConvBertForSequenceClassification,
             "token-classification": ConvBertForTokenClassification,
             "zero-shot": ConvBertForSequenceClassification,

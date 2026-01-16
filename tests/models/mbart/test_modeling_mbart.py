@@ -217,14 +217,9 @@ class MBartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     )
     pipeline_model_mapping = (
         {
-            "feature-extraction": MBartModel,
-            "fill-mask": MBartForConditionalGeneration,
-            "question-answering": MBartForQuestionAnswering,
-            "summarization": MBartForConditionalGeneration,
+            "text-embedding": MBartModel,
             "text-classification": MBartForSequenceClassification,
             "text-generation": MBartForCausalLM,
-            "text2text-generation": MBartForConditionalGeneration,
-            "translation": MBartForConditionalGeneration,
             "zero-shot": MBartForSequenceClassification,
         }
         if is_torch_available()

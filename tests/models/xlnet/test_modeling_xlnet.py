@@ -521,8 +521,7 @@ class XLNetModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     )
     pipeline_model_mapping = (
         {
-            "feature-extraction": XLNetModel,
-            "question-answering": XLNetForQuestionAnsweringSimple,
+            "text-embedding": XLNetModel,
             "text-classification": XLNetForSequenceClassification,
             "text-generation": XLNetLMHeadModel,
             "token-classification": XLNetForTokenClassification,

@@ -172,7 +172,7 @@ class SegGptModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     test_torch_exportable = True
 
     pipeline_model_mapping = (
-        {"feature-extraction": SegGptModel, "mask-generation": SegGptModel} if is_torch_available() else {}
+        {"text-embedding": SegGptModel, "mask-generation": SegGptModel} if is_torch_available() else {}
     )
 
     def setUp(self):

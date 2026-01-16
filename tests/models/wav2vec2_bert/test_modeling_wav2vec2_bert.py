@@ -413,7 +413,7 @@ class Wav2Vec2BertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Test
         {
             "audio-classification": Wav2Vec2BertForSequenceClassification,
             "automatic-speech-recognition": Wav2Vec2BertForCTC,
-            "feature-extraction": Wav2Vec2BertModel,
+            "text-embedding": Wav2Vec2BertModel,
         }
         if is_torch_available()
         else {}

@@ -549,9 +549,7 @@ class RoCBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     all_generative_model_classes = ()
     pipeline_model_mapping = (
         {
-            "feature-extraction": RoCBertModel,
-            "fill-mask": RoCBertForMaskedLM,
-            "question-answering": RoCBertForQuestionAnswering,
+            "text-embedding": RoCBertModel,
             "text-classification": RoCBertForSequenceClassification,
             "text-generation": RoCBertForCausalLM,
             "token-classification": RoCBertForTokenClassification,

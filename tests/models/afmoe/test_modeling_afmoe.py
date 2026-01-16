@@ -101,7 +101,7 @@ class AfmoeModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = AfmoeModelTester
     all_model_classes = (AfmoeModel, AfmoeForCausalLM) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": AfmoeModel, "text-generation": AfmoeForCausalLM} if is_torch_available() else {}
+        {"text-embedding": AfmoeModel, "text-generation": AfmoeForCausalLM} if is_torch_available() else {}
     )
 
     @unittest.skip("Afmoe applies key/query norm which doesn't work with packing")

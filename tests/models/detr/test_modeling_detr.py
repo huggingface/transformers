@@ -179,7 +179,7 @@ class DetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     )
     pipeline_model_mapping = (
         {
-            "image-feature-extraction": DetrModel,
+            "image-embedding": DetrModel,
             "image-segmentation": DetrForSegmentation,
             "object-detection": DetrForObjectDetection,
         }

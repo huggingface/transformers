@@ -181,11 +181,10 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     )
     pipeline_model_mapping = (
         {
-            "feature-extraction": DiffLlamaModel,
+            "text-embedding": DiffLlamaModel,
             "text-classification": DiffLlamaForSequenceClassification,
             "text-generation": DiffLlamaForCausalLM,
             "zero-shot": DiffLlamaForSequenceClassification,
-            "question-answering": DiffLlamaForQuestionAnswering,
             "token-classification": DiffLlamaForTokenClassification,
         }
         if is_torch_available()

@@ -20,8 +20,8 @@ from transformers import (
     FEATURE_EXTRACTOR_MAPPING,
     IMAGE_PROCESSOR_MAPPING,
     MODEL_MAPPING,
-    FeatureExtractionPipeline,
     LxmertConfig,
+    TextEmbeddingPipeline,
     is_torch_available,
     pipeline,
 )
@@ -131,7 +131,7 @@ class FeatureExtractionPipelineTests(unittest.TestCase):
                 For now ignore those.
                 """
             )
-        feature_extractor_pipeline = FeatureExtractionPipeline(
+        feature_extractor_pipeline = TextEmbeddingPipeline(
             model=model,
             tokenizer=tokenizer,
             feature_extractor=feature_extractor,

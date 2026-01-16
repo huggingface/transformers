@@ -733,9 +733,7 @@ class ReformerLSHAttnModelTest(
     )
     pipeline_model_mapping = (
         {
-            "feature-extraction": ReformerModel,
-            "fill-mask": ReformerForMaskedLM,
-            "question-answering": ReformerForQuestionAnswering,
+            "text-embedding": ReformerModel,
             "text-classification": ReformerForSequenceClassification,
             "text-generation": ReformerModelWithLMHead,
             "zero-shot": ReformerForSequenceClassification,

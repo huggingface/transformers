@@ -140,10 +140,8 @@ _import_structure = {
         "CsvPipelineDataFormat",
         "DepthEstimationPipeline",
         "DocumentQuestionAnsweringPipeline",
-        "FeatureExtractionPipeline",
-        "FillMaskPipeline",
         "ImageClassificationPipeline",
-        "ImageFeatureExtractionPipeline",
+        "ImageEmbeddingPipeline",
         "ImageSegmentationPipeline",
         "ImageTextToTextPipeline",
         "ImageToImagePipeline",
@@ -155,14 +153,13 @@ _import_structure = {
         "PipedPipelineDataFormat",
         "Pipeline",
         "PipelineDataFormat",
-        "QuestionAnsweringPipeline",
         "TableQuestionAnsweringPipeline",
         "TextClassificationPipeline",
+        "TextEmbeddingPipeline",
         "TextGenerationPipeline",
         "TextToAudioPipeline",
         "TokenClassificationPipeline",
         "VideoClassificationPipeline",
-        "VisualQuestionAnsweringPipeline",
         "ZeroShotAudioClassificationPipeline",
         "ZeroShotClassificationPipeline",
         "ZeroShotImageClassificationPipeline",
@@ -648,10 +645,8 @@ if TYPE_CHECKING:
     from .pipelines import CsvPipelineDataFormat as CsvPipelineDataFormat
     from .pipelines import DepthEstimationPipeline as DepthEstimationPipeline
     from .pipelines import DocumentQuestionAnsweringPipeline as DocumentQuestionAnsweringPipeline
-    from .pipelines import FeatureExtractionPipeline as FeatureExtractionPipeline
-    from .pipelines import FillMaskPipeline as FillMaskPipeline
     from .pipelines import ImageClassificationPipeline as ImageClassificationPipeline
-    from .pipelines import ImageFeatureExtractionPipeline as ImageFeatureExtractionPipeline
+    from .pipelines import ImageEmbeddingPipeline as ImageEmbeddingPipeline
     from .pipelines import ImageSegmentationPipeline as ImageSegmentationPipeline
     from .pipelines import ImageTextToTextPipeline as ImageTextToTextPipeline
     from .pipelines import ImageToImagePipeline as ImageToImagePipeline
@@ -663,14 +658,13 @@ if TYPE_CHECKING:
     from .pipelines import PipedPipelineDataFormat as PipedPipelineDataFormat
     from .pipelines import Pipeline as Pipeline
     from .pipelines import PipelineDataFormat as PipelineDataFormat
-    from .pipelines import QuestionAnsweringPipeline as QuestionAnsweringPipeline
     from .pipelines import TableQuestionAnsweringPipeline as TableQuestionAnsweringPipeline
     from .pipelines import TextClassificationPipeline as TextClassificationPipeline
+    from .pipelines import TextEmbeddingPipeline as TextEmbeddingPipeline
     from .pipelines import TextGenerationPipeline as TextGenerationPipeline
     from .pipelines import TextToAudioPipeline as TextToAudioPipeline
     from .pipelines import TokenClassificationPipeline as TokenClassificationPipeline
     from .pipelines import VideoClassificationPipeline as VideoClassificationPipeline
-    from .pipelines import VisualQuestionAnsweringPipeline as VisualQuestionAnsweringPipeline
     from .pipelines import ZeroShotAudioClassificationPipeline as ZeroShotAudioClassificationPipeline
     from .pipelines import ZeroShotClassificationPipeline as ZeroShotClassificationPipeline
     from .pipelines import ZeroShotImageClassificationPipeline as ZeroShotImageClassificationPipeline

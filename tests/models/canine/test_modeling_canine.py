@@ -224,8 +224,7 @@ class CanineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     )
     pipeline_model_mapping = (
         {
-            "feature-extraction": CanineModel,
-            "question-answering": CanineForQuestionAnswering,
+            "text-embedding": CanineModel,
             "text-classification": CanineForSequenceClassification,
             "token-classification": CanineForTokenClassification,
             "zero-shot": CanineForSequenceClassification,

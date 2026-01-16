@@ -189,7 +189,7 @@ class OpenAIGPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     )
     pipeline_model_mapping = (
         {
-            "feature-extraction": OpenAIGPTModel,
+            "text-embedding": OpenAIGPTModel,
             "text-classification": OpenAIGPTForSequenceClassification,
             "text-generation": OpenAIGPTLMHeadModel,
             "zero-shot": OpenAIGPTForSequenceClassification,

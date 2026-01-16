@@ -232,12 +232,8 @@ class UMT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     )
     pipeline_model_mapping = (
         {
-            "feature-extraction": UMT5Model,
-            "question-answering": UMT5ForQuestionAnswering,
-            "summarization": UMT5ForConditionalGeneration,
+            "text-embedding": UMT5Model,
             "text-classification": UMT5ForSequenceClassification,
-            "text2text-generation": UMT5ForConditionalGeneration,
-            "translation": UMT5ForConditionalGeneration,
             "zero-shot": UMT5ForSequenceClassification,
         }
         if is_torch_available()

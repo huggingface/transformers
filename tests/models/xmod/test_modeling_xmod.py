@@ -373,9 +373,7 @@ class XmodModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     )
     pipeline_model_mapping = (
         {
-            "feature-extraction": XmodModel,
-            "fill-mask": XmodForMaskedLM,
-            "question-answering": XmodForQuestionAnswering,
+            "text-embedding": XmodModel,
             "text-classification": XmodForSequenceClassification,
             "text-generation": XmodForCausalLM,
             "token-classification": XmodForTokenClassification,

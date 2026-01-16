@@ -135,7 +135,7 @@ class BitNetModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     )
     pipeline_model_mapping = (
         {
-            "feature-extraction": BitNetModel,
+            "text-embedding": BitNetModel,
             "text-generation": BitNetForCausalLM,
         }
         if is_torch_available()

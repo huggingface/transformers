@@ -451,9 +451,7 @@ class BertModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     )
     pipeline_model_mapping = (
         {
-            "feature-extraction": BertModel,
-            "fill-mask": BertForMaskedLM,
-            "question-answering": BertForQuestionAnswering,
+            "text-embedding": BertModel,
             "text-classification": BertForSequenceClassification,
             "text-generation": BertLMHeadModel,
             "token-classification": BertForTokenClassification,

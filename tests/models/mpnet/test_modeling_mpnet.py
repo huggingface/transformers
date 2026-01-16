@@ -202,9 +202,7 @@ class MPNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     )
     pipeline_model_mapping = (
         {
-            "feature-extraction": MPNetModel,
-            "fill-mask": MPNetForMaskedLM,
-            "question-answering": MPNetForQuestionAnswering,
+            "text-embedding": MPNetModel,
             "text-classification": MPNetForSequenceClassification,
             "token-classification": MPNetForTokenClassification,
             "zero-shot": MPNetForSequenceClassification,

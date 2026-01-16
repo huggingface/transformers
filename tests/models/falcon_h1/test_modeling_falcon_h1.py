@@ -264,7 +264,7 @@ class FalconH1ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
     model_split_percents = [0.5, 0.7, 0.8]
 
     pipeline_model_mapping = (
-        {"feature-extraction": FalconH1Model, "text-generation": FalconH1ForCausalLM} if is_torch_available() else {}
+        {"text-embedding": FalconH1Model, "text-generation": FalconH1ForCausalLM} if is_torch_available() else {}
     )
 
     def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):

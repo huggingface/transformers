@@ -374,9 +374,7 @@ class Data2VecTextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTes
     )
     pipeline_model_mapping = (
         {
-            "feature-extraction": Data2VecTextModel,
-            "fill-mask": Data2VecTextForMaskedLM,
-            "question-answering": Data2VecTextForQuestionAnswering,
+            "text-embedding": Data2VecTextModel,
             "text-classification": Data2VecTextForSequenceClassification,
             "text-generation": Data2VecTextForCausalLM,
             "token-classification": Data2VecTextForTokenClassification,

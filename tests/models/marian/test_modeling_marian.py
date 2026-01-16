@@ -219,11 +219,8 @@ class MarianModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     all_model_classes = (MarianModel, MarianMTModel) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "feature-extraction": MarianModel,
-            "summarization": MarianMTModel,
+            "text-embedding": MarianModel,
             "text-generation": MarianForCausalLM,
-            "text2text-generation": MarianMTModel,
-            "translation": MarianMTModel,
         }
         if is_torch_available()
         else {}

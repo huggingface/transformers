@@ -20,7 +20,7 @@ if is_vision_available():
             Whether or not to return the pooled output. If `False`, the model will return the raw hidden states.
     """,
 )
-class ImageFeatureExtractionPipeline(Pipeline):
+class ImageEmbeddingPipeline(Pipeline):
     """
     Image feature extraction pipeline uses no model head. This pipeline extracts the hidden states from the base
     transformer, which can be used as features in downstream tasks.
@@ -30,7 +30,7 @@ class ImageFeatureExtractionPipeline(Pipeline):
     ```python
     >>> from transformers import pipeline
 
-    >>> extractor = pipeline(model="google/vit-base-patch16-224", task="image-feature-extraction")
+    >>> extractor = pipeline(model="google/vit-base-patch16-224", task="image-embedding")
     >>> result = extractor("https://huggingface.co/datasets/Narsil/image_dummy/raw/main/parrots.png", return_tensors=True)
     >>> result.shape  # This is a tensor of shape [1, sequence_length, hidden_dimension] representing the input image.
     torch.Size([1, 197, 768])
@@ -38,8 +38,8 @@ class ImageFeatureExtractionPipeline(Pipeline):
 
     Learn more about the basics of using a pipeline in the [pipeline tutorial](../pipeline_tutorial)
 
-    This image feature extraction pipeline can currently be loaded from [`pipeline`] using the task identifier:
-    `"image-feature-extraction"`.
+    This image embedding pipeline can currently be loaded from [`pipeline`] using the task identifier:
+    `"image-embedding"`.
 
     All vision models may be used for this pipeline. See a list of all models, including community-contributed models on
     [huggingface.co/models](https://huggingface.co/models).

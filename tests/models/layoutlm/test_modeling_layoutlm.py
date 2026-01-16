@@ -236,8 +236,7 @@ class LayoutLMModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     pipeline_model_mapping = (
         {
             "document-question-answering": LayoutLMForQuestionAnswering,
-            "feature-extraction": LayoutLMModel,
-            "fill-mask": LayoutLMForMaskedLM,
+            "text-embedding": LayoutLMModel,
             "text-classification": LayoutLMForSequenceClassification,
             "token-classification": LayoutLMForTokenClassification,
             "zero-shot": LayoutLMForSequenceClassification,

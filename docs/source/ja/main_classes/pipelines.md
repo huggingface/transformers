@@ -388,23 +388,11 @@ my_pipeline = pipeline(model="xxxx", pipeline_class=MyPipeline)
 
 自然言語処理タスクに使用できるパイプラインには次のものがあります。
 
-### FillMaskPipeline
-
-[[autodoc]] FillMaskPipeline
-    - __call__
-    - all
-
 ### NerPipeline
 
 [[autodoc]] NerPipeline
 
 詳細については、[`TokenClassificationPipeline`] を参照してください。
-
-### QuestionAnsweringPipeline
-
-[[autodoc]] QuestionAnsweringPipeline
-    - __call__
-    - all
 
 ### TableQuestionAnsweringPipeline
 
@@ -445,27 +433,21 @@ my_pipeline = pipeline(model="xxxx", pipeline_class=MyPipeline)
     - __call__
     - all
 
-### FeatureExtractionPipeline
+### TextEmbeddingPipeline
 
-[[autodoc]] FeatureExtractionPipeline
+[[autodoc]] TextEmbeddingPipeline
     - __call__
     - all
 
-### ImageFeatureExtractionPipeline
+### ImageEmbeddingPipeline
 
-[[autodoc]] ImageFeatureExtractionPipeline
+[[autodoc]] ImageEmbeddingPipeline
     - __call__
     - all
 
 ### ImageTextToTextPipeline
 
 [[autodoc]] ImageTextToTextPipeline
-    - __call__
-    - all
-
-### VisualQuestionAnsweringPipeline
-
-[[autodoc]] VisualQuestionAnsweringPipeline
     - __call__
     - all
 

@@ -311,7 +311,7 @@ class CodeGenModelTester:
 class CodeGenModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (CodeGenModel, CodeGenForCausalLM) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": CodeGenModel, "text-generation": CodeGenForCausalLM} if is_torch_available() else {}
+        {"text-embedding": CodeGenModel, "text-generation": CodeGenForCausalLM} if is_torch_available() else {}
     )
 
     test_missing_keys = False
