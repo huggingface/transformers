@@ -359,18 +359,6 @@ my_pipeline = pipeline(model="xxxx", pipeline_class=MyPipeline)
 
 자연어 처리 작업에 사용할 수 있는 파이프라인은 다음과 같습니다.
 
-### FillMaskPipeline [[transformers.FillMaskPipeline]]
-
-[[autodoc]] FillMaskPipeline
-    - __call__
-    - all
-
-### QuestionAnsweringPipeline [[transformers.QuestionAnsweringPipeline]]
-
-[[autodoc]] QuestionAnsweringPipeline
-    - __call__
-    - all
-
 ### TableQuestionAnsweringPipeline [[transformers.TableQuestionAnsweringPipeline]]
 
 [[autodoc]] TableQuestionAnsweringPipeline
@@ -431,12 +419,6 @@ my_pipeline = pipeline(model="xxxx", pipeline_class=MyPipeline)
 ### MaskGenerationPipeline [[transformers.MaskGenerationPipeline]]
 
 [[autodoc]] MaskGenerationPipeline
-    - __call__
-    - all
-
-### VisualQuestionAnsweringPipeline [[transformers.VisualQuestionAnsweringPipeline]]
-
-[[autodoc]] VisualQuestionAnsweringPipeline
     - __call__
     - all
 
