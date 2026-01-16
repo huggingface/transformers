@@ -274,6 +274,11 @@ class ModernBertConfig(PreTrainedConfig):
         output.pop("reference_compile", None)
         return output
 
+    @property
+    def sliding_window(self):
+        """Half-window size: `local_attention` is the total window, so we divide by 2."""
+        return self.local_attention // 2
+
 
 class ModernBertEmbeddings(nn.Module):
     """
@@ -395,11 +400,12 @@ class ModernBertAttention(nn.Module):
         )
 
         if layer_idx % config.global_attn_every_n_layers != 0:
-            # config.sliding_window (local_attention) represents the total window size (default 128).
-            # Flash attention window_size=(left, right) attends to left + 1 + right tokens total.
-            # To get a total window of ~sliding_window tokens, we need left = right = sliding_window // 2.
-            # The +1 accounts for flash attention's inclusive boundary handling(see modeling_flash_attention_utils.py).
-            self.sliding_window = config.sliding_window // 2 + 1
+            # config.sliding_window = local_attention // 2 (half-window size, e.g. 64 for local_attention=128)
+            # +1 is needed because flash attention sets inclusive boundaries (see modeling_flash_attention_utils.py)
+            # i.e., window_size=(w-1, w-1) attends to 2*(w-1)+1 = 2*w-1 tokens total.
+            # To get a total window of 2*sliding_window+1, we need to pass sliding_window+1 here
+            # so it becomes window_size=(sliding_window, sliding_window).
+            self.sliding_window = config.sliding_window + 1
         else:
             self.sliding_window = None
 
