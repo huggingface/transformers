@@ -49,7 +49,7 @@ Axolotl's [ModelLoader](https://docs.axolotl.ai/docs/api/loaders.model.html#axol
 
 - The model config is built from [`AutoConfig.from_pretrained`]. Preload setup configures the [device map](https://huggingface.co/docs/accelerate/concept_guides/big_model_inference#designing-a-device-map), [quantization config](../main_classes/quantization), and [attention backend](../attention_interface).
 
-- `ModelLoader` selects [`AutoModelForCausalLM`], [`AutoModelForVision2Seq`], or [`AutoModelForImageTextToText`] based on the model class. Weights load with [`~AutoModel.from_pretrained`]. When `reinit_weights` is set, Axolotl builds the model with [`~AutoModel.from_config`] for random initialization.
+- `ModelLoader` selects [`AutoModelForCausalLM`], [`AutoModelForImageTextToText`], or a model-specific class from the multimodal mapping. Weights load with the selected loader's `from_pretrained`. When `reinit_weights` is set, Axolotl builds the model with the selected loader's `from_config` for random initialization.
 
 - Adapters load after the base model when LoRA or other PEFT methods are enabled. A patch manager applies optimizations before and after loading.
 

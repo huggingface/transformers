@@ -39,9 +39,7 @@ TRL extends Transformers APIs and adds method-specific settings.
 
 - TRL trainers build on [`Trainer`]. Method-specific trainers like [`~trl.GRPOTrainer`] add generation, reward scoring, and loss computation. Config classes extend [`TrainingArguments`] with method-specific fields.
 
-- Model loading uses [`AutoConfig.from_pretrained`] and [`PreTrainedModel.from_pretrained`] directly from Transformers.
-
-- Data collators inherit from [`DataCollatorMixin`] and plug into the trainer pipeline.
+- Model loading uses [`AutoConfig.from_pretrained`], then instantiates the model class from the config with that class' `from_pretrained`.
 
 ## Resources
 

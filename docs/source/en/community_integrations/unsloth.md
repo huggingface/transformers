@@ -60,7 +60,7 @@ trainer.train()
 
 Unsloth wraps Transformers APIs and patches internal methods for speed.
 
-- `FastLanguageModel.from_pretrained` loads models with [`AutoConfig.from_pretrained`] and [`AutoModelForCausalLM.from_pretrained`]. Before loading, Unsloth patches attention, decoder layer, and rotary embedding classes inside a Transformers model.
+- `FastLanguageModel.from_pretrained` loads config with [`AutoConfig.from_pretrained`]. It then loads a base model with [`AutoModelForCausalLM.from_pretrained`]. Before loading, Unsloth patches attention, decoder layer, and rotary embedding classes inside a Transformers model.
 
 - `UnslothTrainer` extends TRL's [`~trl.SFTTrainer`]. Unsloth patches [`~Trainer.compute_loss`] and [`~Trainer.training_step`] to fix gradient accumulation in older Transformers versions.
 
