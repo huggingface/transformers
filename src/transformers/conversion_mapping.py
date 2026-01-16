@@ -362,7 +362,7 @@ def get_model_conversion_mapping(
     if hf_quantizer is not None:
         # NOTE: Since get_weight_conversions() only serves to dequantize, we need to put them first in the list.
         # However, for now it's not possible to match 1 param with 2 converters (i.e. 1 dequantization converter
-        # and 1 model-specific converter. Which means that if a model that has model-specific conversions and is being
+        # and 1 model-specific converter). Which means that if a model that has model-specific conversions and is being
         # dequantized, the model-specific conversion that has patterns matching the dequantization patterns will be ignored.
         weight_conversions = hf_quantizer.get_weight_conversions() + weight_conversions
 
