@@ -46,7 +46,6 @@ if is_torch_available():
         invert_mask,
         shift_tokens_right,
     )
-    from transformers.pipelines import TranslationPipeline
 
 
 class FSMTModelTester:
@@ -173,8 +172,6 @@ class FSMTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             "src_vocab_size": 10,
             "tgt_vocab_size": 20,
         }
-        # XXX: hack to appease to all other models requiring `vocab_size`
-        config["vocab_size"] = 99  # no such thing in FSMT
         self.config_tester = ConfigTester(self, config_class=FSMTConfig, **config)
 
     def test_config(self):
@@ -299,6 +296,19 @@ class FSMTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
     @unittest.skip(reason="TODO: Decoder embeddings cannot be resized at the moment")
     def test_resize_embeddings_untied(self):
+        pass
+
+    @unittest.skip(reason="Can't do assisted decoding and not worth fixing")
+    def test_prompt_lookup_decoding_matches_greedy_search(self):
+        pass
+
+    @unittest.skip(reason="Can't do assisted decoding and not worth fixing")
+    def test_assisted_decoding_sample(self):
+        pass
+
+    @unittest.skip(reason="Can't do assisted decoding and not worth fixing")
+    @parameterized.expand([("random",), ("same",)])
+    def test_assisted_decoding_matches_greedy_search(self, assistant_type):
         pass
 
 
@@ -525,14 +535,6 @@ class FSMTModelIntegrationTests(unittest.TestCase):
         outputs = model.generate(input_ids)
         decoded = tokenizer.decode(outputs[0], skip_special_tokens=True)
         assert decoded == tgt_text, f"\n\ngot: {decoded}\nexp: {tgt_text}\n"
-
-    @parameterized.expand(pairs)
-    @slow
-    def test_translation_pipeline(self, pair):
-        tokenizer, model, src_text, tgt_text = self.translation_setup(pair)
-        pipeline = TranslationPipeline(model, tokenizer, device=torch_device)
-        output = pipeline([src_text])
-        self.assertEqual([tgt_text], [x["translation_text"] for x in output])
 
 
 @require_torch

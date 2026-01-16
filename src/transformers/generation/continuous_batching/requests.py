@@ -119,7 +119,7 @@ class RequestState:
 
     # Required fields
     request_id: str
-    initial_tokens: list[int]  # Initial prompt tokens
+    initial_tokens: list[int]  # Initial prompt tokens # TODO: rename this as prefill tokens
     # Optional fields
     record_timestamps: bool = False  # Whether to record timestamps for the generated tokens
     num_children: int = 0  # Number of children requests
@@ -137,6 +137,8 @@ class RequestState:
     error: str | None = None  # Error message if the request failed
     lifespan: tuple[float, float] = (-1, -1)  # (time request was no longer pending, time request finished)
     _timestamps: list[float] = field(default_factory=list)  # Timestamps of the generated tokens
+    _true_initial_tokens: int = 0  # The true number of initial tokens, useful when soft resetting requests
+    # TODO: remove the attribute above to _num_initial_tokens once initial_tokens is renamed
 
     @property
     def status(self) -> RequestStatus:
@@ -220,6 +222,9 @@ class RequestState:
 
     def to_generation_output(self):
         """Convert the request state to a GenerationOutput object."""
+        if self._true_initial_tokens:
+            self.generated_tokens = self.initial_tokens[self._true_initial_tokens :] + self.generated_tokens
+            self.initial_tokens = self.initial_tokens[: self._true_initial_tokens]
         return GenerationOutput(
             request_id=self.request_id,
             prompt_ids=self.initial_tokens,
@@ -253,3 +258,20 @@ class RequestState:
             record_timestamps=self.record_timestamps,
         )
         return new_request
+
+    def create_equivalent_initial_request(self) -> "RequestState":
+        """Creates an equivalent new request by removing the generated tokens and adding them to the initial prompt. The
+        created request has THE SAME request_id. Notably, we can retrieve the original request from the created one with
+        the _true_initial_tokens attribute."""
+        new_state = RequestState(
+            request_id=self.request_id,
+            initial_tokens=self.initial_tokens + self.generated_tokens,
+            num_children=self.num_children,
+            record_timestamps=self.record_timestamps,
+            tokens_to_process=self.initial_tokens + self.generated_tokens,
+            max_new_tokens=self.max_new_tokens - len(self.generated_tokens),
+            eos_token_id=self.eos_token_id,
+            streaming=self.streaming,
+        )
+        new_state._true_initial_tokens = self._true_initial_tokens + len(self.initial_tokens)
+        return new_state

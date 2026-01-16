@@ -169,6 +169,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("layoutlmv3", "LayoutLMv3Tokenizer" if is_tokenizers_available() else None),
         ("layoutxlm", "LayoutXLMTokenizer" if is_tokenizers_available() else None),
         ("led", "LEDTokenizer" if is_tokenizers_available() else None),
+        ("lighton_ocr", "Qwen2TokenizerFast" if is_tokenizers_available() else None),
         ("lilt", "RobertaTokenizer" if is_tokenizers_available() else None),
         ("longformer", "RobertaTokenizer" if is_tokenizers_available() else None),
         ("longt5", "T5Tokenizer" if is_tokenizers_available() else None),
@@ -581,18 +582,6 @@ class AutoTokenizer:
         >>> # Explicitly use the sentencepiece backend
         >>> tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/llama-tokenizer", backend="sentencepiece")
         ```"""
-        use_auth_token = kwargs.pop("use_auth_token", None)
-        if use_auth_token is not None:
-            logger.warning(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-                FutureWarning,
-            )
-            if kwargs.get("token") is not None:
-                raise ValueError(
-                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-                )
-            kwargs["token"] = use_auth_token
-
         config = kwargs.pop("config", None)
         kwargs["_from_auto"] = True
 
@@ -708,7 +697,7 @@ class AutoTokenizer:
                 tokenizer_class = TokenizersBackend
 
             return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-        elif getattr(config, "tokenizer_class"):
+        elif getattr(config, "tokenizer_class", None):
             _class = config.tokenizer_class
             if "PreTrainedTokenizerFast" not in _class:
                 _class = _class.replace("Fast", "")

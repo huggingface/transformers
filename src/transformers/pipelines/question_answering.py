@@ -1,6 +1,5 @@
 import inspect
 import types
-import warnings
 from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
@@ -178,18 +177,6 @@ class QuestionAnsweringArgumentHandler(ArgumentHandler):
                 inputs = list(args)
         # Generic compatibility with sklearn and Keras
         # Batched data
-        elif "X" in kwargs:
-            warnings.warn(
-                "Passing the `X` argument to the pipeline is deprecated and will be removed in v5. Inputs should be passed using the `question` and `context` keyword arguments instead.",
-                FutureWarning,
-            )
-            inputs = kwargs["X"]
-        elif "data" in kwargs:
-            warnings.warn(
-                "Passing the `data` argument to the pipeline is deprecated and will be removed in v5. Inputs should be passed using the `question` and `context` keyword arguments instead.",
-                FutureWarning,
-            )
-            inputs = kwargs["data"]
         elif "question" in kwargs and "context" in kwargs:
             if isinstance(kwargs["question"], list) and isinstance(kwargs["context"], str):
                 inputs = [{"question": Q, "context": kwargs["context"]} for Q in kwargs["question"]]
@@ -282,7 +269,6 @@ class QuestionAnsweringPipeline(ChunkPipeline):
     def _sanitize_parameters(
         self,
         padding=None,
-        topk=None,
         top_k=None,
         doc_stride=None,
         max_answer_len=None,
@@ -304,9 +290,6 @@ class QuestionAnsweringPipeline(ChunkPipeline):
             preprocess_params["max_seq_len"] = max_seq_len
 
         postprocess_params = {}
-        if topk is not None and top_k is None:
-            warnings.warn("topk parameter is deprecated, use top_k instead", UserWarning)
-            top_k = topk
         if top_k is not None:
             if top_k < 1:
                 raise ValueError(f"top_k parameter should be >= 1 (got {top_k})")
@@ -321,7 +304,7 @@ class QuestionAnsweringPipeline(ChunkPipeline):
             postprocess_params["align_to_words"] = align_to_words
         return preprocess_params, {}, postprocess_params
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, **kwargs):
         """
         Answer the question(s) given as inputs by using the context(s).
 
@@ -359,14 +342,7 @@ class QuestionAnsweringPipeline(ChunkPipeline):
             - **answer** (`str`) -- The answer to the question.
         """
 
-        # Convert inputs to features
-        if args:
-            warnings.warn(
-                "Passing a list of SQuAD examples to the pipeline is deprecated and will be removed in v5. Inputs should be passed using the `question` and `context` keyword arguments instead.",
-                FutureWarning,
-            )
-
-        examples = self._args_parser(*args, **kwargs)
+        examples = self._args_parser(**kwargs)
         if isinstance(examples, (list, tuple)) and len(examples) == 1:
             return super().__call__(examples[0], **kwargs)
         return super().__call__(examples, **kwargs)
