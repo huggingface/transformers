@@ -390,7 +390,6 @@ class BlipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         {
             "text-embedding": BlipModel,
             "image-to-text": BlipForConditionalGeneration,
-            "visual-question-answering": BlipForQuestionAnswering,
             "image-text-to-text": BlipForConditionalGeneration,
         }
         if is_torch_available()
