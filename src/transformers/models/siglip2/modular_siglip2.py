@@ -15,6 +15,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+from tokenizers import normalizers
 
 from transformers.models.siglip.configuration_siglip import SiglipConfig, SiglipTextConfig, SiglipVisionConfig
 from transformers.models.siglip.modeling_siglip import (
@@ -33,9 +34,71 @@ from transformers.models.siglip.modeling_siglip import (
     SiglipVisionTransformer,
 )
 
+from ...gemma.tokenization_gemma import GemmaTokenizer
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...utils import auto_docstring, filter_out_non_signature_kwargs
 from ...utils.generic import check_model_inputs, is_flash_attention_requested
+
+
+def _ensure_lowercase_normalizer(tok):
+    backend = getattr(tok, "_tokenizer", None)
+    if backend is None:
+        return
+
+    current = backend.normalizer
+    if current is None:
+        backend.normalizer = normalizers.Lowercase()
+        return
+
+    if isinstance(current, normalizers.Lowercase):
+        return
+
+    if isinstance(current, normalizers.Sequence):
+        items = list(current.normalizers)
+        if not any(isinstance(n, normalizers.Lowercase) for n in items):
+            backend.normalizer = normalizers.Sequence([normalizers.Lowercase(), *items])
+        return
+
+    backend.normalizer = normalizers.Sequence([normalizers.Lowercase(), current])
+
+
+class Siglip2Tokenizer(GemmaTokenizer):
+    """
+    Gemma tokenizer + SigLIP2 training default: lowercase normalization.
+    """
+
+    def __init__(
+        self,
+        vocab: str | dict[str, int] | None = None,
+        merges: str | list[str] | None = None,
+        unk_token: str = "<unk>",
+        bos_token: str = "<bos>",
+        eos_token: str = "<eos>",
+        pad_token: str = "<pad>",
+        mask_token: str = "<mask>",
+        do_lower_case: bool = True,
+        **kwargs,
+    ):
+        self.do_lower_case = do_lower_case
+
+        super().__init__(
+            vocab=vocab,
+            merges=merges,
+            unk_token=unk_token,
+            bos_token=bos_token,
+            eos_token=eos_token,
+            pad_token=pad_token,
+            mask_token=mask_token,
+            **kwargs,
+        )
+
+        # Persist for save/load + push_to_hub dynamic tokenizer test
+        if hasattr(self, "init_kwargs") and isinstance(self.init_kwargs, dict):
+            self.init_kwargs.setdefault("tokenizer_class", self.__class__.__name__)
+            self.init_kwargs["do_lower_case"] = do_lower_case
+
+        if do_lower_case:
+            _ensure_lowercase_normalizer(self)
 
 
 class Siglip2TextConfig(SiglipTextConfig):
@@ -607,4 +670,5 @@ __all__ = [
     "Siglip2TextModel",
     "Siglip2VisionModel",
     "Siglip2ForImageClassification",
+    "Siglip2Tokenizer",
 ]
