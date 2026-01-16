@@ -421,9 +421,6 @@ class LongT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     pipeline_model_mapping = (
         {
             "text-embedding": LongT5Model,
-            "summarization": LongT5ForConditionalGeneration,
-            "text2text-generation": LongT5ForConditionalGeneration,
-            "translation": LongT5ForConditionalGeneration,
         }
         if is_torch_available()
         else {}

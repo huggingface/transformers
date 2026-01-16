@@ -475,10 +475,7 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, 
     pipeline_model_mapping = (
         {
             "text-embedding": T5Model,
-            "summarization": T5ForConditionalGeneration,
             "text-classification": T5ForSequenceClassification,
-            "text2text-generation": T5ForConditionalGeneration,
-            "translation": T5ForConditionalGeneration,
             "zero-shot": T5ForSequenceClassification,
         }
         if is_torch_available()

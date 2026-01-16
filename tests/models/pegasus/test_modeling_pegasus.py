@@ -227,10 +227,7 @@ class PegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     pipeline_model_mapping = (
         {
             "text-embedding": PegasusModel,
-            "summarization": PegasusForConditionalGeneration,
             "text-generation": PegasusForCausalLM,
-            "text2text-generation": PegasusForConditionalGeneration,
-            "translation": PegasusForConditionalGeneration,
         }
         if is_torch_available()
         else {}
