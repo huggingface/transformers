@@ -249,8 +249,8 @@ def convert_moe_packed_tensors(
         blk = blocks[r0:r1]
         exp = scales[r0:r1]
 
-        idx_lo = blk & 0x0F
-        idx_hi = blk >> 4
+        idx_lo = (blk & 0x0F).to(torch.uint8)
+        idx_hi = (blk >> 4).to(torch.uint8)
 
         sub = out[r0:r1]
         sub[:, 0::2] = lut[idx_lo]
