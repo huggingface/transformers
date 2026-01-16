@@ -26,7 +26,13 @@ from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.generic import check_model_inputs
-from ..clip.modeling_clip import CLIPEncoder, CLIPEncoderLayer, CLIPVisionEmbeddings, CLIPVisionModel, CLIPVisionTransformer
+from ..clip.modeling_clip import (
+    CLIPEncoder,
+    CLIPEncoderLayer,
+    CLIPVisionEmbeddings,
+    CLIPVisionModel,
+    CLIPVisionTransformer,
+)
 from ..deepseek_v2.configuration_deepseek_v2 import DeepseekV2Config
 from ..deepseek_v2.modeling_deepseek_v2 import (
     DeepseekV2DecoderLayer,

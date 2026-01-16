@@ -313,6 +313,7 @@ VLMS = [
     "aria",
     "ayavision",
     "colpali",
+    "deepseek_ocr",
     "emu3",
     "fuyu",
     "gotocr2",
