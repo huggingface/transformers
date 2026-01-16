@@ -118,7 +118,7 @@ from .utils import (
     is_torch_xpu_available,
     logging,
 )
-from .utils.generic import _CAN_RECORD_REGISTRY, GeneralInterface, OutputRecorder
+from .utils.generic import _CAN_RECORD_REGISTRY, GeneralInterface, OutputRecorder, is_flash_attention_requested
 from .utils.hub import DownloadKwargs, create_and_tag_model_card, get_checkpoint_shard_files
 from .utils.import_utils import (
     is_huggingface_hub_greater_or_equal,
@@ -1830,7 +1830,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             )
 
             # preload flash attention here to allow compile with fullgraph
-            if "flash" in applicable_attn_implementation:
+            if is_flash_attention_requested(requested_attention_implementation=applicable_attn_implementation):
                 lazy_import_flash_attention(applicable_attn_implementation)
 
         return applicable_attn_implementation
