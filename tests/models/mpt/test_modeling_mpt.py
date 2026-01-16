@@ -355,7 +355,6 @@ class MptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     pipeline_model_mapping = (
         {
             "text-embedding": MptModel,
-            "question-answering": MptForQuestionAnswering,
             "text-classification": MptForSequenceClassification,
             "text-generation": MptForCausalLM,
             "token-classification": MptForTokenClassification,

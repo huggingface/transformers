@@ -475,7 +475,6 @@ class T5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, 
     pipeline_model_mapping = (
         {
             "text-embedding": T5Model,
-            "question-answering": T5ForQuestionAnswering,
             "summarization": T5ForConditionalGeneration,
             "text-classification": T5ForSequenceClassification,
             "text2text-generation": T5ForConditionalGeneration,
