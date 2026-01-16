@@ -50,6 +50,8 @@ SPECIAL_CASES_TO_ALLOW = {
     "GPTNeoConfig": ["attention_types"],
     "BlenderbotConfig": ["encoder_no_repeat_ngram_size"],
     "EsmConfig": ["is_folding_model"],
+    "DeepseekOcrCLIPConfig": True,
+    "DeepseekOcrCLIPTextConfig": True,
     "Mask2FormerConfig": ["ignore_value"],
     "OneFormerConfig": ["ignore_value", "norm"],
     "T5Config": ["feed_forward_proj"],
