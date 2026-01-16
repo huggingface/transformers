@@ -22,7 +22,7 @@ import numpy as np
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
-from ...tokenization_utils_base import AddedToken, TextInput
+from ...tokenization_utils_base import AddedToken, PreTrainedTokenizerBase, TextInput
 from ...utils import is_torch_available, is_vision_available
 from ..auto.tokenization_auto import AutoTokenizer
 from .image_processing_deepseek_ocr_fast import DeepseekOcrImageProcessorFast
@@ -59,6 +59,24 @@ DEEPSEEK_OCR_DEFAULT_CHAT_TEMPLATE = dedent(
     {%- endfor %}
     """
 ).strip()
+
+
+# Ensure DeepSeek OCR uses a default chat template even when loading a bare tokenizer (e.g., via AutoProcessor fallback).
+if not getattr(PreTrainedTokenizerBase, "_deepseek_ocr_chat_patch", False):
+    _orig_apply_chat_template = PreTrainedTokenizerBase.apply_chat_template
+
+    def _deepseek_ocr_apply_chat_template(self, conversation, chat_template=None, **kwargs):
+        template = chat_template
+        if template is None and getattr(self, "chat_template", None) is None:
+            model_type = getattr(getattr(self, "config", None), "model_type", None)
+            name_or_path = (getattr(self, "name_or_path", "") or "").lower()
+            if model_type == "deepseek_ocr" or "deepseek-ocr" in name_or_path:
+                template = DEEPSEEK_OCR_DEFAULT_CHAT_TEMPLATE
+                self.chat_template = template
+        return _orig_apply_chat_template(self, conversation, chat_template=template, **kwargs)
+
+    PreTrainedTokenizerBase.apply_chat_template = _deepseek_ocr_apply_chat_template
+    PreTrainedTokenizerBase._deepseek_ocr_chat_patch = True
 
 
 class DeepseekOcrProcessorKwargs(ProcessingKwargs, total=False):
