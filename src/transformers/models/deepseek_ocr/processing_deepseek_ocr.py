@@ -16,7 +16,6 @@ import json
 import math
 import re
 from textwrap import dedent
-from typing import Optional, Union
 
 import numpy as np
 
@@ -141,8 +140,8 @@ class DeepseekOcrProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        text: Union[TextInput, list[TextInput]],
-        images: Optional[ImageInput] = None,
+        text: TextInput | list[TextInput],
+        images: ImageInput | None = None,
         **kwargs: Unpack[ProcessingKwargs],
     ) -> BatchFeature:
         """

@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import math
-from typing import Optional, Union
 
 import torch
 from torchvision.transforms import InterpolationMode
@@ -200,17 +199,17 @@ class DeepseekOcrImageProcessorFast(BaseImageProcessorFast):
         images: list["torch.Tensor"],
         size: SizeDict,
         base_size: SizeDict,
-        interpolation: Optional[InterpolationMode],
+        interpolation: InterpolationMode | None,
         patch_size: int,
         patch_size_side: int,
         max_crops: int,
         do_rescale: bool,
-        rescale_factor: Optional[float],
+        rescale_factor: float | None,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
-        disable_grouping: Optional[bool] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        disable_grouping: bool | None = None,
+        return_tensors: str | TensorType | None = None,
         **kwargs,
     ):
         patch_image_size = patch_size_side

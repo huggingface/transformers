@@ -18,8 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional
-
 from ...configuration_utils import PreTrainedConfig
 
 
@@ -258,34 +256,34 @@ class DeepseekOcrTextConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 32000,
-        hidden_size: Optional[int] = 4096,
-        intermediate_size: Optional[int] = 11008,
-        num_hidden_layers: Optional[int] = 32,
-        num_attention_heads: Optional[int] = 32,
-        num_key_value_heads: Optional[int] = None,
-        hidden_act: Optional[str] = "silu",
-        max_position_embeddings: Optional[int] = 2048,
-        initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[int] = 1e-6,
-        use_cache: Optional[bool] = True,
-        pad_token_id: Optional[int] = None,
-        bos_token_id: Optional[int] = 1,
-        eos_token_id: Optional[int] = 2,
-        tie_word_embeddings: Optional[bool] = False,
-        attention_bias: Optional[bool] = False,
-        attention_dropout: Optional[float] = 0.0,
-        mlp_bias: Optional[bool] = False,
-        first_k_dense_replace: Optional[int] = 0,
-        n_group: Optional[int] = None,
-        n_routed_experts: Optional[int] = 64,
-        n_shared_experts: Optional[int] = 2,
-        routed_scaling_factor: Optional[float] = 1.0,
-        topk_group: Optional[int] = None,
-        topk_method: Optional[str] = "greedy",
-        norm_topk_prob: Optional[bool] = False,
-        num_experts_per_tok: Optional[int] = None,
-        moe_intermediate_size: Optional[int] = 1407,
+        vocab_size: int | None = 32000,
+        hidden_size: int | None = 4096,
+        intermediate_size: int | None = 11008,
+        num_hidden_layers: int | None = 32,
+        num_attention_heads: int | None = 32,
+        num_key_value_heads: int | None = None,
+        hidden_act: str | None = "silu",
+        max_position_embeddings: int | None = 2048,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: int | None = 1e-6,
+        use_cache: bool | None = True,
+        pad_token_id: int | None = None,
+        bos_token_id: int | None = 1,
+        eos_token_id: int | None = 2,
+        tie_word_embeddings: bool | None = False,
+        attention_bias: bool | None = False,
+        attention_dropout: float | None = 0.0,
+        mlp_bias: bool | None = False,
+        first_k_dense_replace: int | None = 0,
+        n_group: int | None = None,
+        n_routed_experts: int | None = 64,
+        n_shared_experts: int | None = 2,
+        routed_scaling_factor: float | None = 1.0,
+        topk_group: int | None = None,
+        topk_method: str | None = "greedy",
+        norm_topk_prob: bool | None = False,
+        num_experts_per_tok: int | None = None,
+        moe_intermediate_size: int | None = 1407,
         **kwargs,
     ):
         rope_theta = kwargs.get("rope_theta", 10_000.0)
@@ -321,13 +319,11 @@ class DeepseekOcrTextConfig(PreTrainedConfig):
         self.mlp_bias = mlp_bias
         self.rope_parameters = getattr(self, "rope_parameters", None) or {}
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        super().__init__(**kwargs)
         self.rope_theta = getattr(self, "rope_theta", rope_theta)
         self.standardize_rope_params()
         self.validate_rope()
@@ -440,7 +436,20 @@ class DeepseekOcrConfig(PreTrainedConfig):
         self.vocab_size = self.text_config.vocab_size
         self.ignore_index = kwargs.pop("ignore_index", -100)
 
-        super().__init__(**kwargs)
+        pad_token_id = kwargs.pop("pad_token_id", getattr(self.text_config, "pad_token_id", None))
+        if pad_token_id is None:
+            pad_token_id = getattr(self.text_config, "bos_token_id", None)
+        bos_token_id = kwargs.pop("bos_token_id", getattr(self.text_config, "bos_token_id", None))
+        eos_token_id = kwargs.pop("eos_token_id", getattr(self.text_config, "eos_token_id", None))
+        if getattr(self.text_config, "pad_token_id", None) is None:
+            self.text_config.pad_token_id = pad_token_id
+
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            **kwargs,
+        )
         self.original_model_type = original_model_type
         self.model_type = "deepseek_ocr"
 

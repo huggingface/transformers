@@ -13,7 +13,6 @@
 # limitations under the License.
 
 import math
-from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -302,34 +301,34 @@ class DeepseekOcrTextConfig(DeepseekV2Config):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 32000,
-        hidden_size: Optional[int] = 4096,
-        intermediate_size: Optional[int] = 11008,
-        num_hidden_layers: Optional[int] = 32,
-        num_attention_heads: Optional[int] = 32,
-        num_key_value_heads: Optional[int] = None,
-        hidden_act: Optional[str] = "silu",
-        max_position_embeddings: Optional[int] = 2048,
-        initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[int] = 1e-6,
-        use_cache: Optional[bool] = True,
-        pad_token_id: Optional[int] = None,
-        bos_token_id: Optional[int] = 1,
-        eos_token_id: Optional[int] = 2,
-        tie_word_embeddings: Optional[bool] = False,
-        attention_bias: Optional[bool] = False,
-        attention_dropout: Optional[float] = 0.0,
-        mlp_bias: Optional[bool] = False,
-        first_k_dense_replace: Optional[int] = 0,
-        n_group: Optional[int] = None,
-        n_routed_experts: Optional[int] = 64,
-        n_shared_experts: Optional[int] = 2,
-        routed_scaling_factor: Optional[float] = 1.0,
-        topk_group: Optional[int] = None,
-        topk_method: Optional[str] = "greedy",
-        norm_topk_prob: Optional[bool] = False,
-        num_experts_per_tok: Optional[int] = None,
-        moe_intermediate_size: Optional[int] = 1407,
+        vocab_size: int | None = 32000,
+        hidden_size: int | None = 4096,
+        intermediate_size: int | None = 11008,
+        num_hidden_layers: int | None = 32,
+        num_attention_heads: int | None = 32,
+        num_key_value_heads: int | None = None,
+        hidden_act: str | None = "silu",
+        max_position_embeddings: int | None = 2048,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: int | None = 1e-6,
+        use_cache: bool | None = True,
+        pad_token_id: int | None = None,
+        bos_token_id: int | None = 1,
+        eos_token_id: int | None = 2,
+        tie_word_embeddings: bool | None = False,
+        attention_bias: bool | None = False,
+        attention_dropout: float | None = 0.0,
+        mlp_bias: bool | None = False,
+        first_k_dense_replace: int | None = 0,
+        n_group: int | None = None,
+        n_routed_experts: int | None = 64,
+        n_shared_experts: int | None = 2,
+        routed_scaling_factor: float | None = 1.0,
+        topk_group: int | None = None,
+        topk_method: str | None = "greedy",
+        norm_topk_prob: bool | None = False,
+        num_experts_per_tok: int | None = None,
+        moe_intermediate_size: int | None = 1407,
         **kwargs,
     ):
         rope_theta = kwargs.get("rope_theta", 10_000.0)
@@ -458,7 +457,20 @@ class DeepseekOcrConfig(PreTrainedConfig):
         self.vocab_size = self.text_config.vocab_size
         self.ignore_index = kwargs.pop("ignore_index", -100)
 
-        super().__init__(**kwargs)
+        pad_token_id = kwargs.pop("pad_token_id", getattr(self.text_config, "pad_token_id", None))
+        if pad_token_id is None:
+            pad_token_id = getattr(self.text_config, "bos_token_id", None)
+        bos_token_id = kwargs.pop("bos_token_id", getattr(self.text_config, "bos_token_id", None))
+        eos_token_id = kwargs.pop("eos_token_id", getattr(self.text_config, "eos_token_id", None))
+        if getattr(self.text_config, "pad_token_id", None) is None:
+            self.text_config.pad_token_id = pad_token_id
+
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            **kwargs,
+        )
         self.original_model_type = original_model_type
         self.model_type = "deepseek_ocr"
 
@@ -590,8 +602,8 @@ class DeepseekOcrEncoderLayer(CLIPEncoderLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        causal_attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
+        causal_attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         return super().forward(
@@ -610,9 +622,9 @@ class DeepseekOcrCLIPEncoder(CLIPEncoder):
     def forward(
         self,
         inputs_embeds,
-        attention_mask: Optional[torch.Tensor] = None,
-        causal_attention_mask: Optional[torch.Tensor] = None,
-        output_hidden_states: Optional[bool] = False,  # TODO get rid of this when we're done with the fwd pass
+        attention_mask: torch.Tensor | None = None,
+        causal_attention_mask: torch.Tensor | None = None,
+        output_hidden_states: bool | None = False,  # TODO get rid of this when we're done with the fwd pass
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         hidden_states = inputs_embeds
@@ -652,8 +664,8 @@ class DeepseekOcrCLIPVisionTransformer(CLIPVisionTransformer):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        interpolate_pos_encoding: Optional[bool] = False,
+        pixel_values: torch.FloatTensor | None = None,
+        interpolate_pos_encoding: bool | None = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         if pixel_values is None:
@@ -700,7 +712,7 @@ class DeepseekOcrCLIPVisionModel(CLIPVisionModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_values: torch.FloatTensor | None = None,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
@@ -1101,10 +1113,10 @@ class DeepseekOcrModel(LlavaNextModel):
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
-        pixel_values_local: Optional[torch.FloatTensor] = None,
-        num_local_crops: Optional[torch.LongTensor] = None,
-        image_sizes: Optional[torch.Tensor] = None,
-        image_spatial_crops: Optional[torch.Tensor] = None,
+        pixel_values_local: torch.FloatTensor | None = None,
+        num_local_crops: torch.LongTensor | None = None,
+        image_sizes: torch.Tensor | None = None,
+        image_spatial_crops: torch.Tensor | None = None,
     ):
         """Wrapper for the two image feature stacks used in deepseek OCR."""
         image_feature_groups: list[list[torch.Tensor]] = []
@@ -1145,17 +1157,17 @@ class DeepseekOcrModel(LlavaNextModel):
 
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        pixel_values_local: Optional[torch.FloatTensor] = None,
-        image_sizes: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        num_local_crops: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        pixel_values_local: torch.FloatTensor | None = None,
+        image_sizes: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: list[torch.FloatTensor] | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        num_local_crops: torch.LongTensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Union[tuple, BaseModelOutputWithPast]:
+    ) -> tuple | BaseModelOutputWithPast:
         """
         Args:
             pixel_values (`torch.FloatTensor` of shape `(batch_size, 1, num_channels, height, width)`):
@@ -1235,20 +1247,20 @@ class DeepseekOcrForConditionalGeneration(LlavaNextForConditionalGeneration):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        pixel_values_local: Optional[torch.FloatTensor] = None,
-        image_sizes: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        num_local_crops: Optional[torch.LongTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        pixel_values_local: torch.FloatTensor | None = None,
+        image_sizes: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: list[torch.FloatTensor] | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        num_local_crops: torch.LongTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        cache_position: torch.LongTensor | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, DeepseekOcrCausalLMOutputWithPast]:
+    ) -> tuple | DeepseekOcrCausalLMOutputWithPast:
         """
         Args:
             pixel_values (`torch.FloatTensor` of shape `(batch_size, 1, num_channels, height, width)`):

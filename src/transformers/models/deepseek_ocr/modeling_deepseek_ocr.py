@@ -22,7 +22,7 @@ import collections
 import math
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Optional, Union
+from typing import Optional
 
 import torch
 import torch.nn.functional as F
@@ -312,7 +312,7 @@ class DeepseekOcrModelOutputWithPast(BaseModelOutputWithPast):
         image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
-    image_hidden_states: Optional[torch.FloatTensor] = None
+    image_hidden_states: torch.FloatTensor | None = None
 
 
 @dataclass
@@ -337,12 +337,12 @@ class DeepseekOcrCausalLMOutputWithPast(ModelOutput):
         image_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    logits: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[Cache] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
-    image_hidden_states: Optional[torch.FloatTensor] = None
+    loss: torch.FloatTensor | None = None
+    logits: torch.FloatTensor | None = None
+    past_key_values: Cache | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
+    image_hidden_states: torch.FloatTensor | None = None
 
 
 @dataclass
@@ -358,10 +358,10 @@ class DeepseekOcrVisionEncoderOutput(ModelOutput):
         The image embeddings obtained by applying the projection layer to the pooler_output.
     """
 
-    image_embeds: Optional[torch.FloatTensor] = None
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    image_embeds: torch.FloatTensor | None = None
+    last_hidden_state: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 class DeepseekOcrMLPBlock(nn.Module):
@@ -722,7 +722,7 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
+    attention_mask: torch.Tensor | None,
     scaling: float,
     dropout: float = 0.0,
     **kwargs: Unpack[TransformersKwargs],
@@ -741,7 +741,7 @@ def eager_attention_forward(
 class DeepseekOcrCLIPAttention(nn.Module):
     """Multi-headed attention from 'Attention Is All You Need' paper"""
 
-    def __init__(self, config: Union[DeepseekOcrCLIPVisionConfig, DeepseekOcrCLIPTextConfig]):
+    def __init__(self, config: DeepseekOcrCLIPVisionConfig | DeepseekOcrCLIPTextConfig):
         super().__init__()
         self.config = config
         self.embed_dim = config.hidden_size
@@ -764,9 +764,9 @@ class DeepseekOcrCLIPAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         """Input shape: Batch x Time x Channel"""
 
         batch_size, seq_length, embed_dim = hidden_states.shape
@@ -827,8 +827,8 @@ class DeepseekOcrEncoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        causal_attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
+        causal_attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
@@ -867,9 +867,9 @@ class DeepseekOcrCLIPEncoder(nn.Module):
     def forward(
         self,
         inputs_embeds,
-        attention_mask: Optional[torch.Tensor] = None,
-        causal_attention_mask: Optional[torch.Tensor] = None,
-        output_hidden_states: Optional[bool] = False,  # TODO get rid of this when we're done with the fwd pass
+        attention_mask: torch.Tensor | None = None,
+        causal_attention_mask: torch.Tensor | None = None,
+        output_hidden_states: bool | None = False,  # TODO get rid of this when we're done with the fwd pass
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         r"""
@@ -923,8 +923,8 @@ class DeepseekOcrCLIPVisionTransformer(nn.Module):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        interpolate_pos_encoding: Optional[bool] = False,
+        pixel_values: torch.FloatTensor | None = None,
+        interpolate_pos_encoding: bool | None = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         if pixel_values is None:
@@ -981,15 +981,11 @@ class DeepseekOcrCLIPVisionModel(DeepseekOcrCLIPPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_values: torch.FloatTensor | None = None,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPooling:
         r"""
-        Args:
-            patch_embeds (`torch.FloatTensor`, *optional*):
-                Precomputed patch embeddings derived from the SAM vision encoder. When provided, the transformer will
-                reuse them instead of recomputing embeddings from `pixel_values`.
 
         Example:
 
@@ -1151,7 +1147,7 @@ def rotate_half(x):
 
 
 @use_kernel_func_from_hub("rotary_pos_emb")
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
     Args:
@@ -1159,8 +1155,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
         k (`torch.Tensor`): The key tensor.
         cos (`torch.Tensor`): The cosine part of the rotary embedding.
         sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`, *optional*):
-            Deprecated and unused.
         unsqueeze_dim (`int`, *optional*, defaults to 1):
             The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
             sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
@@ -1220,10 +1214,10 @@ class DeepseekOcrTextAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Cache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        attention_mask: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -1276,12 +1270,12 @@ class DeepseekOcrTextDecoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        use_cache: Optional[bool] = False,
-        cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        use_cache: bool | None = False,
+        cache_position: torch.LongTensor | None = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
@@ -1328,9 +1322,9 @@ class DeepseekOcrTextRotaryEmbedding(nn.Module):
 
     @staticmethod
     def compute_default_rope_parameters(
-        config: Optional[DeepseekOcrTextConfig] = None,
+        config: DeepseekOcrTextConfig | None = None,
         device: Optional["torch.device"] = None,
-        seq_len: Optional[int] = None,
+        seq_len: int | None = None,
     ) -> tuple["torch.Tensor", float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
@@ -1450,13 +1444,13 @@ class DeepseekOcrTextModel(DeepseekOcrTextPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        cache_position: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -1528,12 +1522,12 @@ class DeepseekOcrModel(DeepseekOcrPreTrainedModel):
 
         self.vocab_size = config.text_config.vocab_size
         self.language_model = DeepseekOcrTextModel._from_config(config.text_config)
-        self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
 
         self.sam_model = DeepseekOcrSamVisionEncoder._from_config(config.vision_config.sam_config)
         self.clip_model = DeepseekOcrCLIPVisionModel._from_config(config.vision_config.clip_config)
 
         self.multi_modal_projector = DeepseekOcrProjector._from_config(config.projector_config)
+        self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self.view_seperator = nn.Parameter(
             torch.randn(config.hidden_size) * embed_std
         )  # TODO the typo is in the checkpoint
@@ -1660,10 +1654,10 @@ class DeepseekOcrModel(DeepseekOcrPreTrainedModel):
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
-        pixel_values_local: Optional[torch.FloatTensor] = None,
-        num_local_crops: Optional[torch.LongTensor] = None,
-        image_sizes: Optional[torch.Tensor] = None,
-        image_spatial_crops: Optional[torch.Tensor] = None,
+        pixel_values_local: torch.FloatTensor | None = None,
+        num_local_crops: torch.LongTensor | None = None,
+        image_sizes: torch.Tensor | None = None,
+        image_spatial_crops: torch.Tensor | None = None,
     ):
         """Wrapper for the two image feature stacks used in deepseek OCR."""
         image_feature_groups: list[list[torch.Tensor]] = []
@@ -1729,26 +1723,25 @@ class DeepseekOcrModel(DeepseekOcrPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        pixel_values_local: Optional[torch.FloatTensor] = None,
-        image_sizes: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        num_local_crops: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        pixel_values_local: torch.FloatTensor | None = None,
+        image_sizes: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: list[torch.FloatTensor] | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        num_local_crops: torch.LongTensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Union[tuple, BaseModelOutputWithPast]:
-        """
-        Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, 1, num_channels, height, width)`):
-                Global view (1024x1024) consumed by SAM + CLIP. This is injected wherever `<image>` placeholders appear.
-            pixel_values_local (`torch.FloatTensor` of shape `(batch_size, max_num_crops, num_channels, crop_height, crop_width)`):
-                Optional high-resolution (640x640) crops. When provided, they are stitched into the packed feature grid
-                ahead of the global features.
-            num_local_crops (`torch.LongTensor` of shape `(batch_size,)`):
-                Number of valid local crops for each image in the batch.
+    ) -> tuple | BaseModelOutputWithPast:
+        r"""
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, 1, num_channels, height, width)`):
+            Global view (1024x1024) consumed by SAM + CLIP. This is injected wherever `<image>` placeholders appear.
+        pixel_values_local (`torch.FloatTensor` of shape `(batch_size, max_num_crops, num_channels, crop_height, crop_width)`):
+            Optional high-resolution (640x640) crops. When provided, they are stitched into the packed feature grid
+            ahead of the global features.
+        num_local_crops (`torch.LongTensor` of shape `(batch_size,)`):
+            Number of valid local crops for each image in the batch.
         """
         image_spatial_crop = kwargs.pop("image_spatial_crop", None)
         pixel_values_local = kwargs.pop("pixel_values_local", pixel_values_local)
@@ -1859,8 +1852,8 @@ class DeepseekOcrForConditionalGeneration(DeepseekOcrPreTrainedModel, Generation
         self,
         pixel_values: torch.FloatTensor,
         image_sizes: torch.Tensor,
-        vision_feature_layer: Optional[Union[int, list[int]]] = None,
-        vision_feature_select_strategy: Optional[str] = None,
+        vision_feature_layer: int | list[int] | None = None,
+        vision_feature_select_strategy: str | None = None,
     ):
         return self.model.get_image_features(
             pixel_values=pixel_values,
@@ -1873,28 +1866,27 @@ class DeepseekOcrForConditionalGeneration(DeepseekOcrPreTrainedModel, Generation
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        pixel_values_local: Optional[torch.FloatTensor] = None,
-        image_sizes: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[list[torch.FloatTensor]] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        num_local_crops: Optional[torch.LongTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        pixel_values_local: torch.FloatTensor | None = None,
+        image_sizes: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: list[torch.FloatTensor] | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        num_local_crops: torch.LongTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        cache_position: torch.LongTensor | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, DeepseekOcrCausalLMOutputWithPast]:
-        """
-        Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, 1, num_channels, height, width)`):
-                Global view of images downsampled to 1024x1024 for processing by both SAM and CLIP encoders.
-            pixel_values_local (`torch.FloatTensor` of shape `(batch_size, max_num_crops, num_channels, crop_height, crop_width)`):
-                High-resolution local crops (640x640) extracted from images for detailed OCR processing.
-            num_local_crops (`torch.LongTensor` of shape `(batch_size,)`):
-                Number of valid local crops for each image in the batch.
+    ) -> tuple | DeepseekOcrCausalLMOutputWithPast:
+        r"""
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, 1, num_channels, height, width)`):
+            Global view of images downsampled to 1024x1024 for processing by both SAM and CLIP encoders.
+        pixel_values_local (`torch.FloatTensor` of shape `(batch_size, max_num_crops, num_channels, crop_height, crop_width)`):
+            High-resolution local crops (640x640) extracted from images for detailed OCR processing.
+        num_local_crops (`torch.LongTensor` of shape `(batch_size,)`):
+            Number of valid local crops for each image in the batch.
         """
         image_spatial_crop = kwargs.pop("image_spatial_crop", None)
         if image_sizes is None and image_spatial_crop is not None:
