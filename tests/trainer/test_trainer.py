@@ -1926,7 +1926,6 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         train_loader = trainer.get_train_dataloader()
         self.assertIsInstance(train_loader.sampler, torch.utils.data.SequentialSampler)
 
-
     @require_liger_kernel
     def test_use_liger_kernel_patching(self):
         # Ensure any monkey patching is cleaned up for subsequent tests
