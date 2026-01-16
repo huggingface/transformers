@@ -80,8 +80,12 @@
       title: Experts backends
     - local: continuous_batching
       title: Continuous batching
-    - local: kernel_doc/overview
-      title: Kernels in transformers
+    - sections:
+      - local: kernel_doc/overview
+        title: Kernels
+      - local: kernel_doc/loading_kernels
+        title: Loading kernels
+      title: Kernels
     - local: perf_torch_compile
       title: torch.compile
     - local: perf_infer_gpu_multi
