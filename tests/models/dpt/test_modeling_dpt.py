@@ -163,7 +163,7 @@ class DPTModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     pipeline_model_mapping = (
         {
             "depth-estimation": DPTForDepthEstimation,
-            "image-feature-extraction": DPTModel,
+            "image-embedding": DPTModel,
             "image-segmentation": DPTForSemanticSegmentation,
         }
         if is_torch_available()

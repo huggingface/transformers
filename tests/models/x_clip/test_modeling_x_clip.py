@@ -506,7 +506,7 @@ class XCLIPModelTester:
 @require_torch
 class XCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (XCLIPModel,) if is_torch_available() else ()
-    pipeline_model_mapping = {"feature-extraction": XCLIPModel} if is_torch_available() else {}
+    pipeline_model_mapping = {"text-embedding": XCLIPModel} if is_torch_available() else {}
 
     test_resize_embeddings = False
     test_attention_outputs = False

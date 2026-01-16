@@ -247,7 +247,7 @@ class KyutaiSpeechToTextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipel
     )
     pipeline_model_mapping = (
         {
-            "feature-extraction": KyutaiSpeechToTextModel,
+            "text-embedding": KyutaiSpeechToTextModel,
             "automatic-speech-recognition": KyutaiSpeechToTextForConditionalGeneration,
             "any-to-any": KyutaiSpeechToTextForConditionalGeneration,
         }

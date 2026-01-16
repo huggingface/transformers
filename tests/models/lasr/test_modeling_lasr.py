@@ -238,7 +238,7 @@ class LasrForCTCModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (LasrForCTC,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "feature-extraction": LasrEncoder,
+            "text-embedding": LasrEncoder,
             "automatic-speech-recognition": LasrForCTC,
         }
         if is_torch_available()

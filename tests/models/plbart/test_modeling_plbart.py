@@ -213,7 +213,7 @@ class PLBartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     )
     pipeline_model_mapping = (
         {
-            "feature-extraction": PLBartModel,
+            "text-embedding": PLBartModel,
             "summarization": PLBartForConditionalGeneration,
             "text-classification": PLBartForSequenceClassification,
             "text-generation": PLBartForCausalLM,

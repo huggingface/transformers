@@ -300,7 +300,7 @@ class WavLMModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         {
             "audio-classification": WavLMForSequenceClassification,
             "automatic-speech-recognition": WavLMForCTC,
-            "feature-extraction": WavLMModel,
+            "text-embedding": WavLMModel,
         }
         if is_torch_available()
         else {}

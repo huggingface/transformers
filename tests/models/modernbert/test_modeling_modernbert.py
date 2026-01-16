@@ -251,7 +251,7 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     )
     pipeline_model_mapping = (
         {
-            "feature-extraction": ModernBertModel,
+            "text-embedding": ModernBertModel,
             "fill-mask": ModernBertForMaskedLM,
             "text-classification": ModernBertForSequenceClassification,
             "token-classification": ModernBertForTokenClassification,

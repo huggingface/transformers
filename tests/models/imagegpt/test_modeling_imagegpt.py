@@ -223,7 +223,7 @@ class ImageGPTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         (ImageGPTForCausalImageModeling, ImageGPTForImageClassification, ImageGPTModel) if is_torch_available() else ()
     )
     pipeline_model_mapping = (
-        {"image-feature-extraction": ImageGPTModel, "image-classification": ImageGPTForImageClassification}
+        {"image-embedding": ImageGPTModel, "image-classification": ImageGPTForImageClassification}
         if is_torch_available()
         else {}
     )

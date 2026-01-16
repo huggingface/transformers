@@ -232,7 +232,7 @@ class UMT5ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     )
     pipeline_model_mapping = (
         {
-            "feature-extraction": UMT5Model,
+            "text-embedding": UMT5Model,
             "question-answering": UMT5ForQuestionAnswering,
             "summarization": UMT5ForConditionalGeneration,
             "text-classification": UMT5ForSequenceClassification,

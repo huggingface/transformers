@@ -583,7 +583,7 @@ class T5GemmaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     )
     pipeline_model_mapping = (
         {
-            "feature-extraction": T5GemmaModel,
+            "text-embedding": T5GemmaModel,
             "summarization": T5GemmaForConditionalGeneration,
             "text-classification": T5GemmaForSequenceClassification,
             "text2text-generation": T5GemmaForConditionalGeneration,

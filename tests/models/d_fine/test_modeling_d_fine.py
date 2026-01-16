@@ -286,7 +286,7 @@ class DFineModelTester:
 class DFineModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (DFineModel, DFineForObjectDetection) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"image-feature-extraction": DFineModel, "object-detection": DFineForObjectDetection}
+        {"image-embedding": DFineModel, "object-detection": DFineForObjectDetection}
         if is_torch_available()
         else {}
     )

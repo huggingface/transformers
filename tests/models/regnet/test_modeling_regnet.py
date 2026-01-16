@@ -123,7 +123,7 @@ class RegNetModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     all_model_classes = (RegNetModel, RegNetForImageClassification) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"image-feature-extraction": RegNetModel, "image-classification": RegNetForImageClassification}
+        {"image-embedding": RegNetModel, "image-classification": RegNetForImageClassification}
         if is_torch_available()
         else {}
     )

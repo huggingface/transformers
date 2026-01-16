@@ -159,7 +159,7 @@ class GPT2ModelTest(CausalLMModelTest, unittest.TestCase):
     # We need to set `pipeline_model_mapping` because we overwrite `all_model_classes`
     pipeline_model_mapping = (
         {
-            "feature-extraction": GPT2Model,
+            "text-embedding": GPT2Model,
             "question-answering": GPT2ForQuestionAnswering,
             "text-classification": GPT2ForSequenceClassification,
             "text-generation": GPT2LMHeadModel,

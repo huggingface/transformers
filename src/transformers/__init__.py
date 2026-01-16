@@ -140,10 +140,10 @@ _import_structure = {
         "CsvPipelineDataFormat",
         "DepthEstimationPipeline",
         "DocumentQuestionAnsweringPipeline",
-        "FeatureExtractionPipeline",
+        "TextEmbeddingPipeline",
         "FillMaskPipeline",
         "ImageClassificationPipeline",
-        "ImageFeatureExtractionPipeline",
+        "ImageEmbeddingPipeline",
         "ImageSegmentationPipeline",
         "ImageTextToTextPipeline",
         "ImageToImagePipeline",
@@ -648,10 +648,10 @@ if TYPE_CHECKING:
     from .pipelines import CsvPipelineDataFormat as CsvPipelineDataFormat
     from .pipelines import DepthEstimationPipeline as DepthEstimationPipeline
     from .pipelines import DocumentQuestionAnsweringPipeline as DocumentQuestionAnsweringPipeline
-    from .pipelines import FeatureExtractionPipeline as FeatureExtractionPipeline
+    from .pipelines import TextEmbeddingPipeline as FeatureExtractionPipeline
     from .pipelines import FillMaskPipeline as FillMaskPipeline
     from .pipelines import ImageClassificationPipeline as ImageClassificationPipeline
-    from .pipelines import ImageFeatureExtractionPipeline as ImageFeatureExtractionPipeline
+    from .pipelines import ImageEmbeddingPipeline as ImageFeatureExtractionPipeline
     from .pipelines import ImageSegmentationPipeline as ImageSegmentationPipeline
     from .pipelines import ImageTextToTextPipeline as ImageTextToTextPipeline
     from .pipelines import ImageToImagePipeline as ImageToImagePipeline
