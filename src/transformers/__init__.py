@@ -650,7 +650,7 @@ if TYPE_CHECKING:
     from .pipelines import DocumentQuestionAnsweringPipeline as DocumentQuestionAnsweringPipeline
     from .pipelines import FillMaskPipeline as FillMaskPipeline
     from .pipelines import ImageClassificationPipeline as ImageClassificationPipeline
-    from .pipelines import ImageEmbeddingPipeline as ImageFeatureExtractionPipeline
+    from .pipelines import ImageEmbeddingPipeline as ImageEmbeddingPipeline
     from .pipelines import ImageSegmentationPipeline as ImageSegmentationPipeline
     from .pipelines import ImageTextToTextPipeline as ImageTextToTextPipeline
     from .pipelines import ImageToImagePipeline as ImageToImagePipeline
@@ -665,7 +665,7 @@ if TYPE_CHECKING:
     from .pipelines import QuestionAnsweringPipeline as QuestionAnsweringPipeline
     from .pipelines import TableQuestionAnsweringPipeline as TableQuestionAnsweringPipeline
     from .pipelines import TextClassificationPipeline as TextClassificationPipeline
-    from .pipelines import TextEmbeddingPipeline as FeatureExtractionPipeline
+    from .pipelines import TextEmbeddingPipeline as TextEmbeddingPipeline
     from .pipelines import TextGenerationPipeline as TextGenerationPipeline
     from .pipelines import TextToAudioPipeline as TextToAudioPipeline
     from .pipelines import TokenClassificationPipeline as TokenClassificationPipeline
