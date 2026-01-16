@@ -871,6 +871,7 @@ MODEL_FOR_UNIVERSAL_SEGMENTATION_MAPPING_NAMES = OrderedDict(
         # Model for Universal Segmentation mapping
         ("detr", "DetrForSegmentation"),
         ("eomt", "EomtForUniversalSegmentation"),
+        ("eomt_dinov3", "EomtDinov3ForUniversalSegmentation"),
         ("mask2former", "Mask2FormerForUniversalSegmentation"),
         ("maskformer", "MaskFormerForInstanceSegmentation"),
         ("oneformer", "OneFormerForUniversalSegmentation"),
