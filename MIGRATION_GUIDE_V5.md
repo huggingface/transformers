@@ -578,7 +578,7 @@ Linked PRs:
 
 ## Pipelines
 
-`Text2TextPipeline`, as well as the related `SummarizationPipeline` and `TranslationPipeline`, were deprecated and will now be removed.
+`Text2TextGenerationPipeline`, as well as the related `SummarizationPipeline` and `TranslationPipeline`, were deprecated and will now be removed.
 `pipeline` classes are intended as a high-level beginner-friendly API, but for almost all text-to-text tasks a modern chat model 
 and `TextGenerationPipeline` will provide much higher quality output. As a result, we felt it was misleading for beginners to offer the older pipelines.
 
