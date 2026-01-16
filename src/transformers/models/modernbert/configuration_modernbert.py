@@ -258,5 +258,10 @@ class ModernBertConfig(PreTrainedConfig):
         """Half-window size: `local_attention` is the total window, so we divide by 2."""
         return self.local_attention // 2
 
+    @sliding_window.setter
+    def sliding_window(self, value):
+        """Set sliding_window by updating local_attention to 2 * value."""
+        self.local_attention = value * 2
+
 
 __all__ = ["ModernBertConfig"]
