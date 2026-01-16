@@ -254,11 +254,11 @@ def grouped_mm_experts_forward(
     # Compute offsets for grouped_mm
     # using histc instead of bincount to avoid cuda graph issues
     num_tokens_per_expert = torch.histc(expert_ids_g.float(), bins=num_experts, min=0, max=num_experts - 1)
-    offs = torch.cumsum(num_tokens_per_expert, dim=0, dtype=torch.int32)
+    offsets = torch.cumsum(num_tokens_per_expert, dim=0, dtype=torch.int32)
 
     # --- Up projection per expert (grouped) ---
     gate_up_out = _grouped_linear(
-        selected_hidden_states_g, selected_gate_up, selected_gate_up_bias, offs, is_transposed=self.is_transposed
+        selected_hidden_states_g, selected_gate_up, selected_gate_up_bias, offsets, is_transposed=self.is_transposed
     )  # (S, 2 * intermediate_dim)
 
     # Apply gating
@@ -266,7 +266,7 @@ def grouped_mm_experts_forward(
 
     # --- Down projection per expert (grouped) ---
     out_per_sample_g = _grouped_linear(
-        gated_out, selected_down, selected_down_bias, offs, is_transposed=self.is_transposed
+        gated_out, selected_down, selected_down_bias, offsets, is_transposed=self.is_transposed
     )  # (S, hidden_dim)
 
     # Apply routing weights
