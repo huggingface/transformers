@@ -13,8 +13,8 @@
 import argparse
 import json
 import os
+import re
 
-import regex as re
 import torch
 from mistral_common.tokens.tokenizers.mistral import MistralTokenizer
 from safetensors.torch import load_file as safe_load_file

@@ -20,8 +20,8 @@ Convert SAM3 checkpoints from the original implementation to HuggingFace format.
 import argparse
 import gc
 import os
+import re
 
-import regex as re
 import torch
 
 from transformers import CLIPTokenizerFast

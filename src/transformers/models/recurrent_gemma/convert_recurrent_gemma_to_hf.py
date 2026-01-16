@@ -29,7 +29,7 @@ except ImportError as e:
     )
     GemmaTokenizerFast = None
 
-import regex as re
+import re
 
 
 """
