@@ -775,7 +775,7 @@ class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
         eoi_token_index: int = 256_000,
     ):
         super().__init__(config)
-        self.padding_idx = config.pad_token_id
+        self.padding_idx = config.text_config.pad_token_id
         self.vocab_size = config.text_config.vocab_size
 
         vision_config = config.vision_config

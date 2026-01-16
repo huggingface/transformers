@@ -202,8 +202,6 @@ class GlmImageTextConfig(Glm4vTextConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether the model's input and output word embeddings should be tied.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         rope_parameters (`RopeParameters`, *optional*):
@@ -234,15 +232,12 @@ class GlmImageTextConfig(Glm4vTextConfig):
         vocab_size: int | None = 168064,
         vision_vocab_size: int | None = 16512,
         attention_bias: bool | None = True,
-        tie_word_embeddings: bool | None = False,
         **super_kwargs,
     ):
         self.vocab_size = vocab_size
         self.vision_vocab_size = vision_vocab_size
         self.attention_bias = attention_bias
-        super().__init__(
-            tie_word_embeddings=tie_word_embeddings, ignore_keys_at_rope_validation={"mrope_section"}, **super_kwargs
-        )
+        super().__init__(ignore_keys_at_rope_validation={"mrope_section"}, **super_kwargs)
 
 
 class GlmImageConfig(PreTrainedConfig):
@@ -268,6 +263,8 @@ class GlmImageConfig(PreTrainedConfig):
             The image start token index to encode the start of image.
         image_end_token_id (`int`, *optional*, defaults to 16385):
             The image end token index to encode the end of image.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether the model's input and output word embeddings should be tied.
 
     ```python
     >>> from transformers import Glm4vForConditionalGeneration, Glm4vConfig
@@ -298,6 +295,7 @@ class GlmImageConfig(PreTrainedConfig):
         image_token_id=167855,
         image_start_token_id=16384,
         image_end_token_id=16385,
+        tie_word_embeddings: bool | None = False,
         **kwargs,
     ):
         if isinstance(vision_config, dict):
@@ -321,6 +319,7 @@ class GlmImageConfig(PreTrainedConfig):
         self.text_config = text_config
         self.vision_config = vision_config
         self.vq_config = vq_config
+        self.tie_word_embeddings = tie_word_embeddings
         super().__init__(**kwargs)
 
 
