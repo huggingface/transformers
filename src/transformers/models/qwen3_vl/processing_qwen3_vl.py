@@ -124,16 +124,23 @@ class Qwen3VLProcessor(ProcessorMixin):
             text = [text]
 
         text = text.copy()  # below lines change text in-place
+
+        # Optimization strategy: keep only 1 image_token as a placeholder, record the number of tokens needed at each position
+        # After tokenization, expand directly at the token_ids level to avoid processing extra-long strings
+        image_token_counts = []  # Record the number of tokens needed at each image_token position
         if image_grid_thw is not None:
             merge_length = self.image_processor.merge_size**2
             index = 0
             for i in range(len(text)):
-                while self.image_token in text[i]:
+                # Calculate how many image_tokens are in this text
+                count = text[i].count(self.image_token)
+                for _ in range(count):
                     num_image_tokens = image_grid_thw[index].prod() // merge_length
-                    text[i] = text[i].replace(self.image_token, "<|placeholder|>" * num_image_tokens, 1)
+                    image_token_counts.append(num_image_tokens)
                     index += 1
-                text[i] = text[i].replace("<|placeholder|>", self.image_token)
+                # Do not modify text, keep it as is (only 1 image_token at each position)
 
+        video_token_counts = []  # Record the number of tokens needed at each video_token position
         if video_grid_thw is not None:
             merge_length = self.video_processor.merge_size**2
             index = 0
@@ -155,14 +162,19 @@ class Qwen3VLProcessor(ProcessorMixin):
                         self.video_processor.merge_size,
                     )
 
-                    video_placeholder = ""
+                    # Optimization: use list concatenation, only 1 video_token per frame, record the number to be expanded
+                    video_parts = []
                     frame_seqlen = video_grid_thw[index][1:].prod() // merge_length
                     for frame_idx in range(video_grid_thw[index][0]):
                         curr_time = curr_timestamp[frame_idx]
-                        video_placeholder += f"<{curr_time:.1f} seconds>"
-                        video_placeholder += (
-                            self.vision_start_token + "<|placeholder|>" * frame_seqlen + self.vision_end_token
-                        )
+                        video_parts.append(f"<{curr_time:.1f} seconds>")
+                        video_parts.append(self.vision_start_token)
+                        video_parts.append(self.video_token)  # Only use 1
+                        video_parts.append(self.vision_end_token)
+                        # Record the number to be expanded
+                        video_token_counts.append(frame_seqlen)
+
+                    video_placeholder = "".join(video_parts)
                     if f"{self.vision_start_token}{self.video_token}{self.vision_end_token}" in text[i]:
                         text[i] = text[i].replace(
                             f"{self.vision_start_token}{self.video_token}{self.vision_end_token}", video_placeholder, 1
@@ -172,12 +184,69 @@ class Qwen3VLProcessor(ProcessorMixin):
                         text[i] = text[i].replace(self.video_token, video_placeholder, 1)
                     index += 1
 
-                text[i] = text[i].replace("<|placeholder|>", self.video_token)
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", None)
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
         self._check_special_mm_tokens(text, text_inputs, modalities=["image", "video"])
+
+        # Expand image tokens (optimization: operate directly at token_ids level)
+        if image_grid_thw is not None and image_token_counts:
+            # Global image_token counter
+            global_token_count_idx = 0
+
+            # Iterate through each sample's input_ids
+            for batch_idx in range(len(text_inputs['input_ids'])):
+                input_ids = text_inputs['input_ids'][batch_idx]
+
+                # Find all image_token_id positions and expand
+                new_input_ids = []
+
+                for token_id in input_ids:
+                    if token_id == self.image_token_id and global_token_count_idx < len(image_token_counts):
+                        # Expand 1 image_token to N tokens
+                        num_tokens = image_token_counts[global_token_count_idx]
+                        new_input_ids.extend([self.image_token_id] * num_tokens)
+                        global_token_count_idx += 1
+                    else:
+                        new_input_ids.append(token_id)
+
+                # Update input_ids
+                text_inputs['input_ids'][batch_idx] = new_input_ids
+
+                # Synchronously update attention_mask (if exists)
+                if 'attention_mask' in text_inputs:
+                    text_inputs['attention_mask'][batch_idx] = [1] * len(new_input_ids)
+
+        # Expand video tokens (optimization: operate directly at token_ids level)
+        if video_grid_thw is not None and video_token_counts:
+            # Global video_token counter
+            global_video_token_idx = 0
+
+            # Iterate through each sample's input_ids
+            for batch_idx in range(len(text_inputs['input_ids'])):
+                input_ids = text_inputs['input_ids'][batch_idx]
+
+                # Find all video_token_id positions and expand
+                new_input_ids = []
+
+                for token_id in input_ids:
+                    if token_id == self.video_token_id and global_video_token_idx < len(video_token_counts):
+                        # Expand 1 video_token to N tokens
+                        num_tokens = video_token_counts[global_video_token_idx]
+                        new_input_ids.extend([self.video_token_id] * num_tokens)
+                        global_video_token_idx += 1
+                    else:
+                        new_input_ids.append(token_id)
+
+                # Update input_ids
+                text_inputs['input_ids'][batch_idx] = new_input_ids
+
+                # Synchronously update attention_mask (if exists)
+                if 'attention_mask' in text_inputs:
+                    text_inputs['attention_mask'][batch_idx] = [1] * len(new_input_ids)
+
+
 
         if return_mm_token_type_ids:
             array_ids = np.array(text_inputs["input_ids"])
