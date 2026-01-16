@@ -442,7 +442,8 @@ class ErnieSplitAndDecoupleTextVisionExperts(ConversionOps):
 
 class Force16BytesAlignment(ConversionOps):
     """
-    Ensures that the given tensor is 16-bytes aligned in memory.
+    Ensures that the given tensor is 16-bytes aligned in memory and clones it if not.
+    This garantees 16-bytes alignmenet for kernels / implementations that use TMA or SIMD instructions like torch._grouped_mm.
     """
 
     @torch.no_grad()
@@ -452,7 +453,8 @@ class Force16BytesAlignment(ConversionOps):
         target_pattern = self.get_target_pattern(input_dict, source_patterns, target_patterns)
         tensors = next(iter(input_dict.values()))
         tensor = tensors[0] if isinstance(tensors, list) else tensors
-        return {target_pattern: tensor.clone()}
+        tensor = tensor.clone() if tensor.data_ptr() % 16 != 0 else tensor
+        return {target_pattern: tensor}
 
     def get_target_pattern(
         self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str]
