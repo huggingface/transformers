@@ -118,9 +118,11 @@ def _build_peft_weight_mapping(
         conversion.source_patterns = new_source_patterns
         pat = conversion.target_patterns[0].rsplit(".", 1)[0]
         # we make sure the target key is correct
-        conversion.target_patterns = [f"{pat}{adapter_name}.lora_A" for pat in conversion.target_patterns]
+        conversion.target_patterns = [f"{pat}.lora_A.default" for pat in conversion.target_patterns]
         conversion.operations = peft_weight_conversions
     weight_conversions = [WeightRenaming("base_model.model.model", "model")] + weight_conversions
+    weight_conversions = [WeightRenaming("lora_A.weight", "lora_A.default.weight")] + weight_conversions
+    weight_conversions = [WeightRenaming("lora_B.weight", "lora_B.default.weight")] + weight_conversions
     return weight_conversions
 
 
