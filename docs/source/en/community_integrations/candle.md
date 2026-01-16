@@ -40,4 +40,4 @@ let model = Model::new(args.use_flash_attn, &config, vb)?;
 
 ## Resources
 
-- [Candle](https://huggingface.github.io/candle/index.html) documentation
+- [Candle](https://github.com/huggingface/candle) documentation
