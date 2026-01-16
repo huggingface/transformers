@@ -109,6 +109,7 @@ class DeepseekOcrProjector(PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.layers = nn.Linear(config.input_dim, config.n_embed)
+        self.post_init()
 
     def forward(self, x, **kwargs):
         return self.layers(x)
