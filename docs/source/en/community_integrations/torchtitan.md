@@ -16,7 +16,10 @@ rendered properly in your Markdown viewer.
 
 # torchtitan
 
-[torchtitan](https://github.com/pytorch/torchtitan) is a PyTorch's distributed training framework for large language models. It supports Fully Sharded Data Parallelism (FSDP), tensor, pipeline, and context parallelism (4D parallelism).
+[torchtitan](https://github.com/pytorch/torchtitan) is PyTorch's distributed training framework for large language models. It supports Fully Sharded Data Parallelism (FSDP), tensor, pipeline, and context parallelism (4D parallelism). torchtitan is fully compatible with [torch.compile](../perf_torch_compile), enabling kernel fusion and graph optimizations that significantly reduce memory overhead and speed up training.
+
+> [!NOTE]
+> Only dense models are supported at the moment.
 
 Use a Transformers model directly in torchtitan's distributed training infrastructure.
 
