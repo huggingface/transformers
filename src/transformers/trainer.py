@@ -4008,9 +4008,6 @@ class Trainer:
             if self.args.should_save:
                 self._save(output_dir, state_dict=state_dict)
             Path(os.path.join(output_dir, "user_content.pt")).touch()
-        # If we drop to here, we're in 1D parallelism, so all ranks need to go to `save_pretrained`
-        elif (tp_size := getattr(self.model, "_tp_size", 0)) is not None and tp_size > 1:
-            self._save(output_dir)
         elif self.is_fsdp_enabled:
             if "FULL_STATE_DICT" in str(self.accelerator.state.fsdp_plugin.state_dict_type):
                 state_dict = self.accelerator.get_state_dict(self.model)
