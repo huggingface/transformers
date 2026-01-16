@@ -123,10 +123,6 @@
     - local: open_webui
       title: Open WebUI
     title: Serving
-  - local: agents
-    title: Agents
-  - local: tools
-    title: Tools
   title: Inference
 - isExpanded: false
   sections:
@@ -267,6 +263,8 @@
         title: Audio classification
       - local: tasks/asr
         title: Automatic speech recognition
+      - local: tasks/text-to-speech
+        title: Text to speech
       title: Audio
     - sections:
       - local: tasks/image_classification
@@ -305,8 +303,6 @@
         title: Document Question Answering
       - local: tasks/visual_question_answering
         title: Visual Question Answering
-      - local: tasks/text-to-speech
-        title: Text to speech
       - local: tasks/idefics
         title: Image tasks with IDEFICS
       - local: tasks/image_text_to_text
@@ -921,6 +917,8 @@
         title: EnCodec
       - local: model_doc/fastspeech2_conformer
         title: FastSpeech2Conformer
+      - local: model_doc/glmasr
+        title: GLM-ASR
       - local: model_doc/granite_speech
         title: GraniteSpeech
       - local: model_doc/hubert
@@ -1071,8 +1069,6 @@
         title: Gemma3n
       - local: model_doc/git
         title: GIT
-      - local: model_doc/glmasr
-        title: GLM-ASR
       - local: model_doc/glm46v
         title: Glm46V
       - local: model_doc/glm4v

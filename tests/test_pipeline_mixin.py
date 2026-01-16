@@ -30,7 +30,6 @@ from huggingface_hub import (
     DepthEstimationInput,
     ImageClassificationInput,
     ImageSegmentationInput,
-    ImageToTextInput,
     ObjectDetectionInput,
     QuestionAnsweringInput,
     VideoClassificationInput,
@@ -44,7 +43,6 @@ from transformers.pipelines import (
     DepthEstimationPipeline,
     ImageClassificationPipeline,
     ImageSegmentationPipeline,
-    ImageToTextPipeline,
     ObjectDetectionPipeline,
     QuestionAnsweringPipeline,
     VideoClassificationPipeline,
@@ -72,7 +70,6 @@ from .pipelines.test_pipelines_image_feature_extraction import ImageFeatureExtra
 from .pipelines.test_pipelines_image_segmentation import ImageSegmentationPipelineTests
 from .pipelines.test_pipelines_image_text_to_text import ImageTextToTextPipelineTests
 from .pipelines.test_pipelines_image_to_image import ImageToImagePipelineTests
-from .pipelines.test_pipelines_image_to_text import ImageToTextPipelineTests
 from .pipelines.test_pipelines_mask_generation import MaskGenerationPipelineTests
 from .pipelines.test_pipelines_object_detection import ObjectDetectionPipelineTests
 from .pipelines.test_pipelines_question_answering import QAPipelineTests
@@ -101,7 +98,6 @@ pipeline_test_mapping = {
     "image-segmentation": {"test": ImageSegmentationPipelineTests},
     "image-text-to-text": {"test": ImageTextToTextPipelineTests},
     "image-to-image": {"test": ImageToImagePipelineTests},
-    "image-to-text": {"test": ImageToTextPipelineTests},
     "mask-generation": {"test": MaskGenerationPipelineTests},
     "any-to-any": {"test": AnyToAnyPipelineTests},
     "object-detection": {"test": ObjectDetectionPipelineTests},
@@ -127,7 +123,6 @@ task_to_pipeline_and_spec_mapping = {
     "depth-estimation": (DepthEstimationPipeline, DepthEstimationInput),
     "image-classification": (ImageClassificationPipeline, ImageClassificationInput),
     "image-segmentation": (ImageSegmentationPipeline, ImageSegmentationInput),
-    "image-to-text": (ImageToTextPipeline, ImageToTextInput),
     "object-detection": (ObjectDetectionPipeline, ObjectDetectionInput),
     "question-answering": (QuestionAnsweringPipeline, QuestionAnsweringInput),
     "video-classification": (VideoClassificationPipeline, VideoClassificationInput),
@@ -386,7 +381,7 @@ class PipelineTesterMixin:
 
         # TODO: We should check if a model file is on the Hub repo. instead.
         try:
-            model = model_architecture.from_pretrained(repo_id, revision=commit)
+            model = model_architecture.from_pretrained(repo_id, revision=commit, use_safetensors=True)
         except Exception:
             logger.warning(
                 f"{self.__class__.__name__}::test_pipeline_{task.replace('-', '_')}_{dtype} is skipped: Could not find or load "
@@ -597,17 +592,6 @@ class PipelineTesterMixin:
     @require_torch
     def test_pipeline_any_to_any_fp16(self):
         self.run_task_tests(task="any-to-any", dtype="float16")
-
-    @is_pipeline_test
-    @require_vision
-    def test_pipeline_image_to_text(self):
-        self.run_task_tests(task="image-to-text")
-
-    @is_pipeline_test
-    @require_vision
-    @require_torch
-    def test_pipeline_image_to_text_fp16(self):
-        self.run_task_tests(task="image-to-text", dtype="float16")
 
     @is_pipeline_test
     @require_timm
