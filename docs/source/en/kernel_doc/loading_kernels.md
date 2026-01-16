@@ -23,7 +23,7 @@ This guide shows how to load kernels to accelerate inference.
 Install the kernels package. We recommend the latest version which provides the best performance and bug fixes.
 
 > [!NOTE]
-> kernels >=0.9.0 is the minimum required version for working with Transformers.
+> kernels >=0.11.0 is the minimum required version for working with Transformers.
 
 ```bash
 pip install -U kernels
@@ -119,7 +119,7 @@ model.kernelize(mode=Mode.TRAINING | Mode.TORCH_COMPILE)
 
 ## KernelConfig
 
-[`KernelConfig`] customizes how kernels are used in a model.
+[`KernelConfig`] customizes which kernels are used in a model.
 
 The `:` separator names a specific kernel entry inside the repository and maps it to a layer.
 
