@@ -331,6 +331,7 @@ class SpeechT5Config(PreTrainedConfig):
         self.decoder_start_token_id = decoder_start_token_id
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
+    @property
     def inputs_to_logits_ratio(self):
         return functools.reduce(operator.mul, self.conv_stride, 1)
 
