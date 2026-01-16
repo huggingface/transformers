@@ -215,10 +215,7 @@ class BlenderbotModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTeste
     pipeline_model_mapping = (
         {
             "text-embedding": BlenderbotModel,
-            "summarization": BlenderbotForConditionalGeneration,
             "text-generation": BlenderbotForCausalLM,
-            "text2text-generation": BlenderbotForConditionalGeneration,
-            "translation": BlenderbotForConditionalGeneration,
         }
         if is_torch_available()
         else {}
