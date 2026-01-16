@@ -315,7 +315,7 @@ class YoutuModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
                 )
 
 
-@require_torch_accelerator
+@slow
 class YoutuIntegrationTest(unittest.TestCase):
     def tearDown(self):
         # See LlamaIntegrationTest.tearDown(). Can be removed once LlamaIntegrationTest.tearDown() is removed.
