@@ -4461,7 +4461,7 @@ class ModelTesterMixin:
                 len(unused_entries) == 0, f"The following entries of the TP-plan are not valid: {unused_entries}"
             )
 
-    def test_reverse_loading_mapping(self):
+    def test_reverse_loading_mapping(self, check_keys_were_modified=True):
         """Make sure we can load and save correctly the models having any weight renaming mapping or weight conversion
         mapping.
         Note that this test would be better if we could start from the serialized keys, and check that the model
@@ -4470,6 +4470,11 @@ class ModelTesterMixin:
         reverse the conversion and then check that those converted keys match correctly the conversions.
 
         However, all the checks performed here should ensure everything is going as it should.
+
+        Args:
+            check_keys_were_modified (`bool`, *optional*, defaults to `True`):
+                Whether to expect keys being modified or not. In some cases, models do not change keys but
+                their weights, e.g. via transpose, memory alignment, etc.
         """
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -4500,8 +4505,9 @@ class ModelTesterMixin:
                     # Get all the serialized keys that we just saved according to the reverse mapping
                     serialized_keys = list(state_dict.keys())
 
-                # They should be different, otherwise we did not perform any mapping
-                self.assertNotEqual(sorted(serialized_keys), sorted(model_keys), "No key mapping was performed!")
+                if check_keys_were_modified:
+                    # They should be different, otherwise we did not perform any mapping
+                    self.assertNotEqual(sorted(serialized_keys), sorted(model_keys), "No key mapping was performed!")
 
                 # Check that for each conversion entry, we at least map to one key
                 for conversion in conversions:

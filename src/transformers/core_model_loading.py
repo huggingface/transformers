@@ -447,30 +447,31 @@ class Force16BytesAlignment(ConversionOps):
 
     @torch.no_grad()
     def convert(
-        self,
-        input_dict: dict[str, list[torch.Tensor]],
-        source_patterns: list[str],
-        target_patterns: list[str],
-        config,
-        **kwargs,
-    ) -> dict[str, list[torch.Tensor]]:
-        if len(input_dict) != len(target_patterns):
-            raise ValueError(
-                f"Force16BytesAlignment conversion can only happen on each key ({len(input_dict)}) "
-                f"and should match exact one target ({len(target_patterns)})."
-            )
+        self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str], **kwargs
+    ) -> dict[str, torch.Tensor]:
+        target_pattern = self.get_target_pattern(input_dict, source_patterns, target_patterns)
+        tensors = next(iter(input_dict.values()))
+        tensor = tensors[0] if isinstance(tensors, list) else tensors
+        return {target_pattern: tensor.clone()}
 
-        output: dict[str, list[torch.Tensor]] = {}
-        for key, target_pattern in zip(input_dict.keys(), target_patterns):
-            tensor = input_dict.get(key, [])
-            if len(tensor) != 1:
-                raise ValueError(f"Force16BytesAlignment conversion requires exactly one tensor, found {len(tensor)}.")
-            output[target_pattern] = tensor[0].clone() if tensor[0].data_ptr() % 16 == 0 else tensor[0].clone()
-        return output
+    def get_target_pattern(
+        self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str]
+    ) -> str:
+        if len(input_dict) != 1:
+            raise ValueError("Undefined Operation encountered!")
+        # Here it's the first operation of a chain, so return the source
+        if len(target_patterns) > 1:
+            if len(source_patterns) == 1:
+                return source_patterns[0]
+            else:
+                raise ValueError("Undefined Operation encountered!")
+        # Here it's the only operation, or the last operation in a chain, so we return the target
+        else:
+            return target_patterns[0]
 
     @property
     def reverse_op(self) -> ConversionOps:
-        return deepcopy(self)
+        return Force16BytesAlignment()
 
 
 @dataclass(slots=True)
