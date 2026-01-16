@@ -311,8 +311,7 @@ class _BaseAutoModelClass:
             if kwargs.get("dtype") == "auto":
                 _ = kwargs.pop("dtype")
             # to not overwrite the quantization_config if config has a quantization_config
-            if kwargs.get("quantization_config") is not None:
-                _ = kwargs.pop("quantization_config")
+            _ = kwargs.pop("quantization_config", None)
 
             config, kwargs = AutoConfig.from_pretrained(
                 pretrained_model_name_or_path,
