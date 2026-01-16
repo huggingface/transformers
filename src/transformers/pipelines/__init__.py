@@ -230,7 +230,7 @@ SUPPORTED_TASKS = {
     "image-text-to-text": {
         "impl": ImageTextToTextPipeline,
         "pt": (AutoModelForImageTextToText,) if is_torch_available() else (),
-        "default": {"model": ("llava-hf/llava-onevision-qwen2-0.5b-ov-hf", "2c9ba3b")},
+        "default": {"model": ("Qwen/Qwen3-VL-2B-Instruct", "8964489")},
         "type": "multimodal",
     },
     "object-detection": {
