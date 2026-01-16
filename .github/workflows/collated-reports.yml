@@ -23,8 +23,8 @@ jobs:
     runs-on: ubuntu-22.04
     if: always()
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v7
 
       - name: Collated reports
         shell: bash

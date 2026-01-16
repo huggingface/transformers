@@ -39,12 +39,12 @@ jobs:
       quantization_matrix: ${{ steps.set-matrix.outputs.quantization_matrix }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.10"
 
@@ -123,7 +123,7 @@ jobs:
         --shm-size=64G
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -167,7 +167,7 @@ jobs:
 
       - name: "Test suite reports artifacts: ${{ env.machine_type }}_run_pipelines_torch_gpu_test_reports"
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ env.machine_type }}_run_pipelines_torch_gpu_test_reports
           path: reports/${{ env.machine_type }}_run_pipelines_torch_gpu_test_reports
@@ -192,7 +192,7 @@ jobs:
         --shm-size=64G
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -239,7 +239,7 @@ jobs:
 
       - name: "Test suite reports artifacts: ${{ env.machine_type }}_run_examples_gpu_test_reports"
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ env.machine_type }}_run_examples_gpu_test_reports
           path: reports/${{ env.machine_type }}_run_examples_gpu_test_reports
@@ -264,7 +264,7 @@ jobs:
         --shm-size=64G
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
@@ -311,7 +311,7 @@ jobs:
 
       - name: "Test suite reports artifacts: ${{ env.machine_type }}_run_torch_cuda_extensions_gpu_test_reports"
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ env.machine_type }}_run_torch_cuda_extensions_gpu_test_reports
           path: reports/${{ env.machine_type }}_run_torch_cuda_extensions_gpu_test_reports

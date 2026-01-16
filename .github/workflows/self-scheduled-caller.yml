@@ -42,7 +42,7 @@ jobs:
           echo "$other_workflow_run_id" > "setup_values/other_workflow_run_id.txt"
 
       - name: Upload artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: setup_values
           path: setup_values
