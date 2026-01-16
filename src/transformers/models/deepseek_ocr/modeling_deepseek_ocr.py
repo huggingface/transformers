@@ -1508,7 +1508,6 @@ class DeepseekOcrTextModel(DeepseekOcrTextPreTrainedModel):
     """
 )
 class DeepseekOcrModel(DeepseekOcrPreTrainedModel):
-    _checkpoint_conversion_mapping = {}
     base_model_prefix = "model"
     _supports_sdpa = True
     _supports_flash_attn = True
