@@ -408,12 +408,8 @@ class BartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     pipeline_model_mapping = (
         {
             "text-embedding": BartModel,
-            "question-answering": BartForQuestionAnswering,
-            "summarization": BartForConditionalGeneration,
             "text-classification": BartForSequenceClassification,
             "text-generation": BartForCausalLM,
-            "text2text-generation": BartForConditionalGeneration,
-            "translation": BartForConditionalGeneration,
             "zero-shot": BartForSequenceClassification,
         }
         if is_torch_available()

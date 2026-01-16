@@ -289,7 +289,6 @@ class MarkupLMModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     pipeline_model_mapping = (
         {
             "text-embedding": MarkupLMModel,
-            "question-answering": MarkupLMForQuestionAnswering,
             "text-classification": MarkupLMForSequenceClassification,
             "token-classification": MarkupLMForTokenClassification,
             "zero-shot": MarkupLMForSequenceClassification,

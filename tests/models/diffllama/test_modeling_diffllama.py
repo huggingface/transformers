@@ -185,7 +185,6 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
             "text-classification": DiffLlamaForSequenceClassification,
             "text-generation": DiffLlamaForCausalLM,
             "zero-shot": DiffLlamaForSequenceClassification,
-            "question-answering": DiffLlamaForQuestionAnswering,
             "token-classification": DiffLlamaForTokenClassification,
         }
         if is_torch_available()

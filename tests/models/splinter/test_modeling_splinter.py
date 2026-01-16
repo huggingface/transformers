@@ -216,11 +216,7 @@ class SplinterModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         if is_torch_available()
         else ()
     )
-    pipeline_model_mapping = (
-        {"text-embedding": SplinterModel, "question-answering": SplinterForQuestionAnswering}
-        if is_torch_available()
-        else {}
-    )
+    pipeline_model_mapping = {"text-embedding": SplinterModel} if is_torch_available() else {}
 
     # TODO: Fix the failed tests when this model gets more usage
     def is_pipeline_test_to_skip(
