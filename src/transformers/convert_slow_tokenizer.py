@@ -1892,9 +1892,10 @@ class TikTokenConverter:
         )
         tokenizer.decoder = decoders.ByteLevel()
 
-        tokenizer.add_special_tokens(
-            [AddedToken(token, normalized=False, special=True) for token in self.extra_special_tokens]
-        )
+        if self.extra_special_tokens is not None:
+            tokenizer.add_special_tokens(
+                [AddedToken(token, normalized=False, special=True) for token in self.extra_special_tokens]
+            )
 
         tokenizer.post_processor = processors.ByteLevel(trim_offsets=False)
 
