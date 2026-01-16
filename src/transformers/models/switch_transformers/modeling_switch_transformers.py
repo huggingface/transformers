@@ -47,7 +47,7 @@ from ...utils import (
     is_torchdynamo_compiling,
     logging,
 )
-from ...utils.generic import OutputRecorder, can_return_tuple, check_model_inputs
+from ...utils.generic import OutputRecorder, can_return_tuple, check_model_inputs, is_flash_attention_requested
 from .configuration_switch_transformers import SwitchTransformersConfig
 
 
@@ -790,7 +790,7 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
         past_key_values: Cache,
         output_attentions: bool = False,
     ):
-        if self.config._attn_implementation == "flash_attention_2":
+        if is_flash_attention_requested(self.config):
             if attention_mask is not None and (attention_mask == 0.0).any():
                 return attention_mask
             return None
