@@ -566,11 +566,9 @@ def main():
                 with open(vocab_file, "w") as file:
                     json.dump(vocab_dict, file)
 
-        # if tokenizer has just been created
-        # it is defined by `tokenizer_class` if present in config else by `model_type`
         tokenizer_kwargs = {
-            "config": config if config.tokenizer_class is not None else None,
-            "tokenizer_type": (config.model_type if config.tokenizer_class is None else None),
+            "config": config,
+            "tokenizer_type": config.model_type,
             "unk_token": unk_token,
             "pad_token": pad_token,
             "word_delimiter_token": word_delimiter_token,

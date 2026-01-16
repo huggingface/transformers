@@ -1354,7 +1354,7 @@ class ModelUtilsTest(TestCasePlus):
 
     def test_tied_weights_reload(self):
         # Base
-        model = BaseModelWithTiedWeights(PreTrainedConfig())
+        model = BaseModelWithTiedWeights(PreTrainedConfig(tie_word_embeddings=True))
         with tempfile.TemporaryDirectory() as tmp_dir:
             model.save_pretrained(tmp_dir)
 
@@ -1370,7 +1370,7 @@ class ModelUtilsTest(TestCasePlus):
             self.assertIs(new_model.linear.weight, new_model.linear_2.weight)
 
             # With head
-            model = BaseModel(PreTrainedConfig())
+            model = BaseModel(PreTrainedConfig(tie_word_embeddings=True))
             model.save_pretrained(tmp_dir)
             new_model, load_info = ModelWithHeadAndTiedWeights.from_pretrained(tmp_dir, output_loading_info=True)
             self.assertIs(new_model.base.linear.weight, new_model.decoder.weight)
@@ -1379,7 +1379,7 @@ class ModelUtilsTest(TestCasePlus):
 
     def test_tied_weights_can_load_symmetrically(self):
         """Test that we can correctly load and tie weights even though the wrong key was saved."""
-        model = BaseModelWithTiedWeights(PreTrainedConfig())
+        model = BaseModelWithTiedWeights(PreTrainedConfig(tie_word_embeddings=True))
         # Just to be sure it's actually tied
         self.assertIs(model.linear.weight, model.linear_2.weight, msg="Weights are not tied!")
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -1407,7 +1407,7 @@ class ModelUtilsTest(TestCasePlus):
         # First class is consistent in how they provide the source, second is not -> make sure it works in both cases
         for model_class in [BaseModelWithMultipleTiedWeights, BaseModelWithMultipleMixedTiedWeights]:
             with self.subTest(model_class.__name__):
-                model = model_class(PreTrainedConfig())
+                model = model_class(PreTrainedConfig(tie_word_embeddings=True))
                 # Just to be sure it's actually tied
                 self.assertIs(model.linear.weight, model.linear_2.weight, msg="Weights are not tied!")
                 self.assertIs(model.linear.weight, model.linear_3.weight, msg="Weights are not tied!")
@@ -1461,7 +1461,7 @@ class ModelUtilsTest(TestCasePlus):
     def test_tied_weights_are_not_tied_if_both_present(self):
         """Test that if both the source and target of tied weights are present, we do NOT tie them, and instead
         raise a warning"""
-        model = BaseModelWithTiedWeights(PreTrainedConfig())
+        model = BaseModelWithTiedWeights(PreTrainedConfig(tie_word_embeddings=True))
         # Just to be sure it's actually tied
         self.assertIs(model.linear.weight, model.linear_2.weight, msg="Weights are not tied!")
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -1492,7 +1492,7 @@ class ModelUtilsTest(TestCasePlus):
 
     def test_tied_weights_are_missing_if_both_absent(self):
         """Test that if both the source and target of tied weights are absent, we do tie them, but they are missing"""
-        model = BaseModelWithTiedWeights(PreTrainedConfig())
+        model = BaseModelWithTiedWeights(PreTrainedConfig(tie_word_embeddings=True))
         # Just to be sure it's actually tied
         self.assertIs(model.linear.weight, model.linear_2.weight, msg="Weights are not tied!")
         with tempfile.TemporaryDirectory() as tmp_dir:
@@ -1520,7 +1520,7 @@ class ModelUtilsTest(TestCasePlus):
             self.assertIs(new_model.linear.weight, new_model.linear_2.weight, msg="Weights are not tied!")
 
     def test_unexpected_keys_warnings(self):
-        model = ModelWithHead(PreTrainedConfig())
+        model = ModelWithHead(PreTrainedConfig(tie_word_embeddings=True))
         logger = logging.get_logger("transformers.modeling_utils")
         with tempfile.TemporaryDirectory() as tmp_dir:
             model.save_pretrained(tmp_dir)
@@ -1552,8 +1552,7 @@ class ModelUtilsTest(TestCasePlus):
             logger.warning_once.cache_clear()
             with LoggingLevel(logging.WARNING):
                 with CaptureLogger(logger) as cl:
-                    config_no_pad_token = PreTrainedConfig()
-                    config_no_pad_token.pad_token_id = None
+                    config_no_pad_token = PreTrainedConfig(pad_token_id=None, bos_token_id=None, eos_token_id=None)
                     model = ModelWithHead(config_no_pad_token)
                     input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 0, 0]])
                     model.warn_if_padding_and_no_attention_mask(input_ids, attention_mask=None)
@@ -1563,8 +1562,7 @@ class ModelUtilsTest(TestCasePlus):
             logger.warning_once.cache_clear()
             with LoggingLevel(logging.WARNING):
                 with CaptureLogger(logger) as cl:
-                    config = PreTrainedConfig()
-                    config.pad_token_id = 0
+                    config = PreTrainedConfig(pad_token_id=0, bos_token_id=None, eos_token_id=None)
                     model = ModelWithHead(config)
                     input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 0, 0]])
                     attention_mask = torch.tensor([[1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0]])
@@ -1575,8 +1573,7 @@ class ModelUtilsTest(TestCasePlus):
             logger.warning_once.cache_clear()
             with LoggingLevel(logging.WARNING):
                 with CaptureLogger(logger) as cl:
-                    config = PreTrainedConfig()
-                    config.pad_token_id = 0
+                    config = PreTrainedConfig(pad_token_id=0, bos_token_id=None, eos_token_id=None)
                     model = ModelWithHead(config)
                     input_ids = torch.tensor([[1, 345, 232, 328, 740, 140, 1695, 69, 6078, 2341, 25]])
                     model.warn_if_padding_and_no_attention_mask(input_ids, attention_mask=None)
@@ -1586,8 +1583,7 @@ class ModelUtilsTest(TestCasePlus):
             logger.warning_once.cache_clear()
             with LoggingLevel(logging.WARNING):
                 with CaptureLogger(logger) as cl:
-                    config = PreTrainedConfig()
-                    config.pad_token_id = 0
+                    config = PreTrainedConfig(pad_token_id=0, bos_token_id=None, eos_token_id=None)
                     model = ModelWithHead(config)
                     input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 432, 5232]])
                     model.warn_if_padding_and_no_attention_mask(input_ids, attention_mask=None)
@@ -1597,8 +1593,7 @@ class ModelUtilsTest(TestCasePlus):
             logger.warning_once.cache_clear()
             with LoggingLevel(logging.WARNING):
                 with CaptureLogger(logger) as cl:
-                    config = PreTrainedConfig()
-                    config.pad_token_id = 0
+                    config = PreTrainedConfig(pad_token_id=0, bos_token_id=None, eos_token_id=None)
                     model = ModelWithHead(config)
                     input_ids = torch.tensor([[432, 345, 232, 328, 740, 140, 1695, 69, 6078, 0, 0]])
                     model.warn_if_padding_and_no_attention_mask(input_ids, attention_mask=None)
@@ -1608,8 +1603,7 @@ class ModelUtilsTest(TestCasePlus):
             logger.warning_once.cache_clear()
             with LoggingLevel(logging.WARNING):
                 with CaptureLogger(logger) as cl:
-                    config = PreTrainedConfig()
-                    config.pad_token_id = 0
+                    config = PreTrainedConfig(pad_token_id=0, bos_token_id=None, eos_token_id=None)
                     model = ModelWithHead(config)
                     input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 0, 0]])
                     model.warn_if_padding_and_no_attention_mask(input_ids, attention_mask=None)
@@ -1620,9 +1614,7 @@ class ModelUtilsTest(TestCasePlus):
             logger.warning_once.cache_clear()
             with LoggingLevel(logging.WARNING):
                 with CaptureLogger(logger) as cl:
-                    config = PreTrainedConfig()
-                    config.pad_token_id = 0
-                    config.bos_token_id = config.pad_token_id
+                    config = PreTrainedConfig(pad_token_id=0, bos_token_id=0, eos_token_id=None)
                     model = ModelWithHead(config)
                     input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 0, 0]])
                     model.warn_if_padding_and_no_attention_mask(input_ids, attention_mask=None)
@@ -1632,8 +1624,7 @@ class ModelUtilsTest(TestCasePlus):
             logger.warning_once.cache_clear()
             from torch._dynamo import config, testing
 
-            config = PreTrainedConfig()
-            config.pad_token_id = 0
+            config = PreTrainedConfig(pad_token_id=0, bos_token_id=None, eos_token_id=None)
             model = ModelWithHead(config)
             input_ids = torch.tensor([[0, 345, 232, 328, 740, 140, 1695, 69, 6078, 432, 5232]])
 
