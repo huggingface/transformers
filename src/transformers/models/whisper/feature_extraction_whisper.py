@@ -22,10 +22,43 @@ from ...audio_utils import mel_filter_bank, spectrogram, window_function
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
 from ...utils import TensorType, logging
+from ...utils.import_utils import requires_backends
 
 
 if is_torch_available():
     import torch
+    from torch import nn
+
+    class _WhisperFeatureExtractorModule(nn.Module):
+        def __init__(self, feature_extractor: "WhisperFeatureExtractor"):
+            super().__init__()
+            self.n_fft = feature_extractor.n_fft
+            self.hop_length = feature_extractor.hop_length
+            self.dither = feature_extractor.dither
+            self.register_buffer("window", torch.hann_window(self.n_fft))
+            self.register_buffer("mel_filters", torch.from_numpy(feature_extractor.mel_filters).float())
+
+        def forward(self, waveform):
+            # Note: it would be better to dither the chunked waveform,
+            # so overlapping signal does not get the same dithering.
+            # But, chunking is happening inside pytorch, so it is here.
+            if self.dither != 0.0:
+                waveform += self.dither * torch.randn(waveform.shape, dtype=waveform.dtype, device=waveform.device)
+
+            stft = torch.stft(waveform, self.n_fft, self.hop_length, window=self.window, return_complex=True)
+            magnitudes = stft[..., :-1].abs() ** 2
+
+            mel_spec = self.mel_filters.T @ magnitudes
+
+            log_spec = torch.clamp(mel_spec, min=1e-10).log10()
+            if waveform.dim() == 2:
+                max_val = log_spec.max(dim=2, keepdim=True)[0].max(dim=1, keepdim=True)[0]
+                log_spec = torch.maximum(log_spec, max_val - 8.0)
+            else:
+                log_spec = torch.maximum(log_spec, log_spec.max() - 8.0)
+            log_spec = (log_spec + 4.0) / 4.0
+            return log_spec
+
 
 logger = logging.get_logger(__name__)
 
@@ -102,17 +135,18 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
             mel_scale="slaney",
         )
 
-    def _np_extract_fbank_features(self, waveform_batch: np.ndarray, device: str) -> np.ndarray:
+    def to_exportable_module(self) -> "nn.Module":
+        """
+        Returns an exportable version of the feature extractor, which can be used with `torch.export`.
+        """
+        requires_backends(self, "torch")
+        return _WhisperFeatureExtractorModule(self)
+
+    def _np_extract_fbank_features(self, waveform_batch: np.ndarray) -> np.ndarray:
         """
         Compute the log-mel spectrogram of the provided audio, gives similar results to Whisper's original torch
         implementation with 1e-5 tolerance.
         """
-        if device != "cpu":
-            raise ValueError(
-                f"Got device `{device}` for feature extraction, but feature extraction on CUDA accelerator "
-                "devices requires torch, which is not installed. Either set `device='cpu'`, or "
-                "install torch according to the official instructions: https://pytorch.org/get-started/locally/"
-            )
         log_spec_batch = []
         for waveform in waveform_batch:
             log_spec = spectrogram(
@@ -138,27 +172,8 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         yielding results similar to cpu computing with 1e-5 tolerance.
         """
         waveform = torch.from_numpy(waveform).to(device, torch.float32)
-        window = torch.hann_window(self.n_fft, device=device)
-
-        # Note: it would be better to dither the chunked waveform,
-        # so overlapping signal does not get the same dithering.
-        # But, chunking is happening inside pytorch, so it is here.
-        if self.dither != 0.0:
-            waveform += self.dither * torch.randn(waveform.shape, dtype=waveform.dtype, device=waveform.device)
-
-        stft = torch.stft(waveform, self.n_fft, self.hop_length, window=window, return_complex=True)
-        magnitudes = stft[..., :-1].abs() ** 2
-
-        mel_filters = torch.from_numpy(self.mel_filters).to(device, torch.float32)
-        mel_spec = mel_filters.T @ magnitudes
-
-        log_spec = torch.clamp(mel_spec, min=1e-10).log10()
-        if waveform.dim() == 2:
-            max_val = log_spec.max(dim=2, keepdim=True)[0].max(dim=1, keepdim=True)[0]
-            log_spec = torch.maximum(log_spec, max_val - 8.0)
-        else:
-            log_spec = torch.maximum(log_spec, log_spec.max() - 8.0)
-        log_spec = (log_spec + 4.0) / 4.0
+        module = self.to_exportable_module().to(device)
+        log_spec = module(waveform)
         if device != "cpu":
             log_spec = log_spec.detach().cpu()
         return log_spec.numpy()
@@ -314,10 +329,10 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         # make sure list is in array format
         input_features = padded_inputs.get("input_features").transpose(2, 0, 1)
 
-        extract_fbank_features = (
-            self._torch_extract_fbank_features if is_torch_available() else self._np_extract_fbank_features
-        )
-        input_features = extract_fbank_features(input_features[0], device)
+        if is_torch_available() and device != "cpu":
+            input_features = self._torch_extract_fbank_features(input_features[0], device=device)
+        else:
+            input_features = self._np_extract_fbank_features(input_features[0])
 
         if isinstance(input_features[0], list):
             padded_inputs["input_features"] = [np.asarray(feature, dtype=np.float32) for feature in input_features]
