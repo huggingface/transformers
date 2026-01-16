@@ -33,11 +33,15 @@ from .utils import (
     is_librosa_available,
     is_numpy_array,
     is_soundfile_available,
+    is_torch_available,
     is_torch_tensor,
     is_torchcodec_available,
     requires_backends,
 )
 
+
+if is_torch_available():
+    import torch
 
 if TYPE_CHECKING:
     import torch
