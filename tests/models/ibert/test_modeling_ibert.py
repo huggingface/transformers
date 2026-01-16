@@ -241,7 +241,7 @@ class IBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     )
     pipeline_model_mapping = (
         {
-            "feature-extraction": IBertModel,
+            "text-embedding": IBertModel,
             "fill-mask": IBertForMaskedLM,
             "question-answering": IBertForQuestionAnswering,
             "text-classification": IBertForSequenceClassification,

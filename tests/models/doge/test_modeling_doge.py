@@ -263,7 +263,7 @@ class DogeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     all_generative_model_classes = (DogeForCausalLM,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "feature-extraction": DogeModel,
+            "text-embedding": DogeModel,
             "text-classification": DogeForSequenceClassification,
             "text-generation": DogeForCausalLM,
             "zero-shot": DogeForSequenceClassification,

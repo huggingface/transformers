@@ -239,7 +239,7 @@ class ParakeetForCTCModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (ParakeetForCTC,) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "feature-extraction": ParakeetEncoder,
+            "text-embedding": ParakeetEncoder,
             "automatic-speech-recognition": ParakeetForCTC,
         }
         if is_torch_available()

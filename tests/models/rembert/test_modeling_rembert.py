@@ -358,7 +358,7 @@ class RemBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     all_generative_model_classes = ()
     pipeline_model_mapping = (
         {
-            "feature-extraction": RemBertModel,
+            "text-embedding": RemBertModel,
             "fill-mask": RemBertForMaskedLM,
             "question-answering": RemBertForQuestionAnswering,
             "text-classification": RemBertForSequenceClassification,

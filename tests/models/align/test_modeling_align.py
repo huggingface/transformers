@@ -434,7 +434,7 @@ class AlignModelTester:
 @require_torch
 class AlignModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (AlignModel,) if is_torch_available() else ()
-    pipeline_model_mapping = {"feature-extraction": AlignModel} if is_torch_available() else {}
+    pipeline_model_mapping = {"text-embedding": AlignModel} if is_torch_available() else {}
 
     test_resize_embeddings = False
     test_attention_outputs = False

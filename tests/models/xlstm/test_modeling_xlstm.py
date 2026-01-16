@@ -157,7 +157,7 @@ class xLSTMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     has_attentions = False  # xLSTM does not support attentions
 
     pipeline_model_mapping = (
-        {"feature-extraction": xLSTMModel, "text-generation": xLSTMForCausalLM} if is_torch_available() else {}
+        {"text-embedding": xLSTMModel, "text-generation": xLSTMForCausalLM} if is_torch_available() else {}
     )
 
     def setUp(self):

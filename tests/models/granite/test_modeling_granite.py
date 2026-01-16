@@ -167,7 +167,7 @@ class GraniteModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     )
     pipeline_model_mapping = (
         {
-            "feature-extraction": GraniteModel,
+            "text-embedding": GraniteModel,
             "text-generation": GraniteForCausalLM,
         }
         if is_torch_available()

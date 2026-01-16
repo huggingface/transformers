@@ -161,7 +161,7 @@ class Swin2SRModelTester:
 class Swin2SRModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (Swin2SRModel, Swin2SRForImageSuperResolution) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"image-feature-extraction": Swin2SRModel, "image-to-image": Swin2SRForImageSuperResolution}
+        {"image-embedding": Swin2SRModel, "image-to-image": Swin2SRForImageSuperResolution}
         if is_torch_available()
         else {}
     )

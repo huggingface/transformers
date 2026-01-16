@@ -404,7 +404,7 @@ class Wav2Vec2ConformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest
         {
             "audio-classification": Wav2Vec2ConformerForSequenceClassification,
             "automatic-speech-recognition": Wav2Vec2ConformerForCTC,
-            "feature-extraction": Wav2Vec2ConformerModel,
+            "text-embedding": Wav2Vec2ConformerModel,
         }
         if is_torch_available()
         else {}

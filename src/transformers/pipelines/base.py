@@ -712,7 +712,7 @@ PIPELINE_INIT_ARGS = build_pipeline_init_args(
 
 SUPPORTED_PEFT_TASKS = {
     "document-question-answering": ["PeftModelForQuestionAnswering"],
-    "feature-extraction": ["PeftModelForFeatureExtraction", "PeftModel"],
+    "text-embedding": ["PeftModelForFeatureExtraction", "PeftModel"],
     "question-answering": ["PeftModelForQuestionAnswering"],
     "summarization": ["PeftModelForSeq2SeqLM"],
     "table-question-answering": ["PeftModelForQuestionAnswering"],
@@ -753,7 +753,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
 
     Pipeline supports running on CPU or GPU through the device argument (see below).
 
-    Some pipeline, like for instance [`FeatureExtractionPipeline`] (`'feature-extraction'`) output large tensor object
+    Some pipeline, like for instance [`TextEmbeddingPipeline`] (`'text-embedding'`) output large tensor object
     as nested-lists. In order to avoid dumping such large structure as textual data we provide the `binary_output`
     constructor argument. If set to `True`, the output will be stored in the pickle format.
     """

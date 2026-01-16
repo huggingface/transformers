@@ -261,7 +261,7 @@ class BioGptModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     )
     pipeline_model_mapping = (
         {
-            "feature-extraction": BioGptModel,
+            "text-embedding": BioGptModel,
             "text-classification": BioGptForSequenceClassification,
             "text-generation": BioGptForCausalLM,
             "token-classification": BioGptForTokenClassification,

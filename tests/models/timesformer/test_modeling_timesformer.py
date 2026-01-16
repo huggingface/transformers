@@ -158,7 +158,7 @@ class TimesformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
     all_model_classes = (TimesformerModel, TimesformerForVideoClassification) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": TimesformerModel, "video-classification": TimesformerForVideoClassification}
+        {"text-embedding": TimesformerModel, "video-classification": TimesformerForVideoClassification}
         if is_torch_available()
         else {}
     )

@@ -169,7 +169,7 @@ class GraniteMoeSharedModelTest(ModelTesterMixin, GenerationTesterMixin, unittes
     )
     pipeline_model_mapping = (
         {
-            "feature-extraction": GraniteMoeSharedModel,
+            "text-embedding": GraniteMoeSharedModel,
             "text-generation": GraniteMoeSharedForCausalLM,
         }
         if is_torch_available()

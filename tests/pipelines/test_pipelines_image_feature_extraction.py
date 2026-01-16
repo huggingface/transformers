@@ -20,7 +20,7 @@ import pytest
 from transformers import (
     MODEL_MAPPING,
     TOKENIZER_MAPPING,
-    ImageFeatureExtractionPipeline,
+    ImageEmbeddingPipeline,
     is_torch_available,
     is_vision_available,
     pipeline,
@@ -118,7 +118,7 @@ class ImageFeatureExtractionPipelineTests(unittest.TestCase):
                 """
             )
 
-        feature_extractor_pipeline = ImageFeatureExtractionPipeline(
+        feature_extractor_pipeline = ImageEmbeddingPipeline(
             model=model,
             tokenizer=tokenizer,
             feature_extractor=feature_extractor,

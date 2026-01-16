@@ -226,7 +226,7 @@ class PegasusModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     all_model_classes = (PegasusModel, PegasusForConditionalGeneration) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
-            "feature-extraction": PegasusModel,
+            "text-embedding": PegasusModel,
             "summarization": PegasusForConditionalGeneration,
             "text-generation": PegasusForCausalLM,
             "text2text-generation": PegasusForConditionalGeneration,

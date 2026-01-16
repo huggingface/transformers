@@ -173,7 +173,7 @@ class MaskFormerSwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
         if is_torch_available()
         else ()
     )
-    pipeline_model_mapping = {"feature-extraction": MaskFormerSwinModel} if is_torch_available() else {}
+    pipeline_model_mapping = {"text-embedding": MaskFormerSwinModel} if is_torch_available() else {}
 
     test_resize_embeddings = False
 

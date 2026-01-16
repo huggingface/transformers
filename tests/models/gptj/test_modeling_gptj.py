@@ -331,7 +331,7 @@ class GPTJModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     )
     pipeline_model_mapping = (
         {
-            "feature-extraction": GPTJModel,
+            "text-embedding": GPTJModel,
             "question-answering": GPTJForQuestionAnswering,
             "text-classification": GPTJForSequenceClassification,
             "text-generation": GPTJForCausalLM,

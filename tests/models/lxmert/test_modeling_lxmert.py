@@ -524,7 +524,7 @@ class LxmertModelTester:
 class LxmertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (LxmertModel, LxmertForPreTraining, LxmertForQuestionAnswering) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": LxmertModel, "question-answering": LxmertForQuestionAnswering}
+        {"text-embedding": LxmertModel, "question-answering": LxmertForQuestionAnswering}
         if is_torch_available()
         else {}
     )

@@ -118,7 +118,7 @@ class MgpstrModelTester:
 class MgpstrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (MgpstrForSceneTextRecognition,) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"feature-extraction": MgpstrForSceneTextRecognition, "image-feature-extraction": MgpstrModel}
+        {"text-embedding": MgpstrForSceneTextRecognition, "image-embedding": MgpstrModel}
         if is_torch_available()
         else {}
     )

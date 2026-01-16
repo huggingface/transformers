@@ -445,15 +445,15 @@ my_pipeline = pipeline(model="xxxx", pipeline_class=MyPipeline)
     - __call__
     - all
 
-### FeatureExtractionPipeline
+### TextEmbeddingPipeline
 
-[[autodoc]] FeatureExtractionPipeline
+[[autodoc]] TextEmbeddingPipeline
     - __call__
     - all
 
-### ImageFeatureExtractionPipeline
+### ImageEmbeddingPipeline
 
-[[autodoc]] ImageFeatureExtractionPipeline
+[[autodoc]] ImageEmbeddingPipeline
     - __call__
     - all
 

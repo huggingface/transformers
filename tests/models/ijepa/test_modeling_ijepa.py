@@ -197,7 +197,7 @@ class IJepaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         else ()
     )
     pipeline_model_mapping = (
-        {"image-feature-extraction": IJepaModel, "image-classification": IJepaForImageClassification}
+        {"image-embedding": IJepaModel, "image-classification": IJepaForImageClassification}
         if is_torch_available()
         else {}
     )

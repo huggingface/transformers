@@ -180,7 +180,7 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
     )
     pipeline_model_mapping = (
         {
-            "feature-extraction": DiffLlamaModel,
+            "text-embedding": DiffLlamaModel,
             "text-classification": DiffLlamaForSequenceClassification,
             "text-generation": DiffLlamaForCausalLM,
             "zero-shot": DiffLlamaForSequenceClassification,

@@ -188,7 +188,7 @@ class VideoMAEModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         (VideoMAEModel, VideoMAEForPreTraining, VideoMAEForVideoClassification) if is_torch_available() else ()
     )
     pipeline_model_mapping = (
-        {"feature-extraction": VideoMAEModel, "video-classification": VideoMAEForVideoClassification}
+        {"text-embedding": VideoMAEModel, "video-classification": VideoMAEForVideoClassification}
         if is_torch_available()
         else {}
     )

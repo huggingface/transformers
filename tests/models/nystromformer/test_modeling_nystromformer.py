@@ -229,7 +229,7 @@ class NystromformerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
     )
     pipeline_model_mapping = (
         {
-            "feature-extraction": NystromformerModel,
+            "text-embedding": NystromformerModel,
             "fill-mask": NystromformerForMaskedLM,
             "question-answering": NystromformerForQuestionAnswering,
             "text-classification": NystromformerForSequenceClassification,

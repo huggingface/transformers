@@ -408,7 +408,7 @@ class BartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     )
     pipeline_model_mapping = (
         {
-            "feature-extraction": BartModel,
+            "text-embedding": BartModel,
             "fill-mask": BartForConditionalGeneration,
             "question-answering": BartForQuestionAnswering,
             "summarization": BartForConditionalGeneration,

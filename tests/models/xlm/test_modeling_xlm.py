@@ -375,7 +375,7 @@ class XLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     )
     pipeline_model_mapping = (
         {
-            "feature-extraction": XLMModel,
+            "text-embedding": XLMModel,
             "fill-mask": XLMWithLMHeadModel,
             "question-answering": XLMForQuestionAnsweringSimple,
             "text-classification": XLMForSequenceClassification,

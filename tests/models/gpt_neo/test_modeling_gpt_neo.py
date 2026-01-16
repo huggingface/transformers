@@ -365,7 +365,7 @@ class GPTNeoModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     )
     pipeline_model_mapping = (
         {
-            "feature-extraction": GPTNeoModel,
+            "text-embedding": GPTNeoModel,
             "question-answering": GPTNeoForQuestionAnswering,
             "text-classification": GPTNeoForSequenceClassification,
             "text-generation": GPTNeoForCausalLM,
