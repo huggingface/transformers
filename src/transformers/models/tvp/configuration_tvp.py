@@ -15,7 +15,6 @@
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
-from ...utils.backbone_utils import verify_backbone_config_arguments
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
@@ -104,9 +103,6 @@ class TvpConfig(PreTrainedConfig):
         self,
         backbone_config=None,
         backbone=None,
-        use_pretrained_backbone=False,
-        use_timm_backbone=False,
-        backbone_kwargs=None,
         distance_loss_weight=1.0,
         duration_loss_weight=0.1,
         visual_prompter_type="framepad",
@@ -137,20 +133,15 @@ class TvpConfig(PreTrainedConfig):
             backbone_model_type = backbone_config.get("model_type")
             config_class = CONFIG_MAPPING[backbone_model_type]
             backbone_config = config_class.from_dict(backbone_config)
-
-        verify_backbone_config_arguments(
-            use_timm_backbone=use_timm_backbone,
-            use_pretrained_backbone=use_pretrained_backbone,
-            backbone=backbone,
-            backbone_config=backbone_config,
-            backbone_kwargs=backbone_kwargs,
-        )
+        elif kwargs.get("backbone_kwargs") and backbone is not None:
+            backbone_kwargs = kwargs.pop("backbone_kwargs")
+            backbone_config = CONFIG_MAPPING["timm_backbone"](backbone=backbone, **backbone_kwargs)
+            backbone = None
+        elif backbone is not None and backbone_config is not None:
+            raise ValueError("You can't specify both `backbone` and `backbone_config`.")
 
         self.backbone_config = backbone_config
         self.backbone = backbone
-        self.use_pretrained_backbone = use_pretrained_backbone
-        self.use_timm_backbone = use_timm_backbone
-        self.backbone_kwargs = backbone_kwargs
         self.distance_loss_weight = distance_loss_weight
         self.duration_loss_weight = duration_loss_weight
         self.visual_prompter_type = visual_prompter_type

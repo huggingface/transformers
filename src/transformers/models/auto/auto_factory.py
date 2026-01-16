@@ -21,6 +21,8 @@ from collections import OrderedDict
 from collections.abc import Iterator
 from typing import Any, TypeVar
 
+from huggingface_hub import repo_exists
+
 from ...configuration_utils import PreTrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
 from ...utils import (
@@ -429,8 +431,8 @@ class _BaseAutoBackboneClass(_BaseAutoModelClass):
 
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
-        use_timm_backbone = kwargs.pop("use_timm_backbone", False)
-        if use_timm_backbone:
+        kwargs.pop("use_timm_backbone", None)
+        if not repo_exists(pretrained_model_name_or_path):
             return cls._load_timm_backbone_from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)
 
         return super().from_pretrained(pretrained_model_name_or_path, *model_args, **kwargs)

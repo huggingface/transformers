@@ -148,8 +148,6 @@ class BackboneMixin:
         """
         Initialize the backbone model from timm The backbone must already be loaded to self._backbone
         """
-        if getattr(self, "_backbone", None) is None:
-            raise ValueError("self._backbone must be set before calling _init_timm_backbone")
 
         # These will diagree with the defaults for the transformers models e.g. for resnet50
         # the transformer model has out_features = ['stem', 'stage1', 'stage2', 'stage3', 'stage4']
@@ -186,9 +184,10 @@ class BackboneMixin:
         pretrained model weights have been loaded.
         """
         self.config = config
-
-        self.use_timm_backbone = getattr(config, "use_timm_backbone", False)
-        self.backbone_type = BackboneType.TIMM if self.use_timm_backbone else BackboneType.TRANSFORMERS
+        if getattr(self, "_backbone", None) is not None:
+            self.backbone_type = BackboneType.TIMM
+        else:
+            self.backbone_type = BackboneType.TRANSFORMERS
 
         if self.backbone_type == BackboneType.TIMM:
             self._init_timm_backbone(config)
@@ -313,48 +312,22 @@ def load_backbone(config):
     If the config is from the parent model of the backbone model itself, then we load the pretrained backbone weights
     if specified.
     """
-    from transformers import AutoBackbone, AutoConfig
+    from transformers import AutoBackbone
 
     backbone_config = getattr(config, "backbone_config", None)
-    use_timm_backbone = getattr(config, "use_timm_backbone", None)
-    use_pretrained_backbone = getattr(config, "use_pretrained_backbone", None)
     backbone_checkpoint = getattr(config, "backbone", None)
-    backbone_kwargs = getattr(config, "backbone_kwargs", None)
-    backbone_kwargs = {} if backbone_kwargs is None else backbone_kwargs
 
-    if backbone_kwargs and backbone_config is not None:
-        raise ValueError("You can't specify both `backbone_kwargs` and `backbone_config`.")
-
-    # If there is a backbone_config and a backbone checkpoint, and use_pretrained_backbone=False then the desired
-    # behaviour is ill-defined: do you want to load from the checkpoint's config or the backbone_config?
-    if backbone_config is not None and backbone_checkpoint is not None and use_pretrained_backbone is not None:
-        raise ValueError("Cannot specify both config.backbone_config and config.backbone")
+    if backbone_checkpoint is not None and backbone_config is not None:
+        raise ValueError("You can't specify both `backbone_checkpoint` and `backbone_config`.")
 
     # If any of the following are set, then the config passed in is from a model which contains a backbone.
-    if backbone_config is None and use_timm_backbone is None and backbone_checkpoint is None:
-        return AutoBackbone.from_config(config=config, **backbone_kwargs)
+    if backbone_config is None and backbone_checkpoint is None:
+        return AutoBackbone.from_config(config=config)
 
     # config from the parent model that has a backbone
-    if use_timm_backbone:
-        if backbone_checkpoint is None:
-            raise ValueError("config.backbone must be set if use_timm_backbone is True")
-        # Because of how timm backbones were originally added to models, we need to pass in use_pretrained_backbone
-        # to determine whether to load the pretrained weights.
-        backbone = AutoBackbone.from_pretrained(
-            backbone_checkpoint,
-            use_timm_backbone=use_timm_backbone,
-            use_pretrained_backbone=use_pretrained_backbone,
-            **backbone_kwargs,
-        )
-    elif use_pretrained_backbone:
-        if backbone_checkpoint is None:
-            raise ValueError("config.backbone must be set if use_pretrained_backbone is True")
-        backbone = AutoBackbone.from_pretrained(backbone_checkpoint, **backbone_kwargs)
+    if backbone_checkpoint is not None:
+        backbone = AutoBackbone.from_pretrained(backbone_checkpoint)
     else:
-        if backbone_config is None and backbone_checkpoint is None:
-            raise ValueError("Either config.backbone_config or config.backbone must be set")
-        if backbone_config is None:
-            backbone_config = AutoConfig.from_pretrained(backbone_checkpoint, **backbone_kwargs)
         backbone = AutoBackbone.from_config(config=backbone_config)
     return backbone
 

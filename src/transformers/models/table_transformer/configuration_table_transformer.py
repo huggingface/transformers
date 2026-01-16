@@ -15,7 +15,6 @@
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
-from ...utils.backbone_utils import verify_backbone_config_arguments
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
@@ -136,7 +135,6 @@ class TableTransformerConfig(PreTrainedConfig):
     # Copied from transformers.models.detr.configuration_detr.DetrConfig.__init__
     def __init__(
         self,
-        use_timm_backbone=True,
         backbone_config=None,
         num_channels=3,
         num_queries=100,
@@ -159,8 +157,6 @@ class TableTransformerConfig(PreTrainedConfig):
         auxiliary_loss=False,
         position_embedding_type="sine",
         backbone="resnet50",
-        use_pretrained_backbone=True,
-        backbone_kwargs=None,
         dilation=False,
         class_cost=1,
         bbox_cost=5,
@@ -172,16 +168,22 @@ class TableTransformerConfig(PreTrainedConfig):
         eos_coefficient=0.1,
         **kwargs,
     ):
-        # We default to values which were previously hard-coded in the model. This enables configurability of the config
-        # while keeping the default behavior the same.
-        if use_timm_backbone and backbone_kwargs is None:
-            backbone_kwargs = {}
+        # Backwards compatibility, pop attributes and infer backbone config
+        use_timm_backbone = kwargs.pop("use_timm_backbone", True)
+        backbone_kwargs = kwargs.pop("backbone_kwargs", {})
+        if use_timm_backbone:
+            # Default to values which were hard-coded in `modeling`
+            backbone_config = CONFIG_MAPPING["timm_backbone"](
+                backbone=backbone,
+                num_channels=backbone_kwargs.get("num_channels", num_channels),
+                features_only=True,
+                use_pretrained_backbone=False,  # backbone weights are already in state dict, no?
+                out_indices=backbone_kwargs.get("out_indices", [1, 2, 3, 4]),
+            )
             if dilation:
-                backbone_kwargs["output_stride"] = 16
-            backbone_kwargs["out_indices"] = [1, 2, 3, 4]
-            backbone_kwargs["in_chans"] = num_channels
-        # Backwards compatibility
-        elif not use_timm_backbone and backbone in (None, "resnet50"):
+                backbone_config.output_stride = backbone_kwargs.get("output_stride", 16)
+            backbone = None
+        else:
             if backbone_config is None:
                 logger.info("`backbone_config` is `None`. Initializing the config with the default `ResNet` backbone.")
                 backbone_config = CONFIG_MAPPING["resnet"](out_features=["stage4"])
@@ -189,19 +191,9 @@ class TableTransformerConfig(PreTrainedConfig):
                 backbone_model_type = backbone_config.get("model_type")
                 config_class = CONFIG_MAPPING[backbone_model_type]
                 backbone_config = config_class.from_dict(backbone_config)
-            backbone = None
             # set timm attributes to None
             dilation = None
 
-        verify_backbone_config_arguments(
-            use_timm_backbone=use_timm_backbone,
-            use_pretrained_backbone=use_pretrained_backbone,
-            backbone=backbone,
-            backbone_config=backbone_config,
-            backbone_kwargs=backbone_kwargs,
-        )
-
-        self.use_timm_backbone = use_timm_backbone
         self.backbone_config = backbone_config
         self.num_channels = num_channels
         self.num_queries = num_queries
@@ -224,8 +216,6 @@ class TableTransformerConfig(PreTrainedConfig):
         self.auxiliary_loss = auxiliary_loss
         self.position_embedding_type = position_embedding_type
         self.backbone = backbone
-        self.use_pretrained_backbone = use_pretrained_backbone
-        self.backbone_kwargs = backbone_kwargs
         self.dilation = dilation
         # Hungarian matcher
         self.class_cost = class_cost
