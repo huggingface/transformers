@@ -79,10 +79,10 @@ class PeftConcatenate(Concatenate):
             lora_b_out.append(torch.block_diag(lora_b_out[0][i], lora_b_out[1][i]))
         lora_b_out = torch.stack(lora_b_out[2:], dim=0)
         return {
-            full_layer_name + "_lora_A_weight": [
+            full_layer_name : [
                 lora_a_out
             ],  # @BenjaminBossan this depends on MoE implementation for 3 patams
-            full_layer_name + "_lora_B_weight": [lora_b_out],
+            full_layer_name.replace("lora_A", "lora_B"): [lora_b_out],
         }
 
     @property
