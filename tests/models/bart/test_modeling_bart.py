@@ -48,7 +48,6 @@ if is_torch_available():
         BartForSequenceClassification,
         BartModel,
         BartTokenizer,
-        pipeline,
     )
     from transformers.models.bart.modeling_bart import BartDecoder, BartEncoder, shift_tokens_right
 

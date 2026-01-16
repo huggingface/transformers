@@ -31,7 +31,6 @@ from huggingface_hub import (
     ImageClassificationInput,
     ImageSegmentationInput,
     ObjectDetectionInput,
-    QuestionAnsweringInput,
     VideoClassificationInput,
     ZeroShotImageClassificationInput,
 )
@@ -44,7 +43,6 @@ from transformers.pipelines import (
     ImageClassificationPipeline,
     ImageSegmentationPipeline,
     ObjectDetectionPipeline,
-    QuestionAnsweringPipeline,
     VideoClassificationPipeline,
     ZeroShotImageClassificationPipeline,
 )
@@ -64,7 +62,6 @@ from .pipelines.test_pipelines_automatic_speech_recognition import AutomaticSpee
 from .pipelines.test_pipelines_depth_estimation import DepthEstimationPipelineTests
 from .pipelines.test_pipelines_document_question_answering import DocumentQuestionAnsweringPipelineTests
 from .pipelines.test_pipelines_feature_extraction import FeatureExtractionPipelineTests
-from .pipelines.test_pipelines_fill_mask import FillMaskPipelineTests
 from .pipelines.test_pipelines_image_classification import ImageClassificationPipelineTests
 from .pipelines.test_pipelines_image_feature_extraction import ImageFeatureExtractionPipelineTests
 from .pipelines.test_pipelines_image_segmentation import ImageSegmentationPipelineTests
@@ -72,14 +69,12 @@ from .pipelines.test_pipelines_image_text_to_text import ImageTextToTextPipeline
 from .pipelines.test_pipelines_image_to_image import ImageToImagePipelineTests
 from .pipelines.test_pipelines_mask_generation import MaskGenerationPipelineTests
 from .pipelines.test_pipelines_object_detection import ObjectDetectionPipelineTests
-from .pipelines.test_pipelines_question_answering import QAPipelineTests
 from .pipelines.test_pipelines_table_question_answering import TQAPipelineTests
 from .pipelines.test_pipelines_text_classification import TextClassificationPipelineTests
 from .pipelines.test_pipelines_text_generation import TextGenerationPipelineTests
 from .pipelines.test_pipelines_text_to_audio import TextToAudioPipelineTests
 from .pipelines.test_pipelines_token_classification import TokenClassificationPipelineTests
 from .pipelines.test_pipelines_video_classification import VideoClassificationPipelineTests
-from .pipelines.test_pipelines_visual_question_answering import VisualQuestionAnsweringPipelineTests
 from .pipelines.test_pipelines_zero_shot import ZeroShotClassificationPipelineTests
 from .pipelines.test_pipelines_zero_shot_audio_classification import ZeroShotAudioClassificationPipelineTests
 from .pipelines.test_pipelines_zero_shot_image_classification import ZeroShotImageClassificationPipelineTests
