@@ -68,6 +68,11 @@ class BrosConfig(PreTrainedConfig):
             The number of relations for SpadeEE(entity extraction), SpadeEL(entity linking) head.
         classifier_dropout_prob (`float`, *optional*, defaults to 0.1):
             The dropout ratio for the classifier head.
+        is_decoder (`bool`, *optional*, defaults to `False`):
+            Whether to only use the decoder in an encoder-decoder architecture, otherwise it has no effect on
+            decoder-only or encoder-only architectures.
+        add_cross_attention (`bool`, *optional*, defaults to `False`):
+            Whether cross-attention layers should be added to the model.
 
 
     Examples:
@@ -106,25 +111,27 @@ class BrosConfig(PreTrainedConfig):
         bbox_scale=100.0,
         n_relations=1,
         classifier_dropout_prob=0.1,
+        is_decoder=False,
+        add_cross_attention=False,
         **kwargs,
     ):
-        super().__init__(
-            vocab_size=vocab_size,
-            hidden_size=hidden_size,
-            num_hidden_layers=num_hidden_layers,
-            num_attention_heads=num_attention_heads,
-            intermediate_size=intermediate_size,
-            hidden_act=hidden_act,
-            hidden_dropout_prob=hidden_dropout_prob,
-            attention_probs_dropout_prob=attention_probs_dropout_prob,
-            max_position_embeddings=max_position_embeddings,
-            type_vocab_size=type_vocab_size,
-            initializer_range=initializer_range,
-            layer_norm_eps=layer_norm_eps,
-            pad_token_id=pad_token_id,
-            **kwargs,
-        )
+        super().__init__(**kwargs)
 
+        self.is_decoder = is_decoder
+        self.add_cross_attention = add_cross_attention
+        self.vocab_size = vocab_size
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.intermediate_size = intermediate_size
+        self.hidden_act = hidden_act
+        self.hidden_dropout_prob = hidden_dropout_prob
+        self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.max_position_embeddings = max_position_embeddings
+        self.type_vocab_size = type_vocab_size
+        self.initializer_range = initializer_range
+        self.layer_norm_eps = layer_norm_eps
+        self.pad_token_id = pad_token_id
         self.dim_bbox = dim_bbox
         self.bbox_scale = bbox_scale
         self.n_relations = n_relations
