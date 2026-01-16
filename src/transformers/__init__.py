@@ -140,7 +140,6 @@ _import_structure = {
         "CsvPipelineDataFormat",
         "DepthEstimationPipeline",
         "DocumentQuestionAnsweringPipeline",
-        "FillMaskPipeline",
         "ImageClassificationPipeline",
         "ImageEmbeddingPipeline",
         "ImageSegmentationPipeline",
@@ -154,7 +153,6 @@ _import_structure = {
         "PipedPipelineDataFormat",
         "Pipeline",
         "PipelineDataFormat",
-        "QuestionAnsweringPipeline",
         "TableQuestionAnsweringPipeline",
         "TextClassificationPipeline",
         "TextEmbeddingPipeline",
@@ -162,7 +160,6 @@ _import_structure = {
         "TextToAudioPipeline",
         "TokenClassificationPipeline",
         "VideoClassificationPipeline",
-        "VisualQuestionAnsweringPipeline",
         "ZeroShotAudioClassificationPipeline",
         "ZeroShotClassificationPipeline",
         "ZeroShotImageClassificationPipeline",
@@ -648,7 +645,6 @@ if TYPE_CHECKING:
     from .pipelines import CsvPipelineDataFormat as CsvPipelineDataFormat
     from .pipelines import DepthEstimationPipeline as DepthEstimationPipeline
     from .pipelines import DocumentQuestionAnsweringPipeline as DocumentQuestionAnsweringPipeline
-    from .pipelines import FillMaskPipeline as FillMaskPipeline
     from .pipelines import ImageClassificationPipeline as ImageClassificationPipeline
     from .pipelines import ImageEmbeddingPipeline as ImageEmbeddingPipeline
     from .pipelines import ImageSegmentationPipeline as ImageSegmentationPipeline
@@ -670,7 +666,6 @@ if TYPE_CHECKING:
     from .pipelines import TextToAudioPipeline as TextToAudioPipeline
     from .pipelines import TokenClassificationPipeline as TokenClassificationPipeline
     from .pipelines import VideoClassificationPipeline as VideoClassificationPipeline
-    from .pipelines import VisualQuestionAnsweringPipeline as VisualQuestionAnsweringPipeline
     from .pipelines import ZeroShotAudioClassificationPipeline as ZeroShotAudioClassificationPipeline
     from .pipelines import ZeroShotClassificationPipeline as ZeroShotClassificationPipeline
     from .pipelines import ZeroShotImageClassificationPipeline as ZeroShotImageClassificationPipeline
