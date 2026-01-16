@@ -44,7 +44,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ...utils.generic import can_return_tuple, check_model_inputs, maybe_autocast
+from ...utils.generic import can_return_tuple, check_model_inputs, is_flash_attention_requested, maybe_autocast
 from ...utils.import_utils import is_triton_available
 from .configuration_modernbert import ModernBertConfig
 
@@ -302,7 +302,7 @@ class ModernBertAttention(nn.Module):
         cos, sin = position_embeddings
         # Flash attention requires float32 for rotary embeddings to match the original implementation
         # which used a separate ModernBertUnpaddedRotaryEmbedding class
-        if "flash" in self.config._attn_implementation:
+        if is_flash_attention_requested(self.config):
             original_dtype = query_states.dtype
             query_states = query_states.float()
             key_states = key_states.float()

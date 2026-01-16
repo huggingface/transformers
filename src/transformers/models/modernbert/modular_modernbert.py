@@ -38,7 +38,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ...utils.generic import can_return_tuple, check_model_inputs
+from ...utils.generic import can_return_tuple, check_model_inputs, is_flash_attention_requested
 from ...utils.import_utils import is_triton_available
 from ..align.modeling_align import eager_attention_forward
 from ..gemma3.modeling_gemma3 import Gemma3RotaryEmbedding, apply_rotary_pos_emb
@@ -132,6 +132,8 @@ class ModernBertConfig(PreTrainedConfig):
             the model will be compiled if 1) `triton` is installed, 2) the model is not on MPS, 3) the model is not
             shared between devices, and 4) the model is not resized after initialization. If `True`, then the model may
             be faster in some scenarios.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
     Examples:
 
@@ -187,6 +189,7 @@ class ModernBertConfig(PreTrainedConfig):
         sparse_prediction: bool | None = False,
         sparse_pred_ignore_index: int | None = -100,
         reference_compile: bool | None = None,
+        tie_word_embeddings: bool | None = True,
         **kwargs,
     ):
         self.pad_token_id = pad_token_id
@@ -405,7 +408,7 @@ class ModernBertAttention(nn.Module):
         cos, sin = position_embeddings
         # Flash attention requires float32 for rotary embeddings to match the original implementation
         # which used a separate ModernBertUnpaddedRotaryEmbedding class
-        if "flash" in self.config._attn_implementation:
+        if is_flash_attention_requested(self.config):
             original_dtype = query_states.dtype
             query_states = query_states.float()
             key_states = key_states.float()

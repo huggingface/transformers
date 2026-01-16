@@ -110,6 +110,8 @@ class ModernBertConfig(PreTrainedConfig):
             the model will be compiled if 1) `triton` is installed, 2) the model is not on MPS, 3) the model is not
             shared between devices, and 4) the model is not resized after initialization. If `True`, then the model may
             be faster in some scenarios.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
     Examples:
 
@@ -165,6 +167,7 @@ class ModernBertConfig(PreTrainedConfig):
         sparse_prediction: bool | None = False,
         sparse_pred_ignore_index: int | None = -100,
         reference_compile: bool | None = None,
+        tie_word_embeddings: bool | None = True,
         **kwargs,
     ):
         self.pad_token_id = pad_token_id
