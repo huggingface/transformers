@@ -21,6 +21,7 @@ from .core_model_loading import (
     Chunk,
     Concatenate,
     ErnieFuseAndSplitTextVisionExperts,
+    Force16BytesAlignment,
     MergeModulelist,
     Transpose,
     WeightConverter,
@@ -40,6 +41,18 @@ if TYPE_CHECKING:
 
 def _build_checkpoint_conversion_mapping():
     mapping = {
+        "gpt_oss": [
+            WeightConverter(
+                source_patterns="mlp.experts.gate_up_proj",
+                target_patterns="mlp.experts.gate_up_proj",
+                operations=[Force16BytesAlignment()],
+            ),
+            WeightConverter(
+                source_patterns="mlp.experts.down_proj",
+                target_patterns="mlp.experts.down_proj",
+                operations=[Force16BytesAlignment()],
+            ),
+        ],
         "mixtral": [
             WeightRenaming(".block_sparse_moe.gate", ".mlp.gate"),
             WeightConverter(
@@ -347,6 +360,10 @@ def get_model_conversion_mapping(
 
     # Add the ones from the quantizer as well if provided
     if hf_quantizer is not None:
-        weight_conversions.extend(hf_quantizer.get_weight_conversions())
+        # NOTE: Since get_weight_conversions() only serves to dequantize, we need to put them first in the list.
+        # However, for now it's not possible to match 1 param with 2 converters (i.e. 1 dequantization converter
+        # and 1 model-specific converter). Which means that if a model that has model-specific conversions and is being
+        # dequantized, the model-specific conversion that has patterns matching the dequantization patterns will be ignored.
+        weight_conversions = hf_quantizer.get_weight_conversions() + weight_conversions
 
     return weight_conversions
