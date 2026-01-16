@@ -252,5 +252,10 @@ class ModernBertConfig(PreTrainedConfig):
         output.pop("reference_compile", None)
         return output
 
+    @property
+    def sliding_window(self):
+        """Half-window size: `local_attention` is the total window, so we divide by 2."""
+        return self.local_attention // 2
+
 
 __all__ = ["ModernBertConfig"]
