@@ -2140,12 +2140,35 @@ class GenerationMixin(ContinuousMixin):
         generation_config._pad_token_tensor = pad_token_tensor
         generation_config._decoder_start_token_tensor = decoder_start_token_tensor
 
+
+    def _is_dynamo_compilation_disabled(self):
+        """
+        Check if dynamo compilation should be disabled based on environment variables.
+        Uses standard environment variables to respect user's explicit intention to disable
+        torch.dynamo compilation.
+        """
+        disable_env_vars = [
+            "TORCHDYNAMO_DISABLE"  # Pytorch standard
+        ]
+
+        for env_var in disable_env_vars:
+            value = os.getenv(env_var, "").lower()
+            if value in ("1", "true", "yes", "on"):
+                return True
+
+        return False
+
+
     def _valid_auto_compile_criteria(self, model_kwargs: dict[str, Any], generation_config: GenerationConfig) -> bool:
         """
         Determines whether to trigger auto-compilation of the model's forward pass at generation time.
         """
         # Override: honor `disable_compile` flag
         if generation_config.disable_compile:
+            return False
+
+        # honor accelerate config to disable dynamo
+        if self._is_dynamo_compilation_disabled():
             return False
 
         # Base logic
