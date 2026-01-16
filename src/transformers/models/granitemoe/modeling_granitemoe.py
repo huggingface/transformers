@@ -222,6 +222,7 @@ class GraniteMoeTopKGating(nn.Module):
         return index_sorted_experts, batch_index, batch_gates, expert_size, logits
 
 
+@use_kernel_forward_from_hub("ScatterMoEGatedMLP")
 class GraniteMoeMoE(nn.Module):
     """
     A Sparsely gated mixture of experts layer with 1-layer Feed-Forward networks as experts.
