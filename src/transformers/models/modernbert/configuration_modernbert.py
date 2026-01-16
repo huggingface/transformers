@@ -128,7 +128,6 @@ class ModernBertConfig(PreTrainedConfig):
 
     model_type = "modernbert"
     keys_to_ignore_at_inference = ["past_key_values"]
-    attribute_map = {"sliding_window": "local_attention"}
     default_theta = {"global": 160_000.0, "local": 10_000.0}
 
     def __init__(
