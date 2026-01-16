@@ -1201,12 +1201,11 @@ class CometCallback(TrainerCallback):
 
     def on_train_end(self, args, state, control, **kwargs):
         if self._initialized and state.is_world_process_zero:
-            if self._experiment is not None:
-                if self._log_assets is True:
-                    logger.info("Logging checkpoints. This may take time.")
-                    self._experiment.log_asset_folder(
-                        args.output_dir, recursive=True, log_file_name=True, step=state.global_step
-                    )
+            if self._log_assets is True:
+                logger.info("Logging checkpoints. This may take time.")
+                self._experiment.log_asset_folder(
+                    args.output_dir, recursive=True, log_file_name=True, step=state.global_step
+                )
 
             # We create one experiment per trial in HPO mode
             if state.is_hyper_param_search:
@@ -1814,6 +1813,8 @@ class ClearMLCallback(TrainerCallback):
         ClearML task name.
     - **CLEARML_LOG_MODEL** (`bool`, *optional*, defaults to `False`):
         Whether to log models as artifacts during training.
+    - **CLEARML_RESUME_TASK_ID** (`str`, *optional*):
+        Task ID to resume from checkpoint. If not provided, a new task will be created.
     """
 
     log_suffix = ""
@@ -1844,7 +1845,7 @@ class ClearMLCallback(TrainerCallback):
 
         self._initialized = False
         self._clearml_task = None
-
+        self._resume_task_id = os.getenv("CLEARML_RESUME_TASK_ID")
         self._log_model = False
         self._checkpoints_saved = []
 
@@ -1877,12 +1878,26 @@ class ClearMLCallback(TrainerCallback):
                     ).upper() in ENV_VARS_TRUE_VALUES.union({"TRUE"})
                     logger.info("External ClearML Task has been connected.")
                 else:
-                    self._clearml_task = self._clearml.Task.init(
-                        project_name=os.getenv("CLEARML_PROJECT", "HuggingFace Transformers"),
-                        task_name=os.getenv("CLEARML_TASK", "Trainer"),
-                        auto_connect_frameworks={"tensorboard": False, "pytorch": False},
-                        output_uri=True,
-                    )
+                    # Try to resume from checkpoint if task ID is provided
+                    if self._resume_task_id:
+                        try:
+                            self._clearml_task = self._clearml.Task.get_task(task_id=self._resume_task_id)
+                            logger.info(f"Resumed ClearML Task {self._resume_task_id}")
+                        except Exception as e:
+                            logger.warning(f"Failed to resume task {self._resume_task_id}: {e}")
+                            self._clearml_task = self._clearml.Task.init(
+                                project_name=os.getenv("CLEARML_PROJECT", "HuggingFace Transformers"),
+                                task_name=os.getenv("CLEARML_TASK", "Trainer"),
+                                auto_connect_frameworks={"tensorboard": False, "pytorch": False},
+                                output_uri=True,
+                            )
+                    else:
+                        self._clearml_task = self._clearml.Task.init(
+                            project_name=os.getenv("CLEARML_PROJECT", "HuggingFace Transformers"),
+                            task_name=os.getenv("CLEARML_TASK", "Trainer"),
+                            auto_connect_frameworks={"tensorboard": False, "pytorch": False},
+                            output_uri=True,
+                        )
                     self._log_model = os.getenv("CLEARML_LOG_MODEL", "TRUE").upper() in ENV_VARS_TRUE_VALUES.union(
                         {"TRUE"}
                     )
