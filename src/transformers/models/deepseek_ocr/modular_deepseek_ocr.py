@@ -389,6 +389,7 @@ class DeepseekOcrConfig(PreTrainedConfig):
     ```"""
 
     model_type = "deepseek_ocr"
+    processor_class = "DeepseekOcrProcessor"
     sub_configs = {
         "text_config": DeepseekOcrTextConfig,
         "vision_config": DeepseekOcrVisionConfig,
@@ -516,7 +517,7 @@ class DeepseekOcrProjector(PreTrainedModel):
         super().__init__(config)
         self.layers = nn.Linear(config.input_dim, config.n_embed)
 
-    def forward(self, x):
+    def forward(self, x, **kwargs):
         return self.layers(x)
 
 
@@ -561,7 +562,7 @@ class DeepseekOcrSamVisionEncoder(SamVisionEncoder):
             downsample_channels[0], downsample_channels[1], kernel_size=3, stride=2, padding=1, bias=False
         )
 
-    def forward(self, pixel_values):
+    def forward(self, pixel_values: torch.Tensor, **kwargs):
         hidden_states = self.patch_embed(pixel_values)
         if self.pos_embed is not None:
             pos_embed = self.pos_embed

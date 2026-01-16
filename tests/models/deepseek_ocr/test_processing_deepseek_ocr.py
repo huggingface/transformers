@@ -15,7 +15,7 @@
 import tempfile
 import unittest
 
-from transformers import AutoTokenizer, DeepseekOcrProcessor
+from transformers import AutoTokenizer, DeepseekOcrProcessor, LlamaTokenizer
 from transformers.testing_utils import get_tests_dir, require_torch, require_vision
 from transformers.utils import is_vision_available
 
@@ -61,6 +61,13 @@ CHAT_TEMPLATE = """
 class DeepseekOcrProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = DeepseekOcrProcessor
 
+    @classmethod
+    def _setup_tokenizer(cls):
+        tokenizer = LlamaTokenizer.from_pretrained(SAMPLE_VOCAB)
+        tokenizer.pad_token_id = 0
+        tokenizer.add_special_tokens({"additional_special_tokens": ["<image>"]})
+        return tokenizer
+
     def setUp(self):
         self.tmpdirname = tempfile.mkdtemp()
         image_processor = DeepseekOcrImageProcessorFast(
@@ -69,7 +76,7 @@ class DeepseekOcrProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             patch_size_side=256,
             max_crops=1,
         )
-        tokenizer = AutoTokenizer.from_pretrained("deepseek-ai/DeepSeek-V2-Lite")
+        tokenizer = type(self)._setup_tokenizer()
         processor_kwargs = self.prepare_processor_dict()
         processor = self.processor_class(
             image_processor=image_processor,

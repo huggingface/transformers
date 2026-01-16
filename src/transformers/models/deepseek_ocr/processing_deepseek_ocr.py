@@ -36,8 +36,6 @@ if is_vision_available():
     from PIL import Image, ImageDraw, ImageFont
 
 
-DEEPSEEK_OCR_MIN_DYNAMIC_CROPS = 2
-
 DEEPSEEK_OCR_DEFAULT_CHAT_TEMPLATE = dedent(
     """
     {%- for message in messages %}
@@ -111,7 +109,7 @@ class DeepseekOcrProcessor(ProcessorMixin):
             )
         self.image_token_ids = [self.image_token_id]
         tokenizer_chat_template = getattr(tokenizer, "chat_template", None)
-        if "chat_template" not in kwargs:
+        if kwargs.get("chat_template") is None:
             if tokenizer_chat_template is not None:
                 kwargs["chat_template"] = tokenizer_chat_template
             else:
@@ -130,6 +128,8 @@ class DeepseekOcrProcessor(ProcessorMixin):
                 raise
             image_processor = DeepseekOcrImageProcessorFast()
             tokenizer = AutoTokenizer.from_pretrained(pretrained_model_name_or_path, **kwargs)
+            if getattr(tokenizer, "chat_template", None) is None:
+                tokenizer.chat_template = DEEPSEEK_OCR_DEFAULT_CHAT_TEMPLATE
             return [image_processor, tokenizer]
 
     def __call__(
@@ -231,6 +231,19 @@ class DeepseekOcrProcessor(ProcessorMixin):
         """
         return self.tokenizer.decode(*args, **kwargs)
 
+    def apply_chat_template(self, messages, **kwargs):
+        """
+        Ensure a chat template is available on the tokenizer before delegating.
+        """
+        chat_template = kwargs.pop("chat_template", None)
+        if chat_template is None:
+            if getattr(self, "chat_template", None) is None:
+                self.chat_template = DEEPSEEK_OCR_DEFAULT_CHAT_TEMPLATE
+            chat_template = self.chat_template
+        if getattr(self.tokenizer, "chat_template", None) is None:
+            self.tokenizer.chat_template = chat_template
+        return super().apply_chat_template(messages, chat_template=chat_template, **kwargs)
+
     @property
     def model_input_names(self):
         tokenizer_input_names = self.tokenizer.model_input_names
@@ -287,14 +300,14 @@ class DeepseekOcrProcessor(ProcessorMixin):
         return MultiModalData(**vision_data)
 
     def _build_ratio_candidates(self, max_crops):
-        if max_crops < DEEPSEEK_OCR_MIN_DYNAMIC_CROPS:
+        if max_crops < 2:
             return []
         target_ratios = {
             (i, j)
-            for n in range(DEEPSEEK_OCR_MIN_DYNAMIC_CROPS, max_crops + 1)
+            for n in range(2, max_crops + 1)
             for i in range(1, n + 1)
             for j in range(1, n + 1)
-            if DEEPSEEK_OCR_MIN_DYNAMIC_CROPS <= i * j <= max_crops
+            if 2 <= i * j <= max_crops
         }
         return sorted(target_ratios, key=lambda x: x[0] * x[1])
 

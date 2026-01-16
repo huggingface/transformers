@@ -368,6 +368,7 @@ class DeepseekOcrConfig(PreTrainedConfig):
     ```"""
 
     model_type = "deepseek_ocr"
+    processor_class = "DeepseekOcrProcessor"
     sub_configs = {
         "text_config": DeepseekOcrTextConfig,
         "vision_config": DeepseekOcrVisionConfig,

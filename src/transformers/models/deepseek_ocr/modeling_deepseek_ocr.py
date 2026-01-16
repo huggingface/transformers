@@ -110,7 +110,7 @@ class DeepseekOcrProjector(PreTrainedModel):
         super().__init__(config)
         self.layers = nn.Linear(config.input_dim, config.n_embed)
 
-    def forward(self, x):
+    def forward(self, x, **kwargs):
         return self.layers(x)
 
 
@@ -594,7 +594,7 @@ class DeepseekOcrSamVisionEncoder(DeepseekOcrPreTrainedModel):
         return self.patch_embed
 
     @check_model_inputs(tie_last_hidden_states=False)
-    def forward(self, pixel_values) -> DeepseekOcrVisionEncoderOutput:
+    def forward(self, pixel_values: torch.Tensor, **kwargs) -> DeepseekOcrVisionEncoderOutput:
         hidden_states = self.patch_embed(pixel_values)
         if self.pos_embed is not None:
             pos_embed = self.pos_embed
