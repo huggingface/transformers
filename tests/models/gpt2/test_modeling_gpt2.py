@@ -268,18 +268,18 @@ class GPT2ModelTest(CausalLMModelTest, unittest.TestCase):
         super().test_training_gradient_checkpointing()
         self.all_model_classes = self.original_all_model_classes
 
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        # overwritten: GPT2DoubleHeadsModel fails this test, non-standard class
-        self.original_all_model_classes = self.all_model_classes
-        self.all_model_classes = (cls for cls in self.all_model_classes if cls.__name__ != "GPT2DoubleHeadsModel")
-        super().test_training_gradient_checkpointing_use_reentrant()
-        self.all_model_classes = self.original_all_model_classes
-
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         # overwritten: GPT2DoubleHeadsModel fails this test, non-standard class
         self.original_all_model_classes = self.all_model_classes
         self.all_model_classes = (cls for cls in self.all_model_classes if cls.__name__ != "GPT2DoubleHeadsModel")
         super().test_training_gradient_checkpointing_use_reentrant_false()
+        self.all_model_classes = self.original_all_model_classes
+
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        # overwritten: GPT2DoubleHeadsModel fails this test, non-standard class
+        self.original_all_model_classes = self.all_model_classes
+        self.all_model_classes = (cls for cls in self.all_model_classes if cls.__name__ != "GPT2DoubleHeadsModel")
+        super().test_training_gradient_checkpointing_use_reentrant_true()
         self.all_model_classes = self.original_all_model_classes
 
 

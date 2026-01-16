@@ -18,6 +18,7 @@ import tempfile
 import unittest
 
 import numpy as np
+import pytest
 import requests
 from parameterized import parameterized
 
@@ -195,24 +196,20 @@ class Blip2VisionModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training(self):
         pass
 
-    @unittest.skip
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     @slow
@@ -498,6 +495,11 @@ class Blip2ForConditionalGenerationDecoderOnlyTest(ModelTesterMixin, GenerationT
 
     @unittest.skip(reason="Blip2Model does not have input/output embeddings")
     def test_model_get_set_embeddings(self):
+        pass
+
+    @pytest.mark.generate
+    @unittest.skip(reason="Blip2Model does not support generation from no inputs")
+    def test_generate_without_input_ids(self):
         pass
 
     @unittest.skip(reason="BLIP2 has no separate base model without a head.")
@@ -855,6 +857,11 @@ class Blip2ModelTest(ModelTesterMixin, PipelineTesterMixin, GenerationTesterMixi
     def test_cpu_offload(self):
         pass
 
+    @pytest.mark.generate
+    @unittest.skip(reason="Blip2Model does not support generation from no inputs")
+    def test_generate_without_input_ids(self):
+        pass
+
     @unittest.skip(reason="BLIP2 has no separate base model without a head.")
     def test_model_base_model_prefix(self):
         pass
@@ -1086,10 +1093,6 @@ class Blip2TextModelWithProjectionTest(ModelTesterMixin, unittest.TestCase):
     def test_training(self):
         pass
 
-    @unittest.skip(reason="Training is not yet supported")
-    def test_training_gradient_checkpointing(self):
-        pass
-
     @unittest.skip(reason="Hidden_states is tested in individual model tests")
     def test_hidden_states_output(self):
         pass
@@ -1237,20 +1240,20 @@ class Blip2VisionModelWithProjectionTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip(reason="Training is not yet supported")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training(self):
         pass
 
-    @unittest.skip(reason="Training is not yet supported")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(reason="Training is not yet supported")
-    def test_training_gradient_checkpointing_use_reentrant(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="Training is not yet supported")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     @unittest.skip(reason="Blip2VisionModelWithProjection does not use inputs_embeds")
@@ -1476,11 +1479,11 @@ class Blip2TextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(reason="Training is not yet supported")
-    def test_training_gradient_checkpointing_use_reentrant(self):
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
     @unittest.skip(reason="Training is not yet supported")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
 

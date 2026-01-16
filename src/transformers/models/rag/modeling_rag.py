@@ -521,7 +521,7 @@ class RagModel(RagPreTrainedModel):
                 retriever_outputs = self.retriever(
                     input_ids,
                     question_encoder_last_hidden_state.detach().to(device="cpu", dtype=torch.float32).numpy(),
-                    prefix=self.generator.config.prefix,
+                    prefix=getattr(self.generator.config, "prefix", None),
                     n_docs=n_docs,
                     return_tensors="pt",
                 )
@@ -953,7 +953,7 @@ class RagSequenceForGeneration(RagPreTrainedModel):
             context_input_ids = self.retriever(
                 input_ids,
                 question_hidden_states.detach().to(device="cpu", dtype=torch.float32).numpy(),
-                prefix=self.generator.config.prefix,
+                prefix=getattr(self.generator.config, "prefix", None),
                 n_docs=n_docs,
                 return_tensors="pt",
             )["context_input_ids"]
@@ -1505,7 +1505,7 @@ class RagTokenForGeneration(RagPreTrainedModel, GenerationMixin):
             out = self.retriever(
                 input_ids,
                 question_hidden_states.detach().to(device="cpu", dtype=torch.float32).numpy(),
-                prefix=self.generator.config.prefix,
+                prefix=getattr(self.generator.config, "prefix", None),
                 n_docs=n_docs,
                 return_tensors="pt",
             )

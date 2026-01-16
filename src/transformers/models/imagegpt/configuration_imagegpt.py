@@ -112,8 +112,13 @@ class ImageGPTConfig(PreTrainedConfig):
         tie_word_embeddings=False,
         scale_attn_by_inverse_layer_idx=False,
         reorder_and_upcast_attn=False,
+        add_cross_attention=False,
+        pad_token_id=None,
+        bos_token_id=None,
+        eos_token_id=None,
         **kwargs,
     ):
+        self.add_cross_attention = add_cross_attention
         self.vocab_size = vocab_size
         self.n_positions = n_positions
         self.n_embd = n_embd
@@ -130,9 +135,12 @@ class ImageGPTConfig(PreTrainedConfig):
         self.use_cache = use_cache
         self.scale_attn_by_inverse_layer_idx = scale_attn_by_inverse_layer_idx
         self.reorder_and_upcast_attn = reorder_and_upcast_attn
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
         self.tie_word_embeddings = tie_word_embeddings
 
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+        super().__init__(**kwargs)
 
 
 __all__ = ["ImageGPTConfig"]

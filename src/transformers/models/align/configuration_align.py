@@ -61,9 +61,10 @@ class AlignTextConfig(PreTrainedConfig):
             The epsilon used by the layer normalization layers.
         pad_token_id (`int`, *optional*, defaults to 0):
             Padding token id.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
+        bos_token_id (`int`, *optional*):
+            Beginning of stream token id.
+        eos_token_id (`int`, *optional*):
+            End of stream token id.
 
     Example:
 
@@ -98,7 +99,8 @@ class AlignTextConfig(PreTrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         pad_token_id=0,
-        use_cache=True,
+        bos_token_id=None,
+        eos_token_id=None,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -115,8 +117,9 @@ class AlignTextConfig(PreTrainedConfig):
         self.type_vocab_size = type_vocab_size
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
-        self.use_cache = use_cache
         self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
 
 
 class AlignVisionConfig(PreTrainedConfig):
