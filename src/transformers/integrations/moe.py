@@ -108,16 +108,18 @@ def batched_mm_experts_forward(
     final_hidden_states = torch.zeros_like(hidden_states)
 
     # Flatten top_k_index to get expert_ids per selected sample
-    expert_ids = top_k_index.reshape(-1)
+    expert_ids = top_k_index.view(-1)
     token_idx = torch.arange(num_tokens, device=device).unsqueeze(1).expand(-1, num_top_k).reshape(-1)
 
     # Resolve routing weights per selected sample, allowing top_k_weights to be either:
     # - (num_tokens, num_top_k) Qwen2MoE style
     # - (num_tokens, num_experts) DeepseekV2 style
     if top_k_weights.shape == (num_tokens, num_top_k):
-        sample_weights = top_k_weights.reshape(-1)  # (S,)
+        sample_weights = top_k_weights.view(-1, 1)  # (S, 1)
     elif top_k_weights.shape == (num_tokens, num_experts):
-        sample_weights = top_k_weights[token_idx, expert_ids]  # (S,)
+        # TODO: routers that output full expert distribution
+        # should probably be corrected to output only top_k weights
+        sample_weights = top_k_weights[token_idx, expert_ids].view(-1, 1)  # (S, 1)
     else:
         raise ValueError(
             f"top_k_weights has an invalid/unsupported shape. It should be either (num_tokens, num_top_k)({num_tokens}, {num_top_k}) "
@@ -135,19 +137,19 @@ def batched_mm_experts_forward(
 
     # --- Up projection per expert (batched) ---
     gate_up_out = _batched_linear(
-        selected_hidden_states, selected_gate_up, bias=selected_gate_up_bias, is_transposed=self.is_transposed
+        selected_hidden_states, selected_gate_up, selected_gate_up_bias, is_transposed=self.is_transposed
     )  # (S, 2 * intermediate_dim)
 
     # Apply gating
-    hidden_after_activation = self._apply_gate(gate_up_out)  # (S, intermediate_dim)
+    gated_out = self._apply_gate(gate_up_out)  # (S, intermediate_dim)
 
     # --- Down projection per expert (batched) ---
     out_per_sample = _batched_linear(
-        hidden_after_activation, selected_down, bias=selected_down_bias, is_transposed=self.is_transposed
+        gated_out, selected_down, selected_down_bias, is_transposed=self.is_transposed
     )  # (S, hidden_dim)
 
     # Apply routing weights
-    out_per_sample = out_per_sample * sample_weights.unsqueeze(-1)  # (S, hidden_dim)
+    out_per_sample = out_per_sample * sample_weights  # (S, hidden_dim)
 
     # Accumulate results back to the final_hidden_states using original token indices
     final_hidden_states.index_add_(0, token_idx, out_per_sample.to(final_hidden_states.dtype))
@@ -211,16 +213,18 @@ def grouped_mm_experts_forward(
     final_hidden_states = torch.zeros_like(hidden_states)
 
     # Flatten top_k_index to get expert_ids per selected sample
-    expert_ids = top_k_index.reshape(-1)
+    expert_ids = top_k_index.view(-1)
     token_idx = torch.arange(num_tokens, device=device).unsqueeze(1).expand(-1, num_top_k).reshape(-1)
 
     # Resolve routing weights per selected sample, allowing top_k_weights to be either:
     # - (num_tokens, num_top_k) Qwen2MoE style
     # - (num_tokens, num_experts) DeepseekV2 style
     if top_k_weights.shape == (num_tokens, num_top_k):
-        sample_weights = top_k_weights.reshape(-1)  # (S,)
+        sample_weights = top_k_weights.view(-1, 1)  # (S, 1)
     elif top_k_weights.shape == (num_tokens, num_experts):
-        sample_weights = top_k_weights[token_idx, expert_ids]  # (S,)
+        # TODO: routers that output full expert distribution
+        # should probably be corrected to output only top_k weights
+        sample_weights = top_k_weights[token_idx, expert_ids].view(-1, 1)  # (S, 1)
     else:
         raise ValueError(
             f"top_k_weights has an invalid/unsupported shape. It should be either (num_tokens, num_top_k)({num_tokens}, {num_top_k}) "
@@ -228,40 +232,45 @@ def grouped_mm_experts_forward(
         )
 
     # Get current hidden states for selected samples
-    current_hidden_states = hidden_states[token_idx]
+    selected_hidden_states = hidden_states[token_idx]
 
     # Sort by expert for grouped processing
-    perm = torch.argsort(expert_ids, stable=True)
-    inv_perm = torch.argsort(perm, stable=True)
-
-    # Group by expert
+    perm = torch.argsort(expert_ids)
+    inv_perm = torch.argsort(perm)
     expert_ids_g = expert_ids[perm]
     sample_weights_g = sample_weights[perm]
-    current_states_g = current_hidden_states[perm]
+    selected_hidden_states_g = selected_hidden_states[perm]
+
+    # Select expert weights and biases for selected samples
+    # NOTE: We keep all experts here and rely on offsets to target the active ones.
+    # I have already implemented a version that only passes the active experts, but
+    # to do so I had to use torch.unique which breaks the graph capture (data-dependent).
+    # Also there were no speedup gains from it in my experiments, even in eager mode.
+    selected_gate_up = self.gate_up_proj
+    selected_down = self.down_proj
     selected_gate_up_bias = self.gate_up_proj_bias[expert_ids_g] if self.has_bias else None
     selected_down_bias = self.down_proj_bias[expert_ids_g] if self.has_bias else None
 
     # Compute offsets for grouped_mm
     # using histc instead of bincount to avoid cuda graph issues
-    # (grouped_mm_experts_forward still fails with cuda graphs but because of _grouped_mm internals)
     num_tokens_per_expert = torch.histc(expert_ids_g.float(), bins=num_experts, min=0, max=num_experts - 1)
     offs = torch.cumsum(num_tokens_per_expert, dim=0, dtype=torch.int32)
 
-    # --- Up projection per expert (grouped_mm) ---
+    # --- Up projection per expert (grouped) ---
     gate_up_out = _grouped_linear(
-        current_states_g, self.gate_up_proj, bias=selected_gate_up_bias, is_transposed=self.is_transposed, offs=offs
+        selected_hidden_states_g, selected_gate_up, selected_gate_up_bias, offs, is_transposed=self.is_transposed
     )  # (S, 2 * intermediate_dim)
 
     # Apply gating
-    hidden_after_activation = self._apply_gate(gate_up_out)  # (S, intermediate_dim)
+    gated_out = self._apply_gate(gate_up_out)  # (S, intermediate_dim)
 
-    # --- Down projection per expert (grouped_mm) ---
+    # --- Down projection per expert (grouped) ---
     out_per_sample_g = _grouped_linear(
-        hidden_after_activation, self.down_proj, bias=selected_down_bias, is_transposed=self.is_transposed, offs=offs
+        gated_out, selected_down, selected_down_bias, offs, is_transposed=self.is_transposed
     )  # (S, hidden_dim)
 
     # Apply routing weights
-    out_per_sample_g = out_per_sample_g * sample_weights_g.unsqueeze(-1)
+    out_per_sample_g = out_per_sample_g * sample_weights_g
 
     # Restore original order
     out_per_sample = out_per_sample_g[inv_perm]
