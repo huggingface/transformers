@@ -1126,7 +1126,6 @@ class GitModel(GitPreTrainedModel):
             attention_mask = torch.cat([extended_attention_mask, attention_mask], dim=-1)
 
         # Images attend each other bidirectionally while text remains causal
-        print(cache_position)
         causal_mask = create_causal_mask_mapping(
             self.config,
             embedding_output,
