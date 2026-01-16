@@ -35,8 +35,8 @@ class SolarOpenConfig(Glm4MoeConfig):
     This is the configuration class to store the configuration of a [`SolarOpenModel`]. It is used to instantiate a
     SolarOpen model according to the specified arguments, defining the model architecture.
 
-    Configuration objects inherit from [`Glm4MoeConfig`] and can be used to control the model outputs. Read the
-    documentation from [`Glm4MoeConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Instantiating a configuration defaults will yield a similar configuration to that of
     [upstage/Solar-Open-100B](https://huggingface.co/upstage/Solar-Open-100B) architecture.
