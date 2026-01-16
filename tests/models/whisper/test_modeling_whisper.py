@@ -1240,6 +1240,49 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         return [x["array"] for x in speech_samples]
 
     @slow
+    def test_retrieve_segment(self):
+        set_seed(0)
+        torch_device = "cpu"
+        # model doesn't matter since _retrieve_segment is a static method 
+        model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-tiny")
+        model = model.to(torch_device)
+        return_token_timestamps = False
+        # the test tokens are from whisper-large-v3
+        input_dict = {
+            "seek_sequence": torch.tensor([50365, 415, 1619, 11, 411, 257, 27484, 260, 294, 257, 50473]),
+            "seek_outputs": [torch.tensor([50258, 50259, 50360, 50365, 415, 1619, 11, 411, 257, 27484, 260, 294, 257, 50473, 50257])],
+            "time_offset": torch.tensor([27.8200], dtype=torch.float64),
+            "timestamp_begin": 50365,
+            "seek_num_frames": torch.tensor([218]),
+            "time_precision": 0.02,
+            "time_precision_features": 0.01,
+            "input_stride": 2,
+            "prev_idx": 0,
+            "idx": 0,
+            "return_token_timestamps": return_token_timestamps,
+            "decoder_input_ids": torch.tensor([[50258, 50259, 50360]]),
+            "max_frames": 3000
+        }
+        result_segments, result_segment_offset = model._retrieve_segment(**input_dict)
+
+        EXPECTED_SEGMENT_LIST = [{
+            'start': torch.tensor(27.8200, dtype=torch.float64),
+            'end': torch.tensor(29.9800, dtype=torch.float64),
+            'tokens': torch.tensor([51756, 415, 1619, 11, 411, 257, 27484, 260, 294, 257, 51864]),
+            'idxs': (3, 14),
+            'result': torch.tensor([50258, 50259, 50360, 51756, 415, 1619, 11, 411, 257, 27484, 260, 294, 257, 51864, 50257],)}]
+        EXPECTED_SEGMENT_OFFSET = 218
+
+        for result, expected in zip(result_segments, EXPECTED_SEGMENT_LIST):
+            self.assertEqual(result['start'], expected['start'])
+            self.assertEqual(result['end'], expected['end'])
+            self.assertEqual(result['idxs'], expected['idxs'])
+            torch.testing.assert_close(result['tokens'], expected['tokens'])
+            torch.testing.assert_close(result['result'], expected['result'])
+
+        self.assertEqual(result_segment_offset, EXPECTED_SEGMENT_OFFSET)
+
+    @slow
     def test_tiny_logits_librispeech(self):
         torch_device = "cpu"
         set_seed(0)

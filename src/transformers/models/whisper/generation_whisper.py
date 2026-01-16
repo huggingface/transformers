@@ -893,6 +893,7 @@ class WhisperGenerationMixin(GenerationMixin):
                     idx=i,
                     return_token_timestamps=return_token_timestamps,
                     decoder_input_ids=decoder_input_ids,
+                    max_frames=max_frames[i],
                 )
 
                 seek[prev_i] += segment_offset
@@ -1986,6 +1987,7 @@ class WhisperGenerationMixin(GenerationMixin):
         idx,
         return_token_timestamps,
         decoder_input_ids,
+        max_frames,
     ):
         # find the predicted "end of segment" predictions of Whisper
         # "end of segment" predictions occur whenever Whisper predicts a timestamp token
@@ -2055,6 +2057,16 @@ class WhisperGenerationMixin(GenerationMixin):
                 last_timestamp_pos = (timestamps[-1] - timestamp_begin).to(
                     torch.float32 if device.type == "mps" else torch.float64
                 )
+                add_time_offset = torch.round(time_offset[prev_idx] / time_precision).to(seek_sequence.dtype)
+                if (add_time_offset != 0).any():
+                    seek_sequence[timestamp_tokens] += add_time_offset
+                    # Ensure the added offset does not exceed the chunk length; otherwise, the timestamp may surpass Whisper's hard token id limit at <|30.00|>.
+                    max_timestamp_token_id = (timestamp_begin + int(max_frames*0.01/time_precision))
+                    seek_sequence = seek_sequence.clamp(max=max_timestamp_token_id)
+                    if isinstance(seek_outputs[0], torch.Tensor):
+                        seek_outputs[idx][idx_offset: idx_offset + len(seek_sequence)] = seek_sequence
+                    elif isinstance(seek_outputs[0], dict):
+                        seek_outputs[idx]['sequences'][idx_offset: idx_offset + len(seek_sequence)] = seek_sequence
             segments = [
                 {
                     "start": time_offset[prev_idx],
