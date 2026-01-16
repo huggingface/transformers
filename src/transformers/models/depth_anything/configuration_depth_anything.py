@@ -15,7 +15,6 @@
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
-from ...utils.backbone_utils import verify_backbone_config_arguments
 from ..auto.configuration_auto import CONFIG_MAPPING, AutoConfig
 
 
@@ -91,9 +90,6 @@ class DepthAnythingConfig(PreTrainedConfig):
         self,
         backbone_config=None,
         backbone=None,
-        use_pretrained_backbone=False,
-        use_timm_backbone=False,
-        backbone_kwargs=None,
         patch_size=14,
         initializer_range=0.02,
         reassemble_hidden_size=384,
@@ -120,20 +116,14 @@ class DepthAnythingConfig(PreTrainedConfig):
             backbone_model_type = backbone_config.get("model_type")
             config_class = CONFIG_MAPPING[backbone_model_type]
             backbone_config = config_class.from_dict(backbone_config)
-
-        verify_backbone_config_arguments(
-            use_timm_backbone=use_timm_backbone,
-            use_pretrained_backbone=use_pretrained_backbone,
-            backbone=backbone,
-            backbone_config=backbone_config,
-            backbone_kwargs=backbone_kwargs,
-        )
+        elif kwargs.get("backbone_kwargs"):
+            backbone_kwargs = kwargs.pop("backbone_kwargs")
+            backbone_config = CONFIG_MAPPING["timm_backbone"](**backbone_kwargs)
+        elif backbone is not None and backbone_config is not None:
+            raise ValueError("You can't specify both `backbone` and `backbone_config`.")
 
         self.backbone_config = backbone_config
         self.backbone = backbone
-        self.use_pretrained_backbone = use_pretrained_backbone
-        self.use_timm_backbone = use_timm_backbone
-        self.backbone_kwargs = backbone_kwargs
         self.reassemble_hidden_size = reassemble_hidden_size
         self.patch_size = patch_size
         self.initializer_range = initializer_range

@@ -19,7 +19,6 @@
 # limitations under the License.
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
-from ...utils.backbone_utils import verify_backbone_config_arguments
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
@@ -209,10 +208,7 @@ class DFineConfig(PreTrainedConfig):
         # backbone
         backbone_config=None,
         backbone=None,
-        use_pretrained_backbone=False,
-        use_timm_backbone=False,
         freeze_backbone_batch_norms=True,
-        backbone_kwargs=None,
         # encoder HybridEncoder
         encoder_hidden_dim=256,
         encoder_in_channels=[512, 1024, 2048],
@@ -280,16 +276,13 @@ class DFineConfig(PreTrainedConfig):
         self.initializer_bias_prior_prob = initializer_bias_prior_prob
         self.layer_norm_eps = layer_norm_eps
         self.batch_norm_eps = batch_norm_eps
+
         # backbone
         if backbone_config is None and backbone is None:
             logger.info(
                 "`backbone_config` and `backbone` are `None`. Initializing the config with the default `HGNet-V2` backbone."
             )
-            backbone_model_type = "hgnet_v2"
-            config_class = CONFIG_MAPPING[backbone_model_type]
-            # this will map it to HGNetV2Config
-            # and we would need to create HGNetV2Backbone
-            backbone_config = config_class(
+            backbone_config = CONFIG_MAPPING["hgnet_v2"](
                 num_channels=3,
                 embedding_size=64,
                 hidden_sizes=[256, 512, 1024, 2048],
@@ -305,21 +298,15 @@ class DFineConfig(PreTrainedConfig):
             backbone_model_type = backbone_config.pop("model_type")
             config_class = CONFIG_MAPPING[backbone_model_type]
             backbone_config = config_class.from_dict(backbone_config)
-
-        verify_backbone_config_arguments(
-            use_timm_backbone=use_timm_backbone,
-            use_pretrained_backbone=use_pretrained_backbone,
-            backbone=backbone,
-            backbone_config=backbone_config,
-            backbone_kwargs=backbone_kwargs,
-        )
+        elif kwargs.get("backbone_kwargs"):
+            backbone_kwargs = kwargs.pop("backbone_kwargs")
+            backbone_config = CONFIG_MAPPING["timm_backbone"](**backbone_kwargs)
+        elif backbone is not None and backbone_config is not None:
+            raise ValueError("You can't specify both `backbone` and `backbone_config`.")
 
         self.backbone_config = backbone_config
         self.backbone = backbone
-        self.use_pretrained_backbone = use_pretrained_backbone
-        self.use_timm_backbone = use_timm_backbone
         self.freeze_backbone_batch_norms = freeze_backbone_batch_norms
-        self.backbone_kwargs = backbone_kwargs
         # encoder
         self.encoder_hidden_dim = encoder_hidden_dim
         self.encoder_in_channels = encoder_in_channels

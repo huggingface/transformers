@@ -23,7 +23,7 @@ from torch import Tensor, nn
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...file_utils import ModelOutput, is_timm_available, requires_backends
+from ...file_utils import ModelOutput, is_timm_available
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import meshgrid
@@ -34,7 +34,7 @@ from .configuration_grounding_dino import GroundingDinoConfig
 
 
 if is_timm_available():
-    from timm import create_model
+    pass
 
 
 logger = logging.get_logger(__name__)
@@ -373,25 +373,13 @@ class GroundingDinoConvEncoder(nn.Module):
         super().__init__()
 
         self.config = config
-
-        if config.use_timm_backbone:
-            requires_backends(self, ["timm"])
-            backbone = create_model(
-                config.backbone,
-                pretrained=config.use_pretrained_backbone,
-                features_only=True,
-                **config.backbone_kwargs,
-            )
-        else:
-            backbone = load_backbone(config)
+        backbone = load_backbone(config)
 
         # replace batch norm by frozen batch norm
         with torch.no_grad():
             replace_batch_norm(backbone)
         self.model = backbone
-        self.intermediate_channel_sizes = (
-            self.model.feature_info.channels() if config.use_timm_backbone else self.model.channels
-        )
+        self.intermediate_channel_sizes = self.model.channels
 
         backbone_model_type = None
         if config.backbone is not None:
@@ -403,17 +391,13 @@ class GroundingDinoConvEncoder(nn.Module):
 
         if "resnet" in backbone_model_type:
             for name, parameter in self.model.named_parameters():
-                if config.use_timm_backbone:
-                    if "layer2" not in name and "layer3" not in name and "layer4" not in name:
-                        parameter.requires_grad_(False)
-                else:
-                    if "stage.1" not in name and "stage.2" not in name and "stage.3" not in name:
-                        parameter.requires_grad_(False)
+                if "stage.1" not in name and "stage.2" not in name and "stage.3" not in name:
+                    parameter.requires_grad_(False)
 
     # Copied from transformers.models.detr.modeling_detr.DetrConvEncoder.forward with Detr->GroundingDino
     def forward(self, pixel_values: torch.Tensor, pixel_mask: torch.Tensor):
         # send pixel_values through the model to get list of feature maps
-        features = self.model(pixel_values) if self.config.use_timm_backbone else self.model(pixel_values).feature_maps
+        features = self.model(pixel_values, return_dict=True).feature_maps
 
         out = []
         for feature_map in features:

@@ -15,7 +15,6 @@
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
-from ...utils.backbone_utils import verify_backbone_config_arguments
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
@@ -155,9 +154,6 @@ class GroundingDinoConfig(PreTrainedConfig):
         self,
         backbone_config=None,
         backbone=None,
-        use_pretrained_backbone=False,
-        use_timm_backbone=False,
-        backbone_kwargs=None,
         text_config=None,
         num_queries=900,
         encoder_layers=6,
@@ -213,24 +209,15 @@ class GroundingDinoConfig(PreTrainedConfig):
             backbone_model_type = backbone_config.pop("model_type")
             config_class = CONFIG_MAPPING[backbone_model_type]
             backbone_config = config_class.from_dict(backbone_config)
-
-        verify_backbone_config_arguments(
-            use_timm_backbone=use_timm_backbone,
-            use_pretrained_backbone=use_pretrained_backbone,
-            backbone=backbone,
-            backbone_config=backbone_config,
-            backbone_kwargs=backbone_kwargs,
-        )
-
-        if text_config is None:
-            text_config = {}
-            logger.info("text_config is None. Initializing the text config with default values (`BertConfig`).")
+        elif kwargs.get("backbone_kwargs") and backbone is not None:
+            backbone_kwargs = kwargs.pop("backbone_kwargs")
+            backbone_config = CONFIG_MAPPING["timm_backbone"](backbone=backbone, **backbone_kwargs)
+            backbone = None
+        elif backbone is not None and backbone_config is not None:
+            raise ValueError("You can't specify both `backbone` and `backbone_config`.")
 
         self.backbone_config = backbone_config
         self.backbone = backbone
-        self.use_pretrained_backbone = use_pretrained_backbone
-        self.use_timm_backbone = use_timm_backbone
-        self.backbone_kwargs = backbone_kwargs
         self.num_queries = num_queries
         self.d_model = d_model
         self.encoder_ffn_dim = encoder_ffn_dim
@@ -265,6 +252,7 @@ class GroundingDinoConfig(PreTrainedConfig):
             text_config = CONFIG_MAPPING[text_config["model_type"]](**text_config)
         elif text_config is None:
             text_config = CONFIG_MAPPING["bert"]()
+            logger.info("text_config is None. Initializing the text config with default values (`BertConfig`).")
 
         self.text_config = text_config
         self.max_text_len = max_text_len
