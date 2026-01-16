@@ -447,10 +447,6 @@ def dequantize(module, param_name, param_value, target_device, dq_param_name, **
             setattr(module, param_name.rsplit(".", 1)[1], param_value)
             if hasattr(module, blocks_attr) and hasattr(module, scales_attr):
                 dequantized = convert_moe_packed_tensors(getattr(module, blocks_attr), getattr(module, scales_attr))
-                if target_device == "cpu" and torch.cuda.is_available():
-                    torch.cuda.empty_cache()
-                elif target_device == "cpu" and is_torch_xpu_available():
-                    torch.xpu.empty_cache()
                 setattr(module, proj, torch.nn.Parameter(dequantized.to(target_device)))
                 delattr(module, blocks_attr)
                 delattr(module, scales_attr)
