@@ -25,8 +25,8 @@ from dataclasses import dataclass
 from typing import Any
 
 import torch
-import torch.nn.functional as F
 from torch import Tensor, nn
+from torch.nn.functional import softmax
 
 from ... import initialization as init
 from ...activations import ACT2CLS, ACT2FN
@@ -807,9 +807,6 @@ class LwDetrMultiscaleDeformableAttention(nn.Module):
 
         self.disable_custom_kernels = config.disable_custom_kernels
 
-    def with_pos_embed(self, tensor: torch.Tensor, position_embeddings: Tensor | None):
-        return tensor if position_embeddings is None else tensor + position_embeddings
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -822,10 +819,10 @@ class LwDetrMultiscaleDeformableAttention(nn.Module):
         spatial_shapes_list=None,
         level_start_index=None,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> tuple[torch.Tensor, torch.Tensor]:
         # add position embeddings to the hidden states before projecting to queries and keys
         if position_embeddings is not None:
-            hidden_states = self.with_pos_embed(hidden_states, position_embeddings)
+            hidden_states = hidden_states + position_embeddings
 
         batch_size, num_queries, _ = hidden_states.shape
         batch_size, sequence_length, _ = encoder_hidden_states.shape
@@ -846,7 +843,7 @@ class LwDetrMultiscaleDeformableAttention(nn.Module):
         attention_weights = self.attention_weights(hidden_states).view(
             batch_size, num_queries, self.n_heads, self.n_levels * self.n_points
         )
-        attention_weights = F.softmax(attention_weights, -1).view(
+        attention_weights = softmax(attention_weights, -1).view(
             batch_size, num_queries, self.n_heads, self.n_levels, self.n_points
         )
         # batch_size, num_queries, n_heads, n_levels, n_points, 2

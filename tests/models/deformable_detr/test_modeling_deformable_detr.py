@@ -407,7 +407,6 @@ class DeformableDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
                 recursive_check(tuple_output, dict_output)
 
         for model_class in self.all_model_classes:
-            print("Model class:", model_class)
             model = model_class(config)
             model.to(torch_device)
             model.eval()
@@ -535,10 +534,10 @@ class DeformableDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
                 )
                 self.assertEqual(outputs.logits.shape, expected_shape)
                 # Confirm out_indices was propagated to backbone
-                self.assertEqual(len(model.model.backbone.conv_encoder.intermediate_channel_sizes), 4)
+                self.assertEqual(len(model.model.backbone.intermediate_channel_sizes), 4)
             else:
                 # Confirm out_indices was propagated to backbone
-                self.assertEqual(len(model.backbone.conv_encoder.intermediate_channel_sizes), 4)
+                self.assertEqual(len(model.backbone.intermediate_channel_sizes), 4)
 
             self.assertTrue(outputs)
 
@@ -567,10 +566,10 @@ class DeformableDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
                 )
                 self.assertEqual(outputs.logits.shape, expected_shape)
                 # Confirm out_indices was propagated to backbone
-                self.assertEqual(len(model.model.backbone.conv_encoder.intermediate_channel_sizes), 4)
+                self.assertEqual(len(model.model.backbone.intermediate_channel_sizes), 4)
             else:
                 # Confirm out_indices was propagated to backbone
-                self.assertEqual(len(model.backbone.conv_encoder.intermediate_channel_sizes), 4)
+                self.assertEqual(len(model.backbone.intermediate_channel_sizes), 4)
 
             self.assertTrue(outputs)
 

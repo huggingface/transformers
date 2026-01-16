@@ -28,7 +28,8 @@ def spawn_conversion(token: str, private: bool, model_id: str):
 
     def start(_sse_connection):
         for line in _sse_connection.iter_lines():
-            line = line.decode()
+            if not isinstance(line, str):
+                line = line.decode()
             if line.startswith("event:"):
                 status = line[7:]
                 logger.debug(f"Safetensors conversion status: {status}")
