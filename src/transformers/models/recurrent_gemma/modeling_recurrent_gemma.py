@@ -487,6 +487,8 @@ class RecurrentGemmaRecurrentBlock(nn.Module):
                 x_branch = x_branch.unsqueeze(-1)
                 self.conv1d_state = conv_state[:, :, 1:]
         else:
+            self.conv1d_state = None
+            self.rg_lru.recurrent_states = None
             x_branch = self.conv_1d(x_branch)[..., :seq_len]
 
         x_branch = self.rg_lru(x_branch.transpose(1, 2), position_ids)

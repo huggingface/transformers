@@ -354,22 +354,6 @@ class SmolVLMForConditionalGenerationModelTest(
     def test_generate_methods_with_logits_to_keep(self):
         super().test_generate_methods_with_logits_to_keep()
 
-    @unittest.skip
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
     @unittest.skip(reason="Unsupported")
     def test_generate_with_static_cache(self):
         pass

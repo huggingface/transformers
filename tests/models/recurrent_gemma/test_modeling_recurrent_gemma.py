@@ -51,10 +51,6 @@ class RecurrentGemmaModelTest(CausalLMModelTest, unittest.TestCase):
     def test_eager_matches_sdpa_generate(self):
         pass
 
-    @unittest.skip(reason="SQRBound is known to have issues with gc")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
     @unittest.skip(reason="Past key values are not returned")
     def test_prompt_lookup_decoding_matches_greedy_search(self):
         pass
