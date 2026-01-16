@@ -17,7 +17,6 @@ import os
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any, Literal, Optional
 
-from ..conversion_mapping import get_model_conversion_mapping
 from ..core_model_loading import (
     Concatenate,
     ConversionOps,
@@ -37,7 +36,7 @@ from ..utils import (
 )
 from ..utils.hub import DownloadKwargs
 from ..utils.loading_report import log_state_dict_report
-
+from ..conversion_mapping import get_model_conversion_mapping
 
 if is_torch_available():
     import torch
@@ -80,7 +79,9 @@ class PeftConcatenate(Concatenate):
             lora_b_out.append(torch.block_diag(lora_b_out[0][i], lora_b_out[1][i]))
         lora_b_out = torch.stack(lora_b_out[2:], dim=0)
         return {
-            full_layer_name: [lora_a_out],  # @BenjaminBossan this depends on MoE implementation for 3 patams
+            full_layer_name : [
+                lora_a_out
+            ],  # @BenjaminBossan this depends on MoE implementation for 3 patams
             full_layer_name.replace("lora_A", "lora_B"): [lora_b_out],
         }
 
@@ -116,8 +117,9 @@ def _build_peft_weight_mapping(
             new_source_patterns.append(f"{pat}.lora_B{adapter_name}.*")
         conversion.source_patterns = new_source_patterns
         pat = conversion.target_patterns[0].rsplit(".", 1)[0]
+        pat = pat.replace("gate_up_proj", "").replace('down_proj.', 'base_layer.')
         # we make sure the target key is correct
-        conversion.target_patterns = [f"{pat}.lora_A.default" for pat in conversion.target_patterns]
+        conversion.target_patterns = [pat + ".lora_A", pat + ".lora_B"]
         conversion.operations = peft_weight_conversions
     weight_conversions = [WeightRenaming("base_model.model.model", "model")] + weight_conversions
     weight_conversions = [WeightRenaming("lora_A.weight", "lora_A.default.weight")] + weight_conversions
