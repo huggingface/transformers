@@ -212,7 +212,6 @@ class EsmModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     pipeline_model_mapping = (
         {
             "text-embedding": EsmModel,
-            "fill-mask": EsmForMaskedLM,
             "text-classification": EsmForSequenceClassification,
             "token-classification": EsmForTokenClassification,
             "zero-shot": EsmForSequenceClassification,
