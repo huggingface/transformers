@@ -40,7 +40,7 @@ mname = "hf-internal-testing/tiny-random-bert"
 BertConfig.from_pretrained(mname)
 BertModel.from_pretrained(mname)
 BertTokenizer.from_pretrained(mname)
-pipe = pipeline(task="fill-mask", model=mname)
+pipe = pipeline(task="text-embedding", model=mname)
 print("success")
         """
 
@@ -55,7 +55,7 @@ socket.socket = offline_socket
         BertConfig.from_pretrained(mname)
         BertModel.from_pretrained(mname)
         BertTokenizer.from_pretrained(mname)
-        pipeline(task="fill-mask", model=mname)
+        pipeline(task="text-embedding", model=mname)
 
         # baseline - just load from_pretrained with normal network
         # should succeed as TRANSFORMERS_OFFLINE=1 tells it to use local files
@@ -75,7 +75,7 @@ mname = "hf-internal-testing/tiny-random-bert"
 BertConfig.from_pretrained(mname)
 BertModel.from_pretrained(mname)
 BertTokenizer.from_pretrained(mname)
-pipe = pipeline(task="fill-mask", model=mname)
+pipe = pipeline(task="text-embedding", model=mname)
 print("success")
         """
 
@@ -90,7 +90,7 @@ socket.socket = offline_socket
         BertConfig.from_pretrained(mname)
         BertModel.from_pretrained(mname)
         BertTokenizer.from_pretrained(mname)
-        pipeline(task="fill-mask", model=mname)
+        pipeline(task="text-embedding", model=mname)
 
         # baseline - just load from_pretrained with normal network
         # should succeed

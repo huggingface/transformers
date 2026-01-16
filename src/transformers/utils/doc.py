@@ -911,7 +911,6 @@ PIPELINE_TASKS_TO_SAMPLE_DOCSTRINGS = OrderedDict(
         ("multiple-choice", MULTIPLE_CHOICE_SAMPLE),
         ("text-classification", TEXT_CLASSIFICATION_SAMPLE),
         ("token-classification", TOKEN_CLASSIFICATION_SAMPLE),
-        ("fill-mask", FILL_MASK_SAMPLE),
         ("mask-generation", MASK_GENERATION_SAMPLE),
         ("pretraining", PRETRAINING_SAMPLE),
     ]
@@ -950,7 +949,6 @@ MODELS_TO_PIPELINE = OrderedDict(
         ("MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES", "multiple-choice"),
         ("MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES", "text-classification"),
         ("MODEL_FOR_TOKEN_CLASSIFICATION_MAPPING_NAMES", "token-classification"),
-        ("MODEL_FOR_MASKED_LM_MAPPING_NAMES", "fill-mask"),
         ("MODEL_FOR_MASK_GENERATION_MAPPING_NAMES", "mask-generation"),
         ("MODEL_FOR_PRETRAINING_MAPPING_NAMES", "pretraining"),
     ]
