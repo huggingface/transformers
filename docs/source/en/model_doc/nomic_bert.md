@@ -16,6 +16,7 @@ limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
+*This model was released on 2021-04-20 and added to Hugging Face Transformers on 2026-01-16.*
 
 
 # NomicBERT
@@ -24,8 +25,8 @@ limitations under the License.
 
 The NomicBERT model currently has no academic papers specifically written about it, however, the [nomic-bert-2048](https://huggingface.co/nomic-ai/nomic-bert-2048) card clearly describes the model’s architecture and training approach: it extends BERT to a 2048 token context length, and modifies the BERT training procedure. Notable changes include: 
 
-- Use [Rotary Position Embeddings](https://arxiv.org/pdf/2104.09864.pdf) to allow for context length extrapolation.
-- Use SwiGLU activations, which have [been shown](https://arxiv.org/abs/2002.05202) to [improve model performance](https://www.databricks.com/blog/mosaicbert)
+- Use [Rotary Position Embeddings](https://huggingface.co/papers/2104.09864.pdf) to allow for context length extrapolation.
+- Use SwiGLU activations, which have [been shown](https://huggingface.co/papers/2002.05202) to [improve model performance](https://www.databricks.com/blog/mosaicbert)
 - Set dropout to 0 during pretraining
 
 > [!TIP]
