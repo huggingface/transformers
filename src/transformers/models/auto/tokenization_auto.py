@@ -716,7 +716,7 @@ class AutoTokenizer:
                 )
             config = config.encoder
 
-        model_type = config_class_to_model_type(type(config).__name__) or config.get("model_type", None)
+        model_type = config_class_to_model_type(type(config).__name__) or getattr(config, "model_type", None)
         if model_type is not None:
             tokenizer_class = TOKENIZER_MAPPING.get(type(config), TokenizersBackend)
             if tokenizer_class is not None:
