@@ -15,7 +15,7 @@
 
 # /// script
 # dependencies = [
-#     "transformers==4.57.5",
+#     "transformers==4.57.6",
 #     "datasets[audio]>=1.14.0",
 #     "evaluate",
 #     "librosa",
