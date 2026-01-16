@@ -21,7 +21,7 @@ from dataclasses import asdict, dataclass, field, fields
 from datetime import timedelta
 from enum import Enum
 from functools import cached_property
-from typing import Any
+from typing import Any, Callable
 
 from .debug_utils import DebugOption
 from .trainer_utils import (
@@ -591,6 +591,10 @@ class TrainingArguments:
             Column name for precomputed lengths. If the column exists, grouping by length will use these values rather
             than computing them on train startup. Ignored unless `group_by_length` is `True` and the dataset is an
             instance of `Dataset`.
+        train_sampler_fn (`Callable`, *optional*):
+            A callable that takes a dataset and returns a `torch.utils.data.Sampler` for the training dataset.
+            If provided, this will override the default sampler behavior.
+            The callable should have the signature: `def train_sampler_fn(dataset: Dataset) -> torch.utils.data.Sampler`.
         report_to (`str` or `list[str]`, *optional*, defaults to `"none"`):
             The list of integrations to report the results and logs to. Supported platforms are `"azure_ml"`,
             `"clearml"`, `"codecarbon"`, `"comet_ml"`, `"dagshub"`, `"dvclive"`, `"flyte"`, `"mlflow"`, `"swanlab"`,
@@ -1190,6 +1194,16 @@ class TrainingArguments:
     length_column_name: str = field(
         default="length",
         metadata={"help": "Column name with precomputed lengths to use when grouping by length."},
+    )
+    train_sampler_fn: Callable | None = field(
+        default=None,
+        metadata={
+            "help": (
+                "A callable that takes a dataset and returns a `torch.utils.data.Sampler` for the training dataset. "
+                "If provided, this will override the default sampler behavior. "
+                "The callable should have the signature: `def train_sampler_fn(dataset: Dataset) -> torch.utils.data.Sampler`."
+            )
+        },
     )
     report_to: None | str | list[str] = field(
         default="none", metadata={"help": "The list of integrations to report the results and logs to."}

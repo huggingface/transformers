@@ -995,6 +995,9 @@ class Trainer:
             return None
 
         # Build the sampler.
+        if self.args.train_sampler_fn is not None:
+            return self.args.train_sampler_fn(train_dataset)
+
         if self.args.group_by_length:
             if is_datasets_available() and isinstance(train_dataset, datasets.Dataset):
                 lengths = (

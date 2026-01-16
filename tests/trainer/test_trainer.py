@@ -1906,6 +1906,27 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
         self.assertEqual(first_dataloader, first_dataloader_repeated)
         self.assertEqual(second_dataloader, second_dataloader_repeated)
 
+    def test_custom_train_sampler_fn(self):
+        train_dataset = RegressionDataset()
+        config = GPT2Config(vocab_size=100, n_positions=128, n_embd=32, n_layer=3, n_head=4)
+        tiny_gpt2 = GPT2LMHeadModel(config)
+
+        def custom_train_sampler(dataset):
+            return torch.utils.data.SequentialSampler(dataset)
+
+        args = TrainingArguments(
+            self.get_auto_remove_tmp_dir(),
+            report_to="none",
+            train_sampler_fn=custom_train_sampler,
+        )
+
+        trainer = Trainer(tiny_gpt2, args, train_dataset=train_dataset)
+        trainer.accelerator.prepare = lambda x: x
+
+        train_loader = trainer.get_train_dataloader()
+        self.assertIsInstance(train_loader.sampler, torch.utils.data.SequentialSampler)
+
+
     @require_liger_kernel
     def test_use_liger_kernel_patching(self):
         # Ensure any monkey patching is cleaned up for subsequent tests
