@@ -30,9 +30,9 @@ def fixed_cross_entropy(
     target: torch.Tensor,
     num_items_in_batch: torch.Tensor | None = None,
     ignore_index: int = -100,
-    label_smoothing: float = 0.0,
     weight: torch.Tensor | None = None,
-    **kwargs,
+    label_smoothing: float = 0.0,
+    **_kwargs,
 ) -> torch.Tensor:
     reduction = "sum" if num_items_in_batch is not None else "mean"
 
