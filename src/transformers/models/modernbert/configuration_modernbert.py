@@ -231,12 +231,17 @@ class ModernBertConfig(PreTrainedConfig):
         rope_scaling = kwargs.pop("rope_scaling", None)
 
         # Try to set `rope_scaling` if available, otherwise use `rope_parameters`. If we find `rope_parameters`
-        # as arg in the inputs, we can safely assume that it is in the new format. New naming used -> new format
+        # as arg in the inputs and both `sliding_attention` and `full_attention` are present, we can safely assume
+        # that it is in the new format. New naming used -> new format
         default_rope_params = {
             "sliding_attention": {"rope_type": "default"},
             "full_attention": {"rope_type": "default"},
         }
-        self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else default_rope_params
+        if (
+            self.rope_parameters.get("sliding_attention") is not None
+            and self.rope_parameters.get("full_attention") is not None
+        ):
+            self.rope_parameters = default_rope_params
         if rope_scaling is not None:
             self.rope_parameters["full_attention"].update(rope_scaling)
             self.rope_parameters["sliding_attention"].update(rope_scaling)
