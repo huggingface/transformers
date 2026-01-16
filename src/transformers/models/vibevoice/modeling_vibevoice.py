@@ -729,30 +729,6 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
             self._tied_weights_keys = {}
         self.post_init()
 
-    @property
-    def language_model(self):
-        return self.model.language_model
-
-    @property
-    def acoustic_tokenizer(self):
-        return self.model.acoustic_tokenizer
-
-    @property
-    def acoustic_connector(self):
-        return self.model.acoustic_connector
-
-    @property
-    def semantic_tokenizer(self):
-        return self.model.semantic_tokenizer
-
-    @property
-    def semantic_connector(self):
-        return self.model.semantic_connector
-
-    @property
-    def diffusion_head(self):
-        return self.model.diffusion_head
-
     @can_return_tuple
     @auto_docstring
     def forward(

@@ -327,7 +327,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         monitor_progress = getattr(generation_config, "monitor_progress", None)
         cfg_scale = generation_config.cfg_scale
         n_diffusion_steps = generation_config.n_diffusion_steps
-        diffusion_head_device = next(self.diffusion_head.parameters()).device
+        diffusion_head_device = next(self.model.diffusion_head.parameters()).device
 
         # State tracking
         acoustic_cache = None
@@ -503,6 +503,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
 
             # *************** VibeVoice specific ***************
             # Handle EOS detection and completion tracking
+            # TODO: can we use default stopping criteria??
             eos_mask = next_tokens == self.config.eos_token_id
             if eos_mask.any():
                 new_eos_indices = eos_mask & ~finished_tags
@@ -592,6 +593,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                         for layer_idx in range(len(negative_model_kwargs["past_key_values"])):
                             k_cache = negative_model_kwargs["past_key_values"].layers[layer_idx].keys
                             v_cache = negative_model_kwargs["past_key_values"].layers[layer_idx].values
+                            # TODO: is this needed? why modifying for values that don't need diffusion process?
                             for sample_idx, start_idx in zip(non_diffusion_indices.tolist(), start_indices.tolist()):
                                 if start_idx + 1 < k_cache.shape[2] - 1:
                                     k_cache[sample_idx, :, start_idx + 1 :, :] = k_cache[
@@ -634,7 +636,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                 for timestep in noise_scheduler.timesteps:
                     half = speech[: len(speech) // 2]
                     combined = torch.cat([half, half], dim=0)
-                    eps = self.diffusion_head(
+                    eps = self.model.diffusion_head(
                         combined, timestep.repeat(combined.shape[0]).to(combined), condition=condition
                     )
                     cond_eps, uncond_eps = torch.split(eps, len(eps) // 2, dim=0)
@@ -655,8 +657,8 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                     padded_latent[diffusion_indices] = scaled_latent
                 else:
                     padded_latent = scaled_latent
-                audio_output = self.acoustic_tokenizer.decode(
-                    padded_latent.to(self.acoustic_tokenizer.device),
+                audio_output = self.model.acoustic_tokenizer.decode(
+                    padded_latent.to(self.model.acoustic_tokenizer.device),
                     padding_cache=acoustic_cache,
                     use_cache=self.config.use_cache,
                 )
@@ -671,7 +673,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                     streamer.put(audio_chunk, diffusion_indices)
 
                 # Get semantic features for next step
-                semantic_outputs = self.semantic_tokenizer.encode(
+                semantic_outputs = self.model.semantic_tokenizer.encode(
                     audio_chunk,
                     padding_cache=semantic_cache,
                     use_cache=self.config.use_cache,
@@ -680,8 +682,8 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                 semantic_cache = semantic_outputs.padding_cache
 
                 # Combine features for next input
-                acoustic_embed = self.acoustic_connector(speech_latent)
-                semantic_embed = self.semantic_connector(semantic_features)
+                acoustic_embed = self.model.acoustic_connector(speech_latent)
+                semantic_embed = self.model.semantic_connector(semantic_features)
                 diffusion_embeds = acoustic_embed + semantic_embed
                 next_inputs_embeds[diffusion_indices] = diffusion_embeds
 
