@@ -917,6 +917,8 @@
         title: EnCodec
       - local: model_doc/fastspeech2_conformer
         title: FastSpeech2Conformer
+      - local: model_doc/glmasr
+        title: GLM-ASR
       - local: model_doc/granite_speech
         title: GraniteSpeech
       - local: model_doc/hubert
@@ -1067,8 +1069,6 @@
         title: Gemma3n
       - local: model_doc/git
         title: GIT
-      - local: model_doc/glmasr
-        title: GLM-ASR
       - local: model_doc/glm46v
         title: Glm46V
       - local: model_doc/glm4v

@@ -994,7 +994,7 @@ class Seq2SeqLMExportableModule(torch.nn.Module):
                 decoder_input_ids = torch.tensor([[next_token]], dtype=torch.long, device=model_device)
 
                 # Check if EOS token
-                if next_token == self.config.eos_token_id:
+                if next_token == self.generation_config.eos_token_id:
                     break
 
             return generated_ids

@@ -46,6 +46,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.generic import is_flash_attention_requested
 from .configuration_kosmos2_5 import (
     Kosmos2_5Config,
     Kosmos2_5TextConfig,
@@ -566,7 +567,7 @@ class Kosmos2_5VisionEncoder(nn.Module):
         self.gradient_checkpointing = False
 
     def _prepare_attention_mask(self, attention_mask, input_shape, inputs_embeds):
-        if self.config._attn_implementation == "flash_attention_2":
+        if is_flash_attention_requested(self.config):
             if attention_mask is not None and 0.0 in attention_mask:
                 return attention_mask
             return None
@@ -936,7 +937,7 @@ class Kosmos2_5TextTransformer(nn.Module):
         past_key_values: Cache,
         output_attentions: bool = False,
     ):
-        if self.config._attn_implementation == "flash_attention_2":
+        if is_flash_attention_requested(self.config):
             if attention_mask is not None and (attention_mask == 0.0).any():
                 return attention_mask
             return None
@@ -1223,7 +1224,7 @@ class Kosmos2_5PreTrainedModel(PreTrainedModel):
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["Kosmos2_5VisionLayer", "Kosmos2_5TextBlock"]
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_cache_class = True
     _supports_sdpa = True
     _supports_attention_backend = True

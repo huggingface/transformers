@@ -776,7 +776,7 @@ class DiaModel(DiaPreTrainedModel):
         bsz, seq_len, channels = (encoder_outputs[0].shape[0], -1, self.config.decoder_config.num_channels)
         if decoder_input_ids is None:
             decoder_input_ids = torch.full(
-                size=(bsz, 1, channels), fill_value=self.config.bos_token_id, device=self.device
+                size=(bsz, 1, channels), fill_value=self.config.decoder_config.bos_token_id, device=self.device
             )
         # Ensure 3D
         if decoder_input_ids.ndim == 2:

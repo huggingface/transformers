@@ -57,11 +57,6 @@ class ClapTextConfig(PreTrainedConfig):
             The vocabulary size of the `token_type_ids` passed when calling [`ClapTextModel`].
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
-        is_decoder (`bool`, *optional*, defaults to `False`):
-            Whether the model is used as a decoder or not. If `False`, the model is used as an encoder.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
         projection_hidden_act (`str`, *optional*, defaults to `"relu"`):
             The non-linear activation function (function or string) in the projection layer. If string, `"gelu"`,
             `"relu"`, `"silu"` and `"gelu_new"` are supported.
@@ -104,12 +99,14 @@ class ClapTextConfig(PreTrainedConfig):
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
-        use_cache=True,
         projection_hidden_act="relu",
         **kwargs,
     ):
-        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+        super().__init__(**kwargs)
 
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
@@ -122,7 +119,6 @@ class ClapTextConfig(PreTrainedConfig):
         self.type_vocab_size = type_vocab_size
         self.initializer_factor = initializer_factor
         self.layer_norm_eps = layer_norm_eps
-        self.use_cache = use_cache
         self.projection_hidden_act = projection_hidden_act
         self.projection_dim = projection_dim
 

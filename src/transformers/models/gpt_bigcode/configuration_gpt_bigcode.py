@@ -114,8 +114,12 @@ class GPTBigCodeConfig(PreTrainedConfig):
         attention_softmax_in_fp32=True,
         scale_attention_softmax_in_fp32=True,
         multi_query=True,
+        add_cross_attention=False,
+        tie_word_embeddings=True,
         **kwargs,
     ):
+        self.add_cross_attention = add_cross_attention
+        self.tie_word_embeddings = tie_word_embeddings
         self.vocab_size = vocab_size
         self.n_positions = n_positions
         self.n_embd = n_embd
@@ -138,7 +142,7 @@ class GPTBigCodeConfig(PreTrainedConfig):
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
 
-        super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+        super().__init__(**kwargs)
 
 
 __all__ = ["GPTBigCodeConfig"]

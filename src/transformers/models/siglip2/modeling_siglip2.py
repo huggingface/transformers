@@ -37,7 +37,7 @@ from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, Ima
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, filter_out_non_signature_kwargs
-from ...utils.generic import check_model_inputs
+from ...utils.generic import check_model_inputs, is_flash_attention_requested
 from .configuration_siglip2 import Siglip2Config, Siglip2TextConfig, Siglip2VisionConfig
 
 
@@ -570,7 +570,7 @@ class Siglip2VisionTransformer(Siglip2PreTrainedModel):
 
         hidden_states = self.embeddings(pixel_values, spatial_shapes)
 
-        if attention_mask is not None and self.config._attn_implementation != "flash_attention_2":
+        if attention_mask is not None and not is_flash_attention_requested(self.config):
             # [batch_size, seq_len] -> [batch_size, 1, tgt_seq_len, src_seq_len]
             encoder_attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
         else:
@@ -629,7 +629,7 @@ class Siglip2TextTransformer(Siglip2PreTrainedModel):
 
         # note: Siglip2's text model does not use a causal mask, unlike the original CLIP model.
         # expand attention_mask
-        uses_flash_attention = "flash" in self.config._attn_implementation
+        uses_flash_attention = is_flash_attention_requested(self.config)
         if uses_flash_attention:
             attention_mask = None
         elif attention_mask is not None and not uses_flash_attention:

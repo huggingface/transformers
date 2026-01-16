@@ -20,7 +20,7 @@ import torch.nn.functional as F
 from .cache_utils import Cache
 from .configuration_utils import PreTrainedConfig
 from .utils import is_torch_xpu_available, logging
-from .utils.generic import GeneralInterface
+from .utils.generic import GeneralInterface, is_flash_attention_requested
 from .utils.import_utils import is_torch_flex_attn_available, is_torch_greater_or_equal, is_tracing
 
 
@@ -1112,10 +1112,10 @@ def create_chunked_causal_mask(
     if chunk_size is None:
         raise ValueError("Could not find an `attention_chunk_size` argument in the config, or it is not set")
 
-    # Raise if using chunked attention on context too large with FA2
-    if config._attn_implementation == "flash_attention_2" and kv_length + kv_offset > chunk_size:
+    # Raise if using chunked attention on context too large with FA
+    if is_flash_attention_requested(config) and kv_length + kv_offset > chunk_size:
         raise ValueError(
-            "Flash attention 2 cannot handle chunked attention, and the key-value length is larger than the chunk size so the "
+            "Flash attention cannot handle chunked attention, and the key-value length is larger than the chunk size so the "
             "chunked pattern cannot be respected. You should use another `attn_implementation` when instantiating the model"
         )
 

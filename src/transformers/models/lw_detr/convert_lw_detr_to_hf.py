@@ -502,7 +502,7 @@ def main():
     )
     parser.add_argument("--checkpoint_path", type=str, help="Path to the checkpoint file (if not using hub download)")
     parser.add_argument("--push_to_hub", action="store_true", help="Push model to the hub")
-    parser.add_argument("--organization", type=str, default="stevenbucaille", help="Organization to push the model to")
+    parser.add_argument("--organization", type=str, default="AnnaZhang", help="Organization to push the model to")
 
     args = parser.parse_args()
 

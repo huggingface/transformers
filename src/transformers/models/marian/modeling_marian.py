@@ -1307,7 +1307,7 @@ class MarianForCausalLM(MarianPreTrainedModel, GenerationMixin):
         >>> from transformers import AutoTokenizer, MarianForCausalLM
 
         >>> tokenizer = AutoTokenizer.from_pretrained("Helsinki-NLP/opus-mt-fr-en")
-        >>> model = MarianForCausalLM.from_pretrained("Helsinki-NLP/opus-mt-fr-en", add_cross_attention=False)
+        >>> model = MarianForCausalLM.from_pretrained("Helsinki-NLP/opus-mt-fr-en")
         >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)

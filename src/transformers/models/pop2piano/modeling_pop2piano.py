@@ -32,6 +32,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPastAndCrossAttentions, Seq2SeqLMOutput
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, is_torch_flex_attn_available, is_torchdynamo_compiling, logging
+from ...utils.generic import is_flash_attention_requested
 from .configuration_pop2piano import Pop2PianoConfig
 
 
@@ -809,7 +810,7 @@ class Pop2PianoStack(Pop2PianoPreTrainedModel):
         past_key_values: Cache,
         output_attentions: bool = False,
     ):
-        if self.config._attn_implementation == "flash_attention_2":
+        if is_flash_attention_requested(self.config):
             if attention_mask is not None and (attention_mask == 0.0).any():
                 return attention_mask
             return None
