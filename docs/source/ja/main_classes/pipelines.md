@@ -457,12 +457,6 @@ my_pipeline = pipeline(model="xxxx", pipeline_class=MyPipeline)
     - __call__
     - all
 
-### ImageToTextPipeline
-
-[[autodoc]] ImageToTextPipeline
-    - __call__
-    - all
-
 ### ImageTextToTextPipeline
 
 [[autodoc]] ImageTextToTextPipeline

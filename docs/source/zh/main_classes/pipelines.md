@@ -431,12 +431,6 @@ See [`TokenClassificationPipeline`] for all details.
     - __call__
     - all
 
-### ImageToTextPipeline
-
-[[autodoc]] ImageToTextPipeline
-    - __call__
-    - all
-
 ### ImageTextToTextPipeline
 
 [[autodoc]] ImageTextToTextPipeline
