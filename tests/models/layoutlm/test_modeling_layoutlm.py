@@ -237,7 +237,6 @@ class LayoutLMModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
         {
             "document-question-answering": LayoutLMForQuestionAnswering,
             "text-embedding": LayoutLMModel,
-            "fill-mask": LayoutLMForMaskedLM,
             "text-classification": LayoutLMForSequenceClassification,
             "token-classification": LayoutLMForTokenClassification,
             "zero-shot": LayoutLMForSequenceClassification,

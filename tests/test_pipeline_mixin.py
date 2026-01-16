@@ -92,7 +92,6 @@ pipeline_test_mapping = {
     "depth-estimation": {"test": DepthEstimationPipelineTests},
     "document-question-answering": {"test": DocumentQuestionAnsweringPipelineTests},
     "text-embedding": {"test": FeatureExtractionPipelineTests},
-    "fill-mask": {"test": FillMaskPipelineTests},
     "image-classification": {"test": ImageClassificationPipelineTests},
     "image-embedding": {"test": ImageFeatureExtractionPipelineTests},
     "image-segmentation": {"test": ImageSegmentationPipelineTests},
@@ -101,14 +100,12 @@ pipeline_test_mapping = {
     "mask-generation": {"test": MaskGenerationPipelineTests},
     "any-to-any": {"test": AnyToAnyPipelineTests},
     "object-detection": {"test": ObjectDetectionPipelineTests},
-    "question-answering": {"test": QAPipelineTests},
     "table-question-answering": {"test": TQAPipelineTests},
     "text-classification": {"test": TextClassificationPipelineTests},
     "text-generation": {"test": TextGenerationPipelineTests},
     "text-to-audio": {"test": TextToAudioPipelineTests},
     "token-classification": {"test": TokenClassificationPipelineTests},
     "video-classification": {"test": VideoClassificationPipelineTests},
-    "visual-question-answering": {"test": VisualQuestionAnsweringPipelineTests},
     "zero-shot": {"test": ZeroShotClassificationPipelineTests},
     "zero-shot-audio-classification": {"test": ZeroShotAudioClassificationPipelineTests},
     "zero-shot-image-classification": {"test": ZeroShotImageClassificationPipelineTests},
@@ -124,7 +121,6 @@ task_to_pipeline_and_spec_mapping = {
     "image-classification": (ImageClassificationPipeline, ImageClassificationInput),
     "image-segmentation": (ImageSegmentationPipeline, ImageSegmentationInput),
     "object-detection": (ObjectDetectionPipeline, ObjectDetectionInput),
-    "question-answering": (QuestionAnsweringPipeline, QuestionAnsweringInput),
     "video-classification": (VideoClassificationPipeline, VideoClassificationInput),
     "zero-shot-image-classification": (ZeroShotImageClassificationPipeline, ZeroShotImageClassificationInput),
 }
@@ -535,15 +531,6 @@ class PipelineTesterMixin:
         self.run_task_tests(task="feature-extraction", dtype="float16")
 
     @is_pipeline_test
-    def test_pipeline_fill_mask(self):
-        self.run_task_tests(task="fill-mask")
-
-    @is_pipeline_test
-    @require_torch
-    def test_pipeline_fill_mask_fp16(self):
-        self.run_task_tests(task="fill-mask", dtype="float16")
-
-    @is_pipeline_test
     @require_torch
     @require_vision
     def test_pipeline_image_classification(self):
@@ -636,15 +623,6 @@ class PipelineTesterMixin:
         self.run_task_tests(task="object-detection", dtype="float16")
 
     @is_pipeline_test
-    def test_pipeline_question_answering(self):
-        self.run_task_tests(task="question-answering")
-
-    @is_pipeline_test
-    @require_torch
-    def test_pipeline_question_answering_fp16(self):
-        self.run_task_tests(task="question-answering", dtype="float16")
-
-    @is_pipeline_test
     def test_pipeline_table_question_answering(self):
         self.run_task_tests(task="table-question-answering")
 
@@ -704,18 +682,6 @@ class PipelineTesterMixin:
     @require_av
     def test_pipeline_video_classification_fp16(self):
         self.run_task_tests(task="video-classification", dtype="float16")
-
-    @is_pipeline_test
-    @require_torch
-    @require_vision
-    def test_pipeline_visual_question_answering(self):
-        self.run_task_tests(task="visual-question-answering")
-
-    @is_pipeline_test
-    @require_torch
-    @require_vision
-    def test_pipeline_visual_question_answering_fp16(self):
-        self.run_task_tests(task="visual-question-answering", dtype="float16")
 
     @is_pipeline_test
     def test_pipeline_zero_shot(self):
