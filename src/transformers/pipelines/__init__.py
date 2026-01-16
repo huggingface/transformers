@@ -61,7 +61,6 @@ from .base import (
 )
 from .depth_estimation import DepthEstimationPipeline
 from .document_question_answering import DocumentQuestionAnsweringPipeline
-from .text_embedding import TextEmbeddingPipeline
 from .fill_mask import FillMaskPipeline
 from .image_classification import ImageClassificationPipeline
 from .image_embedding import ImageEmbeddingPipeline
@@ -74,6 +73,7 @@ from .object_detection import ObjectDetectionPipeline
 from .question_answering import QuestionAnsweringArgumentHandler, QuestionAnsweringPipeline
 from .table_question_answering import TableQuestionAnsweringArgumentHandler, TableQuestionAnsweringPipeline
 from .text_classification import TextClassificationPipeline
+from .text_embedding import TextEmbeddingPipeline
 from .text_generation import TextGenerationPipeline
 from .text_to_audio import TextToAudioPipeline
 from .token_classification import (

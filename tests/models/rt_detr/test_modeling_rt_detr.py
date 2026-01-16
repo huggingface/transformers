@@ -253,9 +253,7 @@ class RTDetrModelTester:
 class RTDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (RTDetrModel, RTDetrForObjectDetection) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"image-embedding": RTDetrModel, "object-detection": RTDetrForObjectDetection}
-        if is_torch_available()
-        else {}
+        {"image-embedding": RTDetrModel, "object-detection": RTDetrForObjectDetection} if is_torch_available() else {}
     )
     is_encoder_decoder = True
 
