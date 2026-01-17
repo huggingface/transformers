@@ -54,22 +54,22 @@ class VibeVoiceProcessorKwargs(ProcessingKwargs, total=False):
 
 class VibeVoiceProcessor(ProcessorMixin):
     r"""
-    Constructs a VibeVoice processor which wraps [`VibeVoiceFeatureExtractor`] and
+    Constructs a VibeVoice processor which wraps [`VibeVoiceAcousticTokenizerFeatureExtractor`] and
     [`Qwen2TokenizerFast`] into a single processor that inherits both the audio feature extraction and
     tokenizer functionalities.
 
     See the [`~VibeVoiceProcessor.__call__`] for more information.
 
     Args:
-        feature_extractor (`VibeVoiceFeatureExtractor`):
-            The feature extractor for speech processing.
+        feature_extractor (`VibeVoiceAcousticTokenizerFeatureExtractor`):
+            The feature extractor for audio processing.
         tokenizer (`Qwen2TokenizerFast`):
             The tokenizer for text processing.
         chat_template (`str`, *optional*):
             A Jinja template which will be used to convert lists of messages in a chat into a tokenizable string.
     """
 
-    feature_extractor_class = "VibeVoiceFeatureExtractor"
+    feature_extractor_class = "VibeVoiceAcousticTokenizerFeatureExtractor"
     tokenizer_class = "Qwen2TokenizerFast"
 
     def __init__(self, feature_extractor, tokenizer, chat_template=None):

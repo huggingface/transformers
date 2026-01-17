@@ -27,7 +27,7 @@ from transformers import (
     VibeVoiceAcousticTokenizerConfig,
     VibeVoiceAcousticTokenizerModel,
     VibeVoiceConfig,
-    VibeVoiceFeatureExtractor,
+    VibeVoiceAcousticTokenizerFeatureExtractor,
     VibeVoiceForConditionalGeneration,
     VibeVoiceProcessor,
     VibeVoiceSemanticTokenizerConfig,
@@ -176,7 +176,7 @@ def convert_checkpoint(
             language_model_pretrained_name = "Qwen/Qwen2.5-1.5B"
         else:
             language_model_pretrained_name = "Qwen/Qwen2.5-7B"
-    feature_extractor = VibeVoiceFeatureExtractor(**audio_config)
+    feature_extractor = VibeVoiceAcousticTokenizerFeatureExtractor(**audio_config)
 
     # 3) Prepare model configuration
     # -- Load

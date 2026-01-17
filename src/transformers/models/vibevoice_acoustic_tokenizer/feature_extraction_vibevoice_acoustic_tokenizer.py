@@ -25,9 +25,9 @@ from ...utils import PaddingStrategy, logging
 logger = logging.get_logger(__name__)
 
 
-class VibeVoiceFeatureExtractor(SequenceFeatureExtractor):
+class VibeVoiceAcousticTokenizerFeatureExtractor(SequenceFeatureExtractor):
     r"""
-    Constructs a VibeVoice feature extractor.
+    Constructs a VibeVoiceAcousticTokenizer feature extractor.
 
     Args:
         feature_size (`int`, *optional*, defaults to 1):
@@ -149,4 +149,4 @@ class VibeVoiceFeatureExtractor(SequenceFeatureExtractor):
         return output_values
 
 
-__all__ = ["VibeVoiceFeatureExtractor"]
+__all__ = ["VibeVoiceAcousticTokenizerFeatureExtractor"]

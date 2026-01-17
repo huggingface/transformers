@@ -11,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Tests for the VibeVoice feature extractor."""
 
 import itertools
 import random
@@ -19,7 +18,7 @@ import unittest
 
 import numpy as np
 
-from transformers import VibeVoiceFeatureExtractor
+from transformers import VibeVoiceAcousticTokenizerFeatureExtractor
 from transformers.testing_utils import require_torch
 from transformers.utils.import_utils import is_torch_available
 
@@ -49,7 +48,7 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
 
 
 @require_torch
-class VibeVoiceFeatureExtractionTester:
+class VibeVoiceAcousticTokenizerFeatureExtractionTester:
     def __init__(
         self,
         parent,
@@ -106,11 +105,11 @@ class VibeVoiceFeatureExtractionTester:
 
 
 @require_torch
-class VibeVoiceFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
-    feature_extraction_class = VibeVoiceFeatureExtractor
+class VibeVoiceAcousticTokenizerFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittest.TestCase):
+    feature_extraction_class = VibeVoiceAcousticTokenizerFeatureExtractor
 
     def setUp(self):
-        self.feat_extract_tester = VibeVoiceFeatureExtractionTester(self)
+        self.feat_extract_tester = VibeVoiceAcousticTokenizerFeatureExtractionTester(self)
 
     def test_call(self):
         TOL = 1e-6
@@ -165,7 +164,7 @@ class VibeVoiceFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittes
     def test_normalize_audio(self):
         """Test audio normalization functionality specific to VibeVoice."""
         # Test with normalization enabled (default)
-        feature_extractor = VibeVoiceFeatureExtractor(normalize_audio=True, target_dB_FS=-25)
+        feature_extractor = VibeVoiceAcousticTokenizerFeatureExtractor(normalize_audio=True, target_dB_FS=-25)
 
         # Test with very low amplitude audio (should increase amplitude)
         low_amplitude_audio = np.random.randn(1000).astype(np.float32) * 0.01
@@ -176,7 +175,7 @@ class VibeVoiceFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittes
         )
 
         # Test with normalization disabled (should be close to original)
-        feature_extractor_no_norm = VibeVoiceFeatureExtractor(normalize_audio=False)
+        feature_extractor_no_norm = VibeVoiceAcousticTokenizerFeatureExtractor(normalize_audio=False)
         result_no_norm = feature_extractor_no_norm([low_amplitude_audio], return_tensors="pt")
         torch.testing.assert_close(
             result_no_norm.input_values.squeeze(), torch.tensor(low_amplitude_audio), rtol=1e-5, atol=1e-5
@@ -184,7 +183,7 @@ class VibeVoiceFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittes
 
     def test_sampling_rate_validation(self):
         """Test that sampling rate validation works correctly."""
-        feature_extractor = VibeVoiceFeatureExtractor(sampling_rate=24000)
+        feature_extractor = VibeVoiceAcousticTokenizerFeatureExtractor(sampling_rate=24000)
         input_audio = np.random.randn(1000).astype(np.float32)
 
         # Should work with correct sampling rate
@@ -197,7 +196,7 @@ class VibeVoiceFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittes
 
     def test_padding_mask_generation(self):
         """Test that padding masks are generated correctly."""
-        feature_extractor = VibeVoiceFeatureExtractor()
+        feature_extractor = VibeVoiceAcousticTokenizerFeatureExtractor()
 
         # Create audio samples of different lengths
         audio1 = np.random.randn(100).astype(np.float32)

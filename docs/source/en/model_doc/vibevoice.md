@@ -511,10 +511,6 @@ TODO
 
 [[autodoc]] VibeVoiceConfig
 
-## VibeVoiceFeatureExtractor
-
-[[autodoc]] VibeVoiceFeatureExtractor
-    - __call__
 
 ## VibeVoiceProcessor
 

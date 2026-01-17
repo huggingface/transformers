@@ -19,7 +19,6 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_vibevoice import *
-    from .feature_extraction_vibevoice import *
     from .modeling_vibevoice import *
     from .processing_vibevoice import *
 else:

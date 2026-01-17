@@ -334,7 +334,7 @@ class VibeVoiceAcousticTokenizerIntegrationTest(unittest.TestCase):
             torch_device, dtype=dtype
         )
         with torch.no_grad():
-            encoder_out = model.encode(processed_audio["input_features"], sample=False).latents
+            encoder_out = model.encode(processed_audio["input_values"], sample=False).latents
             acoustic_decoder_out = model.decode(encoder_out).audio
         encoder_out_flat = encoder_out.reshape(encoder_out.shape[0], -1)
         encoder_out = encoder_out_flat[..., : expected_encoder.shape[-1]].cpu()

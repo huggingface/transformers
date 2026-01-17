@@ -101,6 +101,12 @@ wavfile.write(output_fp, sampling_rate, decoded_outputs.audio.squeeze().cpu().nu
 [[autodoc]] VibeVoiceAcousticTokenizerConfig
 
 
+## VibeVoiceAcousticTokenizerFeatureExtractor
+
+[[autodoc]] VibeVoiceAcousticTokenizerFeatureExtractor
+    - __call__
+
+
 ## VibeVoiceAcousticTokenizerModel
 
 [[autodoc]] VibeVoiceAcousticTokenizerModel
