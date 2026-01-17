@@ -374,7 +374,7 @@ def get_cached_module_file(
         local_files_only = True
 
     # Download and cache module_file from the repo `pretrained_model_name_or_path` of grab it if it's a local file.
-    pretrained_model_name_or_path = str(pretrained_model_name_or_path)
+    pretrained_model_name_or_path = str(pretrained_model_name_or_path).rstrip(os.sep)
     is_local = os.path.isdir(pretrained_model_name_or_path)
     if is_local:
         submodule = _sanitize_module_name(os.path.basename(pretrained_model_name_or_path))
