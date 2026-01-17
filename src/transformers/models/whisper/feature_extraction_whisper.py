@@ -101,6 +101,10 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
             norm="slaney",
             mel_scale="slaney",
         )
+        # GPU tensor cache for efficient repeated calls
+        self._cached_window: Optional[torch.Tensor] = None
+        self._cached_mel_filters: Optional[torch.Tensor] = None
+        self._cached_device: Optional[str] = None
 
     def _np_extract_fbank_features(self, waveform_batch: np.ndarray, device: str) -> np.ndarray:
         """
@@ -132,35 +136,99 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         log_spec_batch = np.array(log_spec_batch)
         return log_spec_batch
 
-    def _torch_extract_fbank_features(self, waveform: np.ndarray, device: str = "cpu") -> np.ndarray:
+    def _ensure_gpu_cache(self, device: str) -> tuple["torch.Tensor", "torch.Tensor"]:
+        """
+        Ensure window and mel_filters tensors are cached on the target device.
+        This avoids recreating these tensors on every call, significantly improving
+        GPU performance by eliminating repeated CPU->CPU transfers.
+
+        Returns:
+            Tuple of (window, mel_filters_transposed) tensors on the target device.
+        """
+        if self._cached_device != device:
+            self._cached_window = torch.hann_window(self.n_fft, device=device)
+            # mel_filter_bank returns [n_freqs, n_mels], transpose to [n_mels, n_freqs] for matmul
+            self._cached_mel_filters = (
+                torch.from_numpy(self.mel_filters).to(device=device, dtype=torch.float32).T.contiguous()
+            )
+            self._cached_device = device
+        return self._cached_window, self._cached_mel_filters
+
+    def _torch_extract_fbank_features(
+        self, waveform: Union[np.ndarray, "torch.Tensor"], device: str = "cpu", return_tensors: bool = False
+    ) -> Union[np.ndarray, "torch.Tensor"]:
         """
         Compute the log-mel spectrogram of the audio using PyTorch's GPU-accelerated STFT implementation with batching,
         yielding results similar to cpu computing with 1e-5 tolerance.
+
+        Args:
+            waveform: Input waveform, can be numpy array or torch tensor.
+            device: Target device for computation ("cpu" or "cuda", "cuda:0", etc.).
+            return_tensors: If True, return torch.Tensor instead of numpy array.
+                When device is not "cpu" and return_tensors is True, the result
+                stays on GPU, avoiding expensive GPU->CPU synchronization.
+
+        Returns:
+            Log-mel spectrogram as numpy array or torch tensor depending on return_tensors.
         """
-        waveform = torch.from_numpy(waveform).to(device, torch.float32)
-        window = torch.hann_window(self.n_fft, device=device)
+        import time
+
+        start_time = time.perf_counter()
+        logger.info(f"[WhisperFeatureExtractor] Starting feature extraction on device: {device}")
+
+        # Handle both numpy and tensor inputs
+        if isinstance(waveform, np.ndarray):
+            waveform = torch.from_numpy(waveform).to(device, torch.float32)
+        elif waveform.device.type != device.split(":")[0] if ":" in device else device:
+            waveform = waveform.to(device, torch.float32)
+
+        # Use cached window and mel_filters (transposed)
+        window, mel_filters_T = self._ensure_gpu_cache(device)
 
         # Note: it would be better to dither the chunked waveform,
         # so overlapping signal does not get the same dithering.
         # But, chunking is happening inside pytorch, so it is here.
         if self.dither != 0.0:
-            waveform += self.dither * torch.randn(waveform.shape, dtype=waveform.dtype, device=waveform.device)
+            waveform = waveform + self.dither * torch.randn(
+                waveform.shape, dtype=waveform.dtype, device=waveform.device
+            )
 
         stft = torch.stft(waveform, self.n_fft, self.hop_length, window=window, return_complex=True)
         magnitudes = stft[..., :-1].abs() ** 2
 
-        mel_filters = torch.from_numpy(self.mel_filters).to(device, torch.float32)
-        mel_spec = mel_filters.T @ magnitudes
+        # Apply mel filterbank: [n_mels, n_freqs] @ [batch, n_freqs, frames] -> [batch, n_mels, frames]
+        mel_spec = torch.matmul(mel_filters_T, magnitudes)
 
         log_spec = torch.clamp(mel_spec, min=1e-10).log10()
         if waveform.dim() == 2:
-            max_val = log_spec.max(dim=2, keepdim=True)[0].max(dim=1, keepdim=True)[0]
+            max_val = log_spec.amax(dim=(1, 2), keepdim=True)
             log_spec = torch.maximum(log_spec, max_val - 8.0)
         else:
             log_spec = torch.maximum(log_spec, log_spec.max() - 8.0)
         log_spec = (log_spec + 4.0) / 4.0
+
+        if return_tensors:
+            # Move to CPU for compatibility - vLLM serialization requires CPU tensors
+            # The speedup comes from GPU-accelerated STFT/matmul and cached window/mel_filters
+            # Must use .detach().contiguous() to ensure proper memory layout and detach from computation graph
+            if log_spec.device.type != "cpu":
+                log_spec = log_spec.detach().cpu().contiguous()
+            else:
+                log_spec = log_spec.detach().contiguous()
+            # Sync for accurate timing when using GPU
+            if device != "cpu":
+                torch.cuda.synchronize()
+            elapsed_ms = (time.perf_counter() - start_time) * 1000
+            logger.info(f"[WhisperFeatureExtractor] Feature extraction completed in {elapsed_ms:.2f} ms (device={device}, return_tensors=True)")
+            return log_spec
+
+        # Only transfer to CPU if needed for numpy output
         if device != "cpu":
+            torch.cuda.synchronize()  # Sync before timing measurement
             log_spec = log_spec.detach().cpu()
+        
+        elapsed_ms = (time.perf_counter() - start_time) * 1000
+        logger.info(f"[WhisperFeatureExtractor] Feature extraction completed in {elapsed_ms:.2f} ms (device={device}, return_tensors=False)")
         return log_spec.numpy()
 
     @staticmethod
@@ -314,14 +382,17 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
         # make sure list is in array format
         input_features = padded_inputs.get("input_features").transpose(2, 0, 1)
 
-        extract_fbank_features = (
-            self._torch_extract_fbank_features if is_torch_available() else self._np_extract_fbank_features
-        )
-        input_features = extract_fbank_features(input_features[0], device)
+        # Determine if we should keep tensors on GPU to avoid expensive GPU->CPU sync
+        use_torch = is_torch_available()
+        keep_on_gpu = use_torch and device != "cpu" and return_tensors == "pt"
 
-        if isinstance(input_features[0], list):
+        if use_torch:
+            input_features = self._torch_extract_fbank_features(input_features[0], device, return_tensors=keep_on_gpu)
+        else:
+            input_features = self._np_extract_fbank_features(input_features[0], device)
+
+        if not keep_on_gpu and isinstance(input_features[0], list):
             padded_inputs["input_features"] = [np.asarray(feature, dtype=np.float32) for feature in input_features]
-
         else:
             padded_inputs["input_features"] = input_features
 
