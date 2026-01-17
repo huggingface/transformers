@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Arcee AI and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """AFMoE model configuration"""
-
-from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...modeling_rope_utils import RopeParameters
@@ -104,6 +101,12 @@ class AfmoeConfig(PreTrainedConfig):
         mup_enabled (`bool`, *optional*, defaults to `False`):
             Whether to enable muP (Maximal Update Parametrization) input scaling. When enabled, input embeddings
             are scaled by `sqrt(hidden_size)`.
+        eos_token_id (`int`, *optional*):
+            End of stream token id.
+        pad_token_id (`int`, *optional*):
+            Padding token id.
+        bos_token_id (`int`, *optional*):
+            Beginning of stream token id.
 
     Example:
     ```python
@@ -132,32 +135,35 @@ class AfmoeConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 200192,
-        hidden_size: Optional[int] = 2048,
-        intermediate_size: Optional[int] = 6144,
-        moe_intermediate_size: Optional[int] = 1408,
-        num_hidden_layers: Optional[int] = 32,
-        num_dense_layers: Optional[int] = 1,
-        num_attention_heads: Optional[int] = 16,
-        num_key_value_heads: Optional[int] = None,
-        head_dim: Optional[int] = 128,
-        hidden_act: Optional[str] = "silu",
-        max_position_embeddings: Optional[int] = 16384,
-        initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[float] = 1e-5,
-        use_cache: Optional[bool] = True,
-        tie_word_embeddings: Optional[bool] = False,
-        rope_theta: Optional[float] = 10000.0,
-        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        num_experts: Optional[int] = 64,
-        num_experts_per_tok: Optional[int] = 6,
-        num_shared_experts: Optional[int] = 2,
-        route_scale: Optional[float] = 1.0,
-        global_attn_every_n_layers: Optional[int] = 4,
-        sliding_window: Optional[int] = 1024,
-        layer_types: Optional[list] = None,
-        attention_dropout: Optional[float] = 0.0,
-        mup_enabled: Optional[bool] = False,
+        vocab_size: int | None = 200192,
+        hidden_size: int | None = 2048,
+        intermediate_size: int | None = 6144,
+        moe_intermediate_size: int | None = 1408,
+        num_hidden_layers: int | None = 32,
+        num_dense_layers: int | None = 1,
+        num_attention_heads: int | None = 16,
+        num_key_value_heads: int | None = None,
+        head_dim: int | None = 128,
+        hidden_act: str | None = "silu",
+        max_position_embeddings: int | None = 16384,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: float | None = 1e-5,
+        use_cache: bool | None = True,
+        tie_word_embeddings: bool | None = False,
+        rope_theta: float | None = 10000.0,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        num_experts: int | None = 64,
+        num_experts_per_tok: int | None = 6,
+        num_shared_experts: int | None = 2,
+        route_scale: float | None = 1.0,
+        global_attn_every_n_layers: int | None = 4,
+        sliding_window: int | None = 1024,
+        layer_types: list | None = None,
+        attention_dropout: float | None = 0.0,
+        mup_enabled: bool | None = False,
+        eos_token_id: bool | None = None,
+        pad_token_id: bool | None = None,
+        bos_token_id: bool | None = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -200,11 +206,12 @@ class AfmoeConfig(PreTrainedConfig):
             num_key_value_heads = num_attention_heads
 
         self.num_key_value_heads = num_key_value_heads
+        self.eos_token_id = eos_token_id
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
 
-        super().__init__(
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        super().__init__(**kwargs)
 
 
 __all__ = ["AfmoeConfig"]

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020, The T5 Authors and HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -95,12 +94,15 @@ class MT5Config(PreTrainedConfig):
         use_cache=True,
         tokenizer_class="T5Tokenizer",
         tie_word_embeddings=False,
+        bos_token_id=None,
         pad_token_id=0,
         eos_token_id=1,
         decoder_start_token_id=0,
         classifier_dropout=0.0,
+        is_decoder=False,
         **kwargs,
     ):
+        self.is_decoder = is_decoder
         self.vocab_size = vocab_size
         self.d_model = d_model
         self.d_kv = d_kv
@@ -133,17 +135,17 @@ class MT5Config(PreTrainedConfig):
         if feed_forward_proj == "gated-gelu":
             self.dense_act_fn = "gelu_new"
 
+        # Force because official weights have False serialized, but we have to tie always
+        self.tie_word_embeddings = True
+        self.tokenizer_class = tokenizer_class
+        self.bos_token_id = bos_token_id
+        self.pad_token_id = pad_token_id
+        self.eos_token_id = eos_token_id
+        self.decoder_start_token_id = decoder_start_token_id
         super().__init__(
             is_encoder_decoder=is_encoder_decoder,
-            tokenizer_class=tokenizer_class,
-            tie_word_embeddings=tie_word_embeddings,
-            pad_token_id=pad_token_id,
-            eos_token_id=eos_token_id,
-            decoder_start_token_id=decoder_start_token_id,
             **kwargs,
         )
-        # TODO: Mt5 never supported not tying encoder decoder so this has to be true.
-        self.tie_encoder_decoder = True
 
 
 __all__ = ["MT5Config"]

@@ -17,7 +17,6 @@ import gc
 import json
 import os
 from pathlib import Path
-from typing import Optional
 
 import regex as re
 import tiktoken
@@ -57,7 +56,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
 # fmt: on
 
 
-def convert_old_keys_to_new_keys(state_dict_keys: Optional[dict] = None):
+def convert_old_keys_to_new_keys(state_dict_keys: dict | None = None):
     """
     This function should be applied only once, on the concatenated keys to efficiently rename using
     the key mappings.
@@ -386,7 +385,7 @@ class GptOssConverter(TikTokenConverter):
         self,
         vocab_file,
         model_max_length: int,
-        chat_template: Optional[str] = None,
+        chat_template: str | None = None,
         **kwargs,
     ):
         super().__init__(vocab_file, pattern=None)

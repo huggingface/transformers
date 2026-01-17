@@ -242,10 +242,10 @@ Transformers includes a utility script to validate the docstrings when you open 
 You can run this check locally - before committing - by running the following command.
 
 ```bash
-make fix-copies
+make fix-repo
 ```
 
-`make fix-copies` runs several other checks as well. If you don't need those checks, run the command below to only perform docstring and auto-docstring checks.
+`make fix-repo` runs several other checks as well. If you don't need those checks, run the command below to only perform docstring and auto-docstring checks.
 
 ```bash
 python utils/check_docstrings.py # to only check files included in the diff without fixing them
