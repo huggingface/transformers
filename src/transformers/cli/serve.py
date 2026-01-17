@@ -1069,6 +1069,7 @@ class Serve:
             "generation_config": generation_config,
             "return_dict_in_generate": True,
             "past_key_values": last_kv_cache,
+            "tokenizer": processor,
         }
 
         def stream_chat_completion(streamer, _request_id):
