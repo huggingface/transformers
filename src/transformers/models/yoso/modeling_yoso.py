@@ -33,6 +33,7 @@ from ...modeling_outputs import (
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import apply_chunking_to_forward
 from ...utils import (
+    add_code_sample_docstrings,
     auto_docstring,
     is_kernels_available,
     is_ninja_available,
@@ -724,7 +725,6 @@ class YosoForMaskedLM(YosoPreTrainedModel):
         self.cls.predictions.decoder = new_embeddings
         self.cls.predictions.bias = new_embeddings.bias
 
-    @auto_docstring
     def forward(
         self,
         input_ids: torch.Tensor | None = None,
@@ -777,6 +777,37 @@ class YosoForMaskedLM(YosoPreTrainedModel):
         )
 
 
+# Robust doctest for YosoForMaskedLM.forward (local override; avoids touching shared doc utilities)
+YosoForMaskedLM.forward.__doc__ = (
+    (YosoForMaskedLM.forward.__doc__ or "")
+    + r"""
+
+Example:
+>>> from transformers import AutoTokenizer, YosoForMaskedLM
+>>> import torch
+>>>
+>>> tokenizer = AutoTokenizer.from_pretrained("uw-madison/yoso-4096")
+>>> model = YosoForMaskedLM.from_pretrained("uw-madison/yoso-4096")
+>>>
+>>> # use tokenizer.mask_token so the example works for any tokenizer
+>>> text = f"The capital of France is {tokenizer.mask_token}."
+>>> inputs = tokenizer(text, return_tensors="pt")
+>>>
+>>> _ = model.eval()
+>>> with torch.no_grad():
+...     outputs = model(**inputs)
+>>>
+>>> logits = outputs.logits
+>>> mask_token_index = (inputs.input_ids == tokenizer.mask_token_id)[0].nonzero(as_tuple=True)[0]
+>>> # use PyTorch argmax dim keyword (not axis)
+>>> predicted_token_id = logits[0, mask_token_index].argmax(dim=-1)
+>>>
+>>> tokenizer.decode(predicted_token_id)  # doctest: +SKIP
+"""
+)
+# --- End: docstring override ---
+
+
 class YosoClassificationHead(nn.Module):
     """Head for sentence-level classification tasks."""
 
@@ -814,7 +845,11 @@ class YosoForSequenceClassification(YosoPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @auto_docstring
+    @add_code_sample_docstrings(
+        checkpoint="uw-madison/yoso-4096",
+        output_type=SequenceClassifierOutput,
+        config_class="YosoConfig",
+    )
     def forward(
         self,
         input_ids: torch.Tensor | None = None,
@@ -1002,7 +1037,11 @@ class YosoForTokenClassification(YosoPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @auto_docstring
+    @add_code_sample_docstrings(
+        checkpoint="uw-madison/yoso-4096",
+        output_type=TokenClassifierOutput,
+        config_class="YosoConfig",
+    )
     def forward(
         self,
         input_ids: torch.Tensor | None = None,
@@ -1078,7 +1117,11 @@ class YosoForQuestionAnswering(YosoPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @auto_docstring
+    @add_code_sample_docstrings(
+        checkpoint="uw-madison/yoso-4096",
+        output_type=QuestionAnsweringModelOutput,
+        config_class="YosoConfig",
+    )
     def forward(
         self,
         input_ids: torch.Tensor | None = None,
