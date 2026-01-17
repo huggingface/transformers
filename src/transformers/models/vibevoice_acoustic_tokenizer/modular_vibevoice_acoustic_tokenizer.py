@@ -36,14 +36,14 @@ class VibeVoiceAcousticTokenizerOutput(ModelOutput):
         Projected latents (continuous representations for acoustic tokens) at the output of the encoder.
     latents (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
         Projected latents (continuous representations for acoustic tokens) at the output of the encoder.
-    padding_cache (`VibeVoiceAcousticTokenizerConv1dCache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        A [`VibeVoiceAcousticTokenizerConv1dCache`] instance containing cached convolution states for each layer that
+    padding_cache (`VibeVoiceAcousticTokenizerConv1dPaddingCache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        A [`VibeVoiceAcousticTokenizerConv1dPaddingCache`] instance containing cached convolution states for each layer that
         can be passed to subsequent forward calls.
     """
 
     audio: Optional[torch.FloatTensor] = None
     latents: Optional[torch.FloatTensor] = None
-    padding_cache: Optional["VibeVoiceAcousticTokenizerConv1dCache"] = None
+    padding_cache: Optional["VibeVoiceAcousticTokenizerConv1dPaddingCache"] = None
 
 
 @dataclass
@@ -63,13 +63,13 @@ class VibeVoiceAcousticTokenizerDecoderOutput(ModelOutput):
     """
     audio (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
         Projected latents (continuous representations for acoustic tokens) at the output of the encoder.
-    padding_cache (`VibeVoiceAcousticTokenizerConv1dCache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
-        A [`VibeVoiceAcousticTokenizerConv1dCache`] instance containing cached convolution states for each layer that
+    padding_cache (`VibeVoiceAcousticTokenizerConv1dPaddingCache`, *optional*, returned when `use_cache=True` is passed or when `config.use_cache=True`):
+        A [`VibeVoiceAcousticTokenizerConv1dPaddingCache`] instance containing cached convolution states for each layer that
         can be passed to subsequent forward calls.
     """
 
     audio: Optional[torch.FloatTensor] = None
-    padding_cache: Optional["VibeVoiceAcousticTokenizerConv1dCache"] = None
+    padding_cache: Optional["VibeVoiceAcousticTokenizerConv1dPaddingCache"] = None
 
 
 class VibeVoiceAcousticTokenizerRMSNorm(LlamaRMSNorm):
@@ -87,73 +87,8 @@ class VibeVoiceAcousticTokenizerFeedForward(nn.Module):
         return self.linear2(self.activation(self.linear1(hidden_states)))
 
 
-# TODO (ebezzam): Mimi cache can be used as is after this PR is merged: https://github.com/huggingface/transformers/pull/43130
-class VibeVoiceAcousticTokenizerConv1dCache(MimiConv1dPaddingCache):
-    """Cache class for maintaining convolution states across layers to support streaming."""
-
-    def _cache_init(self, hidden_states: torch.Tensor, layer_idx: int):
-        """
-        Initialize the cache for a specific layer.
-
-        Parameters:
-            hidden_states (`torch.Tensor`):
-                The hidden states to initialize the cache with.
-            layer_idx (`int`):
-                The index of the layer to initialize the cache for.
-        Returns:
-            `torch.Tensor`, the initialized cache.
-        """
-        batch_size, dtype, device = hidden_states.shape[0], hidden_states.dtype, hidden_states.device
-        padding, padding_mode, in_channels = (
-            self.per_layer_padding[layer_idx],
-            self.per_layer_padding_mode[layer_idx],
-            self.per_layer_in_channels[layer_idx],
-        )
-
-        if padding_mode == "constant":
-            current_cache = torch.zeros(batch_size, in_channels, padding, device=device, dtype=dtype)
-        elif padding_mode == "replicate":
-            current_cache = (
-                torch.ones(batch_size, in_channels, padding, device=device, dtype=dtype) * hidden_states[..., :1]
-            )
-        else:
-            raise NotImplementedError(f"Padding mode {padding_mode} not supported")
-
-        return current_cache
-
-    def update(self, hidden_states: torch.Tensor, layer_idx: int):
-        """
-        Updates the padding cache with the new padding states for the layer `layer_idx` and returns the current cache.
-
-        Parameters:
-            hidden_states (`torch.Tensor`):
-                The hidden states to be partially cached.
-            layer_idx (`int`):
-                The index of the layer to cache the states for.
-        Returns:
-            `torch.Tensor` or `None`, the current padding cache.
-        """
-        batch_size, dtype, device = hidden_states.shape[0], hidden_states.dtype, hidden_states.device
-        padding, in_channels = self.per_layer_padding[layer_idx], self.per_layer_in_channels[layer_idx]
-
-        if self.padding_cache[layer_idx] is None:
-            current_cache = self._cache_init(hidden_states, layer_idx)
-        else:
-            current_cache = self.padding_cache[layer_idx]
-
-        # update the cache
-        if padding > 0:
-            shortfall = max(0, padding - hidden_states.shape[-1])
-            if shortfall > 0:
-                padding_states = torch.cat([current_cache[:, :, -shortfall:], hidden_states], dim=-1)
-            else:
-                padding_states = hidden_states[:, :, -padding:]
-        else:
-            padding_states = torch.empty(batch_size, in_channels, 0, dtype=dtype, device=device)
-
-        self.padding_cache[layer_idx] = padding_states
-
-        return current_cache
+class VibeVoiceAcousticTokenizerConv1dPaddingCache(MimiConv1dPaddingCache):
+    pass
 
 
 class VibeVoiceAcousticTokenizerCausalConv1d(nn.Module):
@@ -186,7 +121,7 @@ class VibeVoiceAcousticTokenizerCausalConv1d(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        padding_cache: Optional[VibeVoiceAcousticTokenizerConv1dCache] = None,
+        padding_cache: Optional[VibeVoiceAcousticTokenizerConv1dPaddingCache] = None,
     ) -> torch.Tensor:
         """
         Forward pass with optional streaming support via cache.
@@ -210,7 +145,7 @@ class VibeVoiceAcousticTokenizerCausalConv1d(nn.Module):
 
 
 class VibeVoiceAcousticTokenizerCausalConvTranspose1d(nn.Module):
-    """Causal ConvTranspose1d with optional streaming support via VibeVoiceAcousticTokenizerConv1dCache."""
+    """Causal ConvTranspose1d with optional streaming support via VibeVoiceAcousticTokenizerConv1dPaddingCache."""
 
     def __init__(
         self,
@@ -233,7 +168,7 @@ class VibeVoiceAcousticTokenizerCausalConvTranspose1d(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        padding_cache: Optional["VibeVoiceAcousticTokenizerConv1dCache"] = None,
+        padding_cache: Optional["VibeVoiceAcousticTokenizerConv1dPaddingCache"] = None,
     ) -> torch.Tensor:
         time_dim = hidden_states.shape[-1]
 
@@ -518,14 +453,14 @@ class VibeVoiceAcousticTokenizerModel(VibeVoiceAcousticTokenizerPreTrainedModel)
         r"""
         latents (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`):
             Input latent representations to be decoded back into audio waveforms.
-        padding_cache (`VibeVoiceAcousticTokenizerConv1dCache`, *optional*):
+        padding_cache (`VibeVoiceAcousticTokenizerConv1dPaddingCache`, *optional*):
             Cache object for streaming mode to maintain convolution states across layers.
         use_cache (`bool`, *optional*):
             Whether to use caching for convolution states.
         """
 
         if use_cache and padding_cache is None:
-            padding_cache = VibeVoiceAcousticTokenizerConv1dCache(
+            padding_cache = VibeVoiceAcousticTokenizerConv1dPaddingCache(
                 num_layers=self.decoder.num_layers,
                 per_layer_padding=self.decoder.per_layer_padding,
                 per_layer_padding_mode=self.decoder.per_layer_padding_mode,
@@ -542,7 +477,7 @@ class VibeVoiceAcousticTokenizerModel(VibeVoiceAcousticTokenizerPreTrainedModel)
         r"""
         audio (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`):
             Input audio waveform to be encoded into latent representations.
-        padding_cache (`VibeVoiceAcousticTokenizerConv1dCache`, *optional*):
+        padding_cache (`VibeVoiceAcousticTokenizerConv1dPaddingCache`, *optional*):
             Cache object for streaming mode to maintain convolution states across layers. Note only used by decoder.
         use_cache (`bool`, *optional*):
             Whether to use caching for convolution states.
