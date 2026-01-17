@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import contextvars
 import itertools
 from collections.abc import Callable
 
@@ -40,6 +41,12 @@ if _is_torch_greater_or_equal_than_2_6:
 
 
 logger = logging.get_logger(__name__)
+
+# Context variable to track if attention_mask is known to be all-True during generation.
+# When set to True, _ignore_causal_mask_sdpa skips the expensive .all() GPU-CPU sync.
+_attention_mask_all_true: contextvars.ContextVar[bool | None] = contextvars.ContextVar(
+    "_attention_mask_all_true", default=None
+)
 
 
 def and_masks(*mask_functions: Callable) -> Callable:
@@ -239,6 +246,10 @@ def _ignore_causal_mask_sdpa(
     # hard-coded to the forward. If a user exports a model with query_length > 1, the exported model will hard-code `is_causal=True`
     # which is in general wrong (see https://github.com/pytorch/pytorch/issues/108108). Thus, we only set
     # `ignore_causal_mask = True` if we are not tracing
+    #
+    # Check context variable first to avoid GPU-CPU sync during generation.
+    # When _attention_mask_all_true is True, we know the mask contains no padding.
+    mask_known_all_true = _attention_mask_all_true.get()
     if (
         not is_tracing(padding_mask)
         # only cases when lower and upper diags are the same, see https://github.com/pytorch/pytorch/issues/108108
@@ -246,7 +257,7 @@ def _ignore_causal_mask_sdpa(
         # in this case we need to add special patterns to the mask so cannot be skipped otherwise
         and (local_attention_size is None or kv_length < local_attention_size)
         # In this case, we need to add padding to the mask, so cannot be skipped otherwise
-        and (padding_mask is None or padding_mask.all())
+        and (padding_mask is None or mask_known_all_true is True or padding_mask.all())
     ):
         return True
 
