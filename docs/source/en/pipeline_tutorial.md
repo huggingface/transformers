@@ -39,15 +39,23 @@ pipeline("the secret to baking a really good cake is ")
 When you have more than one input, pass them as a list.
 
 ```py
+
 from transformers import pipeline
 from accelerate import Accelerator
 
+# Automatically use GPU if available
 device = Accelerator().device
 
-pipeline = pipeline(task="text-generation", model="google/gemma-2-2b", device=device)
-pipeline(["the secret to baking a really good cake is ", "a baguette is "])
-[[{'generated_text': 'the secret to baking a really good cake is 1. the right ingredients 2. the'}],
- [{'generated_text': 'a baguette is 100% bread.\n\na baguette is 100%'}]]
+generator = pipeline(task="text-generation", model="google/gemma-2-2b", device=device)
+
+# Batch of prompts
+prompts = ["the secret to baking a really good cake is ", "a baguette is "]
+outputs = generator(prompts)
+
+for i, output in enumerate(outputs):
+    print(f"Prompt: {prompts[i]}")
+    print(f"Generated: {output['generated_text']}\n")
+
 ```
 
 This guide will introduce you to the [`Pipeline`], demonstrate its features, and show how to configure its various parameters.
@@ -355,3 +363,96 @@ pipeline = pipeline(model="google/gemma-7b", dtype=torch.bfloat16, device_map="a
 pipeline("the secret to baking a good cake is ")
 [{'generated_text': 'the secret to baking a good cake is 1. the right ingredients 2. the right'}]
 ```
+### Multilingual text generation (example)
+
+This example shows how to generate text for prompts in multiple languages using a single text-generation pipeline. It also demonstrates using `accelerate` to select GPU automatically if available.
+
+```python
+from transformers import pipeline
+from accelerate import Accelerator
+
+# Automatically use GPU if available (falls back to CPU)
+device = Accelerator().device
+generator = pipeline("text-generation", model="google/gemma-2-2b", device=device)
+
+prompts = [
+    "The secret to a really good cake is ",          # English
+    "एक अच्छे केक का रहस्य है ",                       # Hindi
+    "చిన్న కేక్ బాగా తయారుచేసే రహస్యం ఏమిటి ",        # Telugu
+]
+
+for prompt in prompts:
+    out = generator(prompt, max_new_tokens=50)
+    print("Prompt:", prompt)
+    print("Generated:", out[0]["generated_text"])
+    print("-" * 60)
+
+   python
+   ```
+**CPU vs GPU perfromance comparision**
+  This example shows  the comparing the inference speed on CPU vs GPU using the Hugging Face      pipeline  and Accelerator 
+
+```python
+
+import time
+from transformers import pipeline
+from accelerator import Accelerator
+
+#Use Accelerator to auto select CPU or GPU
+device = Accelerator().device
+generator - pipeline("text-generation", model="google/gemma-2-2b",device=device)
+
+start = time.time()
+generator("AI is trasforming education by")
+end = time.time()
+
+print(f"Inference completed on {device} in {end - start:.2f} seconds.")
+
+python
+```
+
+
+
+## Named Entity Recognition (NER) Example
+This example demonstrates how to use the hugging face transformers **pipeline** for token-level classification
+
+1.It finds and labels names of people, places, or organizations in a sentence.
+
+2.It uses a pre-trained BERT model to detect these entities from text.
+
+3.It helps in extracting useful info from text, useful for chatbots or data analysis.
+
+```python
+
+from transformers import pipeline
+
+# Load NER pipeline
+
+ner_pipeline=pipeline(
+    task="ner",
+    model="dbmdz/bert-large-cased-finetuned-conll04-english",
+    grouped_entities=True
+)
+
+text="Hugging Face is based in New York and was found by Clement Delangue."
+entities = ner_pipeline(text)
+
+for entity in entities:
+    print(f"Entity: {entity['word']},Label: {entity['entity_group']},Score:{entity['score':.2f}")
+
+     
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+

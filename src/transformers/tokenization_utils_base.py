@@ -777,6 +777,13 @@ class BatchEncoding(UserDict):
         else:
             logger.warning(f"Attempting to cast a BatchEncoding to type {str(device)}. This is not supported.")
         return self
+    
+    
+    def decoder(self):
+    # NOTE: In Transformers v5, decoder object may differ from v4.
+    # This is intentional and does not affect tokenizer.decode() output.
+      return self._decoder  # or whatever the existing return line is
+
 
 
 ENCODE_KWARGS_DOCSTRING = r"""
