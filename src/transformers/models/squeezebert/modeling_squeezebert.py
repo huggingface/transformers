@@ -536,6 +536,27 @@ class SqueezeBertForMaskedLM(SqueezeBertPreTrainedModel):
             Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
             config.vocab_size]` (see `input_ids` docstring) Tokens with indices set to `-100` are ignored (masked), the
             loss is only computed for the tokens with labels in `[0, ..., config.vocab_size]`
+
+        Example:
+
+        ```python
+        >>> from transformers import AutoTokenizer, SqueezeBertForMaskedLM
+        >>> import torch
+
+        >>> tokenizer = AutoTokenizer.from_pretrained("squeezebert/squeezebert-uncased")
+        >>> model = SqueezeBertForMaskedLM.from_pretrained("squeezebert/squeezebert-uncased")
+
+        >>> inputs = tokenizer("The capital of France is [MASK].", return_tensors="pt")
+        >>> with torch.no_grad():
+        ...     logits = model(**inputs).logits
+
+        >>> # retrieve index of [MASK]
+        >>> mask_token_index = (inputs.input_ids == tokenizer.mask_token_id)[0].nonzero(as_tuple=True)[0]
+
+        >>> predicted_token_id = logits[0, mask_token_index].argmax(axis=-1)
+        >>> tokenizer.decode(predicted_token_id)  # doctest: +SKIP
+        'paris'
+        ```
         """
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
