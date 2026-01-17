@@ -16,7 +16,7 @@ limitations under the License.
 
 # Generating the documentation
 
-Several packages are required to build the documentation. Install these packages with the following command at the root of the repository.
+Several packages are required to build the documentation locally. Install these packages with the following command at the root of the repository.
 
 ```bash
 pip install -e ".[dev]"
