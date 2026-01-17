@@ -296,6 +296,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("tvp", "BertTokenizer" if is_tokenizers_available() else None),
         ("udop", "UdopTokenizer" if is_tokenizers_available() else None),
         ("umt5", "T5Tokenizer" if is_tokenizers_available() else None),
+        ("vibevoice", "Qwen2TokenizerFast" if is_tokenizers_available() else None),
         ("unispeech", "Wav2Vec2CTCTokenizer"),
         ("unispeech-sat", "Wav2Vec2CTCTokenizer"),
         ("vilt", "BertTokenizer" if is_tokenizers_available() else None),
