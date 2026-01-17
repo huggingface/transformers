@@ -26,7 +26,7 @@ open-source contribution to Transformers. Along the way, you will:
     libraries
 -   learn how to do efficiently test large NLP models
 -   learn how to integrate Python utilities like `black`, `ruff`,
-    `make fix-copies` into a library to always ensure clean and readable
+    `make fix-repo` into a library to always ensure clean and readable
     code
 
 To start, let's try to get a general overview of the Transformers
@@ -1087,7 +1087,7 @@ make style
 and verify that your coding style passes the quality check:
 
 ```bash
-make quality
+make check-repo
 ```
 
 There are a couple of other very strict design tests in 🤗 Transformers

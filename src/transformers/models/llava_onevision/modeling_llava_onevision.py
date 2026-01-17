@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_llava_onevision.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2024 the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,7 +20,6 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -62,9 +60,9 @@ class LlavaOnevisionModelOutputWithPast(BaseModelOutputWithPast):
         video_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
-    image_hidden_states: Optional[torch.FloatTensor] = None
+    image_hidden_states: torch.FloatTensor | None = None
 
-    video_hidden_states: Optional[torch.FloatTensor] = None
+    video_hidden_states: torch.FloatTensor | None = None
 
 
 @dataclass
@@ -92,14 +90,14 @@ class LlavaOnevisionCausalLMOutputWithPast(ModelOutput):
         video_hidden_states of the model produced by the vision encoder and after projecting the last hidden state.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    logits: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[Cache] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
-    image_hidden_states: Optional[torch.FloatTensor] = None
+    loss: torch.FloatTensor | None = None
+    logits: torch.FloatTensor | None = None
+    past_key_values: Cache | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
+    image_hidden_states: torch.FloatTensor | None = None
 
-    video_hidden_states: Optional[torch.FloatTensor] = None
+    video_hidden_states: torch.FloatTensor | None = None
 
 
 @auto_docstring
@@ -281,7 +279,6 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
 
         self.vocab_size = config.text_config.vocab_size
         self.language_model = AutoModel.from_config(config.text_config)
-        self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self.post_init()
 
     def get_input_embeddings(self):
@@ -359,10 +356,10 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         image_sizes: torch.Tensor,
-        vision_feature_layer: Optional[Union[int, list[int]]] = None,
-        vision_feature_select_strategy: Optional[str] = None,
-        vision_aspect_ratio: Optional[str] = None,
-        batch_num_images: Optional[torch.LongTensor] = None,
+        vision_feature_layer: int | list[int] | None = None,
+        vision_feature_select_strategy: str | None = None,
+        vision_aspect_ratio: str | None = None,
+        batch_num_images: torch.LongTensor | None = None,
     ):
         """
         Obtains image last hidden states from the vision tower and apply multimodal projection.
@@ -447,8 +444,8 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
         self,
         input_ids: torch.LongTensor,
         inputs_embeds: torch.FloatTensor,
-        image_features: Optional[torch.FloatTensor] = None,
-        video_features: Optional[torch.FloatTensor] = None,
+        image_features: torch.FloatTensor | None = None,
+        video_features: torch.FloatTensor | None = None,
     ):
         """
         Obtains multimodal placeholder mask from `input_ids` or `inputs_embeds`, and checks that the placeholder token count is
@@ -487,26 +484,26 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        image_sizes: Optional[torch.LongTensor] = None,
-        pixel_values_videos: Optional[torch.FloatTensor] = None,
-        image_sizes_videos: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        vision_feature_layer: Optional[Union[int, list[int]]] = None,
-        vision_feature_select_strategy: Optional[str] = None,
-        vision_aspect_ratio: Optional[str] = None,
-        batch_num_images: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        image_sizes: torch.LongTensor | None = None,
+        pixel_values_videos: torch.FloatTensor | None = None,
+        image_sizes_videos: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        vision_feature_layer: int | list[int] | None = None,
+        vision_feature_select_strategy: str | None = None,
+        vision_aspect_ratio: str | None = None,
+        batch_num_images: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Union[tuple, LlavaOnevisionModelOutputWithPast]:
+    ) -> tuple | LlavaOnevisionModelOutputWithPast:
         r"""
         image_sizes_videos (`torch.LongTensor` of shape `(batch_size, frames, 2)`, *optional*):
             The sizes of the videos in the batch, being (height, width) for each frame in the video.
@@ -597,7 +594,7 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
     def get_video_features(
         self,
         pixel_values: torch.FloatTensor,
-        vision_feature_layer: Union[int, list[int]],
+        vision_feature_layer: int | list[int],
         vision_feature_select_strategy: str,
     ):
         """
@@ -695,8 +692,8 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
         self,
         pixel_values: torch.FloatTensor,
         image_sizes: torch.Tensor,
-        vision_feature_layer: Optional[Union[int, list[int]]] = None,
-        vision_feature_select_strategy: Optional[str] = None,
+        vision_feature_layer: int | list[int] | None = None,
+        vision_feature_select_strategy: str | None = None,
     ):
         return self.model.get_image_features(
             pixel_values=pixel_values,
@@ -709,28 +706,28 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        image_sizes: Optional[torch.LongTensor] = None,
-        pixel_values_videos: Optional[torch.FloatTensor] = None,
-        image_sizes_videos: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        vision_feature_layer: Optional[Union[int, list[int]]] = None,
-        vision_feature_select_strategy: Optional[str] = None,
-        vision_aspect_ratio: Optional[str] = None,
-        batch_num_images: Optional[torch.LongTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        image_sizes: torch.LongTensor | None = None,
+        pixel_values_videos: torch.FloatTensor | None = None,
+        image_sizes_videos: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        vision_feature_layer: int | list[int] | None = None,
+        vision_feature_select_strategy: str | None = None,
+        vision_aspect_ratio: str | None = None,
+        batch_num_images: torch.LongTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, LlavaOnevisionCausalLMOutputWithPast]:
+    ) -> tuple | LlavaOnevisionCausalLMOutputWithPast:
         r"""
         image_sizes_videos (`torch.LongTensor` of shape `(batch_size, frames, 2)`, *optional*):
             The sizes of the videos in the batch, being (height, width) for each frame in the video.
@@ -932,8 +929,8 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
     def get_video_features(
         self,
         pixel_values: torch.FloatTensor,
-        vision_feature_layer: Optional[Union[int, list[int]]] = None,
-        vision_feature_select_strategy: Optional[str] = None,
+        vision_feature_layer: int | list[int] | None = None,
+        vision_feature_select_strategy: str | None = None,
     ):
         return self.model.get_video_features(
             pixel_values=pixel_values,

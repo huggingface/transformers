@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The Nari Labs and HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,7 +13,7 @@
 # limitations under the License.
 
 from collections.abc import Callable
-from typing import Any, Optional, Union
+from typing import Any, Optional
 
 import torch
 import torch.distributed as dist
@@ -45,14 +44,14 @@ class DiaGenerationMixin(GenerationMixin):
     def _get_logits_processor(
         self,
         generation_config: GenerationConfig,
-        input_ids_seq_length: Optional[int] = None,
-        encoder_input_ids: Optional[torch.LongTensor] = None,
-        prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], list[int]]] = None,
-        logits_processor: Optional[LogitsProcessorList] = None,
-        device: Optional[str] = None,
-        model_kwargs: Optional[dict[str, Any]] = None,
-        negative_prompt_ids: Optional[torch.Tensor] = None,
-        negative_prompt_attention_mask: Optional[torch.Tensor] = None,
+        input_ids_seq_length: int | None = None,
+        encoder_input_ids: torch.LongTensor | None = None,
+        prefix_allowed_tokens_fn: Callable[[int, torch.Tensor], list[int]] | None = None,
+        logits_processor: LogitsProcessorList | None = None,
+        device: str | None = None,
+        model_kwargs: dict[str, Any] | None = None,
+        negative_prompt_ids: torch.Tensor | None = None,
+        negative_prompt_attention_mask: torch.Tensor | None = None,
     ) -> LogitsProcessorList:
         # Need either custom order or custom processor instead
         # (Temporarily disabling those for the super function)
@@ -70,7 +69,7 @@ class DiaGenerationMixin(GenerationMixin):
         custom_processors.append(
             DiaEOSChannelFilterLogitsProcessor(
                 num_channels=len(self.config.delay_pattern),
-                eos_token_id=self.config.eos_token_id,
+                eos_token_id=self.config.decoder_config.eos_token_id,
             )
         )
 
@@ -97,7 +96,7 @@ class DiaGenerationMixin(GenerationMixin):
         merged_processors.append(
             DiaEOSDelayPatternLogitsProcessor(
                 delay_pattern=self.config.delay_pattern,
-                eos_token_id=self.config.eos_token_id,
+                eos_token_id=self.config.decoder_config.eos_token_id,
                 max_generation_len=generation_config.max_length,
                 device=device,
             )
@@ -110,10 +109,15 @@ class DiaGenerationMixin(GenerationMixin):
         return merged_processors
 
     def _prepare_generation_config(
-        self, generation_config: Optional[GenerationConfig], **kwargs: Any
+        self, generation_config: GenerationConfig | None, **kwargs: Any
     ) -> tuple[GenerationConfig, dict]:
         generation_config, model_kwargs = super()._prepare_generation_config(generation_config, **kwargs)
 
+        if generation_config.temperature is not None and generation_config.temperature < 1.0:
+            logger.warning_once(
+                f"temperature < 1.0 is not supported for Dia; clamping to 1.0 (got {generation_config.temperature})"
+            )
+            generation_config.temperature = 1.0
         # We allow generation up to max length + max delay pattern
         # (will revert back to max length after generation)
         generation_config.max_length += max(self.config.delay_pattern)
@@ -125,10 +129,10 @@ class DiaGenerationMixin(GenerationMixin):
 
     def _prepare_model_inputs(
         self,
-        inputs: Optional[torch.Tensor] = None,
-        bos_token_id: Optional[torch.Tensor] = None,
-        model_kwargs: Optional[dict[str, torch.Tensor]] = None,
-    ) -> tuple[torch.Tensor, Optional[str], dict[str, torch.Tensor]]:
+        inputs: torch.Tensor | None = None,
+        bos_token_id: torch.Tensor | None = None,
+        model_kwargs: dict[str, torch.Tensor] | None = None,
+    ) -> tuple[torch.Tensor, str | None, dict[str, torch.Tensor]]:
         inputs, input_name, model_kwargs = super()._prepare_model_inputs(
             inputs=inputs,
             bos_token_id=bos_token_id,
@@ -151,7 +155,7 @@ class DiaGenerationMixin(GenerationMixin):
         model_input_name: str,
         model_kwargs: dict[str, torch.Tensor],
         decoder_start_token_id: torch.Tensor,
-        device: Optional[torch.device] = None,
+        device: torch.device | None = None,
     ) -> tuple[torch.LongTensor, dict[str, torch.Tensor]]:
         """Prepares `decoder_input_ids` for generation with encoder-decoder models"""
         # 1. Check whether the user has defined `decoder_input_ids` and `decoder_attention_mask`; if not error out
@@ -184,7 +188,8 @@ class DiaGenerationMixin(GenerationMixin):
         # 2. Determine the valid input and what works as mask within the input
         delay_mask = decoder_input_ids.long()
         valid_input_size = (
-            decoder_input_ids.shape[1] - (decoder_input_ids[:, :, 0] == self.config.pad_token_id).sum(dim=-1).max()
+            decoder_input_ids.shape[1]
+            - (decoder_input_ids[:, :, 0] == self.config.decoder_config.pad_token_id).sum(dim=-1).max()
         )
         decoder_input_ids = delay_mask[:, :valid_input_size].transpose(1, 2).long()
         decoder_attention_mask = decoder_attention_mask[:, :valid_input_size].long()
@@ -212,7 +217,7 @@ class DiaGenerationMixin(GenerationMixin):
         # Post processing for CFG and overwriting via delay pattern mask
         # 1. Delay pattern mask -- force tokens if not allowed to predict (!= pad_token in mask)
         model_inputs["decoder_input_ids"] = self.apply_delay_mask(
-            input_ids, self.config.pad_token_id, decoder_delay_mask
+            input_ids, self.config.decoder_config.pad_token_id, decoder_delay_mask
         )
 
         # Depending on cache usage we need to pass all or just one
@@ -233,7 +238,7 @@ class DiaGenerationMixin(GenerationMixin):
         return model_inputs
 
     @staticmethod
-    def apply_delay_mask(input_ids: torch.Tensor, pad_id: int, delay_mask: Optional[torch.Tensor]) -> torch.Tensor:
+    def apply_delay_mask(input_ids: torch.Tensor, pad_id: int, delay_mask: torch.Tensor | None) -> torch.Tensor:
         if delay_mask is None:
             return input_ids
 
@@ -248,17 +253,17 @@ class DiaGenerationMixin(GenerationMixin):
 
     def _main_generate_loop(
         self,
-        inputs: Optional[torch.Tensor] = None,
-        generation_config: Optional[GenerationConfig] = None,
-        logits_processor: Optional[LogitsProcessorList] = None,
-        stopping_criteria: Optional[StoppingCriteriaList] = None,
-        prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], list[int]]] = None,
-        synced_gpus: Optional[bool] = None,
+        inputs: torch.Tensor | None = None,
+        generation_config: GenerationConfig | None = None,
+        logits_processor: LogitsProcessorList | None = None,
+        stopping_criteria: StoppingCriteriaList | None = None,
+        prefix_allowed_tokens_fn: Callable[[int, torch.Tensor], list[int]] | None = None,
+        synced_gpus: bool | None = None,
         assistant_model: Optional["PreTrainedModel"] = None,
         streamer: Optional["BaseStreamer"] = None,
-        negative_prompt_ids: Optional[torch.Tensor] = None,
-        negative_prompt_attention_mask: Optional[torch.Tensor] = None,
-        custom_generate: Optional[str] = None,
+        negative_prompt_ids: torch.Tensor | None = None,
+        negative_prompt_attention_mask: torch.Tensor | None = None,
+        custom_generate: str | None = None,
         **kwargs,
     ):
         # ********** mostly taken from main generate function up to calling the different methods (see NOTE) **********
@@ -410,19 +415,19 @@ class DiaGenerationMixin(GenerationMixin):
     @torch.no_grad()
     def generate(
         self,
-        inputs: Optional[torch.Tensor] = None,
-        generation_config: Optional[GenerationConfig] = None,
-        logits_processor: Optional[LogitsProcessorList] = None,
-        stopping_criteria: Optional[StoppingCriteriaList] = None,
-        prefix_allowed_tokens_fn: Optional[Callable[[int, torch.Tensor], list[int]]] = None,
-        synced_gpus: Optional[bool] = None,
+        inputs: torch.Tensor | None = None,
+        generation_config: GenerationConfig | None = None,
+        logits_processor: LogitsProcessorList | None = None,
+        stopping_criteria: StoppingCriteriaList | None = None,
+        prefix_allowed_tokens_fn: Callable[[int, torch.Tensor], list[int]] | None = None,
+        synced_gpus: bool | None = None,
         assistant_model: Optional["PreTrainedModel"] = None,
         streamer: Optional["BaseStreamer"] = None,
-        negative_prompt_ids: Optional[torch.Tensor] = None,
-        negative_prompt_attention_mask: Optional[torch.Tensor] = None,
-        custom_generate: Optional[str] = None,
+        negative_prompt_ids: torch.Tensor | None = None,
+        negative_prompt_attention_mask: torch.Tensor | None = None,
+        custom_generate: str | None = None,
         **kwargs,
-    ) -> Union[GenerateOutput, torch.LongTensor]:
+    ) -> GenerateOutput | torch.LongTensor:
         # We expect the initial input ids to be the complete mask (delayed input)
         delay_mask = kwargs.get("decoder_input_ids")
         if delay_mask is not None:
@@ -456,7 +461,7 @@ class DiaGenerationMixin(GenerationMixin):
         output_sequences = output_sequences.reshape(bsz, num_channels, -1).transpose(1, 2)
 
         # Apply delay mask
-        output_sequences = self.apply_delay_mask(output_sequences, self.config.pad_token_id, delay_mask)
+        output_sequences = self.apply_delay_mask(output_sequences, self.config.decoder_config.pad_token_id, delay_mask)
 
         if return_dict_in_generate:
             output.sequences = output_sequences

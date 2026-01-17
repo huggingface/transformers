@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,8 +14,6 @@
 """
 Feature extractor class for Whisper
 """
-
-from typing import Optional, Union
 
 import numpy as np
 
@@ -191,17 +188,16 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
 
     def __call__(
         self,
-        raw_speech: Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]],
+        raw_speech: np.ndarray | list[float] | list[np.ndarray] | list[list[float]],
         truncation: bool = True,
-        pad_to_multiple_of: Optional[int] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        return_attention_mask: Optional[bool] = None,
-        padding: Optional[str] = "max_length",
-        max_length: Optional[int] = None,
-        sampling_rate: Optional[int] = None,
-        do_normalize: Optional[bool] = None,
-        device: Optional[str] = "cpu",
-        return_token_timestamps: Optional[bool] = None,
+        pad_to_multiple_of: int | None = None,
+        return_tensors: str | TensorType | None = None,
+        return_attention_mask: bool | None = None,
+        padding: str | None = "max_length",
+        max_length: int | None = None,
+        sampling_rate: int | None = None,
+        do_normalize: bool | None = None,
+        device: str | None = "cpu",
         **kwargs,
     ) -> BatchFeature:
         """Main method to featurize and prepare for the model one or several sequence(s). Implementation uses PyTorch
@@ -260,11 +256,6 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
             device (`str`, *optional*, defaults to `'cpu'`):
                 Specifies the device for computation of the log-mel spectrogram of audio signals in the
                 `_torch_extract_fbank_features` method. (e.g., "cpu", "cuda")
-            return_token_timestamps (`bool`, *optional*, defaults to `None`):
-                Deprecated. Use `return_attention_mask` instead from which the number of frames can be inferred.
-
-                Whether or not to return the number of frames of the input raw_speech.
-                These num_frames can be used by the model to compute word level timestamps.
             **kwargs: Not supported by WhisperFeatureExtractor.__call__() and ignored.
         """
         if sampling_rate is not None:
@@ -344,12 +335,6 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
             if padded_inputs["attention_mask"].shape[1] % self.hop_length != 0:
                 rescaled_attention_mask = rescaled_attention_mask[:, :-1]
             padded_inputs["attention_mask"] = rescaled_attention_mask
-
-        if return_token_timestamps is not None:
-            logger.warning_once(
-                f"`return_token_timestamps` is deprecated for {self.__class__.__name__} and will be removed in Transformers v5. Use `return_attention_mask` instead, as the number of frames can be inferred from it."
-            )
-            padded_inputs["num_frames"] = [len(raw_speech_i) // self.hop_length for raw_speech_i in raw_speech]
 
         if return_tensors is not None:
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)

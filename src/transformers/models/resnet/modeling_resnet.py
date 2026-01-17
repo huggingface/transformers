@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 Microsoft Research, Inc. and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +14,6 @@
 """PyTorch ResNet model."""
 
 import math
-from typing import Optional
 
 import torch
 from torch import Tensor, nn
@@ -287,8 +285,8 @@ class ResNetModel(ResNetPreTrainedModel):
     def forward(
         self,
         pixel_values: Tensor,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
     ) -> BaseModelOutputWithPoolingAndNoAttention:
         output_hidden_states = (
@@ -338,10 +336,10 @@ class ResNetForImageClassification(ResNetPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        pixel_values: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
     ) -> ImageClassifierOutputWithNoAttention:
         r"""
@@ -392,8 +390,8 @@ class ResNetBackbone(ResNetPreTrainedModel, BackboneMixin):
     def forward(
         self,
         pixel_values: Tensor,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
     ) -> BackboneOutput:
         r"""

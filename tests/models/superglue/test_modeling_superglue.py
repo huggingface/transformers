@@ -147,20 +147,20 @@ class SuperGlueModelTest(ModelTesterMixin, unittest.TestCase):
     def test_feed_forward_chunking(self):
         pass
 
-    @unittest.skip(reason="SuperGlueForKeypointMatching is not trainable")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training(self):
         pass
 
-    @unittest.skip(reason="SuperGlueForKeypointMatching is not trainable")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(reason="SuperGlueForKeypointMatching is not trainable")
-    def test_training_gradient_checkpointing_use_reentrant(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="SuperGlueForKeypointMatching is not trainable")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     @unittest.skip(reason="SuperGlue does not output any loss term in the forward pass")
@@ -304,7 +304,7 @@ class SuperGlueModelTest(ModelTesterMixin, unittest.TestCase):
             else:
                 # indexing the first element does not always work
                 # e.g. models that output similarity scores of size (N, M) would need to index [0, 0]
-                slice_ids = [slice(0, index) for index in single_row_object.shape]
+                slice_ids = tuple(slice(0, index) for index in single_row_object.shape)
                 batched_row = batched_object[slice_ids]
                 self.assertFalse(
                     torch.isnan(batched_row).any(), f"Batched output has `nan` in {model_name} for key={key}"

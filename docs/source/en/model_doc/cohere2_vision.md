@@ -139,3 +139,4 @@ print(outputs)
 ## Cohere2VisionProcessor
 
 [[autodoc]] Cohere2VisionProcessor
+    - __call__

@@ -15,6 +15,7 @@
 
 import unittest
 
+import pytest
 import requests
 
 from transformers import (
@@ -197,23 +198,23 @@ class AriaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMi
         self.model_tester = AriaVisionText2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=AriaConfig, has_text_modality=False)
 
-    @unittest.skip(
+    @pytest.mark.xfail(
         reason="This architecture seems to not compute gradients for the last vision-layernorm because the model uses hidden states pre-norm"
     )
     def test_training_gradient_checkpointing(self):
-        pass
+        super().test_training_gradient_checkpointing()
 
-    @unittest.skip(
-        reason="This architecture seems to not compute gradients for the last vision-layernorm because the model uses hidden states pre-norm"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
+    @pytest.mark.xfail(
         reason="This architecture seems to not compute gradients for the last vision-layernorm because the model uses hidden states pre-norm"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
+        super().test_training_gradient_checkpointing_use_reentrant_false()
+
+    @pytest.mark.xfail(
+        reason="This architecture seems to not compute gradients for the last vision-layernorm because the model uses hidden states pre-norm"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        super().test_training_gradient_checkpointing_use_reentrant_true()
 
 
 SKIP = False

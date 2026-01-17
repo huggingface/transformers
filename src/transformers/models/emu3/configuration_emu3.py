@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 HuggingFace Inc. team. All rights reserved.
 #
 #
@@ -14,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, Union
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
@@ -156,8 +154,6 @@ class Emu3TextConfig(PreTrainedConfig):
             Beginning of stream token id.
         eos_token_id (`int`, *optional*, defaults to 151850):
             End of stream token id.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether to tie weight embeddings
         rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
@@ -197,7 +193,7 @@ class Emu3TextConfig(PreTrainedConfig):
         intermediate_size: int = 14336,
         num_hidden_layers: int = 32,
         num_attention_heads: int = 32,
-        num_key_value_heads: Optional[int] = 8,
+        num_key_value_heads: int | None = 8,
         hidden_act: str = "silu",
         max_position_embeddings: int = 9216,
         rms_norm_eps: float = 1e-5,
@@ -205,8 +201,7 @@ class Emu3TextConfig(PreTrainedConfig):
         pad_token_id: int = 151643,
         bos_token_id: int = 151849,
         eos_token_id: int = 151850,
-        tie_word_embeddings: bool = False,
-        rope_parameters: Optional[RopeParameters] = None,
+        rope_parameters: RopeParameters | None = None,
         mlp_bias=False,
         attention_bias=False,
         attention_dropout: float = 0.1,
@@ -229,13 +224,10 @@ class Emu3TextConfig(PreTrainedConfig):
         self.attention_dropout = attention_dropout
         self.rope_parameters = rope_parameters
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        super().__init__(**kwargs)
 
 
 class Emu3Config(PreTrainedConfig):
@@ -256,6 +248,8 @@ class Emu3Config(PreTrainedConfig):
             Emu3TextConfig instance containing the configuration for the language model.
         vocabulary_map (`dict`, *optional*):
             A dictionary containing the vocabulary map from the tokenizer. Used to obtain tokens from the image inputs.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether to tie weight embeddings
     """
 
     model_type = "emu3"
@@ -264,9 +258,10 @@ class Emu3Config(PreTrainedConfig):
 
     def __init__(
         self,
-        vq_config: Union[dict, Emu3VQVAEConfig] = None,
-        text_config: Union[dict, Emu3TextConfig] = None,
-        vocabulary_map: Optional[dict[int, int]] = None,
+        vq_config: dict | Emu3VQVAEConfig = None,
+        text_config: dict | Emu3TextConfig = None,
+        vocabulary_map: dict[int, int] | None = None,
+        tie_word_embeddings: bool | None = False,
         **kwargs,
     ):
         if vq_config is None:
@@ -283,6 +278,7 @@ class Emu3Config(PreTrainedConfig):
         self.text_config = text_config
         self.vocabulary_map = vocabulary_map
         self.image_token_id = vocabulary_map.get("<image>") if vocabulary_map is not None else None
+        self.tie_word_embeddings = tie_word_embeddings
 
         super().__init__(**kwargs)
 

@@ -16,8 +16,7 @@ limitations under the License.
 
 # Generating the documentation
 
-To generate the documentation, you first have to build it. Several packages are necessary to build the doc, 
-you can install them with the following command, at the root of the code repository:
+Several packages are required to build the documentation. Install these packages with the following command at the root of the repository.
 
 ```bash
 pip install -e ".[dev]"

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2019-present, Facebook, Inc and the HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -133,8 +132,11 @@ class FSMTConfig(PreTrainedConfig):
     ```"""
 
     model_type = "fsmt"
-    attribute_map = {"num_attention_heads": "encoder_attention_heads", "hidden_size": "d_model"}
-    sub_configs = {"decoder": DecoderConfig}
+    attribute_map = {
+        "num_attention_heads": "encoder_attention_heads",
+        "hidden_size": "d_model",
+        "vocab_size": "tgt_vocab_size",
+    }
 
     # update the defaults from config file
     def __init__(
@@ -189,15 +191,7 @@ class FSMTConfig(PreTrainedConfig):
         self.init_std = init_std  # Normal(0, this parameter)
         self.activation_function = activation_function
 
-        self.decoder = DecoderConfig(
-            vocab_size=tgt_vocab_size,
-            bos_token_id=eos_token_id,
-            is_encoder_decoder=is_encoder_decoder,
-            num_hidden_layers=encoder_layers,
-        )
-        if "decoder" in common_kwargs:
-            del common_kwargs["decoder"]
-
+        common_kwargs.pop("decoder", None)  # delete unused kwargs
         self.scale_embedding = scale_embedding  # scale factor will be sqrt(d_model) if True
 
         # 3 Types of Dropout
@@ -206,13 +200,14 @@ class FSMTConfig(PreTrainedConfig):
         self.dropout = dropout
 
         self.use_cache = use_cache
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.decoder_start_token_id = decoder_start_token_id
+        self.tie_word_embeddings = tie_word_embeddings
+
         super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            decoder_start_token_id=decoder_start_token_id,
             is_encoder_decoder=is_encoder_decoder,
-            tie_word_embeddings=tie_word_embeddings,
             forced_eos_token_id=forced_eos_token_id,
             max_length=max_length,
             num_beams=num_beams,

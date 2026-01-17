@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 HuggingFace Inc. team. All rights reserved.
 #
 #

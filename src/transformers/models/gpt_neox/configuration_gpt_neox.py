@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 EleutherAI and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """GPTNeoX model configuration"""
-
-from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
@@ -110,27 +107,31 @@ class GPTNeoXConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 50432,
-        hidden_size: Optional[int] = 6144,
-        num_hidden_layers: Optional[int] = 44,
-        num_attention_heads: Optional[int] = 64,
-        intermediate_size: Optional[int] = 24576,
-        hidden_act: Optional[str] = "gelu",
-        attention_dropout: Optional[float] = 0.0,
-        hidden_dropout: Optional[float] = 0.0,
-        classifier_dropout: Optional[float] = 0.1,
-        max_position_embeddings: Optional[int] = 2048,
-        initializer_range: Optional[float] = 0.02,
-        layer_norm_eps: Optional[int] = 1e-5,
-        use_cache: Optional[bool] = True,
-        bos_token_id: Optional[int] = 0,
-        eos_token_id: Optional[int] = 2,
-        tie_word_embeddings: Optional[bool] = False,
-        use_parallel_residual: Optional[bool] = True,
-        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        attention_bias: Optional[bool] = True,
+        vocab_size: int | None = 50432,
+        hidden_size: int | None = 6144,
+        num_hidden_layers: int | None = 44,
+        num_attention_heads: int | None = 64,
+        intermediate_size: int | None = 24576,
+        hidden_act: str | None = "gelu",
+        attention_dropout: float | None = 0.0,
+        hidden_dropout: float | None = 0.0,
+        classifier_dropout: float | None = 0.1,
+        max_position_embeddings: int | None = 2048,
+        initializer_range: float | None = 0.02,
+        layer_norm_eps: int | None = 1e-5,
+        use_cache: bool | None = True,
+        bos_token_id: int | None = 0,
+        eos_token_id: int | None = 2,
+        tie_word_embeddings: bool | None = False,
+        use_parallel_residual: bool | None = True,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        attention_bias: bool | None = True,
+        is_decoder: bool | None = False,
         **kwargs,
     ):
+        self.is_decoder = is_decoder
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -147,14 +148,13 @@ class GPTNeoXConfig(PreTrainedConfig):
         self.use_parallel_residual = use_parallel_residual
         self.attention_bias = attention_bias
         self.rope_parameters = rope_parameters
+        self.tie_word_embeddings = tie_word_embeddings
 
         if self.hidden_size % self.num_attention_heads != 0:
             raise ValueError(
                 "The hidden size is not divisible by the number of attention heads! Make sure to update them!"
             )
-        super().__init__(
-            bos_token_id=bos_token_id, eos_token_id=eos_token_id, tie_word_embeddings=tie_word_embeddings, **kwargs
-        )
+        super().__init__(**kwargs)
 
     def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation=None, **kwargs):
         rope_scaling = kwargs.pop("rope_scaling", None)
