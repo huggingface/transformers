@@ -230,6 +230,7 @@ class Ernie4_5_VL_MoeProcessor(ProcessorMixin):
         if video_sizes is not None:
             videos_kwargs = Ernie4_5_VL_MoeProcessorKwargs._defaults.get("videos_kwargs", {})
             videos_kwargs.update(kwargs)
+            merge_size = videos_kwargs.get("merge_size", None) or self.video_processor.merge_size
             temporal_merge_size = (
                 videos_kwargs.get("temporal_patch_size", None) or self.video_processor.temporal_patch_size
             )

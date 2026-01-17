@@ -345,6 +345,11 @@ class VideoLlama3VideoProcessor(BaseVideoProcessor):
         grid_t = num_frames // temporal_patch_size
         return grid_t * grid_h * grid_w
 
+    def get_number_of_video_patches(self, num_frames: int, height: int, width: int, videos_kwargs=None):
+        return self.get_num_of_video_patches(
+            num_frames=num_frames, height=height, width=width, videos_kwargs=videos_kwargs
+        )
+
     def _get_compression_mask(
         self,
         pixel_values_videos: torch.FloatTensor,

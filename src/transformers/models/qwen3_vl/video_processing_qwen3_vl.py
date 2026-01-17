@@ -269,5 +269,44 @@ class Qwen3VLVideoProcessor(BaseVideoProcessor):
 
         return BatchFeature(data=data, tensor_type=return_tensors)
 
+    def get_number_of_video_patches(self, num_frames: int, height: int, width: int, videos_kwargs=None):
+        """
+        A utility that returns number of video patches for a given video size.
+
+        Args:
+            num_frames (`int`):
+                Number of frames in the input video.
+            height (`int`):
+                Height of the input video.
+            width (`int`):
+                Width of the input video.
+            videos_kwargs (`dict`, *optional*):
+                Any kwargs to override defaults of the video processor.
+        Returns:
+            `int`: Number of video patches per video.
+        """
+        size = videos_kwargs.get("size", None) or self.size
+        patch_size = videos_kwargs.get("patch_size", None) or self.patch_size
+        merge_size = videos_kwargs.get("merge_size", None) or self.merge_size
+        temporal_patch_size = videos_kwargs.get("temporal_patch_size", None) or self.temporal_patch_size
+        do_resize = videos_kwargs.get("do_resize", None)
+        do_resize = self.do_resize if do_resize is None else do_resize
+
+        resized_height, resized_width = height, width
+        if do_resize:
+            resized_height, resized_width = smart_resize(
+                num_frames=num_frames,
+                height=height,
+                width=width,
+                temporal_factor=temporal_patch_size,
+                factor=patch_size * merge_size,
+                min_pixels=size["shortest_edge"],
+                max_pixels=size["longest_edge"],
+            )
+
+        grid_h, grid_w = resized_height // patch_size, resized_width // patch_size
+        grid_t = (num_frames + temporal_patch_size - 1) // temporal_patch_size
+        return grid_t * grid_h * grid_w
+
 
 __all__ = ["Qwen3VLVideoProcessor"]

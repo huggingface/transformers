@@ -189,6 +189,7 @@ class VideoLlama3Processor(ProcessorMixin):
         if video_sizes is not None:
             videos_kwargs = VideoLlama3ProcessorKwargs._defaults.get("videos_kwargs", {})
             videos_kwargs.update(kwargs)
+            merge_size = videos_kwargs.get("merge_size", None) or self.video_processor.merge_size
             num_video_patches = [
                 self.video_processor.get_number_of_video_patches(*video_size, videos_kwargs)
                 for video_size in video_sizes
