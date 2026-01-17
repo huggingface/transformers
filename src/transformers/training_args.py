@@ -977,6 +977,12 @@ class TrainingArguments:
             )
         },
     )
+    preserve_best_model: bool = field(
+        default=True,
+        metadata={
+            "help": "Whether to preserve the best model checkpoint when rotating checkpoints due to save_total_limit."
+        },
+    )
     restore_callback_states_from_checkpoint: bool = field(
         default=False,
         metadata={
@@ -1501,26 +1507,15 @@ class TrainingArguments:
                     "--load_best_model_at_end requires the save and eval strategy to match, but found\n- Evaluation "
                     f"strategy: {self.eval_strategy}\n- Save strategy: {self.save_strategy}"
                 )
-            if self.eval_strategy == IntervalStrategy.STEPS and self.save_steps % self.eval_steps != 0:
-                if self.eval_steps < 1 or self.save_steps < 1:
-                    if not (self.eval_steps < 1 and self.save_steps < 1):
-                        raise ValueError(
-                            "--load_best_model_at_end requires the saving steps to be a multiple of the evaluation "
-                            "steps, which cannot get guaranteed when mixing ratio and absolute steps for save_steps "
-                            f"{self.save_steps} and eval_steps {self.eval_steps}."
-                        )
-                    # Work around floating point precision issues
-                    LARGE_MULTIPLIER = 1_000_000
-                    if (self.save_steps * LARGE_MULTIPLIER) % (self.eval_steps * LARGE_MULTIPLIER) != 0:
-                        raise ValueError(
-                            "--load_best_model_at_end requires the saving steps to be a multiple of the evaluation "
-                            f"steps, but found {self.save_steps}, which is not a multiple of {self.eval_steps}."
-                        )
-                else:
-                    raise ValueError(
-                        "--load_best_model_at_end requires the saving steps to be a round multiple of the evaluation "
-                        f"steps, but found {self.save_steps}, which is not a round multiple of {self.eval_steps}."
+            if self.eval_strategy == IntervalStrategy.STEPS:
+                if self.save_steps > 0 and self.eval_steps > 0:
+                    steps_aligned = (self.save_steps % self.eval_steps == 0) or (
+                        self.eval_steps % self.save_steps == 0
                     )
+                    if not steps_aligned:
+                        warnings.warn(
+                            "Warning: save_steps and eval_steps are misaligned. Best model will be saved at evaluation, not at a scheduled save step."
+                        )
 
         if (
             self.load_best_model_at_end or self.lr_scheduler_type == SchedulerType.REDUCE_ON_PLATEAU
