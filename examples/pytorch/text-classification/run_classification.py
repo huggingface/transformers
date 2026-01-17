@@ -40,6 +40,7 @@ import datasets
 import evaluate
 import numpy as np
 from datasets import Value, load_dataset
+from scipy.special import expit
 
 import transformers
 from transformers import (
@@ -708,7 +709,7 @@ def main():
             # Convert logits to multi-hot encoding. We compare the logits to 0 instead of 0.5, because the sigmoid is not applied.
             # You can also pass `preprocess_logits_for_metrics=lambda logits, labels: nn.functional.sigmoid(logits)` to the Trainer
             # and set p > 0.5 below (less efficient in this case)
-            predictions = np.array([np.where(p > 0, 1, 0) for p in predictions])
+            predictions = np.array([np.where(expit(p) > 0.5, 1, 0) for p in predictions])
         else:
             predictions = np.argmax(predictions, axis=1)
         output_predict_file = os.path.join(training_args.output_dir, "predict_results.txt")
