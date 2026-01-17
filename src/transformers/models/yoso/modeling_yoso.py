@@ -776,6 +776,7 @@ class YosoForMaskedLM(YosoPreTrainedModel):
             attentions=outputs.attentions,
         )
 
+
 # Robust doctest for YosoForMaskedLM.forward (local override; avoids touching shared doc utilities)
 YosoForMaskedLM.forward.__doc__ = (
     (YosoForMaskedLM.forward.__doc__ or "")
