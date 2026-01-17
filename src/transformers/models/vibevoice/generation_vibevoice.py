@@ -14,16 +14,12 @@
 # limitations under the License.
 
 import importlib
-import queue
-import time
 from dataclasses import dataclass
-from queue import Queue
-from typing import Optional, Union
+from typing import Optional
 
 import torch
 
 from ...generation import (
-    BaseStreamer,
     GenerateDecoderOnlyOutput,
     GenerationConfig,
     GenerationMixin,
@@ -67,135 +63,6 @@ class VibeVoiceTokenConstraintProcessor(LogitsProcessor):
         # Apply mask to scores
         scores = scores + mask
         return scores
-
-
-# TODO (ebezzam) used in Gradio demo: https://github.com/vibevoice-community/VibeVoice/blob/main/demo/gradio_demo.py
-class AudioStreamer(BaseStreamer):
-    """
-    Audio streamer that stores audio chunks in queues for each sample in the batch.
-    This allows streaming audio generation for multiple samples simultaneously.
-
-    Parameters:
-        batch_size (`int`):
-            The batch size for generation
-        stop_signal (`any`, *optional*):
-            The signal to put in the queue when generation ends. Defaults to None.
-        timeout (`float`, *optional*):
-            The timeout for the audio queue. If `None`, the queue will block indefinitely.
-    """
-
-    def __init__(
-        self,
-        batch_size: int,
-        stop_signal: Optional[any] = None,
-        timeout: Optional[float] = None,
-    ):
-        self.batch_size = batch_size
-        self.stop_signal = stop_signal
-        self.timeout = timeout
-
-        self.audio_queues = [Queue() for _ in range(batch_size)]
-        self.finished_flags = [False for _ in range(batch_size)]
-        self.sample_indices_map = {}  # Map from sample index to queue index
-
-    def put(self, audio_chunks: torch.Tensor, sample_indices: torch.Tensor):
-        """
-        Receives audio chunks and puts them in the appropriate queues.
-
-        Args:
-            audio_chunks: Tensor of shape (num_samples, ...) containing audio chunks
-            sample_indices: Tensor indicating which samples these chunks belong to
-        """
-        for i, sample_idx in enumerate(sample_indices):
-            idx = sample_idx.item()
-            if idx < self.batch_size and not self.finished_flags[idx]:
-                # Convert to numpy or keep as tensor based on preference
-                audio_chunk = audio_chunks[i].detach().cpu()
-                self.audio_queues[idx].put(audio_chunk, timeout=self.timeout)
-
-    def end(self, sample_indices: Optional[torch.Tensor] = None):
-        """
-        Signals the end of generation for specified samples or all samples.
-
-        Args:
-            sample_indices: Optional tensor of sample indices to end. If None, ends all.
-        """
-        if sample_indices is None:
-            for idx in range(self.batch_size):
-                if not self.finished_flags[idx]:
-                    self.audio_queues[idx].put(self.stop_signal, timeout=self.timeout)
-                    self.finished_flags[idx] = True
-        else:
-            for sample_idx in sample_indices:
-                idx = sample_idx.item() if torch.is_tensor(sample_idx) else sample_idx
-                if idx < self.batch_size and not self.finished_flags[idx]:
-                    self.audio_queues[idx].put(self.stop_signal, timeout=self.timeout)
-                    self.finished_flags[idx] = True
-
-    def __iter__(self):
-        """Returns an iterator over the batch of audio streams."""
-        return AudioBatchIterator(self)
-
-    def get_stream(self, sample_idx: int):
-        """Get the audio stream for a specific sample."""
-        if sample_idx >= self.batch_size:
-            raise ValueError(f"Sample index {sample_idx} exceeds batch size {self.batch_size}")
-        return AudioSampleIterator(self, sample_idx)
-
-
-class AudioSampleIterator:
-    """Iterator for a single audio stream from the batch."""
-
-    def __init__(self, streamer: AudioStreamer, sample_idx: int):
-        self.streamer = streamer
-        self.sample_idx = sample_idx
-
-    def __iter__(self):
-        return self
-
-    def __next__(self):
-        value = self.streamer.audio_queues[self.sample_idx].get(timeout=self.streamer.timeout)
-        if value == self.streamer.stop_signal:
-            raise StopIteration()
-        return value
-
-
-class AudioBatchIterator:
-    """Iterator that yields audio chunks for all samples in the batch."""
-
-    def __init__(self, streamer: AudioStreamer):
-        self.streamer = streamer
-        self.active_samples = set(range(streamer.batch_size))
-
-    def __iter__(self):
-        return self
-
-    def __next__(self):
-        if not self.active_samples:
-            raise StopIteration()
-
-        batch_chunks = {}
-        samples_to_remove = set()
-        for idx in self.active_samples:
-            try:
-                value = self.streamer.audio_queues[idx].get(block=False)
-                if value == self.streamer.stop_signal:
-                    samples_to_remove.add(idx)
-                else:
-                    batch_chunks[idx] = value
-            except queue.Empty:
-                pass
-
-        self.active_samples -= samples_to_remove
-
-        if batch_chunks:
-            return batch_chunks
-        elif self.active_samples:
-            # If no chunks were ready but we still have active samples, wait a bit and try again
-            time.sleep(0.01)
-            return self.__next__()
-        else:
-            raise StopIteration()
 
 
 class VibeVoiceGenerationMixin(GenerationMixin):
@@ -282,7 +149,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         stopping_criteria: StoppingCriteriaList,
         generation_config: GenerationConfig,
         synced_gpus: bool = False,
-        streamer: Optional[Union[AudioStreamer]] = None,
+        streamer=None,
         **model_kwargs,
     ):
         """
@@ -297,6 +164,9 @@ class VibeVoiceGenerationMixin(GenerationMixin):
 
         VibeVoice supports stopping criteria through internal finished_tags logic combined with
         the standard stopping criteria framework.
+
+        Expected streamer object can take the form of the following from the original code base:
+        https://github.com/vibevoice-community/VibeVoice/blob/b9d561240ada3ee5d8fb5812bebb32f7ecfd97ae/vibevoice/modular/streamer.py#L13
         """
         # init values
         pad_token_id = generation_config._pad_token_tensor
@@ -321,8 +191,8 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         model_kwargs = self._get_initial_cache_position(cur_len, input_ids.device, model_kwargs)
 
         # *************** VibeVoice specific ***************
-        input_features = model_kwargs.pop("input_features", None)
-        input_features_mask = model_kwargs.pop("input_features_mask", None)
+        input_values = model_kwargs.pop("input_values", None)
+        input_values_mask = model_kwargs.pop("input_values_mask", None)
         noise_scheduler = generation_config.noise_scheduler
         monitor_progress = getattr(generation_config, "monitor_progress", None)
         cfg_scale = generation_config.cfg_scale
@@ -333,7 +203,6 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         acoustic_cache = None
         semantic_cache = None
         finished_tags = torch.zeros(batch_size, dtype=torch.bool, device=input_ids.device)
-        correct_cnt = torch.zeros(batch_size, dtype=torch.long, device=input_ids.device)
         is_prefill = True
         inputs_embeds = None
 
@@ -433,11 +302,11 @@ class VibeVoiceGenerationMixin(GenerationMixin):
             # Handle prefill vs normal generation
             if is_prefill:
                 # First step: process speech inputs for conditioning
-                if input_features is not None and input_features_mask is not None:
+                if input_values is not None and input_values_mask is not None:
                     model_inputs.update(
                         {
-                            "input_features": input_features.to(device=input_ids.device),
-                            "input_features_mask": input_features_mask.to(input_ids.device),
+                            "input_values": input_values.to(device=input_ids.device),
+                            "input_values_mask": input_values_mask.to(input_ids.device),
                         }
                     )
                 is_prefill = False
@@ -571,45 +440,6 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                     is_encoder_decoder=False,
                 )
                 negative_input_ids = torch.cat([negative_input_ids, next_tokens[:, None]], dim=-1)
-
-                # Correct non-diffusion indices in negative generation
-                non_diffusion_mask = ~finished_tags & (next_tokens != self.config.audio_diffusion_token_id)
-                if non_diffusion_mask.any():
-                    non_diffusion_indices = non_diffusion_mask.nonzero(as_tuple=False).squeeze(1)
-                    start_indices = correct_cnt[non_diffusion_indices]
-
-                    seq_len = negative_model_kwargs["attention_mask"].shape[1]
-                    for sample_idx, start_idx in zip(non_diffusion_indices.tolist(), start_indices.tolist()):
-                        if start_idx + 1 < seq_len - 1:
-                            negative_model_kwargs["attention_mask"][sample_idx, start_idx + 1 :] = (
-                                negative_model_kwargs["attention_mask"][sample_idx, start_idx:-1].clone()
-                            )
-                        negative_model_kwargs["attention_mask"][sample_idx, start_idx] = 0
-
-                    if (
-                        "past_key_values" in negative_model_kwargs
-                        and negative_model_kwargs["past_key_values"] is not None
-                    ):
-                        for layer_idx in range(len(negative_model_kwargs["past_key_values"])):
-                            k_cache = negative_model_kwargs["past_key_values"].layers[layer_idx].keys
-                            v_cache = negative_model_kwargs["past_key_values"].layers[layer_idx].values
-                            # TODO: is this needed? why modifying for values that don't need diffusion process?
-                            for sample_idx, start_idx in zip(non_diffusion_indices.tolist(), start_indices.tolist()):
-                                if start_idx + 1 < k_cache.shape[2] - 1:
-                                    k_cache[sample_idx, :, start_idx + 1 :, :] = k_cache[
-                                        sample_idx, :, start_idx:-1, :
-                                    ].clone()
-                                    v_cache[sample_idx, :, start_idx + 1 :, :] = v_cache[
-                                        sample_idx, :, start_idx:-1, :
-                                    ].clone()
-
-                    for sample_idx, start_idx in zip(non_diffusion_indices.tolist(), start_indices.tolist()):
-                        if start_idx + 1 < negative_input_ids.shape[1] - 1:
-                            negative_input_ids[sample_idx, start_idx + 1 :] = negative_input_ids[
-                                sample_idx, start_idx:-1
-                            ].clone()
-
-                    correct_cnt[non_diffusion_indices] += 1
 
                 # Diffusion process with classifier-free guidance
                 positive_condition = outputs.last_hidden_state[diffusion_indices, -1, :]
