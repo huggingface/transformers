@@ -127,8 +127,8 @@ class VibeVoiceConfig(PretrainedConfig):
             The token ID indicating the start of speech diffusion tokens.
         num_head_layers (`int`, *optional*, defaults to 4):
             Number of layers in the diffusion head.
-        head_ffn_ratio (`int`, *optional*, defaults to 3):
-            The ratio of the language model hidden size to the intermediate size in the diffusion head.
+        intermediate_size (`int`, *optional*, defaults to 4608):
+            The intermediate size of the feed-forward layers.
         rms_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the RMSNorm layers.
         hidden_act (`str`, *optional*, defaults to `"silu"`):
@@ -177,11 +177,11 @@ class VibeVoiceConfig(PretrainedConfig):
         use_cache=True,
         pad_token_id=151643,
         eos_token_id=151643,
-        speech_start_id=151652,
-        speech_end_id=151653,
-        speech_diffusion_id=151654,
+        audio_bos_token_id=151652,
+        audio_eos_token_id=151653,
+        audio_diffusion_token_id=151654,
         num_head_layers=4,
-        head_ffn_ratio=3,
+        intermediate_size=4608,
         rms_norm_eps=1e-5,
         hidden_act="silu",
         frequency_embedding_size=256,
@@ -218,47 +218,38 @@ class VibeVoiceConfig(PretrainedConfig):
 
         self.vocab_size = text_config.vocab_size
         self.use_cache = use_cache
-        self.speech_start_id = speech_start_id
-        self.speech_end_id = speech_end_id
-        self.speech_diffusion_id = speech_diffusion_id
+        self.audio_bos_token_id = audio_bos_token_id
+        self.audio_eos_token_id = audio_eos_token_id
+        self.audio_diffusion_token_id = audio_diffusion_token_id
         self.num_head_layers = num_head_layers
-        self.head_ffn_ratio = head_ffn_ratio
         self.rms_norm_eps = rms_norm_eps
         self.hidden_act = hidden_act
         self.frequency_embedding_size = frequency_embedding_size
 
         # NOTE (ebezzam) to use LlamaMLP via modular
         self.mlp_bias = False
+        self.intermediate_size = intermediate_size
 
+        kwargs.pop("tie_word_embeddings", None) # remove if present to take priority from text_config
         super().__init__(
             pad_token_id=pad_token_id,
             eos_token_id=eos_token_id,
+            tie_word_embeddings=getattr(text_config, "tie_word_embeddings", False),
             **kwargs,
         )
 
     @property
-    def weight_init_value(self) -> float:
-        return self.acoustic_tokenizer_config.weight_init_value
+    def initializer_range(self) -> float:
+        return self.acoustic_tokenizer_config.initializer_range
 
     @property
     def layer_scale_init_value(self) -> float:
         return self.acoustic_tokenizer_config.layer_scale_init_value
 
-    @property
-    def intermediate_size(self) -> int:
-        return self.hidden_size * self.head_ffn_ratio
-
+    # NOTE (ebezzam) for modular usage of `LlamaMLP`
     @property
     def hidden_size(self) -> int:
         return self.text_config.hidden_size
-
-    @property
-    def acoustic_hidden_size(self) -> int:
-        return self.acoustic_tokenizer_config.hidden_size
-
-    @property
-    def semantic_hidden_size(self) -> int:
-        return self.semantic_tokenizer_config.hidden_size
 
 
 __all__ = ["VibeVoiceConfig", "VibeVoiceSemanticTokenizerConfig"]

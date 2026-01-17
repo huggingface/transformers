@@ -145,9 +145,9 @@ class VibeVoiceModelTester:
             pad_token_id=self.text_config["pad_token_id"],
             eos_token_id=self.text_config["eos_token_id"],
             # Use token IDs that exist in our test vocabulary (vocab_size=99)
-            speech_start_id=3,  # Instead of default 151652
-            speech_end_id=4,  # Instead of default 151653
-            speech_diffusion_id=5,  # Instead of default 151654
+            audio_bos_token_id=3,  # Instead of default 151652
+            audio_eos_token_id=4,  # Instead of default 151653
+            audio_diffusion_token_id=5,  # Instead of default 151654
         )
 
     def prepare_config_and_inputs(self):

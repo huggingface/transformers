@@ -14,6 +14,7 @@
 # limitations under the License.
 
 import os
+import re
 from typing import Optional, Union
 
 from ...audio_utils import AudioInput, make_list_of_audio
@@ -74,26 +75,26 @@ class VibeVoiceProcessor(ProcessorMixin):
     def __init__(self, feature_extractor, tokenizer, chat_template=None):
         super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
 
-        if not hasattr(tokenizer, "speech_start_token"):
-            self.speech_start_token = "<|vision_start|>"
-            self.speech_start_id = tokenizer.convert_tokens_to_ids(self.speech_start_token)
+        if not hasattr(tokenizer, "audio_bos_token"):
+            self.audio_bos_token = "<|vision_start|>"
+            self.audio_bos_token_id = tokenizer.convert_tokens_to_ids(self.audio_bos_token)
         else:
-            self.speech_start_token = tokenizer.speech_start_token
-            self.speech_start_id = tokenizer.speech_start_id
+            self.audio_bos_token = tokenizer.audio_bos_token
+            self.audio_bos_token_id = tokenizer.audio_bos_token_id
 
-        if not hasattr(tokenizer, "speech_end_token"):
-            self.speech_end_token = "<|vision_end|>"
-            self.speech_end_id = tokenizer.convert_tokens_to_ids(self.speech_end_token)
+        if not hasattr(tokenizer, "audio_eos_token"):
+            self.audio_eos_token = "<|vision_end|>"
+            self.audio_eos_token_id = tokenizer.convert_tokens_to_ids(self.audio_eos_token)
         else:
-            self.speech_end_token = tokenizer.speech_end_token
-            self.speech_end_id = tokenizer.speech_end_id
+            self.audio_eos_token = tokenizer.audio_eos_token
+            self.audio_eos_token_id = tokenizer.audio_eos_token_id
 
-        if not hasattr(tokenizer, "speech_diffusion_token"):
-            self.speech_diffusion_token = "<|vision_pad|>"
-            self.speech_diffusion_id = tokenizer.convert_tokens_to_ids(self.speech_diffusion_token)
+        if not hasattr(tokenizer, "audio_diffusion_token"):
+            self.audio_diffusion_token = "<|vision_pad|>"
+            self.audio_diffusion_token_id = tokenizer.convert_tokens_to_ids(self.audio_diffusion_token)
         else:
-            self.speech_diffusion_token = tokenizer.speech_diffusion_token
-            self.speech_diffusion_id = tokenizer.speech_diffusion_id
+            self.audio_diffusion_token = tokenizer.audio_diffusion_token
+            self.audio_diffusion_token_id = tokenizer.audio_diffusion_token_id
 
     def __call__(
         self,
@@ -119,8 +120,8 @@ class VibeVoiceProcessor(ProcessorMixin):
             `BatchFeature`: A BatchFeature with the following fields:
                 - **input_ids** -- Token ID sequences ready for the model
                 - **attention_mask** -- Attention masks for the sequences
-                - **input_features** -- Processed audio tensors (if audio provided)
-                - **input_features_mask** -- Masks for valid speech tokens (if audio provided)
+                - **input_values** -- Processed audio tensors (if audio provided)
+                - **input_values_mask** -- Masks for valid speech tokens (if audio provided)
         """
         output_kwargs = self._merge_kwargs(
             VibeVoiceProcessorKwargs,
@@ -138,7 +139,7 @@ class VibeVoiceProcessor(ProcessorMixin):
             text = [text]
         elif not isinstance(text, (list, tuple)):
             raise ValueError("text input must be a string or list of strings")
-        n_audio_in_text = [sample.count(self.speech_diffusion_token) for sample in text]
+        n_audio_in_text = [sample.count(self.audio_diffusion_token) for sample in text]
 
         n_audio = 0
         if audio is not None:
@@ -160,31 +161,20 @@ class VibeVoiceProcessor(ProcessorMixin):
             data = self.feature_extractor(audio, **audio_kwargs)
 
             # Create mask for audio tokenizer based on compression ratio
-            padding_masks = data["input_features_mask"]
+            padding_masks = data["input_values_mask"]
             speech_tok_compress_ratio = int(audio_kwargs["pad_to_multiple_of"])
             num_audio_tokens_list = torch.ceil(padding_masks.sum(dim=-1) / speech_tok_compress_ratio).int().tolist()
-            input_features_mask = torch.zeros((len(padding_masks), max(num_audio_tokens_list)), dtype=torch.bool)
+            input_values_mask = torch.zeros((len(padding_masks), max(num_audio_tokens_list)), dtype=torch.bool)
             for i, seq_len in enumerate(num_audio_tokens_list):
-                input_features_mask[i, :seq_len] = True
-            data["input_features_mask"] = input_features_mask
+                input_values_mask[i, :seq_len] = True
+            data["input_values_mask"] = input_values_mask
 
-            # expand the text to repeat the audio token for the corresponding number of frames
-            num_audio_tokens_list_copy = num_audio_tokens_list.copy()
-            expanded_text = []
-            for sample in text:
-                replace_str = []
-                while self.speech_diffusion_token in sample:
-                    num_speech_tokens = num_audio_tokens_list_copy.pop(0)
-                    expanded_speech_token = self.speech_diffusion_token * num_speech_tokens
-
-                    replace_str.append(expanded_speech_token)
-                    sample = sample.replace(self.speech_diffusion_token, "<placeholder>", 1)
-
-                while "<placeholder>" in sample:
-                    sample = sample.replace("<placeholder>", replace_str.pop(0), 1)
-                expanded_text.append(sample)
-
-            text = expanded_text
+            # Expand audio tokens in text (note could be multiple audio per text)
+            audio_token_iter = iter(num_audio_tokens_list)
+            for i, sample in enumerate(text):
+                def replace_fn(match):
+                    return self.audio_diffusion_token * next(audio_token_iter)
+                text[i] = re.sub(re.escape(self.audio_diffusion_token), replace_fn, sample)
 
         encoding = self.tokenizer(text, **text_kwargs)
         data.update(encoding)

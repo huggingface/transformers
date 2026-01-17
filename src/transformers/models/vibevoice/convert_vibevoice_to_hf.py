@@ -288,24 +288,17 @@ def convert_checkpoint(
         del model_config["acoustic_tokenizer_config"]["causal"]
 
     # clean up diffusion head config
-    model_config["diffusion_head_config"]["head_ffn_ratio"] = int(
-        model_config["diffusion_head_config"]["head_ffn_ratio"]
+    model_config["intermediate_size"] = int(
+        model_config["diffusion_head_config"].pop("head_ffn_ratio") * model_config["diffusion_head_config"]["hidden_size"]
     )
     model_config["diffusion_head_config"]["num_head_layers"] = model_config["diffusion_head_config"].pop("head_layers")
     if model_config["diffusion_head_config"]["ddpm_beta_schedule"] == "cosine":
         model_config["diffusion_head_config"]["ddpm_beta_schedule"] = "squaredcos_cap_v2"
-    if "speech_vae_dim" in model_config["diffusion_head_config"]:
-        del model_config["diffusion_head_config"]["speech_vae_dim"]
-    if "diffusion_type" in model_config["diffusion_head_config"]:
-        del model_config["diffusion_head_config"]["diffusion_type"]
-    if "ddpm_batch_mul" in model_config["diffusion_head_config"]:
-        del model_config["diffusion_head_config"]["ddpm_batch_mul"]
-    if "latent_size" in model_config["diffusion_head_config"]:
-        # should be same as acoustic tokenizer hidden size
-        del model_config["diffusion_head_config"]["latent_size"]
-    if "hidden_size" in model_config["diffusion_head_config"]:
-        # should be same as text model hidden size
-        del model_config["diffusion_head_config"]["hidden_size"]
+    model_config["diffusion_head_config"].pop("speech_vae_dim")
+    model_config["diffusion_head_config"].pop("diffusion_type")
+    model_config["diffusion_head_config"].pop("ddpm_batch_mul")
+    model_config["diffusion_head_config"].pop("latent_size")    # same as acoustic tokenizer hidden size
+    model_config["diffusion_head_config"].pop("hidden_size")    # same as text model hidden size
     # -- flatten diffusion head config
     for k, v in model_config["diffusion_head_config"].items():
         model_config[k] = v
@@ -361,9 +354,9 @@ def convert_checkpoint(
     # Define a chat template adapted for VibeVoice's speech use case
     chat_template = """{%- set system_prompt = system_prompt | default(" Transform the text provided by various speakers into speech output, utilizing the distinct voice of each respective speaker.\n") -%}
 {{ system_prompt -}}
-{%- set speech_start_token = speech_start_token | default("<|vision_start|>") %}
-{%- set speech_end_token = speech_end_token | default("<|vision_end|>") %}
-{%- set speech_diffusion_token = speech_diffusion_token | default("<|vision_pad|>") %}
+{%- set audio_bos_token = audio_bos_token | default("<|vision_start|>") %}
+{%- set audio_eos_token = audio_eos_token | default("<|vision_end|>") %}
+{%- set audio_diffusion_token = audio_diffusion_token | default("<|vision_pad|>") %}
 {%- set ns = namespace(speakers_with_audio="") %}
 {%- for message in messages %}
     {%- set role = message['role'] %}
@@ -378,7 +371,7 @@ def convert_checkpoint(
 {{ " Voice input:\n" }}
 {%- for speaker in ns.speakers_with_audio.rstrip(',').split(',') %}
 {%- if speaker %}
- Speaker {{ speaker }}:{{ speech_start_token }}{{ speech_diffusion_token }}{{ speech_end_token }}{{ "\n" }}
+ Speaker {{ speaker }}:{{ audio_bos_token }}{{ audio_diffusion_token }}{{ audio_eos_token }}{{ "\n" }}
 {%- endif %}
 {%- endfor %}
 {%- endif %}
@@ -391,7 +384,7 @@ def convert_checkpoint(
  Speaker {{ role }}: {{ item['text'] }}{{ "\n" }}
     {%- endfor %}
 {%- endfor %}
- Speech output:{{ "\n" }}{{ speech_start_token }}"""
+ Speech output:{{ "\n" }}{{ audio_bos_token }}"""
 
     # Explicitly use Qwen2TokenizerFast to ensure proper class name in config
     tokenizer = Qwen2TokenizerFast.from_pretrained(language_model_pretrained_name)
@@ -423,12 +416,12 @@ def convert_checkpoint(
     vibevoice_config = VibeVoiceConfig(**model_config)
     vibevoice_model = VibeVoiceForConditionalGeneration(vibevoice_config).to(dtype)
     # -- print dtypes of key components for verification
-    print("Acoustic connector dtype : ", next(vibevoice_model.acoustic_connector.parameters()).dtype)
-    print("Semantic connector dtype : ", next(vibevoice_model.semantic_connector.parameters()).dtype)
-    print("Language model dtype : ", next(vibevoice_model.language_model.parameters()).dtype)
-    print("Acoustic tokenizer dtype : ", next(vibevoice_model.acoustic_tokenizer.parameters()).dtype)
-    print("Semantic tokenizer dtype : ", next(vibevoice_model.semantic_tokenizer.parameters()).dtype)
-    print("Diffusion head dtype : ", next(vibevoice_model.diffusion_head.parameters()).dtype)
+    print("Acoustic connector dtype : ", next(vibevoice_model.model.acoustic_connector.parameters()).dtype)
+    print("Semantic connector dtype : ", next(vibevoice_model.model.semantic_connector.parameters()).dtype)
+    print("Language model dtype : ", next(vibevoice_model.model.language_model.parameters()).dtype)
+    print("Acoustic tokenizer dtype : ", next(vibevoice_model.model.acoustic_tokenizer.parameters()).dtype)
+    print("Semantic tokenizer dtype : ", next(vibevoice_model.model.semantic_tokenizer.parameters()).dtype)
+    print("Diffusion head dtype : ", next(vibevoice_model.model.diffusion_head.parameters()).dtype)
 
     # -- load into HF model
     if model_config["text_config"].get("tie_word_embeddings", False):
@@ -445,15 +438,15 @@ def convert_checkpoint(
     print("Full model checkpoint loaded successfully.")
 
     # Calculate speech token IDs from tokenizer for generation config
-    speech_start_id = tokenizer.convert_tokens_to_ids("<|vision_start|>")
-    speech_end_id = tokenizer.convert_tokens_to_ids("<|vision_end|>")
-    speech_diffusion_id = tokenizer.convert_tokens_to_ids("<|vision_pad|>")
+    audio_bos_token_id = tokenizer.convert_tokens_to_ids("<|vision_start|>")
+    audio_eos_token_id = tokenizer.convert_tokens_to_ids("<|vision_end|>")
+    audio_diffusion_id = tokenizer.convert_tokens_to_ids("<|vision_pad|>")
 
     # Set default generation config
     vibevoice_model.generation_config._from_model_config = False
-    vibevoice_model.generation_config.speech_start_id = speech_start_id
-    vibevoice_model.generation_config.speech_end_id = speech_end_id
-    vibevoice_model.generation_config.speech_diffusion_id = speech_diffusion_id
+    vibevoice_model.generation_config.audio_bos_token_id = audio_bos_token_id
+    vibevoice_model.generation_config.audio_eos_token_id = audio_eos_token_id
+    vibevoice_model.generation_config.audio_diffusion_id = audio_diffusion_id
     vibevoice_model.generation_config.bos_token_id = tokenizer.bos_token_id
     vibevoice_model.generation_config.eos_token_id = tokenizer.eos_token_id
     vibevoice_model.generation_config.pad_token_id = tokenizer.pad_token_id

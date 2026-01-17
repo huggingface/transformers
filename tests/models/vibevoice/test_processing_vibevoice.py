@@ -32,17 +32,18 @@ if is_torch_available():
 @require_torch
 class VibeVoiceProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = VibeVoiceProcessor
+    audio_input_name = "input_values"
 
     @classmethod
     def setUpClass(cls):
         cls.checkpoint = "bezzam/VibeVoice-1.5B"
         processor = VibeVoiceProcessor.from_pretrained(cls.checkpoint)
-        cls.speech_start_token = processor.speech_start_token
-        cls.speech_start_id = processor.speech_start_id
-        cls.speech_end_token = processor.speech_end_token
-        cls.speech_end_id = processor.speech_end_id
-        cls.speech_diffusion_token = processor.speech_diffusion_token
-        cls.speech_diffusion_id = processor.speech_diffusion_id
+        cls.audio_bos_token = processor.audio_bos_token
+        cls.audio_bos_token_id = processor.audio_bos_token_id
+        cls.audio_eos_token = processor.audio_eos_token
+        cls.audio_eos_token_id = processor.audio_eos_token_id
+        cls.audio_diffusion_token = processor.audio_diffusion_token
+        cls.audio_diffusion_token_id = processor.audio_diffusion_token_id
         cls.pad_token_id = processor.tokenizer.pad_token_id
         cls.bos_token_id = processor.tokenizer.bos_token_id
         cls.tmpdirname = tempfile.mkdtemp()
@@ -53,9 +54,9 @@ class VibeVoiceProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         return {
             "chat_template": """{%- set system_prompt = system_prompt | default(" Transform the text provided by various speakers into speech output, utilizing the distinct voice of each respective speaker.\n") -%}
 {{ system_prompt -}}
-{%- set speech_start_token = speech_start_token | default("<|vision_start|>") %}
-{%- set speech_end_token = speech_end_token | default("<|vision_end|>") %}
-{%- set speech_diffusion_token = speech_diffusion_token | default("<|vision_pad|>") %}
+{%- set audio_bos_token = audio_bos_token | default("<|vision_start|>") %}
+{%- set audio_eos_token = audio_eos_token | default("<|vision_end|>") %}
+{%- set audio_diffusion_token = audio_diffusion_token | default("<|vision_pad|>") %}
 {%- set ns = namespace(speakers_with_audio="") %}
 {%- for message in messages %}
     {%- set role = message['role'] %}
@@ -70,7 +71,7 @@ class VibeVoiceProcessorTest(ProcessorTesterMixin, unittest.TestCase):
 {{ " Voice input:\n" }}
 {%- for speaker in ns.speakers_with_audio.rstrip(',').split(',') %}
 {%- if speaker %}
- Speaker {{ speaker }}:{{ speech_start_token }}{{ speech_diffusion_token }}{{ speech_end_token }}{{ "\n" }}
+ Speaker {{ speaker }}:{{ audio_bos_token }}{{ audio_diffusion_token }}{{ audio_eos_token }}{{ "\n" }}
 {%- endif %}
 {%- endfor %}
 {%- endif %}
@@ -83,7 +84,7 @@ class VibeVoiceProcessorTest(ProcessorTesterMixin, unittest.TestCase):
  Speaker {{ role }}: {{ item['text'] }}{{ "\n" }}
     {%- endfor %}
 {%- endfor %}
- Speech output:{{ "\n" }}{{ speech_start_token }}"""
+ Speech output:{{ "\n" }}{{ audio_bos_token }}"""
         }
 
     @require_librosa

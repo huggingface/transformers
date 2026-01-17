@@ -342,9 +342,9 @@ class VibeVoiceGenerationMixin(GenerationMixin):
 
         # Token constraints for VibeVoice - only allow speech tokens
         valid_tokens = [
-            self.config.speech_start_id,
-            self.config.speech_end_id,
-            self.config.speech_diffusion_id,
+            self.config.audio_bos_token_id,
+            self.config.audio_eos_token_id,
+            self.config.audio_diffusion_token_id,
             self.config.eos_token_id,
         ]
         if hasattr(self.config, "bos_token_id") and self.config.bos_token_id is not None:
@@ -355,7 +355,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         # Setup negative generation for classifier-free guidance
         negative_kwargs = {
             "input_ids": torch.full(
-                (batch_size, 1), self.config.speech_start_id, dtype=torch.long, device=input_ids.device
+                (batch_size, 1), self.config.audio_bos_token_id, dtype=torch.long, device=input_ids.device
             ),
             "attention_mask": torch.ones((batch_size, 1), dtype=torch.long, device=input_ids.device),
             "max_new_tokens": generation_config.max_new_tokens,
@@ -531,7 +531,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                     streamer.end(new_max_length_indices)
 
             # Handle speech start tokens
-            diffusion_start_mask = ~finished_tags & (next_tokens == self.config.speech_start_id)
+            diffusion_start_mask = ~finished_tags & (next_tokens == self.config.audio_bos_token_id)
             if diffusion_start_mask.any():
                 diffusion_start_indices = diffusion_start_mask.nonzero(as_tuple=False).squeeze(1)
                 # Update negative generation state
@@ -546,13 +546,13 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                             k_cache[sample_idx, :, -1, :] = k_cache[sample_idx, :, 0, :].clone()
                             v_cache[sample_idx, :, -1, :] = v_cache[sample_idx, :, 0, :].clone()
                 for sample_idx in diffusion_start_indices.tolist():
-                    negative_input_ids[sample_idx, -1] = self.config.speech_start_id
+                    negative_input_ids[sample_idx, -1] = self.config.audio_bos_token_id
 
             # Prepare embeddings for next iteration
             next_inputs_embeds = self.get_input_embeddings()(next_tokens).unsqueeze(1)
 
             # Handle diffusion tokens
-            diffusion_mask = ~finished_tags & (next_tokens == self.config.speech_diffusion_id)
+            diffusion_mask = ~finished_tags & (next_tokens == self.config.audio_diffusion_token_id)
             negative_outputs = None
             if diffusion_mask.any():
                 diffusion_indices = diffusion_mask.nonzero(as_tuple=False).squeeze(1)
@@ -573,7 +573,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                 negative_input_ids = torch.cat([negative_input_ids, next_tokens[:, None]], dim=-1)
 
                 # Correct non-diffusion indices in negative generation
-                non_diffusion_mask = ~finished_tags & (next_tokens != self.config.speech_diffusion_id)
+                non_diffusion_mask = ~finished_tags & (next_tokens != self.config.audio_diffusion_token_id)
                 if non_diffusion_mask.any():
                     non_diffusion_indices = non_diffusion_mask.nonzero(as_tuple=False).squeeze(1)
                     start_indices = correct_cnt[non_diffusion_indices]
@@ -617,7 +617,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
 
                 noise_scheduler.set_timesteps(num_inference_steps=n_diffusion_steps)
                 condition = torch.cat([positive_condition, negative_condition], dim=0).to(diffusion_head_device)
-                speech = torch.randn(condition.shape[0], self.config.acoustic_hidden_size).to(condition)
+                speech = torch.randn(condition.shape[0], self.config.acoustic_tokenizer_config.hidden_size).to(condition)
 
                 # # TODO (ebezzam) something like below to use `do_sample`? only problem is original would differ and would break integration tests
                 # if do_sample:
@@ -731,7 +731,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                 reach_max_step_sample=completion_steps >= max_step_per_sample,
             )
         else:
-            # NOTE (ebezzam): new tokens in input_ids are simply speech tokens (mainly `speech_diffusion_id`)
+            # NOTE (ebezzam): new tokens in input_ids are simply speech tokens (mainly `audio_diffusion_token_id`)
             # so returning `input_ids` is insufficient for generated audio
             return final_audio_outputs
         # ============================================

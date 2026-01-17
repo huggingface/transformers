@@ -523,13 +523,8 @@ class VibeVoiceAcousticTokenizerPreTrainedModel(PreTrainedModel):
     _no_split_modules = ["VibeVoiceAcousticTokenizerEncoder", "VibeVoiceAcousticTokenizerDecoder"]
 
     def _init_weights(self, module):
-        if isinstance(module, (nn.Linear, nn.Conv1d, nn.ConvTranspose1d)):
-            nn.init.normal_(module.weight, std=self.config.weight_init_value)
-            if module.bias is not None:
-                nn.init.zeros_(module.bias)
-        elif isinstance(module, VibeVoiceAcousticTokenizerRMSNorm):
-            nn.init.ones_(module.weight)
-        elif isinstance(module, VibeVoiceAcousticTokenizerConvNext1dLayer):
+        super()._init_weights(module)
+        if isinstance(module, VibeVoiceAcousticTokenizerConvNext1dLayer):
             nn.init.constant_(module.gamma, self.config.layer_scale_init_value)
             nn.init.constant_(module.ffn_gamma, self.config.layer_scale_init_value)
 

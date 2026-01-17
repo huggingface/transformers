@@ -38,7 +38,7 @@ class VibeVoiceAcousticTokenizerConfig(PretrainedConfig):
             Whether to use bias in convolution and feed-forward layers.
         layer_scale_init_value (`float`, *optional*, defaults to 1e-06):
             Initial value for layer scaling.
-        weight_init_value (`float`, *optional*, defaults to 0.01):
+        initializer_range (`float`, *optional*, defaults to 0.01):
             Standard deviation for weight initialization.
         n_filters (`int`, *optional*, defaults to 32):
             Number of filters in initial convolutional layer, and doubles after each downsampling.
@@ -79,7 +79,7 @@ class VibeVoiceAcousticTokenizerConfig(PretrainedConfig):
         rms_norm_eps=1e-5,
         bias=True,
         layer_scale_init_value=1e-6,
-        weight_init_value=1e-2,
+        initializer_range=1e-2,
         n_filters=32,
         downsampling_ratios=[2, 2, 4, 5, 5, 8],
         depths=[3, 3, 3, 3, 3, 3, 8],
@@ -97,7 +97,7 @@ class VibeVoiceAcousticTokenizerConfig(PretrainedConfig):
         self.bias = bias
         self.layer_scale_init_value = layer_scale_init_value
         self.ffn_expansion = ffn_expansion
-        self.weight_init_value = weight_init_value
+        self.initializer_range = initializer_range
         self.n_filters = n_filters
         self.downsampling_ratios = downsampling_ratios
         self.depths = depths

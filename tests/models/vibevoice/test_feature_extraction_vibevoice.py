@@ -126,19 +126,19 @@ class VibeVoiceFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittes
         # Test not batched input
         encoded_sequences_1 = feature_extractor(
             torch_audio_inputs[0], sampling_rate=sampling_rate, return_tensors="np"
-        ).input_features
+        ).input_values
         encoded_sequences_2 = feature_extractor(
             np_audio_inputs[0], sampling_rate=sampling_rate, return_tensors="np"
-        ).input_features
+        ).input_values
         self.assertTrue(np.allclose(encoded_sequences_1, encoded_sequences_2, atol=TOL))
 
         # Test batched
         encoded_sequences_1 = feature_extractor(
             torch_audio_inputs, sampling_rate=sampling_rate, padding=True, return_tensors="np"
-        ).input_features
+        ).input_values
         encoded_sequences_2 = feature_extractor(
             np_audio_inputs, sampling_rate=sampling_rate, padding=True, return_tensors="np"
-        ).input_features
+        ).input_values
         for enc_seq_1, enc_seq_2 in zip(encoded_sequences_1, encoded_sequences_2):
             self.assertTrue(np.allclose(enc_seq_1, enc_seq_2, atol=TOL))
 
@@ -148,17 +148,17 @@ class VibeVoiceFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittes
         py_audio_inputs = np_audio_inputs.tolist()
 
         for inputs in [py_audio_inputs, np_audio_inputs]:
-            np_processed = feature_extractor.pad([{"input_features": inputs}], return_tensors="np")
-            self.assertTrue(np_processed.input_features.dtype == np.float32)
-            pt_processed = feature_extractor.pad([{"input_features": inputs}], return_tensors="pt")
-            self.assertTrue(pt_processed.input_features.dtype == torch.float32)
+            np_processed = feature_extractor.pad([{"input_values": inputs}], return_tensors="np")
+            self.assertTrue(np_processed.input_values.dtype == np.float32)
+            pt_processed = feature_extractor.pad([{"input_values": inputs}], return_tensors="pt")
+            self.assertTrue(pt_processed.input_values.dtype == torch.float32)
 
     def _load_datasamples(self, num_samples):
         from datasets import load_dataset
 
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
         # automatic decoding with librispeech
-        audio_samples = ds.sort("id")[:num_samples]["input_features"]
+        audio_samples = ds.sort("id")[:num_samples]["input_values"]
 
         return [x["array"] for x in audio_samples]
 
@@ -170,7 +170,7 @@ class VibeVoiceFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittes
         # Test with very low amplitude audio (should increase amplitude)
         low_amplitude_audio = np.random.randn(1000).astype(np.float32) * 0.01
         result = feature_extractor([low_amplitude_audio], return_tensors="pt")
-        normalized_audio = result.input_features.squeeze()
+        normalized_audio = result.input_values.squeeze()
         self.assertGreater(
             torch.abs(normalized_audio).max().item(), torch.abs(torch.tensor(low_amplitude_audio)).max().item()
         )
@@ -179,7 +179,7 @@ class VibeVoiceFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittes
         feature_extractor_no_norm = VibeVoiceFeatureExtractor(normalize_audio=False)
         result_no_norm = feature_extractor_no_norm([low_amplitude_audio], return_tensors="pt")
         torch.testing.assert_close(
-            result_no_norm.input_features.squeeze(), torch.tensor(low_amplitude_audio), rtol=1e-5, atol=1e-5
+            result_no_norm.input_values.squeeze(), torch.tensor(low_amplitude_audio), rtol=1e-5, atol=1e-5
         )
 
     def test_sampling_rate_validation(self):
@@ -189,7 +189,7 @@ class VibeVoiceFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittes
 
         # Should work with correct sampling rate
         result = feature_extractor([input_audio], sampling_rate=24000, return_tensors="pt")
-        self.assertIsInstance(result.input_features, torch.Tensor)
+        self.assertIsInstance(result.input_values, torch.Tensor)
 
         # Should raise error with incorrect sampling rate
         with self.assertRaises(ValueError):
@@ -206,10 +206,10 @@ class VibeVoiceFeatureExtractionTest(SequenceFeatureExtractionTestMixin, unittes
         result = feature_extractor([audio1, audio2], padding=True, return_tensors="pt", return_attention_mask=True)
 
         # Should have padding_mask
-        self.assertIn("input_features_mask", result)
-        self.assertEqual(result.input_features_mask.shape, result.input_features.squeeze(1).shape)
+        self.assertIn("input_values_mask", result)
+        self.assertEqual(result.input_values_mask.shape, result.input_values.squeeze(1).shape)
 
         # First sample should have some padding (False values at the end)
-        self.assertTrue(torch.any(~result.input_features_mask[0]))
+        self.assertTrue(torch.any(~result.input_values_mask[0]))
         # Second sample should have no padding (all True values)
-        self.assertTrue(torch.all(result.input_features_mask[1]))
+        self.assertTrue(torch.all(result.input_values_mask[1]))

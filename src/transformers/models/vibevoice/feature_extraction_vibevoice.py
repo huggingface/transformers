@@ -14,13 +14,12 @@
 # limitations under the License.
 
 from typing import Optional, Union
-
-import numpy as np
+import torch
 
 from ...audio_utils import AudioInput, make_list_of_audio
 from ...feature_extraction_sequence_utils import SequenceFeatureExtractor
 from ...feature_extraction_utils import BatchFeature
-from ...utils import PaddingStrategy, TensorType, logging
+from ...utils import PaddingStrategy, logging
 
 
 logger = logging.get_logger(__name__)
@@ -42,10 +41,11 @@ class VibeVoiceFeatureExtractor(SequenceFeatureExtractor):
         target_dB_FS (`float`, *optional*, defaults to -25):
             Target dB FS for normalization.
         eps (`float`, *optional*, defaults to 1e-06):
+            A small value to avoid division by zero when normalizing.
 
     """
 
-    model_input_names = ["input_features", "input_features_mask"]
+    model_input_names = ["input_values", "input_values_mask"]
 
     def __init__(
         self,
@@ -69,25 +69,33 @@ class VibeVoiceFeatureExtractor(SequenceFeatureExtractor):
         sampling_rate: Optional[int] = None,
         padding: Optional[Union[bool, str, PaddingStrategy]] = True,
         pad_to_multiple_of: Optional[int] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        return_attention_mask: Optional[bool] = True,
         max_length: Optional[int] = None,
+        return_attention_mask: Optional[bool] = True,
+        return_tensors: Optional[Union[str, type]] = None,
     ) -> BatchFeature:
         """
         Main method to prepare audio for the VibeVoice model.
 
         Args:
-            audio: Audio input(s) to process. Can be:
-                - np.ndarray: Audio array
-                - List[float]: Audio as list of floats
-                - List[np.ndarray]: Batch of audio arrays
-                - List[list[float]]: Batch of audio as lists of floats
-            sampling_rate (int, optional): Sampling rate of the input audio
-            return_tensors (str, optional): Return format ('pt' for PyTorch, 'np' for NumPy)
+            audio (`np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`:
+                The sequence or batch of sequences to be processed. Each sequence can be a numpy array, a torch tensor,
+                a list of numpy arrays or a list of torch tensors.
+            sampling_rate (`int`, *optional*):
+                The sampling rate at which the `audio` input was sampled. It is strongly recommended to pass
+                `sampling_rate` at the forward call to prevent silent errors.
+            padding (`bool`, `str` or [`~utils.PaddingStrategy`], *optional*, defaults to `True`):
+                Select a strategy to pad the returned sequences (according to the model's padding side and padding
+                index) among:
 
-        Returns:
-            dict: Processed audio inputs with keys:
-                - input_features: Audio tensor(s) ready for the model
+                - `True` or `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single
+                  sequence if provided).
+                - `'max_length'`: Pad to a maximum length specified with the argument `max_length` or to the maximum
+                  acceptable input length for the model if that argument is not provided.
+                - `False` or `'do_not_pad'` (default): No padding (i.e., can output a batch with sequences of different
+                  lengths).
+            pad_to_multiple_of (`int`, *optional*):
+                If set will pad the sequence to a multiple of the provided value.
+            
         """
         if sampling_rate is not None:
             if sampling_rate != self.sampling_rate:
@@ -105,39 +113,38 @@ class VibeVoiceFeatureExtractor(SequenceFeatureExtractor):
         # Ensure batch
         audio = make_list_of_audio(audio)
 
-        # Ensure numpy float arrays and mono
+        # Ensure torch tensors and mono
         for idx, example in enumerate(audio):
-            example = np.asarray(example, dtype=np.float32)
+            example = torch.tensor(example, dtype=torch.float32)
             if example.ndim != 1:
                 raise ValueError(f"Audio should be mono, got shape: {example.shape}")
             audio[idx] = example
 
         if self.normalize_audio:
             for idx, example in enumerate(audio):
-                rms = np.sqrt(np.mean(example**2))
-                scalar = 10 ** (self.target_dB_FS / 20) / (rms + self.eps)
-                example = example * scalar
-                max_val = np.max(np.abs(example))
+                rms = torch.sqrt(torch.mean(example**2))
+                example = example * 10 ** (self.target_dB_FS / 20) / (rms + self.eps)
+                max_val = torch.max(torch.abs(example))
                 if max_val > 1.0:
                     example = example / (max_val + self.eps)
                 audio[idx] = example
 
-        output_values = BatchFeature({"input_features": audio})
+        output_values = BatchFeature({"input_values": audio})
         if padding:
             output_values = self.pad(
                 output_values,
-                max_length=max_length,
-                return_tensors=return_tensors,
                 pad_to_multiple_of=pad_to_multiple_of,
                 return_attention_mask=return_attention_mask,
                 padding=padding,
+                max_length=max_length,
+                return_tensors=return_tensors,
             )
             if return_attention_mask:
-                output_values["input_features_mask"] = output_values.pop("attention_mask")
+                output_values["input_values_mask"] = output_values.pop("attention_mask")
 
         # add channel dimension if missing
-        if output_values["input_features"].ndim == 2:
-            output_values["input_features"] = output_values["input_features"][:, None, :]
+        if output_values["input_values"].ndim == 2:
+            output_values["input_values"] = output_values["input_values"][:, None, :]
 
         return output_values
 
