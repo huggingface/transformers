@@ -60,7 +60,6 @@ class VideoLlama3ProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             raise ValueError("batch_size must be greater than 0")
         return prepare_image_inputs() * batch_size
 
-    # Copied from tests.models.llava.test_processing_llava.LlavaProcessorTest.test_get_num_vision_tokens
     def test_get_num_vision_tokens(self):
         "Tests general functionality of the helper used internally in vLLM"
 
