@@ -50,6 +50,13 @@ class Glm4vProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             **kwargs,
         )
 
+    def test_get_num_vision_tokens_video(self):
+        processor = self.get_processor()
+
+        output = processor._get_num_multimodal_tokens(video_sizes=[(8, 224, 224)])
+        self.assertTrue("num_video_tokens" in output)
+        self.assertEqual(len(output["num_video_tokens"]), 1)
+
     @require_torch
     @require_av
     def _test_apply_chat_template(

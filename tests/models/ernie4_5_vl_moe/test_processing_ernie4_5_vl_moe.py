@@ -80,6 +80,10 @@ class Ernie4_5_VL_MoeProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertTrue("num_image_patches" in output)
         self.assertEqual(len(output["num_image_patches"]), 3)
 
+        output = processor._get_num_multimodal_tokens(video_sizes=[(8, 224, 224)])
+        self.assertTrue("num_video_tokens" in output)
+        self.assertEqual(len(output["num_video_tokens"]), 1)
+
     def test_save_load_pretrained_default(self):
         tokenizer = self.get_tokenizer()
         image_processor = self.get_image_processor()
