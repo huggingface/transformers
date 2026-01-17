@@ -70,6 +70,7 @@ HARDCODED_CONFIG_FOR_MODELS = {
     "donut": "DonutSwinConfig",
     "esmfold": "EsmConfig",
     "parakeet": "ParakeetCTCConfig",
+    "s3tokenizer": "S3TokenizerConfig",
     "lasr": "LasrCTCConfig",
     "wav2vec2-with-lm": "Wav2Vec2Config",
 }
