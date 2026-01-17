@@ -54,18 +54,18 @@ def update_state_dict_for_hf_model(state_dict):
                 if match:
                     old_idx = int(match.group(1))
                     new_idx = old_idx - 1  # Shift down by 1 since downsample_layers[0] became stem
-                    new_key = re.sub(r'downsample_layers\.\d+\.0\.conv\.', f'layers.{new_idx}.conv.conv.', new_key)
+                    new_key = re.sub(r'downsample_layers\.\d+\.0\.conv\.', f'conv_layers.{new_idx}.conv.conv.', new_key)
             elif "stages." in key and not "stages.0." in key:
                 match = re.search(r'stages\.(\d+)', key)
                 if match:
                     old_idx = int(match.group(1))
                     new_idx = old_idx - 1  # Shift down by 1 since stages[0] became stem
-                    new_key = re.sub(r'stages\.\d+\.', f'layers.{new_idx}.stage.', new_key)
+                    new_key = re.sub(r'stages\.\d+\.', f'conv_layers.{new_idx}.stage.', new_key)
             if "mixer.conv.conv.conv." in key:
                 new_key = new_key.replace("mixer.conv.conv.conv.", "mixer.conv.")
             if ".conv.conv.conv." in new_key:
                 new_key = new_key.replace(".conv.conv.conv.", ".conv.conv.")
-            elif ".conv.conv." in key and "stem.conv.conv" not in new_key and "layers." not in new_key:
+            elif ".conv.conv." in key and "stem.conv.conv" not in new_key and "conv_layers." not in new_key:
                 new_key = new_key.replace(".conv.conv.", ".conv.")
 
         # Handle acoustic tokenizer transformations
@@ -79,18 +79,18 @@ def update_state_dict_for_hf_model(state_dict):
                 if match:
                     old_idx = int(match.group(1))
                     new_idx = old_idx - 1  # Shift down by 1 since downsample_layers[0] became stem
-                    new_key = re.sub(r'downsample_layers\.\d+\.0\.conv\.', f'layers.{new_idx}.conv.conv.', new_key)
+                    new_key = re.sub(r'downsample_layers\.\d+\.0\.conv\.', f'conv_layers.{new_idx}.conv.conv.', new_key)
             elif "stages." in key and not "stages.0." in key:
                 match = re.search(r'stages\.(\d+)', key)
                 if match:
                     old_idx = int(match.group(1))
                     new_idx = old_idx - 1  # Shift down by 1 since stages[0] became stem
-                    new_key = re.sub(r'stages\.\d+\.', f'layers.{new_idx}.stage.', new_key)
+                    new_key = re.sub(r'stages\.\d+\.', f'conv_layers.{new_idx}.stage.', new_key)
             if "mixer.conv.conv.conv." in key:
                 new_key = new_key.replace("mixer.conv.conv.conv.", "mixer.conv.")
             if ".conv.conv.conv." in new_key:
                 new_key = new_key.replace(".conv.conv.conv.", ".conv.conv.")
-            elif ".conv.conv." in key and "stem.conv.conv" not in new_key and "layers." not in new_key:
+            elif ".conv.conv." in key and "stem.conv.conv" not in new_key and "conv_layers." not in new_key:
                 new_key = new_key.replace(".conv.conv.", ".conv.")
         if "acoustic_tokenizer.decoder" in key:
             if "upsample_layers.0.0.conv.conv." in key:
@@ -102,13 +102,13 @@ def update_state_dict_for_hf_model(state_dict):
                 if match:
                     old_idx = int(match.group(1))
                     new_idx = old_idx - 1  # Shift down by 1 since upsample_layers[0] became conv0
-                    new_key = re.sub(r'upsample_layers\.\d+\.0\.convtr\.convtr\.', f'layers.{new_idx}.convtr.convtr.', new_key)
+                    new_key = re.sub(r'upsample_layers\.\d+\.0\.convtr\.convtr\.', f'conv_layers.{new_idx}.convtr.convtr.', new_key)
             elif "stages." in key and not "stages.0." in key:
                 match = re.search(r'stages\.(\d+)', key)
                 if match:
                     old_idx = int(match.group(1))
                     new_idx = old_idx - 1  # Shift down by 1 since stages[0] became stage0
-                    new_key = re.sub(r'stages\.\d+\.', f'layers.{new_idx}.stage.', new_key)
+                    new_key = re.sub(r'stages\.\d+\.', f'conv_layers.{new_idx}.stage.', new_key)
             if "head.conv." in key:
                 new_key = new_key.replace("head.conv.", "head.")
             if "mixer.conv.conv.conv." in key:

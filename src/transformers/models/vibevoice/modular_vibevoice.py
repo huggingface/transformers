@@ -29,11 +29,9 @@ from ..llama.modeling_llama import LlamaMLP
 from ..mimi.modeling_mimi import MimiConv1dPaddingCache
 from ..qwen2.modeling_qwen2 import Qwen2RMSNorm
 from ..vibevoice_acoustic_tokenizer.modeling_vibevoice_acoustic_tokenizer import (
-    VibeVoiceAcousticTokenizerConvNext1dLayer,
     VibeVoiceAcousticTokenizerModel,
     VibeVoiceAcousticTokenizerPreTrainedModel,
-    VibeVoiceAcousticTokenizerStemLayer,
-    VibeVoiceAcousticTokenizerCausalConv1d
+    VibeVoiceAcousticTokenizerEncoder,
 )
 from .configuration_vibevoice import VibeVoiceConfig, VibeVoiceSemanticTokenizerConfig
 from .generation_vibevoice import VibeVoiceGenerationMixin
@@ -243,98 +241,26 @@ class VibeVoiceSemanticTokenizerOutput(ModelOutput):
     padding_cache: Optional["VibeVoiceConv1dPaddingCache"] = None
 
 
-class VibeVoiceStemLayer(VibeVoiceAcousticTokenizerStemLayer):
-    pass
-
-
-class VibeVoiceCausalConv1d(VibeVoiceAcousticTokenizerCausalConv1d):
-    pass
-
-
-class VibeVoiceConvNext1dLayer(VibeVoiceAcousticTokenizerConvNext1dLayer):
-    pass
-
-
-class VibeVoiceEncoderLayer(nn.Module):
-    def __init__(self, config, stage_idx, depth, layer_idx=None):
-        super().__init__()
-
-        in_channels = int(config.n_filters * (2**stage_idx))
-        intermediate_channels = int(config.n_filters * (2 ** (stage_idx + 1)))
-        self.conv = VibeVoiceCausalConv1d(
-            in_channels=in_channels,
-            out_channels=intermediate_channels,
-            kernel_size=int(config.downsampling_ratios[stage_idx] * 2),
-            stride=config.downsampling_ratios[stage_idx],
-            bias=config.bias,
-            layer_idx=layer_idx,
-        )
-        self.stage = nn.ModuleList(
-            [
-                VibeVoiceConvNext1dLayer(config, hidden_size=intermediate_channels, layer_idx=layer_idx + depth_idx + 1)
-                for depth_idx in range(depth)
-            ]
-        )
-        self.num_layers = depth + 1
-
-    def forward(self, hidden_states, padding_cache=None):
-        hidden_states = self.conv(hidden_states, padding_cache=padding_cache)
-        for block in self.stage:
-            hidden_states = block(hidden_states, padding_cache=padding_cache)
-        return hidden_states
-
-
-class VibeVoiceEncoder(nn.Module):
-    """Encoder component for the VibeVoice tokenizer that converts audio to latent representations."""
-
+class VibeVoiceEncoder(VibeVoiceAcousticTokenizerEncoder):
     def __init__(self, config):
-        super().__init__()
-
-        layer_idx = 0
-        self.stem = VibeVoiceStemLayer(config, depth=config.depths[0], layer_idx=layer_idx)
-        layer_idx += self.stem.num_layers
-        
-        # Downsampling layers
-        self.layers = nn.ModuleList()
-        for stage_idx in range(len(config.downsampling_ratios)):
-            layer = VibeVoiceEncoderLayer(
-                config, stage_idx, depth=config.depths[stage_idx + 1], layer_idx=layer_idx
-            )
-            self.layers.append(layer)
-            layer_idx += layer.num_layers
-
-        # Head layer
-        self.head = VibeVoiceCausalConv1d(
-            in_channels=int(config.n_filters * (2**len(config.downsampling_ratios))),
-            out_channels=config.hidden_size,
-            kernel_size=config.kernel_size,
-            bias=config.bias,
-            layer_idx=layer_idx,
-        )
+        super().__init__(config)
 
         # Parameters for cache creation
-        self.num_layers = layer_idx + 1
-        self.per_layer_padding_mode = ["constant"] * self.num_layers
-        self.per_layer_padding = [self.stem.conv.causal_padding]
-        self.per_layer_in_channels = [self.stem.conv.conv.in_channels]
+        self.num_conv_layers = layer_idx + 1
+        self.per_conv_layer_padding_mode = ["constant"] * self.num_conv_layers
+        self.per_conv_layer_padding = [self.stem.conv.causal_padding]
+        self.per_conv_layer_in_channels = [self.stem.conv.conv.in_channels]
         for block in self.stem.stage:
-            self.per_layer_padding.append(block.mixer.causal_padding)
-            self.per_layer_in_channels.append(block.mixer.conv.in_channels)
-        for layer in self.layers:
-            self.per_layer_padding.append(layer.conv.causal_padding)
-            self.per_layer_in_channels.append(layer.conv.conv.in_channels)
+            self.per_conv_layer_padding.append(block.mixer.causal_padding)
+            self.per_conv_layer_in_channels.append(block.mixer.conv.in_channels)
+        for layer in self.conv_layers:
+            self.per_conv_layer_padding.append(layer.conv.causal_padding)
+            self.per_conv_layer_in_channels.append(layer.conv.conv.in_channels)
             for block in layer.stage:
-                self.per_layer_padding.append(block.mixer.causal_padding)
-                self.per_layer_in_channels.append(block.mixer.conv.in_channels)
-        self.per_layer_padding.append(self.head.causal_padding)
-        self.per_layer_in_channels.append(self.head.conv.in_channels)
-
-    def forward(self, hidden_states, padding_cache=None):
-        hidden_states = self.stem(hidden_states, padding_cache=padding_cache)
-        for layer in self.layers:
-            hidden_states = layer(hidden_states, padding_cache=padding_cache)
-        hidden_states = self.head(hidden_states, padding_cache=padding_cache)
-        return hidden_states.permute(0, 2, 1)
+                self.per_conv_layer_padding.append(block.mixer.causal_padding)
+                self.per_conv_layer_in_channels.append(block.mixer.conv.in_channels)
+        self.per_conv_layer_padding.append(self.head.causal_padding)
+        self.per_conv_layer_in_channels.append(self.head.conv.in_channels)
 
 
 @auto_docstring(
@@ -365,10 +291,10 @@ class VibeVoiceSemanticTokenizerModel(VibeVoiceAcousticTokenizerModel):
         """
         if use_cache and padding_cache is None:
             padding_cache = VibeVoiceConv1dPaddingCache(
-                num_layers=self.encoder.num_layers,
-                per_layer_padding=self.encoder.per_layer_padding,
-                per_layer_padding_mode=self.encoder.per_layer_padding_mode,
-                per_layer_in_channels=self.encoder.per_layer_in_channels,
+                num_layers=self.encoder.num_conv_layers,
+                per_layer_padding=self.encoder.per_conv_layer_padding,
+                per_layer_padding_mode=self.encoder.per_conv_layer_padding_mode,
+                per_layer_in_channels=self.encoder.per_conv_layer_in_channels,
             )
         latents = self.encoder(audio, padding_cache=padding_cache)
 
