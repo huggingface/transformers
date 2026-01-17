@@ -305,6 +305,9 @@ class Mxfp4GptOssExperts(nn.Module):
         self.limit = getattr(config, "swiglu_limit", 7.0)
 
     def forward(self, hidden_states: torch.Tensor, routing_data, gather_idx, scatter_idx) -> torch.Tensor:
+        if hidden_states.dtype == torch.float32:
+            hidden_states = hidden_states.to(torch.bfloat16)
+
         FnSpecs, FusedActivation, matmul_ogs = (
             triton_kernels_hub.matmul_ogs.FnSpecs,
             triton_kernels_hub.matmul_ogs.FusedActivation,
