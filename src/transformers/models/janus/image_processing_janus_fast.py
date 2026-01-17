@@ -81,8 +81,8 @@ class JanusImageProcessorFast(BaseImageProcessorFast):
         delta = size / max_size
         # Largest side becomes `size` and the other side is scaled according to the aspect ratio.
         output_size_nonpadded = SizeDict(
-            height=max(int(height * delta), min_size),
-            width=max(int(width * delta), min_size),
+            height=max(round(height * delta), min_size),
+            width=max(round(width * delta), min_size),
         )
 
         return super().resize(image, size=output_size_nonpadded, interpolation=interpolation, antialias=antialias)
