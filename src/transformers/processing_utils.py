@@ -19,6 +19,7 @@ import bisect
 import copy
 import inspect
 import json
+import inspect
 import os
 import sys
 import typing
@@ -672,7 +673,15 @@ class ProcessorMixin(PushToHubMixin):
             attribute = getattr(self, attribute_name, None)
             input_data, input_kwargs = attribute_to_kwargs[attribute_name]
             if input_data is not None and attribute is not None:
-                attribute_output = attribute(input_data, **kwargs[input_kwargs])
+                # This is our fix: filter the kwargs before calling the attribute
+                all_kwargs_for_modality = kwargs[input_kwargs]
+                valid_args = inspect.signature(attribute.__call__).parameters.keys()
+
+                filtered_kwargs = {
+                    key: value for key, value in all_kwargs_for_modality.items() if key in valid_args
+                }
+
+                attribute_output = attribute(input_data, **filtered_kwargs)
                 outputs.update(attribute_output)
 
         return BatchFeature(outputs)
@@ -1810,6 +1819,22 @@ class ProcessorMixin(PushToHubMixin):
             if self.tokenizer.bos_token is not None and single_prompt.startswith(self.tokenizer.bos_token):
                 kwargs["add_special_tokens"] = False
 
+            # We need to separate the kwargs for each modality processor.
+            # The easiest way to do this is to use the `_merge_kwargs` method.
+            # This will give us a dictionary of kwargs for each modality.
+            # We can then pass these to the respective processors.
+            # TODO: This logic is duplicated from `__call__`. It should be refactored.
+            merged_kwargs = self._merge_kwargs(
+                self.valid_processor_kwargs,
+                tokenizer_init_kwargs=self.tokenizer.init_kwargs if hasattr(self, "tokenizer") else {},
+                **kwargs,
+            )
+            text_kwargs = merged_kwargs.get("text_kwargs", {})
+            images_kwargs = merged_kwargs.get("images_kwargs", {})
+            videos_kwargs = merged_kwargs.get("videos_kwargs", {})
+            audio_kwargs = merged_kwargs.get("audio_kwargs", {})
+            common_kwargs = merged_kwargs.get("common_kwargs", {})
+
             # Always sample frames by default unless explicitly set to `False` by users. If users do not pass `num_frames`/`fps`
             # sampling should not done for BC.
             if "do_sample_frames" not in kwargs and (
@@ -1820,11 +1845,10 @@ class ProcessorMixin(PushToHubMixin):
             images_exist = any((im is not None) for im_list in batch_images for im in im_list)
             videos_exist = any((vid is not None) for vid_list in batch_videos for vid in vid_list)
             out = self(
-                text=prompt,
-                images=batch_images if images_exist else None,
-                videos=batch_videos if videos_exist else None,
-                audio=batch_audios if batch_audios else None,
-                **kwargs,
+                text=prompt, **{**text_kwargs, **common_kwargs},
+                images=batch_images if images_exist else None, **{**images_kwargs, **common_kwargs},
+                videos=batch_videos if videos_exist else None, **{**videos_kwargs, **common_kwargs},
+                audio=batch_audios if batch_audios else None, **{**audio_kwargs, **common_kwargs},
             )
 
             if return_dict:
