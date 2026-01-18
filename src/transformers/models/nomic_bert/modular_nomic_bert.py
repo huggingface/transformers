@@ -393,16 +393,14 @@ class RotaryEmbedding(nn.Module):
         self.base = float(base)
         # Generate and save the inverse frequency buffer (non trainable)
         # This computes 1 / (base^(2i/dim)) for i in [0, dim/2)
-        inv_freq = self._compute_inv_freq(device)
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.inv_freq = self._compute_inv_freq(device)
+        self.register_buffer("inv_freq", self.inv_freq, persistent=False)
         self.interleaved = interleaved
         self.scale_base = scale_base
 
         self._seq_len_cached = 0
         self._cos_cached = None
         self._sin_cached = None
-        self._cos_k_cached = None
-        self._sin_k_cached = None
 
     def _rotate_half(self, x, interleaved=False):
         """
@@ -450,8 +448,8 @@ class RotaryEmbedding(nn.Module):
         ro_dim = self.dim
 
         if position_ids is not None:
-            cos = cos[position_ids].squeeze(1)
-            sin = sin[position_ids].squeeze(1)
+            cos = cos[position_ids]
+            sin = sin[position_ids]
         else:
             seq_len = x.shape[2]
             cos, sin = (
@@ -463,11 +461,13 @@ class RotaryEmbedding(nn.Module):
         from einops import repeat
 
         if cos.dim() == 2:
-            cos = repeat(cos, "s d -> 1 1 s (2 d)" if not interleaved else "s d -> 1 1 s (d 2)")
-            sin = repeat(sin, "s d -> 1 1 s (2 d)" if not interleaved else "s d -> 1 1 s (d 2)")
-        else:
-            cos = repeat(cos, "b s d -> b 1 s (2 d)" if not interleaved else "b s d -> b 1 s (d 2)")
-            sin = repeat(sin, "b s d -> b 1 s (2 d)" if not interleaved else "b s d -> b 1 s (d 2)")
+            pattern = "s d -> 1 1 s (2 d)" if not interleaved else "s d -> 1 1 s (d 2)"
+            cos = repeat(cos, pattern)
+            sin = repeat(sin, pattern)
+        elif cos.dim() == 3:
+            pattern = "b s d -> b 1 s (2 d)" if not interleaved else "b s d -> b 1 s (d 2)"
+            cos = repeat(cos, pattern)
+            sin = repeat(sin, pattern)
 
         return torch.cat(
             [x[..., :ro_dim] * cos + self._rotate_half(x[..., :ro_dim], interleaved) * sin, x[..., ro_dim:]],
