@@ -493,6 +493,7 @@ class Pix2StructVisionModel(Pix2StructPreTrainedModel):
 
         ```python
         >>> import httpx
+        >>> from io import bytesio
         >>> from PIL import Image
         >>> from transformers import AutoProcessor, Pix2StructVisionModel
 
@@ -1394,6 +1395,7 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel, GenerationMi
         ```python
         >>> from PIL import Image
         >>> import httpx
+        >>> from io import bytesio
         >>> from transformers import AutoProcessor, Pix2StructForConditionalGeneration
 
         >>> processor = AutoProcessor.from_pretrained("google/pix2struct-textcaps-base")
@@ -1426,6 +1428,7 @@ class Pix2StructForConditionalGeneration(Pix2StructPreTrainedModel, GenerationMi
         ```python
         >>> from PIL import Image
         >>> import httpx
+        >>> from io import bytesio
         >>> from transformers import AutoProcessor, Pix2StructForConditionalGeneration
 
         >>> processor = AutoProcessor.from_pretrained("google/pix2struct-base")

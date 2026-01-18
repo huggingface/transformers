@@ -568,6 +568,7 @@ class Glm46VForConditionalGeneration(Glm46VPreTrainedModel, GenerationMixin):
         ```python
         >>> from PIL import Image
         >>> import httpx
+        >>> from io import bytesio
         >>> from transformers import AutoProcessor, Glm46VForConditionalGeneration
 
         >>> model = Glm46VForConditionalGeneration.from_pretrained("THUDM/GLM-4.1V-9B-Thinking")

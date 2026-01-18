@@ -47,6 +47,7 @@ class ImageToImagePipeline(Pipeline):
     ```python
     >>> from PIL import Image
     >>> import httpx
+        >>> from io import bytesio
     >>> import io
 
     >>> from transformers import pipeline

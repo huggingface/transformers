@@ -576,6 +576,7 @@ class ViltModel(ViltPreTrainedModel):
         >>> from transformers import ViltProcessor, ViltModel
         >>> from PIL import Image
         >>> import httpx
+        >>> from io import bytesio
 
         >>> # prepare image and text
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -731,6 +732,7 @@ class ViltForMaskedLM(ViltPreTrainedModel):
         ```python
         >>> from transformers import ViltProcessor, ViltForMaskedLM
         >>> import httpx
+        >>> from io import bytesio
         >>> from PIL import Image
         >>> import re
         >>> import torch
@@ -900,6 +902,7 @@ class ViltForQuestionAnswering(ViltPreTrainedModel):
         ```python
         >>> from transformers import ViltProcessor, ViltForQuestionAnswering
         >>> import httpx
+        >>> from io import bytesio
         >>> from PIL import Image
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -1004,6 +1007,7 @@ class ViltForImageAndTextRetrieval(ViltPreTrainedModel):
         ```python
         >>> from transformers import ViltProcessor, ViltForImageAndTextRetrieval
         >>> import httpx
+        >>> from io import bytesio
         >>> from PIL import Image
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -1109,6 +1113,7 @@ class ViltForImagesAndTextClassification(ViltPreTrainedModel):
         ```python
         >>> from transformers import ViltProcessor, ViltForImagesAndTextClassification
         >>> import httpx
+        >>> from io import bytesio
         >>> from PIL import Image
 
         >>> url_1 = "https://lil.nlp.cornell.edu/nlvr/exs/ex0_0.jpg"

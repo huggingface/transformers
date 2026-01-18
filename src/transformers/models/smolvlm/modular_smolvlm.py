@@ -360,6 +360,7 @@ class SmolVLMForConditionalGeneration(Idefics3ForConditionalGeneration):
 
         ```python
         >>> import httpx
+        >>> from io import bytesio
         >>> import torch
         >>> from PIL import Image
         >>> from io import BytesIO

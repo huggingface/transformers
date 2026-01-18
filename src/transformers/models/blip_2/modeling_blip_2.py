@@ -1257,6 +1257,7 @@ class Blip2Model(Blip2PreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import httpx
+        >>> from io import bytesio
         >>> from transformers import Blip2Processor, Blip2Model
         >>> import torch
 
@@ -1703,6 +1704,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
         ```python
         >>> from PIL import Image
         >>> import httpx
+        >>> from io import bytesio
         >>> from transformers import Blip2Processor, Blip2ForConditionalGeneration
         >>> import torch
 
@@ -1970,6 +1972,7 @@ class Blip2ForImageTextRetrieval(Blip2PreTrainedModel):
         >>> import torch
         >>> from PIL import Image
         >>> import httpx
+        >>> from io import bytesio
         >>> from transformers import AutoProcessor, Blip2ForImageTextRetrieval
 
         >>> device = "cuda" if torch.cuda.is_available() else "cpu"

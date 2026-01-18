@@ -930,6 +930,7 @@ class GitVisionModel(GitPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import httpx
+        >>> from io import bytesio
         >>> from transformers import AutoProcessor, GitVisionModel
 
         >>> processor = AutoProcessor.from_pretrained("microsoft/git-base")
@@ -1022,6 +1023,7 @@ class GitModel(GitPreTrainedModel):
         ```python
         >>> from transformers import AutoProcessor, AutoModel
         >>> import httpx
+        >>> from io import bytesio
         >>> from PIL import Image
 
         >>> processor = AutoProcessor.from_pretrained("microsoft/git-base")
@@ -1216,6 +1218,7 @@ class GitForCausalLM(GitPreTrainedModel, GenerationMixin):
         ```python
         >>> from transformers import AutoProcessor, AutoModelForCausalLM
         >>> import httpx
+        >>> from io import bytesio
         >>> from PIL import Image
 
         >>> processor = AutoProcessor.from_pretrained("microsoft/git-base-coco")

@@ -399,6 +399,7 @@ class MgpstrForSceneTextRecognition(MgpstrPreTrainedModel):
         ...     MgpstrForSceneTextRecognition,
         ... )
         >>> import httpx
+        >>> from io import bytesio
         >>> from PIL import Image
 
         >>> # load image from the IIIT-5k dataset

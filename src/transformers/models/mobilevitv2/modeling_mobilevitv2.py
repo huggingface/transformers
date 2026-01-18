@@ -872,6 +872,7 @@ class MobileViTV2ForSemanticSegmentation(MobileViTV2PreTrainedModel):
 
         ```python
         >>> import httpx
+        >>> from io import bytesio
         >>> import torch
         >>> from PIL import Image
         >>> from transformers import AutoImageProcessor, MobileViTV2ForSemanticSegmentation

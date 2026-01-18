@@ -745,6 +745,7 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
         ```python
         >>> from PIL import Image
         >>> import httpx
+        >>> from io import bytesio
         >>> import torch
         >>> from transformers import LlavaOnevisionProcessor, LlavaOnevisionForConditionalGeneration
 

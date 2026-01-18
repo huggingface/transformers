@@ -638,6 +638,7 @@ class PerceiverModel(PerceiverPreTrainedModel):
         ... )
         >>> import torch
         >>> import httpx
+        >>> from io import bytesio
         >>> from PIL import Image
 
         >>> # EXAMPLE 1: using the Perceiver to classify texts
@@ -1130,6 +1131,7 @@ class PerceiverForImageClassificationLearned(PerceiverPreTrainedModel):
         >>> from transformers import AutoImageProcessor, PerceiverForImageClassificationLearned
         >>> from PIL import Image
         >>> import httpx
+        >>> from io import bytesio
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> with httpx.stream("GET", url) as response:
@@ -1254,6 +1256,7 @@ class PerceiverForImageClassificationFourier(PerceiverPreTrainedModel):
         >>> from transformers import AutoImageProcessor, PerceiverForImageClassificationFourier
         >>> from PIL import Image
         >>> import httpx
+        >>> from io import bytesio
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> with httpx.stream("GET", url) as response:
@@ -1377,6 +1380,7 @@ class PerceiverForImageClassificationConvProcessing(PerceiverPreTrainedModel):
         >>> from transformers import AutoImageProcessor, PerceiverForImageClassificationConvProcessing
         >>> from PIL import Image
         >>> import httpx
+        >>> from io import bytesio
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> with httpx.stream("GET", url) as response:

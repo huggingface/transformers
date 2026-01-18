@@ -704,6 +704,7 @@ class TrOCRForCausalLM(TrOCRPreTrainedModel, GenerationMixin):
         ...     VisionEncoderDecoderModel,
         ... )
         >>> import httpx
+        >>> from io import bytesio
         >>> from PIL import Image
 
         >>> # TrOCR is a decoder model and should be used within a VisionEncoderDecoderModel

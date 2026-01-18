@@ -2332,6 +2332,7 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         >>> from transformers import AutoImageProcessor, Mask2FormerForUniversalSegmentation
         >>> from PIL import Image
         >>> import httpx
+        >>> from io import bytesio
         >>> import torch
 
         >>> # Load Mask2Former trained on COCO instance segmentation dataset
@@ -2366,6 +2367,7 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         >>> from transformers import AutoImageProcessor, Mask2FormerForUniversalSegmentation
         >>> from PIL import Image
         >>> import httpx
+        >>> from io import bytesio
         >>> import torch
 
         >>> # Load Mask2Former trained on ADE20k semantic segmentation dataset
@@ -2401,6 +2403,7 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         >>> from transformers import AutoImageProcessor, Mask2FormerForUniversalSegmentation
         >>> from PIL import Image
         >>> import httpx
+        >>> from io import bytesio
         >>> import torch
 
         >>> # Load Mask2Former trained on CityScapes panoptic segmentation dataset

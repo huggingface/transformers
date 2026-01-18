@@ -1540,6 +1540,7 @@ class OmDetTurboForObjectDetection(OmDetTurboPreTrainedModel):
 
         ```python
         >>> import httpx
+        >>> from io import bytesio
         >>> from PIL import Image
 
         >>> from transformers import AutoProcessor, OmDetTurboForObjectDetection

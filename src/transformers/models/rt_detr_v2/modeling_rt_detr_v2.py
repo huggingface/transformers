@@ -1515,6 +1515,7 @@ class RTDetrV2Model(RTDetrV2PreTrainedModel):
         >>> from transformers import AutoImageProcessor, RTDetrV2Model
         >>> from PIL import Image
         >>> import httpx
+        >>> from io import bytesio
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> with httpx.stream("GET", url) as response:
@@ -1880,6 +1881,7 @@ class RTDetrV2ForObjectDetection(RTDetrV2PreTrainedModel):
         >>> from transformers import RTDetrV2ImageProcessor, RTDetrV2ForObjectDetection
         >>> from PIL import Image
         >>> import httpx
+        >>> from io import bytesio
         >>> import torch
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"

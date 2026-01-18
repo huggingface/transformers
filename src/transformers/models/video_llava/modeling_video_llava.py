@@ -472,6 +472,7 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
         ```python
         >>> from PIL import Image
         >>> import httpx
+        >>> from io import bytesio
         >>> import numpy as np
         >>> import av
         >>> from huggingface_hub import hf_hub_download

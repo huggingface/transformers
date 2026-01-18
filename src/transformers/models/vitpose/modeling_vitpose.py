@@ -231,6 +231,7 @@ class VitPoseForPoseEstimation(VitPosePreTrainedModel):
         >>> import torch
         >>> from PIL import Image
         >>> import httpx
+        >>> from io import bytesio
 
         >>> processor = AutoImageProcessor.from_pretrained("usyd-community/vitpose-base-simple")
         >>> model = VitPoseForPoseEstimation.from_pretrained("usyd-community/vitpose-base-simple")

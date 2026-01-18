@@ -961,6 +961,7 @@ class Sam3TrackerModel(Sam3TrackerPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import httpx
+        >>> from io import bytesio
         >>> from transformers import AutoModel, AutoProcessor
 
         >>> model = AutoModel.from_pretrained("danelcsb/sam3_tracker.1_hiera_tiny")

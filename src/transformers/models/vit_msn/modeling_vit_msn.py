@@ -427,6 +427,7 @@ class ViTMSNModel(ViTMSNPreTrainedModel):
         >>> import torch
         >>> from PIL import Image
         >>> import httpx
+        >>> from io import bytesio
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> with httpx.stream("GET", url) as response:
@@ -486,6 +487,7 @@ class ViTMSNForImageClassification(ViTMSNPreTrainedModel):
         >>> import torch
         >>> from PIL import Image
         >>> import httpx
+        >>> from io import bytesio
 
         >>> torch.manual_seed(2)  # doctest: +IGNORE_RESULT
 

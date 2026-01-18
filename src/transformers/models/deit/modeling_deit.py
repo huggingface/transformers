@@ -509,6 +509,7 @@ class DeiTForMaskedImageModeling(DeiTPreTrainedModel):
         >>> import torch
         >>> from PIL import Image
         >>> import httpx
+        >>> from io import bytesio
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> with httpx.stream("GET", url) as response:
@@ -608,6 +609,7 @@ class DeiTForImageClassification(DeiTPreTrainedModel):
         >>> import torch
         >>> from PIL import Image
         >>> import httpx
+        >>> from io import bytesio
 
         >>> torch.manual_seed(3)  # doctest: +IGNORE_RESULT
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"

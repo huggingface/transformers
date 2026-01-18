@@ -895,6 +895,7 @@ class OwlViTVisionModel(OwlViTPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import httpx
+        >>> from io import bytesio
         >>> from transformers import AutoProcessor, OwlViTVisionModel
 
         >>> model = OwlViTVisionModel.from_pretrained("google/owlvit-base-patch32")
@@ -1050,6 +1051,7 @@ class OwlViTModel(OwlViTPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import httpx
+        >>> from io import bytesio
         >>> from transformers import AutoProcessor, OwlViTModel
 
         >>> model = OwlViTModel.from_pretrained("google/owlvit-base-patch32")
@@ -1451,6 +1453,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         Examples:
         ```python
         >>> import httpx
+        >>> from io import bytesio
         >>> from PIL import Image
         >>> import torch
         >>> from transformers import AutoProcessor, OwlViTForObjectDetection
@@ -1563,6 +1566,7 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         Examples:
         ```python
         >>> import httpx
+        >>> from io import bytesio
         >>> from PIL import Image
         >>> import torch
 

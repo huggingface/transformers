@@ -598,6 +598,7 @@ class Dinov2WithRegistersBackbone(Dinov2WithRegistersPreTrainedModel, BackboneMi
         >>> import torch
         >>> from PIL import Image
         >>> import httpx
+        >>> from io import bytesio
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> with httpx.stream("GET", url) as response:

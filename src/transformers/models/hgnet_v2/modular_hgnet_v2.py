@@ -572,6 +572,7 @@ class HGNetV2ForImageClassification(HGNetV2PreTrainedModel):
         ```python
         >>> import torch
         >>> import httpx
+        >>> from io import bytesio
         >>> from transformers import HGNetV2ForImageClassification, AutoImageProcessor
         >>> from PIL import Image
 

@@ -1240,6 +1240,7 @@ class DabDetrModel(DabDetrPreTrainedModel):
         >>> from transformers import AutoImageProcessor, AutoModel
         >>> from PIL import Image
         >>> import httpx
+        >>> from io import bytesio
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> with httpx.stream("GET", url) as response:
@@ -1494,6 +1495,7 @@ class DabDetrForObjectDetection(DabDetrPreTrainedModel):
         >>> from transformers import AutoImageProcessor, AutoModelForObjectDetection
         >>> from PIL import Image
         >>> import httpx
+        >>> from io import bytesio
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> with httpx.stream("GET", url) as response:

@@ -725,6 +725,7 @@ class SiglipVisionModel(SiglipPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import httpx
+        >>> from io import bytesio
         >>> from transformers import AutoProcessor, SiglipVisionModel
 
         >>> model = SiglipVisionModel.from_pretrained("google/siglip-base-patch16-224")
@@ -888,6 +889,7 @@ class SiglipModel(SiglipPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import httpx
+        >>> from io import bytesio
         >>> from transformers import AutoProcessor, AutoModel
         >>> import torch
 
@@ -1014,6 +1016,7 @@ class SiglipForImageClassification(SiglipPreTrainedModel):
         >>> import torch
         >>> from PIL import Image
         >>> import httpx
+        >>> from io import bytesio
 
         >>> torch.manual_seed(3)  # doctest: +IGNORE_RESULT
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"

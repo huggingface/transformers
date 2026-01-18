@@ -748,6 +748,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
         ```python
         >>> from PIL import Image
         >>> import httpx
+        >>> from io import bytesio
         >>> import av
         >>> from transformers import AutoProcessor, LlavaNextVideoForConditionalGeneration
 

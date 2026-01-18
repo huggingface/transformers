@@ -410,6 +410,7 @@ class PromptDepthAnythingForDepthEstimation(PromptDepthAnythingPreTrainedModel):
         >>> import numpy as np
         >>> from PIL import Image
         >>> import httpx
+        >>> from io import bytesio
 
         >>> url = "https://github.com/DepthAnything/PromptDA/blob/main/assets/example_images/image.jpg?raw=true"
         >>> with httpx.stream("GET", url) as response:

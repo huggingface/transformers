@@ -1275,6 +1275,7 @@ class DFineModel(DFinePreTrainedModel):
         >>> from transformers import AutoImageProcessor, DFineModel
         >>> from PIL import Image
         >>> import httpx
+        >>> from io import bytesio
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> with httpx.stream("GET", url) as response:

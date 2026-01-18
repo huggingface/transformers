@@ -1109,6 +1109,7 @@ class AriaForConditionalGeneration(AriaPreTrainedModel, GenerationMixin):
 
         ```python
         >>> import httpx
+        >>> from io import bytesio
         >>> import torch
         >>> from PIL import Image
         >>> from io import BytesIO
