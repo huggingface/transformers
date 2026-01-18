@@ -22,7 +22,9 @@ import requests
 from parameterized import parameterized
 
 from transformers import (
+    AutoModelForImageTextToText,
     AutoProcessor,
+    BitsAndBytesConfig,
     is_torch_available,
     is_vision_available,
 )
@@ -30,6 +32,7 @@ from transformers.testing_utils import (
     Expectations,
     cleanup,
     is_flaky,
+    require_bitsandbytes,
     require_torch,
     slow,
     torch_device,
@@ -665,3 +668,43 @@ class SmolVLMForConditionalGenerationIntegrationTest(unittest.TestCase):
         exportable_module = TorchExportableModuleForVLM(model)
         exported_program = exportable_module.export_text_decoder()
         self.assertIsInstance(exported_program, torch.export.ExportedProgram)
+
+    @slow
+    @require_bitsandbytes
+    def test_quantization_dtype_compatibility(self):
+        """Test that SmolVLM2 can be loaded with quantization without dtype mismatch errors."""
+        bnb_config = BitsAndBytesConfig(
+            load_in_4bit=True,
+            bnb_4bit_use_double_quant=True,
+            bnb_4bit_quant_type="nf4",
+            bnb_4bit_compute_dtype=torch.bfloat16,
+        )
+
+        # This should not raise a RuntimeError about dtype mismatch
+        model = AutoModelForImageTextToText.from_pretrained(
+            "HuggingFaceTB/SmolVLM2-2.2B-Instruct", quantization_config=bnb_config, torch_dtype=torch.bfloat16
+        )
+
+        # Basic verification that the model was loaded successfully
+        self.assertIsNotNone(model)
+        self.assertEqual(model.dtype, torch.bfloat16)
+
+        # Test that the inputs_merger method works correctly with quantized weights
+        # Create dummy inputs to test the dtype conversion logic
+        batch_size = 1
+        seq_len = 10
+        hidden_size = model.config.hidden_size
+
+        # Simulate the scenario that was causing the dtype mismatch
+        inputs_embeds = torch.randn(batch_size, seq_len, hidden_size, dtype=torch.bfloat16)
+        image_hidden_states = torch.randn(1, 8, hidden_size, dtype=torch.float32)
+
+        # Test that inputs_merger handles dtype conversion correctly
+        merged_embeds = model.inputs_merger(
+            input_ids=None,
+            inputs_embeds=inputs_embeds,
+            image_hidden_states=image_hidden_states,
+        )
+        # Verify the result has the correct dtype and shape
+        self.assertEqual(merged_embeds.dtype, torch.bfloat16)
+        self.assertEqual(merged_embeds.shape, inputs_embeds.shape)
