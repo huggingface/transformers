@@ -967,11 +967,11 @@ class Sam3TrackerModel(Sam3TrackerPreTrainedModel):
         >>> model = AutoModel.from_pretrained("danelcsb/sam3_tracker.1_hiera_tiny")
         >>> processor = AutoProcessor.from_pretrained("danelcsb/sam3_tracker.1_hiera_tiny")
 
-        >>> url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/sam-car.png"
-        >>> with httpx.stream("GET", url) as response:
-        ...     image = Image.open(BytesIO(response.read())).convert("RGB")
+        >>> img_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/sam-car.png"
+        >>> with httpx.stream("GET", img_url) as response:
+        ...     raw_image = Image.open(BytesIO(response.read())).convert("RGB")
         >>> input_points = [[[400, 650]]]  # 2D location of a window on the car
-        >>> inputs = processor(images=image, input_points=input_points, return_tensors="pt")
+        >>> inputs = processor(images=raw_image, input_points=input_points, return_tensors="pt")
 
         >>> # Get segmentation mask
         >>> outputs = model(**inputs)
