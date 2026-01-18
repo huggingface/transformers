@@ -328,7 +328,6 @@ class FIFOScheduler(Scheduler):
         return scheduled_requests
 
 
-# FIXME: prioritize adding from waiting reqs before scheduling `RequestStatus.DECODING` when cache space allows it
 # TODO: further consolidate the code by making more of it common. The reference Scheduler is FIFO, not this one.
 @attach_tracer()
 class PrefillFirstScheduler(Scheduler):
@@ -339,21 +338,23 @@ class PrefillFirstScheduler(Scheduler):
     @traced
     def schedule_batch(self, token_budget: int, cache_budget: int) -> list[RequestState] | None:
         priority_states: list[RequestState] = []
-        second_priority_states: list[RequestState] = []
+        waiting_states: list[RequestState] = []
+        decoding_states: list[RequestState] = []
 
         for state in self.active_requests.values():
             # XXX: when cache is full, state can stay on `PREFILLING_SPLIT` so we need to take those into account
             if state.status in [RequestStatus.PREFILLING_SPLIT, RequestStatus.SPLIT_PENDING_REMAINDER]:
                 priority_states.append(state)
             elif state.status == RequestStatus.DECODING:
-                second_priority_states.append(state)
+                decoding_states.append(state)
 
-        # Add waiting requests to second priority
+        # Add waiting requests before decoding when new requests are allowed
         if not self.block_new_requests:
             for req_id in self.waiting_requests_order:
-                second_priority_states.append(self.waiting_requests[req_id])
+                waiting_states.append(self.waiting_requests[req_id])
 
-        candidates = priority_states + second_priority_states
+        # Priority: split prefill first, then waiting requests, then decoding
+        candidates = priority_states + waiting_states + decoding_states
         request_ids_to_remove_from_waiting = set()
         scheduled_requests, one_allocation_failed = self._process_candidates(
             candidates,
