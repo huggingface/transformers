@@ -359,7 +359,7 @@ class SmolVLMForConditionalGeneration(Idefics3ForConditionalGeneration):
         Example:
 
         ```python
-        >>> import requests
+        >>> import httpx
         >>> import torch
         >>> from PIL import Image
         >>> from io import BytesIO

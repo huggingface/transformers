@@ -564,9 +564,9 @@ class Mask2FormerLoss(nn.Module):
         batch_size, num_queries, _ = pred_logits.shape
         criterion = nn.CrossEntropyLoss(weight=self.empty_weight)
         idx = self._get_predictions_permutation_indices(indices)  # shape of (batch_size, num_queries)
-        target_classes_o = torch.cat(
-            [target[j] for target, (_, j) in zip(class_labels, indices)]
-        )  # shape of (batch_size, num_queries)
+        target_classes_o = torch.cat([
+            target[j] for target, (_, j) in zip(class_labels, indices)
+        ])  # shape of (batch_size, num_queries)
         target_classes = torch.full(
             (batch_size, num_queries), fill_value=self.num_labels, dtype=torch.int64, device=pred_logits.device
         )
@@ -1088,9 +1088,9 @@ class Mask2FormerPixelDecoderEncoderOnly(nn.Module):
 
         self.config = config
         self.dropout = config.dropout
-        self.layers = nn.ModuleList(
-            [Mask2FormerPixelDecoderEncoderLayer(config) for _ in range(config.encoder_layers)]
-        )
+        self.layers = nn.ModuleList([
+            Mask2FormerPixelDecoderEncoderLayer(config) for _ in range(config.encoder_layers)
+        ])
 
     @staticmethod
     def get_reference_points(spatial_shapes_list, valid_ratios, device):
@@ -1232,14 +1232,12 @@ class Mask2FormerPixelDecoder(nn.Module):
                 )
             self.input_projections = nn.ModuleList(input_projections_list)
         else:
-            self.input_projections = nn.ModuleList(
-                [
-                    nn.Sequential(
-                        nn.Conv2d(transformer_in_channels[-1], feature_dim, kernel_size=1),
-                        nn.GroupNorm(32, feature_dim),
-                    )
-                ]
-            )
+            self.input_projections = nn.ModuleList([
+                nn.Sequential(
+                    nn.Conv2d(transformer_in_channels[-1], feature_dim, kernel_size=1),
+                    nn.GroupNorm(32, feature_dim),
+                )
+            ])
 
         self.encoder = Mask2FormerPixelDecoderEncoderOnly(config)
         self.mask_projection = nn.Conv2d(feature_dim, mask_dim, kernel_size=1, stride=1, padding=0)
@@ -1788,9 +1786,9 @@ class Mask2FormerMaskedAttentionDecoder(nn.Module):
         self.num_feature_levels = 3  # level embedding (3 scales)
         self.decoder_layers = config.decoder_layers - 1
 
-        self.layers = nn.ModuleList(
-            [Mask2FormerMaskedAttentionDecoderLayer(self.config) for _ in range(self.decoder_layers)]
-        )
+        self.layers = nn.ModuleList([
+            Mask2FormerMaskedAttentionDecoderLayer(self.config) for _ in range(self.decoder_layers)
+        ])
         self.layernorm = nn.LayerNorm(config.hidden_dim)
 
         self.mask_predictor = Mask2FormerMaskPredictor(
@@ -2331,7 +2329,7 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, Mask2FormerForUniversalSegmentation
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
         >>> import torch
 
         >>> # Load Mask2Former trained on COCO instance segmentation dataset
@@ -2341,7 +2339,8 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         ... )
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
         >>> inputs = image_processor(image, return_tensors="pt")
 
         >>> with torch.no_grad():
@@ -2364,7 +2363,7 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, Mask2FormerForUniversalSegmentation
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
         >>> import torch
 
         >>> # Load Mask2Former trained on ADE20k semantic segmentation dataset
@@ -2374,7 +2373,8 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         >>> url = (
         ...     "https://huggingface.co/datasets/hf-internal-testing/fixtures_ade20k/resolve/main/ADE_val_00000001.jpg"
         ... )
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
         >>> inputs = image_processor(image, return_tensors="pt")
 
         >>> with torch.no_grad():
@@ -2398,7 +2398,7 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, Mask2FormerForUniversalSegmentation
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
         >>> import torch
 
         >>> # Load Mask2Former trained on CityScapes panoptic segmentation dataset
@@ -2408,7 +2408,8 @@ class Mask2FormerForUniversalSegmentation(Mask2FormerPreTrainedModel):
         ... )
 
         >>> url = "https://cdn-media.huggingface.co/Inference-API/Sample-results-on-the-Cityscapes-dataset-The-above-images-show-how-our-method-can-handle.png"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
         >>> inputs = image_processor(image, return_tensors="pt")
 
         >>> with torch.no_grad():

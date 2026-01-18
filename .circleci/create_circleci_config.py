@@ -64,7 +64,6 @@ class EmptyJob:
             steps.extend(
                 [
                     "checkout",
-                    {"run": "pip install requests || true"},
                     {"run": """while [[ $(curl --location --request GET "https://circleci.com/api/v2/workflow/$CIRCLE_WORKFLOW_ID/job" --header "Circle-Token: $CCI_TOKEN"| jq -r '.items[]|select(.name != "collection_job")|.status' | grep -c "running") -gt 0 ]]; do sleep 5; done || true"""},
                     {"run": 'python utils/process_circleci_workflow_test_reports.py --workflow_id $CIRCLE_WORKFLOW_ID || true'},
                     {"store_artifacts": {"path": "outputs"}},

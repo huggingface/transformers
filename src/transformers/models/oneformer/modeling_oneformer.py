@@ -1269,14 +1269,12 @@ class OneFormerPixelDecoder(nn.Module):
                 )
             self.input_projections = nn.ModuleList(input_projections_list)
         else:
-            self.input_projections = nn.ModuleList(
-                [
-                    nn.Sequential(
-                        nn.Conv2d(transformer_in_channels[-1], config.conv_dim, kernel_size=1),
-                        nn.GroupNorm(32, config.conv_dim),
-                    )
-                ]
-            )
+            self.input_projections = nn.ModuleList([
+                nn.Sequential(
+                    nn.Conv2d(transformer_in_channels[-1], config.conv_dim, kernel_size=1),
+                    nn.GroupNorm(32, config.conv_dim),
+                )
+            ])
 
         self.encoder = OneFormerPixelDecoderEncoderOnly(config)
 
@@ -2147,9 +2145,9 @@ class OneFormerTransformerDecoder(nn.Module):
 
         self.num_feature_levels = 3
 
-        self.layers = nn.ModuleList(
-            [OneFormerTransformerDecoderLayer(config) for _ in range(config.decoder_layers - 1)]
-        )
+        self.layers = nn.ModuleList([
+            OneFormerTransformerDecoderLayer(config) for _ in range(config.decoder_layers - 1)
+        ])
 
         self.query_input_projection = nn.Conv2d(in_channels, config.hidden_dim, kernel_size=1)
 
@@ -2501,12 +2499,10 @@ class OneFormerTextContextDecoder(nn.Module):
             nn.Linear(visual_dim, transformer_width),
         )
 
-        self.decoder = nn.ModuleList(
-            [
-                OneFormerTextTransformerDecoderLayer(transformer_width, transformer_heads, dropout, layer_norm_eps)
-                for _ in range(transformer_layers)
-            ]
-        )
+        self.decoder = nn.ModuleList([
+            OneFormerTextTransformerDecoderLayer(transformer_width, transformer_heads, dropout, layer_norm_eps)
+            for _ in range(transformer_layers)
+        ])
 
         self.out_proj = nn.Sequential(
             nn.LayerNorm(transformer_width, eps=layer_norm_eps), nn.Linear(transformer_width, visual_dim)
@@ -2588,9 +2584,9 @@ class OneFormerTextTransformer(nn.Module):
         super().__init__()
         self.width = width
         self.num_layers = layers
-        self.layers = nn.Sequential(
-            *[OneFormerTextTransformerLayer(width, heads, attn_mask, layer_norm_eps) for _ in range(layers)]
-        )
+        self.layers = nn.Sequential(*[
+            OneFormerTextTransformerLayer(width, heads, attn_mask, layer_norm_eps) for _ in range(layers)
+        ])
         self.use_checkpoint = use_checkpoint
 
     def forward(self, hidden_states: torch.Tensor):
@@ -2855,12 +2851,13 @@ class OneFormerModel(OneFormerPreTrainedModel):
         ```python
         >>> import torch
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
         >>> from transformers import OneFormerProcessor, OneFormerModel
 
         >>> # download texting image
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> # load processor for preprocessing the inputs
         >>> processor = OneFormerProcessor.from_pretrained("shi-labs/oneformer_ade20k_swin_tiny")
@@ -3051,7 +3048,7 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
         ```python
         >>> from transformers import OneFormerProcessor, OneFormerForUniversalSegmentation
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
         >>> import torch
 
         >>> # load OneFormer fine-tuned on ADE20k for universal segmentation
@@ -3061,7 +3058,8 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
         >>> url = (
         ...     "https://huggingface.co/datasets/hf-internal-testing/fixtures_ade20k/resolve/main/ADE_val_00000001.jpg"
         ... )
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> # Semantic Segmentation
         >>> inputs = processor(image, ["semantic"], return_tensors="pt")

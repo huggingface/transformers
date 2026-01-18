@@ -426,10 +426,11 @@ class ViTMSNModel(ViTMSNPreTrainedModel):
         >>> from transformers import AutoImageProcessor, ViTMSNModel
         >>> import torch
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("facebook/vit-msn-small")
         >>> model = ViTMSNModel.from_pretrained("facebook/vit-msn-small")
@@ -484,12 +485,13 @@ class ViTMSNForImageClassification(ViTMSNPreTrainedModel):
         >>> from transformers import AutoImageProcessor, ViTMSNForImageClassification
         >>> import torch
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
 
         >>> torch.manual_seed(2)  # doctest: +IGNORE_RESULT
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read())).convert("RGB")
 
         >>> image_processor = AutoImageProcessor.from_pretrained("facebook/vit-msn-small")
         >>> model = ViTMSNForImageClassification.from_pretrained("facebook/vit-msn-small")

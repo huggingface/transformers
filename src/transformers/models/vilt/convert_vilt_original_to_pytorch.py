@@ -15,9 +15,10 @@
 
 import argparse
 import json
+from io import BytesIO
 from pathlib import Path
 
-import requests
+import httpx
 import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
@@ -47,15 +48,24 @@ def create_rename_keys(config, vqa_model=False, nlvr_model=False, irtr_model=Fal
         rename_keys.append((f"transformer.blocks.{i}.norm1.weight", f"vilt.encoder.layer.{i}.layernorm_before.weight"))
         rename_keys.append((f"transformer.blocks.{i}.norm1.bias", f"vilt.encoder.layer.{i}.layernorm_before.bias"))
         rename_keys.append(
-            (f"transformer.blocks.{i}.attn.proj.weight", f"vilt.encoder.layer.{i}.attention.output.dense.weight")
+            (
+                f"transformer.blocks.{i}.attn.proj.weight",
+                f"vilt.encoder.layer.{i}.attention.output.dense.weight",
+            )
         )
         rename_keys.append(
-            (f"transformer.blocks.{i}.attn.proj.bias", f"vilt.encoder.layer.{i}.attention.output.dense.bias")
+            (
+                f"transformer.blocks.{i}.attn.proj.bias",
+                f"vilt.encoder.layer.{i}.attention.output.dense.bias",
+            )
         )
         rename_keys.append((f"transformer.blocks.{i}.norm2.weight", f"vilt.encoder.layer.{i}.layernorm_after.weight"))
         rename_keys.append((f"transformer.blocks.{i}.norm2.bias", f"vilt.encoder.layer.{i}.layernorm_after.bias"))
         rename_keys.append(
-            (f"transformer.blocks.{i}.mlp.fc1.weight", f"vilt.encoder.layer.{i}.intermediate.dense.weight")
+            (
+                f"transformer.blocks.{i}.mlp.fc1.weight",
+                f"vilt.encoder.layer.{i}.intermediate.dense.weight",
+            )
         )
         rename_keys.append((f"transformer.blocks.{i}.mlp.fc1.bias", f"vilt.encoder.layer.{i}.intermediate.dense.bias"))
         rename_keys.append((f"transformer.blocks.{i}.mlp.fc2.weight", f"vilt.encoder.layer.{i}.output.dense.weight"))
@@ -227,8 +237,10 @@ def convert_vilt_checkpoint(checkpoint_url, pytorch_dump_folder_path):
 
     # Forward pass on example inputs (image + text)
     if nlvr_model:
-        image1 = Image.open(requests.get("https://lil.nlp.cornell.edu/nlvr/exs/ex0_0.jpg", stream=True).raw)
-        image2 = Image.open(requests.get("https://lil.nlp.cornell.edu/nlvr/exs/ex0_0.jpg", stream=True).raw)
+        url = "https://lil.nlp.cornell.edu/nlvr/exs/ex0_0.jpg"
+        with httpx.stream("GET", url) as response:
+            image1 = Image.open(BytesIO(response.read()))
+            image2 = Image.open(BytesIO(response.read()))
         text = (
             "The left image contains twice the number of dogs as the right image, and at least two dogs in total are"
             " standing."
@@ -241,7 +253,9 @@ def convert_vilt_checkpoint(checkpoint_url, pytorch_dump_folder_path):
             pixel_values_2=encoding_2.pixel_values,
         )
     else:
-        image = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
+        url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        with httpx.stream("GET", url) as response:
+            image = Image.open(BytesIO(response.read()))
         if mlm_model:
             text = "a bunch of [MASK] laying on a [MASK]."
         else:

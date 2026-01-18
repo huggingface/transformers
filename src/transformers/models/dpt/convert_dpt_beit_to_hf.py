@@ -14,9 +14,10 @@
 """Convert DPT 3.1 checkpoints from the MiDaS repository. URL: https://github.com/isl-org/MiDaS"""
 
 import argparse
+from io import BytesIO
 from pathlib import Path
 
-import requests
+import httpx
 import torch
 from PIL import Image
 
@@ -165,8 +166,9 @@ def rename_key(dct, old, new):
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
-    return im
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
+    return image
 
 
 @torch.no_grad()
@@ -217,12 +219,12 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
     print("Mean of pixel values:", pixel_values.mean().item())
     print("Shape of pixel values:", pixel_values.shape)
 
-    import requests
     from PIL import Image
     from torchvision import transforms
 
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    image = Image.open(requests.get(url, stream=True).raw)
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
 
     transforms = transforms.Compose(
         [
@@ -247,7 +249,11 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub):
         # OK, checked
         expected_shape = torch.Size([1, 512, 512])
         expected_slice = torch.tensor(
-            [[2804.6260, 2792.5708, 2812.9263], [2772.0288, 2780.1118, 2796.2529], [2748.1094, 2766.6558, 2766.9834]]
+            [
+                [2804.6260, 2792.5708, 2812.9263],
+                [2772.0288, 2780.1118, 2796.2529],
+                [2748.1094, 2766.6558, 2766.9834],
+            ]
         )
     elif model_name == "dpt-beit-large-384":
         # OK, checked

@@ -473,13 +473,11 @@ class Idefics2VisionTransformer(Idefics2PreTrainedModel):
         batch_size = pixel_values.size(0)
         if patch_attention_mask is None:
             patch_size = self.config.patch_size
-            patch_attention_mask = torch.ones(
-                (
-                    batch_size,
-                    pixel_values.size(2) // patch_size,
-                    pixel_values.size(3) // patch_size,
-                )
-            )
+            patch_attention_mask = torch.ones((
+                batch_size,
+                pixel_values.size(2) // patch_size,
+                pixel_values.size(3) // patch_size,
+            ))
             patch_attention_mask = patch_attention_mask.to(dtype=torch.bool, device=pixel_values.device)
 
         hidden_states = self.embeddings(pixel_values=pixel_values, patch_attention_mask=patch_attention_mask)
@@ -1027,7 +1025,7 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel, GenerationMixin)
         Example:
 
         ```python
-        >>> import requests
+        >>> import httpx
         >>> import torch
         >>> from PIL import Image
         >>> from io import BytesIO

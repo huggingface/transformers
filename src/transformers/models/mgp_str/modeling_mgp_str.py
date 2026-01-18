@@ -171,7 +171,8 @@ class MgpstrAttention(nn.Module):
     def forward(self, hidden_states):
         batch_size, num, channel = hidden_states.shape
         qkv = (
-            self.qkv(hidden_states)
+            self
+            .qkv(hidden_states)
             .reshape(batch_size, num, 3, self.num_heads, channel // self.num_heads)
             .permute(2, 0, 3, 1, 4)
         )
@@ -219,9 +220,9 @@ class MgpstrEncoder(nn.Module):
         # stochastic depth decay rule
         dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, config.num_hidden_layers, device="cpu")]
 
-        self.blocks = nn.Sequential(
-            *[MgpstrLayer(config=config, drop_path=dpr[i]) for i in range(config.num_hidden_layers)]
-        )
+        self.blocks = nn.Sequential(*[
+            MgpstrLayer(config=config, drop_path=dpr[i]) for i in range(config.num_hidden_layers)
+        ])
 
     def forward(self, hidden_states, output_attentions=False, output_hidden_states=False, return_dict=True):
         all_hidden_states = () if output_hidden_states else None
@@ -398,12 +399,13 @@ class MgpstrForSceneTextRecognition(MgpstrPreTrainedModel):
         ...     MgpstrProcessor,
         ...     MgpstrForSceneTextRecognition,
         ... )
-        >>> import requests
+        >>> import httpx
         >>> from PIL import Image
 
         >>> # load image from the IIIT-5k dataset
         >>> url = "https://i.postimg.cc/ZKwLg2Gw/367-14.png"
-        >>> image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read())).convert("RGB")
 
         >>> processor = MgpstrProcessor.from_pretrained("alibaba-damo/mgp-str-base")
         >>> pixel_values = processor(images=image, return_tensors="pt").pixel_values

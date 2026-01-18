@@ -18,9 +18,10 @@ import argparse
 import json
 import os
 import pickle
+from io import BytesIO
 from pathlib import Path
 
-import requests
+import httpx
 import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
@@ -224,8 +225,9 @@ def read_in_decoder_q_k_v(state_dict, config):
 # We will verify our results on an image of cute cats
 def prepare_img() -> torch.Tensor:
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    im = Image.open(requests.get(url, stream=True).raw)
-    return im
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
+    return image
 
 
 @torch.no_grad()
@@ -296,7 +298,11 @@ def convert_maskformer_checkpoint(
 
     if model_name == "maskformer-swin-tiny-ade":
         expected_logits = torch.tensor(
-            [[3.6353, -4.4770, -2.6065], [0.5081, -4.2394, -3.5343], [2.1909, -5.0353, -1.9323]]
+            [
+                [3.6353, -4.4770, -2.6065],
+                [0.5081, -4.2394, -3.5343],
+                [2.1909, -5.0353, -1.9323],
+            ]
         )
     assert torch.allclose(outputs.class_queries_logits[0, :3, :3], expected_logits, atol=1e-4)
     print("Looks ok!")

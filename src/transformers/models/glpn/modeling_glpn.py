@@ -126,7 +126,8 @@ class GLPNEfficientSelfAttention(nn.Module):
     ):
         batch_size, seq_length, _ = hidden_states.shape
         query_layer = (
-            self.query(hidden_states)
+            self
+            .query(hidden_states)
             .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
             .transpose(1, 2)
         )
@@ -142,12 +143,14 @@ class GLPNEfficientSelfAttention(nn.Module):
             hidden_states = self.layer_norm(hidden_states)
 
         key_layer = (
-            self.key(hidden_states)
+            self
+            .key(hidden_states)
             .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
             .transpose(1, 2)
         )
         value_layer = (
-            self.value(hidden_states)
+            self
+            .value(hidden_states)
             .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
             .transpose(1, 2)
         )
@@ -336,9 +339,9 @@ class GLPNEncoder(nn.Module):
         self.block = nn.ModuleList(blocks)
 
         # Layer norms
-        self.layer_norm = nn.ModuleList(
-            [nn.LayerNorm(config.hidden_sizes[i]) for i in range(config.num_encoder_blocks)]
-        )
+        self.layer_norm = nn.ModuleList([
+            nn.LayerNorm(config.hidden_sizes[i]) for i in range(config.num_encoder_blocks)
+        ])
 
     def forward(
         self,
@@ -506,9 +509,9 @@ class GLPNDecoder(nn.Module):
         reserved_hidden_sizes = config.hidden_sizes[::-1]
         out_channels = config.decoder_hidden_size
 
-        self.stages = nn.ModuleList(
-            [GLPNDecoderStage(hidden_size, out_channels) for hidden_size in reserved_hidden_sizes]
-        )
+        self.stages = nn.ModuleList([
+            GLPNDecoderStage(hidden_size, out_channels) for hidden_size in reserved_hidden_sizes
+        ])
         # don't fuse in first stage
         self.stages[0].fusion = None
 
@@ -609,10 +612,11 @@ class GLPNForDepthEstimation(GLPNPreTrainedModel):
         >>> import torch
         >>> import numpy as np
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("vinvino02/glpn-kitti")
         >>> model = GLPNForDepthEstimation.from_pretrained("vinvino02/glpn-kitti")

@@ -800,12 +800,10 @@ class Sam3ViTModel(Sam3PreTrainedModel):
         self.config = config
         self.embeddings = Sam3ViTEmbeddings(config)
         self.layer_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
-        self.layers = nn.ModuleList(
-            [
-                Sam3ViTLayer(config, window_size=config.window_size if i not in config.global_attn_indexes else 0)
-                for i in range(config.num_hidden_layers)
-            ]
-        )
+        self.layers = nn.ModuleList([
+            Sam3ViTLayer(config, window_size=config.window_size if i not in config.global_attn_indexes else 0)
+            for i in range(config.num_hidden_layers)
+        ])
         self.post_init()
 
     def get_input_embeddings(self) -> Sam3ViTPatchEmbeddings:
@@ -986,14 +984,12 @@ class Sam3VisionNeck(nn.Module):
         self.position_encoding = Sam3SinePositionEmbedding(num_pos_feats=config.fpn_hidden_size // 2, normalize=True)
 
         # Create one FPN layer per scale factor
-        self.fpn_layers = nn.ModuleList(
-            [
-                Sam3FPNLayer(
-                    in_channels=config.backbone_config.hidden_size, fpn_dim=config.fpn_hidden_size, scale_factor=scale
-                )
-                for scale in config.scale_factors
-            ]
-        )
+        self.fpn_layers = nn.ModuleList([
+            Sam3FPNLayer(
+                in_channels=config.backbone_config.hidden_size, fpn_dim=config.fpn_hidden_size, scale_factor=scale
+            )
+            for scale in config.scale_factors
+        ])
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[tuple[torch.Tensor, ...], tuple[torch.Tensor, ...]]:
         fpn_hidden_states = ()
@@ -1900,13 +1896,11 @@ class Sam3MaskEmbedder(nn.Module):
         self.config = config
         hidden_size = config.hidden_size
 
-        self.layers = nn.ModuleList(
-            [
-                nn.Linear(hidden_size, hidden_size),
-                nn.Linear(hidden_size, hidden_size),
-                nn.Linear(hidden_size, hidden_size),
-            ]
-        )
+        self.layers = nn.ModuleList([
+            nn.Linear(hidden_size, hidden_size),
+            nn.Linear(hidden_size, hidden_size),
+            nn.Linear(hidden_size, hidden_size),
+        ])
         self.activation = nn.ReLU()
 
     def forward(self, queries: torch.Tensor) -> torch.Tensor:
@@ -1938,12 +1932,10 @@ class Sam3PixelDecoder(nn.Module):
         num_upsampling_stages = config.num_upsampling_stages
 
         # Create conv layers and norms for FPN
-        self.conv_layers = nn.ModuleList(
-            [
-                nn.Conv2d(hidden_size, hidden_size, kernel_size=3, stride=1, padding=1)
-                for _ in range(num_upsampling_stages)
-            ]
-        )
+        self.conv_layers = nn.ModuleList([
+            nn.Conv2d(hidden_size, hidden_size, kernel_size=3, stride=1, padding=1)
+            for _ in range(num_upsampling_stages)
+        ])
         self.norms = nn.ModuleList([nn.GroupNorm(8, hidden_size) for _ in range(num_upsampling_stages)])
 
         self.out_channels = hidden_size
@@ -2164,7 +2156,7 @@ class Sam3Model(Sam3PreTrainedModel):
         ```python
         >>> from transformers import Sam3Model, Sam3Processor
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
 
         >>> model = Sam3Model.from_pretrained("facebook/sam3")
         >>> processor = Sam3Processor.from_pretrained("facebook/sam3")
@@ -2174,8 +2166,9 @@ class Sam3Model(Sam3PreTrainedModel):
         >>> text_embeds = model.get_text_features(**text_inputs)
 
         >>> # Reuse text embeddings for multiple images
-        >>> img_url = "http://images.cocodataset.org/val2017/000000077595.jpg"
-        >>> image = Image.open(requests.get(img_url, stream=True).raw)
+        >>> url = "http://images.cocodataset.org/val2017/000000077595.jpg"
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
         >>> img_inputs = processor(images=image, return_tensors="pt")
         >>> outputs = model(pixel_values=img_inputs.pixel_values, text_embeds=text_embeds)
         ```
@@ -2202,14 +2195,15 @@ class Sam3Model(Sam3PreTrainedModel):
         ```python
         >>> from transformers import Sam3Model, Sam3Processor
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
 
         >>> model = Sam3Model.from_pretrained("facebook/sam3")
         >>> processor = Sam3Processor.from_pretrained("facebook/sam3")
 
         >>> # Pre-compute vision embeddings
-        >>> img_url = "http://images.cocodataset.org/val2017/000000077595.jpg"
-        >>> image = Image.open(requests.get(img_url, stream=True).raw)
+        >>> url = "http://images.cocodataset.org/val2017/000000077595.jpg"
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
         >>> img_inputs = processor(images=image, return_tensors="pt")
         >>> vision_embeds = model.get_vision_features(pixel_values=img_inputs.pixel_values)
 
@@ -2250,16 +2244,17 @@ class Sam3Model(Sam3PreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
         >>> from transformers import AutoModel, AutoProcessor
 
         >>> model = AutoModel.from_pretrained("facebook/sam3")
         >>> processor = AutoProcessor.from_pretrained("facebook/sam3")
 
-        >>> img_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/sam-car.png"
-        >>> raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
+        >>> url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/sam-car.png"
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read())).convert("RGB")
         >>> text = "car"
-        >>> inputs = processor(images=raw_image, text=text, return_tensors="pt")
+        >>> inputs = processor(images=image, text=text, return_tensors="pt")
 
         >>> # Get segmentation output
         >>> outputs = model(**inputs)

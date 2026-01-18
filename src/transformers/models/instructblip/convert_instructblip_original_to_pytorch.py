@@ -18,8 +18,9 @@ URL: https://github.com/salesforce/LAVIS/tree/main/projects/instructblip
 """
 
 import argparse
+from io import BytesIO
 
-import requests
+import httpx
 import torch
 
 # pip3 install salesforce-lavis
@@ -47,7 +48,8 @@ from transformers.utils.constants import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD
 
 def load_demo_image():
     url = "https://raw.githubusercontent.com/salesforce/LAVIS/main/docs/_static/Confusing-Pictures.jpg"
-    image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read())).convert("RGB")
 
     return image
 
@@ -226,7 +228,11 @@ def convert_blip2_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
             logits = hf_model(**inputs).logits
         else:
             original_logits = original_model(
-                {"image": original_pixel_values, "text_input": [prompt], "text_output": ["\n"]}
+                {
+                    "image": original_pixel_values,
+                    "text_input": [prompt],
+                    "text_output": ["\n"],
+                }
             ).logits
             label_input_ids = tokenizer("\n", return_tensors="pt").input_ids.to(hf_model_device)
             labels = label_input_ids.masked_fill(label_input_ids == tokenizer.pad_token_id, -100)

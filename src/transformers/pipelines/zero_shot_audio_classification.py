@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+import pathlib
 from collections import UserDict
 from typing import Any
 
@@ -108,8 +109,7 @@ class ZeroShotAudioClassificationPipeline(Pipeline):
                 # like http_huggingface_co.png
                 audio = httpx.get(audio, follow_redirects=True).content
             else:
-                with open(audio, "rb") as f:
-                    audio = f.read()
+                audio = pathlib.Path(audio).read_bytes()
 
         if isinstance(audio, bytes):
             audio = ffmpeg_read(audio, self.feature_extractor.sampling_rate)

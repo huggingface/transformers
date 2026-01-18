@@ -15,11 +15,12 @@ import sys
 from argparse import ArgumentParser
 from collections.abc import Iterator
 from dataclasses import dataclass
+from io import BytesIO
 from pathlib import Path
 from pprint import pformat
 from typing import Any
 
-import requests
+import httpx
 import torch
 import torchvision.transforms as T
 from detectron2.checkpoint import DetectionCheckpointer
@@ -82,9 +83,9 @@ class TrackedStateDict:
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    img_data = requests.get(url, stream=True).raw
-    im = Image.open(img_data)
-    return im
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
+    return image
 
 
 @dataclass
@@ -417,22 +418,40 @@ class OriginalMaskFormerCheckpointToOursConverter:
             rename_keys.append((f"{src_prefix}.layers.{i}.linear2.weight", f"{dst_prefix}.layers.{i}.fc2.weight"))
             rename_keys.append((f"{src_prefix}.layers.{i}.linear2.bias", f"{dst_prefix}.layers.{i}.fc2.bias"))
             rename_keys.append(
-                (f"{src_prefix}.layers.{i}.norm1.weight", f"{dst_prefix}.layers.{i}.self_attn_layer_norm.weight")
+                (
+                    f"{src_prefix}.layers.{i}.norm1.weight",
+                    f"{dst_prefix}.layers.{i}.self_attn_layer_norm.weight",
+                )
             )
             rename_keys.append(
-                (f"{src_prefix}.layers.{i}.norm1.bias", f"{dst_prefix}.layers.{i}.self_attn_layer_norm.bias")
+                (
+                    f"{src_prefix}.layers.{i}.norm1.bias",
+                    f"{dst_prefix}.layers.{i}.self_attn_layer_norm.bias",
+                )
             )
             rename_keys.append(
-                (f"{src_prefix}.layers.{i}.norm2.weight", f"{dst_prefix}.layers.{i}.encoder_attn_layer_norm.weight")
+                (
+                    f"{src_prefix}.layers.{i}.norm2.weight",
+                    f"{dst_prefix}.layers.{i}.encoder_attn_layer_norm.weight",
+                )
             )
             rename_keys.append(
-                (f"{src_prefix}.layers.{i}.norm2.bias", f"{dst_prefix}.layers.{i}.encoder_attn_layer_norm.bias")
+                (
+                    f"{src_prefix}.layers.{i}.norm2.bias",
+                    f"{dst_prefix}.layers.{i}.encoder_attn_layer_norm.bias",
+                )
             )
             rename_keys.append(
-                (f"{src_prefix}.layers.{i}.norm3.weight", f"{dst_prefix}.layers.{i}.final_layer_norm.weight")
+                (
+                    f"{src_prefix}.layers.{i}.norm3.weight",
+                    f"{dst_prefix}.layers.{i}.final_layer_norm.weight",
+                )
             )
             rename_keys.append(
-                (f"{src_prefix}.layers.{i}.norm3.bias", f"{dst_prefix}.layers.{i}.final_layer_norm.bias")
+                (
+                    f"{src_prefix}.layers.{i}.norm3.bias",
+                    f"{dst_prefix}.layers.{i}.final_layer_norm.bias",
+                )
             )
 
         return rename_keys

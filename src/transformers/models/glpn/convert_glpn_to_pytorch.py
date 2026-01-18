@@ -15,8 +15,9 @@
 
 import argparse
 from collections import OrderedDict
+from io import BytesIO
 
-import requests
+import httpx
 import torch
 from PIL import Image
 
@@ -114,7 +115,8 @@ def read_in_k_v(state_dict, config):
 # We will verify our results on a COCO image
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    image = Image.open(requests.get(url, stream=True).raw)
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
 
     return image
 
@@ -159,11 +161,19 @@ def convert_glpn_checkpoint(checkpoint_path, pytorch_dump_folder_path, push_to_h
     if model_name is not None:
         if "nyu" in model_name:
             expected_slice = torch.tensor(
-                [[4.4147, 4.0873, 4.0673], [3.7890, 3.2881, 3.1525], [3.7674, 3.5423, 3.4913]]
+                [
+                    [4.4147, 4.0873, 4.0673],
+                    [3.7890, 3.2881, 3.1525],
+                    [3.7674, 3.5423, 3.4913],
+                ]
             )
         elif "kitti" in model_name:
             expected_slice = torch.tensor(
-                [[3.4291, 2.7865, 2.5151], [3.2841, 2.7021, 2.3502], [3.1147, 2.4625, 2.2481]]
+                [
+                    [3.4291, 2.7865, 2.5151],
+                    [3.2841, 2.7021, 2.3502],
+                    [3.1147, 2.4625, 2.2481],
+                ]
             )
         else:
             raise ValueError(f"Unknown model name: {model_name}")

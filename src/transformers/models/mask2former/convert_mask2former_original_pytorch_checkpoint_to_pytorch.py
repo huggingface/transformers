@@ -16,11 +16,12 @@ import sys
 from argparse import ArgumentParser
 from collections.abc import Iterator
 from dataclasses import dataclass
+from io import BytesIO
 from pathlib import Path
 from pprint import pformat
 from typing import Any
 
-import requests
+import httpx
 import torch
 import torchvision.transforms as T
 from detectron2.checkpoint import DetectionCheckpointer
@@ -86,9 +87,9 @@ class TrackedStateDict:
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    img_data = requests.get(url, stream=True).raw
-    im = Image.open(img_data)
-    return im
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
+    return image
 
 
 @dataclass
@@ -689,16 +690,28 @@ class OriginalMask2FormerCheckpointToOursConverter:
             )
 
             rename_keys.append(
-                (f"{src_prefix}.transformer_ffn_layers.{i}.linear1.weight", f"{dst_prefix}.layers.{i}.fc1.weight")
+                (
+                    f"{src_prefix}.transformer_ffn_layers.{i}.linear1.weight",
+                    f"{dst_prefix}.layers.{i}.fc1.weight",
+                )
             )
             rename_keys.append(
-                (f"{src_prefix}.transformer_ffn_layers.{i}.linear1.bias", f"{dst_prefix}.layers.{i}.fc1.bias")
+                (
+                    f"{src_prefix}.transformer_ffn_layers.{i}.linear1.bias",
+                    f"{dst_prefix}.layers.{i}.fc1.bias",
+                )
             )
             rename_keys.append(
-                (f"{src_prefix}.transformer_ffn_layers.{i}.linear2.weight", f"{dst_prefix}.layers.{i}.fc2.weight")
+                (
+                    f"{src_prefix}.transformer_ffn_layers.{i}.linear2.weight",
+                    f"{dst_prefix}.layers.{i}.fc2.weight",
+                )
             )
             rename_keys.append(
-                (f"{src_prefix}.transformer_ffn_layers.{i}.linear2.bias", f"{dst_prefix}.layers.{i}.fc2.bias")
+                (
+                    f"{src_prefix}.transformer_ffn_layers.{i}.linear2.bias",
+                    f"{dst_prefix}.layers.{i}.fc2.bias",
+                )
             )
             rename_keys.append(
                 (

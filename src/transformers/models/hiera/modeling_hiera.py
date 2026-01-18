@@ -521,21 +521,19 @@ class HieraStage(GradientCheckpointingLayer):
         previous_stage_used_masked_attention = False
         if stage_num is not None:
             previous_stage_used_masked_attention = config.masked_unit_attention[stage_num - 1 if stage_num > 0 else 0]
-        self.layers = nn.ModuleList(
-            [
-                HieraLayer(
-                    config=config,
-                    hidden_size=hidden_size if i == 0 else hidden_size_output,
-                    hidden_size_output=hidden_size_output,
-                    num_heads=num_heads,
-                    drop_path=drop_path[i],
-                    query_stride=query_stride[i],
-                    window_size=window_size,
-                    use_mask_unit_attn=use_mask_unit_attn or (previous_stage_used_masked_attention and i == 0),
-                )
-                for i in range(depth)
-            ]
-        )
+        self.layers = nn.ModuleList([
+            HieraLayer(
+                config=config,
+                hidden_size=hidden_size if i == 0 else hidden_size_output,
+                hidden_size_output=hidden_size_output,
+                num_heads=num_heads,
+                drop_path=drop_path[i],
+                query_stride=query_stride[i],
+                window_size=window_size,
+                use_mask_unit_attn=use_mask_unit_attn or (previous_stage_used_masked_attention and i == 0),
+            )
+            for i in range(depth)
+        ])
 
     def forward(
         self, hidden_states: torch.Tensor, output_attentions: bool = False
@@ -1142,10 +1140,11 @@ class HieraForPreTraining(HieraPreTrainedModel):
         >>> from transformers import AutoImageProcessor, HieraForPreTraining
         >>> import torch
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("facebook/hiera-tiny-224-mae-hf")
         >>> model = HieraForPreTraining.from_pretrained("facebook/hiera-tiny-224-mae-hf")
@@ -1337,10 +1336,11 @@ class HieraBackbone(HieraPreTrainedModel, BackboneMixin):
         >>> from transformers import AutoImageProcessor, AutoBackbone
         >>> import torch
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> processor = AutoImageProcessor.from_pretrained("facebook/hiera-tiny-224-hf")
         >>> model = AutoBackbone.from_pretrained(

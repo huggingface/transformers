@@ -52,7 +52,6 @@ from huggingface_hub.utils import (
     RepositoryNotFoundError,
     RevisionNotFoundError,
     build_hf_headers,
-    get_session,
     hf_raise_for_status,
 )
 
@@ -383,7 +382,7 @@ def cached_files(
             existing_files.append(resolved_file)
 
     if os.path.isdir(path_or_repo_id):
-        return existing_files if existing_files else None
+        return existing_files or None
 
     if cache_dir is None:
         cache_dir = constants.HF_HUB_CACHE
@@ -580,7 +579,7 @@ def has_file(
 
     # Check if the file exists
     try:
-        response = get_session().head(
+        response = httpx.head(
             hf_hub_url(path_or_repo, filename=filename, revision=revision, repo_type=repo_type),
             headers=build_hf_headers(token=token, user_agent=http_user_agent()),
             follow_redirects=False,
