@@ -677,29 +677,6 @@ AUDIO_FRAME_CLASSIFICATION_SAMPLE = PT_SPEECH_FRAME_CLASS_SAMPLE
 AUDIO_XVECTOR_SAMPLE = PT_SPEECH_XVECTOR_SAMPLE
 
 
-IMAGE_TO_TEXT_SAMPLE = r"""
-    Example:
-
-    ```python
-    >>> from PIL import Image
-    >>> import httpx
-        >>> from io import bytesio
-    >>> from transformers import AutoProcessor, {model_class}
-
-    >>> processor = AutoProcessor.from_pretrained("{checkpoint}")
-    >>> model = {model_class}.from_pretrained("{checkpoint}")
-
-    >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    >>> with httpx.stream("GET", url) as response:
-    ...     image = Image.open(BytesIO(response.read()))
-
-    >>> inputs = processor(images=image, return_tensors="pt")
-
-    >>> outputs = model(**inputs)
-    ```
-"""
-
-
 DEPTH_ESTIMATION_SAMPLE = r"""
     Example:
 

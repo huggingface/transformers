@@ -20,7 +20,6 @@ import base64
 import importlib
 import io
 import os
-import pathlib
 import warnings
 from collections.abc import Sequence
 from io import BytesIO
@@ -180,7 +179,8 @@ def load_audio_as(
             response.raise_for_status()
             audio_bytes = response.content
         elif os.path.isfile(audio):
-            audio_bytes = pathlib.Path(audio).read_bytes()
+            with open(audio, "rb") as audio_file:
+                audio_bytes = audio_file.read()
         else:
             raise ValueError(f"File not found: {audio}")
 

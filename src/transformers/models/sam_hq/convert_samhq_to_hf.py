@@ -22,9 +22,10 @@ URL: https://github.com/SysCV/sam-hq
 import argparse
 from io import BytesIO
 
+import httpx
 import numpy as np
 import torch
-from huggingface_hub import get_session, hf_hub_download
+from huggingface_hub import hf_hub_download
 from PIL import Image
 
 from transformers import SamHQConfig, SamHQModel, SamHQProcessor, SamHQVisionConfig, SamImageProcessor
@@ -173,7 +174,7 @@ def convert_sam_hq_checkpoint(model_name, checkpoint_path, pytorch_dump_folder, 
 
     # Test the model with a sample image
     url = "https://huggingface.co/ybelkada/segment-anything/resolve/main/assets/car.png"
-    with get_session().stream("GET", url) as response:
+    with httpx.stream("GET", url) as response:
         raw_image = Image.open(BytesIO(response.read())).convert("RGB")
 
     input_points = [[[500, 375]]]

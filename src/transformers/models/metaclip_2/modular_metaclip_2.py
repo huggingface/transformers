@@ -644,7 +644,7 @@ class MetaClip2VisionModel(CLIPVisionModel):
     ```python
     >>> from PIL import Image
     >>> import httpx
-        >>> from io import bytesio
+    >>> from io import bytesio
     >>> from transformers import AutoProcessor, MetaClip2VisionModel
 
     >>> model = MetaClip2VisionModel.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu")
@@ -652,7 +652,7 @@ class MetaClip2VisionModel(CLIPVisionModel):
 
     >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
     >>> with httpx.stream("GET", url) as response:
-        ...     image = Image.open(BytesIO(response.read()))
+    ...     image = Image.open(BytesIO(response.read()))
 
     >>> inputs = processor(images=image, return_tensors="pt")
 
@@ -720,7 +720,7 @@ class MetaClip2VisionModelWithProjection(CLIPVisionModelWithProjection):
     ```python
     >>> from PIL import Image
     >>> import httpx
-        >>> from io import bytesio
+    >>> from io import bytesio
     >>> from transformers import AutoProcessor, MetaClip2VisionModelWithProjection
 
     >>> model = MetaClip2VisionModelWithProjection.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu")
@@ -728,7 +728,7 @@ class MetaClip2VisionModelWithProjection(CLIPVisionModelWithProjection):
 
     >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
     >>> with httpx.stream("GET", url) as response:
-        ...     image = Image.open(BytesIO(response.read()))
+    ...     image = Image.open(BytesIO(response.read()))
 
     >>> inputs = processor(images=image, return_tensors="pt")
 
