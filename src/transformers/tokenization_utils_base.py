@@ -1066,7 +1066,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 f"Truncation side should be selected between 'right' and 'left', current value: {self.truncation_side}"
             )
 
-        self.model_input_names = kwargs.pop("model_input_names", self.model_input_names)
+        self.model_input_names = list(kwargs.pop("model_input_names", self.model_input_names))
 
         # By default, clean up tokenization spaces for both fast and slow tokenizers
         self.clean_up_tokenization_spaces = kwargs.pop("clean_up_tokenization_spaces", False)
