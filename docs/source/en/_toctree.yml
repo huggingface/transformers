@@ -263,6 +263,8 @@
         title: Audio classification
       - local: tasks/asr
         title: Automatic speech recognition
+      - local: tasks/text-to-speech
+        title: Text to speech
       title: Audio
     - sections:
       - local: tasks/image_classification
@@ -301,8 +303,6 @@
         title: Document Question Answering
       - local: tasks/visual_question_answering
         title: Visual Question Answering
-      - local: tasks/text-to-speech
-        title: Text to speech
       - local: tasks/idefics
         title: Image tasks with IDEFICS
       - local: tasks/image_text_to_text
