@@ -333,7 +333,6 @@ def convert_model(vq_model_id, llm_model_id, output_dir, hub_model_id=None, test
         prompt = processor.apply_chat_template(conversation, add_generation_prompt=True)
 
         url = "https://uploads4.wikiart.org/images/paul-klee/death-for-the-idea-1915.jpg!Large.jpg"
-
         with httpx.stream("GET", url) as response:
             image = Image.open(BytesIO(response.read()))
         inputs = processor(images=image, text=prompt, return_tensors="pt").to(model.device, torch.bfloat16)

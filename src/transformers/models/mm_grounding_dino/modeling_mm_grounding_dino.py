@@ -20,7 +20,6 @@
 import math
 import warnings
 from dataclasses import dataclass
-from itertools import starmap
 
 import torch
 import torch.nn.functional as F
@@ -789,8 +788,7 @@ class MMGroundingDinoMultiheadAttention(nn.Module):
     ) -> tuple[torch.Tensor]:
         batch_size, seq_length, _ = queries.shape
         query_layer = (
-            self
-            .query(queries)
+            self.query(queries)
             .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
             .transpose(1, 2)
         )
@@ -2229,7 +2227,7 @@ class MMGroundingDinoMLPPredictionHead(nn.Module):
         super().__init__()
         self.num_layers = num_layers
         h = [hidden_dim] * (num_layers - 1)
-        self.layers = nn.ModuleList(starmap(nn.Linear, zip([input_dim] + h, h + [output_dim])))
+        self.layers = nn.ModuleList(nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim]))
 
     def forward(self, x):
         for i, layer in enumerate(self.layers):
@@ -2405,16 +2403,18 @@ class MMGroundingDinoForObjectDetection(MMGroundingDinoPreTrainedModel):
 
         self.model = MMGroundingDinoModel(config)
 
-        self.class_embed = nn.ModuleList([
-            MMGroundingDinoContrastiveEmbedding(config) for _ in range(config.decoder_layers)
-        ])
+        self.class_embed = nn.ModuleList(
+            [MMGroundingDinoContrastiveEmbedding(config) for _ in range(config.decoder_layers)]
+        )
 
-        self.bbox_embed = nn.ModuleList([
-            MMGroundingDinoMLPPredictionHead(
-                input_dim=config.d_model, hidden_dim=config.d_model, output_dim=4, num_layers=3
-            )
-            for _ in range(config.decoder_layers)
-        ])
+        self.bbox_embed = nn.ModuleList(
+            [
+                MMGroundingDinoMLPPredictionHead(
+                    input_dim=config.d_model, hidden_dim=config.d_model, output_dim=4, num_layers=3
+                )
+                for _ in range(config.decoder_layers)
+            ]
+        )
         # Initialize weights and apply final processing
         self.model.decoder.class_embed = self.class_embed  # class embed has no weights so nothing to tie
         self.model.decoder.bbox_embed = self.bbox_embed

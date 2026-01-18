@@ -690,28 +690,16 @@ class OriginalMask2FormerCheckpointToOursConverter:
             )
 
             rename_keys.append(
-                (
-                    f"{src_prefix}.transformer_ffn_layers.{i}.linear1.weight",
-                    f"{dst_prefix}.layers.{i}.fc1.weight",
-                )
+                (f"{src_prefix}.transformer_ffn_layers.{i}.linear1.weight", f"{dst_prefix}.layers.{i}.fc1.weight")
             )
             rename_keys.append(
-                (
-                    f"{src_prefix}.transformer_ffn_layers.{i}.linear1.bias",
-                    f"{dst_prefix}.layers.{i}.fc1.bias",
-                )
+                (f"{src_prefix}.transformer_ffn_layers.{i}.linear1.bias", f"{dst_prefix}.layers.{i}.fc1.bias")
             )
             rename_keys.append(
-                (
-                    f"{src_prefix}.transformer_ffn_layers.{i}.linear2.weight",
-                    f"{dst_prefix}.layers.{i}.fc2.weight",
-                )
+                (f"{src_prefix}.transformer_ffn_layers.{i}.linear2.weight", f"{dst_prefix}.layers.{i}.fc2.weight")
             )
             rename_keys.append(
-                (
-                    f"{src_prefix}.transformer_ffn_layers.{i}.linear2.bias",
-                    f"{dst_prefix}.layers.{i}.fc2.bias",
-                )
+                (f"{src_prefix}.transformer_ffn_layers.{i}.linear2.bias", f"{dst_prefix}.layers.{i}.fc2.bias")
             )
             rename_keys.append(
                 (

@@ -16,7 +16,6 @@
 import collections.abc
 import math
 from dataclasses import dataclass
-from itertools import starmap
 
 import torch
 from torch import nn
@@ -266,20 +265,17 @@ class Swin2SRSelfAttention(nn.Module):
     ) -> tuple[torch.Tensor]:
         batch_size, dim, num_channels = hidden_states.shape
         query_layer = (
-            self
-            .query(hidden_states)
+            self.query(hidden_states)
             .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
             .transpose(1, 2)
         )
         key_layer = (
-            self
-            .key(hidden_states)
+            self.key(hidden_states)
             .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
             .transpose(1, 2)
         )
         value_layer = (
-            self
-            .value(hidden_states)
+            self.value(hidden_states)
             .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
             .transpose(1, 2)
         )
@@ -334,8 +330,7 @@ class Swin2SRSelfAttention(nn.Module):
         relative_coords_h = torch.arange(-(self.window_size[0] - 1), self.window_size[0], dtype=torch.int64).float()
         relative_coords_w = torch.arange(-(self.window_size[1] - 1), self.window_size[1], dtype=torch.int64).float()
         relative_coords_table = (
-            torch
-            .stack(meshgrid([relative_coords_h, relative_coords_w], indexing="ij"))
+            torch.stack(meshgrid([relative_coords_h, relative_coords_w], indexing="ij"))
             .permute(1, 2, 0)
             .contiguous()
             .unsqueeze(0)
@@ -466,7 +461,7 @@ class Swin2SRLayer(nn.Module):
         self.layernorm_after = nn.LayerNorm(dim, eps=config.layer_norm_eps)
 
     def _compute_window_shift(self, target_window_size, target_shift_size) -> tuple[tuple[int, int], tuple[int, int]]:
-        window_size = list(starmap(min, zip(self.input_resolution, target_window_size)))
+        window_size = [min(r, w) for r, w in zip(self.input_resolution, target_window_size)]
         shift_size = [0 if r <= w else s for r, w, s in zip(self.input_resolution, window_size, target_shift_size)]
         return window_size, shift_size
 
@@ -570,17 +565,19 @@ class Swin2SRStage(GradientCheckpointingLayer):
         super().__init__()
         self.config = config
         self.dim = dim
-        self.layers = nn.ModuleList([
-            Swin2SRLayer(
-                config=config,
-                dim=dim,
-                input_resolution=input_resolution,
-                num_heads=num_heads,
-                shift_size=0 if (i % 2 == 0) else config.window_size // 2,
-                pretrained_window_size=pretrained_window_size,
-            )
-            for i in range(depth)
-        ])
+        self.layers = nn.ModuleList(
+            [
+                Swin2SRLayer(
+                    config=config,
+                    dim=dim,
+                    input_resolution=input_resolution,
+                    num_heads=num_heads,
+                    shift_size=0 if (i % 2 == 0) else config.window_size // 2,
+                    pretrained_window_size=pretrained_window_size,
+                )
+                for i in range(depth)
+            ]
+        )
 
         if config.resi_connection == "1conv":
             self.conv = nn.Conv2d(dim, dim, 3, 1, 1)
@@ -633,18 +630,20 @@ class Swin2SREncoder(nn.Module):
         self.num_stages = len(config.depths)
         self.config = config
         dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths), device="cpu")]
-        self.stages = nn.ModuleList([
-            Swin2SRStage(
-                config=config,
-                dim=config.embed_dim,
-                input_resolution=(grid_size[0], grid_size[1]),
-                depth=config.depths[stage_idx],
-                num_heads=config.num_heads[stage_idx],
-                drop_path=dpr[sum(config.depths[:stage_idx]) : sum(config.depths[: stage_idx + 1])],
-                pretrained_window_size=0,
-            )
-            for stage_idx in range(self.num_stages)
-        ])
+        self.stages = nn.ModuleList(
+            [
+                Swin2SRStage(
+                    config=config,
+                    dim=config.embed_dim,
+                    input_resolution=(grid_size[0], grid_size[1]),
+                    depth=config.depths[stage_idx],
+                    num_heads=config.num_heads[stage_idx],
+                    drop_path=dpr[sum(config.depths[:stage_idx]) : sum(config.depths[: stage_idx + 1])],
+                    pretrained_window_size=0,
+                )
+                for stage_idx in range(self.num_stages)
+            ]
+        )
 
         self.gradient_checkpointing = False
 

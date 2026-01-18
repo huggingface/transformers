@@ -818,9 +818,9 @@ class Glm4vTextModel(Glm4vPreTrainedModel):
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        self.layers = nn.ModuleList([
-            Glm4vTextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)
-        ])
+        self.layers = nn.ModuleList(
+            [Glm4vTextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
         self.norm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = Glm4vTextRotaryEmbedding(config=config)
 
@@ -1116,8 +1116,7 @@ class Glm4vModel(Glm4vPreTrainedModel):
                 mrope_position_deltas = max_position_ids + 1 - attention_mask.shape[-1]
             else:
                 position_ids = (
-                    torch
-                    .arange(input_ids.shape[1], device=input_ids.device)
+                    torch.arange(input_ids.shape[1], device=input_ids.device)
                     .view(1, 1, -1)
                     .expand(3, input_ids.shape[0], -1)
                 )

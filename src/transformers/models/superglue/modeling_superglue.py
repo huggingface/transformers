@@ -123,14 +123,12 @@ def log_optimal_transport(scores: torch.Tensor, reg_param: torch.Tensor, iterati
     couplings = torch.cat([torch.cat([scores, source_reg_param], -1), torch.cat([target_reg_param, reg_param], -1)], 1)
 
     log_normalization = -(num_rows_tensor + num_columns_tensor).log()
-    log_source_distribution = torch.cat([
-        log_normalization.expand(num_rows),
-        num_columns_tensor.log()[None] + log_normalization,
-    ])
-    log_target_distribution = torch.cat([
-        log_normalization.expand(num_columns),
-        num_rows_tensor.log()[None] + log_normalization,
-    ])
+    log_source_distribution = torch.cat(
+        [log_normalization.expand(num_rows), num_columns_tensor.log()[None] + log_normalization]
+    )
+    log_target_distribution = torch.cat(
+        [log_normalization.expand(num_columns), num_rows_tensor.log()[None] + log_normalization]
+    )
     log_source_distribution, log_target_distribution = (
         log_source_distribution[None].expand(batch_size, -1),
         log_target_distribution[None].expand(batch_size, -1),
@@ -272,20 +270,17 @@ class SuperGlueSelfAttention(nn.Module):
 
         batch_size = hidden_states.shape[0]
         key_layer = (
-            self
-            .key(current_states)
+            self.key(current_states)
             .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
             .transpose(1, 2)
         )
         value_layer = (
-            self
-            .value(current_states)
+            self.value(current_states)
             .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
             .transpose(1, 2)
         )
         query_layer = (
-            self
-            .query(hidden_states)
+            self.query(hidden_states)
             .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
             .transpose(1, 2)
         )
@@ -428,8 +423,7 @@ class SuperGlueAttentionalGNN(nn.Module):
             encoder_attention_mask = None
             if layer_type == "cross":
                 encoder_hidden_states = (
-                    descriptors
-                    .reshape(-1, 2, num_keypoints, self.hidden_size)
+                    descriptors.reshape(-1, 2, num_keypoints, self.hidden_size)
                     .flip(1)
                     .reshape(batch_size, num_keypoints, self.hidden_size)
                 )

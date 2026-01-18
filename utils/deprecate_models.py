@@ -58,7 +58,8 @@ You can do so by running the following command: `pip install -U transformers=={l
 def insert_tip_to_model_doc(model_doc_path, tip_message):
     tip_message_lines = tip_message.split("\n")
 
-    model_doc = Path(model_doc_path).read_text()
+    with open(model_doc_path, "r") as f:
+        model_doc = f.read()
 
     # Add the tip message to the model doc page directly underneath the title
     lines = model_doc.split("\n")
@@ -71,7 +72,8 @@ def insert_tip_to_model_doc(model_doc_path, tip_message):
         else:
             new_model_lines.append(line)
 
-    Path(model_doc_path).write_text("\n".join(new_model_lines))
+    with open(model_doc_path, "w") as f:
+        f.write("\n".join(new_model_lines))
 
 
 def get_model_doc_path(model: str) -> tuple[str | None, str | None]:
@@ -107,7 +109,8 @@ def extract_model_info(model):
 
 
 def update_relative_imports(filename, model):
-    filelines = Path(filename).read_text()
+    with open(filename, "r") as f:
+        filelines = f.read()
 
     new_file_lines = []
     for line in filelines.split("\n"):
@@ -116,7 +119,8 @@ def update_relative_imports(filename, model):
         else:
             new_file_lines.append(line)
 
-    Path(filename).write_text("\n".join(new_file_lines))
+    with open(filename, "w") as f:
+        f.write("\n".join(new_file_lines))
 
 
 def remove_copied_from_statements(model):
@@ -125,7 +129,8 @@ def remove_copied_from_statements(model):
         if file == "__pycache__":
             continue
         file_path = model_path / file
-        file_lines = Path(file_path).read_text()
+        with open(file_path, "r") as f:
+            file_lines = f.read()
 
         new_file_lines = []
         for line in file_lines.split("\n"):
@@ -133,7 +138,8 @@ def remove_copied_from_statements(model):
                 continue
             new_file_lines.append(line)
 
-        Path(file_path).write_text("\n".join(new_file_lines))
+        with open(file_path, "w") as f:
+            f.write("\n".join(new_file_lines))
 
 
 def move_model_files_to_deprecated(model):
@@ -171,14 +177,16 @@ def update_main_init_file(models):
         models (List[str]): The models to mark as deprecated
     """
     filename = REPO_PATH / "src/transformers/__init__.py"
-    init_file = Path(filename).read_text()
+    with open(filename, "r") as f:
+        init_file = f.read()
 
     # 1. For each model, find all the instances of model.model_name and replace with model.deprecated.model_name
     for model in models:
         init_file = init_file.replace(f'models.{model}"', f'models.deprecated.{model}"')
         init_file = init_file.replace(f"models.{model} import", f"models.deprecated.{model} import")
 
-    Path(filename).write_text(init_file)
+    with open(filename, "w") as f:
+        f.write(init_file)
 
     # 2. Resort the imports
     sort_imports_in_all_inits(check_only=False)
@@ -194,7 +202,8 @@ def remove_model_references_from_file(filename, models, condition):
         condition (Callable): A function that takes the line and model and returns True if the line should be removed
     """
     filename = REPO_PATH / filename
-    init_file = Path(filename).read_text()
+    with open(filename, "r") as f:
+        init_file = f.read()
 
     new_file_lines = []
     for i, line in enumerate(init_file.split("\n")):
@@ -202,7 +211,8 @@ def remove_model_references_from_file(filename, models, condition):
             continue
         new_file_lines.append(line)
 
-    Path(filename).write_text("\n".join(new_file_lines))
+    with open(filename, "w") as f:
+        f.write("\n".join(new_file_lines))
 
 
 def remove_model_config_classes_from_config_check(model_config_classes):
@@ -213,7 +223,8 @@ def remove_model_config_classes_from_config_check(model_config_classes):
         model_config_classes (List[str]): The model config classes to remove e.g. ["BertConfig", "DistilBertConfig"]
     """
     filename = REPO_PATH / "utils/check_config_attributes.py"
-    check_config_attributes = Path(filename).read_text()
+    with open(filename, "r") as f:
+        check_config_attributes = f.read()
 
     # Keep track as we have to delete comment above too
     in_special_cases_to_allow = False
@@ -250,7 +261,8 @@ def remove_model_config_classes_from_config_check(model_config_classes):
 
         new_file_lines.append(line)
 
-    Path(filename).write_text("\n".join(new_file_lines))
+    with open(filename, "w") as f:
+        f.write("\n".join(new_file_lines))
 
 
 def add_models_to_deprecated_models_in_config_auto(models):
@@ -259,7 +271,8 @@ def add_models_to_deprecated_models_in_config_auto(models):
     to be in alphabetical order.
     """
     filepath = REPO_PATH / "src/transformers/models/auto/configuration_auto.py"
-    config_auto = Path(filepath).read_text()
+    with open(filepath, "r") as f:
+        config_auto = f.read()
 
     new_file_lines = []
     deprecated_models_list = []
@@ -282,7 +295,8 @@ def add_models_to_deprecated_models_in_config_auto(models):
         else:
             new_file_lines.append(line)
 
-    Path(filepath).write_text("\n".join(new_file_lines))
+    with open(filepath, "w") as f:
+        f.write("\n".join(new_file_lines))
 
 
 def deprecate_models(models):

@@ -155,12 +155,14 @@ class Sam2ImageProcessorFast(SamImageProcessorFast):
             )
 
             segmentation_maps_kwargs = kwargs.copy()
-            segmentation_maps_kwargs.update({
-                "do_normalize": False,
-                "do_rescale": False,
-                "interpolation": pil_torch_interpolation_mapping[PILImageResampling.NEAREST],
-                "size": segmentation_maps_kwargs.pop("mask_size"),
-            })
+            segmentation_maps_kwargs.update(
+                {
+                    "do_normalize": False,
+                    "do_rescale": False,
+                    "interpolation": pil_torch_interpolation_mapping[PILImageResampling.NEAREST],
+                    "size": segmentation_maps_kwargs.pop("mask_size"),
+                }
+            )
             processed_segmentation_maps = self._preprocess(
                 images=processed_segmentation_maps, **segmentation_maps_kwargs
             )

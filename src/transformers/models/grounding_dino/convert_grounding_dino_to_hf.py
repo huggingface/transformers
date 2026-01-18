@@ -70,7 +70,7 @@ def get_grounding_dino_config(model_name):
 def create_rename_keys(state_dict, config):
     rename_keys = []
     # fmt: off
-    # VISION BACKBONE - START
+    ########################################## VISION BACKBONE - START
     # patch embedding layer
     rename_keys.append(("backbone.0.patch_embed.proj.weight",
                         "model.backbone.conv_encoder.model.embeddings.patch_embeddings.projection.weight"))
@@ -113,7 +113,7 @@ def create_rename_keys(state_dict, config):
                             f"model.backbone.conv_encoder.model.encoder.layers.{layer}.blocks.{block}.output.dense.bias"))
 
         # downsample
-        if layer != len(config.backbone_config.depths) - 1:
+        if layer!=len(config.backbone_config.depths)-1:
             rename_keys.append((f"backbone.0.layers.{layer}.downsample.reduction.weight",
                                 f"model.backbone.conv_encoder.model.encoder.layers.{layer}.downsample.reduction.weight"))
             rename_keys.append((f"backbone.0.layers.{layer}.downsample.norm.weight",
@@ -123,14 +123,14 @@ def create_rename_keys(state_dict, config):
 
     for out_indice in config.backbone_config.out_indices:
         # Grounding DINO implementation of out_indices isn't aligned with transformers
-        rename_keys.append((f"backbone.0.norm{out_indice - 1}.weight",
+        rename_keys.append((f"backbone.0.norm{out_indice-1}.weight",
                         f"model.backbone.conv_encoder.model.hidden_states_norms.stage{out_indice}.weight"))
-        rename_keys.append((f"backbone.0.norm{out_indice - 1}.bias",
+        rename_keys.append((f"backbone.0.norm{out_indice-1}.bias",
                         f"model.backbone.conv_encoder.model.hidden_states_norms.stage{out_indice}.bias"))
 
-    # VISION BACKBONE - END
+    ########################################## VISION BACKBONE - END
 
-    # ENCODER - START
+    ########################################## ENCODER - START
     deformable_key_mappings = {
         'self_attn.sampling_offsets.weight': 'deformable_layer.self_attn.sampling_offsets.weight',
         'self_attn.sampling_offsets.bias': 'deformable_layer.self_attn.sampling_offsets.bias',
@@ -196,9 +196,9 @@ def create_rename_keys(state_dict, config):
         for src, dest in fusion_key_mappings.items():
             rename_keys.append((f"transformer.encoder.fusion_layers.{layer}.{src}",
                                 f"model.encoder.layers.{layer}.{dest}"))
-    # ENCODER - END
+    ########################################## ENCODER - END
 
-    # DECODER - START
+    ########################################## DECODER - START
     key_mappings_decoder = {
         'cross_attn.sampling_offsets.weight': 'encoder_attn.sampling_offsets.weight',
         'cross_attn.sampling_offsets.bias': 'encoder_attn.sampling_offsets.bias',
@@ -236,24 +236,24 @@ def create_rename_keys(state_dict, config):
         for source_name, target_name in key_mappings_decoder.items():
             rename_keys.append((source_prefix_decoder + source_name,
                                target_prefix_decoder + target_name))
-    # DECODER - END
+    ########################################## DECODER - END
 
-    # Additional - START
+    ########################################## Additional - START
     for layer_name in state_dict:
-        # TEXT BACKBONE
+        #### TEXT BACKBONE
         if "bert" in layer_name:
             rename_keys.append((layer_name, layer_name.replace("bert", "model.text_backbone")))
-        # INPUT PROJ - PROJECT OUTPUT FEATURES FROM VISION BACKBONE
+        #### INPUT PROJ - PROJECT OUTPUT FEATURES FROM VISION BACKBONE
         if "input_proj" in layer_name:
             rename_keys.append((layer_name, layer_name.replace("input_proj", "model.input_proj_vision")))
-        # INPUT PROJ - PROJECT OUTPUT FEATURES FROM TEXT BACKBONE
+        #### INPUT PROJ - PROJECT OUTPUT FEATURES FROM TEXT BACKBONE
         if "feat_map" in layer_name:
             rename_keys.append((layer_name, layer_name.replace("feat_map", "model.text_projection")))
-        # DECODER REFERENCE POINT HEAD
+        #### DECODER REFERENCE POINT HEAD
         if "transformer.decoder.ref_point_head" in layer_name:
             rename_keys.append((layer_name, layer_name.replace("transformer.decoder.ref_point_head",
                                                                "model.decoder.reference_points_head")))
-        # DECODER BBOX EMBED
+        #### DECODER BBOX EMBED
         if "transformer.decoder.bbox_embed" in layer_name:
             rename_keys.append((layer_name, layer_name.replace("transformer.decoder.bbox_embed",
                                                                "model.decoder.bbox_embed")))
@@ -268,7 +268,7 @@ def create_rename_keys(state_dict, config):
     rename_keys.append(("transformer.decoder.norm.weight", "model.decoder.layer_norm.weight"))
     rename_keys.append(("transformer.decoder.norm.bias", "model.decoder.layer_norm.bias"))
     rename_keys.append(("transformer.tgt_embed.weight", "model.query_position_embeddings.weight"))
-    # Additional - END
+    ########################################## Additional - END
 
     # fmt: on
     return rename_keys
@@ -281,7 +281,7 @@ def rename_key(dct, old, new):
 
 # we split up the matrix of each encoder layer into queries, keys and values
 def read_in_q_k_v_encoder(state_dict, config):
-    # VISION BACKBONE - START
+    ########################################## VISION BACKBONE - START
     embed_dim = config.backbone_config.embed_dim
     for layer, depth in enumerate(config.backbone_config.depths):
         hidden_size = embed_dim * 2**layer
@@ -310,7 +310,7 @@ def read_in_q_k_v_encoder(state_dict, config):
             state_dict[
                 f"model.backbone.conv_encoder.model.encoder.layers.{layer}.blocks.{block}.attention.self.value.bias"
             ] = in_proj_bias[-hidden_size:]
-    # VISION BACKBONE - END
+    ########################################## VISION BACKBONE - END
 
 
 def read_in_q_k_v_text_enhancer(state_dict, config):
@@ -453,11 +453,7 @@ def convert_grounding_dino_checkpoint(args):
         print(outputs.logits[0, :3, :3])
 
         expected_slice = torch.tensor(
-            [
-                [-4.8913, -0.1900, -0.2161],
-                [-4.9653, -0.3719, -0.3950],
-                [-5.9599, -3.3765, -3.3104],
-            ]
+            [[-4.8913, -0.1900, -0.2161], [-4.9653, -0.3719, -0.3950], [-5.9599, -3.3765, -3.3104]]
         )
 
         assert torch.allclose(outputs.logits[0, :3, :3], expected_slice, atol=1e-4)

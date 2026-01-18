@@ -161,19 +161,11 @@ def convert_glpn_checkpoint(checkpoint_path, pytorch_dump_folder_path, push_to_h
     if model_name is not None:
         if "nyu" in model_name:
             expected_slice = torch.tensor(
-                [
-                    [4.4147, 4.0873, 4.0673],
-                    [3.7890, 3.2881, 3.1525],
-                    [3.7674, 3.5423, 3.4913],
-                ]
+                [[4.4147, 4.0873, 4.0673], [3.7890, 3.2881, 3.1525], [3.7674, 3.5423, 3.4913]]
             )
         elif "kitti" in model_name:
             expected_slice = torch.tensor(
-                [
-                    [3.4291, 2.7865, 2.5151],
-                    [3.2841, 2.7021, 2.3502],
-                    [3.1147, 2.4625, 2.2481],
-                ]
+                [[3.4291, 2.7865, 2.5151], [3.2841, 2.7021, 2.3502], [3.1147, 2.4625, 2.2481]]
             )
         else:
             raise ValueError(f"Unknown model name: {model_name}")

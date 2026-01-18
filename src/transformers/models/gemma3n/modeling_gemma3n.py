@@ -199,24 +199,28 @@ class Gemma3nAudioRelativePositionEmbedding(nn.Module):
 
         # Reshape for slicing (emulating JAX's behavior)
         # [B, N, U, W * (C+1)]
-        term_bd_reshaped = term_bd_padded.reshape((
-            batch_size,
-            num_heads,
-            num_query_blocks,
-            query_block_size * (key_context_size + 1),
-        ))
+        term_bd_reshaped = term_bd_padded.reshape(
+            (
+                batch_size,
+                num_heads,
+                num_query_blocks,
+                query_block_size * (key_context_size + 1),
+            )
+        )
 
         # Slice to effective [B, N, U, W * C]
         term_bd_sliced = term_bd_reshaped[:, :, :, : query_block_size * key_context_size]
 
         # Reshape back to [B, N, U, W, C]
-        term_bd_shifted = term_bd_sliced.reshape((
-            batch_size,
-            num_heads,
-            num_query_blocks,
-            query_block_size,
-            key_context_size,
-        ))
+        term_bd_shifted = term_bd_sliced.reshape(
+            (
+                batch_size,
+                num_heads,
+                num_query_blocks,
+                query_block_size,
+                key_context_size,
+            )
+        )
         return term_bd_shifted
 
     def forward(self, queries: torch.Tensor, keys: torch.Tensor) -> torch.Tensor:
@@ -513,12 +517,14 @@ class Gemma3nAudioAttention(nn.Module):
         v_bun = value_blocks.permute(0, 1, 3, 2, 4).reshape(-1, c_dim, h_dim)
         result_bmm = torch.bmm(prob_bun, v_bun)
         context_vectors = result_bmm.reshape(b_dim, u_dim, n_dim, w_dim, h_dim).permute(0, 1, 3, 2, 4)
-        context_vectors = context_vectors.reshape((
-            batch_size,
-            num_query_blocks * self.chunk_size,
-            self.num_heads,
-            self.head_dim,
-        ))
+        context_vectors = context_vectors.reshape(
+            (
+                batch_size,
+                num_query_blocks * self.chunk_size,
+                self.num_heads,
+                self.head_dim,
+            )
+        )
         context_vectors = context_vectors[:, :q_time]
 
         return context_vectors
@@ -913,9 +919,9 @@ class Gemma3nAudioEncoder(PreTrainedModel):
         self.config = config
 
         self.subsample_conv_projection = Gemma3nAudioSubSampleConvProjection(config)
-        self.conformer = nn.ModuleList([
-            Gemma3nAudioConformerBlock(config) for _ in range(config.conf_num_hidden_layers)
-        ])
+        self.conformer = nn.ModuleList(
+            [Gemma3nAudioConformerBlock(config) for _ in range(config.conf_num_hidden_layers)]
+        )
         self.post_init()
 
     def forward(
@@ -1088,8 +1094,7 @@ class Gemma3nTextAltUp(nn.Module):
 
         # Project and then transpose all 2D matrices contained so that mulmat gives the correct result
         all_coefs: torch.Tensor = (
-            self
-            .prediction_coefs(modalities)
+            self.prediction_coefs(modalities)
             .reshape(*modalities.shape[:-1], self.config.altup_num_inputs, self.config.altup_num_inputs)
             .permute(0, 1, 3, 2)
         )
@@ -1570,9 +1575,9 @@ class Gemma3nTextModel(Gemma3nPreTrainedModel):
         self.embed_tokens = Gemma3nTextScaledWordEmbedding(
             config.vocab_size, config.hidden_size, self.padding_idx, embed_scale=self.config.hidden_size**0.5
         )
-        self.layers = nn.ModuleList([
-            Gemma3nTextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)
-        ])
+        self.layers = nn.ModuleList(
+            [Gemma3nTextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
 
         self.norm = Gemma3nRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = Gemma3nRotaryEmbedding(config)
@@ -1596,13 +1601,13 @@ class Gemma3nTextModel(Gemma3nPreTrainedModel):
 
         self.per_layer_projection_norm = Gemma3nRMSNorm(config.hidden_size_per_layer_input, eps=config.rms_norm_eps)
 
-        self.altup_projections = nn.ModuleList([
-            nn.Linear(self.hidden_size, self.hidden_size, bias=False) for _ in range(1, self.config.altup_num_inputs)
-        ])
+        self.altup_projections = nn.ModuleList(
+            [nn.Linear(self.hidden_size, self.hidden_size, bias=False) for _ in range(1, self.config.altup_num_inputs)]
+        )
 
-        self.altup_unembed_projections = nn.ModuleList([
-            nn.Linear(self.hidden_size, self.hidden_size, bias=False) for _ in range(1, self.config.altup_num_inputs)
-        ])
+        self.altup_unembed_projections = nn.ModuleList(
+            [nn.Linear(self.hidden_size, self.hidden_size, bias=False) for _ in range(1, self.config.altup_num_inputs)]
+        )
 
         self.register_buffer("per_layer_projection_scale", torch.tensor(self.hidden_size**-0.5), persistent=False)
         self.register_buffer("per_layer_input_scale", torch.rsqrt(torch.tensor(2.0)), persistent=False)

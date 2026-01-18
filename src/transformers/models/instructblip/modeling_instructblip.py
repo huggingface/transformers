@@ -684,9 +684,9 @@ class InstructBlipQFormerEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList([
-            InstructBlipQFormerLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)
-        ])
+        self.layer = nn.ModuleList(
+            [InstructBlipQFormerLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
         self.gradient_checkpointing = False
 
     @can_return_tuple

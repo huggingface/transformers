@@ -604,9 +604,9 @@ class SamPromptEncoder(nn.Module):
         self.image_embedding_size = (config.image_embedding_size, config.image_embedding_size)
         self.input_image_size = config.image_size
 
-        self.point_embed = nn.ModuleList([
-            nn.Embedding(1, config.hidden_size) for i in range(config.num_point_embeddings)
-        ])
+        self.point_embed = nn.ModuleList(
+            [nn.Embedding(1, config.hidden_size) for i in range(config.num_point_embeddings)]
+        )
         self.hidden_size = config.hidden_size
         self.not_a_point_embed = nn.Embedding(1, config.hidden_size)
 
@@ -804,8 +804,7 @@ class SamVisionAttention(nn.Module):
         batch_size, height, width, _ = hidden_states.shape
         # qkv with shape (3, batch_size, nHead, height * width, channel)
         qkv = (
-            self
-            .qkv(hidden_states)
+            self.qkv(hidden_states)
             .reshape(batch_size, height * width, 3, self.num_attention_heads, -1)
             .permute(2, 0, 3, 1, 4)
         )
@@ -850,8 +849,7 @@ class SamVisionSdpaAttention(SamVisionAttention):
         batch_size, height, width, _ = hidden_states.shape
         # qkv with shape (3, B, nHead, H * W, C)
         qkv = (
-            self
-            .qkv(hidden_states)
+            self.qkv(hidden_states)
             .reshape(batch_size, height * width, 3, self.num_attention_heads, -1)
             .permute(2, 0, 3, 1, 4)
         )
@@ -875,8 +873,7 @@ class SamVisionSdpaAttention(SamVisionAttention):
         attn_output = torch.nn.functional.scaled_dot_product_attention(query, key, value, attn_mask=attn_bias)
 
         attn_output = (
-            attn_output
-            .view(batch_size, self.num_attention_heads, height, width, -1)
+            attn_output.view(batch_size, self.num_attention_heads, height, width, -1)
             .permute(0, 2, 3, 1, 4)
             .reshape(batch_size, height, width, -1)
         )

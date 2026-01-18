@@ -46,22 +46,13 @@ def create_rename_keys(config):
         for j in range(config.depths[i]):
             # Rename blocks' parameters
             rename_keys.append(
-                (
-                    f"block{i + 1}.{j}.attn.q.weight",
-                    f"pvt.encoder.block.{i}.{j}.attention.self.query.weight",
-                )
+                (f"block{i + 1}.{j}.attn.q.weight", f"pvt.encoder.block.{i}.{j}.attention.self.query.weight")
             )
             rename_keys.append(
-                (
-                    f"block{i + 1}.{j}.attn.q.bias",
-                    f"pvt.encoder.block.{i}.{j}.attention.self.query.bias",
-                )
+                (f"block{i + 1}.{j}.attn.q.bias", f"pvt.encoder.block.{i}.{j}.attention.self.query.bias")
             )
             rename_keys.append(
-                (
-                    f"block{i + 1}.{j}.attn.kv.weight",
-                    f"pvt.encoder.block.{i}.{j}.attention.self.kv.weight",
-                )
+                (f"block{i + 1}.{j}.attn.kv.weight", f"pvt.encoder.block.{i}.{j}.attention.self.kv.weight")
             )
             rename_keys.append((f"block{i + 1}.{j}.attn.kv.bias", f"pvt.encoder.block.{i}.{j}.attention.self.kv.bias"))
 
@@ -73,10 +64,7 @@ def create_rename_keys(config):
                     )
                 )
                 rename_keys.append(
-                    (
-                        f"block{i + 1}.{j}.attn.norm.bias",
-                        f"pvt.encoder.block.{i}.{j}.attention.self.layer_norm.bias",
-                    )
+                    (f"block{i + 1}.{j}.attn.norm.bias", f"pvt.encoder.block.{i}.{j}.attention.self.layer_norm.bias")
                 )
                 rename_keys.append(
                     (
@@ -92,16 +80,10 @@ def create_rename_keys(config):
                 )
 
             rename_keys.append(
-                (
-                    f"block{i + 1}.{j}.attn.proj.weight",
-                    f"pvt.encoder.block.{i}.{j}.attention.output.dense.weight",
-                )
+                (f"block{i + 1}.{j}.attn.proj.weight", f"pvt.encoder.block.{i}.{j}.attention.output.dense.weight")
             )
             rename_keys.append(
-                (
-                    f"block{i + 1}.{j}.attn.proj.bias",
-                    f"pvt.encoder.block.{i}.{j}.attention.output.dense.bias",
-                )
+                (f"block{i + 1}.{j}.attn.proj.bias", f"pvt.encoder.block.{i}.{j}.attention.output.dense.bias")
             )
 
             rename_keys.append((f"block{i + 1}.{j}.norm1.weight", f"pvt.encoder.block.{i}.{j}.layer_norm_1.weight"))

@@ -18,7 +18,6 @@ import functools
 import json
 import operator
 import os
-import pathlib
 import re
 import sys
 import time
@@ -485,7 +484,8 @@ class Message:
             to_truncate=False,
         )
         file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/model_failures_report.txt")
-        pathlib.Path(file_path).write_text(model_failures_report, encoding="UTF-8")
+        with open(file_path, "w", encoding="UTF-8") as fp:
+            fp.write(model_failures_report)
 
         module_failures_report = prepare_reports(
             title=f"The following {label} modules had failures",
@@ -494,7 +494,8 @@ class Message:
             to_truncate=False,
         )
         file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/module_failures_report.txt")
-        pathlib.Path(file_path).write_text(module_failures_report, encoding="UTF-8")
+        with open(file_path, "w", encoding="UTF-8") as fp:
+            fp.write(module_failures_report)
 
         if self.prev_ci_artifacts is not None:
             # if the last run produces artifact named `ci_results_{job_name}`
@@ -514,7 +515,8 @@ class Message:
                         to_truncate=False,
                     )
                     file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/changed_model_failures_report.txt")
-                    pathlib.Path(file_path).write_text(diff_report, encoding="UTF-8")
+                    with open(file_path, "w", encoding="UTF-8") as fp:
+                        fp.write(diff_report)
 
                     # To be sent to Slack channels
                     diff_report = prepare_reports(
@@ -600,7 +602,8 @@ class Message:
 
                 failure_text = extra_blocks[-1]["text"]["text"]
                 file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/{filename}.txt")
-                pathlib.Path(file_path).write_text(failure_text, encoding="UTF-8")
+                with open(file_path, "w", encoding="UTF-8") as fp:
+                    fp.write(failure_text)
 
                 # upload results to Hub dataset
                 file_path = os.path.join(os.getcwd(), f"ci_results_{job_name}/{filename}.txt")
@@ -781,7 +784,7 @@ class Message:
         MAX_ERROR_TEXT = 3000 - len("[Truncated]")
 
         failure_text = ""
-        for error in failures:
+        for idx, error in enumerate(failures):
             new_text = failure_text + f"*{error['line']}*\n_{error['trace']}_\n\n"
             if len(new_text) > MAX_ERROR_TEXT:
                 # `failure_text` here has length <= 3000
@@ -883,10 +886,7 @@ class Message:
         if failure_text:
             if with_header:
                 blocks.append(
-                    {
-                        "type": "header",
-                        "text": {"type": "plain_text", "text": "New failures", "emoji": True},
-                    }
+                    {"type": "header", "text": {"type": "plain_text", "text": "New failures", "emoji": True}}
                 )
             else:
                 failure_text = f"{failure_text}"
@@ -1269,10 +1269,7 @@ if __name__ == "__main__":
 
                         trace = pop_default(stacktraces, 0, "Cannot retrieve error message.")
                         matrix_job_results[matrix_name]["failures"][artifact_gpu].append(
-                            {
-                                "line": line,
-                                "trace": trace,
-                            }
+                            {"line": line, "trace": trace}
                         )
 
                         # TODO: How to deal wit this
@@ -1590,7 +1587,8 @@ if __name__ == "__main__":
 
             report = compare_job_sets(prev_artifacts_set, current_artifacts_set)
 
-            pathlib.Path(f"ci_results_{job_name}/test_results_diff.json").write_text(report)
+            with open(f"ci_results_{job_name}/test_results_diff.json", "w") as fp:
+                fp.write(report)
 
             # upload
             commit_info = api.upload_file(

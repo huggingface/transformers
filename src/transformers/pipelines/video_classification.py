@@ -34,7 +34,6 @@ if is_av_available():
 if is_torch_available():
     from ..models.auto.modeling_auto import MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES
 
-
 logger = logging.get_logger(__name__)
 
 

@@ -18,7 +18,6 @@ import warnings
 from collections import OrderedDict
 from dataclasses import dataclass
 from functools import lru_cache
-from itertools import starmap
 
 import torch
 import torch.nn.functional as F
@@ -276,9 +275,9 @@ class OmDetTurboVisionBackbone(nn.Module):
         super().__init__()
         self.apply_layernorm_after_vision_backbone = config.apply_layernorm_after_vision_backbone
         self.vision_backbone = load_backbone(config)
-        self.layer_norms = nn.ModuleList([
-            nn.LayerNorm(in_channel_dim, eps=config.layer_norm_eps) for in_channel_dim in config.encoder_in_channels
-        ])
+        self.layer_norms = nn.ModuleList(
+            [nn.LayerNorm(in_channel_dim, eps=config.layer_norm_eps) for in_channel_dim in config.encoder_in_channels]
+        )
 
     def forward(self, pixel_values):
         outputs = self.vision_backbone(pixel_values).feature_maps
@@ -504,8 +503,7 @@ class OmDetTurboMultiheadAttention(nn.Module):
     ) -> tuple[torch.Tensor]:
         batch_size, seq_length, _ = queries.shape
         query_layer = (
-            self
-            .query(queries)
+            self.query(queries)
             .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
             .transpose(1, 2)
         )
@@ -836,7 +834,9 @@ class OmDetTurboMLP(nn.Module):
         self.num_layers = num_layers
         hidden_layers_dims = [hidden_dim] * (num_layers - 1)
         layers_dims = [input_dim] + hidden_layers_dims + [output_dim]
-        self.layers = nn.ModuleList(list(starmap(nn.Linear, zip(layers_dims[:-1], layers_dims[1:]))))
+        self.layers = nn.ModuleList(
+            [nn.Linear(in_dim, out_dim) for in_dim, out_dim in zip(layers_dims[:-1], layers_dims[1:])]
+        )
 
     def forward(self, x):
         for i, layer in enumerate(self.layers):
@@ -1176,9 +1176,9 @@ class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
             self.task_project = nn.Linear(config.class_embed_dim, hidden_dim)
 
         # Transformer module
-        self.layers = nn.ModuleList([
-            OmDetTurboDeformableTransformerDecoderLayer(config) for _ in range(config.decoder_num_layers)
-        ])
+        self.layers = nn.ModuleList(
+            [OmDetTurboDeformableTransformerDecoderLayer(config) for _ in range(config.decoder_num_layers)]
+        )
         self.decoder_num_layers = config.decoder_num_layers
         # decoder embedding
         if self.learn_initial_query:
@@ -1195,12 +1195,12 @@ class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
         self.encoder_bbox_head = OmDetTurboMLP(input_dim=hidden_dim, hidden_dim=hidden_dim, output_dim=4, num_layers=3)
 
         # decoder head
-        self.decoder_class_head = nn.ModuleList([
-            nn.Linear(config.class_embed_dim, hidden_dim) for _ in range(config.decoder_num_layers)
-        ])
-        self.decoder_bbox_head = nn.ModuleList([
-            OmDetTurboMLP(hidden_dim, hidden_dim, 4, num_layers=3) for _ in range(config.decoder_num_layers)
-        ])
+        self.decoder_class_head = nn.ModuleList(
+            [nn.Linear(config.class_embed_dim, hidden_dim) for _ in range(config.decoder_num_layers)]
+        )
+        self.decoder_bbox_head = nn.ModuleList(
+            [OmDetTurboMLP(hidden_dim, hidden_dim, 4, num_layers=3) for _ in range(config.decoder_num_layers)]
+        )
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1284,8 +1284,7 @@ class OmDetTurboDecoder(OmDetTurboPreTrainedModel):
         topk_ind = torch.topk(encoder_class_similarity.max(-1).values, self.num_queries, dim=1).indices.view(-1)
         # (batch_size, num_queries)
         batch_ind = (
-            torch
-            .arange(end=batch_size, dtype=topk_ind.dtype, device=topk_ind.device)
+            torch.arange(end=batch_size, dtype=topk_ind.dtype, device=topk_ind.device)
             .unsqueeze(-1)
             .repeat(1, self.num_queries)
             .view(-1)

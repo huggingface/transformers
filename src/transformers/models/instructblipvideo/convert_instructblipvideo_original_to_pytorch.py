@@ -230,11 +230,7 @@ def convert_blip2_checkpoint(model_name, pytorch_dump_folder_path=None, push_to_
             logits = hf_model(**inputs).logits
         else:
             original_logits = original_model(
-                {
-                    "image": original_pixel_values,
-                    "text_input": [prompt],
-                    "text_output": ["\n"],
-                }
+                {"image": original_pixel_values, "text_input": [prompt], "text_output": ["\n"]}
             ).logits
             label_input_ids = tokenizer("\n", return_tensors="pt").input_ids.to(hf_model_device)
             labels = label_input_ids.masked_fill(label_input_ids == tokenizer.pad_token_id, -100)

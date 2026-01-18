@@ -16,7 +16,6 @@
 import argparse
 import json
 import os
-import pathlib
 import re
 import subprocess
 
@@ -73,7 +72,8 @@ print(f"pytest runs successfully.")
 exit(0)
 """
 
-    pathlib.Path("target_script.py").write_text(script.strip())
+    with open("target_script.py", "w") as fp:
+        fp.write(script.strip())
 
 
 def is_bad_commit(target_test, commit):
@@ -154,7 +154,8 @@ git bisect start --first-parent {start_commit} {end_commit}
 git bisect run python3 target_script.py
 """
 
-    pathlib.Path("run_git_bisect.sh").write_text(bash.strip())
+    with open("run_git_bisect.sh", "w") as fp:
+        fp.write(bash.strip())
 
     result = subprocess.run(
         ["bash", "run_git_bisect.sh"],
@@ -238,7 +239,8 @@ if __name__ == "__main__":
         commit, status = find_bad_commit(
             target_test=args.test, start_commit=args.start_commit, end_commit=args.end_commit
         )
-        pathlib.Path(args.output_file).write_text(f"{args.test}\n{commit}\n{status}", encoding="UTF-8")
+        with open(args.output_file, "w", encoding="UTF-8") as fp:
+            fp.write(f"{args.test}\n{commit}\n{status}")
     elif os.path.isfile(args.file):
         with open(args.file, "r", encoding="UTF-8") as fp:
             reports = json.load(fp)

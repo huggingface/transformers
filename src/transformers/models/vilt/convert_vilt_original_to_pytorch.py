@@ -48,24 +48,15 @@ def create_rename_keys(config, vqa_model=False, nlvr_model=False, irtr_model=Fal
         rename_keys.append((f"transformer.blocks.{i}.norm1.weight", f"vilt.encoder.layer.{i}.layernorm_before.weight"))
         rename_keys.append((f"transformer.blocks.{i}.norm1.bias", f"vilt.encoder.layer.{i}.layernorm_before.bias"))
         rename_keys.append(
-            (
-                f"transformer.blocks.{i}.attn.proj.weight",
-                f"vilt.encoder.layer.{i}.attention.output.dense.weight",
-            )
+            (f"transformer.blocks.{i}.attn.proj.weight", f"vilt.encoder.layer.{i}.attention.output.dense.weight")
         )
         rename_keys.append(
-            (
-                f"transformer.blocks.{i}.attn.proj.bias",
-                f"vilt.encoder.layer.{i}.attention.output.dense.bias",
-            )
+            (f"transformer.blocks.{i}.attn.proj.bias", f"vilt.encoder.layer.{i}.attention.output.dense.bias")
         )
         rename_keys.append((f"transformer.blocks.{i}.norm2.weight", f"vilt.encoder.layer.{i}.layernorm_after.weight"))
         rename_keys.append((f"transformer.blocks.{i}.norm2.bias", f"vilt.encoder.layer.{i}.layernorm_after.bias"))
         rename_keys.append(
-            (
-                f"transformer.blocks.{i}.mlp.fc1.weight",
-                f"vilt.encoder.layer.{i}.intermediate.dense.weight",
-            )
+            (f"transformer.blocks.{i}.mlp.fc1.weight", f"vilt.encoder.layer.{i}.intermediate.dense.weight")
         )
         rename_keys.append((f"transformer.blocks.{i}.mlp.fc1.bias", f"vilt.encoder.layer.{i}.intermediate.dense.bias"))
         rename_keys.append((f"transformer.blocks.{i}.mlp.fc2.weight", f"vilt.encoder.layer.{i}.output.dense.weight"))

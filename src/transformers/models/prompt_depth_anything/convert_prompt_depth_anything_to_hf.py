@@ -115,30 +115,14 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"depth_head.scratch.layer(\d+)_rn.weight": lambda m: f"neck.convs.{int(m.group(1)) - 1}.weight",
     r"depth_head.resize_layers.(\d+).(weight|bias)": r"neck.reassemble_stage.layers.\1.resize.\2",
     # Refinenet (with reversed indices)
-    r"depth_head.scratch.refinenet(\d+).out_conv.(weight|bias)": lambda m: (
-        f"neck.fusion_stage.layers.{4 - int(m.group(1))}.projection.{m.group(2)}"
-    ),
-    r"depth_head.scratch.refinenet(\d+).resConfUnit1.conv1.(weight|bias)": lambda m: (
-        f"neck.fusion_stage.layers.{4 - int(m.group(1))}.residual_layer1.convolution1.{m.group(2)}"
-    ),
-    r"depth_head.scratch.refinenet(\d+).resConfUnit1.conv2.(weight|bias)": lambda m: (
-        f"neck.fusion_stage.layers.{4 - int(m.group(1))}.residual_layer1.convolution2.{m.group(2)}"
-    ),
-    r"depth_head.scratch.refinenet(\d+).resConfUnit2.conv1.(weight|bias)": lambda m: (
-        f"neck.fusion_stage.layers.{4 - int(m.group(1))}.residual_layer2.convolution1.{m.group(2)}"
-    ),
-    r"depth_head.scratch.refinenet(\d+).resConfUnit2.conv2.(weight|bias)": lambda m: (
-        f"neck.fusion_stage.layers.{4 - int(m.group(1))}.residual_layer2.convolution2.{m.group(2)}"
-    ),
-    r"depth_head.scratch.refinenet(\d+).resConfUnit_depth.0.(weight|bias)": lambda m: (
-        f"neck.fusion_stage.layers.{4 - int(m.group(1))}.prompt_depth_layer.convolution1.{m.group(2)}"
-    ),
-    r"depth_head.scratch.refinenet(\d+).resConfUnit_depth.2.(weight|bias)": lambda m: (
-        f"neck.fusion_stage.layers.{4 - int(m.group(1))}.prompt_depth_layer.convolution2.{m.group(2)}"
-    ),
-    r"depth_head.scratch.refinenet(\d+).resConfUnit_depth.4.(weight|bias)": lambda m: (
-        f"neck.fusion_stage.layers.{4 - int(m.group(1))}.prompt_depth_layer.convolution3.{m.group(2)}"
-    ),
+    r"depth_head.scratch.refinenet(\d+).out_conv.(weight|bias)": lambda m: f"neck.fusion_stage.layers.{4 - int(m.group(1))}.projection.{m.group(2)}",
+    r"depth_head.scratch.refinenet(\d+).resConfUnit1.conv1.(weight|bias)": lambda m: f"neck.fusion_stage.layers.{4 - int(m.group(1))}.residual_layer1.convolution1.{m.group(2)}",
+    r"depth_head.scratch.refinenet(\d+).resConfUnit1.conv2.(weight|bias)": lambda m: f"neck.fusion_stage.layers.{4 - int(m.group(1))}.residual_layer1.convolution2.{m.group(2)}",
+    r"depth_head.scratch.refinenet(\d+).resConfUnit2.conv1.(weight|bias)": lambda m: f"neck.fusion_stage.layers.{4 - int(m.group(1))}.residual_layer2.convolution1.{m.group(2)}",
+    r"depth_head.scratch.refinenet(\d+).resConfUnit2.conv2.(weight|bias)": lambda m: f"neck.fusion_stage.layers.{4 - int(m.group(1))}.residual_layer2.convolution2.{m.group(2)}",
+    r"depth_head.scratch.refinenet(\d+).resConfUnit_depth.0.(weight|bias)": lambda m: f"neck.fusion_stage.layers.{4 - int(m.group(1))}.prompt_depth_layer.convolution1.{m.group(2)}",
+    r"depth_head.scratch.refinenet(\d+).resConfUnit_depth.2.(weight|bias)": lambda m: f"neck.fusion_stage.layers.{4 - int(m.group(1))}.prompt_depth_layer.convolution2.{m.group(2)}",
+    r"depth_head.scratch.refinenet(\d+).resConfUnit_depth.4.(weight|bias)": lambda m: f"neck.fusion_stage.layers.{4 - int(m.group(1))}.prompt_depth_layer.convolution3.{m.group(2)}",
     # Head
     r"depth_head.scratch.output_conv1.(weight|bias)": r"head.conv1.\1",
     r"depth_head.scratch.output_conv2.0.(weight|bias)": r"head.conv2.\1",
@@ -243,27 +227,15 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
         expected_shape = torch.Size([1, 756, 1008])
         if model_name == "prompt-depth-anything-vits":
             expected_slice = torch.tensor(
-                [
-                    [3.0100, 3.0016, 3.0219],
-                    [3.0046, 3.0137, 3.0275],
-                    [3.0083, 3.0191, 3.0292],
-                ]
+                [[3.0100, 3.0016, 3.0219], [3.0046, 3.0137, 3.0275], [3.0083, 3.0191, 3.0292]]
             )
         elif model_name == "prompt-depth-anything-vits-transparent":
             expected_slice = torch.tensor(
-                [
-                    [3.0058, 3.0397, 3.0460],
-                    [3.0314, 3.0393, 3.0504],
-                    [3.0326, 3.0465, 3.0545],
-                ]
+                [[3.0058, 3.0397, 3.0460], [3.0314, 3.0393, 3.0504], [3.0326, 3.0465, 3.0545]]
             )
         elif model_name == "prompt-depth-anything-vitl":
             expected_slice = torch.tensor(
-                [
-                    [3.1336, 3.1358, 3.1363],
-                    [3.1368, 3.1267, 3.1414],
-                    [3.1397, 3.1385, 3.1448],
-                ]
+                [[3.1336, 3.1358, 3.1363], [3.1368, 3.1267, 3.1414], [3.1397, 3.1385, 3.1448]]
             )
         else:
             raise ValueError("Not supported")

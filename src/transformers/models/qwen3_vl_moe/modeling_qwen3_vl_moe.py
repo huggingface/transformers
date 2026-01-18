@@ -609,13 +609,15 @@ class Qwen3VLMoeVisionModel(Qwen3VLMoePreTrainedModel):
         )
 
         self.deepstack_visual_indexes = config.deepstack_visual_indexes
-        self.deepstack_merger_list = nn.ModuleList([
-            Qwen3VLMoeVisionPatchMerger(
-                config=config,
-                use_postshuffle_norm=True,
-            )
-            for _ in range(len(config.deepstack_visual_indexes))
-        ])
+        self.deepstack_merger_list = nn.ModuleList(
+            [
+                Qwen3VLMoeVisionPatchMerger(
+                    config=config,
+                    use_postshuffle_norm=True,
+                )
+                for _ in range(len(config.deepstack_visual_indexes))
+            ]
+        )
 
         self.gradient_checkpointing = False
 
@@ -712,8 +714,7 @@ class Qwen3VLMoeVisionModel(Qwen3VLMoePreTrainedModel):
         for pos_embed, t, h, w in zip(patch_pos_embeds, grid_ts, grid_hs, grid_ws):
             pos_embed = pos_embed.repeat(t, 1)
             pos_embed = (
-                pos_embed
-                .view(t, h // merge_size, merge_size, w // merge_size, merge_size, -1)
+                pos_embed.view(t, h // merge_size, merge_size, w // merge_size, merge_size, -1)
                 .permute(0, 1, 3, 2, 4, 5)
                 .flatten(0, 4)
             )
@@ -879,9 +880,9 @@ class Qwen3VLMoeTextModel(Qwen3VLMoePreTrainedModel):
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        self.layers = nn.ModuleList([
-            Qwen3VLMoeTextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)
-        ])
+        self.layers = nn.ModuleList(
+            [Qwen3VLMoeTextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
         self.norm = Qwen3VLMoeTextRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = Qwen3VLMoeTextRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
@@ -1179,8 +1180,7 @@ class Qwen3VLMoeModel(Qwen3VLMoePreTrainedModel):
                 mrope_position_deltas = max_position_ids + 1 - attention_mask.shape[-1]
             else:
                 position_ids = (
-                    torch
-                    .arange(input_ids.shape[1], device=input_ids.device)
+                    torch.arange(input_ids.shape[1], device=input_ids.device)
                     .view(1, 1, -1)
                     .expand(3, input_ids.shape[0], -1)
                 )

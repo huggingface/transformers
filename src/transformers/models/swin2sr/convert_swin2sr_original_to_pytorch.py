@@ -200,48 +200,28 @@ def convert_swin2sr_checkpoint(checkpoint_url, pytorch_dump_folder_path, push_to
     if "Swin2SR_ClassicalSR_X2_64" in checkpoint_url:
         expected_shape = torch.Size([1, 3, 512, 512])
         expected_slice = torch.tensor(
-            [
-                [-0.7087, -0.7138, -0.6721],
-                [-0.8340, -0.8095, -0.7298],
-                [-0.9149, -0.8414, -0.7940],
-            ]
+            [[-0.7087, -0.7138, -0.6721], [-0.8340, -0.8095, -0.7298], [-0.9149, -0.8414, -0.7940]]
         )
     elif "Swin2SR_ClassicalSR_X4_64" in checkpoint_url:
         expected_shape = torch.Size([1, 3, 1024, 1024])
         expected_slice = torch.tensor(
-            [
-                [-0.7775, -0.8105, -0.8933],
-                [-0.7764, -0.8356, -0.9225],
-                [-0.7976, -0.8686, -0.9579],
-            ]
+            [[-0.7775, -0.8105, -0.8933], [-0.7764, -0.8356, -0.9225], [-0.7976, -0.8686, -0.9579]]
         )
     elif "Swin2SR_CompressedSR_X4_48" in checkpoint_url:
         # TODO values didn't match exactly here
         expected_shape = torch.Size([1, 3, 1024, 1024])
         expected_slice = torch.tensor(
-            [
-                [-0.8035, -0.7504, -0.7491],
-                [-0.8538, -0.8124, -0.7782],
-                [-0.8804, -0.8651, -0.8493],
-            ]
+            [[-0.8035, -0.7504, -0.7491], [-0.8538, -0.8124, -0.7782], [-0.8804, -0.8651, -0.8493]]
         )
     elif "Swin2SR_Lightweight_X2_64" in checkpoint_url:
         expected_shape = torch.Size([1, 3, 512, 512])
         expected_slice = torch.tensor(
-            [
-                [-0.7669, -0.8662, -0.8767],
-                [-0.8810, -0.9962, -0.9820],
-                [-0.9340, -1.0322, -1.1149],
-            ]
+            [[-0.7669, -0.8662, -0.8767], [-0.8810, -0.9962, -0.9820], [-0.9340, -1.0322, -1.1149]]
         )
     elif "Swin2SR_RealworldSR_X4_64_BSRGAN_PSNR" in checkpoint_url:
         expected_shape = torch.Size([1, 3, 1024, 1024])
         expected_slice = torch.tensor(
-            [
-                [-0.5238, -0.5557, -0.6321],
-                [-0.6016, -0.5903, -0.6391],
-                [-0.6244, -0.6334, -0.6889],
-            ]
+            [[-0.5238, -0.5557, -0.6321], [-0.6016, -0.5903, -0.6391], [-0.6244, -0.6334, -0.6889]]
         )
 
     assert outputs.reconstruction.shape == expected_shape, (

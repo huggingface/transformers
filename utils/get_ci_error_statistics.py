@@ -2,7 +2,6 @@ import argparse
 import json
 import math
 import os
-import pathlib
 import time
 import traceback
 import zipfile
@@ -106,7 +105,8 @@ def download_artifact(artifact_name, artifact_url, output_dir, token):
     download_url = result.headers["Location"]
     response = httpx.get(download_url, follow_redirects=True)
     file_path = os.path.join(output_dir, f"{artifact_name}.zip")
-    pathlib.Path(file_path).write_bytes(response.content)
+    with open(file_path, "wb") as fp:
+        fp.write(response.content)
 
 
 def get_errors_from_single_artifact(artifact_zip_path, job_links=None):
@@ -299,5 +299,7 @@ if __name__ == "__main__":
     s1 = make_github_table(reduced_by_error)
     s2 = make_github_table_per_model(reduced_by_model)
 
-    pathlib.Path(os.path.join(args.output_dir, "reduced_by_error.txt")).write_text(s1, encoding="UTF-8")
-    pathlib.Path(os.path.join(args.output_dir, "reduced_by_model.txt")).write_text(s2, encoding="UTF-8")
+    with open(os.path.join(args.output_dir, "reduced_by_error.txt"), "w", encoding="UTF-8") as fp:
+        fp.write(s1)
+    with open(os.path.join(args.output_dir, "reduced_by_model.txt"), "w", encoding="UTF-8") as fp:
+        fp.write(s2)

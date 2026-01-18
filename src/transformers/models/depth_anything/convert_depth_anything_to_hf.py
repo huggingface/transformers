@@ -118,7 +118,7 @@ def create_rename_keys(config):
             rename_keys.append((f"depth_head.resize_layers.{i}.bias", f"neck.reassemble_stage.layers.{i}.resize.bias"))
 
     # refinenet (tricky here)
-    mapping = {1: 3, 2: 2, 3: 1, 4: 0}
+    mapping = {1:3, 2:2, 3:1, 4:0}
 
     for i in range(1, 5):
         j = mapping[i]
@@ -135,7 +135,7 @@ def create_rename_keys(config):
 
     # scratch convolutions
     for i in range(4):
-        rename_keys.append((f"depth_head.scratch.layer{i + 1}_rn.weight", f"neck.convs.{i}.weight"))
+        rename_keys.append((f"depth_head.scratch.layer{i+1}_rn.weight", f"neck.convs.{i}.weight"))
 
     # head
     rename_keys.append(("depth_head.scratch.output_conv1.weight", "head.conv1.weight"))

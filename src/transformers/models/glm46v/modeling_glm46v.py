@@ -278,8 +278,7 @@ class Glm46VModel(Glm46VPreTrainedModel):
                 mrope_position_deltas = max_position_ids + 1 - attention_mask.shape[-1]
             else:
                 position_ids = (
-                    torch
-                    .arange(input_ids.shape[1], device=input_ids.device)
+                    torch.arange(input_ids.shape[1], device=input_ids.device)
                     .view(1, 1, -1)
                     .expand(3, input_ids.shape[0], -1)
                 )

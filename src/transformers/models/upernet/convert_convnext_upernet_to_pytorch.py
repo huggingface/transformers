@@ -95,8 +95,8 @@ def create_rename_keys(config):
             rename_keys.append((f"backbone.downsample_layers.{i}.1.weight", f"backbone.encoder.stages.{i}.downsampling_layer.1.weight"))
             rename_keys.append((f"backbone.downsample_layers.{i}.1.bias", f"backbone.encoder.stages.{i}.downsampling_layer.1.bias"))
 
-        rename_keys.append((f"backbone.norm{i}.weight", f"backbone.hidden_states_norms.stage{i + 1}.weight"))
-        rename_keys.append((f"backbone.norm{i}.bias", f"backbone.hidden_states_norms.stage{i + 1}.bias"))
+        rename_keys.append((f"backbone.norm{i}.weight", f"backbone.hidden_states_norms.stage{i+1}.weight"))
+        rename_keys.append((f"backbone.norm{i}.bias", f"backbone.hidden_states_norms.stage{i+1}.bias"))
 
     # decode head
     rename_keys.extend(
@@ -159,43 +159,23 @@ def convert_upernet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub
 
     if model_name == "upernet-convnext-tiny":
         expected_slice = torch.tensor(
-            [
-                [-8.8110, -8.8110, -8.6521],
-                [-8.8110, -8.8110, -8.6521],
-                [-8.7746, -8.7746, -8.6130],
-            ]
+            [[-8.8110, -8.8110, -8.6521], [-8.8110, -8.8110, -8.6521], [-8.7746, -8.7746, -8.6130]]
         )
     elif model_name == "upernet-convnext-small":
         expected_slice = torch.tensor(
-            [
-                [-8.8236, -8.8236, -8.6771],
-                [-8.8236, -8.8236, -8.6771],
-                [-8.7638, -8.7638, -8.6240],
-            ]
+            [[-8.8236, -8.8236, -8.6771], [-8.8236, -8.8236, -8.6771], [-8.7638, -8.7638, -8.6240]]
         )
     elif model_name == "upernet-convnext-base":
         expected_slice = torch.tensor(
-            [
-                [-8.8558, -8.8558, -8.6905],
-                [-8.8558, -8.8558, -8.6905],
-                [-8.7669, -8.7669, -8.6021],
-            ]
+            [[-8.8558, -8.8558, -8.6905], [-8.8558, -8.8558, -8.6905], [-8.7669, -8.7669, -8.6021]]
         )
     elif model_name == "upernet-convnext-large":
         expected_slice = torch.tensor(
-            [
-                [-8.6660, -8.6660, -8.6210],
-                [-8.6660, -8.6660, -8.6210],
-                [-8.6310, -8.6310, -8.5964],
-            ]
+            [[-8.6660, -8.6660, -8.6210], [-8.6660, -8.6660, -8.6210], [-8.6310, -8.6310, -8.5964]]
         )
     elif model_name == "upernet-convnext-xlarge":
         expected_slice = torch.tensor(
-            [
-                [-8.4980, -8.4980, -8.3977],
-                [-8.4980, -8.4980, -8.3977],
-                [-8.4379, -8.4379, -8.3412],
-            ]
+            [[-8.4980, -8.4980, -8.3977], [-8.4980, -8.4980, -8.3977], [-8.4379, -8.4379, -8.3412]]
         )
     print("Logits:", outputs.logits[0, 0, :3, :3])
     assert torch.allclose(outputs.logits[0, 0, :3, :3], expected_slice, atol=1e-4)

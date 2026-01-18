@@ -38,7 +38,6 @@ try:
     from detectron2.projects.deeplab import add_deeplab_config
 except ImportError:
     pass
-
 from transformers import CLIPTokenizer, DinatConfig, SwinConfig
 from transformers.models.oneformer.image_processing_oneformer import OneFormerImageProcessor
 from transformers.models.oneformer.modeling_oneformer import (

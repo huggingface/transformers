@@ -298,11 +298,7 @@ def convert_maskformer_checkpoint(
 
     if model_name == "maskformer-swin-tiny-ade":
         expected_logits = torch.tensor(
-            [
-                [3.6353, -4.4770, -2.6065],
-                [0.5081, -4.2394, -3.5343],
-                [2.1909, -5.0353, -1.9323],
-            ]
+            [[3.6353, -4.4770, -2.6065], [0.5081, -4.2394, -3.5343], [2.1909, -5.0353, -1.9323]]
         )
     assert torch.allclose(outputs.class_queries_logits[0, :3, :3], expected_logits, atol=1e-4)
     print("Looks ok!")

@@ -418,40 +418,22 @@ class OriginalMaskFormerCheckpointToOursConverter:
             rename_keys.append((f"{src_prefix}.layers.{i}.linear2.weight", f"{dst_prefix}.layers.{i}.fc2.weight"))
             rename_keys.append((f"{src_prefix}.layers.{i}.linear2.bias", f"{dst_prefix}.layers.{i}.fc2.bias"))
             rename_keys.append(
-                (
-                    f"{src_prefix}.layers.{i}.norm1.weight",
-                    f"{dst_prefix}.layers.{i}.self_attn_layer_norm.weight",
-                )
+                (f"{src_prefix}.layers.{i}.norm1.weight", f"{dst_prefix}.layers.{i}.self_attn_layer_norm.weight")
             )
             rename_keys.append(
-                (
-                    f"{src_prefix}.layers.{i}.norm1.bias",
-                    f"{dst_prefix}.layers.{i}.self_attn_layer_norm.bias",
-                )
+                (f"{src_prefix}.layers.{i}.norm1.bias", f"{dst_prefix}.layers.{i}.self_attn_layer_norm.bias")
             )
             rename_keys.append(
-                (
-                    f"{src_prefix}.layers.{i}.norm2.weight",
-                    f"{dst_prefix}.layers.{i}.encoder_attn_layer_norm.weight",
-                )
+                (f"{src_prefix}.layers.{i}.norm2.weight", f"{dst_prefix}.layers.{i}.encoder_attn_layer_norm.weight")
             )
             rename_keys.append(
-                (
-                    f"{src_prefix}.layers.{i}.norm2.bias",
-                    f"{dst_prefix}.layers.{i}.encoder_attn_layer_norm.bias",
-                )
+                (f"{src_prefix}.layers.{i}.norm2.bias", f"{dst_prefix}.layers.{i}.encoder_attn_layer_norm.bias")
             )
             rename_keys.append(
-                (
-                    f"{src_prefix}.layers.{i}.norm3.weight",
-                    f"{dst_prefix}.layers.{i}.final_layer_norm.weight",
-                )
+                (f"{src_prefix}.layers.{i}.norm3.weight", f"{dst_prefix}.layers.{i}.final_layer_norm.weight")
             )
             rename_keys.append(
-                (
-                    f"{src_prefix}.layers.{i}.norm3.bias",
-                    f"{dst_prefix}.layers.{i}.final_layer_norm.bias",
-                )
+                (f"{src_prefix}.layers.{i}.norm3.bias", f"{dst_prefix}.layers.{i}.final_layer_norm.bias")
             )
 
         return rename_keys

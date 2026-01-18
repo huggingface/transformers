@@ -124,50 +124,17 @@ def convert_textnet_checkpoint(checkpoint_url, checkpoint_config_filename, pytor
     if "tiny" in content[checkpoint_config_filename]["config"]:
         config = prepare_config(tiny_config_url, size)
         expected_slice_backbone = torch.tensor(
-            [
-                0.0000,
-                0.0000,
-                0.0000,
-                0.0000,
-                0.5300,
-                0.0000,
-                0.0000,
-                0.0000,
-                0.0000,
-                1.1221,
-            ]
+            [0.0000, 0.0000, 0.0000, 0.0000, 0.5300, 0.0000, 0.0000, 0.0000, 0.0000, 1.1221]
         )
     elif "small" in content[checkpoint_config_filename]["config"]:
         config = prepare_config(small_config_url, size)
         expected_slice_backbone = torch.tensor(
-            [
-                0.0000,
-                0.0000,
-                0.0000,
-                0.0000,
-                0.0000,
-                0.0000,
-                0.0000,
-                0.0000,
-                0.0000,
-                0.1394,
-            ]
+            [0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.0000, 0.1394]
         )
     else:
         config = prepare_config(base_config_url, size)
         expected_slice_backbone = torch.tensor(
-            [
-                0.9210,
-                0.6099,
-                0.0000,
-                0.0000,
-                0.0000,
-                0.0000,
-                3.2207,
-                2.6602,
-                1.8925,
-                0.0000,
-            ]
+            [0.9210, 0.6099, 0.0000, 0.0000, 0.0000, 0.0000, 3.2207, 2.6602, 1.8925, 0.0000]
         )
 
     model = TextNetBackbone(config)
@@ -199,18 +166,7 @@ def convert_textnet_checkpoint(checkpoint_url, checkpoint_config_filename, pytor
         image = Image.open(BytesIO(response.read())).convert("RGB")
 
     original_pixel_values = torch.tensor(
-        [
-            0.1939,
-            0.3481,
-            0.4166,
-            0.3309,
-            0.4508,
-            0.4679,
-            0.4851,
-            0.4851,
-            0.3309,
-            0.4337,
-        ]
+        [0.1939, 0.3481, 0.4166, 0.3309, 0.4508, 0.4679, 0.4851, 0.4851, 0.3309, 0.4337]
     )
     pixel_values = textnet_image_processor(image, return_tensors="pt").pixel_values
 

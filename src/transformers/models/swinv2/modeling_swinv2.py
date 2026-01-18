@@ -16,7 +16,6 @@
 import collections.abc
 import math
 from dataclasses import dataclass
-from itertools import starmap
 
 import torch
 from torch import Tensor, nn
@@ -427,20 +426,17 @@ class Swinv2SelfAttention(nn.Module):
     ) -> tuple[torch.Tensor]:
         batch_size, dim, num_channels = hidden_states.shape
         query_layer = (
-            self
-            .query(hidden_states)
+            self.query(hidden_states)
             .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
             .transpose(1, 2)
         )
         key_layer = (
-            self
-            .key(hidden_states)
+            self.key(hidden_states)
             .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
             .transpose(1, 2)
         )
         value_layer = (
-            self
-            .value(hidden_states)
+            self.value(hidden_states)
             .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
             .transpose(1, 2)
         )
@@ -495,8 +491,7 @@ class Swinv2SelfAttention(nn.Module):
         relative_coords_h = torch.arange(-(self.window_size[0] - 1), self.window_size[0], dtype=torch.int64).float()
         relative_coords_w = torch.arange(-(self.window_size[1] - 1), self.window_size[1], dtype=torch.int64).float()
         relative_coords_table = (
-            torch
-            .stack(meshgrid([relative_coords_h, relative_coords_w], indexing="ij"))
+            torch.stack(meshgrid([relative_coords_h, relative_coords_w], indexing="ij"))
             .permute(1, 2, 0)
             .contiguous()
             .unsqueeze(0)
@@ -625,7 +620,7 @@ class Swinv2Layer(nn.Module):
         self.layernorm_after = nn.LayerNorm(dim, eps=config.layer_norm_eps)
 
     def _compute_window_shift(self, target_window_size, target_shift_size) -> tuple[tuple[int, int], tuple[int, int]]:
-        window_size = list(starmap(min, zip(self.input_resolution, target_window_size)))
+        window_size = [min(r, w) for r, w in zip(self.input_resolution, target_window_size)]
         shift_size = [0 if r <= w else s for r, w, s in zip(self.input_resolution, window_size, target_shift_size)]
         return window_size, shift_size
 
@@ -1088,8 +1083,7 @@ class Swinv2ForMaskedImageModeling(Swinv2PreTrainedModel):
             size = self.config.image_size // self.config.patch_size
             bool_masked_pos = bool_masked_pos.reshape(-1, size, size)
             mask = (
-                bool_masked_pos
-                .repeat_interleave(self.config.patch_size, 1)
+                bool_masked_pos.repeat_interleave(self.config.patch_size, 1)
                 .repeat_interleave(self.config.patch_size, 2)
                 .unsqueeze(1)
                 .contiguous()

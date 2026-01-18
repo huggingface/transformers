@@ -542,9 +542,12 @@ class EfficientLoFTRLocalFeatureTransformerLayer(GradientCheckpointingLayer):
 class EfficientLoFTRLocalFeatureTransformer(nn.Module):
     def __init__(self, config: EfficientLoFTRConfig):
         super().__init__()
-        self.layers = nn.ModuleList([
-            EfficientLoFTRLocalFeatureTransformerLayer(config, layer_idx=i) for i in range(config.num_attention_layers)
-        ])
+        self.layers = nn.ModuleList(
+            [
+                EfficientLoFTRLocalFeatureTransformerLayer(config, layer_idx=i)
+                for i in range(config.num_attention_layers)
+            ]
+        )
 
     def forward(
         self,

@@ -426,11 +426,7 @@ def convert_perceiver_checkpoint(pickle_file, pytorch_dump_folder_path, architec
 
     if architecture == "MLM":
         expected_slice = torch.tensor(
-            [
-                [-11.8336, -11.6850, -11.8483],
-                [-12.8149, -12.5863, -12.7904],
-                [-12.8440, -12.6410, -12.8646],
-            ]
+            [[-11.8336, -11.6850, -11.8483], [-12.8149, -12.5863, -12.7904], [-12.8440, -12.6410, -12.8646]]
         )
         assert torch.allclose(logits[0, :3, :3], expected_slice)
         masked_tokens_predictions = logits[0, 51:60].argmax(dim=-1).tolist()

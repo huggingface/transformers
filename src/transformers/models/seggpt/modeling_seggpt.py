@@ -314,8 +314,7 @@ class SegGptAttention(nn.Module):
         batch_size, height, width, _ = hidden_states.shape
         # qkv with shape (3, batch_size, nHead, height * width, channel)
         qkv = (
-            self
-            .qkv(hidden_states)
+            self.qkv(hidden_states)
             .reshape(batch_size, height * width, 3, self.num_attention_heads, -1)
             .permute(2, 0, 3, 1, 4)
         )

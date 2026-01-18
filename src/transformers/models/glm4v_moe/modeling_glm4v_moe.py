@@ -289,8 +289,7 @@ class Glm4vMoeTextMoE(nn.Module):
         router_logits = router_logits.sigmoid()
         router_logits_for_choice = router_logits + self.gate.e_score_correction_bias
         group_scores = (
-            router_logits_for_choice
-            .view(-1, self.n_group, self.n_routed_experts // self.n_group)
+            router_logits_for_choice.view(-1, self.n_group, self.n_routed_experts // self.n_group)
             .topk(2, dim=-1)[0]
             .sum(dim=-1)
         )
@@ -298,8 +297,7 @@ class Glm4vMoeTextMoE(nn.Module):
         group_mask = torch.zeros_like(group_scores)
         group_mask.scatter_(1, group_idx, 1)
         score_mask = (
-            group_mask
-            .unsqueeze(-1)
+            group_mask.unsqueeze(-1)
             .expand(-1, self.n_group, self.n_routed_experts // self.n_group)
             .reshape(-1, self.n_routed_experts)
         )
@@ -968,9 +966,9 @@ class Glm4vMoeTextModel(Glm4vMoePreTrainedModel):
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        self.layers = nn.ModuleList([
-            Glm4vMoeTextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)
-        ])
+        self.layers = nn.ModuleList(
+            [Glm4vMoeTextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
         self.norm = Glm4vMoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = Glm4vMoeTextRotaryEmbedding(config=config)
 
@@ -1292,8 +1290,7 @@ class Glm4vMoeModel(Glm4vMoePreTrainedModel):
                 mrope_position_deltas = max_position_ids + 1 - attention_mask.shape[-1]
             else:
                 position_ids = (
-                    torch
-                    .arange(input_ids.shape[1], device=input_ids.device)
+                    torch.arange(input_ids.shape[1], device=input_ids.device)
                     .view(1, 1, -1)
                     .expand(3, input_ids.shape[0], -1)
                 )

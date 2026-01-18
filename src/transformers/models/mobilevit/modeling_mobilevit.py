@@ -209,20 +209,17 @@ class MobileViTSelfAttention(nn.Module):
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         batch_size, seq_length, _ = hidden_states.shape
         query_layer = (
-            self
-            .query(hidden_states)
+            self.query(hidden_states)
             .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
             .transpose(1, 2)
         )
         key_layer = (
-            self
-            .key(hidden_states)
+            self.key(hidden_states)
             .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
             .transpose(1, 2)
         )
         value_layer = (
-            self
-            .value(hidden_states)
+            self.value(hidden_states)
             .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
             .transpose(1, 2)
         )
@@ -811,17 +808,19 @@ class MobileViTASPP(nn.Module):
         )
         self.convs.append(in_projection)
 
-        self.convs.extend([
-            MobileViTConvLayer(
-                config,
-                in_channels=in_channels,
-                out_channels=out_channels,
-                kernel_size=3,
-                dilation=rate,
-                use_activation="relu",
-            )
-            for rate in config.atrous_rates
-        ])
+        self.convs.extend(
+            [
+                MobileViTConvLayer(
+                    config,
+                    in_channels=in_channels,
+                    out_channels=out_channels,
+                    kernel_size=3,
+                    dilation=rate,
+                    use_activation="relu",
+                )
+                for rate in config.atrous_rates
+            ]
+        )
 
         pool_layer = MobileViTASPPPooling(config, in_channels, out_channels)
         self.convs.append(pool_layer)

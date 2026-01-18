@@ -16,7 +16,6 @@
 import math
 import warnings
 from dataclasses import dataclass
-from itertools import starmap
 
 import torch
 import torch.nn.functional as F
@@ -1460,7 +1459,7 @@ class RTDetrMLPPredictionHead(nn.Module):
         super().__init__()
         self.num_layers = num_layers
         h = [d_model] * (num_layers - 1)
-        self.layers = nn.ModuleList(starmap(nn.Linear, zip([input_dim] + h, h + [output_dim])))
+        self.layers = nn.ModuleList(nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim]))
 
     def forward(self, x):
         for i, layer in enumerate(self.layers):
@@ -1824,12 +1823,12 @@ class RTDetrForObjectDetection(RTDetrPreTrainedModel):
         super().__init__(config)
         self.model = RTDetrModel(config)
         num_pred = config.decoder_layers
-        self.model.decoder.class_embed = nn.ModuleList([
-            torch.nn.Linear(config.d_model, config.num_labels) for _ in range(num_pred)
-        ])
-        self.model.decoder.bbox_embed = nn.ModuleList([
-            RTDetrMLPPredictionHead(config, config.d_model, config.d_model, 4, num_layers=3) for _ in range(num_pred)
-        ])
+        self.model.decoder.class_embed = nn.ModuleList(
+            [torch.nn.Linear(config.d_model, config.num_labels) for _ in range(num_pred)]
+        )
+        self.model.decoder.bbox_embed = nn.ModuleList(
+            [RTDetrMLPPredictionHead(config, config.d_model, config.d_model, 4, num_layers=3) for _ in range(num_pred)]
+        )
         # if two-stage, the last class_embed and bbox_embed is for region proposal generation
         self.post_init()
 
