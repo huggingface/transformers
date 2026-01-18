@@ -51,6 +51,11 @@ import httpx
 import urllib3
 from huggingface_hub import create_repo, delete_repo
 from packaging import version
+import torch
+import torch.distributed as dist
+import torch.multiprocessing as mp
+#TODO(3outeille): guarding to protect against missing import
+from torch.distributed.device_mesh import init_device_mesh
 
 from transformers import logging as transformers_logging
 
@@ -339,6 +344,20 @@ def is_training_test(test_case):
         else:
             return pytest.mark.is_training_test()(test_case)
 
+def is_training_distributed_test(test_case):
+    """
+    Decorator marking a test as a training distributed test. If RUN_TRAINING_DISTRIBUTED_TESTS is set to a falsy value, those tests will be
+    skipped.
+    """
+    if not _run_training_tests:
+        return unittest.skip(reason="test is training distributed test")(test_case)
+    else:
+        try:
+            import pytest  # We don't need a hard dependency on pytest in the main library
+        except ImportError:
+            return test_case
+        else:
+            return pytest.mark.is_training_distributed_test()(test_case)
 
 def slow(test_case):
     """
@@ -4077,6 +4096,43 @@ def read_json_file(file):
 # Training CI Utilities - Logging and Memory Monitoring
 # =============================================================================
 
+def global_wrapper(rank, func, fsdp_size, tp_size, port, func_args, func_kwargs):
+    def setup_dist_env(rank, world_size, port):
+        os.environ["WORLD_SIZE"] = str(world_size)
+        os.environ["RANK"] = str(rank)
+        os.environ["LOCAL_RANK"] = str(rank)
+        os.environ["MASTER_ADDR"] = "localhost"
+        os.environ["MASTER_PORT"] = str(port)
+
+    world_size = fsdp_size * tp_size
+    setup_dist_env(rank, world_size, port)
+
+    dist.init_process_group(backend="gloo", rank=rank, world_size=world_size)
+
+    # NOTE(3outeille): if want to handle DataParallel, create dp_replicate dims (do not mixed with dp_shard which is for FSDP)
+    # NOTE(3outeille): if other parallelism is added, order matters, it should be ["pp", "ddp", "fsdp", "cp", "tp"]
+    # TODO(3outeille): figure out EP
+    # from less costly to most costly (internode to intranode)
+    dims, names = [fsdp_size, tp_size], ["fsdp", "tp"]
+    mesh = init_device_mesh("cpu", dims, mesh_dim_names=names)
+
+    func(mesh, *func_args, **func_kwargs)
+
+    dist.barrier()
+    dist.destroy_process_group()
+
+
+def init_distributed(fsdp_size: int = 1, tp_size: int = 1):
+    def _init_distributed(func):
+        def wrapper(*args, **kwargs):
+            world_size = fsdp_size * tp_size
+            port = get_torch_dist_unique_port()
+            spawn_args = (func, fsdp_size, tp_size, port, args, kwargs)
+            mp.spawn(global_wrapper, args=spawn_args, nprocs=world_size)
+
+        return wrapper
+
+    return _init_distributed
 
 # ANSI color codes for terminal output
 class Colors:
@@ -4117,8 +4173,9 @@ class ColoredFormatter(logging.Formatter):
     # Loggers that should be dimmed (less important/verbose)
     DIMMED_LOGGERS = {"httpx", "httpcore", "urllib3", "requests"}
 
-    def __init__(self, fmt: str | None = None, datefmt: str | None = None):
+    def __init__(self, fmt: str | None = None, datefmt: str | None = None, rank_prefix: str = ""):
         super().__init__(fmt, datefmt)
+        self.rank_prefix = rank_prefix
 
     def format(self, record: logging.LogRecord) -> str:
         # Check if this logger should be dimmed
@@ -4128,7 +4185,7 @@ class ColoredFormatter(logging.Formatter):
             # Dim the entire log line for httpx and similar
             timestamp = self.formatTime(record, self.datefmt)
             message = record.getMessage()
-            return f"{Colors.DIM}{timestamp} - {record.name} - {record.levelname:8} - {message}{Colors.RESET}"
+            return f"{Colors.DIM}{timestamp} - {record.name} - {record.levelname:8} - {self.rank_prefix}{message}{Colors.RESET}"
 
         # Get color for this level
         color = self.LEVEL_COLORS.get(record.levelno, Colors.RESET)
@@ -4146,7 +4203,7 @@ class ColoredFormatter(logging.Formatter):
         # Get message
         message = record.getMessage()
 
-        return f"{colored_time} - {colored_name} - {colored_levelname} - {message}"
+        return f"{colored_time} - {colored_name} - {colored_levelname} - {self.rank_prefix}{message}"
 
 
 _warn_once_logged: set[str] = set()
@@ -4157,26 +4214,34 @@ def init_test_logger() -> logging.Logger:
 
     Uses a named logger instead of root logger to avoid conflicts with pytest-xdist parallel execution.
     Uses stderr instead of stdout to avoid deadlocks with pytest-xdist output capture.
+    Automatically includes rank in log format when distributed is initialized.
     """
     logger = logging.getLogger("transformers.training_test")
     logger.setLevel(logging.INFO)
 
-    # Only add handler if not already present (avoid duplicate handlers on repeated calls)
-    if not logger.handlers:
-        # Use stderr instead of stdout - pytest-xdist captures stdout which can cause deadlocks
-        ch = logging.StreamHandler(sys.stderr)
-        ch.setLevel(logging.INFO)
+    # Clear existing handlers to update format (e.g., when dist becomes initialized)
+    logger.handlers.clear()
 
-        # Use colored formatter if terminal supports it, plain otherwise
-        if sys.stderr.isatty():
-            formatter = ColoredFormatter(datefmt="%Y-%m-%d %H:%M:%S")
-        else:
-            formatter = logging.Formatter(
-                "%(asctime)s - %(name)s - %(levelname)s - %(message)s", datefmt="%Y-%m-%d %H:%M:%S"
-            )
+    # Use stderr instead of stdout - pytest-xdist captures stdout which can cause deadlocks
+    ch = logging.StreamHandler(sys.stderr)
+    ch.setLevel(logging.INFO)
 
-        ch.setFormatter(formatter)
-        logger.addHandler(ch)
+    # Build format string - include rank if distributed is initialized
+    rank_prefix = ""
+    if dist.is_initialized():
+        rank = dist.get_rank()
+        rank_prefix = f"[rank{rank}] "
+
+    # Use colored formatter if terminal supports it, plain otherwise
+    if sys.stderr.isatty():
+        formatter = ColoredFormatter(datefmt="%Y-%m-%d %H:%M:%S", rank_prefix=rank_prefix)
+    else:
+        formatter = logging.Formatter(
+            f"%(asctime)s - %(name)s - %(levelname)s - {rank_prefix}%(message)s", datefmt="%Y-%m-%d %H:%M:%S"
+        )
+
+    ch.setFormatter(formatter)
+    logger.addHandler(ch)
 
     logger.propagate = False  # Don't propagate to root logger to avoid duplicate output
     return logger

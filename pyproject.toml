@@ -74,6 +74,7 @@ markers = [
     "bitsandbytes: select (or deselect with `not`) bitsandbytes integration tests",
     "generate: marks tests that use the GenerationTesterMixin",
     "is_training_test: marks tests that use the TrainingTesterMixin (deselect with '-m \"not is_training_test\"')",
+    "is_training_distributed_test: marks tests that use the TrainingDistributedTesterMixin (deselect with '-m \"not is_training_test\"')",
 ]
 log_cli = 1
 log_cli_level = "WARNING"
