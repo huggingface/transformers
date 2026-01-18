@@ -165,6 +165,7 @@ class XLNetConfig(PreTrainedConfig):
         pad_token_id=5,
         bos_token_id=1,
         eos_token_id=2,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         """Constructs XLNetConfig."""
@@ -204,10 +205,11 @@ class XLNetConfig(PreTrainedConfig):
         self.bos_token_id = bos_token_id
         self.pad_token_id = pad_token_id
         self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
 
         self.use_mems_eval = use_mems_eval
         self.use_mems_train = use_mems_train
-        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+        super().__init__(**kwargs)
 
     @property
     def max_position_embeddings(self):
