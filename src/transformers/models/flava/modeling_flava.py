@@ -446,17 +446,20 @@ class FlavaSelfAttention(nn.Module):
     ) -> tuple[torch.Tensor, torch.Tensor] | tuple[torch.Tensor]:
         batch_size, seq_length, _ = hidden_states.shape
         query_layer = (
-            self.query(hidden_states)
+            self
+            .query(hidden_states)
             .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
             .transpose(1, 2)
         )
         key_layer = (
-            self.key(hidden_states)
+            self
+            .key(hidden_states)
             .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
             .transpose(1, 2)
         )
         value_layer = (
-            self.value(hidden_states)
+            self
+            .value(hidden_states)
             .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
             .transpose(1, 2)
         )
@@ -1134,14 +1137,15 @@ class FlavaModel(FlavaPreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
         >>> from transformers import AutoProcessor, FlavaModel
 
         >>> model = FlavaModel.from_pretrained("facebook/flava-full")
         >>> processor = AutoProcessor.from_pretrained("facebook/flava-full")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> inputs = processor(text=["a photo of a cat"], images=image, return_tensors="pt", padding=True)
 
@@ -1364,14 +1368,15 @@ class FlavaImageCodebook(FlavaPreTrainedModel):
         Examples:
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
         >>> from transformers import AutoImageProcessor, FlavaImageCodebook
 
         >>> model = FlavaImageCodebook.from_pretrained("{_CHECKPOINT_FOR_CODEBOOK_DOC}")
         >>> image_processor = AutoImageProcessor.from_pretrained("{_CHECKPOINT_FOR_CODEBOOK_DOC}")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> inputs = image_processor([image], return_codebook_pixels=True, return_tensors="pt")
         >>> inputs = dict(pixel_values=inputs.codebook_pixel_values)
@@ -1397,14 +1402,15 @@ class FlavaImageCodebook(FlavaPreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
         >>> from transformers import AutoImageProcessor, FlavaImageCodebook
 
         >>> model = FlavaImageCodebook.from_pretrained("{_CHECKPOINT_FOR_CODEBOOK_DOC}")
         >>> image_processor = AutoImageProcessor.from_pretrained("{_CHECKPOINT_FOR_CODEBOOK_DOC}")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> inputs = image_processor([image], return_codebook_pixels=True, return_tensors="pt")
         >>> inputs = dict(pixel_values=inputs.codebook_pixel_values)
@@ -1632,11 +1638,12 @@ class FlavaForPreTraining(FlavaPreTrainedModel):
         Examples:
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
         >>> from transformers import FlavaForPreTraining, AutoProcessor
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> model = FlavaForPreTraining.from_pretrained("facebook/flava-full")
         >>> processor = AutoProcessor.from_pretrained("facebook/flava-full")

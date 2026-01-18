@@ -447,18 +447,16 @@ class FocalNetStage(GradientCheckpointingLayer):
         dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths), device="cpu")]
         drop_path = dpr[sum(config.depths[:index]) : sum(config.depths[: index + 1])]
 
-        self.layers = nn.ModuleList(
-            [
-                FocalNetLayer(
-                    config=config,
-                    index=index,
-                    dim=dim,
-                    input_resolution=input_resolution,
-                    drop_path=drop_path[i] if isinstance(drop_path, list) else drop_path,
-                )
-                for i in range(config.depths[index])
-            ]
-        )
+        self.layers = nn.ModuleList([
+            FocalNetLayer(
+                config=config,
+                index=index,
+                dim=dim,
+                input_resolution=input_resolution,
+                drop_path=drop_path[i] if isinstance(drop_path, list) else drop_path,
+            )
+            for i in range(config.depths[index])
+        ])
 
         if downsample is not None:
             self.downsample = downsample(
@@ -503,16 +501,14 @@ class FocalNetEncoder(nn.Module):
         self.num_stages = len(config.depths)
         self.config = config
 
-        self.stages = nn.ModuleList(
-            [
-                FocalNetStage(
-                    config=config,
-                    index=i_layer,
-                    input_resolution=(grid_size[0] // (2**i_layer), grid_size[1] // (2**i_layer)),
-                )
-                for i_layer in range(self.num_stages)
-            ]
-        )
+        self.stages = nn.ModuleList([
+            FocalNetStage(
+                config=config,
+                index=i_layer,
+                input_resolution=(grid_size[0] // (2**i_layer), grid_size[1] // (2**i_layer)),
+            )
+            for i_layer in range(self.num_stages)
+        ])
 
         self.gradient_checkpointing = False
 
@@ -720,10 +716,11 @@ class FocalNetForMaskedImageModeling(FocalNetPreTrainedModel):
         >>> from transformers import AutoImageProcessor, FocalNetConfig, FocalNetForMaskedImageModeling
         >>> import torch
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("microsoft/focalnet-base-simmim-window6-192")
         >>> config = FocalNetConfig()
@@ -763,7 +760,8 @@ class FocalNetForMaskedImageModeling(FocalNetPreTrainedModel):
             size = self.config.image_size // self.config.patch_size
             bool_masked_pos = bool_masked_pos.reshape(-1, size, size)
             mask = (
-                bool_masked_pos.repeat_interleave(self.config.patch_size, 1)
+                bool_masked_pos
+                .repeat_interleave(self.config.patch_size, 1)
                 .repeat_interleave(self.config.patch_size, 2)
                 .unsqueeze(1)
                 .contiguous()
@@ -881,10 +879,11 @@ class FocalNetBackbone(FocalNetPreTrainedModel, BackboneMixin):
         >>> from transformers import AutoImageProcessor, AutoBackbone
         >>> import torch
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> processor = AutoImageProcessor.from_pretrained("microsoft/focalnet-tiny-lrf")
         >>> model = AutoBackbone.from_pretrained("microsoft/focalnet-tiny-lrf")

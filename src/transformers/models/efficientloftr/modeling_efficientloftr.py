@@ -544,12 +544,9 @@ class EfficientLoFTRLocalFeatureTransformerLayer(GradientCheckpointingLayer):
 class EfficientLoFTRLocalFeatureTransformer(nn.Module):
     def __init__(self, config: EfficientLoFTRConfig):
         super().__init__()
-        self.layers = nn.ModuleList(
-            [
-                EfficientLoFTRLocalFeatureTransformerLayer(config, layer_idx=i)
-                for i in range(config.num_attention_layers)
-            ]
-        )
+        self.layers = nn.ModuleList([
+            EfficientLoFTRLocalFeatureTransformerLayer(config, layer_idx=i) for i in range(config.num_attention_layers)
+        ])
 
     def forward(
         self,
@@ -750,12 +747,16 @@ class EfficientLoFTRModel(EfficientLoFTRPreTrainedModel):
         >>> from transformers import AutoImageProcessor, AutoModel
         >>> import torch
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
 
         >>> url = "https://github.com/magicleap/SuperGluePretrainedNetwork/blob/master/assets/phototourism_sample_images/london_bridge_78916675_4568141288.jpg?raw=true"
-        >>> image1 = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image1 = Image.open(BytesIO(response.read()))
+
         >>> url = "https://github.com/magicleap/SuperGluePretrainedNetwork/blob/master/assets/phototourism_sample_images/london_bridge_19481797_2295892421.jpg?raw=true"
-        >>> image2 = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image2 = Image.open(BytesIO(response.read()))
+
         >>> images = [image1, image2]
 
         >>> processor = AutoImageProcessor.from_pretrained("zju-community/efficient_loftr")
@@ -1317,12 +1318,16 @@ class EfficientLoFTRForKeypointMatching(EfficientLoFTRPreTrainedModel):
         >>> from transformers import AutoImageProcessor, AutoModel
         >>> import torch
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
 
         >>> url = "https://github.com/magicleap/SuperGluePretrainedNetwork/blob/master/assets/phototourism_sample_images/london_bridge_78916675_4568141288.jpg?raw=true"
-        >>> image1 = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image1 = Image.open(BytesIO(response.read()))
+
         >>> url = "https://github.com/magicleap/SuperGluePretrainedNetwork/blob/master/assets/phototourism_sample_images/london_bridge_19481797_2295892421.jpg?raw=true"
-        >>> image2 = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image2 = Image.open(BytesIO(response.read()))
+
         >>> images = [image1, image2]
 
         >>> processor = AutoImageProcessor.from_pretrained("zju-community/efficient_loftr")

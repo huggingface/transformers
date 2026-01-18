@@ -229,7 +229,8 @@ class SamHQVisionAttention(nn.Module):
         batch_size, height, width, _ = hidden_states.shape
         # qkv with shape (3, batch_size, nHead, height * width, channel)
         qkv = (
-            self.qkv(hidden_states)
+            self
+            .qkv(hidden_states)
             .reshape(batch_size, height * width, 3, self.num_attention_heads, -1)
             .permute(2, 0, 3, 1, 4)
         )
@@ -288,7 +289,8 @@ class SamHQVisionSdpaAttention(SamHQVisionAttention):
         batch_size, height, width, _ = hidden_states.shape
         # qkv with shape (3, B, nHead, H * W, C)
         qkv = (
-            self.qkv(hidden_states)
+            self
+            .qkv(hidden_states)
             .reshape(batch_size, height * width, 3, self.num_attention_heads, -1)
             .permute(2, 0, 3, 1, 4)
         )
@@ -312,7 +314,8 @@ class SamHQVisionSdpaAttention(SamHQVisionAttention):
         attn_output = torch.nn.functional.scaled_dot_product_attention(query, key, value, attn_mask=attn_bias)
 
         attn_output = (
-            attn_output.view(batch_size, self.num_attention_heads, height, width, -1)
+            attn_output
+            .view(batch_size, self.num_attention_heads, height, width, -1)
             .permute(0, 2, 3, 1, 4)
             .reshape(batch_size, height, width, -1)
         )
@@ -1131,9 +1134,9 @@ class SamHQPromptEncoder(nn.Module):
         self.image_embedding_size = (config.image_embedding_size, config.image_embedding_size)
         self.input_image_size = config.image_size
 
-        self.point_embed = nn.ModuleList(
-            [nn.Embedding(1, config.hidden_size) for i in range(config.num_point_embeddings)]
-        )
+        self.point_embed = nn.ModuleList([
+            nn.Embedding(1, config.hidden_size) for i in range(config.num_point_embeddings)
+        ])
         self.hidden_size = config.hidden_size
         self.not_a_point_embed = nn.Embedding(1, config.hidden_size)
 
@@ -1393,16 +1396,17 @@ class SamHQModel(SamHQPreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
         >>> from transformers import AutoModel, AutoProcessor
 
         >>> model = AutoModel.from_pretrained("sushmanth/sam_hq_vit_b")
         >>> processor = AutoProcessor.from_pretrained("sushmanth/sam_hq_vit_b")
 
-        >>> img_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/sam-car.png"
-        >>> raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
+        >>> url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/sam-car.png"
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read())).convert("RGB")
         >>> input_points = [[[400, 650]]]  # 2D location of a window on the car
-        >>> inputs = processor(images=raw_image, input_points=input_points, return_tensors="pt")
+        >>> inputs = processor(images=image, input_points=input_points, return_tensors="pt")
 
         >>> # Get high-quality segmentation mask
         >>> outputs = model(**inputs)

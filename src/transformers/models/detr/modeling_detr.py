@@ -15,6 +15,7 @@
 
 import math
 from dataclasses import dataclass
+from itertools import starmap
 
 import torch
 from torch import Tensor, nn
@@ -1098,10 +1099,11 @@ class DetrModel(DetrPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, DetrModel
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("facebook/detr-resnet-50")
         >>> model = DetrModel.from_pretrained("facebook/detr-resnet-50")
@@ -1217,7 +1219,7 @@ class DetrMLPPredictionHead(nn.Module):
         super().__init__()
         self.num_layers = num_layers
         h = [hidden_dim] * (num_layers - 1)
-        self.layers = nn.ModuleList(nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim]))
+        self.layers = nn.ModuleList(starmap(nn.Linear, zip([input_dim] + h, h + [output_dim])))
 
     def forward(self, x):
         for i, layer in enumerate(self.layers):
@@ -1285,10 +1287,11 @@ class DetrForObjectDetection(DetrPreTrainedModel):
         >>> from transformers import AutoImageProcessor, DetrForObjectDetection
         >>> import torch
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("facebook/detr-resnet-50")
         >>> model = DetrForObjectDetection.from_pretrained("facebook/detr-resnet-50")
@@ -1432,7 +1435,7 @@ class DetrForSegmentation(DetrPreTrainedModel):
 
         ```python
         >>> import io
-        >>> import requests
+        >>> import httpx
         >>> from PIL import Image
         >>> import torch
         >>> import numpy
@@ -1441,7 +1444,8 @@ class DetrForSegmentation(DetrPreTrainedModel):
         >>> from transformers.image_transforms import rgb_to_id
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("facebook/detr-resnet-50-panoptic")
         >>> model = DetrForSegmentation.from_pretrained("facebook/detr-resnet-50-panoptic")

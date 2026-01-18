@@ -1242,18 +1242,16 @@ class TestDetrModel(TestDetrPreTrainedModel):
                 in_channels = config.d_model
             self.input_proj = nn.ModuleList(input_proj_list)
         else:
-            self.input_proj = nn.ModuleList(
-                [
-                    nn.Sequential(
-                        nn.Conv2d(
-                            backbone.intermediate_channel_sizes[-1],
-                            config.d_model,
-                            kernel_size=1,
-                        ),
-                        nn.GroupNorm(32, config.d_model),
-                    )
-                ]
-            )
+            self.input_proj = nn.ModuleList([
+                nn.Sequential(
+                    nn.Conv2d(
+                        backbone.intermediate_channel_sizes[-1],
+                        config.d_model,
+                        kernel_size=1,
+                    ),
+                    nn.GroupNorm(32, config.d_model),
+                )
+            ])
 
         if not config.two_stage:
             self.query_position_embeddings = nn.Embedding(config.num_queries, config.d_model * 2)
@@ -1399,10 +1397,11 @@ class TestDetrModel(TestDetrPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, TestDetrModel
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("SenseTime/deformable-detr")
         >>> model = TestDetrModel.from_pretrained("SenseTime/deformable-detr")

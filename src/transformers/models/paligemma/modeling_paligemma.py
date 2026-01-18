@@ -172,10 +172,8 @@ def create_causal_mask_mapping(
     # from `forward` call. If users run a `forward` call, we have no option to infer `is_first_iteration` because users may be
     # running generation with custom loop. Thus we need to infer it in a `non-perfect` way
     # NOTE: Determining prefill in that case requires checking data values, which is not compile-compatible.
-    is_first_iteration = (
-        is_first_iteration
-        if is_first_iteration
-        else (past_key_values is None or not past_key_values.is_initialized or pixel_values is not None)
+    is_first_iteration = is_first_iteration or (
+        past_key_values is None or not past_key_values.is_initialized or pixel_values is not None
     )
 
     if is_first_iteration or not kwargs.get("use_cache", True):
@@ -327,7 +325,7 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
         >>> from transformers import AutoProcessor, PaliGemmaForConditionalGeneration
 
         >>> model = PaliGemmaForConditionalGeneration.from_pretrained("google/paligemma2-3b-mix-224")
@@ -335,7 +333,8 @@ class PaliGemmaModel(PaliGemmaPreTrainedModel):
 
         >>> prompt = "Where is the cat standing?"
         >>> url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> inputs = processor(images=image, text=prompt,  return_tensors="pt")
 
@@ -478,7 +477,7 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
         >>> from transformers import AutoProcessor, PaliGemmaForConditionalGeneration
 
         >>> model = PaliGemmaForConditionalGeneration.from_pretrained("google/paligemma2-3b-mix-224")
@@ -486,7 +485,8 @@ class PaliGemmaForConditionalGeneration(PaliGemmaPreTrainedModel, GenerationMixi
 
         >>> prompt = "Where is the cat standing?"
         >>> url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> inputs = processor(images=image, text=prompt,  return_tensors="pt")
 

@@ -775,19 +775,17 @@ class MobileViTV2ASPP(nn.Module):
         )
         self.convs.append(in_projection)
 
-        self.convs.extend(
-            [
-                MobileViTV2ConvLayer(
-                    config,
-                    in_channels=in_channels,
-                    out_channels=out_channels,
-                    kernel_size=3,
-                    dilation=rate,
-                    use_activation="relu",
-                )
-                for rate in config.atrous_rates
-            ]
-        )
+        self.convs.extend([
+            MobileViTV2ConvLayer(
+                config,
+                in_channels=in_channels,
+                out_channels=out_channels,
+                kernel_size=3,
+                dilation=rate,
+                use_activation="relu",
+            )
+            for rate in config.atrous_rates
+        ])
 
         pool_layer = MobileViTV2ASPPPooling(config, in_channels, out_channels)
         self.convs.append(pool_layer)
@@ -871,13 +869,14 @@ class MobileViTV2ForSemanticSegmentation(MobileViTV2PreTrainedModel):
         Examples:
 
         ```python
-        >>> import requests
+        >>> import httpx
         >>> import torch
         >>> from PIL import Image
         >>> from transformers import AutoImageProcessor, MobileViTV2ForSemanticSegmentation
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("apple/mobilevitv2-1.0-imagenet1k-256")
         >>> model = MobileViTV2ForSemanticSegmentation.from_pretrained("apple/mobilevitv2-1.0-imagenet1k-256")

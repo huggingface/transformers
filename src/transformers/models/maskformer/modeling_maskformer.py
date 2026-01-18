@@ -1176,9 +1176,9 @@ class MaskFormerFPNModel(nn.Module):
         """
         super().__init__()
         self.stem = MaskFormerFPNConvLayer(in_features, feature_size)
-        self.layers = nn.Sequential(
-            *[MaskFormerFPNLayer(feature_size, lateral_width) for lateral_width in lateral_widths[::-1]]
-        )
+        self.layers = nn.Sequential(*[
+            MaskFormerFPNLayer(feature_size, lateral_width) for lateral_width in lateral_widths[::-1]
+        ])
 
     def forward(self, features: list[Tensor]) -> list[Tensor]:
         fpn_features = []
@@ -1510,14 +1510,15 @@ class MaskFormerModel(MaskFormerPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, MaskFormerModel
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
 
         >>> # load MaskFormer fine-tuned on ADE20k semantic segmentation
         >>> image_processor = AutoImageProcessor.from_pretrained("facebook/maskformer-swin-base-ade")
         >>> model = MaskFormerModel.from_pretrained("facebook/maskformer-swin-base-ade")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> inputs = image_processor(image, return_tensors="pt")
 
@@ -1648,9 +1649,10 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
             masks_queries_logits = binaries_masks[-1]
             # go til [:-1] because the last one is always used
             for aux_binary_masks, aux_classes in zip(binaries_masks[:-1], classes[:-1]):
-                auxiliary_logits.append(
-                    {"masks_queries_logits": aux_binary_masks, "class_queries_logits": aux_classes}
-                )
+                auxiliary_logits.append({
+                    "masks_queries_logits": aux_binary_masks,
+                    "class_queries_logits": aux_classes,
+                })
 
         else:
             transformer_decoder_hidden_states = outputs.transformer_decoder_last_hidden_state
@@ -1692,7 +1694,7 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, MaskFormerForInstanceSegmentation
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
 
         >>> # load MaskFormer fine-tuned on ADE20k semantic segmentation
         >>> image_processor = AutoImageProcessor.from_pretrained("facebook/maskformer-swin-base-ade")
@@ -1701,7 +1703,8 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
         >>> url = (
         ...     "https://huggingface.co/datasets/hf-internal-testing/fixtures_ade20k/resolve/main/ADE_val_00000001.jpg"
         ... )
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
         >>> inputs = image_processor(images=image, return_tensors="pt")
 
         >>> outputs = model(**inputs)
@@ -1725,14 +1728,15 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, MaskFormerForInstanceSegmentation
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
 
         >>> # load MaskFormer fine-tuned on COCO panoptic segmentation
         >>> image_processor = AutoImageProcessor.from_pretrained("facebook/maskformer-swin-base-coco")
         >>> model = MaskFormerForInstanceSegmentation.from_pretrained("facebook/maskformer-swin-base-coco")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
         >>> inputs = image_processor(images=image, return_tensors="pt")
 
         >>> outputs = model(**inputs)

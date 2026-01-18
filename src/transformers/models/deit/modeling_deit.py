@@ -508,10 +508,11 @@ class DeiTForMaskedImageModeling(DeiTPreTrainedModel):
         >>> from transformers import AutoImageProcessor, DeiTForMaskedImageModeling
         >>> import torch
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("facebook/deit-base-distilled-patch16-224")
         >>> model = DeiTForMaskedImageModeling.from_pretrained("facebook/deit-base-distilled-patch16-224")
@@ -550,7 +551,8 @@ class DeiTForMaskedImageModeling(DeiTPreTrainedModel):
             size = self.config.image_size // self.config.patch_size
             bool_masked_pos = bool_masked_pos.reshape(-1, size, size)
             mask = (
-                bool_masked_pos.repeat_interleave(self.config.patch_size, 1)
+                bool_masked_pos
+                .repeat_interleave(self.config.patch_size, 1)
                 .repeat_interleave(self.config.patch_size, 2)
                 .unsqueeze(1)
                 .contiguous()
@@ -606,11 +608,12 @@ class DeiTForImageClassification(DeiTPreTrainedModel):
         >>> from transformers import AutoImageProcessor, DeiTForImageClassification
         >>> import torch
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
 
         >>> torch.manual_seed(3)  # doctest: +IGNORE_RESULT
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> # note: we are loading a DeiTForImageClassificationWithTeacher from the hub here,
         >>> # so the head will be randomly initialized, hence the predictions will be random

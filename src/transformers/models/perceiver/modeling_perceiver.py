@@ -637,7 +637,7 @@ class PerceiverModel(PerceiverPreTrainedModel):
         ...     PerceiverClassificationDecoder,
         ... )
         >>> import torch
-        >>> import requests
+        >>> import httpx
         >>> from PIL import Image
 
         >>> # EXAMPLE 1: using the Perceiver to classify texts
@@ -703,7 +703,8 @@ class PerceiverModel(PerceiverPreTrainedModel):
         >>> # you can then do a forward pass as follows:
         >>> image_processor = PerceiverImageProcessor()
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
         >>> inputs = image_processor(image, return_tensors="pt").pixel_values
 
         >>> with torch.no_grad():
@@ -1128,10 +1129,11 @@ class PerceiverForImageClassificationLearned(PerceiverPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, PerceiverForImageClassificationLearned
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("deepmind/vision-perceiver-learned")
         >>> model = PerceiverForImageClassificationLearned.from_pretrained("deepmind/vision-perceiver-learned")
@@ -1251,10 +1253,11 @@ class PerceiverForImageClassificationFourier(PerceiverPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, PerceiverForImageClassificationFourier
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("deepmind/vision-perceiver-fourier")
         >>> model = PerceiverForImageClassificationFourier.from_pretrained("deepmind/vision-perceiver-fourier")
@@ -1373,10 +1376,11 @@ class PerceiverForImageClassificationConvProcessing(PerceiverPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, PerceiverForImageClassificationConvProcessing
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("deepmind/vision-perceiver-conv")
         >>> model = PerceiverForImageClassificationConvProcessing.from_pretrained("deepmind/vision-perceiver-conv")
@@ -2261,12 +2265,10 @@ class PerceiverMultimodalDecoder(PerceiverAbstractDecoder):
             num_channels=self.num_query_channels,
             **decoder_kwargs,
         )
-        self.padding = nn.ParameterDict(
-            {
-                modality: nn.Parameter(torch.randn(1, self.num_query_channels - decoder.num_query_channels))
-                for modality, decoder in modalities.items()
-            }
-        )
+        self.padding = nn.ParameterDict({
+            modality: nn.Parameter(torch.randn(1, self.num_query_channels - decoder.num_query_channels))
+            for modality, decoder in modalities.items()
+        })
 
     @property
     def num_query_channels(self) -> int:
@@ -3218,15 +3220,13 @@ class PerceiverMultimodalPreprocessor(AbstractPreprocessor):
         self.modalities = nn.ModuleDict(modalities)
         self.min_padding_size = min_padding_size
         self.mask_probs = mask_probs if mask_probs is not None else {}
-        self.padding = nn.ParameterDict(
-            {
-                modality: nn.Parameter(torch.randn(1, self.num_channels - preprocessor.num_channels))
-                for modality, preprocessor in modalities.items()
-            }
-        )
-        self.mask = nn.ParameterDict(
-            {modality: nn.Parameter(torch.randn(1, self.num_channels)) for modality, _ in self.mask_probs.items()}
-        )
+        self.padding = nn.ParameterDict({
+            modality: nn.Parameter(torch.randn(1, self.num_channels - preprocessor.num_channels))
+            for modality, preprocessor in modalities.items()
+        })
+        self.mask = nn.ParameterDict({
+            modality: nn.Parameter(torch.randn(1, self.num_channels)) for modality, _ in self.mask_probs.items()
+        })
 
     @property
     def num_channels(self) -> int:

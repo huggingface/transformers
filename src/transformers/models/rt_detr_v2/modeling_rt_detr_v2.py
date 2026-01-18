@@ -20,6 +20,7 @@
 import math
 import warnings
 from dataclasses import dataclass
+from itertools import starmap
 
 import torch
 import torch.nn.functional as F
@@ -47,7 +48,8 @@ def multi_scale_deformable_attention_v2(
     batch_size, _, num_heads, hidden_dim = value.shape
     _, num_queries, num_heads, num_levels, num_points = sampling_locations.shape
     value_list = (
-        value.permute(0, 2, 3, 1)
+        value
+        .permute(0, 2, 3, 1)
         .flatten(0, 1)
         .split([height * width for height, width in value_spatial_shapes], dim=-1)
     )
@@ -87,7 +89,8 @@ def multi_scale_deformable_attention_v2(
             sampling_coord = torch.stack([sampling_coord_x, sampling_coord_y], dim=-1)
             sampling_coord = sampling_coord.reshape(batch_size * num_heads, num_queries * num_points_list[level_id], 2)
             sampling_idx = (
-                torch.arange(sampling_coord.shape[0], device=value.device)
+                torch
+                .arange(sampling_coord.shape[0], device=value.device)
                 .unsqueeze(-1)
                 .repeat(1, sampling_coord.shape[1])
             )
@@ -1514,10 +1517,11 @@ class RTDetrV2Model(RTDetrV2PreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, RTDetrV2Model
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("PekingU/RTDetrV2_r50vd")
         >>> model = RTDetrV2Model.from_pretrained("PekingU/RTDetrV2_r50vd")
@@ -1721,7 +1725,7 @@ class RTDetrV2MLPPredictionHead(nn.Module):
         super().__init__()
         self.num_layers = num_layers
         h = [d_model] * (num_layers - 1)
-        self.layers = nn.ModuleList(nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim]))
+        self.layers = nn.ModuleList(starmap(nn.Linear, zip([input_dim] + h, h + [output_dim])))
 
     def forward(self, x):
         for i, layer in enumerate(self.layers):
@@ -1828,15 +1832,13 @@ class RTDetrV2ForObjectDetection(RTDetrV2PreTrainedModel):
         super().__init__(config)
         # RTDETR encoder-decoder model
         self.model = RTDetrV2Model(config)
-        self.class_embed = nn.ModuleList(
-            [torch.nn.Linear(config.d_model, config.num_labels) for _ in range(config.decoder_layers)]
-        )
-        self.bbox_embed = nn.ModuleList(
-            [
-                RTDetrV2MLPPredictionHead(config, config.d_model, config.d_model, 4, num_layers=3)
-                for _ in range(config.decoder_layers)
-            ]
-        )
+        self.class_embed = nn.ModuleList([
+            torch.nn.Linear(config.d_model, config.num_labels) for _ in range(config.decoder_layers)
+        ])
+        self.bbox_embed = nn.ModuleList([
+            RTDetrV2MLPPredictionHead(config, config.d_model, config.d_model, 4, num_layers=3)
+            for _ in range(config.decoder_layers)
+        ])
         self.model.decoder.class_embed = self.class_embed
         self.model.decoder.bbox_embed = self.bbox_embed
 
@@ -1878,11 +1880,12 @@ class RTDetrV2ForObjectDetection(RTDetrV2PreTrainedModel):
         ```python
         >>> from transformers import RTDetrV2ImageProcessor, RTDetrV2ForObjectDetection
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
         >>> import torch
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = RTDetrV2ImageProcessor.from_pretrained("PekingU/RTDetrV2_r50vd")
         >>> model = RTDetrV2ForObjectDetection.from_pretrained("PekingU/RTDetrV2_r50vd")

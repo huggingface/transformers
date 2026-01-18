@@ -257,17 +257,20 @@ class Data2VecVisionSelfAttention(nn.Module):
     ) -> tuple[torch.Tensor] | tuple[torch.Tensor, torch.Tensor]:
         batch_size, seq_length, _ = hidden_states.shape
         query_layer = (
-            self.query(hidden_states)
+            self
+            .query(hidden_states)
             .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
             .transpose(1, 2)
         )
         key_layer = (
-            self.key(hidden_states)
+            self
+            .key(hidden_states)
             .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
             .transpose(1, 2)
         )
         value_layer = (
-            self.value(hidden_states)
+            self
+            .value(hidden_states)
             .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
             .transpose(1, 2)
         )
@@ -324,17 +327,20 @@ class Data2VecVisionSdpaSelfAttention(Data2VecVisionSelfAttention):
             )
         batch_size, seq_length, _ = hidden_states.shape
         query_layer = (
-            self.query(hidden_states)
+            self
+            .query(hidden_states)
             .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
             .transpose(1, 2)
         )
         key_layer = (
-            self.key(hidden_states)
+            self
+            .key(hidden_states)
             .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
             .transpose(1, 2)
         )
         value_layer = (
-            self.value(hidden_states)
+            self
+            .value(hidden_states)
             .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
             .transpose(1, 2)
         )
@@ -578,9 +584,10 @@ class Data2VecVisionRelativePositionBias(nn.Module):
         )
         new_sub_table = new_sub_table.permute(0, 2, 3, 1).reshape(new_num_relative_distance - 3, -1)
 
-        new_relative_position_bias_table = torch.cat(
-            [new_sub_table, old_relative_position_bias_table[old_num_relative_distance - 3 :]]
-        )
+        new_relative_position_bias_table = torch.cat([
+            new_sub_table,
+            old_relative_position_bias_table[old_num_relative_distance - 3 :],
+        ])
 
         relative_position_index = self.generate_relative_position_index(window_size)
         relative_position_bias = new_relative_position_bias_table[relative_position_index.view(-1)]
@@ -614,16 +621,14 @@ class Data2VecVisionEncoder(nn.Module):
 
         # stochastic depth decay rule
         dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, config.num_hidden_layers, device="cpu")]
-        self.layer = nn.ModuleList(
-            [
-                Data2VecVisionLayer(
-                    config,
-                    window_size=window_size if config.use_relative_position_bias else None,
-                    drop_path_rate=dpr[i],
-                )
-                for i in range(config.num_hidden_layers)
-            ]
-        )
+        self.layer = nn.ModuleList([
+            Data2VecVisionLayer(
+                config,
+                window_size=window_size if config.use_relative_position_bias else None,
+                drop_path_rate=dpr[i],
+            )
+            for i in range(config.num_hidden_layers)
+        ])
         self.gradient_checkpointing = False
 
     def forward(
@@ -1186,10 +1191,11 @@ class Data2VecVisionForSemanticSegmentation(Data2VecVisionPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, Data2VecVisionForSemanticSegmentation
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("facebook/data2vec-vision-base")
         >>> model = Data2VecVisionForSemanticSegmentation.from_pretrained("facebook/data2vec-vision-base")

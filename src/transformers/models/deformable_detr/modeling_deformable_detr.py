@@ -16,6 +16,7 @@
 import math
 import warnings
 from dataclasses import dataclass
+from itertools import starmap
 from typing import Any
 
 import torch
@@ -1329,18 +1330,16 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
                 in_channels = config.d_model
             self.input_proj = nn.ModuleList(input_proj_list)
         else:
-            self.input_proj = nn.ModuleList(
-                [
-                    nn.Sequential(
-                        nn.Conv2d(
-                            backbone.intermediate_channel_sizes[-1],
-                            config.d_model,
-                            kernel_size=1,
-                        ),
-                        nn.GroupNorm(32, config.d_model),
-                    )
-                ]
-            )
+            self.input_proj = nn.ModuleList([
+                nn.Sequential(
+                    nn.Conv2d(
+                        backbone.intermediate_channel_sizes[-1],
+                        config.d_model,
+                        kernel_size=1,
+                    ),
+                    nn.GroupNorm(32, config.d_model),
+                )
+            ])
 
         if not config.two_stage:
             self.query_position_embeddings = nn.Embedding(config.num_queries, config.d_model * 2)
@@ -1486,10 +1485,11 @@ class DeformableDetrModel(DeformableDetrPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, DeformableDetrModel
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("SenseTime/deformable-detr")
         >>> model = DeformableDetrModel.from_pretrained("SenseTime/deformable-detr")
@@ -1684,7 +1684,7 @@ class DeformableDetrMLPPredictionHead(nn.Module):
         super().__init__()
         self.num_layers = num_layers
         h = [hidden_dim] * (num_layers - 1)
-        self.layers = nn.ModuleList(nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim]))
+        self.layers = nn.ModuleList(starmap(nn.Linear, zip([input_dim] + h, h + [output_dim])))
 
     def forward(self, x):
         for i, layer in enumerate(self.layers):
@@ -1715,17 +1715,15 @@ class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
         # if two-stage, the last class_embed and bbox_embed is for region proposal generation
         num_pred = (config.decoder_layers + 1) if config.two_stage else config.decoder_layers
         self.class_embed = nn.ModuleList([nn.Linear(config.d_model, config.num_labels) for _ in range(num_pred)])
-        self.bbox_embed = nn.ModuleList(
-            [
-                DeformableDetrMLPPredictionHead(
-                    input_dim=config.d_model,
-                    hidden_dim=config.d_model,
-                    output_dim=4,
-                    num_layers=3,
-                )
-                for _ in range(num_pred)
-            ]
-        )
+        self.bbox_embed = nn.ModuleList([
+            DeformableDetrMLPPredictionHead(
+                input_dim=config.d_model,
+                hidden_dim=config.d_model,
+                output_dim=4,
+                num_layers=3,
+            )
+            for _ in range(num_pred)
+        ])
         if config.with_box_refine:
             self.model.decoder.bbox_embed = self.bbox_embed
             self._tied_weights_keys["model.decoder.bbox_embed"] = "bbox_embed"
@@ -1769,10 +1767,11 @@ class DeformableDetrForObjectDetection(DeformableDetrPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, DeformableDetrForObjectDetection
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("SenseTime/deformable-detr")
         >>> model = DeformableDetrForObjectDetection.from_pretrained("SenseTime/deformable-detr")

@@ -15,6 +15,7 @@
 
 import math
 from dataclasses import dataclass
+from itertools import starmap
 
 import torch
 from torch import Tensor, nn
@@ -952,7 +953,7 @@ class MLP(nn.Module):
         super().__init__()
         self.num_layers = num_layers
         h = [hidden_dim] * (num_layers - 1)
-        self.layers = nn.ModuleList(nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim]))
+        self.layers = nn.ModuleList(starmap(nn.Linear, zip([input_dim] + h, h + [output_dim])))
 
     def forward(self, x):
         for i, layer in enumerate(self.layers):
@@ -1364,10 +1365,11 @@ class ConditionalDetrModel(ConditionalDetrPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, AutoModel
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("microsoft/conditional-detr-resnet-50")
         >>> model = AutoModel.from_pretrained("microsoft/conditional-detr-resnet-50")
@@ -1484,7 +1486,7 @@ class ConditionalDetrMLPPredictionHead(nn.Module):
         super().__init__()
         self.num_layers = num_layers
         h = [hidden_dim] * (num_layers - 1)
-        self.layers = nn.ModuleList(nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim]))
+        self.layers = nn.ModuleList(starmap(nn.Linear, zip([input_dim] + h, h + [output_dim])))
 
     def forward(self, x):
         for i, layer in enumerate(self.layers):
@@ -1555,10 +1557,11 @@ class ConditionalDetrForObjectDetection(ConditionalDetrPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, AutoModelForObjectDetection
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("microsoft/conditional-detr-resnet-50")
         >>> model = AutoModelForObjectDetection.from_pretrained("microsoft/conditional-detr-resnet-50")
@@ -1721,7 +1724,7 @@ class ConditionalDetrForSegmentation(ConditionalDetrPreTrainedModel):
 
         ```python
         >>> import io
-        >>> import requests
+        >>> import httpx
         >>> from PIL import Image
         >>> import torch
         >>> import numpy
@@ -1734,7 +1737,8 @@ class ConditionalDetrForSegmentation(ConditionalDetrPreTrainedModel):
         >>> from transformers.image_transforms import rgb_to_id
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("microsoft/conditional-detr-resnet-50")
 

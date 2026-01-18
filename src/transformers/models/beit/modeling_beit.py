@@ -255,17 +255,20 @@ class BeitSelfAttention(nn.Module):
     ) -> tuple[torch.Tensor] | tuple[torch.Tensor, torch.Tensor]:
         batch_size, seq_length, _ = hidden_states.shape
         query_layer = (
-            self.query(hidden_states)
+            self
+            .query(hidden_states)
             .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
             .transpose(1, 2)
         )
         key_layer = (
-            self.key(hidden_states)
+            self
+            .key(hidden_states)
             .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
             .transpose(1, 2)
         )
         value_layer = (
-            self.value(hidden_states)
+            self
+            .value(hidden_states)
             .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
             .transpose(1, 2)
         )
@@ -321,17 +324,20 @@ class BeitSdpaSelfAttention(BeitSelfAttention):
             )
         batch_size, seq_length, _ = hidden_states.shape
         query_layer = (
-            self.query(hidden_states)
+            self
+            .query(hidden_states)
             .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
             .transpose(1, 2)
         )
         key_layer = (
-            self.key(hidden_states)
+            self
+            .key(hidden_states)
             .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
             .transpose(1, 2)
         )
         value_layer = (
-            self.value(hidden_states)
+            self
+            .value(hidden_states)
             .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
             .transpose(1, 2)
         )
@@ -565,9 +571,10 @@ class BeitRelativePositionBias(nn.Module):
         )
         new_sub_table = new_sub_table.permute(0, 2, 3, 1).reshape(new_num_relative_distance - 3, -1)
 
-        new_relative_position_bias_table = torch.cat(
-            [new_sub_table, old_relative_position_bias_table[old_num_relative_distance - 3 :]]
-        )
+        new_relative_position_bias_table = torch.cat([
+            new_sub_table,
+            old_relative_position_bias_table[old_num_relative_distance - 3 :],
+        ])
 
         relative_position_index = self.generate_relative_position_index(window_size)
         relative_position_bias = new_relative_position_bias_table[relative_position_index.view(-1)]
@@ -600,16 +607,14 @@ class BeitEncoder(nn.Module):
 
         # stochastic depth decay rule
         dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, config.num_hidden_layers, device="cpu")]
-        self.layer = nn.ModuleList(
-            [
-                BeitLayer(
-                    config,
-                    window_size=window_size if config.use_relative_position_bias else None,
-                    drop_path_rate=dpr[i],
-                )
-                for i in range(config.num_hidden_layers)
-            ]
-        )
+        self.layer = nn.ModuleList([
+            BeitLayer(
+                config,
+                window_size=window_size if config.use_relative_position_bias else None,
+                drop_path_rate=dpr[i],
+            )
+            for i in range(config.num_hidden_layers)
+        ])
         self.gradient_checkpointing = False
 
     def forward(
@@ -833,10 +838,11 @@ class BeitForMaskedImageModeling(BeitPreTrainedModel):
         >>> from transformers import AutoImageProcessor, BeitForMaskedImageModeling
         >>> import torch
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("microsoft/beit-base-patch16-224-pt22k")
         >>> model = BeitForMaskedImageModeling.from_pretrained("microsoft/beit-base-patch16-224-pt22k")
@@ -1257,10 +1263,11 @@ class BeitForSemanticSegmentation(BeitPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, BeitForSemanticSegmentation
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("microsoft/beit-base-finetuned-ade-640-640")
         >>> model = BeitForSemanticSegmentation.from_pretrained("microsoft/beit-base-finetuned-ade-640-640")
@@ -1382,10 +1389,11 @@ class BeitBackbone(BeitPreTrainedModel, BackboneMixin):
         >>> from transformers import AutoImageProcessor, AutoBackbone
         >>> import torch
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> processor = AutoImageProcessor.from_pretrained("microsoft/beit-base-patch16-224")
         >>> model = AutoBackbone.from_pretrained(

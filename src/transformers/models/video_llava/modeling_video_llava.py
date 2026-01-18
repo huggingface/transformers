@@ -472,7 +472,7 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
         >>> import numpy as np
         >>> import av
         >>> from huggingface_hub import hf_hub_download
@@ -520,7 +520,8 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
 
         >>> # to generate from image and video mix
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
         >>> prompt = [
         ...     "USER: <image>\nHow many cats do you see? ASSISTANT:",
         ...     "USER: <video>\nWhy is this video funny? ASSISTANT:"

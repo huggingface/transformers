@@ -507,9 +507,9 @@ class Gemma3TextModel(Gemma3PreTrainedModel):
         self.embed_tokens = Gemma3TextScaledWordEmbedding(
             config.vocab_size, config.hidden_size, self.padding_idx, embed_scale=self.config.hidden_size**0.5
         )
-        self.layers = nn.ModuleList(
-            [Gemma3DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
-        )
+        self.layers = nn.ModuleList([
+            Gemma3DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)
+        ])
         self.norm = Gemma3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = Gemma3RotaryEmbedding(config)
         self.gradient_checkpointing = False
@@ -902,7 +902,7 @@ class Gemma3Model(Gemma3PreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
         >>> from transformers import AutoProcessor, Gemma3ForConditionalGeneration
 
         >>> model = Gemma3ForConditionalGeneration.from_pretrained("google/gemma32-3b-mix-224")
@@ -910,7 +910,8 @@ class Gemma3Model(Gemma3PreTrainedModel):
 
         >>> prompt = "Where is the cat standing?"
         >>> url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> inputs = processor(images=image, text=prompt,  return_tensors="pt")
 
@@ -1041,7 +1042,7 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
         >>> from transformers import AutoProcessor, Gemma3ForConditionalGeneration
 
         >>> model = Gemma3ForConditionalGeneration.from_pretrained("google/gemma-3-4b-it")

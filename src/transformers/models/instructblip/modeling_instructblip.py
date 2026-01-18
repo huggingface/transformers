@@ -684,9 +684,9 @@ class InstructBlipQFormerEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList(
-            [InstructBlipQFormerLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
-        )
+        self.layer = nn.ModuleList([
+            InstructBlipQFormerLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)
+        ])
         self.gradient_checkpointing = False
 
     @can_return_tuple
@@ -1285,7 +1285,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
         >>> from transformers import InstructBlipProcessor, InstructBlipForConditionalGeneration
         >>> import torch
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
 
         >>> model = InstructBlipForConditionalGeneration.from_pretrained("Salesforce/instructblip-vicuna-7b")
         >>> processor = InstructBlipProcessor.from_pretrained("Salesforce/instructblip-vicuna-7b")
@@ -1294,7 +1294,8 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
         >>> model.to(device)  # doctest: +IGNORE_RESULT
 
         >>> url = "https://raw.githubusercontent.com/salesforce/LAVIS/main/docs/_static/Confusing-Pictures.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read())).convert("RGB")
         >>> prompt = "What is unusual about this image?"
         >>> inputs = processor(images=image, text=prompt, return_tensors="pt").to(device)
 

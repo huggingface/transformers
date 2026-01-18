@@ -1192,9 +1192,9 @@ class Emu3TextModel(Emu3PreTrainedModel):
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
-        self.layers = nn.ModuleList(
-            [Emu3DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
-        )
+        self.layers = nn.ModuleList([
+            Emu3DecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)
+        ])
         self.norm = Emu3RMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = Emu3RotaryEmbedding(config=config)
         self.gradient_checkpointing = False
@@ -1301,7 +1301,7 @@ class Emu3ForCausalLM(Emu3PreTrainedModel, GenerationMixin):
         ```python
         >>> from transformers import Emu3Processor, Emu3ForConditionalGeneration
         >>> import torch
-        >>> import requests
+        >>> import httpx
         >>> from PIL import Image
 
         >>> model = Emu3ForCausalLM.from_pretrained("BAAI/Emu3-Chat-hf", dtype=torch.bfloat16)
@@ -1548,7 +1548,7 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
         ```python
         >>> from transformers import Emu3Processor, Emu3ForConditionalGeneration
         >>> import torch
-        >>> import requests
+        >>> import httpx
         >>> from PIL import Image
 
         >>> model = Emu3ForConditionalGeneration.from_pretrained("BAAI/Emu3-Chat-hf", dtype=torch.bfloat16)
@@ -1571,7 +1571,9 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
         ... ]
 
         >>> prompt = processor.apply_chat_template(conversation, add_generation_prompt=True)
-        >>> image = Image.open(requests.get("https://www.ilankelman.org/stopsigns/australia.jpg", stream=True).raw)
+        >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> inputs = processor(images=[image], text=[prompt], return_tensors="pt").to(model.device, torch.bfloat16)
 

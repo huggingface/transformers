@@ -668,19 +668,17 @@ class SwinStage(GradientCheckpointingLayer):
         super().__init__()
         self.config = config
         self.dim = dim
-        self.blocks = nn.ModuleList(
-            [
-                SwinLayer(
-                    config=config,
-                    dim=dim,
-                    input_resolution=input_resolution,
-                    num_heads=num_heads,
-                    drop_path_rate=drop_path[i],
-                    shift_size=0 if (i % 2 == 0) else config.window_size // 2,
-                )
-                for i in range(depth)
-            ]
-        )
+        self.blocks = nn.ModuleList([
+            SwinLayer(
+                config=config,
+                dim=dim,
+                input_resolution=input_resolution,
+                num_heads=num_heads,
+                drop_path_rate=drop_path[i],
+                shift_size=0 if (i % 2 == 0) else config.window_size // 2,
+            )
+            for i in range(depth)
+        ])
 
         # patch merging layer
         if downsample is not None:
@@ -724,20 +722,18 @@ class SwinEncoder(nn.Module):
         self.num_layers = len(config.depths)
         self.config = config
         dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths), device="cpu")]
-        self.layers = nn.ModuleList(
-            [
-                SwinStage(
-                    config=config,
-                    dim=int(config.embed_dim * 2**i_layer),
-                    input_resolution=(grid_size[0] // (2**i_layer), grid_size[1] // (2**i_layer)),
-                    depth=config.depths[i_layer],
-                    num_heads=config.num_heads[i_layer],
-                    drop_path=dpr[sum(config.depths[:i_layer]) : sum(config.depths[: i_layer + 1])],
-                    downsample=SwinPatchMerging if (i_layer < self.num_layers - 1) else None,
-                )
-                for i_layer in range(self.num_layers)
-            ]
-        )
+        self.layers = nn.ModuleList([
+            SwinStage(
+                config=config,
+                dim=int(config.embed_dim * 2**i_layer),
+                input_resolution=(grid_size[0] // (2**i_layer), grid_size[1] // (2**i_layer)),
+                depth=config.depths[i_layer],
+                num_heads=config.num_heads[i_layer],
+                drop_path=dpr[sum(config.depths[:i_layer]) : sum(config.depths[: i_layer + 1])],
+                downsample=SwinPatchMerging if (i_layer < self.num_layers - 1) else None,
+            )
+            for i_layer in range(self.num_layers)
+        ])
 
         self.gradient_checkpointing = False
 
@@ -960,10 +956,11 @@ class SwinForMaskedImageModeling(SwinPreTrainedModel):
         >>> from transformers import AutoImageProcessor, SwinForMaskedImageModeling
         >>> import torch
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("microsoft/swin-base-simmim-window6-192")
         >>> model = SwinForMaskedImageModeling.from_pretrained("microsoft/swin-base-simmim-window6-192")
@@ -1004,7 +1001,8 @@ class SwinForMaskedImageModeling(SwinPreTrainedModel):
             size = self.config.image_size // self.config.patch_size
             bool_masked_pos = bool_masked_pos.reshape(-1, size, size)
             mask = (
-                bool_masked_pos.repeat_interleave(self.config.patch_size, 1)
+                bool_masked_pos
+                .repeat_interleave(self.config.patch_size, 1)
                 .repeat_interleave(self.config.patch_size, 2)
                 .unsqueeze(1)
                 .contiguous()
@@ -1145,10 +1143,11 @@ class SwinBackbone(SwinPreTrainedModel, BackboneMixin):
         >>> from transformers import AutoImageProcessor, AutoBackbone
         >>> import torch
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> processor = AutoImageProcessor.from_pretrained("shi-labs/nat-mini-in1k-224")
         >>> model = AutoBackbone.from_pretrained(

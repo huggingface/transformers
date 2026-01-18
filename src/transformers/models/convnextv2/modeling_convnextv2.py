@@ -193,18 +193,16 @@ class ConvNextV2Stage(nn.Module):
         super().__init__()
 
         if in_channels != out_channels or stride > 1:
-            self.downsampling_layer = nn.ModuleList(
-                [
-                    ConvNextV2LayerNorm(in_channels, eps=1e-6, data_format="channels_first"),
-                    nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, stride=stride),
-                ]
-            )
+            self.downsampling_layer = nn.ModuleList([
+                ConvNextV2LayerNorm(in_channels, eps=1e-6, data_format="channels_first"),
+                nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, stride=stride),
+            ])
         else:
             self.downsampling_layer = nn.ModuleList()
         drop_path_rates = drop_path_rates or [0.0] * depth
-        self.layers = nn.ModuleList(
-            [ConvNextV2Layer(config, dim=out_channels, drop_path=drop_path_rates[j]) for j in range(depth)]
-        )
+        self.layers = nn.ModuleList([
+            ConvNextV2Layer(config, dim=out_channels, drop_path=drop_path_rates[j]) for j in range(depth)
+        ])
 
     def forward(self, features: torch.Tensor) -> torch.Tensor:
         for layer in self.downsampling_layer:
@@ -399,10 +397,11 @@ class ConvNextV2Backbone(ConvNextV2PreTrainedModel, BackboneMixin):
         >>> from transformers import AutoImageProcessor, AutoBackbone
         >>> import torch
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> processor = AutoImageProcessor.from_pretrained("facebook/convnextv2-tiny-1k-224")
         >>> model = AutoBackbone.from_pretrained("facebook/convnextv2-tiny-1k-224")

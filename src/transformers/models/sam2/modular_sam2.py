@@ -155,14 +155,12 @@ class Sam2ImageProcessorFast(SamImageProcessorFast):
             )
 
             segmentation_maps_kwargs = kwargs.copy()
-            segmentation_maps_kwargs.update(
-                {
-                    "do_normalize": False,
-                    "do_rescale": False,
-                    "interpolation": pil_torch_interpolation_mapping[PILImageResampling.NEAREST],
-                    "size": segmentation_maps_kwargs.pop("mask_size"),
-                }
-            )
+            segmentation_maps_kwargs.update({
+                "do_normalize": False,
+                "do_rescale": False,
+                "interpolation": pil_torch_interpolation_mapping[PILImageResampling.NEAREST],
+                "size": segmentation_maps_kwargs.pop("mask_size"),
+            })
             processed_segmentation_maps = self._preprocess(
                 images=processed_segmentation_maps, **segmentation_maps_kwargs
             )
@@ -1357,14 +1355,15 @@ class Sam2Model(SamModel):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
         >>> from transformers import AutoModel, AutoProcessor
 
         >>> model = AutoModel.from_pretrained("danelcsb/sam2.1_hiera_tiny")
         >>> processor = AutoProcessor.from_pretrained("danelcsb/sam2.1_hiera_tiny")
 
         >>> img_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/sam-car.png"
-        >>> raw_image = Image.open(requests.get(img_url, stream=True).raw).convert("RGB")
+        >>> with httpx.stream("GET", url) as response:
+        ...     raw_image = Image.open(BytesIO(response.read())).convert("RGB")
         >>> input_points = [[[400, 650]]]  # 2D location of a window on the car
         >>> inputs = processor(images=raw_image, input_points=input_points, return_tensors="pt")
 

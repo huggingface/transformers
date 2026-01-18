@@ -15,6 +15,7 @@
 
 import math
 from dataclasses import dataclass
+from itertools import starmap
 
 import torch
 from torch import Tensor, nn
@@ -797,7 +798,7 @@ class DabDetrMLP(nn.Module):
         super().__init__()
         self.num_layers = num_layers
         h = [hidden_dim] * (num_layers - 1)
-        self.layers = nn.ModuleList(nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim]))
+        self.layers = nn.ModuleList(starmap(nn.Linear, zip([input_dim] + h, h + [output_dim])))
 
     def forward(self, input_tensor):
         for i, layer in enumerate(self.layers):
@@ -983,9 +984,9 @@ class DabDetrDecoder(DabDetrPreTrainedModel):
         self.num_layers = config.decoder_layers
         self.gradient_checkpointing = False
 
-        self.layers = nn.ModuleList(
-            [DabDetrDecoderLayer(config, is_first=(layer_id == 0)) for layer_id in range(config.decoder_layers)]
-        )
+        self.layers = nn.ModuleList([
+            DabDetrDecoderLayer(config, is_first=(layer_id == 0)) for layer_id in range(config.decoder_layers)
+        ])
         # in DAB-DETR, the decoder uses layernorm after the last decoder layer output
         self.hidden_size = config.hidden_size
         self.layernorm = nn.LayerNorm(self.hidden_size)
@@ -1239,10 +1240,11 @@ class DabDetrModel(DabDetrPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, AutoModel
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("IDEA-Research/dab_detr-base")
         >>> model = AutoModel.from_pretrained("IDEA-Research/dab_detr-base")
@@ -1319,7 +1321,8 @@ class DabDetrModel(DabDetrPreTrainedModel):
             queries = torch.zeros(batch_size, num_queries, self.hidden_size, device=device)
         else:
             queries = (
-                self.patterns.weight[:, None, None, :]
+                self.patterns
+                .weight[:, None, None, :]
                 .repeat(1, self.num_queries, batch_size, 1)
                 .flatten(0, 1)
                 .permute(1, 0, 2)
@@ -1492,10 +1495,11 @@ class DabDetrForObjectDetection(DabDetrPreTrainedModel):
         ```python
         >>> from transformers import AutoImageProcessor, AutoModelForObjectDetection
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> image_processor = AutoImageProcessor.from_pretrained("IDEA-Research/dab-detr-resnet-50")
         >>> model = AutoModelForObjectDetection.from_pretrained("IDEA-Research/dab-detr-resnet-50")

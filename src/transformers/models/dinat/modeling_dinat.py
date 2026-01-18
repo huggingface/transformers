@@ -267,17 +267,20 @@ class NeighborhoodAttention(nn.Module):
     ) -> tuple[torch.Tensor]:
         batch_size, seq_length, _ = hidden_states.shape
         query_layer = (
-            self.query(hidden_states)
+            self
+            .query(hidden_states)
             .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
             .transpose(1, 2)
         )
         key_layer = (
-            self.key(hidden_states)
+            self
+            .key(hidden_states)
             .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
             .transpose(1, 2)
         )
         value_layer = (
-            self.value(hidden_states)
+            self
+            .value(hidden_states)
             .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
             .transpose(1, 2)
         )
@@ -440,18 +443,16 @@ class DinatStage(nn.Module):
         super().__init__()
         self.config = config
         self.dim = dim
-        self.layers = nn.ModuleList(
-            [
-                DinatLayer(
-                    config=config,
-                    dim=dim,
-                    num_heads=num_heads,
-                    dilation=dilations[i],
-                    drop_path_rate=drop_path_rate[i],
-                )
-                for i in range(depth)
-            ]
-        )
+        self.layers = nn.ModuleList([
+            DinatLayer(
+                config=config,
+                dim=dim,
+                num_heads=num_heads,
+                dilation=dilations[i],
+                drop_path_rate=drop_path_rate[i],
+            )
+            for i in range(depth)
+        ])
 
         # patch merging layer
         if downsample is not None:
@@ -488,20 +489,18 @@ class DinatEncoder(nn.Module):
         self.num_levels = len(config.depths)
         self.config = config
         dpr = [x.item() for x in torch.linspace(0, config.drop_path_rate, sum(config.depths), device="cpu")]
-        self.levels = nn.ModuleList(
-            [
-                DinatStage(
-                    config=config,
-                    dim=int(config.embed_dim * 2**i_layer),
-                    depth=config.depths[i_layer],
-                    num_heads=config.num_heads[i_layer],
-                    dilations=config.dilations[i_layer],
-                    drop_path_rate=dpr[sum(config.depths[:i_layer]) : sum(config.depths[: i_layer + 1])],
-                    downsample=DinatDownsampler if (i_layer < self.num_levels - 1) else None,
-                )
-                for i_layer in range(self.num_levels)
-            ]
-        )
+        self.levels = nn.ModuleList([
+            DinatStage(
+                config=config,
+                dim=int(config.embed_dim * 2**i_layer),
+                depth=config.depths[i_layer],
+                num_heads=config.num_heads[i_layer],
+                dilations=config.dilations[i_layer],
+                drop_path_rate=dpr[sum(config.depths[:i_layer]) : sum(config.depths[: i_layer + 1])],
+                downsample=DinatDownsampler if (i_layer < self.num_levels - 1) else None,
+            )
+            for i_layer in range(self.num_levels)
+        ])
 
     def forward(
         self,
@@ -749,10 +748,11 @@ class DinatBackbone(DinatPreTrainedModel, BackboneMixin):
         >>> from transformers import AutoImageProcessor, AutoBackbone
         >>> import torch
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> processor = AutoImageProcessor.from_pretrained("shi-labs/nat-mini-in1k-224")
         >>> model = AutoBackbone.from_pretrained(

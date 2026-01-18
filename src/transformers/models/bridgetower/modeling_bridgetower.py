@@ -109,13 +109,11 @@ class BridgeTowerResidualAttention(nn.Module):
         self.attn = nn.MultiheadAttention(config.hidden_size, config.hidden_size // 64)
         self.ln_1 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.mlp = nn.ModuleDict(
-            OrderedDict(
-                [
-                    ("c_fc", nn.Linear(config.hidden_size, config.hidden_size * 4)),
-                    ("gelu", QuickGELUActivation()),
-                    ("c_proj", nn.Linear(config.hidden_size * 4, config.hidden_size)),
-                ]
-            )
+            OrderedDict([
+                ("c_fc", nn.Linear(config.hidden_size, config.hidden_size * 4)),
+                ("gelu", QuickGELUActivation()),
+                ("c_proj", nn.Linear(config.hidden_size * 4, config.hidden_size)),
+            ])
         )
         self.ln_2 = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.attn_mask = None
@@ -152,13 +150,13 @@ class BridgeTowerTransformer(nn.Module):
         self.hidden_size = config.hidden_size
         self.num_hidden_layers = config.num_hidden_layers
         if config.remove_last_layer:
-            self.resblocks = nn.ModuleList(
-                [BridgeTowerResidualAttention(config) for _ in range(self.num_hidden_layers - 1)]
-            )
+            self.resblocks = nn.ModuleList([
+                BridgeTowerResidualAttention(config) for _ in range(self.num_hidden_layers - 1)
+            ])
         else:
-            self.resblocks = nn.ModuleList(
-                [BridgeTowerResidualAttention(config) for _ in range(self.num_hidden_layers)]
-            )
+            self.resblocks = nn.ModuleList([
+                BridgeTowerResidualAttention(config) for _ in range(self.num_hidden_layers)
+            ])
         self.stop_gradient = config.stop_gradient
 
     def forward(self, hidden_state: torch.Tensor, attention_mask: torch.Tensor | None = None):
@@ -266,9 +264,9 @@ class BridgeTowerVisionTransformer(nn.Module):
         self.ln_post = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
         self.share_layernorm = config.share_layernorm
         if not config.share_layernorm:
-            self.ln_separate = nn.ModuleList(
-                [nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps) for _ in range(config.num_hidden_layers)]
-            )
+            self.ln_separate = nn.ModuleList([
+                nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps) for _ in range(config.num_hidden_layers)
+            ])
 
     def forward(
         self,
@@ -752,9 +750,9 @@ class BridgeTowerTextEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.layer = nn.ModuleList(
-            [BridgeTowerTextLayer(config, layer_idx=i) for i in range(config.num_hidden_layers)]
-        )
+        self.layer = nn.ModuleList([
+            BridgeTowerTextLayer(config, layer_idx=i) for i in range(config.num_hidden_layers)
+        ])
 
     def forward(
         self,
@@ -1159,12 +1157,12 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
             self.cross_modal_text_transform = nn.Linear(text_config.hidden_size, config.hidden_size)
             self.cross_modal_image_transform = nn.Linear(vision_config.hidden_size, config.hidden_size)
         else:
-            self.cross_modal_text_transform = nn.ModuleList(
-                [nn.Linear(text_config.hidden_size, config.hidden_size) for _ in range(config.num_hidden_layers)]
-            )
-            self.cross_modal_image_transform = nn.ModuleList(
-                [nn.Linear(vision_config.hidden_size, config.hidden_size) for _ in range(config.num_hidden_layers)]
-            )
+            self.cross_modal_text_transform = nn.ModuleList([
+                nn.Linear(text_config.hidden_size, config.hidden_size) for _ in range(config.num_hidden_layers)
+            ])
+            self.cross_modal_image_transform = nn.ModuleList([
+                nn.Linear(vision_config.hidden_size, config.hidden_size) for _ in range(config.num_hidden_layers)
+            ])
 
         self.token_type_embeddings = nn.Embedding(2, config.hidden_size)
 
@@ -1177,12 +1175,12 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
                 ln.weight.data = self.vision_model.visual.ln_post.weight.data
                 ln.bias.data = self.vision_model.visual.ln_post.bias.data
 
-        self.cross_modal_image_layers = nn.ModuleList(
-            [BridgeTowerBertCrossLayer(text_config) for _ in range(config.num_hidden_layers)]
-        )
-        self.cross_modal_text_layers = nn.ModuleList(
-            [BridgeTowerBertCrossLayer(text_config) for _ in range(config.num_hidden_layers)]
-        )
+        self.cross_modal_image_layers = nn.ModuleList([
+            BridgeTowerBertCrossLayer(text_config) for _ in range(config.num_hidden_layers)
+        ])
+        self.cross_modal_text_layers = nn.ModuleList([
+            BridgeTowerBertCrossLayer(text_config) for _ in range(config.num_hidden_layers)
+        ])
 
         # Class token => Linear => Tanh
         self.cross_modal_image_pooler = BridgeTowerPooler(config)
@@ -1196,12 +1194,12 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
             self.cross_modal_text_link_tower = BridgeTowerLinkTower(config)
             self.cross_modal_image_link_tower = BridgeTowerLinkTower(config)
         else:
-            self.cross_modal_text_link_tower = nn.ModuleList(
-                [BridgeTowerLinkTower(config) for _ in range(config.num_hidden_layers - 1)]
-            )
-            self.cross_modal_image_link_tower = nn.ModuleList(
-                [BridgeTowerLinkTower(config) for _ in range(config.num_hidden_layers - 1)]
-            )
+            self.cross_modal_text_link_tower = nn.ModuleList([
+                BridgeTowerLinkTower(config) for _ in range(config.num_hidden_layers - 1)
+            ])
+            self.cross_modal_image_link_tower = nn.ModuleList([
+                BridgeTowerLinkTower(config) for _ in range(config.num_hidden_layers - 1)
+            ])
 
         self.post_init()
 
@@ -1250,11 +1248,12 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         ```python
         >>> from transformers import BridgeTowerProcessor, BridgeTowerModel
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
 
         >>> # prepare image and text
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
         >>> text = "hello world"
         >>> processor = BridgeTowerProcessor.from_pretrained("BridgeTower/bridgetower-base")
         >>> model = BridgeTowerModel.from_pretrained("BridgeTower/bridgetower-base")
@@ -1280,7 +1279,7 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
             )
 
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        image_token_type_idx = image_token_type_idx if image_token_type_idx else 1
+        image_token_type_idx = image_token_type_idx or 1
         input_shape = input_ids.size()
         text_embeds = self.text_model.embeddings(input_ids=input_ids)
 
@@ -1551,10 +1550,11 @@ class BridgeTowerForMaskedLM(BridgeTowerPreTrainedModel):
         ```python
         >>> from transformers import BridgeTowerProcessor, BridgeTowerForMaskedLM
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
 
         >>> url = "http://images.cocodataset.org/val2017/000000360943.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw).convert("RGB")
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read())).convert("RGB")
         >>> text = "a <mask> looking out of the window"
 
         >>> processor = BridgeTowerProcessor.from_pretrained("BridgeTower/bridgetower-base-itm-mlm")
@@ -1650,11 +1650,12 @@ class BridgeTowerForImageAndTextRetrieval(BridgeTowerPreTrainedModel):
 
         ```python
         >>> from transformers import BridgeTowerProcessor, BridgeTowerForImageAndTextRetrieval
-        >>> import requests
+        >>> import httpx
         >>> from PIL import Image
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
         >>> texts = ["An image of two cats chilling on a couch", "A football player scoring a goal"]
 
         >>> processor = BridgeTowerProcessor.from_pretrained("BridgeTower/bridgetower-base-itm-mlm")
@@ -1762,7 +1763,7 @@ class BridgeTowerForContrastiveLearning(BridgeTowerPreTrainedModel):
 
         ```python
         >>> from transformers import BridgeTowerProcessor, BridgeTowerForContrastiveLearning
-        >>> import requests
+        >>> import httpx
         >>> from PIL import Image
         >>> import torch
 
@@ -1771,7 +1772,14 @@ class BridgeTowerForContrastiveLearning(BridgeTowerPreTrainedModel):
         ...     "http://images.cocodataset.org/val2017/000000039769.jpg",
         ... ]
         >>> texts = ["two dogs in a car", "two cats sleeping on a couch"]
-        >>> images = [Image.open(requests.get(url, stream=True).raw) for url in image_urls]
+
+        >>> with httpx.stream("GET", urls[0]) as response:
+        ...     image1 = Image.open(BytesIO(response.read()))
+
+        >>> with httpx.stream("GET", urls[1]) as response:
+        ...     image2 = Image.open(BytesIO(response.read()))
+
+        >>> images = [image1, image2]
 
         >>> processor = BridgeTowerProcessor.from_pretrained("BridgeTower/bridgetower-large-itm-mlm-itc")
         >>> model = BridgeTowerForContrastiveLearning.from_pretrained("BridgeTower/bridgetower-large-itm-mlm-itc")

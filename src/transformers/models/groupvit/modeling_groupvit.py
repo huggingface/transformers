@@ -790,18 +790,16 @@ class GroupViTVisionEncoder(nn.Module):
     def __init__(self, config: GroupViTVisionConfig) -> None:
         super().__init__()
         self.config = config
-        self.stages = nn.ModuleList(
-            [
-                GroupViTStage(
-                    config=config,
-                    depth=config.depths[i],
-                    num_group_token=config.num_group_tokens[i],
-                    num_output_group=config.num_output_groups[i],
-                    num_prev_group_token=config.num_output_groups[i - 1] if i > 0 else 0,
-                )
-                for i in range(len(config.depths))
-            ]
-        )
+        self.stages = nn.ModuleList([
+            GroupViTStage(
+                config=config,
+                depth=config.depths[i],
+                num_group_token=config.num_group_tokens[i],
+                num_output_group=config.num_output_groups[i],
+                num_prev_group_token=config.num_output_groups[i - 1] if i > 0 else 0,
+            )
+            for i in range(len(config.depths))
+        ])
         self.gradient_checkpointing = False
 
     def forward(
@@ -1157,14 +1155,15 @@ class GroupViTVisionModel(GroupViTPreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
         >>> from transformers import AutoProcessor, GroupViTVisionModel
 
         >>> processor = AutoProcessor.from_pretrained("nvidia/groupvit-gcc-yfcc")
         >>> model = GroupViTVisionModel.from_pretrained("nvidia/groupvit-gcc-yfcc")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> inputs = processor(images=image, return_tensors="pt")
 
@@ -1315,14 +1314,15 @@ class GroupViTModel(GroupViTPreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
         >>> from transformers import AutoProcessor, GroupViTModel
 
         >>> model = GroupViTModel.from_pretrained("nvidia/groupvit-gcc-yfcc")
         >>> processor = AutoProcessor.from_pretrained("nvidia/groupvit-gcc-yfcc")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> inputs = processor(
         ...     text=["a photo of a cat", "a photo of a dog"], images=image, return_tensors="pt", padding=True

@@ -446,7 +446,8 @@ class Glm4vVisionEmbeddings(nn.Module):
             orig_size_sq = pos_embed_weight.shape[0]
             orig_size = int(orig_size_sq**0.5)
             pos_embed_2d = (
-                pos_embed_weight.view(orig_size, orig_size, hidden_size)
+                pos_embed_weight
+                .view(orig_size, orig_size, hidden_size)
                 .permute(2, 0, 1)
                 .unsqueeze(0)
                 .to(device=device, dtype=torch.float32)
@@ -844,9 +845,9 @@ class Glm4vVisionModel(Glm4vPreTrainedModel):
 class Glm4vTextModel(Qwen2_5_VLTextModel):
     def __init__(self, config: Glm4vTextConfig):
         super().__init__(config)
-        self.layers = nn.ModuleList(
-            [Glm4vTextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
-        )
+        self.layers = nn.ModuleList([
+            Glm4vTextDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)
+        ])
         self.norm = Glm4vRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = Glm4vTextRotaryEmbedding(config=config)
         del self._attn_implementation
@@ -1124,7 +1125,8 @@ class Glm4vModel(Qwen2_5_VLModel):
                 mrope_position_deltas = max_position_ids + 1 - attention_mask.shape[-1]
             else:
                 position_ids = (
-                    torch.arange(input_ids.shape[1], device=input_ids.device)
+                    torch
+                    .arange(input_ids.shape[1], device=input_ids.device)
                     .view(1, 1, -1)
                     .expand(3, input_ids.shape[0], -1)
                 )
@@ -1346,7 +1348,7 @@ class Glm4vForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
         >>> from transformers import AutoProcessor, Glm4vForConditionalGeneration
 
         >>> model = Glm4vForConditionalGeneration.from_pretrained("THUDM/GLM-4.1V-9B-Thinking")
@@ -1362,7 +1364,8 @@ class Glm4vForConditionalGeneration(Qwen2_5_VLForConditionalGeneration):
             },
         ]
         >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> text = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
         >>> inputs = processor(text=[text], images=[image], vision_infos=[vision_infos])

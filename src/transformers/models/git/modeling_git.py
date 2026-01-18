@@ -249,18 +249,21 @@ class GitSelfAttention(nn.Module):
     ) -> tuple[torch.Tensor]:
         batch_size = hidden_states.shape[0]
         query_layer = (
-            self.query(hidden_states)
+            self
+            .query(hidden_states)
             .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
             .transpose(1, 2)
         )
 
         key_layer = (
-            self.key(hidden_states)
+            self
+            .key(hidden_states)
             .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
             .transpose(1, 2)
         )
         value_layer = (
-            self.value(hidden_states)
+            self
+            .value(hidden_states)
             .view(batch_size, -1, self.num_attention_heads, self.attention_head_size)
             .transpose(1, 2)
         )
@@ -928,14 +931,15 @@ class GitVisionModel(GitPreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
         >>> from transformers import AutoProcessor, GitVisionModel
 
         >>> processor = AutoProcessor.from_pretrained("microsoft/git-base")
         >>> model = GitVisionModel.from_pretrained("microsoft/git-base")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> inputs = processor(images=image, return_tensors="pt")
 
@@ -1019,14 +1023,15 @@ class GitModel(GitPreTrainedModel):
 
         ```python
         >>> from transformers import AutoProcessor, AutoModel
-        >>> import requests
+        >>> import httpx
         >>> from PIL import Image
 
         >>> processor = AutoProcessor.from_pretrained("microsoft/git-base")
         >>> model = AutoModel.from_pretrained("microsoft/git-base")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> text = "this is an image of two cats"
 
@@ -1212,14 +1217,15 @@ class GitForCausalLM(GitPreTrainedModel, GenerationMixin):
 
         ```python
         >>> from transformers import AutoProcessor, AutoModelForCausalLM
-        >>> import requests
+        >>> import httpx
         >>> from PIL import Image
 
         >>> processor = AutoProcessor.from_pretrained("microsoft/git-base-coco")
         >>> model = AutoModelForCausalLM.from_pretrained("microsoft/git-base-coco")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> pixel_values = processor(images=image, return_tensors="pt").pixel_values
 

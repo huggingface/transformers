@@ -785,14 +785,15 @@ class CLIPSegVisionModel(CLIPSegPreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
         >>> from transformers import AutoProcessor, CLIPSegVisionModel
 
         >>> processor = AutoProcessor.from_pretrained("CIDAS/clipseg-rd64-refined")
         >>> model = CLIPSegVisionModel.from_pretrained("CIDAS/clipseg-rd64-refined")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> inputs = processor(images=image, return_tensors="pt")
 
@@ -1111,9 +1112,9 @@ class CLIPSegDecoder(CLIPSegPreTrainedModel):
             )
 
         depth = len(config.extract_layers)
-        self.reduces = nn.ModuleList(
-            [nn.Linear(config.vision_config.hidden_size, config.reduce_dim) for _ in range(depth)]
-        )
+        self.reduces = nn.ModuleList([
+            nn.Linear(config.vision_config.hidden_size, config.reduce_dim) for _ in range(depth)
+        ])
 
         decoder_config = copy.deepcopy(config.vision_config)
         decoder_config.hidden_size = config.reduce_dim
