@@ -1614,7 +1614,7 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
             )
 
         aux_loss = None
-        if output_router_logits:
+        if output_router_logits and self.training:
             aux_loss = load_balancing_loss_func(
                 outputs.router_logits,
                 self.num_experts,
@@ -2052,7 +2052,7 @@ class Qwen3OmniMoeTalkerForConditionalGeneration(Qwen3MoeForCausalLM):
             loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
 
         aux_loss = None
-        if output_router_logits:
+        if output_router_logits and self.training:
             aux_loss = load_balancing_loss_func(
                 outputs.router_logits,
                 self.num_experts,

@@ -701,7 +701,7 @@ class Qwen3MoeForCausalLM(Qwen3MoePreTrainedModel, GenerationMixin):
             loss = self.loss_function(logits, labels, self.vocab_size, **kwargs)
 
         aux_loss = None
-        if output_router_logits:
+        if output_router_logits and self.training:
             aux_loss = load_balancing_loss_func(
                 outputs.router_logits,
                 self.num_experts,
