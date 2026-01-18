@@ -937,7 +937,7 @@ class ChineseCLIPVisionModel(ChineseCLIPPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
         >>> from transformers import CLIPProcessor, ChineseCLIPVisionModel
 
         >>> model = ChineseCLIPVisionModel.from_pretrained("OFA-Sys/chinese-clip-vit-base-patch16")

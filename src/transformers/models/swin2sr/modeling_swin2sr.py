@@ -996,7 +996,7 @@ class Swin2SRForImageSuperResolution(Swin2SRPreTrainedModel):
          >>> import numpy as np
          >>> from PIL import Image
          >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
 
          >>> from transformers import AutoImageProcessor, Swin2SRForImageSuperResolution
 

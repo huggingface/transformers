@@ -1080,7 +1080,7 @@ class Llama4VisionModel(Llama4PreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, MllamaVisionModel
 
         >>> checkpoint = "meta-llama/Llama-3.2-11B-Vision"
@@ -1278,7 +1278,7 @@ class Llama4ForConditionalGeneration(Llama4PreTrainedModel, GenerationMixin):
         ```python
         >>> from PIL import Image
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, LlavaForConditionalGeneration
 
         >>> model = LlavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf")

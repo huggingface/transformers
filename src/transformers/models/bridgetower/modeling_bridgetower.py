@@ -1251,7 +1251,7 @@ class BridgeTowerModel(BridgeTowerPreTrainedModel):
         >>> from transformers import BridgeTowerProcessor, BridgeTowerModel
         >>> from PIL import Image
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
 
         >>> # prepare image and text
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -1554,7 +1554,7 @@ class BridgeTowerForMaskedLM(BridgeTowerPreTrainedModel):
         >>> from transformers import BridgeTowerProcessor, BridgeTowerForMaskedLM
         >>> from PIL import Image
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000360943.jpg"
         >>> with httpx.stream("GET", url) as response:
@@ -1655,7 +1655,7 @@ class BridgeTowerForImageAndTextRetrieval(BridgeTowerPreTrainedModel):
         ```python
         >>> from transformers import BridgeTowerProcessor, BridgeTowerForImageAndTextRetrieval
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
         >>> from PIL import Image
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
@@ -1769,7 +1769,7 @@ class BridgeTowerForContrastiveLearning(BridgeTowerPreTrainedModel):
         ```python
         >>> from transformers import BridgeTowerProcessor, BridgeTowerForContrastiveLearning
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
         >>> from PIL import Image
         >>> import torch
 

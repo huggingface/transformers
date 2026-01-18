@@ -787,7 +787,7 @@ class CLIPSegVisionModel(CLIPSegPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, CLIPSegVisionModel
 
         >>> processor = AutoProcessor.from_pretrained("CIDAS/clipseg-rd64-refined")

@@ -652,7 +652,7 @@ class DepthProModel(DepthProPreTrainedModel):
         >>> import torch
         >>> from PIL import Image
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, DepthProModel
 
         >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
@@ -1041,7 +1041,7 @@ class DepthProForDepthEstimation(DepthProPreTrainedModel):
         >>> import torch
         >>> from PIL import Image
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> with httpx.stream("GET", url) as response:

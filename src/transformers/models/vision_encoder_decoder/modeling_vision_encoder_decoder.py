@@ -344,7 +344,7 @@ class VisionEncoderDecoderModel(PreTrainedModel, GenerationMixin):
         ```python
         >>> from transformers import AutoProcessor, VisionEncoderDecoderModel
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
         >>> from PIL import Image
         >>> import torch
 

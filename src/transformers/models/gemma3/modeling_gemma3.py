@@ -899,7 +899,7 @@ class Gemma3Model(Gemma3PreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Gemma3ForConditionalGeneration
 
         >>> model = Gemma3ForConditionalGeneration.from_pretrained("google/gemma32-3b-mix-224")
@@ -1040,7 +1040,7 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
         ```python
         >>> from PIL import Image
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Gemma3ForConditionalGeneration
 
         >>> model = Gemma3ForConditionalGeneration.from_pretrained("google/gemma-3-4b-it")

@@ -1054,7 +1054,7 @@ class ChameleonForConditionalGeneration(ChameleonPreTrainedModel, GenerationMixi
         >>> from transformers import ChameleonProcessor, ChameleonForConditionalGeneration
         >>> import torch
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
         >>> from PIL import Image
 
         >>> model = ChameleonForConditionalGeneration.from_pretrained("facebook/chameleon-7b", dtype=torch.bfloat16)

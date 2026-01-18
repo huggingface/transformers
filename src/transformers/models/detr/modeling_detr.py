@@ -1099,7 +1099,7 @@ class DetrModel(DetrPreTrainedModel):
         >>> from transformers import AutoImageProcessor, DetrModel
         >>> from PIL import Image
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> with httpx.stream("GET", url) as response:
@@ -1288,7 +1288,7 @@ class DetrForObjectDetection(DetrPreTrainedModel):
         >>> import torch
         >>> from PIL import Image
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> with httpx.stream("GET", url) as response:
@@ -1437,7 +1437,7 @@ class DetrForSegmentation(DetrPreTrainedModel):
         ```python
         >>> import io
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
         >>> from PIL import Image
         >>> import torch
         >>> import numpy

@@ -1017,7 +1017,7 @@ class AlignVisionModel(AlignPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, AlignVisionModel
 
         >>> model = AlignVisionModel.from_pretrained("kakaobrain/align-base")

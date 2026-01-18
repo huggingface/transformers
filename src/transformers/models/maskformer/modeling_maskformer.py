@@ -1511,7 +1511,7 @@ class MaskFormerModel(MaskFormerPreTrainedModel):
         >>> from transformers import AutoImageProcessor, MaskFormerModel
         >>> from PIL import Image
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
 
         >>> # load MaskFormer fine-tuned on ADE20k semantic segmentation
         >>> image_processor = AutoImageProcessor.from_pretrained("facebook/maskformer-swin-base-ade")
@@ -1695,7 +1695,7 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
         >>> from transformers import AutoImageProcessor, MaskFormerForInstanceSegmentation
         >>> from PIL import Image
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
 
         >>> # load MaskFormer fine-tuned on ADE20k semantic segmentation
         >>> image_processor = AutoImageProcessor.from_pretrained("facebook/maskformer-swin-base-ade")
@@ -1730,7 +1730,7 @@ class MaskFormerForInstanceSegmentation(MaskFormerPreTrainedModel):
         >>> from transformers import AutoImageProcessor, MaskFormerForInstanceSegmentation
         >>> from PIL import Image
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
 
         >>> # load MaskFormer fine-tuned on COCO panoptic segmentation
         >>> image_processor = AutoImageProcessor.from_pretrained("facebook/maskformer-swin-base-coco")

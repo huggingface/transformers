@@ -93,9 +93,9 @@ def create_rename_keys(config):
     last_key = ["weight", "bias", "running_mean", "running_var"]
 
     for level in range(3):
-        rename_keys.append((f"backbone.conv1.conv1_{level + 1}.conv.weight", f"model.backbone.model.embedder.embedder.{level}.convolution.weight"))
+        rename_keys.append((f"backbone.conv1.conv1_{level+1}.conv.weight", f"model.backbone.model.embedder.embedder.{level}.convolution.weight"))
         for last in last_key:
-            rename_keys.append((f"backbone.conv1.conv1_{level + 1}.norm.{last}", f"model.backbone.model.embedder.embedder.{level}.normalization.{last}"))
+            rename_keys.append((f"backbone.conv1.conv1_{level+1}.norm.{last}", f"model.backbone.model.embedder.embedder.{level}.normalization.{last}"))
 
     for stage_idx in range(len(config.backbone_config.depths)):
         for layer_idx in range(config.backbone_config.depths[stage_idx]):

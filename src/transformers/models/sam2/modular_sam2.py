@@ -1367,7 +1367,7 @@ class Sam2Model(SamModel):
         ```python
         >>> from PIL import Image
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
         >>> from transformers import AutoModel, AutoProcessor
 
         >>> model = AutoModel.from_pretrained("danelcsb/sam2.1_hiera_tiny")

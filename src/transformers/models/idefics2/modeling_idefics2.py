@@ -1028,7 +1028,7 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel, GenerationMixin)
 
         ```python
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
         >>> import torch
         >>> from PIL import Image
         >>> from io import BytesIO

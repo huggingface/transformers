@@ -608,7 +608,7 @@ class BlipModel(BlipPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, BlipModel
 
         >>> model = BlipModel.from_pretrained("Salesforce/blip-image-captioning-base")
@@ -650,7 +650,7 @@ class BlipModel(BlipPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, BlipModel
 
         >>> model = BlipModel.from_pretrained("Salesforce/blip-image-captioning-base")
@@ -705,7 +705,7 @@ class BlipModel(BlipPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, BlipModel
 
         >>> model = BlipModel.from_pretrained("Salesforce/blip-image-captioning-base")
@@ -820,7 +820,7 @@ class BlipForConditionalGeneration(BlipPreTrainedModel, GenerationMixin):
         ```python
         >>> from PIL import Image
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, BlipForConditionalGeneration
 
         >>> processor = AutoProcessor.from_pretrained("Salesforce/blip-image-captioning-base")
@@ -888,7 +888,7 @@ class BlipForConditionalGeneration(BlipPreTrainedModel, GenerationMixin):
         ```python
         >>> from PIL import Image
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, BlipForConditionalGeneration
 
         >>> model = BlipForConditionalGeneration.from_pretrained("Salesforce/blip-image-captioning-base")
@@ -995,7 +995,7 @@ class BlipForQuestionAnswering(BlipPreTrainedModel, GenerationMixin):
         ```python
         >>> from PIL import Image
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, BlipForQuestionAnswering
 
         >>> model = BlipForQuestionAnswering.from_pretrained("Salesforce/blip-vqa-base")
@@ -1104,7 +1104,7 @@ class BlipForQuestionAnswering(BlipPreTrainedModel, GenerationMixin):
         ```python
         >>> from PIL import Image
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, BlipForQuestionAnswering
 
         >>> model = BlipForQuestionAnswering.from_pretrained("Salesforce/blip-vqa-base")
@@ -1230,7 +1230,7 @@ class BlipForImageTextRetrieval(BlipPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, BlipForImageTextRetrieval
 
         >>> model = BlipForImageTextRetrieval.from_pretrained("Salesforce/blip-itm-base-coco")

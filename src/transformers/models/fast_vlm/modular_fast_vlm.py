@@ -237,7 +237,7 @@ class FastVlmForConditionalGeneration(LlavaForConditionalGeneration):
         ```python
         >>> from PIL import Image
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, AutoModelForImageTextToText
         >>> import torch
 

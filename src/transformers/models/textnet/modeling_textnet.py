@@ -303,7 +303,7 @@ class TextNetForImageClassification(TextNetPreTrainedModel):
         ```python
         >>> import torch
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
         >>> from transformers import TextNetForImageClassification, TextNetImageProcessor
         >>> from PIL import Image
 
@@ -371,7 +371,7 @@ class TextNetBackbone(TextNetPreTrainedModel, BackboneMixin):
         ```python
         >>> import torch
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
         >>> from PIL import Image
         >>> from transformers import AutoImageProcessor, AutoBackbone
 

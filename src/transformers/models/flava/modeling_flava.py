@@ -1137,7 +1137,7 @@ class FlavaModel(FlavaPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, FlavaModel
 
         >>> model = FlavaModel.from_pretrained("facebook/flava-full")
@@ -1369,7 +1369,7 @@ class FlavaImageCodebook(FlavaPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
         >>> from transformers import AutoImageProcessor, FlavaImageCodebook
 
         >>> model = FlavaImageCodebook.from_pretrained("{_CHECKPOINT_FOR_CODEBOOK_DOC}")
@@ -1404,7 +1404,7 @@ class FlavaImageCodebook(FlavaPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
         >>> from transformers import AutoImageProcessor, FlavaImageCodebook
 
         >>> model = FlavaImageCodebook.from_pretrained("{_CHECKPOINT_FOR_CODEBOOK_DOC}")
@@ -1641,7 +1641,7 @@ class FlavaForPreTraining(FlavaPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
         >>> from transformers import FlavaForPreTraining, AutoProcessor
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"

@@ -1053,7 +1053,7 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
         ```python
         >>> from PIL import Image
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, GlmImageForConditionalGeneration
 
         >>> model = GlmImageForConditionalGeneration.from_pretrained("zai-org/GLM-Image")

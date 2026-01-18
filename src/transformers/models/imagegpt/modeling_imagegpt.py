@@ -451,7 +451,7 @@ class ImageGPTModel(ImageGPTPreTrainedModel):
         >>> from transformers import AutoImageProcessor, ImageGPTModel
         >>> from PIL import Image
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> with httpx.stream("GET", url) as response:
@@ -781,7 +781,7 @@ class ImageGPTForImageClassification(ImageGPTPreTrainedModel):
         >>> from transformers import AutoImageProcessor, ImageGPTForImageClassification
         >>> from PIL import Image
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> with httpx.stream("GET", url) as response:

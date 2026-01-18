@@ -1365,7 +1365,7 @@ class ConditionalDetrModel(ConditionalDetrPreTrainedModel):
         >>> from transformers import AutoImageProcessor, AutoModel
         >>> from PIL import Image
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> with httpx.stream("GET", url) as response:
@@ -1558,7 +1558,7 @@ class ConditionalDetrForObjectDetection(ConditionalDetrPreTrainedModel):
         >>> from transformers import AutoImageProcessor, AutoModelForObjectDetection
         >>> from PIL import Image
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> with httpx.stream("GET", url) as response:
@@ -1726,7 +1726,7 @@ class ConditionalDetrForSegmentation(ConditionalDetrPreTrainedModel):
         ```python
         >>> import io
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
         >>> from PIL import Image
         >>> import torch
         >>> import numpy

@@ -445,7 +445,7 @@ class MLCDVisionModel(CLIPVisionModel):
 
         ```python
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
         >>> from PIL import Image
         >>> from transformers import AutoProcessor, MLCDVisionModel
         >>> model = MLCDVisionModel.from_pretrained("DeepGlint-AI/mlcd-vit-bigG-patch14-448")

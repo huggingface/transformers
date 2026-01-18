@@ -598,7 +598,7 @@ class LlavaOnevisionForConditionalGeneration(LlavaNextVideoForConditionalGenerat
         ```python
         >>> from PIL import Image
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
         >>> import torch
         >>> from transformers import LlavaOnevisionProcessor, LlavaOnevisionForConditionalGeneration
 

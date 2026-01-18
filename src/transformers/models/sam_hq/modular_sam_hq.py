@@ -547,7 +547,7 @@ class SamHQModel(SamModel):
         ```python
         >>> from PIL import Image
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
         >>> from transformers import AutoModel, AutoProcessor
 
         >>> model = AutoModel.from_pretrained("sushmanth/sam_hq_vit_b")

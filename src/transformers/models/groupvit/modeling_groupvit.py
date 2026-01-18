@@ -1158,7 +1158,7 @@ class GroupViTVisionModel(GroupViTPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, GroupViTVisionModel
 
         >>> processor = AutoProcessor.from_pretrained("nvidia/groupvit-gcc-yfcc")
@@ -1318,7 +1318,7 @@ class GroupViTModel(GroupViTPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, GroupViTModel
 
         >>> model = GroupViTModel.from_pretrained("nvidia/groupvit-gcc-yfcc")

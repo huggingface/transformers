@@ -364,7 +364,7 @@ class LightOnOcrForConditionalGeneration(LightOnOcrPreTrainedModel, GenerationMi
         ```python
         >>> from PIL import Image
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, LightOnOcrForConditionalGeneration
 
         >>> model = LightOnOcrForConditionalGeneration.from_pretrained("mistralai/Mistral-Small-3.1-24B-Instruct-2503")

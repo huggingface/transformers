@@ -378,7 +378,7 @@ class Multimodal2VisionModel(Multimodal2VisionPreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Multimodal2VisionModel
 
         >>> model = Multimodal2VisionModel.from_pretrained("openai/multimodal2-vit-base-patch32")

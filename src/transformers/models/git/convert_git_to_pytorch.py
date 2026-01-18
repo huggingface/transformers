@@ -74,10 +74,7 @@ def create_rename_keys(config, prefix=""):
     # image encoder
     # ftm: off
     rename_keys.append(
-        (
-            f"{prefix}image_encoder.class_embedding",
-            "git.image_encoder.vision_model.embeddings.class_embedding",
-        )
+        (f"{prefix}image_encoder.class_embedding", "git.image_encoder.vision_model.embeddings.class_embedding")
     )
     rename_keys.append(
         (
@@ -86,18 +83,12 @@ def create_rename_keys(config, prefix=""):
         )
     )
     rename_keys.append(
-        (
-            f"{prefix}image_encoder.conv1.weight",
-            "git.image_encoder.vision_model.embeddings.patch_embedding.weight",
-        )
+        (f"{prefix}image_encoder.conv1.weight", "git.image_encoder.vision_model.embeddings.patch_embedding.weight")
     )
     rename_keys.append((f"{prefix}image_encoder.ln_pre.weight", "git.image_encoder.vision_model.pre_layrnorm.weight"))
     rename_keys.append((f"{prefix}image_encoder.ln_pre.bias", "git.image_encoder.vision_model.pre_layrnorm.bias"))
     rename_keys.append(
-        (
-            f"{prefix}image_encoder.ln_post.weight",
-            "git.image_encoder.vision_model.post_layernorm.weight",
-        )
+        (f"{prefix}image_encoder.ln_post.weight", "git.image_encoder.vision_model.post_layernorm.weight")
     )
     rename_keys.append((f"{prefix}image_encoder.ln_post.bias", "git.image_encoder.vision_model.post_layernorm.bias"))
     # fmt: on

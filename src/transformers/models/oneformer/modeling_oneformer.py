@@ -2856,7 +2856,7 @@ class OneFormerModel(OneFormerPreTrainedModel):
         >>> import torch
         >>> from PIL import Image
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
         >>> from transformers import OneFormerProcessor, OneFormerModel
 
         >>> # download texting image
@@ -3054,7 +3054,7 @@ class OneFormerForUniversalSegmentation(OneFormerPreTrainedModel):
         >>> from transformers import OneFormerProcessor, OneFormerForUniversalSegmentation
         >>> from PIL import Image
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
         >>> import torch
 
         >>> # load OneFormer fine-tuned on ADE20k for universal segmentation

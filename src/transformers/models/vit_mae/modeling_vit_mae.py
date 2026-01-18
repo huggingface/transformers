@@ -587,7 +587,7 @@ class ViTMAEModel(ViTMAEPreTrainedModel):
         >>> from transformers import AutoImageProcessor, ViTMAEModel
         >>> from PIL import Image
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> with httpx.stream("GET", url) as response:
@@ -881,7 +881,7 @@ class ViTMAEForPreTraining(ViTMAEPreTrainedModel):
         >>> from transformers import AutoImageProcessor, ViTMAEForPreTraining
         >>> from PIL import Image
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> with httpx.stream("GET", url) as response:

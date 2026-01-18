@@ -368,7 +368,7 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel, GenerationMixin):
         ```python
         >>> from PIL import Image
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, LlavaForConditionalGeneration
 
         >>> model = LlavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf")

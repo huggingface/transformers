@@ -1633,7 +1633,7 @@ class Glm4vMoeForConditionalGeneration(Glm4vMoePreTrainedModel, GenerationMixin)
         ```python
         >>> from PIL import Image
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Glm4vMoeForConditionalGeneration
 
         >>> model = Glm4vMoeForConditionalGeneration.from_pretrained("THUDM/GLM-4.1V-9B-Thinking")

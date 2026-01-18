@@ -679,7 +679,7 @@ class SuperGlueForKeypointMatching(SuperGluePreTrainedModel):
         >>> import torch
         >>> from PIL import Image
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
 
         >>> url = "https://github.com/magicleap/SuperGluePretrainedNetwork/blob/master/assets/phototourism_sample_images/london_bridge_78916675_4568141288.jpg?raw=true"
         >>> with httpx.stream("GET", url) as response:

@@ -879,7 +879,7 @@ class Emu3ForCausalLM(LlamaForCausalLM, Emu3PreTrainedModel, GenerationMixin):
         >>> from transformers import Emu3Processor, Emu3ForConditionalGeneration
         >>> import torch
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
         >>> from PIL import Image
 
         >>> model = Emu3ForCausalLM.from_pretrained("BAAI/Emu3-Chat-hf", dtype=torch.bfloat16)
@@ -1101,7 +1101,7 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
         >>> from transformers import Emu3Processor, Emu3ForConditionalGeneration
         >>> import torch
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
         >>> from PIL import Image
 
         >>> model = Emu3ForConditionalGeneration.from_pretrained("BAAI/Emu3-Chat-hf", dtype=torch.bfloat16)

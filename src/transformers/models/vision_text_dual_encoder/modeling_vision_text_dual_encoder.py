@@ -192,7 +192,7 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
         >>> from transformers import (
         ...     VisionTextDualEncoderModel,
         ...     VisionTextDualEncoderProcessor,

@@ -572,7 +572,7 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextForConditionalGeneration):
         ```python
         >>> from PIL import Image
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
         >>> import av
         >>> from transformers import AutoProcessor, LlavaNextVideoForConditionalGeneration
 

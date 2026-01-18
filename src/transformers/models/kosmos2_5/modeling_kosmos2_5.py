@@ -1430,7 +1430,7 @@ class Kosmos2_5Model(Kosmos2_5PreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Kosmos2_5Model
 
         >>> model = Kosmos2_5Model.from_pretrained("microsoft/kosmos2.5")
@@ -1731,7 +1731,7 @@ class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel, GenerationMixi
         ```python
         >>> from PIL import Image
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
         >>> import torch
         >>> from transformers import AutoProcessor, Kosmos2_5ForConditionalGeneration
 

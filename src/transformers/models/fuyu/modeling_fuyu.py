@@ -288,7 +288,7 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
         >>> from transformers import FuyuProcessor, FuyuForCausalLM
         >>> from PIL import Image
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
 
         >>> processor = FuyuProcessor.from_pretrained("adept/fuyu-8b")
         >>> model = FuyuForCausalLM.from_pretrained("adept/fuyu-8b")

@@ -743,7 +743,7 @@ class MetaClip2Model(MetaClip2PreTrainedModel):
     ```python
     >>> from PIL import Image
     >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
     >>> from transformers import AutoProcessor, MetaClip2Model
 
     >>> model = MetaClip2Model.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu")
@@ -851,7 +851,7 @@ class MetaClip2Model(MetaClip2PreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, MetaClip2Model
 
         >>> model = MetaClip2Model.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu")
@@ -895,7 +895,7 @@ class MetaClip2Model(MetaClip2PreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, MetaClip2Model
 
         >>> model = MetaClip2Model.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu")
@@ -1023,7 +1023,7 @@ class MetaClip2VisionModel(MetaClip2PreTrainedModel):
     ```python
     >>> from PIL import Image
     >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
     >>> from transformers import AutoProcessor, MetaClip2VisionModel
 
     >>> model = MetaClip2VisionModel.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu")
@@ -1068,7 +1068,7 @@ class MetaClip2VisionModel(MetaClip2PreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, MetaClip2VisionModel
 
         >>> model = MetaClip2VisionModel.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu")
@@ -1133,7 +1133,7 @@ class MetaClip2VisionModelWithProjection(MetaClip2PreTrainedModel):
     ```python
     >>> from PIL import Image
     >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
     >>> from transformers import AutoProcessor, MetaClip2VisionModelWithProjection
 
     >>> model = MetaClip2VisionModelWithProjection.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu")
@@ -1181,7 +1181,7 @@ class MetaClip2VisionModelWithProjection(MetaClip2PreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, MetaClip2VisionModelWithProjection
 
         >>> model = MetaClip2VisionModelWithProjection.from_pretrained("facebook/metaclip-2-worldwide-huge-quickgelu")

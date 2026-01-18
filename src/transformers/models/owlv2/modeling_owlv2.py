@@ -913,7 +913,7 @@ class Owlv2VisionModel(Owlv2PreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Owlv2VisionModel
 
         >>> model = Owlv2VisionModel.from_pretrained("google/owlv2-base-patch16")
@@ -1070,7 +1070,7 @@ class Owlv2Model(Owlv2PreTrainedModel):
         ```python
         >>> from PIL import Image
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Owlv2Model
 
         >>> model = Owlv2Model.from_pretrained("google/owlv2-base-patch16-ensemble")
@@ -1497,7 +1497,7 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         Examples:
         ```python
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
         >>> from PIL import Image
         >>> import torch
         >>> from transformers import AutoProcessor, Owlv2ForObjectDetection
@@ -1625,7 +1625,7 @@ class Owlv2ForObjectDetection(Owlv2PreTrainedModel):
         Examples:
         ```python
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
         >>> from PIL import Image
         >>> import torch
 

@@ -1353,7 +1353,7 @@ class LwDetrModel(LwDetrPreTrainedModel):
         >>> from transformers import AutoImageProcessor, DeformableDetrModel
         >>> from PIL import Image
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> with httpx.stream("GET", url) as response:
@@ -1607,7 +1607,7 @@ class LwDetrForObjectDetection(LwDetrPreTrainedModel):
         >>> from transformers import AutoImageProcessor, LwDetrForObjectDetection
         >>> from PIL import Image
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> with httpx.stream("GET", url) as response:

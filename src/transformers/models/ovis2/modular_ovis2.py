@@ -377,7 +377,7 @@ class Ovis2ForConditionalGeneration(LlavaForConditionalGeneration, GenerationMix
         ```python
         >>> from PIL import Image
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Ovis2ForConditionalGeneration
 
         >>> model = Ovis2ForConditionalGeneration.from_pretrained("thisisiron/Ovis2-2B-hf")

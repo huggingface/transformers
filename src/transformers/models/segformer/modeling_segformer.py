@@ -640,7 +640,7 @@ class SegformerForSemanticSegmentation(SegformerPreTrainedModel):
         >>> from transformers import AutoImageProcessor, SegformerForSemanticSegmentation
         >>> from PIL import Image
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
 
         >>> image_processor = AutoImageProcessor.from_pretrained("nvidia/segformer-b0-finetuned-ade-512-512")
         >>> model = SegformerForSemanticSegmentation.from_pretrained("nvidia/segformer-b0-finetuned-ade-512-512")

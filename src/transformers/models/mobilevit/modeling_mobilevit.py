@@ -904,7 +904,7 @@ class MobileViTForSemanticSegmentation(MobileViTPreTrainedModel):
 
         ```python
         >>> import httpx
-        >>> from io import bytesio
+        >>> from io import BytesIO
         >>> import torch
         >>> from PIL import Image
         >>> from transformers import AutoImageProcessor, MobileViTForSemanticSegmentation
