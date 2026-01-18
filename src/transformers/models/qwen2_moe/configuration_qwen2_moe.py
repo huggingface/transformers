@@ -101,6 +101,12 @@ class Qwen2MoeConfig(PreTrainedConfig):
             Whether to add a bias to the queries, keys and values.
         layer_types (`dict[int, str]`, *optional*): a dictionarry that explicitly maps layer index with
             the attention type. The attention type is one of `sliding_attention`, `full_attention`.
+        pad_token_id (`int`, *optional*):
+            Padding token id.
+        bos_token_id (`int`, *optional*):
+            Beginning of stream token id.
+        eos_token_id (`int`, *optional*):
+            End of stream token id.
     ```python
     >>> from transformers import Qwen2MoeModel, Qwen2MoeConfig
 
@@ -163,6 +169,9 @@ class Qwen2MoeConfig(PreTrainedConfig):
         mlp_only_layers: bool | None = None,
         qkv_bias: bool | None = True,
         layer_types: list[str] | None = None,
+        pad_token_id: int | None = None,
+        bos_token_id: int | None = None,
+        eos_token_id: int | None = None,
         **kwargs,
     ):
         self.layer_types = layer_types
@@ -202,13 +211,14 @@ class Qwen2MoeConfig(PreTrainedConfig):
                 for i in range(self.num_hidden_layers)
             ]
         layer_type_validation(self.layer_types)
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
 
         self.rope_parameters = rope_parameters
 
-        super().__init__(
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        super().__init__(**kwargs)
 
 
 __all__ = ["Qwen2MoeConfig"]

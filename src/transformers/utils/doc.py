@@ -844,14 +844,6 @@ OBJECT_DETECTION_SAMPLE = r"""
 QUESTION_ANSWERING_SAMPLE = PT_QUESTION_ANSWERING_SAMPLE
 
 
-TEXT2TEXT_GENERATION_SAMPLE = r"""
-    Example:
-
-    ```python
-    ```
-"""
-
-
 TEXT_CLASSIFICATION_SAMPLE = PT_SEQUENCE_CLASSIFICATION_SAMPLE
 
 
@@ -923,7 +915,6 @@ PIPELINE_TASKS_TO_SAMPLE_DOCSTRINGS = OrderedDict(
         ("audio-classification", AUDIO_CLASSIFICATION_SAMPLE),
         ("audio-xvector", AUDIO_XVECTOR_SAMPLE),
         ("image-text-to-text", IMAGE_TEXT_TO_TEXT_GENERATION_SAMPLE),
-        ("image-to-text", IMAGE_TO_TEXT_SAMPLE),
         ("visual-question-answering", VISUAL_QUESTION_ANSWERING_SAMPLE),
         ("depth-estimation", DEPTH_ESTIMATION_SAMPLE),
         ("video-classification", VIDEO_CLASSIFICATION_SAMPLE),
@@ -938,7 +929,6 @@ PIPELINE_TASKS_TO_SAMPLE_DOCSTRINGS = OrderedDict(
         ("table-question-answering", TABLE_QUESTION_ANSWERING_SAMPLE),
         ("document-question-answering", DOCUMENT_QUESTION_ANSWERING_SAMPLE),
         ("question-answering", QUESTION_ANSWERING_SAMPLE),
-        ("text2text-generation", TEXT2TEXT_GENERATION_SAMPLE),
         ("next-sentence-prediction", NEXT_SENTENCE_PREDICTION_SAMPLE),
         ("multiple-choice", MULTIPLE_CHOICE_SAMPLE),
         ("text-classification", TEXT_CLASSIFICATION_SAMPLE),
@@ -963,7 +953,6 @@ MODELS_TO_PIPELINE = OrderedDict(
         ("MODEL_FOR_AUDIO_XVECTOR_MAPPING_NAMES", "audio-xvector"),
         # Vision
         ("MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES", "image-text-to-text"),
-        ("MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES", "image-to-text"),
         ("MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING_NAMES", "visual-question-answering"),
         ("MODEL_FOR_DEPTH_ESTIMATION_MAPPING_NAMES", "depth-estimation"),
         ("MODEL_FOR_VIDEO_CLASSIFICATION_MAPPING_NAMES", "video-classification"),
@@ -979,7 +968,6 @@ MODELS_TO_PIPELINE = OrderedDict(
         ("MODEL_FOR_TABLE_QUESTION_ANSWERING_MAPPING_NAMES", "table-question-answering"),
         ("MODEL_FOR_DOCUMENT_QUESTION_ANSWERING_MAPPING_NAMES", "document-question-answering"),
         ("MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES", "question-answering"),
-        ("MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES", "text2text-generation"),
         ("MODEL_FOR_NEXT_SENTENCE_PREDICTION_MAPPING_NAMES", "next-sentence-prediction"),
         ("MODEL_FOR_MULTIPLE_CHOICE_MAPPING_NAMES", "multiple-choice"),
         ("MODEL_FOR_SEQUENCE_CLASSIFICATION_MAPPING_NAMES", "text-classification"),
