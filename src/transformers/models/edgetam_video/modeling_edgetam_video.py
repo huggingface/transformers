@@ -41,14 +41,17 @@ from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
-from ...utils import ModelOutput, auto_docstring
-from ...utils.generic import TransformersKwargs
+from ...utils import ModelOutput, auto_docstring, logging
+from ...utils.generic import TransformersKwargs, is_flash_attention_requested
 from ..auto import AutoModel
 from .configuration_edgetam_video import (
     EdgeTamVideoConfig,
     EdgeTamVideoMaskDecoderConfig,
     EdgeTamVideoPromptEncoderConfig,
 )
+
+
+logger = logging.get_logger(__name__)
 
 
 class EdgeTamVideoLayerNorm(nn.LayerNorm):
@@ -248,6 +251,15 @@ class EdgeTamVideoAttention(nn.Module):
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        if is_flash_attention_requested(self.config) and attention_similarity is not None:
+            # Target guided masks are represented as float masks and are incompatible with Flash Attention
+            # Fallback to SDPA for this call only so the rest of the model can still benefit from FA
+            attention_interface = ALL_ATTENTION_FUNCTIONS["sdpa"]
+            logger.warning_once(
+                "Falling back to SDPA for target-guided attention because "
+                "Flash Attention does not support additive bias masks."
+            )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -807,7 +819,7 @@ class EdgeTamVideoPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = "video"
     _supports_sdpa = True
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_attention_backend = True
 
     @torch.no_grad()

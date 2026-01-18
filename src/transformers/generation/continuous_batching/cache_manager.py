@@ -206,6 +206,15 @@ class BlockManager:
         else:
             self._uninit_block_ids.extend(blocks)
 
+    def uninitialize_unshared_block(self, block_id: int) -> None:
+        """Marks a block as uninitialized. Raises an error if the block has more than one reference."""
+        # Make sure the block has only one reference and remove it from the block table
+        block = self._id_to_block.pop(block_id)
+        if block.ref_count > 1:
+            raise RuntimeError(f"Block {block_id} has more than one reference: {block.ref_count = }")
+        # Add the block to the uninitialized blocks queue
+        self._uninit_block_ids.append(block_id)
+
     def mark_shareable_blocks_as_complete(
         self, num_complete_blocks: int, allocated_blocks: list[int], prompt_ids: list[int]
     ) -> None:
@@ -241,13 +250,17 @@ class BlockManager:
             block.hash = self.compute_hash(parent_hash, tokens, block.group_id)
 
             existing_block_id = self._hash_to_id.get(block.hash)
-            # If the block hash is already in the hash to id mapping, we reference the existing block instead
+            # If their was a different block with the same hash, we reference the existing block instead
             if existing_block_id is not None:
-                logger.debug(f"Found existing block {existing_block_id} for block {block.id}")
-                allocated_blocks[i] = existing_block_id
-                self._id_to_block[existing_block_id].ref_count += 1
-                new_parent_id = existing_block_id
-                self.free_blocks([block.id], shareable=True)
+                if existing_block_id == block.id:
+                    # This should not happen, but is not a problem in itself, so we just log a warning
+                    logger.warning(f"Block {block.id} was marked as complete more than once")
+                else:
+                    logger.debug(f"Found existing block {existing_block_id} for block {block.id}")
+                    allocated_blocks[i] = existing_block_id
+                    new_parent_id = existing_block_id
+                    self.increase_ref_count(existing_block_id)
+                    self.uninitialize_unshared_block(block.id)
 
             # Otherwise, we add the completed block to the hash table
             else:
@@ -348,16 +361,17 @@ class FullAttentionCacheAllocator(CacheAllocator):
         allocated if successful and None otherwise. For group of full attention layers, we always allocate the number of
         requested blocks."""
         # Make sure the request_id is in the block table and get the first block id
-        if request_id not in self.block_table:
-            self.block_table[request_id] = []  # TODO: check the impact of making this a deque
-            last_block_id = None
+        block_table = self.block_table.get(request_id, [])
+        if block_table:
+            last_block_id = block_table[-1]
         else:
-            last_block_id = self.block_table[request_id][-1]
+            self.block_table[request_id] = block_table  # TODO: check the impact of making this a deque
+            last_block_id = None
         # Actual allocation, return early if failed
         allocated_blocks = block_manager.get_free_blocks(n_blocks, last_block_id, self.uses_block_sharing, self._index)
         if allocated_blocks is None:
             return None
-        self.block_table[request_id].extend(allocated_blocks)
+        block_table.extend(allocated_blocks)
         return n_blocks
 
     def get_read_indices(self, request_id: str, past_length: int, query_length: int) -> list[int]:
