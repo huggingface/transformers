@@ -324,8 +324,7 @@ class BlipAttention(nn.Module):
         bsz, tgt_len, embed_dim = hidden_states.size()
 
         mixed_qkv = (
-            self
-            .qkv(hidden_states)
+            self.qkv(hidden_states)
             .reshape(bsz, tgt_len, 3, self.num_heads, embed_dim // self.num_heads)
             .permute(2, 0, 3, 1, 4)
         )
@@ -916,8 +915,7 @@ class BlipForConditionalGeneration(BlipPreTrainedModel, GenerationMixin):
             input_ids = torch.LongTensor(input_ids)
         elif input_ids is None:
             input_ids = (
-                torch
-                .LongTensor([[self.decoder_input_ids, self.config.text_config.eos_token_id]])
+                torch.LongTensor([[self.decoder_input_ids, self.config.text_config.eos_token_id]])
                 .repeat(batch_size, 1)
                 .to(image_embeds.device)
             )

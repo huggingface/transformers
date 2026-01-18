@@ -300,11 +300,7 @@ def convert_blip2_checkpoint(
                 logits = hf_model(pixel_values, input_ids).logits
             else:
                 original_logits = original_model(
-                    {
-                        "image": original_pixel_values,
-                        "text_input": ["\n"],
-                        "text_output": ["\n"],
-                    }
+                    {"image": original_pixel_values, "text_input": ["\n"], "text_output": ["\n"]}
                 ).logits
                 labels = input_ids.masked_fill(input_ids == tokenizer.pad_token_id, -100)
                 logits = hf_model(pixel_values, input_ids, labels=labels).logits

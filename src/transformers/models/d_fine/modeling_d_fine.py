@@ -19,7 +19,6 @@
 # limitations under the License.
 import math
 from dataclasses import dataclass
-from itertools import starmap
 from typing import Any
 
 import torch
@@ -48,8 +47,7 @@ def multi_scale_deformable_attention_v2(
     batch_size, _, num_heads, hidden_dim = value.shape
     _, num_queries, num_heads, num_levels, num_points = sampling_locations.shape
     value_list = (
-        value
-        .permute(0, 2, 3, 1)
+        value.permute(0, 2, 3, 1)
         .flatten(0, 1)
         .split([height * width for height, width in value_spatial_shapes], dim=-1)
     )
@@ -89,8 +87,7 @@ def multi_scale_deformable_attention_v2(
             sampling_coord = torch.stack([sampling_coord_x, sampling_coord_y], dim=-1)
             sampling_coord = sampling_coord.reshape(batch_size * num_heads, num_queries * num_points_list[level_id], 2)
             sampling_idx = (
-                torch
-                .arange(sampling_coord.shape[0], device=value.device)
+                torch.arange(sampling_coord.shape[0], device=value.device)
                 .unsqueeze(-1)
                 .repeat(1, sampling_coord.shape[1])
             )
@@ -1751,7 +1748,7 @@ class DFineMLPPredictionHead(nn.Module):
         super().__init__()
         self.num_layers = num_layers
         h = [d_model] * (num_layers - 1)
-        self.layers = nn.ModuleList(starmap(nn.Linear, zip([input_dim] + h, h + [output_dim])))
+        self.layers = nn.ModuleList(nn.Linear(n, k) for n, k in zip([input_dim] + h, h + [output_dim]))
 
     def forward(self, x):
         for i, layer in enumerate(self.layers):
@@ -1766,7 +1763,7 @@ class DFineMLP(nn.Module):
         hidden_dims = [hidden_dim] * (num_layers - 1)
         input_dims = [input_dim] + hidden_dims
         output_dims = hidden_dims + [output_dim]
-        self.layers = nn.ModuleList(starmap(nn.Linear, zip(input_dims, output_dims)))
+        self.layers = nn.ModuleList(nn.Linear(in_dim, out_dim) for in_dim, out_dim in zip(input_dims, output_dims))
         self.act = ACT2CLS[act]()
 
     def forward(self, stat_features: torch.Tensor) -> torch.Tensor:
@@ -1857,9 +1854,9 @@ class DFineCSPRepLayer(nn.Module):
         hidden_channels = int(out_channels * expansion)
         self.conv1 = DFineConvNormLayer(config, in_channels, hidden_channels, 1, 1, activation=activation)
         self.conv2 = DFineConvNormLayer(config, in_channels, hidden_channels, 1, 1, activation=activation)
-        self.bottlenecks = nn.ModuleList([
-            DFineRepVggBlock(config, hidden_channels, hidden_channels) for _ in range(num_blocks)
-        ])
+        self.bottlenecks = nn.ModuleList(
+            [DFineRepVggBlock(config, hidden_channels, hidden_channels) for _ in range(num_blocks)]
+        )
         if hidden_channels != out_channels:
             self.conv3 = DFineConvNormLayer(config, hidden_channels, out_channels, 1, 1, activation=activation)
         else:

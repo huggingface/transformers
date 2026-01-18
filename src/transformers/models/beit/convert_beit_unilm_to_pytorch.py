@@ -49,16 +49,10 @@ def create_rename_keys(config, has_lm_head=False, is_semantic=False):
         rename_keys.append((f"{prefix}blocks.{i}.norm1.weight", f"beit.encoder.layer.{i}.layernorm_before.weight"))
         rename_keys.append((f"{prefix}blocks.{i}.norm1.bias", f"beit.encoder.layer.{i}.layernorm_before.bias"))
         rename_keys.append(
-            (
-                f"{prefix}blocks.{i}.attn.proj.weight",
-                f"beit.encoder.layer.{i}.attention.output.dense.weight",
-            )
+            (f"{prefix}blocks.{i}.attn.proj.weight", f"beit.encoder.layer.{i}.attention.output.dense.weight")
         )
         rename_keys.append(
-            (
-                f"{prefix}blocks.{i}.attn.proj.bias",
-                f"beit.encoder.layer.{i}.attention.output.dense.bias",
-            )
+            (f"{prefix}blocks.{i}.attn.proj.bias", f"beit.encoder.layer.{i}.attention.output.dense.bias")
         )
         rename_keys.append((f"{prefix}blocks.{i}.norm2.weight", f"beit.encoder.layer.{i}.layernorm_after.weight"))
         rename_keys.append((f"{prefix}blocks.{i}.norm2.bias", f"beit.encoder.layer.{i}.layernorm_after.bias"))

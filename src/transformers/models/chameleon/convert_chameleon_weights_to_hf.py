@@ -38,7 +38,6 @@ except ImportError:
         "Update your `tokenizers` library and re-run the tokenizer conversion."
     )
 
-
 """
 Sample usage:
 

@@ -551,8 +551,7 @@ class DeiTForMaskedImageModeling(DeiTPreTrainedModel):
             size = self.config.image_size // self.config.patch_size
             bool_masked_pos = bool_masked_pos.reshape(-1, size, size)
             mask = (
-                bool_masked_pos
-                .repeat_interleave(self.config.patch_size, 1)
+                bool_masked_pos.repeat_interleave(self.config.patch_size, 1)
                 .repeat_interleave(self.config.patch_size, 2)
                 .unsqueeze(1)
                 .contiguous()

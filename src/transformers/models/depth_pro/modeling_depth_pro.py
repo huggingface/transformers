@@ -963,21 +963,23 @@ class DepthProDepthEstimationHead(nn.Module):
         self.config = config
 
         features = config.fusion_hidden_size
-        self.layers = nn.ModuleList([
-            nn.Conv2d(features, features // 2, kernel_size=3, stride=1, padding=1),
-            nn.ConvTranspose2d(
-                in_channels=features // 2,
-                out_channels=features // 2,
-                kernel_size=2,
-                stride=2,
-                padding=0,
-                bias=True,
-            ),
-            nn.Conv2d(features // 2, 32, kernel_size=3, stride=1, padding=1),
-            nn.ReLU(True),
-            nn.Conv2d(32, 1, kernel_size=1, stride=1, padding=0),
-            nn.ReLU(),
-        ])
+        self.layers = nn.ModuleList(
+            [
+                nn.Conv2d(features, features // 2, kernel_size=3, stride=1, padding=1),
+                nn.ConvTranspose2d(
+                    in_channels=features // 2,
+                    out_channels=features // 2,
+                    kernel_size=2,
+                    stride=2,
+                    padding=0,
+                    bias=True,
+                ),
+                nn.Conv2d(features // 2, 32, kernel_size=3, stride=1, padding=1),
+                nn.ReLU(True),
+                nn.Conv2d(32, 1, kernel_size=1, stride=1, padding=0),
+                nn.ReLU(),
+            ]
+        )
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
         for layer in self.layers:

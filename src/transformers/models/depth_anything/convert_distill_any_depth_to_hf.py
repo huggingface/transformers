@@ -49,12 +49,8 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
     r"depth_head\.scratch\.output_conv(\d+)(?:\.(\d+))?\.(weight|bias)": lambda m: (
         f"head.conv{int(m[1]) + (int(m[2]) // 2 if m[2] else 0)}.{m[3]}" if m[1] == "2" else f"head.conv{m[1]}.{m[3]}"
     ),
-    r"depth_head\.scratch\.refinenet(\d+)\.out_conv\.(weight|bias)": lambda m: (
-        f"neck.fusion_stage.layers.{3 - (int(m[1]) - 1)}.projection.{m[2]}"
-    ),
-    r"depth_head\.scratch\.refinenet(\d+)\.resConfUnit(\d+)\.conv(\d+)\.(weight|bias)": lambda m: (
-        f"neck.fusion_stage.layers.{3 - (int(m[1]) - 1)}.residual_layer{m[2]}.convolution{m[3]}.{m[4]}"
-    ),
+    r"depth_head\.scratch\.refinenet(\d+)\.out_conv\.(weight|bias)": lambda m: f"neck.fusion_stage.layers.{3 - (int(m[1]) - 1)}.projection.{m[2]}",
+    r"depth_head\.scratch\.refinenet(\d+)\.resConfUnit(\d+)\.conv(\d+)\.(weight|bias)": lambda m: f"neck.fusion_stage.layers.{3 - (int(m[1]) - 1)}.residual_layer{m[2]}.convolution{m[3]}.{m[4]}",
 }
 
 
@@ -193,27 +189,15 @@ def convert_dpt_checkpoint(model_name, pytorch_dump_folder_path, push_to_hub, ve
 
         if model_name == "distill-any-depth-small":
             expected_slice = torch.tensor(
-                [
-                    [2.5653, 2.5249, 2.5570],
-                    [2.4897, 2.5235, 2.5355],
-                    [2.5255, 2.5261, 2.5422],
-                ]
+                [[2.5653, 2.5249, 2.5570], [2.4897, 2.5235, 2.5355], [2.5255, 2.5261, 2.5422]]
             )
         elif model_name == "distill-any-depth-base":
             expected_slice = torch.tensor(
-                [
-                    [4.8976, 4.9075, 4.9403],
-                    [4.8872, 4.8906, 4.9448],
-                    [4.8712, 4.8898, 4.8838],
-                ]
+                [[4.8976, 4.9075, 4.9403], [4.8872, 4.8906, 4.9448], [4.8712, 4.8898, 4.8838]]
             )
         elif model_name == "distill-any-depth-large":
             expected_slice = torch.tensor(
-                [
-                    [55.1067, 51.1828, 51.6803],
-                    [51.9098, 50.7529, 51.4494],
-                    [50.1745, 50.5491, 50.8818],
-                ]
+                [[55.1067, 51.1828, 51.6803], [51.9098, 50.7529, 51.4494], [50.1745, 50.5491, 50.8818]]
             )
         else:
             raise ValueError("Not supported")

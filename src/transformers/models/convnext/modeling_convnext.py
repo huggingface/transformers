@@ -173,16 +173,18 @@ class ConvNextStage(nn.Module):
         super().__init__()
 
         if in_channels != out_channels or stride > 1:
-            self.downsampling_layer = nn.ModuleList([
-                ConvNextLayerNorm(in_channels, eps=1e-6, data_format="channels_first"),
-                nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, stride=stride),
-            ])
+            self.downsampling_layer = nn.ModuleList(
+                [
+                    ConvNextLayerNorm(in_channels, eps=1e-6, data_format="channels_first"),
+                    nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, stride=stride),
+                ]
+            )
         else:
             self.downsampling_layer = nn.ModuleList()
         drop_path_rates = drop_path_rates or [0.0] * depth
-        self.layers = nn.ModuleList([
-            ConvNextLayer(config, dim=out_channels, drop_path=drop_path_rates[j]) for j in range(depth)
-        ])
+        self.layers = nn.ModuleList(
+            [ConvNextLayer(config, dim=out_channels, drop_path=drop_path_rates[j]) for j in range(depth)]
+        )
 
     def forward(self, features: torch.Tensor) -> torch.Tensor:
         for layer in self.downsampling_layer:

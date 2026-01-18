@@ -825,9 +825,9 @@ class ChameleonModel(ChameleonPreTrainedModel):
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
         self.vocabulary_mapping = ChameleonImageVocabularyMapping(config.vocabulary_map)
         decoder_layer = ChameleonDecoderLayer if not self.config.swin_norm else ChameleonSwinDecoderLayer
-        self.layers = nn.ModuleList([
-            decoder_layer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)
-        ])
+        self.layers = nn.ModuleList(
+            [decoder_layer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
+        )
         self.norm = ChameleonRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.vqmodel = ChameleonVQVAE._from_config(config.vq_config)
         self.rotary_emb = ChameleonRotaryEmbedding(config=config)

@@ -96,18 +96,18 @@ def create_rename_keys(config):
 
     # activation postprocessing (readout projections + resize blocks)
     for i in range(4):
-        rename_keys.append((f"pretrained.act_postprocess{i + 1}.0.project.0.weight", f"neck.reassemble_stage.readout_projects.{i}.0.weight"))
-        rename_keys.append((f"pretrained.act_postprocess{i + 1}.0.project.0.bias", f"neck.reassemble_stage.readout_projects.{i}.0.bias"))
+        rename_keys.append((f"pretrained.act_postprocess{i+1}.0.project.0.weight", f"neck.reassemble_stage.readout_projects.{i}.0.weight"))
+        rename_keys.append((f"pretrained.act_postprocess{i+1}.0.project.0.bias", f"neck.reassemble_stage.readout_projects.{i}.0.bias"))
 
-        rename_keys.append((f"pretrained.act_postprocess{i + 1}.3.weight", f"neck.reassemble_stage.layers.{i}.projection.weight"))
-        rename_keys.append((f"pretrained.act_postprocess{i + 1}.3.bias", f"neck.reassemble_stage.layers.{i}.projection.bias"))
+        rename_keys.append((f"pretrained.act_postprocess{i+1}.3.weight", f"neck.reassemble_stage.layers.{i}.projection.weight"))
+        rename_keys.append((f"pretrained.act_postprocess{i+1}.3.bias", f"neck.reassemble_stage.layers.{i}.projection.bias"))
 
         if i != 2:
-            rename_keys.append((f"pretrained.act_postprocess{i + 1}.4.weight", f"neck.reassemble_stage.layers.{i}.resize.weight"))
-            rename_keys.append((f"pretrained.act_postprocess{i + 1}.4.bias", f"neck.reassemble_stage.layers.{i}.resize.bias"))
+            rename_keys.append((f"pretrained.act_postprocess{i+1}.4.weight", f"neck.reassemble_stage.layers.{i}.resize.weight"))
+            rename_keys.append((f"pretrained.act_postprocess{i+1}.4.bias", f"neck.reassemble_stage.layers.{i}.resize.bias"))
 
     # refinenet (tricky here)
-    mapping = {1: 3, 2: 2, 3: 1, 4: 0}
+    mapping = {1:3, 2:2, 3:1, 4:0}
 
     for i in range(1, 5):
         j = mapping[i]
@@ -124,7 +124,7 @@ def create_rename_keys(config):
 
     # scratch convolutions
     for i in range(4):
-        rename_keys.append((f"scratch.layer{i + 1}_rn.weight", f"neck.convs.{i}.weight"))
+        rename_keys.append((f"scratch.layer{i+1}_rn.weight", f"neck.convs.{i}.weight"))
 
     # head
     for i in range(0, 5, 2):
