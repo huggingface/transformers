@@ -319,6 +319,7 @@ if TYPE_CHECKING:
     from .pp_ocrv5_mobile_det import *
     from .pp_doclayout_v2 import *
     from .pp_doclayout_v3 import *
+    from .pp_lcnet import *
     from .prompt_depth_anything import *
     from .prophetnet import *
     from .pvt import *
