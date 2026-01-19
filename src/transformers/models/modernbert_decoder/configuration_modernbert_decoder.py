@@ -97,6 +97,8 @@ class ModernBertDecoderConfig(PreTrainedConfig):
         layer_types (`list[str]`, *optional*):
             List of layer types, one for each layer. If not specified, will be automatically generated based on
             `global_attn_every_n_layers`. Should contain "full_attention" or "sliding_attention".
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
         rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
@@ -152,9 +154,16 @@ class ModernBertDecoderConfig(PreTrainedConfig):
         local_attention: int | None = 128,
         global_attn_every_n_layers: int | None = 3,
         layer_types: list[str] | None = None,
+        tie_word_embeddings: bool | None = True,
         rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
         **kwargs,
     ):
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.cls_token_id = cls_token_id
+        self.sep_token_id = sep_token_id
+        self.tie_word_embeddings = tie_word_embeddings
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -194,14 +203,7 @@ class ModernBertDecoderConfig(PreTrainedConfig):
         # NOTE: sliding window numbers matches ModernBERT but is only half of it
         self.sliding_window = local_attention // 2 if local_attention else -1
         self.rope_parameters = rope_parameters
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            cls_token_id=cls_token_id,
-            sep_token_id=sep_token_id,
-            **kwargs,
-        )
+        super().__init__(**kwargs)
 
     def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation=None, **kwargs):
         rope_scaling = kwargs.pop("rope_scaling", None)
