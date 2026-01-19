@@ -1031,6 +1031,7 @@ class ChineseCLIPModel(ChineseCLIPPreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
+            return_dict=True,
             **kwargs,
         )
         pooled_output = text_outputs.last_hidden_state[:, 0, :]
@@ -1069,6 +1070,7 @@ class ChineseCLIPModel(ChineseCLIPPreTrainedModel):
         vision_outputs: BaseModelOutputWithPooling = self.vision_model(
             pixel_values=pixel_values,
             interpolate_pos_encoding=interpolate_pos_encoding,
+            return_dict=True,
             **kwargs,
         )
         pooled_output = vision_outputs.pooler_output

@@ -199,7 +199,7 @@ class FastVlmModel(LlavaModel):
         )
 
         kwargs = {k: v for k, v in kwargs.items() if v is not None}
-        image_outputs = self.vision_tower(pixel_values, **kwargs)
+        image_outputs = self.vision_tower(pixel_values, return_dict=True, **kwargs)
 
         # since the vision tower is hybrid in FastVLM, its output needs to be handled differently from Llava
         selected_image_feature = image_outputs.last_hidden_state

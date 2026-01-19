@@ -175,7 +175,7 @@ class LightOnOcrModel(LightOnOcrPreTrainedModel):
     def get_image_features(
         self, pixel_values: torch.Tensor, image_sizes: torch.Tensor | list, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
-        image_outputs = self.vision_encoder(pixel_values, image_sizes=image_sizes, **kwargs)
+        image_outputs = self.vision_encoder(pixel_values, image_sizes=image_sizes, return_dict=True, **kwargs)
         image_features = image_outputs.last_hidden_state
         image_features = self.vision_projection(image_features.squeeze(0), image_sizes)
 

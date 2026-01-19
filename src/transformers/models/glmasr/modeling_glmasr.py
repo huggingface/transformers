@@ -406,7 +406,7 @@ class GlmAsrForConditionalGeneration(GlmAsrPreTrainedModel, GenerationMixin):
         input_features_mask (`torch.Tensor` of shape `(batch_size, feature_sequence_length)`):
             Mask to avoid performing attention on padded feature indices.
         """
-        audio_outputs = self.audio_tower(input_features, **kwargs)
+        audio_outputs = self.audio_tower(input_features, return_dict=True, **kwargs)
         audio_hidden_states = audio_outputs.last_hidden_state
         audio_hidden_states = audio_hidden_states.reshape(
             input_features.shape[0], -1, self.config.audio_config.intermediate_size

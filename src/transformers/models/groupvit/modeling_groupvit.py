@@ -1255,6 +1255,7 @@ class GroupViTModel(GroupViTPreTrainedModel):
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
+            return_dict=True,
             **kwargs,
         )
         pooled_output = text_outputs.pooler_output
@@ -1288,7 +1289,7 @@ class GroupViTModel(GroupViTPreTrainedModel):
         >>> with torch.inference_mode():
         ...     image_features = model.get_image_features(**inputs)
         ```"""
-        vision_outputs: BaseModelOutputWithPooling = self.vision_model(pixel_values, **kwargs)
+        vision_outputs: BaseModelOutputWithPooling = self.vision_model(pixel_values, return_dict=True, **kwargs)
         vision_outputs.pooler_output = self.visual_projection(vision_outputs.pooler_output)
 
         return vision_outputs

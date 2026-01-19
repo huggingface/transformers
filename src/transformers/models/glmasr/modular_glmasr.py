@@ -365,7 +365,7 @@ class GlmAsrForConditionalGeneration(AudioFlamingo3ForConditionalGeneration):
         input_features_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        audio_outputs = self.audio_tower(input_features, **kwargs)
+        audio_outputs = self.audio_tower(input_features, return_dict=True, **kwargs)
         audio_hidden_states = audio_outputs.last_hidden_state
         audio_hidden_states = audio_hidden_states.reshape(
             input_features.shape[0], -1, self.config.audio_config.intermediate_size

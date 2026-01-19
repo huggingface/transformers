@@ -412,7 +412,7 @@ class VoxtralForConditionalGeneration(VoxtralPreTrainedModel, GenerationMixin):
             `input_features`, the [`AutoFeatureExtractor`] should be used for extracting the mel features, padding
             and conversion into a tensor of type `torch.FloatTensor`. See [`~WhisperFeatureExtractor.__call__`]
         """
-        audio_outputs = self.audio_tower(input_features, **kwargs)
+        audio_outputs = self.audio_tower(input_features, return_dict=True, **kwargs)
         audio_hidden_states = audio_outputs.last_hidden_state
         audio_hidden_states = audio_hidden_states.reshape(-1, self.config.audio_config.intermediate_size)
         audio_embeds = self.multi_modal_projector(audio_hidden_states)

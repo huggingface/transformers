@@ -1531,6 +1531,7 @@ class ClvpModelForConditionalGeneration(ClvpPreTrainedModel, GenerationMixin):
             input_ids=input_ids,
             inputs_embeds=text_encoder_inputs_embeds,
             attention_mask=attention_mask,
+            return_dict=True,
             **kwargs,
         )
 

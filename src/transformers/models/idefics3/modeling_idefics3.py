@@ -608,7 +608,7 @@ class Idefics3Model(Idefics3PreTrainedModel):
 
         # Get sequence from the vision encoder
         image_outputs = self.vision_model(
-            pixel_values=pixel_values, patch_attention_mask=patch_attention_mask, **kwargs
+            pixel_values=pixel_values, patch_attention_mask=patch_attention_mask, return_dict=True, **kwargs
         )
         image_hidden_states = image_outputs.last_hidden_state
 

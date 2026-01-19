@@ -1127,12 +1127,14 @@ class Blip2Model(Blip2PreTrainedModel):
             text_outputs: BaseModelOutputWithPast = self.language_model.base_model(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
+                return_dict=True,
                 **kwargs,
             )
         else:
             text_outputs: BaseModelOutputWithPastAndCrossAttentions = self.language_model.get_encoder()(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
+                return_dict=True,
                 **kwargs,
             )
         return BaseModelOutputWithPooling(

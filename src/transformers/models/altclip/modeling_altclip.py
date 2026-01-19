@@ -1184,6 +1184,7 @@ class AltCLIPModel(AltCLIPPreTrainedModel):
             attention_mask=attention_mask,
             position_ids=position_ids,
             token_type_ids=token_type_ids,
+            return_dict=True,
             **kwargs,
         )
         pooled_output = text_outputs.pooler_output
@@ -1220,6 +1221,7 @@ class AltCLIPModel(AltCLIPPreTrainedModel):
         vision_outputs = self.vision_model(
             pixel_values=pixel_values,
             interpolate_pos_encoding=interpolate_pos_encoding,
+            return_dict=True,
             **kwargs,
         )
         pooled_output = vision_outputs.pooler_output

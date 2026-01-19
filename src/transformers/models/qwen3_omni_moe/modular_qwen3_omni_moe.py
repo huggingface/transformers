@@ -1483,6 +1483,7 @@ class Qwen3OmniMoeThinkerForConditionalGeneration(Qwen2_5OmniThinkerForCondition
         audio_outputs = self.audio_tower(
             input_features,
             feature_lens=feature_lens,
+            return_dict=True,
             **kwargs,
         )
 

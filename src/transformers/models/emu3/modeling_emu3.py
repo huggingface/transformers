@@ -1407,7 +1407,9 @@ class Emu3Model(Emu3PreTrainedModel):
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
             The tensors corresponding to the input images.
         """
-        vqmodel_outputs: Emu3VQVAEModelOutput = self.vqmodel.encode(pixel_values, image_sizes, **kwargs)
+        vqmodel_outputs: Emu3VQVAEModelOutput = self.vqmodel.encode(
+            pixel_values, image_sizes, return_dict=True, **kwargs
+        )
         split_sizes = [
             (height // self.vqmodel.vision_spatial_factor) * (width // self.vqmodel.vision_spatial_factor + 1)
             for height, width in image_sizes

@@ -2240,7 +2240,7 @@ class EdgeTamVideoModel(EdgeTamVideoPreTrainedModel):
         pixel_values (`torch.FloatTensor`):
             Input pixel values of shape `(batch_size, num_channels, height, width)`.
         """
-        vision_outputs: EdgeTamVideoVisionEncoderOutput = self.vision_encoder(pixel_values, **kwargs)
+        vision_outputs: EdgeTamVideoVisionEncoderOutput = self.vision_encoder(pixel_values, return_dict=True, **kwargs)
 
         feature_maps = vision_outputs.fpn_hidden_states
         feature_maps_position_embeddings = vision_outputs.fpn_position_encoding

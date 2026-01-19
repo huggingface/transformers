@@ -1580,6 +1580,7 @@ class ClapModel(ClapPreTrainedModel):
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
+            return_dict=True,
             **kwargs,
         )
         text_features = self.text_projection(text_outputs.pooler_output)
@@ -1616,7 +1617,7 @@ class ClapModel(ClapPreTrainedModel):
         ...     audio_features = model.get_audio_features(**inputs)
         ```"""
         audio_outputs: BaseModelOutputWithPooling = self.audio_model(
-            input_features=input_features, is_longer=is_longer, **kwargs
+            input_features=input_features, is_longer=is_longer, return_dict=True, **kwargs
         )
         audio_features = self.audio_projection(audio_outputs.pooler_output)
         audio_outputs.pooler_output = F.normalize(audio_features, dim=-1)

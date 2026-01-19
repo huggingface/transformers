@@ -131,6 +131,7 @@ class VisionTextDualEncoderModel(PreTrainedModel):
             attention_mask=attention_mask,
             position_ids=position_ids,
             token_type_ids=token_type_ids,
+            return_dict=True,
             **kwargs,
         )
         pooled_output = text_outputs.pooler_output
@@ -162,7 +163,7 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         >>> with torch.inference_mode():
         ...     image_features = model.get_image_features(**inputs)
         ```"""
-        vision_outputs = self.vision_model(pixel_values=pixel_values, **kwargs)
+        vision_outputs = self.vision_model(pixel_values=pixel_values, return_dict=True, **kwargs)
         vision_outputs.pooler_output = self.visual_projection(vision_outputs.pooler_output)
 
         return vision_outputs

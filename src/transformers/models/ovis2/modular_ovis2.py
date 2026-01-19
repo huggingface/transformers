@@ -266,7 +266,7 @@ class Ovis2Model(LlavaModel):
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithVisualIndicatorFeatures:
-        image_outputs = self.vision_tower(pixel_values, **kwargs)
+        image_outputs = self.vision_tower(pixel_values, return_dict=True, **kwargs)
         image_features = image_outputs.pooler_output
         batch_size, img_seq_len, _ = image_features.shape
         padding_tensor = torch.zeros(

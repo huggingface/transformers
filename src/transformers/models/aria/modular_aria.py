@@ -1278,6 +1278,7 @@ class AriaModel(LlavaModel):
         image_outputs = self.vision_tower(
             pixel_values,
             patch_attention_mask=patch_attention_mask,
+            return_dict=True,
             **kwargs,
         )
         image_attn_mask = None

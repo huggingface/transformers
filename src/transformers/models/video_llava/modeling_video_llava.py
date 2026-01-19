@@ -204,7 +204,7 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
             raise ValueError(f"Unexpected select feature strategy: {self.config.vision_feature_select_strategy}")
 
         kwargs["output_hidden_states"] = True
-        image_outputs = self.image_tower(pixel_values_images, **kwargs)
+        image_outputs = self.image_tower(pixel_values_images, return_dict=True, **kwargs)
 
         # If we have one vision feature layer, return the corresponding hidden states,
         # otherwise, select the hidden states of each feature layer and concatenate them
@@ -250,7 +250,7 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
 
         pixel_values = pixel_values_videos.reshape(batch_size_vid * num_frames, channels, height, width)
         kwargs["output_hidden_states"] = True
-        video_outputs = self.video_tower(pixel_values, **kwargs)
+        video_outputs = self.video_tower(pixel_values, return_dict=True, **kwargs)
 
         # If we have one vision feature layer, return the corresponding hidden states,
         # otherwise, select the hidden states of each feature layer and concatenate them

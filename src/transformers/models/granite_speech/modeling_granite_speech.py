@@ -362,7 +362,7 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
     def get_audio_features(
         self, input_features: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
     ) -> tuple | BaseModelOutputWithPooling:
-        audio_outputs = self.encoder(input_features, **kwargs)
+        audio_outputs = self.encoder(input_features, return_dict=True, **kwargs)
         projected_embeds = self.projector(audio_outputs.last_hidden_state)
         audio_outputs.pooler_output = projected_embeds
 

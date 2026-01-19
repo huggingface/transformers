@@ -683,7 +683,7 @@ class Florence2Model(Florence2PreTrainedModel):
         pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`):
             The tensors corresponding to the input images.
         """
-        image_outputs = self.vision_tower(pixel_values, **kwargs)
+        image_outputs = self.vision_tower(pixel_values, return_dict=True, **kwargs)
         image_outputs.pooler_output = self.multi_modal_projector(image_outputs.last_hidden_state)
 
         return image_outputs

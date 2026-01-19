@@ -1005,6 +1005,7 @@ class Owlv2Model(Owlv2PreTrainedModel):
         text_outputs: BaseModelOutputWithPooling = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
+            return_dict=True,
             **kwargs,
         )
         pooled_output = text_outputs.pooler_output
@@ -1040,6 +1041,7 @@ class Owlv2Model(Owlv2PreTrainedModel):
         vision_outputs: BaseModelOutputWithPooling = self.vision_model(
             pixel_values=pixel_values,
             interpolate_pos_encoding=interpolate_pos_encoding,
+            return_dict=True,
             **kwargs,
         )
         vision_outputs.pooler_output = self.visual_projection(vision_outputs.pooler_output)

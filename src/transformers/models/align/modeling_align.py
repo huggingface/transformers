@@ -1124,6 +1124,7 @@ class AlignModel(AlignPreTrainedModel):
             token_type_ids=token_type_ids,
             position_ids=position_ids,
             inputs_embeds=inputs_embeds,
+            return_dict=True,
             **kwargs,
         )
         last_hidden_state = text_outputs[0][:, 0, :]

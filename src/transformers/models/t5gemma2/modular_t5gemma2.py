@@ -864,7 +864,7 @@ class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
     ) -> tuple | BaseModelOutputWithPooling:
         # pixel_values: (batch_size, channels, height, width)
         # image_features: Image feature tensor of shape (num_images, image_length, embed_dim).
-        vision_outputs = self.vision_tower(pixel_values=pixel_values, **kwargs)
+        vision_outputs = self.vision_tower(pixel_values=pixel_values, return_dict=True, **kwargs)
         last_hidden_state = vision_outputs.last_hidden_state
         image_features = self.multi_modal_projector(last_hidden_state)
         vision_outputs.pooler_output = image_features

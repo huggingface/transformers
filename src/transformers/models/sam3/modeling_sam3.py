@@ -2170,7 +2170,9 @@ class Sam3Model(Sam3PreTrainedModel):
         >>> outputs = model(pixel_values=img_inputs.pixel_values, text_embeds=text_embeds)
         ```
         """
-        text_outputs = self.text_encoder(input_ids=input_ids, attention_mask=attention_mask, **kwargs)
+        text_outputs = self.text_encoder(
+            input_ids=input_ids, attention_mask=attention_mask, return_dict=True, **kwargs
+        )
         last_hidden_state = text_outputs.last_hidden_state
         text_outputs.pooler_output = self.text_projection(last_hidden_state)
 

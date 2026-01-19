@@ -92,7 +92,7 @@ class VipLlavaModel(LlavaModel):
             vision_feature_layers if vision_feature_layers is not None else self.config.vision_feature_layers
         )
         kwargs["output_hidden_states"] = True
-        image_outputs = self.vision_tower(pixel_values, **kwargs)
+        image_outputs = self.vision_tower(pixel_values, return_dict=True, **kwargs)
 
         # If multiple feature layers are provided (which is usually the case)
         # then the image features are concatenated after the CLS is removed.

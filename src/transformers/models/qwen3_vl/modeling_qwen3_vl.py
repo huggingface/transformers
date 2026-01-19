@@ -1121,7 +1121,7 @@ class Qwen3VLModel(Qwen3VLPreTrainedModel):
         """
         pixel_values = pixel_values.type(self.visual.dtype)
         vision_output: BaseModelOutputWithDeepstackFeatures = self.visual(
-            pixel_values, grid_thw=image_grid_thw, **kwargs
+            pixel_values, grid_thw=image_grid_thw, return_dict=True, **kwargs
         )
         image_embeds = vision_output.pooler_output
         split_sizes = (image_grid_thw.prod(-1) // self.visual.spatial_merge_size**2).tolist()

@@ -2173,6 +2173,7 @@ class Qwen2_5OmniThinkerForConditionalGeneration(Qwen2_5OmniPreTrainedModelForCo
             input_features,
             feature_lens=feature_lens,
             aftercnn_lens=audio_feat_lengths,
+            return_dict=True,
             **kwargs,
         )
         if audio_outputs.last_hidden_state.shape[0] != sum(audio_output_lengths.tolist()):

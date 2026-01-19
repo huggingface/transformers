@@ -2244,7 +2244,7 @@ class Gemma3nModel(PaliGemmaModel):
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        vision_outputs = self.vision_tower(pixel_values=pixel_values, do_pooling=False, **kwargs)
+        vision_outputs = self.vision_tower(pixel_values=pixel_values, do_pooling=False, return_dict=True, **kwargs)
         last_hidden_state = vision_outputs.last_hidden_state
         # Convert from (batch, channels, height, width) to (batch, height * width, channels) where:
         # height == width and height * width == Gemma3nConfig.vision_soft_tokens_per_image.
@@ -2459,7 +2459,9 @@ class Gemma3nModel(PaliGemmaModel):
         input_features_mask (`torch.FloatTensor]` of shape `(num_images, seq_length)`):
             The attention mask for the input audio.
         """
-        audio_outputs: Gemma3nAudioEncoderModelOutput = self.audio_tower(input_features, input_features_mask)
+        audio_outputs: Gemma3nAudioEncoderModelOutput = self.audio_tower(
+            input_features, input_features_mask, return_dict=True, **kwargs
+        )
         audio_embeds = self.embed_audio(inputs_embeds=audio_outputs.last_hidden_state)
         audio_outputs.pooler_output = audio_embeds
 

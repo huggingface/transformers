@@ -1526,6 +1526,7 @@ class Kosmos2Model(Kosmos2PreTrainedModel):
         vision_output: BaseModelOutputWithProjectionAttentions = self.vision_model(
             pixel_values=pixel_values,
             interpolate_pos_encoding=interpolate_pos_encoding,
+            return_dict=True,
             **kwargs,
         )
         # The whole `last_hidden_state` through `post_layernorm` instead of just `pooled_output`.

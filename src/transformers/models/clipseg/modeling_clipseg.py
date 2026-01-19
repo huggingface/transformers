@@ -878,6 +878,7 @@ class CLIPSegModel(CLIPSegPreTrainedModel):
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
+            return_dict=True,
             **kwargs,
         )
         pooled_output = text_outputs.pooler_output
@@ -915,6 +916,7 @@ class CLIPSegModel(CLIPSegPreTrainedModel):
         vision_outputs: BaseModelOutputWithPooling = self.vision_model(
             pixel_values=pixel_values,
             interpolate_pos_encoding=interpolate_pos_encoding,
+            return_dict=True,
             **kwargs,
         )
         pooled_output = vision_outputs.pooler_output

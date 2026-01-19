@@ -184,6 +184,7 @@ class Lfm2VlModel(Lfm2VlPreTrainedModel):
             pixel_values=pixel_values,
             spatial_shapes=spatial_shapes,
             pixel_attention_mask=pixel_attention_mask,
+            return_dict=True,
             **kwargs,
         )
         last_hidden_state = image_outputs.last_hidden_state

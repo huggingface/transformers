@@ -639,6 +639,7 @@ class VideoLlama3Model(Qwen2VLModel):
             pixel_values=pixel_values,
             grid_thw=image_grid_thw,
             merge_sizes=image_merge_sizes,
+            return_dict=True,
             **kwargs,
         )
         last_hidden_state = vision_outputs.last_hidden_state

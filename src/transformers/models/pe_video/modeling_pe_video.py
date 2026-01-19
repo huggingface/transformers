@@ -581,6 +581,7 @@ class PeVideoModel(PeVideoPreTrainedModel):
             text_outputs: BaseModelOutputWithPooling = self.text_model(
                 input_ids=input_ids,
                 attention_mask=attention_mask,
+                return_dict=True,
                 **kwargs,
             )
             text_outputs.pooler_output = self.text_video_head(text_outputs.last_hidden_state)
@@ -597,6 +598,7 @@ class PeVideoModel(PeVideoPreTrainedModel):
             video_outputs: BaseModelOutputWithPooling = self.video_encoder(
                 pixel_values_videos=pixel_values_videos,
                 padding_mask_videos=padding_mask_videos,
+                return_dict=True,
                 **kwargs,
             )
             video_outputs.pooler_output = self.video_head(video_outputs.pooler_output)

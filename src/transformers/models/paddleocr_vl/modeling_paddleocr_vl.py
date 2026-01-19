@@ -1229,6 +1229,7 @@ class PaddleOCRVLModel(PaddleOCRVLPreTrainedModel):
             pixel_values=pixel_values,
             image_grid_thw=image_grid_thw,
             cu_seqlens=cu_seqlens,
+            return_dict=True,
             **kwargs,
         )
         image_embeds = vision_outputs.last_hidden_state

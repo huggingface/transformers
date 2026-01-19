@@ -1041,6 +1041,7 @@ class FlavaModel(FlavaPreTrainedModel):
             attention_mask=attention_mask,
             token_type_ids=token_type_ids,
             position_ids=position_ids,
+            return_dict=True,
             **kwargs,
         )
         last_hidden_state = text_outputs.last_hidden_state
@@ -1086,6 +1087,7 @@ class FlavaModel(FlavaPreTrainedModel):
             bool_masked_pos=bool_masked_pos,
             attention_mask=attention_mask,
             interpolate_pos_encoding=interpolate_pos_encoding,
+            return_dict=True,
             **kwargs,
         )
         last_hidden_state = image_outputs.last_hidden_state

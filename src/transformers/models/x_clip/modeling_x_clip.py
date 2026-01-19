@@ -1230,6 +1230,7 @@ class XCLIPModel(XCLIPPreTrainedModel):
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
+            return_dict=True,
             **kwargs,
         )
         pooled_output = text_outputs.pooler_output
@@ -1317,7 +1318,9 @@ class XCLIPModel(XCLIPPreTrainedModel):
         batch_size, num_frames, num_channels, height, width = pixel_values.shape
         pixel_values = pixel_values.reshape(-1, num_channels, height, width)
 
-        video_outputs: BaseModelOutputWithPooling = self.vision_model(pixel_values=pixel_values, **kwargs)
+        video_outputs: BaseModelOutputWithPooling = self.vision_model(
+            pixel_values=pixel_values, return_dict=True, **kwargs
+        )
         video_embeds = video_outputs.pooler_output
         video_embeds = self.visual_projection(video_embeds)
 

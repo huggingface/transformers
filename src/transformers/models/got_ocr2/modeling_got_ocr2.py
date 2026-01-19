@@ -558,7 +558,7 @@ class GotOcr2Model(GotOcr2PreTrainedModel):
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
-        image_outputs = self.vision_tower(pixel_values, **kwargs)
+        image_outputs = self.vision_tower(pixel_values, return_dict=True, **kwargs)
         last_hidden_state = image_outputs.last_hidden_state
         image_outputs.pooler_output = self.multi_modal_projector(last_hidden_state)
 
