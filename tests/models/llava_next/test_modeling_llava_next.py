@@ -66,7 +66,8 @@ class LlavaNextVisionText2TextModelTester(VLMModelTester):
 
     # Template method overrides
 
-    def compute_num_image_tokens(self):
+    @property
+    def num_image_tokens(self):
         """
         Calculate num_image_tokens based on LlavaNext's pack_image_features logic:
         - base_image_feature: (image_size/patch_size)^2 tokens
