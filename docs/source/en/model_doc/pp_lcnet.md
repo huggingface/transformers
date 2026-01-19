@@ -73,7 +73,7 @@ Here is how you can do it with PP-LCNet using [`Pipeline`] or the [`AutoModel`]:
 import requests
 from PIL import Image
 from transformers import pipeline
-model_path = "/workspace/model_weight_torch/PP-LCNet_x1_0_doc_ori"
+model_path = "PaddlePaddle/PP-LCNet_x1_0_doc_ori_safetensors"
 image = Image.open(requests.get("https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/img_rot180_demo.jpg", stream=True).raw)
 image_classifier = pipeline("image-classification", model=model_path, function_to_apply="none")
 result = image_classifier([image, image])
@@ -90,7 +90,7 @@ import requests
 from PIL import Image
 from transformers import AutoImageProcessor, AutoModelForImageClassification
 
-model_path = "/workspace/model_weight_torch/PP-LCNet_x1_0_doc_ori"
+model_path = "PaddlePaddle/PP-LCNet_x1_0_doc_ori_safetensors"
 model = AutoModelForImageClassification.from_pretrained(model_path)
 image_processor = AutoImageProcessor.from_pretrained(model_path)
 
