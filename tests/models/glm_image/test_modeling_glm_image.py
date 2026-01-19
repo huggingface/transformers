@@ -347,6 +347,12 @@ class GlmImageModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
 
 
 @require_torch
+@unittest.skip(
+    reason="Integration tests use wrong checkpoint (zai-org/GLM-4.5V is glm4v_moe, not glm_image). "
+    "The correct checkpoint is zai-org/GLM-Image with subfolder='vision_language_encoder'. "
+    "Tests also need to be rewritten as GlmImage is for image generation, not VLM-style Q&A. "
+    "See https://github.com/huggingface/transformers/issues/43344"
+)
 @slow
 class GlmImageIntegrationTest(unittest.TestCase):
     @classmethod
