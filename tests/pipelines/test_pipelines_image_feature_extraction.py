@@ -42,7 +42,7 @@ def prepare_img():
 
 
 @is_pipeline_test
-class ImageFeatureExtractionPipelineTests(unittest.TestCase):
+class ImageEmbeddingPipelineTests(unittest.TestCase):
     model_mapping = MODEL_MAPPING
 
     @require_torch

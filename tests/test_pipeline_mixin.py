@@ -61,9 +61,9 @@ from .pipelines.test_pipelines_audio_classification import AudioClassificationPi
 from .pipelines.test_pipelines_automatic_speech_recognition import AutomaticSpeechRecognitionPipelineTests
 from .pipelines.test_pipelines_depth_estimation import DepthEstimationPipelineTests
 from .pipelines.test_pipelines_document_question_answering import DocumentQuestionAnsweringPipelineTests
-from .pipelines.test_pipelines_feature_extraction import FeatureExtractionPipelineTests
+from .pipelines.test_pipelines_feature_extraction import TextEmbeddingPipelineTests
 from .pipelines.test_pipelines_image_classification import ImageClassificationPipelineTests
-from .pipelines.test_pipelines_image_feature_extraction import ImageFeatureExtractionPipelineTests
+from .pipelines.test_pipelines_image_feature_extraction import ImageEmbeddingPipelineTests
 from .pipelines.test_pipelines_image_segmentation import ImageSegmentationPipelineTests
 from .pipelines.test_pipelines_image_text_to_text import ImageTextToTextPipelineTests
 from .pipelines.test_pipelines_image_to_image import ImageToImagePipelineTests
@@ -86,9 +86,9 @@ pipeline_test_mapping = {
     "automatic-speech-recognition": {"test": AutomaticSpeechRecognitionPipelineTests},
     "depth-estimation": {"test": DepthEstimationPipelineTests},
     "document-question-answering": {"test": DocumentQuestionAnsweringPipelineTests},
-    "text-embedding": {"test": FeatureExtractionPipelineTests},
+    "text-embedding": {"test": TextEmbeddingPipelineTests},
     "image-classification": {"test": ImageClassificationPipelineTests},
-    "image-embedding": {"test": ImageFeatureExtractionPipelineTests},
+    "image-embedding": {"test": ImageEmbeddingPipelineTests},
     "image-segmentation": {"test": ImageSegmentationPipelineTests},
     "image-text-to-text": {"test": ImageTextToTextPipelineTests},
     "image-to-image": {"test": ImageToImagePipelineTests},

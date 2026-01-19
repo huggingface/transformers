@@ -247,7 +247,7 @@ class OneFormerModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCas
         feature_extractor_name,
         processor_name,
     ):
-        if pipeline_test_case_name == "FeatureExtractionPipelineTests":
+        if pipeline_test_case_name == "TextEmbeddingPipelineTests":
             return True
 
         return False
