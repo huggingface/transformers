@@ -181,6 +181,10 @@ class GlmImageTextConfig(Glm4vTextConfig):
             by the `inputs_ids` passed when calling [`GlmImageVisionModel`]
         attention_bias (`bool`, *optional*, defaults to `True`):
             Whether to add a bias to the queries, keys and values.
+        pad_token_id (`int`, *optional*, defaults to 167841):
+            The id of the padding token.
+        eos_token_id (`int`, *optional*, defaults to 16385):
+            The id of the end of sequence token.
         hidden_size (`int`, *optional*, defaults to 4096):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 13696):
@@ -198,7 +202,7 @@ class GlmImageTextConfig(Glm4vTextConfig):
             paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to `2`.
         hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
             The non-linear activation function (function or string) in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to 32768):
+        max_position_embeddings (`int`, *optional*, defaults to 131072):
             The maximum sequence length that this model might ever be used with.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
@@ -230,13 +234,15 @@ class GlmImageTextConfig(Glm4vTextConfig):
         vocab_size: int | None = 168064,
         vision_vocab_size: int | None = 16512,
         attention_bias: bool | None = True,
+        pad_token_id: int | None = 167841,
+        eos_token_id: int | None = 16385,
         hidden_size: int | None = 4096,
         intermediate_size: int | None = 13696,
         num_hidden_layers: int | None = 40,
         num_attention_heads: int | None = 32,
         num_key_value_heads: int | None = 2,
         hidden_act: str | None = "silu",
-        max_position_embeddings: int | None = 32768,
+        max_position_embeddings: int | None = 131072,
         initializer_range: float | None = 0.02,
         rms_norm_eps: int | None = 1e-05,
         use_cache: bool | None = True,
@@ -246,6 +252,8 @@ class GlmImageTextConfig(Glm4vTextConfig):
     ):
         self.vision_vocab_size = vision_vocab_size
         self.attention_bias = attention_bias
+        self.pad_token_id = pad_token_id
+        self.eos_token_id = eos_token_id
         super().__init__(
             vocab_size=vocab_size,
             hidden_size=hidden_size,
