@@ -133,6 +133,7 @@ _import_structure = {
         "is_wandb_available",
     ],
     "loss": [],
+    "models.snac": ["SnacConfig"],
     "pipelines": [
         "AnyToAnyPipeline",
         "AudioClassificationPipeline",
