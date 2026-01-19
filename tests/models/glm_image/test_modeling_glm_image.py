@@ -361,6 +361,12 @@ class GlmImageModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
+    @unittest.skip(
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        pass
+
     @unittest.skip(reason="GlmImageVisionModel does not support training")
     def test_retain_grad_hidden_states_attentions(self):
         pass
