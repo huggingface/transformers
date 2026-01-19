@@ -1,0 +1,2 @@
+from .image_processing_resnet 
+import ResNetImageProcessor
