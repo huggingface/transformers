@@ -283,6 +283,30 @@ class GlmImageModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
     def test_multi_gpu_data_parallel_forward(self):
         pass
 
+    @unittest.skip(
+        "GlmImage has a VQ module that uses `weight.data` directly in forward which prevent offloading on that module"
+    )
+    def test_disk_offload_safetensors(self):
+        pass
+
+    @unittest.skip(
+        "GlmImage has a VQ module that uses `weight.data` directly in forward which prevent offloading on that module"
+    )
+    def test_disk_offload_bin(self):
+        pass
+
+    @unittest.skip(
+        "GlmImage has a VQ module that uses `weight.data` directly in forward which prevent offloading on that module"
+    )
+    def test_cpu_offload(self):
+        pass
+
+    @unittest.skip(
+        "GlmImage has a VQ module that uses `weight.data` directly in forward which prevent offloading on that module"
+    )
+    def test_model_parallelism(self):
+        pass
+
     @unittest.skip("Error with compilation")
     def test_generate_from_inputs_embeds_with_static_cache(self):
         pass
