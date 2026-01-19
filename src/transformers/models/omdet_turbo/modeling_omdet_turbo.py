@@ -32,7 +32,7 @@ from ...integrations import use_kernel_forward_from_hub
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, check_with, logging
+from ...utils import auto_docstring, logging, torch_compilable_check
 from ...utils.backbone_utils import load_backbone
 from ..auto import AutoModel
 from .configuration_omdet_turbo import OmDetTurboConfig
@@ -352,10 +352,9 @@ class OmDetTurboMultiscaleDeformableAttention(nn.Module):
         batch_size, sequence_length, _ = encoder_hidden_states.shape
         # Ignore copy
         total_elements = sum(shape[0] * shape[1] for shape in spatial_shapes_list)
-        check_with(
-            ValueError,
+        torch_compilable_check(
             total_elements == sequence_length,
-            lambda: "Make sure to align the spatial shapes with the sequence length of the encoder hidden states",
+            "Make sure to align the spatial shapes with the sequence length of the encoder hidden states",
         )
 
         value = self.value_proj(encoder_hidden_states)

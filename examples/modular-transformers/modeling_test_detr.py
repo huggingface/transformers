@@ -21,7 +21,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import meshgrid
-from ...utils import ModelOutput, auto_docstring, check_with, is_timm_available, requires_backends
+from ...utils import ModelOutput, auto_docstring, is_timm_available, requires_backends, torch_compilable_check
 from ...utils.backbone_utils import load_backbone
 from .configuration_test_detr import TestDetrConfig
 
@@ -429,10 +429,9 @@ class TestDetrMultiscaleDeformableAttention(nn.Module):
         batch_size, num_queries, _ = hidden_states.shape
         batch_size, sequence_length, _ = encoder_hidden_states.shape
         total_elements = sum(height * width for height, width in spatial_shapes_list)
-        check_with(
-            ValueError,
+        torch_compilable_check(
             total_elements == sequence_length,
-            lambda: "Make sure to align the spatial shapes with the sequence length of the encoder hidden states",
+            "Make sure to align the spatial shapes with the sequence length of the encoder hidden states",
         )
 
         value = self.value_proj(encoder_hidden_states)

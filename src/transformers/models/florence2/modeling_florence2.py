@@ -32,7 +32,14 @@ from ...generation import GenerationMixin
 from ...modeling_outputs import Seq2SeqLMOutput, Seq2SeqModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, check_with, is_torch_available, logging
+from ...utils import (
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    is_torch_available,
+    logging,
+    torch_compilable_check,
+)
 from ..auto import AutoModel
 from .configuration_florence2 import Florence2Config, Florence2VisionConfig
 
@@ -696,10 +703,9 @@ class Florence2Model(Florence2PreTrainedModel):
         n_image_tokens = special_image_mask.sum()
         n_image_features = image_features.shape[0] * image_features.shape[1]
         special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-        check_with(
-            ValueError,
+        torch_compilable_check(
             inputs_embeds[special_image_mask].numel() == image_features.numel(),
-            lambda: f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {n_image_features}",
+            f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {n_image_features}",
         )
         return special_image_mask
 

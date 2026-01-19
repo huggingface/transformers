@@ -22,7 +22,7 @@ from ... import initialization as init
 from ...activations import ACT2CLS
 from ...configuration_utils import PreTrainedConfig
 from ...image_transforms import corners_to_center_format
-from ...utils import check_with, logging
+from ...utils import logging, torch_compilable_check
 from ...utils.backbone_utils import verify_backbone_config_arguments
 from ..auto import CONFIG_MAPPING, AutoConfig
 from ..rt_detr.modeling_rt_detr import (
@@ -458,10 +458,9 @@ class DFineMultiscaleDeformableAttention(nn.Module):
         batch_size, num_queries, _ = hidden_states.shape
         batch_size, sequence_length, _ = encoder_hidden_states.shape
 
-        check_with(
-            ValueError,
+        torch_compilable_check(
             (spatial_shapes[:, 0] * spatial_shapes[:, 1]).sum() == sequence_length,
-            lambda: "Make sure to align the spatial shapes with the sequence length of the encoder hidden states",
+            "Make sure to align the spatial shapes with the sequence length of the encoder hidden states",
         )
 
         # Reshape for multi-head attention

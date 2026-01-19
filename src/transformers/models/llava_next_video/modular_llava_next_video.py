@@ -32,7 +32,7 @@ from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...processing_utils import Unpack
-from ...utils import check_with, logging
+from ...utils import logging, torch_compilable_check
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
@@ -423,19 +423,19 @@ class LlavaNextVideoModel(LlavaNextModel):
 
         n_image_tokens = special_image_mask.sum()
         special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-        check_with(
-            ValueError,
-            image_features is None or inputs_embeds[special_image_mask].numel() == image_features.numel(),
-            lambda: f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {image_features.shape[0]}",
-        )
+        if image_features is not None:
+            torch_compilable_check(
+                inputs_embeds[special_image_mask].numel() == image_features.numel(),
+                f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {image_features.shape[0]}",
+            )
 
         n_video_tokens = special_video_mask.sum()
         special_video_mask = special_video_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-        check_with(
-            ValueError,
-            video_features is None or inputs_embeds[special_video_mask].numel() == video_features.numel(),
-            lambda: f"Video features and video tokens do not match, tokens: {n_video_tokens}, features: {video_features.shape[0]}",
-        )
+        if video_features is not None:
+            torch_compilable_check(
+                inputs_embeds[special_video_mask].numel() == video_features.numel(),
+                f"Video features and video tokens do not match, tokens: {n_video_tokens}, features: {video_features.shape[0]}",
+            )
         return special_image_mask, special_video_mask
 
     def forward(

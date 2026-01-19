@@ -31,8 +31,8 @@ from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import (
     ModelOutput,
     auto_docstring,
-    check_with,
     logging,
+    torch_compilable_check,
     torch_int,
 )
 from ...utils.backbone_utils import load_backbone
@@ -720,10 +720,9 @@ class RTDetrMultiscaleDeformableAttention(nn.Module):
         batch_size, num_queries, _ = hidden_states.shape
         batch_size, sequence_length, _ = encoder_hidden_states.shape
         total_elements = sum(height * width for height, width in spatial_shapes_list)
-        check_with(
-            ValueError,
+        torch_compilable_check(
             total_elements == sequence_length,
-            lambda: "Make sure to align the spatial shapes with the sequence length of the encoder hidden states",
+            "Make sure to align the spatial shapes with the sequence length of the encoder hidden states",
         )
 
         value = self.value_proj(encoder_hidden_states)

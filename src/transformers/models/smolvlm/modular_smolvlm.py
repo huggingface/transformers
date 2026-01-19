@@ -20,7 +20,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, can_return_tuple, check_with, logging
+from ...utils import auto_docstring, can_return_tuple, logging, torch_compilable_check
 from ..idefics3.configuration_idefics3 import Idefics3Config, Idefics3VisionConfig
 from ..idefics3.image_processing_idefics3 import Idefics3ImageProcessor
 from ..idefics3.image_processing_idefics3_fast import Idefics3ImageProcessorFast
@@ -172,10 +172,9 @@ class SmolVLMModel(Idefics3Model):
             image_mask = input_ids == self.config.image_token_id
 
         num_image_tokens = image_mask.sum(dim=1)
-        check_with(
-            ValueError,
+        torch_compilable_check(
             torch.all(num_image_tokens % patch_size == 0),
-            lambda: "At least one sample has <image> tokens not divisible by patch_size.",
+            "At least one sample has <image> tokens not divisible by patch_size.",
         )
         blocks_per_sample = num_image_tokens // patch_size
 

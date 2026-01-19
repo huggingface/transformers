@@ -1396,15 +1396,20 @@ def is_tracing(tensor=None) -> bool:
     return _is_tracing
 
 
-def check_with(error_type: type[Exception], cond: Any, msg: Callable[[], str]) -> None:
+def torch_compilable_check(cond: Any, msg: str | Callable[[], str], error_type: type[Exception] = ValueError) -> None:
     """
-    Same as `torch._check_with()` but supports cond being a boolean, a boolean tensor, or a callable returning either.
-    Note: We use `torch._check_with()` which is the same as `torch._check()` but supports specifying the error type.
+    Combines the functionalities of `torch._check`, `torch._check_with` and `torch._check_tensor_all_with` to provide a
+    unified way to perform checks that are compatible with TorchDynamo (torch.compile & torch.export).
+
+    The advantage of using `torch._check(cond, msg, error_type)` over `if cond: raise error_type(msg)` is that the former
+    works as a truthfulness hint for TorchDynamo, instead of failing with a data-dependent control flow error during compilation.
+
+    All checks using this method can be disabled in production environments by setting `TRANSFORMERS_DISABLE_TORCH_CHECK=1`.
 
     Args:
-        error_type (`type[Exception]`): The type of error to raise if the condition is not met.
-        cond (`Any`): The condition to check for (`bool`, `torch.Tensor` or `Callable[[], bool | torch.Tensor]`).
-        msg (`Callable[[], str]`): A callable that returns the message to display if the check fails.
+        cond (`bool`, `torch.Tensor` or `Callable[[], bool | torch.Tensor]`): The condition to check.
+        msg (`str` or `Callable[[], str]`): The error message to display if the condition is not met.
+        error_type (`type[Exception]`, *optional*, defaults to `ValueError`): The type of error to raise if the condition is not met.
 
     Raises:
         error_type: If the condition is not met.
@@ -1414,16 +1419,18 @@ def check_with(error_type: type[Exception], cond: Any, msg: Callable[[], str]) -
 
     import torch
 
+    if not callable(msg):
+        # torch._check requires msg to be a callable but we want to keep the API simple for users
+        def msg():
+            return msg
+
     if callable(cond):
         cond = cond()
 
     if isinstance(cond, torch.Tensor):
-        cond = cond.item()
-
-    if os.getenv("TRANSFORMERS_USE_ASSERT_ASYNC", "0") == "1":
-        torch._assert_async(cond, msg())
-
-    torch._check_with(error_type, cond, msg)
+        torch._check_tensor_all_with(error_type, cond, msg)
+    else:
+        torch._check_with(error_type, cond, msg)
 
 
 @lru_cache
