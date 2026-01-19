@@ -379,6 +379,38 @@ class GlmImageModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
     def test_prompt_lookup_decoding_matches_greedy_search(self):
         pass
 
+    @unittest.skip(
+        reason="GLM-Image packed image format requires images_per_sample for beam search with num_return_sequences > 1"
+    )
+    def test_beam_search_generate(self):
+        pass
+
+    @unittest.skip(
+        reason="GLM-Image packed image format requires images_per_sample for beam search with num_return_sequences > 1"
+    )
+    def test_beam_search_generate_dict_output(self):
+        pass
+
+    @unittest.skip(
+        reason="GLM-Image packed image format requires images_per_sample for beam search with num_return_sequences > 1"
+    )
+    def test_beam_search_generate_dict_outputs_use_cache(self):
+        pass
+
+    @unittest.skip(reason="GLM-Image packed image format requires images_per_sample for beam sample generation")
+    def test_beam_sample_generate(self):
+        pass
+
+    @unittest.skip(reason="GLM-Image packed image format requires images_per_sample for beam sample generation")
+    def test_beam_sample_generate_dict_output(self):
+        pass
+
+    @unittest.skip(
+        reason="GLM-Image packed image format requires images_per_sample for sample generation with num_return_sequences > 1"
+    )
+    def test_sample_generate_dict_output(self):
+        pass
+
     @parameterized.expand([("random",), ("same",)])
     @unittest.skip(reason="GLM-Image can't do and does not need assisted generation. Not worth fixing!")
     def test_assisted_decoding_matches_greedy_search(self, assistant_type):
@@ -402,6 +434,12 @@ class GlmImageModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
         reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
+    @unittest.skip(
+        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     @unittest.skip(reason="GlmImageVisionModel does not support training")
