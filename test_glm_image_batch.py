@@ -526,6 +526,112 @@ def test_different_image_counts(device: str = "cuda"):
     print("\n✅ Different image counts test PASSED")
 
 
+def test_debug_batch_internals(device: str = "cuda"):
+    """Debug test to investigate batch vs single processing differences."""
+    print("\n" + "=" * 60)
+    print("TEST 7: Debug batch internals")
+    print("=" * 60)
+
+    processor = load_processor(PROCESSOR_PATH)
+    model = load_model(MODEL_PATH, device)
+    model.eval()
+    
+    # Use IDENTICAL prompts to eliminate any variability
+    text = "A beautiful garden"
+    texts = [text, text]
+    
+    print("\n--- Processing identical prompts ---")
+    
+    # Batch processing
+    inputs_batch = processor(text=texts, images=None, return_tensors="pt", padding=True)
+    inputs_batch = {k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in inputs_batch.items()}
+    
+    # Single processing
+    inputs_single = processor(text=[text], images=None, return_tensors="pt")
+    inputs_single = {k: v.to(device) if isinstance(v, torch.Tensor) else v for k, v in inputs_single.items()}
+    
+    print(f"\nBatch input_ids[0]: {inputs_batch['input_ids'][0].tolist()}")
+    print(f"Batch input_ids[1]: {inputs_batch['input_ids'][1].tolist()}")
+    print(f"Single input_ids:   {inputs_single['input_ids'][0].tolist()}")
+    
+    # Check if input_ids are identical
+    ids_match = torch.equal(inputs_batch['input_ids'][0], inputs_single['input_ids'][0])
+    print(f"\nInput IDs match: {ids_match}")
+    
+    # Check image_grid_thw
+    print(f"\nBatch image_grid_thw: {inputs_batch['image_grid_thw']}")
+    print(f"Single image_grid_thw: {inputs_single['image_grid_thw']}")
+    
+    print(f"\nBatch images_per_sample: {inputs_batch['images_per_sample']}")
+    print(f"Single images_per_sample: {inputs_single['images_per_sample']}")
+    
+    # Now run forward and compare position_ids
+    print("\n--- Comparing position_ids ---")
+    
+    # We need to hook into the model to capture position_ids
+    # Let's manually call get_rope_index
+    
+    with torch.no_grad():
+        # Batch
+        pos_ids_batch, rope_deltas_batch = model.model.get_rope_index(
+            input_ids=inputs_batch['input_ids'],
+            image_grid_thw=inputs_batch['image_grid_thw'],
+            images_per_sample=inputs_batch['images_per_sample'],
+            attention_mask=inputs_batch['attention_mask'],
+        )
+        
+        # Single
+        pos_ids_single, rope_deltas_single = model.model.get_rope_index(
+            input_ids=inputs_single['input_ids'],
+            image_grid_thw=inputs_single['image_grid_thw'],
+            images_per_sample=inputs_single['images_per_sample'],
+            attention_mask=inputs_single['attention_mask'],
+        )
+    
+    print(f"\nBatch position_ids shape: {pos_ids_batch.shape}")
+    print(f"Single position_ids shape: {pos_ids_single.shape}")
+    
+    # Compare position_ids for sample 0 in batch vs single
+    print(f"\nBatch pos_ids[:, 0, :]: {pos_ids_batch[:, 0, :].tolist()}")
+    print(f"Single pos_ids[:, 0, :]: {pos_ids_single[:, 0, :].tolist()}")
+    
+    pos_ids_match = torch.equal(pos_ids_batch[:, 0, :], pos_ids_single[:, 0, :])
+    print(f"\nPosition IDs match: {pos_ids_match}")
+    
+    # Run full forward pass
+    print("\n--- Comparing forward outputs ---")
+    
+    with torch.no_grad():
+        outputs_batch = model(**inputs_batch)
+        outputs_single = model(**inputs_single)
+    
+    # Compare logits
+    diff_0 = (outputs_batch.logits[0] - outputs_single.logits[0]).abs().max().item()
+    diff_1 = (outputs_batch.logits[1] - outputs_single.logits[0]).abs().max().item()
+    
+    print(f"Max diff batch[0] vs single: {diff_0:.6f}")
+    print(f"Max diff batch[1] vs single: {diff_1:.6f}")
+    
+    # Also check if batch[0] == batch[1]
+    diff_01 = (outputs_batch.logits[0] - outputs_batch.logits[1]).abs().max().item()
+    print(f"Max diff batch[0] vs batch[1]: {diff_01:.6f}")
+    
+    if diff_0 < 0.01 and diff_1 < 0.01:
+        print("\n✅ Debug test PASSED - batch and single outputs match")
+    else:
+        print("\n⚠️ Debug test found differences")
+        
+        # Let's also check inputs_embeds
+        print("\n--- Checking intermediate states ---")
+        
+        # Get the embedding directly
+        inputs_embeds_batch = model.model.language_model.embed_tokens(inputs_batch['input_ids'])
+        inputs_embeds_single = model.model.language_model.embed_tokens(inputs_single['input_ids'])
+        
+        embed_diff = (inputs_embeds_batch[0] - inputs_embeds_single[0]).abs().max().item()
+        print(f"Embedding diff: {embed_diff:.6f}")
+
+
 def main():
     """Run all tests."""
     print("\n" + "=" * 60)
@@ -540,23 +646,8 @@ def main():
 
     # Run tests
     try:
-        # Test 1: Processor
-        #test_processor_batch()
-
-        # Test 2: Model forward
-        #test_model_forward_batch(device)
-
-        # Test 3: Consistency
-        #test_batch_consistency(device)
-
-        # Test 4: Generation (small tokens for speed)
-        #test_generation_batch(device, max_new_tokens=20)
-
-        # Test 5: Image-to-image
-        #test_image_to_image_batch(device)
-
-        # Test 6: Different image counts
-        test_different_image_counts(device)
+        # Test 7: Debug internals first to understand the issue
+        test_debug_batch_internals(device)
 
         print("\n" + "=" * 60)
         print("🎉 ALL TESTS COMPLETED!")
