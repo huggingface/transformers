@@ -208,12 +208,18 @@ class GlmImageModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
             batch_size = 2
             patch_size = config.vision_config.patch_size
             patches_per_side = self.model_tester.image_size // patch_size
+            num_patches = patches_per_side * patches_per_side
+
+            # pixel_values is packed format: [total_patches, embed_dim]
+            # For batch=2 with 1 source image each, we need 2*num_patches rows
+            # inputs_dict has 1*num_patches rows (for batch_size=1), so we duplicate
+            single_image_pixels = inputs_dict["pixel_values"][:num_patches]
 
             # Prepare batch inputs
             batch_inputs = {
                 "input_ids": inputs_dict["input_ids"].repeat(batch_size, 1),
                 "attention_mask": inputs_dict["attention_mask"].repeat(batch_size, 1),
-                "pixel_values": inputs_dict["pixel_values"].repeat(batch_size, 1),
+                "pixel_values": single_image_pixels.repeat(batch_size, 1),  # 2 copies of same image
                 "image_grid_thw": torch.tensor(
                     [[1, patches_per_side, patches_per_side]] * (batch_size * 2),  # 2 grids per sample
                     device=torch_device,
@@ -224,9 +230,9 @@ class GlmImageModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
 
             # Prepare single inputs
             single_inputs = {
-                "input_ids": inputs_dict["input_ids"],
-                "attention_mask": inputs_dict["attention_mask"],
-                "pixel_values": inputs_dict["pixel_values"],
+                "input_ids": inputs_dict["input_ids"][:1],  # Take only first sample
+                "attention_mask": inputs_dict["attention_mask"][:1],
+                "pixel_values": single_image_pixels,  # Single image
                 "image_grid_thw": torch.tensor(
                     [[1, patches_per_side, patches_per_side]] * 2,  # 2 grids for single sample
                     device=torch_device,
