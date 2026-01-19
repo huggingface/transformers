@@ -1225,14 +1225,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
             return_dict=True,
             **kwargs,
         )
-        vision_outputs = BaseModelOutputWithVisionQformerOutputs(
-            last_hidden_state=vision_outputs.last_hidden_state,
-            pooler_output=vision_outputs.pooler_output,
-            hidden_states=vision_outputs.hidden_states,
-            attentions=vision_outputs.attentions,
-            vision_outputs=vision_outputs,
-            qformer_outputs=None,
-        )
+        vision_outputs = BaseModelOutputWithVisionQformerOutputs(**vision_outputs, vision_outputs=vision_outputs)
         image_embeds = vision_outputs[0]
 
         # step 2: forward the query tokens through the QFormer, using the image embeddings for cross-attention
