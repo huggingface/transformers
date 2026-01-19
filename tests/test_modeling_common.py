@@ -95,7 +95,6 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
-    require_torch_greater_or_equal,
     require_torch_mps,
     require_torch_multi_accelerator,
     require_torch_multi_gpu,
@@ -3955,7 +3954,6 @@ class ModelTesterMixin:
             torch.testing.assert_close(param.grad.detach().cpu(), params[name], rtol=1e-4, atol=1e-4)
 
     @slow
-    @require_torch_greater_or_equal("2.5")
     @pytest.mark.torch_export_test
     def test_torch_export(self, atol=1e-4, rtol=1e-4):
         """
@@ -3974,6 +3972,10 @@ class ModelTesterMixin:
             # Skip model if it uses a chunked attention implementation which is not torch exportable
             if "for q, k, v in zip(*splits)" in source_code:
                 self.skipTest(reason="Model architecture uses chunked attention which is not torch exportable")
+
+            # Skip MoEs that don't support batched_mm experts implementation
+            if "for expert_idx in expert_hit:" in source_code and "use_experts_implementation" not in source_code:
+                self.skipTest(reason="Model architecture uses eager MoE implementation which is not torch exportable")
 
         def _is_pure_python_object(obj) -> bool:
             if isinstance(obj, (int, float, bool, str)) or obj is None:
@@ -4020,6 +4022,9 @@ class ModelTesterMixin:
                     # disable returning loss for every submodel
                     if hasattr(module.config, "return_loss"):
                         module.config.return_loss = False
+                    # disable reference compile for every submodel (modernbert)
+                    if hasattr(module.config, "reference_compile"):
+                        module.config.reference_compile = False
                 # disable classifier cast for nllb-moe
                 if hasattr(module, "_cast_classifier"):
                     module._cast_classifier = lambda *args, **kwargs: None
@@ -4054,13 +4059,13 @@ class ModelTesterMixin:
 
                 try:
                     exported_program = torch.export.export(model, args=(), kwargs=copy.deepcopy(inputs_dict))
-                except Exception as e:
-                    raise e
-                # except torch.fx.experimental.symbolic_shapes.GuardOnDataDependentSymNode as e:
-                #     warnings.warn(
-                #         f"Skipping torch export test for {model_class.__name__} because of data-dependent symbolic shape: {e}"
-                #     )
-                #     continue
+                # except Exception as e:
+                #     raise e
+                except torch.fx.experimental.symbolic_shapes.GuardOnDataDependentSymNode as e:
+                    warnings.warn(
+                        f"Skipping torch export test for {model_class.__name__} because of data-dependent symbolic shape: {e}"
+                    )
+                    continue
 
                 with torch.no_grad():
                     set_seed(1234)

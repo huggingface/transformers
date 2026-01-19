@@ -263,7 +263,6 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
     )
 
     model_split_percents = [0.5, 0.8, 0.9]
-    test_torch_exportable = False  # uses torch.compile by default, not compatible with torch.export
 
     # special case for ForPreTraining model
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):

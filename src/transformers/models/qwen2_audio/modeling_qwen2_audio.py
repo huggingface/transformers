@@ -791,7 +791,6 @@ class Qwen2AudioForConditionalGeneration(Qwen2AudioPreTrainedModel, GenerationMi
                     n_audio_tokens = (input_ids == self.config.audio_token_id).sum().item()
                     n_audio_features = audio_features.shape[0]
                     torch_compilable_check(
-                        ValueError,
                         n_audio_tokens == n_audio_features,
                         f"Audio features and audio tokens do not match, tokens: {n_audio_tokens}, features: {n_audio_features}",
                     )

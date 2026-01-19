@@ -211,9 +211,8 @@ def _rational_quadratic_spline(
     upper_bound = tail_bound
     lower_bound = -tail_bound
     torch_compilable_check(
-        ValueError,
         torch.min(inputs) >= lower_bound and torch.max(inputs) <= upper_bound,
-        lambda: "Input to a transform is not within its domain.",
+        "Input to a transform is not within its domain.",
     )
     num_bins = unnormalized_widths.shape[-1]
 
