@@ -600,8 +600,7 @@ Linked PRs:
 
 ### Text pipelines that should just be LLMs
 
-`Text2TextGenerationPipeline`, as well as the related `SummarizationPipeline` and `TranslationPipeline`, were deprecated and will now be removed. The
-`question-answering` pipeline has also been removed. `pipeline` classes are intended as a high-level beginner-friendly API,
+`question-answering` and `Text2TextGenerationPipeline`, including its related `SummarizationPipeline` and `TranslationPipeline`, were deprecated and will now be removed. `pipeline` classes are intended as a high-level beginner-friendly API,
 but for almost all text-to-text or question-answering tasks a modern chat model and `TextGenerationPipeline` will provide much higher quality output. 
 As a result, we felt it was misleading for beginners to offer the older pipelines.
 
@@ -622,7 +621,7 @@ message_history = [
 print(summarizer(message_history)[0]["generated_text"][-1]["content"])
 ```
 
-The above example can be adapted for translation or question answering simply by changing the prompt.
+The above example can be adapted for other tasks, e.g. translation or question answering, simply by changing the prompt.
 
 ### Vision pipelines that should just be VLMs
 
