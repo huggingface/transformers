@@ -43,6 +43,8 @@ GLM-4.7 further enhances **Interleaved Thinking** (a feature introduced since GL
 - **Preserved Thinking**: In coding agent scenarios, the model automatically retains all thinking blocks across multi-turn conversations, reusing the existing reasoning instead of re-deriving from scratch. This reduces information loss and inconsistencies, and is well-suited for long-horizon, complex tasks.
 - **Turn-level Thinking**: The model supports per-turn control over reasoning within a session—disable thinking for lightweight requests to reduce latency/cost, enable it for complex tasks to improve accuracy and stability.
 
+More details: https://docs.z.ai/guides/capabilities/thinking-mode
+
 For more eval results, show cases, and technical details, please visit [GLM-4.7 technical blog](https://z.ai/blog/glm-4.7).
 
 ### GLM-4.6
