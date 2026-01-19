@@ -281,13 +281,13 @@ class PerceptionLMForConditionalGenerationModelTest(ModelTesterMixin, Generation
         self.all_model_classes = (PerceptionLMForConditionalGeneration,) if is_torch_available() else ()
         super().test_training_gradient_checkpointing()
 
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        self.all_model_classes = (PerceptionLMForConditionalGeneration,) if is_torch_available() else ()
-        super().test_training_gradient_checkpointing_use_reentrant()
-
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         self.all_model_classes = (PerceptionLMForConditionalGeneration,) if is_torch_available() else ()
         super().test_training_gradient_checkpointing_use_reentrant_false()
+
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        self.all_model_classes = (PerceptionLMForConditionalGeneration,) if is_torch_available() else ()
+        super().test_training_gradient_checkpointing_use_reentrant_true()
 
     @unittest.skip(
         reason="PE/TIMM's attention implementation is self configured and won't raise ValueError on global attention implementation."

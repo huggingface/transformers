@@ -36,6 +36,7 @@ from transformers.models.siglip.modeling_siglip import (
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils.generic import is_flash_attention_requested
 
 
 class Siglip2TextConfig(SiglipTextConfig):
@@ -258,7 +259,7 @@ class Siglip2VisionTransformer(SiglipVisionTransformer):
 
         hidden_states = self.embeddings(pixel_values, spatial_shapes)
 
-        if attention_mask is not None and self.config._attn_implementation != "flash_attention_2":
+        if attention_mask is not None and not is_flash_attention_requested(self.config):
             # [batch_size, seq_len] -> [batch_size, 1, tgt_seq_len, src_seq_len]
             encoder_attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
         else:
