@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Google Inc. HuggingFace Inc. team. All rights reserved.
 #
 #
@@ -14,7 +13,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from collections.abc import Callable
-from typing import Any, Optional, Union
+from typing import Any
 
 import torch
 import torch.nn as nn
@@ -131,6 +130,9 @@ class T5GemmaModuleConfig(Gemma2Config):
             scaling factor when applying tanh softcapping on the logits.
         attn_logit_softcapping (`float`, *optional*, defaults to 50.0):
             scaling factor when applying tanh softcapping on the attention scores.
+        is_decoder (`bool`, *optional*, defaults to `False`):
+            Whether to only use the decoder in an encoder-decoder architecture, otherwise it has no effect on
+            decoder-only or encoder-only architectures.
 
     ```python
     >>> from transformers import T5GemmaModuleModel, T5GemmaModuleConfig
@@ -144,32 +146,34 @@ class T5GemmaModuleConfig(Gemma2Config):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 256000,
-        hidden_size: Optional[int] = 2304,
-        intermediate_size: Optional[int] = 9216,
-        num_hidden_layers: Optional[int] = 26,
-        num_attention_heads: Optional[int] = 8,
-        num_key_value_heads: Optional[int] = 4,
-        head_dim: Optional[int] = 256,
-        hidden_activation: Optional[str] = "gelu_pytorch_tanh",
-        max_position_embeddings: Optional[int] = 8192,
-        initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[int] = 1e-6,
-        use_cache: Optional[bool] = True,
-        pad_token_id: Optional[int] = 0,
-        eos_token_id: Optional[int] = 1,
-        bos_token_id: Optional[int] = 2,
-        tie_word_embeddings: Optional[bool] = True,
-        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        attention_bias: Optional[bool] = False,
-        attention_dropout: Optional[float] = 0.0,
-        query_pre_attn_scalar: Optional[int] = 256,
-        sliding_window: Optional[int] = 4096,
-        layer_types: Optional[list[str]] = None,
-        final_logit_softcapping: Optional[float] = 30.0,
-        attn_logit_softcapping: Optional[float] = 50.0,
+        vocab_size: int | None = 256000,
+        hidden_size: int | None = 2304,
+        intermediate_size: int | None = 9216,
+        num_hidden_layers: int | None = 26,
+        num_attention_heads: int | None = 8,
+        num_key_value_heads: int | None = 4,
+        head_dim: int | None = 256,
+        hidden_activation: str | None = "gelu_pytorch_tanh",
+        max_position_embeddings: int | None = 8192,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: int | None = 1e-6,
+        use_cache: bool | None = True,
+        pad_token_id: int | None = 0,
+        eos_token_id: int | None = 1,
+        bos_token_id: int | None = 2,
+        tie_word_embeddings: bool | None = True,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        attention_bias: bool | None = False,
+        attention_dropout: float | None = 0.0,
+        query_pre_attn_scalar: int | None = 256,
+        sliding_window: int | None = 4096,
+        layer_types: list[str] | None = None,
+        final_logit_softcapping: float | None = 30.0,
+        attn_logit_softcapping: float | None = 50.0,
+        is_decoder: bool | None = False,
         **kwargs,
     ):
+        self.is_decoder = is_decoder
         super().__init__(
             vocab_size=vocab_size,
             hidden_size=hidden_size,
@@ -241,14 +245,14 @@ class T5GemmaConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        encoder: Optional[Union[T5GemmaModuleConfig, dict[Any, Any]]] = None,
-        decoder: Optional[Union[T5GemmaModuleConfig, dict[Any, Any]]] = None,
-        is_encoder_decoder: Optional[bool] = True,
-        dropout_rate: Optional[float] = 0.0,
-        classifier_dropout_rate: Optional[float] = 0.0,
-        attention_dropout: Optional[float] = 0.0,
-        tie_word_embeddings: Optional[bool] = True,
-        vocab_size: Optional[int] = 256000,
+        encoder: T5GemmaModuleConfig | dict[Any, Any] | None = None,
+        decoder: T5GemmaModuleConfig | dict[Any, Any] | None = None,
+        is_encoder_decoder: bool | None = True,
+        dropout_rate: float | None = 0.0,
+        classifier_dropout_rate: float | None = 0.0,
+        attention_dropout: float | None = 0.0,
+        tie_word_embeddings: bool | None = True,
+        vocab_size: int | None = 256000,
         **kwargs,
     ):
         if isinstance(encoder, dict):
@@ -360,11 +364,11 @@ class T5GemmaCrossAttention(Gemma2Attention):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor],
-        encoder_hidden_states: Optional[torch.Tensor],
-        past_key_values: Optional[Cache] = None,
+        attention_mask: torch.Tensor | None,
+        encoder_hidden_states: torch.Tensor | None,
+        past_key_values: Cache | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         if encoder_hidden_states is None:
             raise ValueError("Encoder hidden state is required for cross attention.")
 
@@ -411,7 +415,7 @@ class T5GemmaCrossAttention(Gemma2Attention):
         return attn_output, attn_weights
 
 
-def bidirectional_mask_function(attention_mask: Optional[torch.Tensor]) -> Callable:
+def bidirectional_mask_function(attention_mask: torch.Tensor | None) -> Callable:
     """
     This creates bidirectional attention mask.
     """
@@ -461,9 +465,9 @@ class T5GemmaEncoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
         **kwargs,
     ) -> tuple[torch.FloatTensor,]:
         residual = hidden_states
@@ -516,14 +520,14 @@ class T5GemmaDecoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[EncoderDecoderCache] = None,
-        use_cache: Optional[bool] = False,
-        cache_position: Optional[torch.LongTensor] = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: EncoderDecoderCache | None = None,
+        use_cache: bool | None = False,
+        cache_position: torch.LongTensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
         **kwargs,
     ) -> torch.FloatTensor:
         residual = hidden_states
@@ -649,9 +653,9 @@ class T5GemmaPreTrainedModel(Gemma2PreTrainedModel):
 
 
 def make_default_2d_attention_mask(
-    token_ids: Optional[torch.LongTensor],
+    token_ids: torch.LongTensor | None,
     hidden_states: torch.Tensor,
-    pad_token_id: Optional[int],
+    pad_token_id: int | None,
 ) -> torch.Tensor:
     """Construct the default attention mask."""
     if token_ids is not None:
@@ -692,10 +696,10 @@ class T5GemmaEncoder(T5GemmaPreTrainedModel):
     @check_model_inputs
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -786,15 +790,15 @@ class T5GemmaDecoder(T5GemmaPreTrainedModel):
     @check_model_inputs
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[EncoderDecoderCache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: EncoderDecoderCache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPastAndCrossAttentions:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -902,18 +906,18 @@ class T5GemmaModel(T5GemmaPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.BoolTensor] = None,
-        decoder_position_ids: Optional[torch.LongTensor] = None,
-        encoder_outputs: Optional[BaseModelOutput] = None,
-        past_key_values: Optional[EncoderDecoderCache] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        decoder_inputs_embeds: Optional[torch.Tensor] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.FloatTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.BoolTensor | None = None,
+        decoder_position_ids: torch.LongTensor | None = None,
+        encoder_outputs: BaseModelOutput | None = None,
+        past_key_values: EncoderDecoderCache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        decoder_inputs_embeds: torch.Tensor | None = None,
+        use_cache: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> Seq2SeqModelOutput:
         r"""
@@ -980,10 +984,10 @@ class T5GemmaEncoderModel(T5GemmaPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.FloatTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         encoder_outputs = self.encoder(
@@ -1022,22 +1026,22 @@ class T5GemmaForConditionalGeneration(T5GemmaPreTrainedModel, GenerationMixin):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.BoolTensor] = None,
-        decoder_position_ids: Optional[torch.LongTensor] = None,
-        encoder_outputs: Optional[BaseModelOutput] = None,
-        past_key_values: Optional[EncoderDecoderCache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.FloatTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.BoolTensor | None = None,
+        decoder_position_ids: torch.LongTensor | None = None,
+        encoder_outputs: BaseModelOutput | None = None,
+        past_key_values: EncoderDecoderCache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple[torch.FloatTensor], Seq2SeqLMOutput]:
+    ) -> tuple[torch.FloatTensor] | Seq2SeqLMOutput:
         r"""
         decoder_position_ids (`torch.LongTensor` of shape `(batch_size, decoder_sequence_length)`, *optional*):
             Indices of positions of each decoder input sequence tokens in the position embeddings. Selected in the range `[0,
@@ -1101,7 +1105,7 @@ class T5GemmaForConditionalGeneration(T5GemmaPreTrainedModel, GenerationMixin):
 
 @auto_docstring
 class T5GemmaForSequenceClassification(T5GemmaPreTrainedModel):
-    def __init__(self, config: T5GemmaConfig, is_encoder_decoder: Optional[bool] = None):
+    def __init__(self, config: T5GemmaConfig, is_encoder_decoder: bool | None = None):
         r"""
         is_encoder_decoder (`Optional`, *optional*):
             Whether use encoder_decoder for sequence classification. When set to False, only encoder is used.
@@ -1134,16 +1138,16 @@ class T5GemmaForSequenceClassification(T5GemmaPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.Tensor] = None,
-        decoder_position_ids: Optional[torch.LongTensor] = None,
-        encoder_outputs: Optional[BaseModelOutput] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.Tensor | None = None,
+        decoder_position_ids: torch.LongTensor | None = None,
+        encoder_outputs: BaseModelOutput | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> SequenceClassifierOutput:
         r"""
@@ -1242,7 +1246,7 @@ class T5GemmaForSequenceClassification(T5GemmaPreTrainedModel):
 
 @auto_docstring
 class T5GemmaForTokenClassification(T5GemmaPreTrainedModel):
-    def __init__(self, config: T5GemmaConfig, is_encoder_decoder: Optional[bool] = None):
+    def __init__(self, config: T5GemmaConfig, is_encoder_decoder: bool | None = None):
         r"""
         is_encoder_decoder (`Optional`, *optional*):
             Whether use encoder_decoder for token classification. When set to False, only encoder is used.
@@ -1276,16 +1280,16 @@ class T5GemmaForTokenClassification(T5GemmaPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.Tensor] = None,
-        decoder_position_ids: Optional[torch.LongTensor] = None,
-        encoder_outputs: Optional[BaseModelOutput] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.Tensor | None = None,
+        decoder_position_ids: torch.LongTensor | None = None,
+        encoder_outputs: BaseModelOutput | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> TokenClassifierOutput:
         r"""

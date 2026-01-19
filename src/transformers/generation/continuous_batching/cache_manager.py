@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -123,6 +122,62 @@ class BlockManager:
         # In both cases, we return the allocated block ids
         return allocated_block_ids
 
+    def fork_blocks(
+        self, parent_blocks: list[int], num_forks: int, shareable: bool, group_id: int
+    ) -> tuple[list[list[int]], list[int], list[int]]:
+        """Fork a given list of (parent_blocks) as many times as (num_forks). If the blocks are (shareable), we use
+        reference on the blocks that are complete. Otherwise, we allocate new blocks and keep track of their indices to
+        later copy the physical cache. For instance, when forking 4 blocks for 2 children:
+
+        Parent blocks: [0, 1, 2, 3], with all blocks being complete except the last one (block 3).
+
+        ----------------------------------------- IF BLOCKS ARE NOT SHAREABLE -----------------------------------------
+
+        Forked blocks lists: [[5, 6, 7, 8], [9, 10, 11, 12]]
+        Copy source:          [0, 1, 2, 3,   0,  1,  2,  3]
+                               ↓  ↓  ↓  ↓    ↓   ↓   ↓   ↓
+        Copy destination:     [5, 6, 7, 8,   9, 10, 11, 12]  → 8 blocks are newly allocated and copied
+
+        ----------------------------------------- IF BLOCKS ARE SHAREABLE ---------------------------------------------
+
+        Forked blocks lists: [[0, 1, 2, 5], [0, 1, 2, 6]]
+        Copy source:          [         3,            3]     (block 3 is not complete so it's copied, not referenced)
+                                        ↓             ↓
+        Copy destination:     [         5,            6]     → only 2 blocks are newly allocated and copied
+        """
+        # First phase: reference all complete blocks
+        forked_by_reference = []
+
+        if shareable:
+            for block_id in parent_blocks:
+                block = self._id_to_block[block_id]
+                if block.is_complete:
+                    forked_by_reference.append(block.id)
+                    block.ref_count += num_forks
+                else:
+                    break
+
+        # Early return if we have forked all blocks by reference
+        blocks_to_copy = len(parent_blocks) - len(forked_by_reference)
+        if blocks_to_copy == 0:
+            return [forked_by_reference[:] for _ in range(num_forks)], [], []
+
+        # From now on, each child will have its own list of blocks
+        forked_blocks_lists = []
+        copy_src = []
+        copy_dst = []
+
+        # Second phase: allocate new blocks if needed
+        parent_id = forked_by_reference[-1] if forked_by_reference else None
+        for _ in range(num_forks):
+            allocated_block_ids = self.get_free_blocks(blocks_to_copy, parent_id, shareable, group_id)
+            if allocated_block_ids is None:
+                return None, [], []
+            forked_blocks_lists.append(forked_by_reference + allocated_block_ids)
+            copy_src.extend(parent_blocks[-blocks_to_copy:])
+            copy_dst.extend(allocated_block_ids)
+        return forked_blocks_lists, copy_src, copy_dst
+
     def increase_ref_count(self, block_id: int) -> None:
         """Increases the reference count of a given (block_id)."""
         block = self._id_to_block[block_id]
@@ -150,6 +205,15 @@ class BlockManager:
                 self.decrease_ref_count(block_id)
         else:
             self._uninit_block_ids.extend(blocks)
+
+    def uninitialize_unshared_block(self, block_id: int) -> None:
+        """Marks a block as uninitialized. Raises an error if the block has more than one reference."""
+        # Make sure the block has only one reference and remove it from the block table
+        block = self._id_to_block.pop(block_id)
+        if block.ref_count > 1:
+            raise RuntimeError(f"Block {block_id} has more than one reference: {block.ref_count = }")
+        # Add the block to the uninitialized blocks queue
+        self._uninit_block_ids.append(block_id)
 
     def mark_shareable_blocks_as_complete(
         self, num_complete_blocks: int, allocated_blocks: list[int], prompt_ids: list[int]
@@ -186,13 +250,17 @@ class BlockManager:
             block.hash = self.compute_hash(parent_hash, tokens, block.group_id)
 
             existing_block_id = self._hash_to_id.get(block.hash)
-            # If the block hash is already in the hash to id mapping, we reference the existing block instead
+            # If their was a different block with the same hash, we reference the existing block instead
             if existing_block_id is not None:
-                logger.debug(f"Found existing block {existing_block_id} for block {block.id}")
-                allocated_blocks[i] = existing_block_id
-                self._id_to_block[existing_block_id].ref_count += 1
-                new_parent_id = existing_block_id
-                self.free_blocks([block.id], shareable=True)
+                if existing_block_id == block.id:
+                    # This should not happen, but is not a problem in itself, so we just log a warning
+                    logger.warning(f"Block {block.id} was marked as complete more than once")
+                else:
+                    logger.debug(f"Found existing block {existing_block_id} for block {block.id}")
+                    allocated_blocks[i] = existing_block_id
+                    new_parent_id = existing_block_id
+                    self.increase_ref_count(existing_block_id)
+                    self.uninitialize_unshared_block(block.id)
 
             # Otherwise, we add the completed block to the hash table
             else:
@@ -243,6 +311,36 @@ class CacheAllocator(ABC):
     def get_seqlens_k(self, request_id: str, past_length: int, query_length: int) -> tuple[str, int]:
         """Returns the attention type of the cache allocator and the key sequence length for the given request_id."""
 
+    def fork_blocks(
+        self, parent_request_id: str, children_request_ids: list[str], block_manager: BlockManager
+    ) -> tuple[list[int], list[int]]:
+        """Forks the cache blocks of a (parent_request_id) to a list of (children_request_ids). To manage the blocks,
+        the (block_manager) is used. When forking, the child's block are either shared with the parent, or they need to
+        be copied from the parent. Hence we return two lists of blocks that need to be copied: one for the source and
+        one for the destination."""
+
+        # Sanity checks
+        if parent_request_id not in self.block_table:
+            raise ValueError(f"No block table found for request {parent_request_id}")
+
+        # Actual forking
+        parent_blocks = self.block_table[parent_request_id]
+        list_forked_blocks, copy_src, copy_dst = block_manager.fork_blocks(
+            parent_blocks=parent_blocks,
+            num_forks=len(children_request_ids),
+            shareable=self.uses_block_sharing,
+            group_id=self._index,
+        )
+        if list_forked_blocks is None:
+            raise ValueError(f"Failed to fork blocks for request {parent_request_id}")
+
+        # Update the block table for all children requests
+        for children_request_id, forked_blocks in zip(children_request_ids, list_forked_blocks):
+            if children_request_id in self.block_table:
+                raise ValueError(f"Block table already exists for request {children_request_id}")
+            self.block_table[children_request_id] = forked_blocks
+        return copy_src, copy_dst
+
 
 class FullAttentionCacheAllocator(CacheAllocator):
     """Cache manager for a group of full attention layers."""
@@ -263,16 +361,17 @@ class FullAttentionCacheAllocator(CacheAllocator):
         allocated if successful and None otherwise. For group of full attention layers, we always allocate the number of
         requested blocks."""
         # Make sure the request_id is in the block table and get the first block id
-        if request_id not in self.block_table:
-            self.block_table[request_id] = []  # TODO: check the impact of making this a deque
-            last_block_id = None
+        block_table = self.block_table.get(request_id, [])
+        if block_table:
+            last_block_id = block_table[-1]
         else:
-            last_block_id = self.block_table[request_id][-1]
+            self.block_table[request_id] = block_table  # TODO: check the impact of making this a deque
+            last_block_id = None
         # Actual allocation, return early if failed
         allocated_blocks = block_manager.get_free_blocks(n_blocks, last_block_id, self.uses_block_sharing, self._index)
         if allocated_blocks is None:
             return None
-        self.block_table[request_id].extend(allocated_blocks)
+        block_table.extend(allocated_blocks)
         return n_blocks
 
     def get_read_indices(self, request_id: str, past_length: int, query_length: int) -> list[int]:

@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_gemma3n.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 Google Inc. HuggingFace Inc. team. All rights reserved.
 #
 #
@@ -20,7 +19,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from collections.abc import Sequence
-from typing import Any, Optional, Union
+from typing import Any
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...modeling_rope_utils import RopeParameters
@@ -126,6 +125,8 @@ class Gemma3nTextConfig(PreTrainedConfig):
             The sparsity factor used to extract the top-k activations for a given layer. The provided Sequence must
             explicitly provide a sparsity value for each layer in the model. By default, the first 10 layers are
             sparse with a sparsity factor of 0.95 and the rest are dense.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
     ```python
     >>> from transformers import Gemma3nTextModel, Gemma3nTextConfig
@@ -165,7 +166,7 @@ class Gemma3nTextConfig(PreTrainedConfig):
         vocab_size_per_layer_input: int = 262_144,
         hidden_size: int = 2048,
         hidden_size_per_layer_input: int = 256,
-        intermediate_size: Union[int, Sequence[int]] = 16_384,
+        intermediate_size: int | Sequence[int] = 16_384,
         num_hidden_layers: int = 35,
         num_attention_heads: int = 8,
         num_key_value_heads: int = 2,
@@ -178,11 +179,11 @@ class Gemma3nTextConfig(PreTrainedConfig):
         pad_token_id: int = 0,
         eos_token_id: int = 1,
         bos_token_id: int = 2,
-        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
         attention_bias: bool = False,
         attention_dropout: float = 0.0,
         sliding_window: int = 512,
-        layer_types: Optional[Sequence[str]] = None,
+        layer_types: Sequence[str] | None = None,
         final_logit_softcapping: float = 30.0,
         altup_active_idx: int = 0,
         altup_coef_clip: float = 120.0,
@@ -190,7 +191,8 @@ class Gemma3nTextConfig(PreTrainedConfig):
         altup_num_inputs: int = 4,
         num_kv_shared_layers: int = 15,
         laurel_rank: int = 64,
-        activation_sparsity_pattern: Optional[Union[float, Sequence[float]]] = None,
+        activation_sparsity_pattern: float | Sequence[float] | None = None,
+        tie_word_embeddings: bool | None = True,
         **kwargs,
     ):
         if isinstance(intermediate_size, Sequence) and (intsize_len := len(intermediate_size)) != num_hidden_layers:
@@ -201,6 +203,9 @@ class Gemma3nTextConfig(PreTrainedConfig):
         elif not isinstance(intermediate_size, Sequence):
             intermediate_size = [intermediate_size] * num_hidden_layers
 
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
         self.vocab_size = vocab_size
         self.vocab_size_per_layer_input = vocab_size_per_layer_input
         self.max_position_embeddings = max_position_embeddings
@@ -250,12 +255,11 @@ class Gemma3nTextConfig(PreTrainedConfig):
             )
         self.activation_sparsity_pattern = activation_sparsity_pattern
         self.rope_parameters = rope_parameters
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            **kwargs,
-        )
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(**kwargs)
 
     def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation=None, **kwargs):
         rope_scaling = kwargs.pop("rope_scaling", None)
@@ -477,7 +481,7 @@ class Gemma3nVisionConfig(PreTrainedConfig):
         vocab_size: int = 128,
         vocab_offset: int = 262_144,
         rms_norm_eps: float = 1e-06,
-        model_args: Optional[dict] = None,
+        model_args: dict | None = None,
         **kwargs,
     ):
         self.architecture = architecture
@@ -582,7 +586,8 @@ class Gemma3nConfig(PreTrainedConfig):
             The audio token index to encode the audio prompt.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
     Example:
 
@@ -617,18 +622,19 @@ class Gemma3nConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        text_config: Optional[Union[Gemma3nTextConfig, dict[str, Any]]] = None,
-        vision_config: Optional[Union[Gemma3nVisionConfig, dict[str, Any]]] = None,
-        audio_config: Optional[Union[Gemma3nAudioConfig, dict[str, Any]]] = None,
-        audio_soft_tokens_per_image: int = 188,
-        vision_soft_tokens_per_image: int = 256,
-        boi_token_id: int = 255_999,
-        eoi_token_id: int = 262_144,
-        image_token_id: int = 262_145,
-        boa_token_id: int = 256_000,
-        eoa_token_id: int = 262_272,
-        audio_token_id: int = 262_273,
-        initializer_range: float = 0.02,
+        text_config: Gemma3nTextConfig | dict[str, Any] | None = None,
+        vision_config: Gemma3nVisionConfig | dict[str, Any] | None = None,
+        audio_config: Gemma3nAudioConfig | dict[str, Any] | None = None,
+        audio_soft_tokens_per_image: int | None = 188,
+        vision_soft_tokens_per_image: int | None = 256,
+        boi_token_id: int | None = 255_999,
+        eoi_token_id: int | None = 262_144,
+        image_token_id: int | None = 262_145,
+        boa_token_id: int | None = 256_000,
+        eoa_token_id: int | None = 262_272,
+        audio_token_id: int | None = 262_273,
+        initializer_range: float | None = 0.02,
+        tie_word_embeddings: bool | None = True,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -664,6 +670,7 @@ class Gemma3nConfig(PreTrainedConfig):
         self.eoa_token_id = eoa_token_id
         self.audio_token_id = audio_token_id
         self.initializer_range = initializer_range
+        self.tie_word_embeddings = tie_word_embeddings
 
 
 __all__ = ["Gemma3nAudioConfig", "Gemma3nConfig", "Gemma3nTextConfig", "Gemma3nVisionConfig"]

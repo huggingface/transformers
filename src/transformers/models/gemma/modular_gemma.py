@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 Google Inc. HuggingFace Inc. team. All rights reserved.
 #
 #
@@ -13,7 +12,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 import torch
 from torch import nn
@@ -140,26 +139,26 @@ class GemmaConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 256000,
-        hidden_size: Optional[int] = 3072,
-        intermediate_size: Optional[int] = 24576,
-        num_hidden_layers: Optional[int] = 28,
-        num_attention_heads: Optional[int] = 16,
-        num_key_value_heads: Optional[int] = 16,
-        head_dim: Optional[int] = 256,
-        hidden_act: Optional[str] = "gelu_pytorch_tanh",
-        max_position_embeddings: Optional[int] = 8192,
-        initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[int] = 1e-6,
-        use_cache: Optional[bool] = True,
-        pad_token_id: Optional[int] = 0,
-        eos_token_id: Optional[int] = 1,
-        bos_token_id: Optional[int] = 2,
-        tie_word_embeddings: Optional[bool] = True,
-        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        attention_bias: Optional[bool] = False,
-        attention_dropout: Optional[float] = 0.0,
-        use_bidirectional_attention: Optional[bool] = None,
+        vocab_size: int | None = 256000,
+        hidden_size: int | None = 3072,
+        intermediate_size: int | None = 24576,
+        num_hidden_layers: int | None = 28,
+        num_attention_heads: int | None = 16,
+        num_key_value_heads: int | None = 16,
+        head_dim: int | None = 256,
+        hidden_act: str | None = "gelu_pytorch_tanh",
+        max_position_embeddings: int | None = 8192,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: int | None = 1e-6,
+        use_cache: bool | None = True,
+        pad_token_id: int | None = 0,
+        eos_token_id: int | None = 1,
+        bos_token_id: int | None = 2,
+        tie_word_embeddings: bool | None = True,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        attention_bias: bool | None = False,
+        attention_dropout: float | None = 0.0,
+        use_bidirectional_attention: bool | None = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -177,15 +176,13 @@ class GemmaConfig(PreTrainedConfig):
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.use_bidirectional_attention = use_bidirectional_attention
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
         self.rope_parameters = rope_parameters
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        super().__init__(**kwargs)
 
 
 class GemmaRMSNorm(nn.Module):
@@ -240,13 +237,13 @@ class GemmaPreTrainedModel(LlamaPreTrainedModel):
 class GemmaModel(LlamaModel):
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):

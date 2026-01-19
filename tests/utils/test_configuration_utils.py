@@ -38,23 +38,10 @@ config_common_kwargs = {
     "output_hidden_states": True,
     "output_attentions": True,
     "dtype": "float16",
-    # "tie_word_embeddings": True, # attribute is hardcoded in many models, hard to test
-    "is_decoder": True,
-    "cross_attention_hidden_size": 128,
-    "add_cross_attention": True,
     "chunk_size_feed_forward": 5,
     "architectures": ["BertModel"],
-    "finetuning_task": "translation",
     "id2label": {0: "label"},
     "label2id": {"label": "0"},
-    "tokenizer_class": "BertTokenizerFast",
-    "prefix": "prefix",
-    "bos_token_id": 6,
-    "pad_token_id": 7,
-    "eos_token_id": 8,
-    "sep_token_id": 9,
-    "decoder_start_token_id": 10,
-    "task_specific_params": {"translation": "some_params"},
     "problem_type": "regression",
 }
 
@@ -158,11 +145,11 @@ class ConfigTestUtils(unittest.TestCase):
             missing_keys,
             [
                 "_output_attentions",
-                "tie_word_embeddings",  # was omitted in purpose and will be deleted from base config soon
                 "is_encoder_decoder",
                 "_name_or_path",
                 "_commit_hash",
                 "_attn_implementation_internal",
+                "_experts_implementation_internal",
                 "transformers_version",
             ],
         )

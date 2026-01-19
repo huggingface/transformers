@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 Databricks Mosaic Research and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,7 +13,7 @@
 # limitations under the License.
 """DBRX model configuration"""
 
-from typing import Any, Optional
+from typing import Any
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
@@ -47,7 +46,7 @@ class DbrxAttentionConfig(PreTrainedConfig):
     def __init__(
         self,
         attn_pdrop: float = 0.0,
-        clip_qkv: Optional[float] = None,
+        clip_qkv: float | None = None,
         kv_n_heads: int = 1,
         **kwargs: Any,
     ):
@@ -83,13 +82,13 @@ class DbrxFFNConfig(PreTrainedConfig):
     def __init__(
         self,
         hidden_size=6144,
-        ffn_act_fn: Optional[dict] = None,
+        ffn_act_fn: dict | None = None,
         ffn_hidden_size: int = 3584,
         moe_num_experts: int = 4,
         moe_top_k: int = 1,
-        moe_jitter_eps: Optional[float] = None,
+        moe_jitter_eps: float | None = None,
         moe_loss_weight: float = 0.01,
-        moe_normalize_expert_weights: Optional[float] = 1.0,
+        moe_normalize_expert_weights: float | None = 1.0,
         **kwargs: Any,
     ):
         super().__init__()
@@ -104,7 +103,15 @@ class DbrxFFNConfig(PreTrainedConfig):
         self.moe_loss_weight = moe_loss_weight
         self.moe_normalize_expert_weights = moe_normalize_expert_weights
 
-        for k in ["model_type", "attn_implementation", "transformers_version", "_commit_hash", "torch_dtype", "dtype"]:
+        for k in [
+            "model_type",
+            "attn_implementation",
+            "experts_implementation",
+            "transformers_version",
+            "_commit_hash",
+            "torch_dtype",
+            "dtype",
+        ]:
             if k in kwargs:
                 kwargs.pop(k)
         if len(kwargs) != 0:
@@ -177,19 +184,23 @@ class DbrxConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        d_model: Optional[int] = 2048,
-        n_heads: Optional[int] = 16,
-        n_layers: Optional[int] = 24,
-        max_seq_len: Optional[int] = 2048,
-        vocab_size: Optional[int] = 32000,
-        resid_pdrop: Optional[float] = 0.0,
-        emb_pdrop: Optional[float] = 0.0,
-        attn_config: Optional[DbrxAttentionConfig] = None,
-        ffn_config: Optional[DbrxFFNConfig] = None,
-        use_cache: Optional[bool] = True,
-        initializer_range: Optional[float] = 0.02,
-        output_router_logits: Optional[bool] = False,
-        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
+        d_model: int | None = 2048,
+        n_heads: int | None = 16,
+        n_layers: int | None = 24,
+        max_seq_len: int | None = 2048,
+        vocab_size: int | None = 32000,
+        resid_pdrop: float | None = 0.0,
+        emb_pdrop: float | None = 0.0,
+        attn_config: DbrxAttentionConfig | None = None,
+        ffn_config: DbrxFFNConfig | None = None,
+        use_cache: bool | None = True,
+        initializer_range: float | None = 0.02,
+        output_router_logits: bool | None = False,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        pad_token_id: int | None = None,
+        bos_token_id: int | None = None,
+        eos_token_id: int | None = None,
+        tie_word_embeddings: bool | None = False,
         **kwargs: Any,
     ):
         if attn_config is None:
@@ -217,13 +228,16 @@ class DbrxConfig(PreTrainedConfig):
         self.initializer_range = initializer_range
         self.output_router_logits = output_router_logits
         self.num_key_value_heads = self.attn_config.kv_n_heads
-        tie_word_embeddings = kwargs.pop("tie_word_embeddings", False)
         if tie_word_embeddings:
             raise ValueError("tie_word_embeddings is not supported for DBRX models.")
 
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
         self.rope_parameters = rope_parameters
 
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+        super().__init__(**kwargs)
 
 
 __all__ = ["DbrxConfig"]

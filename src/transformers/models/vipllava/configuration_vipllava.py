@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 Microsoft Research & University of Wisconsin-Madison and the HuggingFace Inc. team. All rights reserved.
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -47,6 +46,8 @@ class VipLlavaConfig(PreTrainedConfig):
             The vision feature layer, or list of layers to select the vision features from.
         image_seq_length (`int`, *optional*, defaults to 576):
             Sequence length of one image embedding.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether to tie weight embeddings
 
     Example:
 
@@ -84,6 +85,7 @@ class VipLlavaConfig(PreTrainedConfig):
         projector_layernorm_eps=1e-5,
         vision_feature_layers=[-2, -5, -8, -11, 6],
         image_seq_length=576,
+        tie_word_embeddings=False,
         **kwargs,
     ):
         self.image_token_index = image_token_index
@@ -92,6 +94,7 @@ class VipLlavaConfig(PreTrainedConfig):
         self.vision_feature_layers = vision_feature_layers
         self.image_seq_length = image_seq_length
         self.vision_config = vision_config
+        self.tie_word_embeddings = tie_word_embeddings
 
         if isinstance(self.vision_config, dict):
             vision_config["model_type"] = vision_config.get("model_type", "clip_vision_model")

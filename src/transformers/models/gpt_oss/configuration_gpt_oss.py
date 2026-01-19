@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """openai model configuration"""
-
-from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...modeling_rope_utils import RopeParameters
@@ -50,21 +47,21 @@ class GptOssConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        num_hidden_layers: Optional[int] = 36,
-        num_local_experts: Optional[int] = 128,
-        vocab_size: Optional[int] = 201088,
-        hidden_size: Optional[int] = 2880,
-        intermediate_size: Optional[int] = 2880,
-        head_dim: Optional[int] = 64,
-        num_attention_heads: Optional[int] = 64,
-        num_key_value_heads: Optional[int] = 8,
-        sliding_window: Optional[int] = 128,
-        tie_word_embeddings: Optional[bool] = False,
-        hidden_act: Optional[str] = "silu",
-        initializer_range: Optional[float] = 0.02,
-        max_position_embeddings: Optional[int] = 131072,
-        rms_norm_eps: Optional[float] = 1e-5,
-        rope_parameters: Optional[RopeParameters] = {
+        num_hidden_layers: int | None = 36,
+        num_local_experts: int | None = 128,
+        vocab_size: int | None = 201088,
+        hidden_size: int | None = 2880,
+        intermediate_size: int | None = 2880,
+        head_dim: int | None = 64,
+        num_attention_heads: int | None = 64,
+        num_key_value_heads: int | None = 8,
+        sliding_window: int | None = 128,
+        tie_word_embeddings: bool | None = False,
+        hidden_act: str | None = "silu",
+        initializer_range: float | None = 0.02,
+        max_position_embeddings: int | None = 131072,
+        rms_norm_eps: float | None = 1e-5,
+        rope_parameters: RopeParameters | None = {
             "rope_type": "yarn",
             "factor": 32.0,
             "beta_fast": 32.0,
@@ -72,12 +69,15 @@ class GptOssConfig(PreTrainedConfig):
             "truncate": False,
             "original_max_position_embeddings": 4096,
         },
-        attention_dropout: Optional[float] = 0.0,
-        num_experts_per_tok: Optional[int] = 4,
-        router_aux_loss_coef: Optional[float] = 0.9,
-        output_router_logits: Optional[bool] = False,
-        use_cache: Optional[bool] = True,
-        layer_types: Optional[list[str]] = None,
+        attention_dropout: float | None = 0.0,
+        num_experts_per_tok: int | None = 4,
+        router_aux_loss_coef: float | None = 0.9,
+        output_router_logits: bool | None = False,
+        use_cache: bool | None = True,
+        layer_types: list[str] | None = None,
+        pad_token_id: int | None = None,
+        bos_token_id: int | None = None,
+        eos_token_id: int | None = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -112,10 +112,28 @@ class GptOssConfig(PreTrainedConfig):
         self.use_cache = use_cache
         self.rope_parameters = rope_parameters
 
-        super().__init__(
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        super().__init__(**kwargs)
+
+    def __setattr__(self, key, value):
+        """
+        Overwritten to allow checking for the proper attention implementation to be used.
+
+        Due to `set_attn_implementation` which internally assigns `_attn_implementation_internal = "..."`, simply overwriting
+        the specific attention setter is not enough. Using a property/setter for `_attn_implementation_internal` would result in
+        a recursive dependency (as `_attn_implementation` acts as a wrapper around `_attn_implementation_internal`) - hence, this
+        workaround.
+        """
+        if key in ("_attn_implementation", "_attn_implementation_internal"):
+            if value and "flash" in value and value.removeprefix("paged|") != "kernels-community/vllm-flash-attn3":
+                raise ValueError(
+                    f"GPT-OSS model does not support the specified flash attention implementation: {value}. "
+                    "Only `kernels-community/vllm-flash-attn3` is supported."
+                )
+        super().__setattr__(key, value)
 
 
 __all__ = ["GptOssConfig"]

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright (C) 2025 the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -81,6 +80,21 @@ def _build_checkpoint_conversion_mapping():
                 source_patterns="mlp.experts.*.down_proj.weight",
                 target_patterns="mlp.experts.down_proj",
                 operations=[MergeModulelist(dim=0)],
+            ),
+        ],
+        "qwen3_vl_moe": [
+            WeightConverter(
+                source_patterns=[
+                    "mlp.experts.*.gate_proj.weight",
+                    "mlp.experts.*.up_proj.weight",
+                ],
+                target_patterns="mlp.experts.gate_up_proj",
+                operations=[MergeModulelist(dim=0), Concatenate(dim=1), Transpose(1, 2)],
+            ),
+            WeightConverter(
+                source_patterns="mlp.experts.*.down_proj.weight",
+                target_patterns="mlp.experts.down_proj",
+                operations=[MergeModulelist(dim=0), Transpose(1, 2)],
             ),
         ],
         "phimoe": [
@@ -229,14 +243,18 @@ def _build_checkpoint_conversion_mapping():
         WeightRenaming("mlp.moe_statics.e_score_correction_bias", "mlp.gate.moe_statics.e_score_correction_bias")
     ]
     mapping["glm4_moe"] = mapping["qwen2_moe"].copy()
+    mapping["glm4_moe_lite"] = mapping["qwen2_moe"].copy()
     mapping["glm4v_moe"] = mapping["qwen2_moe"].copy()
     mapping["longcat_flash"] = mapping["qwen2_moe"].copy()
     mapping["qwen3_moe"] = mapping["qwen2_moe"].copy()
     mapping["qwen3_omni_moe"] = mapping["qwen2_moe"].copy()
     mapping["qwen3_next"] = mapping["qwen2_moe"].copy()
-    mapping["qwen3_vl_moe"] = mapping["qwen2_moe"].copy()
     mapping["hunyuan_v1_moe"] = mapping["qwen2_moe"].copy()
     mapping["minimax"] = mapping["mixtral"].copy()
+    mapping["minimax_m2"] = mapping["mixtral"].copy()
+    mapping["minimax_m2"] += [
+        WeightRenaming(".block_sparse_moe.e_score_correction_bias", ".mlp.e_score_correction_bias"),
+    ]
     mapping["flex_olmo"] = mapping["qwen2_moe"].copy()
     mapping["olmoe"] = mapping["qwen2_moe"].copy()
 
