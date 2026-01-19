@@ -512,6 +512,8 @@ class InternVLModel(LlavaModel):
         pixel_values = pixel_values.to(dtype=self.dtype)  # fp16 compatibility
 
         downsample_ratio = self.config.downsample_ratio
+        if vision_feature_layer != -1:
+            kwargs["output_hidden_states"] = True
         vision_outputs = self.vision_tower(pixel_values=pixel_values, return_dict=True, **kwargs)
         if vision_feature_layer == -1:
             vision_features = vision_outputs.last_hidden_state
