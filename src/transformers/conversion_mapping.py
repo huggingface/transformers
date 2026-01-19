@@ -238,12 +238,14 @@ def _build_checkpoint_conversion_mapping():
     mapping["hunyuan_v1_moe"] = mapping["qwen2_moe"].copy()
     mapping["minimax"] = mapping["mixtral"].copy()
     mapping["deepseek_ocr"] = [
-        WeightRenaming(r"^model\.sam_model\.blocks\.(\d+)\.", r"sam_model.layers.\1."),
-        WeightRenaming(r"^sam_model\.blocks\.(\d+)\.", r"sam_model.layers.\1."),
-        WeightRenaming(r"^model\.sam_model\.blocks\.(\d+)\.norm1\.", r"sam_model.layers.\1.layer_norm1."),
-        WeightRenaming(r"^sam_model\.blocks\.(\d+)\.norm1\.", r"sam_model.layers.\1.layer_norm1."),
-        WeightRenaming(r"^model\.sam_model\.blocks\.(\d+)\.norm2\.", r"sam_model.layers.\1.layer_norm2."),
-        WeightRenaming(r"^sam_model\.blocks\.(\d+)\.norm2\.", r"sam_model.layers.\1.layer_norm2."),
+        WeightRenaming(r"\\\.", "."), # for renaming issues... namely too many escapes
+        WeightRenaming(r"^model\.model\.", "model."),
+        WeightRenaming(r"^model\.sam_model\.blocks\.", "sam_model.layers."),
+        WeightRenaming(r"^sam_model\.blocks\.", "sam_model.layers."),
+        WeightRenaming(r"^model\.sam_model\.blocks\..*\.norm1\.", "sam_model.layers.layer_norm1."),
+        WeightRenaming(r"^sam_model\.blocks\..*\.norm1\.", "sam_model.layers.layer_norm1."),
+        WeightRenaming(r"^model\.sam_model\.blocks\..*\.norm2\.", "sam_model.layers.layer_norm2."),
+        WeightRenaming(r"^sam_model\.blocks\..*\.norm2\.", "sam_model.layers.layer_norm2."),
         WeightRenaming(r"^sam_model\.layers\.(\d+)\.norm1\.", r"model.sam_model.layers.\1.layer_norm1."),
         WeightRenaming(r"^sam_model\.layers\.(\d+)\.norm2\.", r"model.sam_model.layers.\1.layer_norm2."),
         WeightRenaming(r"^model\.sam_model\.patch_embed\.proj\.", "sam_model.patch_embed.projection."),
@@ -279,7 +281,7 @@ def _build_checkpoint_conversion_mapping():
             target_patterns=["q_proj", "k_proj", "v_proj"],
             operations=[Chunk(dim=0)],
         ),
-    ]   
+    ]
     mapping["deepseek_vl_v2"] = mapping["deepseek_ocr"].copy()
     mapping["minimax_m2"] = mapping["mixtral"].copy()
     mapping["minimax_m2"] += [
