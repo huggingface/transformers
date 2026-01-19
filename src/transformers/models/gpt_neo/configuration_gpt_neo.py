@@ -76,6 +76,10 @@ class GPTNeoConfig(PreTrainedConfig):
             The id of the beginning of sentence token in the vocabulary.
         eos_token_id (`int`, *optional*, defaults to 50256):
             The id of the end of sentence token in the vocabulary.
+        pad_token_id (`int`, *optional*):
+            Padding token id.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
     Example:
 
@@ -116,6 +120,8 @@ class GPTNeoConfig(PreTrainedConfig):
         use_cache=True,
         bos_token_id=50256,
         eos_token_id=50256,
+        pad_token_id=None,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -136,6 +142,8 @@ class GPTNeoConfig(PreTrainedConfig):
 
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
+        self.pad_token_id = pad_token_id
+        self.tie_word_embeddings = tie_word_embeddings
 
         self.attention_types = attention_types
         self.attention_layers = self.expand_attention_types_params(attention_types)
@@ -150,7 +158,7 @@ class GPTNeoConfig(PreTrainedConfig):
                 "Please verify the value of `config.attention_types` argument."
             )
 
-        super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+        super().__init__(**kwargs)
 
     @staticmethod
     def expand_attention_types_params(attention_types):
