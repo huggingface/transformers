@@ -20,6 +20,9 @@ rendered properly in your Markdown viewer.
 
 ## Overview
 
+GLM-4.7-Flash offers a new option for lightweight deployment that balances performance and efficiency.
+
+![bench](https://raw.githubusercontent.com/zai-org/GLM-4.5/refs/heads/main/resources/bench_glm47_flash.png)
 
 ## Glm4MoeLiteConfig
 
