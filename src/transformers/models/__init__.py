@@ -18,6 +18,7 @@ from ..utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
+    from .aeva import *
     from .afmoe import *
     from .aimv2 import *
     from .albert import *
