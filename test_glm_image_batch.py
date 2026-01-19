@@ -11,12 +11,82 @@ Run on H100:
     python test_glm_image_batch.py
 """
 
+import os
 import torch
 from PIL import Image
 import requests
 from io import BytesIO
 
-from transformers import AutoProcessor, GlmImageForConditionalGeneration
+from transformers import AutoProcessor, AutoTokenizer, GlmImageForConditionalGeneration, GlmImageProcessor
+
+# Model paths - adjust as needed
+# For HuggingFace Hub:
+# MODEL_PATH = "zai-org/GLM-Image"
+# PROCESSOR_PATH = "zai-org/GLM-Image"
+
+# For local diffusers-style model:
+MODEL_PATH = os.environ.get("GLM_IMAGE_MODEL_PATH", "/workspace/GLM-Image/vision_language_encoder")
+PROCESSOR_PATH = os.environ.get("GLM_IMAGE_PROCESSOR_PATH", "/workspace/GLM-Image/processor")
+
+
+def load_processor(processor_path: str):
+    """Load processor from local path or HuggingFace Hub."""
+    try:
+        # Try loading with AutoProcessor first (for HF Hub models)
+        return AutoProcessor.from_pretrained(processor_path, trust_remote_code=True)
+    except Exception as e:
+        print(f"AutoProcessor failed: {e}")
+        print("Attempting to load components separately...")
+        
+        # For local diffusers-style models, load components separately
+        tokenizer = AutoTokenizer.from_pretrained(processor_path, trust_remote_code=True)
+        
+        # The tokenizer_config.json should already have these attributes:
+        # - image_token: "<|image|>"
+        # - grid_bos_token: "<sop>"
+        # - grid_eos_token: "<eop>"
+        # - bos_token: "<|dit_token_16384|>"
+        # If not present, set them manually
+        if not hasattr(tokenizer, 'image_token') or tokenizer.image_token is None:
+            tokenizer.image_token = "<|image|>"
+        if not hasattr(tokenizer, 'grid_bos_token') or tokenizer.grid_bos_token is None:
+            tokenizer.grid_bos_token = "<sop>"
+        if not hasattr(tokenizer, 'grid_eos_token') or tokenizer.grid_eos_token is None:
+            tokenizer.grid_eos_token = "<eop>"
+        if not hasattr(tokenizer, 'bos_token') or tokenizer.bos_token is None:
+            tokenizer.bos_token = "<|dit_token_16384|>"
+        
+        print(f"Tokenizer loaded with:")
+        print(f"  image_token: {tokenizer.image_token}")
+        print(f"  grid_bos_token: {tokenizer.grid_bos_token}")
+        print(f"  grid_eos_token: {tokenizer.grid_eos_token}")
+        print(f"  bos_token: {tokenizer.bos_token}")
+        
+        # Check if image processor config exists
+        if os.path.exists(os.path.join(processor_path, "preprocessor_config.json")):
+            from transformers import GlmImageImageProcessor
+            image_processor = GlmImageImageProcessor.from_pretrained(processor_path)
+        else:
+            # Use default image processor
+            from transformers import GlmImageImageProcessor
+            image_processor = GlmImageImageProcessor()
+        
+        # Create GlmImageProcessor
+        processor = GlmImageProcessor(
+            image_processor=image_processor,
+            tokenizer=tokenizer,
+        )
+        return processor
+
+
+def load_model(model_path: str, device: str = "cuda", torch_dtype=torch.bfloat16):
+    """Load model from local path or HuggingFace Hub."""
+    return GlmImageForConditionalGeneration.from_pretrained(
+        model_path,
+        torch_dtype=torch_dtype,
+        device_map=device,
+        trust_remote_code=True,
+    )
 
 
 def download_image(url: str) -> Image.Image:
@@ -31,7 +101,7 @@ def test_processor_batch():
     print("TEST 1: Processor batch handling")
     print("=" * 60)
 
-    processor = AutoProcessor.from_pretrained("zai-org/GLM-Image")
+    processor = load_processor(PROCESSOR_PATH)
 
     # Test text-to-image with batch=2
     texts = [
@@ -59,12 +129,8 @@ def test_model_forward_batch(device: str = "cuda"):
     print("TEST 2: Model forward pass with batch > 1")
     print("=" * 60)
 
-    processor = AutoProcessor.from_pretrained("zai-org/GLM-Image")
-    model = GlmImageForConditionalGeneration.from_pretrained(
-        "zai-org/GLM-Image",
-        torch_dtype=torch.bfloat16,
-        device_map=device,
-    )
+    processor = load_processor(PROCESSOR_PATH)
+    model = load_model(MODEL_PATH, device)
 
     # Test text-to-image with batch=2
     texts = [
@@ -97,12 +163,8 @@ def test_batch_consistency(device: str = "cuda"):
     print("TEST 3: Batch consistency (batch=2 vs 2x batch=1)")
     print("=" * 60)
 
-    processor = AutoProcessor.from_pretrained("zai-org/GLM-Image")
-    model = GlmImageForConditionalGeneration.from_pretrained(
-        "zai-org/GLM-Image",
-        torch_dtype=torch.bfloat16,
-        device_map=device,
-    )
+    processor = load_processor(PROCESSOR_PATH)
+    model = load_model(MODEL_PATH, device)
     model.eval()
 
     texts = [
@@ -161,12 +223,8 @@ def test_generation_batch(device: str = "cuda", max_new_tokens: int = 50):
     print("TEST 4: Generation with batch > 1")
     print("=" * 60)
 
-    processor = AutoProcessor.from_pretrained("zai-org/GLM-Image")
-    model = GlmImageForConditionalGeneration.from_pretrained(
-        "zai-org/GLM-Image",
-        torch_dtype=torch.bfloat16,
-        device_map=device,
-    )
+    processor = load_processor(PROCESSOR_PATH)
+    model = load_model(MODEL_PATH, device)
 
     texts = [
         "A futuristic city with flying cars",
@@ -203,12 +261,8 @@ def test_image_to_image_batch(device: str = "cuda"):
     print("TEST 5: Image-to-image with batch > 1")
     print("=" * 60)
 
-    processor = AutoProcessor.from_pretrained("zai-org/GLM-Image")
-    model = GlmImageForConditionalGeneration.from_pretrained(
-        "zai-org/GLM-Image",
-        torch_dtype=torch.bfloat16,
-        device_map=device,
-    )
+    processor = load_processor(PROCESSOR_PATH)
+    model = load_model(MODEL_PATH, device)
 
     # Download test images
     urls = [
@@ -273,7 +327,7 @@ def test_different_image_counts(device: str = "cuda"):
     print("TEST 6: Different image counts per sample")
     print("=" * 60)
 
-    processor = AutoProcessor.from_pretrained("zai-org/GLM-Image")
+    processor = AutoProcessor.from_pretrained("/workspace/GLM-Image")
 
     # Sample 1: text-to-image (0 source images)
     # Sample 2: image-to-image (1 source image)
