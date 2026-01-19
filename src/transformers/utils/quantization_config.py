@@ -2159,7 +2159,6 @@ class SinqConfig(QuantizationConfigMixin):
 
         self.post_init()
 
-    # ---- Optional validation ----
     def post_init(self):
         
         self.nbits = int(self.nbits)

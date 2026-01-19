@@ -82,7 +82,6 @@ class SinqHfQuantizer(HfQuantizer):
           * A-SINQ (activation-aware) SINQ quantization
     """
 
-    requires_calibration: bool = False
     requires_parameters_quantization: bool = True
 
     def __init__(self, quantization_config: SinqConfig, **kwargs):
@@ -141,8 +140,15 @@ class SinqHfQuantizer(HfQuantizer):
             if len(devs) > 1:
                 raise RuntimeError(
                     "SinqHfQuantizer: multi-GPU device_map detected, but SINQ currently supports only a single CUDA "
-                    f"device. Got {sorted(devs)}. Please use device_map=None"# and set SinqConfig(device='{device_str}')."
+                    f"device. Got {sorted(devs)}. Please use device_map=None."
                 )
+        
+        if self.quantization_config.method == "asinq" and not self.pre_quantized:
+                raise ValueError(
+                "You are using `method='asinq'` in the quantization config. Right now the calibrated version of SINQ"
+                " is not supported in Hugging Face, please refer and use the official SINQ repository "
+                "`to quantized a model with this method. "
+            )
 
     def _build_sinq_quant_dict(self, cfg: SinqConfig) -> dict:
         """
@@ -250,7 +256,7 @@ class SinqHfQuantizer(HfQuantizer):
         For SINQ, we replace nn.Linear modules with empty SINQLinear modules here.
         The actual quantization happens later in SinqQuantize.convert() when weights are loaded.
         """
-        from sinq.sinqlinear_hf import SINQLinear
+        from ..integrations.sinq import replace_with_sinq_linear
 
         self.modules_to_not_convert = self.get_modules_to_not_convert(
             model, (self.quantization_config.modules_to_not_convert or []), keep_in_fp32_modules
@@ -261,33 +267,20 @@ class SinqHfQuantizer(HfQuantizer):
             self.quantization_config.method == "sinq" and not self.pre_quantized
         )
 
-        if not self.pre_quantized and self.quantization_config.method == "asinq":
-            raise ValueError("A-SINQ is not supported in HuggingFace integration")
+        # if not self.pre_quantized and self.quantization_config.method == "asinq":
+        #     raise ValueError("A-SINQ is not supported in HuggingFace integration")
 
         sinq_quant_dict = None if self.pre_quantized else self._build_sinq_quant_dict(self.quantization_config)
         device_str = _normalize_cuda_device(getattr(self.quantization_config, "device", "auto"))
 
-        for full_name, module in list(model.named_modules()):
-            if not isinstance(module, nn.Linear):
-                continue
-            if not should_convert_module(full_name, self.modules_to_not_convert):
-                continue
-
-            parent_path, _, child_name = full_name.rpartition(".")
-            parent = model.get_submodule(parent_path) if parent_path else model
-
-            # Create empty SINQLinear (no weights yet)
-            sinq_layer = SINQLinear(
-                in_features=module.in_features if not self.pre_quantized else None,
-                out_features=module.out_features if not self.pre_quantized else None,
-                bias=(module.bias is not None) if not self.pre_quantized else False,
+        model = replace_with_sinq_linear(
+                model,
+                modules_to_not_convert=self.modules_to_not_convert,
                 quant_config=sinq_quant_dict,
                 compute_dtype=self.dtype,
                 device=device_str,
-                use_unpack_kernel=True,
+                pre_quantized=self.pre_quantized,
             )
-
-            setattr(parent, child_name, sinq_layer)
 
     def _process_model_after_weight_loading(
         self,
@@ -297,48 +290,10 @@ class SinqHfQuantizer(HfQuantizer):
         """
         Called after *all* weights have been loaded.
 
-        - For method="sinq": nothing to do, param-level quantization already
-          replaced Linear modules with SINQLinear during load.
-
-        - For method="asinq": please use the official SINQ repository.
+        We patch the HF save/load methods here so that subsequent save_pretrained
+        calls will correctly serialize SINQ modules. The patch must happen before
+        any save attempt, not during save (which would be too late for the first save).
         """
-
-        if self.quantization_config.method == "asinq" and not self.pre_quantized:
-                raise ValueError(
-                "You are using `method='asinq'` in the quantization config. Right now the calibrated version of SINQ"
-                " is not supported in Hugging Face, please refer and use the official SINQ repository "
-                "`to quantized a model with this method. "
-            )
-
+        from sinq.hf_io import patch_hf_pretrained_io
+        patch_hf_pretrained_io()
         return model
-
-    def _resolve_tokenizer_and_model_id(self, model, kwargs):
-        tok = kwargs.get("tokenizer", None)
-        model_id = None
-        cache_dir = kwargs.get("cache_dir", None)
-
-        try:
-            if hasattr(model, "config") and hasattr(model.config, "_name_or_path"):
-                model_id = model.config._name_or_path
-            if model_id is None:
-                model_id = kwargs.get("pretrained_model_name_or_path", None)
-            if model_id is None and "config" in kwargs and hasattr(kwargs["config"], "_name_or_path"):
-                model_id = getattr(kwargs["config"], "_name_or_path", None)
-
-            logger.info(f"[SinqHfQuantizer] Detected model_id = {model_id}")
-
-            if tok is None and model_id is not None:
-                try:
-                    from transformers import AutoTokenizer
-
-                    tok = AutoTokenizer.from_pretrained(model_id, cache_dir=cache_dir)
-                    logger.info("[SinqHfQuantizer] Tokenizer loaded from model_id.")
-                except Exception as e:
-                    logger.warning(f"[SinqHfQuantizer] AutoTokenizer load failed: {e}")
-        except Exception as outer_e:
-            logger.warning(f"[SinqHfQuantizer] Tokenizer resolution failed: {outer_e}")
-
-        if tok is not None and getattr(tok, "pad_token_id", None) is None and getattr(tok, "eos_token_id", None) is not None:
-            tok.pad_token = tok.eos_token
-
-        return tok, model_id

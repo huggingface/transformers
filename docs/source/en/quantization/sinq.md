@@ -93,14 +93,16 @@ qmodel = AutoModelForCausalLM.from_pretrained(
 ### Save & reload
 
 If you want to reuse a quantized model later, save it to disk or push it on the HuggingFace Hub and reload it without needing base FP weights.
-If you installed SINQ from source you should call *patch_hf_pretrained_io* function:
+If you installed SINQ from source you should call *patch_hf_pretrained_io* function when re-loading a quantized model:
 ```python
-from sinq.hf_io import patch_hf_pretrained_io
-patch_hf_pretrained_io()
 # Save sinq quantized model
 model.save_pretrained("/path/to/save/qwen3-1.7B-sinq-4bit")
 model.push_to_hub("HF_Hub_username/qwen3-1.7B-sinq-4bit")
 tokenizer.push_to_hub("HF_Hub_username/qwen3-1.7B-sinq-4bit")
+```
+```python
+from sinq.hf_io import patch_hf_pretrained_io
+patch_hf_pretrained_io()
 # Reload a sinq quantized model
 hf_hub_model = "HF_Hub_username/qwen3-1.7B-sinq-4bit"
 tokenizer  = AutoTokenizer.from_pretrained(hf_hub_model)

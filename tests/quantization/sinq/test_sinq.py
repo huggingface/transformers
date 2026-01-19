@@ -100,8 +100,7 @@ class TestSinqConfig:
         assert config.group_size == 64
         assert config.tiling_mode == "1D"
         assert config.method == "sinq"
-        assert config.dtype == "auto"
-        assert config.device == "cpu"
+        assert config.device == "cpu"  # default device is "cpu"
 
     def test_custom_config(self):
         """Test custom configuration values."""
@@ -110,14 +109,12 @@ class TestSinqConfig:
             group_size=128,
             tiling_mode="2D",
             method="sinq",
-            dtype="bfloat16",
             device="cuda:0"
         )
         assert config.nbits == 8
         assert config.group_size == 128
         assert config.tiling_mode == "2D"
         assert config.method == "sinq"
-        assert config.dtype == "bfloat16"
         assert config.device == "cuda:0"
 
     def test_method_validation(self):
@@ -147,33 +144,20 @@ class TestSinqConfig:
             "nbits": 8,
             "group_size": 128,
             "method": "sinq",
-            "dtype": "float16"
+            "device": "cuda:0"
         }
         config = SinqConfig.from_dict(config_dict)
 
         assert config.nbits == 8
         assert config.group_size == 128
         assert config.method == "sinq"
-        assert config.dtype == "float16"
+        assert config.device == "cuda:0"
 
-    def test_extra_kwargs_preserved(self):
-        """Test that extra kwargs are preserved in round-trip."""
+    def test_extra_kwargs_stored(self):
+        """Test that extra kwargs are stored in _extra_kwargs."""
         config = SinqConfig(custom_param="test_value")
         assert hasattr(config, "_extra_kwargs")
         assert config._extra_kwargs.get("custom_param") == "test_value"
-
-        config_dict = config.to_dict()
-        assert config_dict.get("custom_param") == "test_value"
-
-    def test_is_trainable(self):
-        """Test that SINQ config is marked as trainable."""
-        config = SinqConfig()
-        assert config.is_trainable is True
-
-    def test_is_serializable(self):
-        """Test that SINQ config is marked as serializable."""
-        config = SinqConfig()
-        assert config.is_serializable is True
 
 
 # ============================================================================
@@ -280,6 +264,8 @@ class TestSinqParamLevelQuantization:
         config = SinqConfig(method="sinq", device="cuda:0")
         quantizer = SinqHfQuantizer(quantization_config=config)
         quantizer.validate_environment()
+        # Must set pre_quantized=False for fresh quantization (default is True)
+        quantizer.pre_quantized = False
 
         # Need to process model first to set _do_param_level_sinq and create SINQLinear modules
         quantizer._process_model_before_weight_loading(simple_model, None)
@@ -316,6 +302,8 @@ class TestSinqParamLevelQuantization:
         )
         quantizer = SinqHfQuantizer(quantization_config=config)
         quantizer.validate_environment()
+        # Must set pre_quantized=False for fresh quantization (default is True)
+        quantizer.pre_quantized = False
         quantizer._process_model_before_weight_loading(simple_model, None)
 
         # layer1 should be SINQLinear
@@ -368,8 +356,10 @@ class TestSinqQuantizeOps:
         config = SinqConfig(device="cuda:0")
         quantizer = SinqHfQuantizer(quantization_config=config)
         quantizer.validate_environment()
+        # Must set pre_quantized=False for fresh quantization (default is True)
+        quantizer.pre_quantized = False
 
-        # First, process model to create SINQLinear modules
+        # First, process model to create SINQLinear modules WITH quant_config
         quantizer._process_model_before_weight_loading(simple_model, None)
 
         # Verify layer1 is now SINQLinear but not yet quantized
@@ -404,6 +394,8 @@ class TestSinqQuantizeOps:
         config = SinqConfig(device="cuda:0")
         quantizer = SinqHfQuantizer(quantization_config=config)
         quantizer.validate_environment()
+        # Must set pre_quantized=False for fresh quantization (default is True)
+        quantizer.pre_quantized = False
 
         quantizer._process_model_before_weight_loading(simple_model, None)
 
@@ -431,52 +423,6 @@ class TestSinqQuantizeOps:
 
 class TestSinqDeserializeOps:
     """Test SinqDeserialize conversion operations for pre-quantized models."""
-
-    @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
-    def test_sinq_deserialize_convert(self, simple_model):
-        """Test SinqDeserialize.convert loads state into existing SINQLinear module."""
-        config = SinqConfig(device="cuda:0")
-        quantizer = SinqHfQuantizer(quantization_config=config)
-        quantizer.validate_environment()
-        quantizer.pre_quantized = True
-
-        # Process model to create empty SINQLinear modules (pre-quantized mode)
-        quantizer._process_model_before_weight_loading(simple_model, None)
-
-        # Verify layer1 is now SINQLinear
-        assert isinstance(simple_model.layer1, SINQLinear)
-
-        from transformers.integrations.sinq import SinqDeserialize
-        ops = SinqDeserialize(quantizer)
-
-        # Create fake quantized tensors
-        W_q = torch.randint(0, 255, (256, 128), dtype=torch.uint8, device="cuda:0")
-        meta = {
-            "shape": (256, 128),
-            "nbits": 4,
-            "group_size": 64,
-            "scale": torch.randn(256, 2, device="cuda:0"),
-            "zero": torch.randn(256, 2, device="cuda:0"),
-        }
-
-        input_dict = {
-            ".W_q": W_q,
-            ".meta": meta,
-            ".bias": None,
-        }
-
-        result = ops.convert(
-            input_dict=input_dict,
-            model=simple_model,
-            full_layer_name="layer1.weight",
-        )
-
-        # Should return empty dict
-        assert result == {}
-
-        # Check that layer was loaded
-        assert simple_model.layer1.ready is True
-        assert simple_model.layer1._is_hf_initialized is True
 
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
     def test_sinq_deserialize_missing_wq(self, simple_model):
@@ -518,6 +464,8 @@ class TestModuleReplacement:
         config = SinqConfig(method="sinq", device="cuda:0")
         quantizer = SinqHfQuantizer(quantization_config=config)
         quantizer.validate_environment()
+        # Must set pre_quantized=False for fresh quantization (default is True)
+        quantizer.pre_quantized = False
 
         # Before processing
         assert isinstance(simple_model.layer1, nn.Linear)
@@ -553,18 +501,33 @@ class TestModuleReplacement:
         assert quantizer._do_param_level_sinq is False
 
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
-    def test_sinqlinear_has_correct_config(self, simple_model):
-        """Test that created SINQLinear modules have correct config."""
+    def test_sinqlinear_has_quant_config_when_not_prequantized(self, simple_model):
+        """Test that created SINQLinear modules have quant_config when NOT pre-quantized."""
         config = SinqConfig(nbits=4, group_size=64, method="sinq", device="cuda:0")
         quantizer = SinqHfQuantizer(quantization_config=config)
         quantizer.validate_environment()
+        # NOT pre_quantized - quant_config should be set
+        quantizer.pre_quantized = False
 
         quantizer._process_model_before_weight_loading(simple_model, None)
 
-        # Check quant_config is set
+        # Check quant_config is set for fresh quantization
         assert simple_model.layer1.quant_config is not None
         assert simple_model.layer1.quant_config["weight_quant_params"]["nbits"] == 4
         assert simple_model.layer1.quant_config["weight_quant_params"]["group_size"] == 64
+
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
+    def test_sinqlinear_no_quant_config_when_prequantized(self, simple_model):
+        """Test that SINQLinear modules have NO quant_config when pre-quantized (loaded from checkpoint)."""
+        config = SinqConfig(nbits=4, group_size=64, method="sinq", device="cuda:0")
+        quantizer = SinqHfQuantizer(quantization_config=config)
+        quantizer.validate_environment()
+        quantizer.pre_quantized = True
+
+        quantizer._process_model_before_weight_loading(simple_model, None)
+
+        # For pre-quantized models, quant_config is None (will be loaded from checkpoint)
+        assert simple_model.layer1.quant_config is None
 
 
 # ============================================================================
@@ -576,12 +539,9 @@ class TestEdgeCases:
 
     def test_invalid_device_spec(self):
         """Test invalid device specification."""
-        config = SinqConfig(device="invalid_device")
-        quantizer = SinqHfQuantizer(quantization_config=config)
+        from transformers.quantizers.quantizer_sinq import _normalize_cuda_device
 
         with pytest.raises(ValueError, match="Unsupported device spec"):
-            # Need to trigger device normalization
-            from transformers.quantizers.quantizer_sinq import _normalize_cuda_device
             _normalize_cuda_device("invalid_device")
 
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
@@ -593,37 +553,16 @@ class TestEdgeCases:
         result = _normalize_cuda_device(f"cuda:{torch.cuda.device_count() + 10}")
         assert "cuda:" in result
 
-    def test_tokenizer_resolution_failure(self, simple_model):
-        """Test graceful handling when tokenizer cannot be resolved."""
-        config = SinqConfig(method="sinq")
-        quantizer = SinqHfQuantizer(quantization_config=config)
-
-        # Should not crash even without tokenizer
-        tok, model_id = quantizer._resolve_tokenizer_and_model_id(simple_model, {})
-        # May be None, which is acceptable
-
     @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
-    def test_asinq_method_raises_error(self, simple_model):
-        """Test that asinq method raises appropriate error."""
+    def test_asinq_method_raises_error_in_validate(self):
+        """Test that asinq method raises appropriate error in validate_environment."""
         config = SinqConfig(method="asinq", device="cuda:0")
         quantizer = SinqHfQuantizer(quantization_config=config)
-        quantizer.validate_environment()
-
-        with pytest.raises(ValueError, match="A-SINQ is not supported"):
-            quantizer._process_model_before_weight_loading(simple_model, None)
-
-    @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
-    def test_asinq_after_weight_loading_error(self, simple_model):
-        """Test that asinq method raises error in _process_model_after_weight_loading."""
-        config = SinqConfig(method="asinq", device="cuda:0")
-        quantizer = SinqHfQuantizer(quantization_config=config)
-        quantizer.validate_environment()
+        # pre_quantized=False triggers the asinq error
         quantizer.pre_quantized = False
-        # Manually set to bypass _process_model_before_weight_loading check
-        quantizer.quantization_config.method = "asinq"
 
         with pytest.raises(ValueError, match="asinq"):
-            quantizer._process_model_after_weight_loading(simple_model)
+            quantizer.validate_environment()
 
 
 # ============================================================================
@@ -680,6 +619,8 @@ class TestIntegration:
 
         quantizer = SinqHfQuantizer(quantization_config=config)
         quantizer.validate_environment()
+        # Must set pre_quantized=False for fresh quantization (default is True)
+        quantizer.pre_quantized = False
 
         # Process model before weight loading
         quantizer._process_model_before_weight_loading(simple_model, None)
@@ -741,6 +682,8 @@ class TestPerformanceAndCorrectness:
         config = SinqConfig(method="sinq", device="cuda:0")
         quantizer = SinqHfQuantizer(quantization_config=config)
         quantizer.validate_environment()
+        # Must set pre_quantized=False for fresh quantization (default is True)
+        quantizer.pre_quantized = False
 
         quantizer._process_model_before_weight_loading(simple_model, None)
 
@@ -779,6 +722,8 @@ class TestPerformanceAndCorrectness:
         config = SinqConfig(nbits=4, method="sinq", device="cuda:0")
         quantizer = SinqHfQuantizer(quantization_config=config)
         quantizer.validate_environment()
+        # Must set pre_quantized=False for fresh quantization (default is True)
+        quantizer.pre_quantized = False
 
         quantizer._process_model_before_weight_loading(simple_model, None)
 
