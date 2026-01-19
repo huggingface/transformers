@@ -27,8 +27,8 @@ class SolarOpenConfig(PreTrainedConfig):
     This is the configuration class to store the configuration of a [`SolarOpenModel`]. It is used to instantiate a
     SolarOpen model according to the specified arguments, defining the model architecture.
 
-    Configuration objects inherit from [`Glm4MoeConfig`] and can be used to control the model outputs. Read the
-    documentation from [`Glm4MoeConfig`] for more information.
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Instantiating a configuration defaults will yield a similar configuration to that of
     [upstage/Solar-Open-100B](https://huggingface.co/upstage/Solar-Open-100B) architecture.
@@ -84,6 +84,12 @@ class SolarOpenConfig(PreTrainedConfig):
             Whether to normalize the topk probabilities.
         use_qk_norm (`bool`, *optional*, defaults to `False`):
             Whether to use query-key normalization in the attention.
+        bos_token_id (`int`, *optional*):
+            Beginning of stream token id.
+        eos_token_id (`int`, *optional*):
+            End of stream token id.
+        pad_token_id (`int`, *optional*):
+            Padding token id.
     """
 
     model_type = "solar_open"
@@ -135,9 +141,15 @@ class SolarOpenConfig(PreTrainedConfig):
         topk_group: int = 1,
         norm_topk_prob: bool = True,
         use_qk_norm: bool = False,
+        bos_token_id: int | None = None,
+        eos_token_id: int | None = None,
+        pad_token_id: int | None = None,
         **kwargs,
     ):
-        kwargs.setdefault("partial_rotary_factor", 1.0)  # override default from Glm4MoeConfig
+        # Default partial_rotary_factor to 1.0 (instead of 0.5 in Glm4MoeConfig).
+        # `setdefault` ensures this value is not overridden by subsequent calls.
+        # This workaround is required due to modular inheritance limitations.
+        kwargs.setdefault("partial_rotary_factor", 1.0)
         self.head_dim = head_dim
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
@@ -165,11 +177,12 @@ class SolarOpenConfig(PreTrainedConfig):
         self.routed_scaling_factor = routed_scaling_factor
         self.norm_topk_prob = norm_topk_prob
         self.use_qk_norm = use_qk_norm
+        self.tie_word_embeddings = tie_word_embeddings
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.pad_token_id = pad_token_id
 
-        super().__init__(
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        super().__init__(**kwargs)
 
     def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation: set | None = None, **kwargs):
         default_rope_params = RopeParameters(

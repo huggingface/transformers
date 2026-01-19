@@ -92,6 +92,12 @@ class SolarOpenConfig(Glm4MoeConfig):
             Whether to normalize the topk probabilities.
         use_qk_norm (`bool`, *optional*, defaults to `False`):
             Whether to use query-key normalization in the attention.
+        bos_token_id (`int`, *optional*):
+            Beginning of stream token id.
+        eos_token_id (`int`, *optional*):
+            End of stream token id.
+        pad_token_id (`int`, *optional*):
+            Padding token id.
     """
 
     model_type = "solar_open"
@@ -134,6 +140,9 @@ class SolarOpenConfig(Glm4MoeConfig):
         topk_group: int = 1,
         norm_topk_prob: bool = True,
         use_qk_norm: bool = False,
+        bos_token_id: int | None = None,
+        eos_token_id: int | None = None,
+        pad_token_id: int | None = None,
         **kwargs,
     ):
         # Default partial_rotary_factor to 1.0 (instead of 0.5 in Glm4MoeConfig).
@@ -167,6 +176,9 @@ class SolarOpenConfig(Glm4MoeConfig):
             topk_group=topk_group,
             norm_topk_prob=norm_topk_prob,
             use_qk_norm=use_qk_norm,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            pad_token_id=pad_token_id,
             **kwargs,
         )
 
