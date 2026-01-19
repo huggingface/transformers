@@ -66,7 +66,6 @@ class VLMModelTester:
 
     @property
     def pipeline_model_mapping(self):
-        # This is the default pipeline mapping.
         mapping = {
             "feature-extraction": self.base_model_class,
             "image-text-to-text": self.conditional_generation_class,
@@ -181,10 +180,6 @@ class VLMModelTester:
         self._base_seq_length = seq_length
         self.tie_word_embeddings = False
 
-        # Compute derived values using template methods (can be overridden by subclasses)
-        self.num_image_tokens = self.compute_num_image_tokens()
-        self.seq_length = self.compute_seq_length()
-
         for required_attribute in [
             "base_model_class",
             "config_class",
@@ -197,55 +192,28 @@ class VLMModelTester:
                     f"You have inherited from VLMModelTester but did not set the {required_attribute} attribute."
                 )
 
-    # ============================================
-    # Template methods - override in subclasses
-    # ============================================
-
-    def compute_num_image_tokens(self):
-        """
-        Compute the number of image tokens per image.
-        Override for models with complex image token calculations.
-
-        Default: returns the num_image_tokens parameter passed to __init__
-        """
+    # Because VLMs have some different standards in how they handle image tokens, we need a few methods
+    # and properties that can be overridden if required:
+    @property
+    def num_image_tokens(self):
         return self._base_num_image_tokens
 
-    def compute_seq_length(self):
-        """
-        Compute the total sequence length including image tokens.
-        Override for models with different sequence length requirements.
-
-        Default: base_seq_length + num_image_tokens
-        """
+    @property
+    def seq_length(self):
         return self._base_seq_length + self.num_image_tokens
 
     def create_pixel_values(self):
-        """
-        Create pixel values tensor with the appropriate shape for this model.
-        Override for models that require different pixel value shapes (e.g., 5D for patch-based models).
-
-        Default: 4D tensor (batch_size, num_channels, image_size, image_size)
-        """
+        # Override to 5D for patch-based models
         return floats_tensor(
             [self.batch_size, self.num_channels, self.image_size, self.image_size], scale=1.0
         )
 
     def create_attention_mask(self, input_ids):
-        """
-        Create attention mask for the input.
-        Override for models that need different mask types (e.g., padding mask for bidirectional attention).
-
-        Default: causal (lower triangular) mask
-        """
+        # Override for bidirectional attention models like Gemma3
         return torch.tril(torch.ones_like(input_ids).to(torch_device))
 
     def place_image_tokens(self, input_ids, config):
-        """
-        Insert image tokens into the input_ids tensor.
-        Override for models with different image token placement strategies.
-
-        Default: places image tokens at the beginning of each sequence
-        """
+        # Override if the image tokens shouldn't be placed at the start of the test sequence
         image_token_index = getattr(config, "image_token_index", self.image_token_index)
         # Clear any accidental image tokens first
         input_ids = input_ids.clone()
@@ -255,17 +223,10 @@ class VLMModelTester:
         return input_ids
 
     def get_additional_inputs(self, config, input_ids, pixel_values):
-        """
-        Return additional model-specific inputs.
-        Override to add inputs like image_sizes, token_type_ids, etc.
-
-        Default: empty dict (no additional inputs)
-        """
+        # Override for model-specific inputs like LlavaNext's image_sizes
         return {}
 
-    # ============================================
-    # Core methods that use template methods
-    # ============================================
+    # End of overridable methods/properties
 
     def prepare_config_and_inputs(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
@@ -282,6 +243,26 @@ class VLMModelTester:
         config = self.get_config()
 
         return config, input_ids, token_type_ids, input_mask, pixel_values
+
+    def prepare_config_and_inputs_for_common(self):
+        config, input_ids, token_type_ids, input_mask, pixel_values = self.prepare_config_and_inputs()
+
+        # Place image tokens in input_ids using template method
+        input_ids = self.place_image_tokens(input_ids, config)
+
+        # Recreate attention mask with final input_ids (after image tokens are placed)
+        # This is important for models that use padding masks based on token values
+        if self.use_input_mask:
+            input_mask = self.create_attention_mask(input_ids)
+
+        # Build base inputs dict
+        inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask, "pixel_values": pixel_values}
+
+        # Add model-specific additional inputs using template method
+        additional_inputs = self.get_additional_inputs(config, input_ids, pixel_values)
+        inputs_dict.update(additional_inputs)
+
+        return config, inputs_dict
 
     @property
     def config_args(self):
@@ -339,26 +320,6 @@ class VLMModelTester:
         model(input_ids, attention_mask=input_mask)
         result = model(input_ids)
         self.parent.assertEqual(result.last_hidden_state.shape, (self.batch_size, self.seq_length, self.hidden_size))
-
-    def prepare_config_and_inputs_for_common(self):
-        config, input_ids, token_type_ids, input_mask, pixel_values = self.prepare_config_and_inputs()
-
-        # Place image tokens in input_ids using template method
-        input_ids = self.place_image_tokens(input_ids, config)
-
-        # Recreate attention mask with final input_ids (after image tokens are placed)
-        # This is important for models that use padding masks based on token values
-        if self.use_input_mask:
-            input_mask = self.create_attention_mask(input_ids)
-
-        # Build base inputs dict
-        inputs_dict = {"input_ids": input_ids, "attention_mask": input_mask, "pixel_values": pixel_values}
-
-        # Add model-specific additional inputs using template method
-        additional_inputs = self.get_additional_inputs(config, input_ids, pixel_values)
-        inputs_dict.update(additional_inputs)
-
-        return config, inputs_dict
 
 
 @require_torch

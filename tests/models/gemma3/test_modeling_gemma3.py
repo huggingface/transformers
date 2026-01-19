@@ -269,9 +269,10 @@ class Gemma3Vision2TextModelTester(VLMModelTester):
         kwargs.setdefault("seq_length", 24)  # Need seq_length >= 10 for bidirectional attention test
         super().__init__(parent, **kwargs)
 
-    # Template method overrides
+    # Tester method overrides
 
-    def compute_num_image_tokens(self):
+    @property
+    def num_image_tokens(self):
         """Gemma3 pools image tokens: int(sqrt(mm_tokens_per_image))^2"""
         tokens_per_side = int(self.mm_tokens_per_image**0.5)
         return tokens_per_side * tokens_per_side
@@ -288,7 +289,7 @@ class Gemma3Vision2TextModelTester(VLMModelTester):
         return input_ids
 
     def get_additional_inputs(self, config, input_ids, pixel_values):
-        """Gemma3 requires token_type_ids for bidirectional attention on image tokens"""
+        """Gemma3 requires specific token_type_ids for bidirectional attention on image tokens"""
         token_type_ids = torch.zeros_like(input_ids)
         token_type_ids[input_ids == config.image_token_index] = 1
         return {"token_type_ids": token_type_ids}
