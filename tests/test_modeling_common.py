@@ -4782,6 +4782,7 @@ class ModelTesterMixin:
     def test_get_text_features_attentions(self):
         def check_attentions_output(inputs_dict, config, model_class):
             model = model_class(copy.deepcopy(config))
+            model.set_attn_implementation("eager")
             model.to(torch_device)
             model.eval()
 
@@ -4801,8 +4802,6 @@ class ModelTesterMixin:
                 continue
 
             config, inputs_dict = self._text_features_prepare_config_and_inputs()
-            # force eager attention to support output attentions
-            config._attn_implementation = "eager"
             inputs_dict["output_hidden_states"] = False
             inputs_dict["output_attentions"] = True
             check_attentions_output(inputs_dict, config, model_class)
@@ -4928,6 +4927,7 @@ class ModelTesterMixin:
     def test_get_image_features_attentions(self):
         def check_attentions_output(inputs_dict, config, model_class):
             model = model_class(copy.deepcopy(config))
+            model.set_attn_implementation("eager")
             model.to(torch_device)
             model.eval()
 
@@ -4947,9 +4947,6 @@ class ModelTesterMixin:
                 continue
 
             config, inputs_dict = self._image_features_prepare_config_and_inputs()
-
-            # force eager attention to support output attentions
-            config._attn_implementation = "eager"
             inputs_dict["output_hidden_states"] = False
             inputs_dict["output_attentions"] = True
             check_attentions_output(inputs_dict, config, model_class)
@@ -5053,6 +5050,7 @@ class ModelTesterMixin:
     def test_get_audio_features_attentions(self):
         def check_attentions_output(inputs_dict, config, model_class):
             model = model_class(copy.deepcopy(config))
+            model.set_attn_implementation("eager")
             model.to(torch_device)
             model.eval()
 
@@ -5071,9 +5069,6 @@ class ModelTesterMixin:
                 continue
 
             config, inputs_dict = self._audio_features_prepare_config_and_inputs()
-
-            # force eager attention to support output attentions
-            config._attn_implementation = "eager"
             inputs_dict["output_hidden_states"] = False
             inputs_dict["output_attentions"] = True
             check_attentions_output(inputs_dict, config, model_class)
@@ -5179,6 +5174,7 @@ class ModelTesterMixin:
     def test_get_video_features_attentions(self):
         def check_attentions_output(inputs_dict, config, model_class):
             model = model_class(copy.deepcopy(config))
+            model.set_attn_implementation("eager")
             model.to(torch_device)
             model.eval()
 
@@ -5197,9 +5193,6 @@ class ModelTesterMixin:
                 continue
 
             config, inputs_dict = self._video_features_prepare_config_and_inputs()
-
-            # force eager attention to support output attentions
-            config._attn_implementation = "eager"
             inputs_dict["output_hidden_states"] = False
             inputs_dict["output_attentions"] = True
             check_attentions_output(inputs_dict, config, model_class)
