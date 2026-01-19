@@ -4608,16 +4608,19 @@ class ModelTesterMixin:
         if hasattr(self.model_tester, "video_model_tester"):
             _, inputs_dict = self.model_tester.video_model_tester.prepare_config_and_inputs_for_common()
         else:
-            if "pixel_values" in inputs_dict and "pixel_values_videos" not in inputs_dict:
-                inputs_dict["pixel_values_videos"] = inputs_dict.pop("pixel_values")
-            if "image_grid_thw" in inputs_dict and "video_grid_thw" not in inputs_dict:
-                inputs_dict["video_grid_thw"] = inputs_dict.pop("image_grid_thw")
-            if "image_merge_sizes" in inputs_dict and "video_merge_sizes" not in inputs_dict:
-                inputs_dict["video_merge_sizes"] = inputs_dict.pop("image_merge_sizes")
+            key_mappings = {
+                "pixel_values": "pixel_values_videos",
+                "image_grid_thw": "video_grid_thw",
+                "image_merge_sizes": "video_merge_sizes",
+            }
+
+            for src_key, dst_key in key_mappings.items():
+                if src_key in inputs_dict and dst_key not in inputs_dict:
+                    inputs_dict[dst_key] = inputs_dict.pop(src_key)
+
+            allowed_non_video_keys = {"vision_feature_layer", "vision_feature_select_strategy", "cu_seqlens"}
             inputs_dict = {
-                key: value
-                for key, value in inputs_dict.items()
-                if "video" in key or key in ["vision_feature_layer", "vision_feature_select_strategy", "cu_seqlens"]
+                key: value for key, value in inputs_dict.items() if "video" in key or key in allowed_non_video_keys
             }
         return config, inputs_dict
 
