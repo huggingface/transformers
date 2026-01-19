@@ -763,6 +763,52 @@ def test_debug_batch_internals(device: str = "cuda"):
         
         layer_diff = (layer_out_batch[0] - layer_out_single[0]).abs().max().item()
         print(f"First layer output diff: {layer_diff:.6f}")
+        
+        # Check if predictions match (argmax)
+        print("\n--- Checking prediction consistency (argmax) ---")
+        
+        # Get logits from full forward
+        logits_batch = outputs_batch.logits
+        logits_single = outputs_single.logits
+        
+        # Get argmax predictions
+        pred_batch_0 = logits_batch[0].argmax(dim=-1)
+        pred_batch_1 = logits_batch[1].argmax(dim=-1)
+        pred_single = logits_single[0].argmax(dim=-1)
+        
+        pred_match_0 = torch.equal(pred_batch_0, pred_single)
+        pred_match_1 = torch.equal(pred_batch_1, pred_single)
+        pred_match_01 = torch.equal(pred_batch_0, pred_batch_1)
+        
+        print(f"Predictions batch[0] == single: {pred_match_0}")
+        print(f"Predictions batch[1] == single: {pred_match_1}")
+        print(f"Predictions batch[0] == batch[1]: {pred_match_01}")
+        
+        if pred_match_0 and pred_match_1:
+            print("\n✅ Predictions match! Numerical differences don't affect output tokens.")
+        else:
+            # Show where they differ
+            diff_positions_0 = (pred_batch_0 != pred_single).nonzero(as_tuple=True)[0]
+            print(f"\nPrediction differences at positions: {diff_positions_0.tolist()}")
+            if len(diff_positions_0) > 0:
+                for pos in diff_positions_0[:5]:  # Show first 5
+                    print(f"  Position {pos}: batch={pred_batch_0[pos].item()}, single={pred_single[pos].item()}")
+                    # Also show the logit values at these positions
+                    print(f"    Batch logits[{pred_batch_0[pos].item()}]: {logits_batch[0, pos, pred_batch_0[pos]].item():.4f}")
+                    print(f"    Single logits[{pred_single[pos].item()}]: {logits_single[0, pos, pred_single[pos]].item():.4f}")
+                    print(f"    Batch logits[{pred_single[pos].item()}]: {logits_batch[0, pos, pred_single[pos]].item():.4f}")
+        
+        # Check top-5 consistency
+        print("\n--- Checking top-5 consistency ---")
+        topk_batch = logits_batch[0].topk(5, dim=-1).indices
+        topk_single = logits_single[0].topk(5, dim=-1).indices
+        
+        top5_match = torch.equal(topk_batch, topk_single)
+        print(f"Top-5 predictions match: {top5_match}")
+        
+        if not top5_match:
+            diff_count = (topk_batch != topk_single).any(dim=-1).sum().item()
+            print(f"Positions with different top-5: {diff_count} / {topk_batch.shape[0]}")
 
 
 def main():
