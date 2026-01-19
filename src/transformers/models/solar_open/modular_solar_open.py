@@ -136,7 +136,10 @@ class SolarOpenConfig(Glm4MoeConfig):
         use_qk_norm: bool = False,
         **kwargs,
     ):
-        kwargs.setdefault("partial_rotary_factor", 1.0)  # override default from Glm4MoeConfig
+        # Default partial_rotary_factor to 1.0 (instead of 0.5 in Glm4MoeConfig).
+        # `setdefault` ensures this value is not overridden by subsequent calls.
+        # This workaround is required due to modular inheritance limitations.
+        kwargs.setdefault("partial_rotary_factor", 1.0)
         self.head_dim = head_dim
 
         super().__init__(
