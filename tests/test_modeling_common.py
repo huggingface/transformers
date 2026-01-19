@@ -4563,6 +4563,12 @@ class ModelTesterMixin:
                     self.assertTrue(compare_state_dicts(model.state_dict(), model_reloaded.state_dict()))
 
     def _text_features_prepare_config_and_inputs(self):
+        """
+        Helper method to extract only text-related inputs from the full set of inputs, for testing `get_text_features`.
+
+        Specifically, it tests both the model_tester and its text_model_tester (if any),
+        and filters for "input_ids", "token_type_ids", and "attention_mask" keys.
+        """
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         if hasattr(self.model_tester, "text_model_tester"):
             _, inputs_dict = self.model_tester.text_model_tester.prepare_config_and_inputs_for_common()
@@ -4575,6 +4581,13 @@ class ModelTesterMixin:
         return config, inputs_dict
 
     def _image_features_prepare_config_and_inputs(self):
+        """
+        Helper method to extract only image-related inputs from the full set of inputs, for testing `get_image_features`.
+
+        Specifically, it tests both the model_tester and its vision_model_tester (if any),
+        and filters for keys related to images. It excludes video-related keys, but allows
+        "spatial_shapes" and "qformer_input_ids" keys as required by some architectures.
+        """
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         if hasattr(self.model_tester, "vision_model_tester"):
             _, inputs_dict = self.model_tester.vision_model_tester.prepare_config_and_inputs_for_common()
@@ -4589,6 +4602,12 @@ class ModelTesterMixin:
         return config, inputs_dict
 
     def _audio_features_prepare_config_and_inputs(self):
+        """
+        Helper method to extract only audio-related inputs from the full set of inputs, for testing `get_audio_features`.
+
+        Specifically, it tests both the model_tester and its audio_model_tester (if any),
+        and filters for keys related to audio.
+        """
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         if hasattr(self.model_tester, "audio_model_tester"):
             _, inputs_dict = self.model_tester.audio_model_tester.prepare_config_and_inputs_for_common()
@@ -4604,6 +4623,13 @@ class ModelTesterMixin:
         return config, inputs_dict
 
     def _video_features_prepare_config_and_inputs(self):
+        """
+        Helper method to extract only video-related inputs from the full set of inputs, for testing `get_video_features`.
+
+        Specifically, it tests both the model_tester and its video_model_tester (if any),
+        and filters for keys related to videos. It also handles key renaming for video inputs
+        if there is no dedicated video_model_tester.
+        """
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         if hasattr(self.model_tester, "video_model_tester"):
             _, inputs_dict = self.model_tester.video_model_tester.prepare_config_and_inputs_for_common()
