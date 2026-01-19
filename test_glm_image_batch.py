@@ -686,6 +686,83 @@ def test_debug_batch_internals(device: str = "cuda"):
         
         lang_diff_no_mask = (lang_out_batch_no_mask.last_hidden_state[0] - lang_out_single_no_mask.last_hidden_state[0]).abs().max().item()
         print(f"Language model diff (no attention_mask): {lang_diff_no_mask:.6f}")
+        
+        # Check rotary embeddings directly
+        print("\n--- Checking rotary embeddings ---")
+        
+        inputs_embeds_batch = lang_model.embed_tokens(inputs_batch['input_ids'])
+        inputs_embeds_single = lang_model.embed_tokens(inputs_single['input_ids'])
+        
+        # Get position embeddings
+        position_embeddings_batch = lang_model.rotary_emb(inputs_embeds_batch, position_ids=pos_ids_batch)
+        position_embeddings_single = lang_model.rotary_emb(inputs_embeds_single, position_ids=pos_ids_single)
+        
+        # position_embeddings is a tuple of (cos, sin)
+        cos_batch, sin_batch = position_embeddings_batch
+        cos_single, sin_single = position_embeddings_single
+        
+        print(f"cos_batch shape: {cos_batch.shape}")
+        print(f"cos_single shape: {cos_single.shape}")
+        
+        # Compare cos and sin for sample 0
+        cos_diff = (cos_batch[0] - cos_single[0]).abs().max().item()
+        sin_diff = (sin_batch[0] - sin_single[0]).abs().max().item()
+        
+        print(f"cos diff: {cos_diff:.6f}")
+        print(f"sin diff: {sin_diff:.6f}")
+        
+        # Test running first layer only
+        print("\n--- Testing first decoder layer ---")
+        
+        first_layer = lang_model.layers[0]
+        
+        # Create causal mask manually
+        from transformers.masking_utils import create_causal_mask
+        
+        mask_kwargs_batch = {
+            "config": lang_model.config,
+            "input_embeds": inputs_embeds_batch,
+            "attention_mask": None,
+            "cache_position": cache_position_batch,
+            "past_key_values": None,
+            "position_ids": None,
+        }
+        mask_kwargs_single = {
+            "config": lang_model.config,
+            "input_embeds": inputs_embeds_single,
+            "attention_mask": None,
+            "cache_position": cache_position_single,
+            "past_key_values": None,
+            "position_ids": None,
+        }
+        
+        causal_mask_batch = create_causal_mask(**mask_kwargs_batch)
+        causal_mask_single = create_causal_mask(**mask_kwargs_single)
+        
+        print(f"causal_mask_batch: {causal_mask_batch}")
+        print(f"causal_mask_single: {causal_mask_single}")
+        
+        with torch.no_grad():
+            layer_out_batch = first_layer(
+                inputs_embeds_batch,
+                attention_mask=causal_mask_batch,
+                position_ids=None,
+                past_key_values=None,
+                cache_position=cache_position_batch,
+                position_embeddings=position_embeddings_batch,
+            )
+            
+            layer_out_single = first_layer(
+                inputs_embeds_single,
+                attention_mask=causal_mask_single,
+                position_ids=None,
+                past_key_values=None,
+                cache_position=cache_position_single,
+                position_embeddings=position_embeddings_single,
+            )
+        
+        layer_diff = (layer_out_batch[0] - layer_out_single[0]).abs().max().item()
+        print(f"First layer output diff: {layer_diff:.6f}")
 
 
 def main():
