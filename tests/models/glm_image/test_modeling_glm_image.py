@@ -197,6 +197,70 @@ class GlmImageModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
         self.model_tester = GlmImageVisionText2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=GlmImageConfig, has_text_modality=False)
 
+    def test_batch_consistency(self):
+        """Test that batch processing produces same predictions as single processing."""
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device).eval()
+
+            # Create batch=2 input by duplicating the single sample
+            batch_size = 2
+            patch_size = config.vision_config.patch_size
+            single_image_len = (self.model_tester.image_size**2) // (patch_size**2)
+            patches_per_side = self.model_tester.image_size // patch_size
+
+            # Prepare batch inputs
+            batch_inputs = {
+                "input_ids": inputs_dict["input_ids"].repeat(batch_size, 1),
+                "attention_mask": inputs_dict["attention_mask"].repeat(batch_size, 1),
+                "pixel_values": inputs_dict["pixel_values"].repeat(batch_size, 1),
+                "image_grid_thw": torch.tensor(
+                    [[1, patches_per_side, patches_per_side]] * (batch_size * 2),  # 2 grids per sample
+                    device=torch_device,
+                ),
+                "images_per_sample": torch.tensor([2, 2], device=torch_device),
+                "num_source_images_per_sample": torch.tensor([1, 1], device=torch_device),
+            }
+
+            # Prepare single inputs
+            single_inputs = {
+                "input_ids": inputs_dict["input_ids"],
+                "attention_mask": inputs_dict["attention_mask"],
+                "pixel_values": inputs_dict["pixel_values"],
+                "image_grid_thw": torch.tensor(
+                    [[1, patches_per_side, patches_per_side]] * 2,  # 2 grids for single sample
+                    device=torch_device,
+                ),
+                "images_per_sample": torch.tensor([2], device=torch_device),
+                "num_source_images_per_sample": torch.tensor([1], device=torch_device),
+            }
+
+            with torch.no_grad():
+                batch_outputs = model(**batch_inputs)
+                single_outputs = model(**single_inputs)
+
+            # Compare predictions (argmax) - this is what matters for generation
+            batch_logits = batch_outputs.logits if hasattr(batch_outputs, "logits") else batch_outputs.last_hidden_state
+            single_logits = single_outputs.logits if hasattr(single_outputs, "logits") else single_outputs.last_hidden_state
+
+            if hasattr(batch_outputs, "logits"):
+                batch_preds = batch_logits[0].argmax(dim=-1)
+                single_preds = single_logits[0].argmax(dim=-1)
+                self.assertTrue(
+                    torch.equal(batch_preds, single_preds),
+                    "Batch processing should produce same predictions as single processing",
+                )
+
+            # Also verify batch[0] == batch[1] since inputs are identical
+            batch0_preds = batch_logits[0].argmax(dim=-1) if hasattr(batch_outputs, "logits") else None
+            batch1_preds = batch_logits[1].argmax(dim=-1) if hasattr(batch_outputs, "logits") else None
+            if batch0_preds is not None:
+                self.assertTrue(
+                    torch.equal(batch0_preds, batch1_preds),
+                    "Identical inputs in batch should produce identical predictions",
+                )
+
     def test_config(self):
         self.config_tester.run_common_tests()
 
