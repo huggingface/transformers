@@ -667,9 +667,7 @@ class GlmImageModel(Glm4vModel):
         image_start_token_id = self.config.image_start_token_id
         image_end_token_id = self.config.image_end_token_id
 
-        position_ids = torch.ones(
-            3, batch_size, seq_len, dtype=dtype, device=device
-        )
+        position_ids = torch.ones(3, batch_size, seq_len, dtype=dtype, device=device)
         text_positions = torch.arange(seq_len, device=device)[None, :].repeat(3, 1)
 
         # Split image_grid_thw by sample if images_per_sample is provided
@@ -690,10 +688,11 @@ class GlmImageModel(Glm4vModel):
             curr_input_ids = input_ids[batch_idx]
             curr_grids = grids_per_sample[batch_idx]
 
-            if attention_mask is not None:
+            if attention_mask is not None and attention_mask.shape[1] == seq_len:
                 valid_mask = attention_mask[batch_idx] == 1
                 curr_input_ids_valid = curr_input_ids[valid_mask]
             else:
+                # attention_mask may have different length during assisted decoding
                 curr_input_ids_valid = curr_input_ids
                 valid_mask = None
 
@@ -768,7 +767,9 @@ class GlmImageModel(Glm4vModel):
                     h_indices = torch.arange(h, device=device).unsqueeze(1).expand(h, w).flatten()
                     w_indices = torch.arange(w, device=device).unsqueeze(0).expand(h, w).flatten()
 
-                    decode_temporal_list.append(torch.full((total_tokens,), decode_pos, device=device, dtype=torch.long))
+                    decode_temporal_list.append(
+                        torch.full((total_tokens,), decode_pos, device=device, dtype=torch.long)
+                    )
                     decode_height_list.append(decode_pos + h_indices)
                     decode_width_list.append(decode_pos + w_indices)
                     decode_pos = decode_pos + max(h, w)
@@ -778,11 +779,14 @@ class GlmImageModel(Glm4vModel):
                 decode_height_list.append(torch.tensor([decode_pos], device=device, dtype=torch.long))
                 decode_width_list.append(torch.tensor([decode_pos], device=device, dtype=torch.long))
 
-                sample_decode_pos_ids = torch.stack([
-                    torch.cat(decode_temporal_list, dim=0),
-                    torch.cat(decode_height_list, dim=0),
-                    torch.cat(decode_width_list, dim=0),
-                ], dim=0)
+                sample_decode_pos_ids = torch.stack(
+                    [
+                        torch.cat(decode_temporal_list, dim=0),
+                        torch.cat(decode_height_list, dim=0),
+                        torch.cat(decode_width_list, dim=0),
+                    ],
+                    dim=0,
+                )
                 all_decode_position_ids.append(sample_decode_pos_ids)
             else:
                 all_decode_position_ids.append(None)
@@ -1207,9 +1211,15 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
             images_per_sample = model_kwargs.get("images_per_sample", None)
             num_source_images_per_sample = model_kwargs.get("num_source_images_per_sample", None)
 
-            # Use images_per_sample if available, otherwise fall back to counting from input_ids
+            # Use images_per_sample if available, otherwise infer from image_grid_thw / batch_size
             if images_per_sample is not None:
                 image_nums = images_per_sample.tolist()
+            elif image_grid_thw is not None and input_ids is not None:
+                # Infer: assume equal distribution of grids across samples
+                batch_size = input_ids.shape[0]
+                total_grids = image_grid_thw.shape[0]
+                grids_per_sample = total_grids // batch_size
+                image_nums = [grids_per_sample] * batch_size
             else:
                 image_nums = self._get_image_nums(input_ids).tolist()
 

@@ -996,10 +996,11 @@ class GlmImageModel(GlmImagePreTrainedModel):
             curr_input_ids = input_ids[batch_idx]
             curr_grids = grids_per_sample[batch_idx]
 
-            if attention_mask is not None:
+            if attention_mask is not None and attention_mask.shape[1] == seq_len:
                 valid_mask = attention_mask[batch_idx] == 1
                 curr_input_ids_valid = curr_input_ids[valid_mask]
             else:
+                # attention_mask may have different length during assisted decoding
                 curr_input_ids_valid = curr_input_ids
                 valid_mask = None
 
@@ -1558,9 +1559,15 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
             images_per_sample = model_kwargs.get("images_per_sample", None)
             num_source_images_per_sample = model_kwargs.get("num_source_images_per_sample", None)
 
-            # Use images_per_sample if available, otherwise fall back to counting from input_ids
+            # Use images_per_sample if available, otherwise infer from image_grid_thw / batch_size
             if images_per_sample is not None:
                 image_nums = images_per_sample.tolist()
+            elif image_grid_thw is not None and input_ids is not None:
+                # Infer: assume equal distribution of grids across samples
+                batch_size = input_ids.shape[0]
+                total_grids = image_grid_thw.shape[0]
+                grids_per_sample = total_grids // batch_size
+                image_nums = [grids_per_sample] * batch_size
             else:
                 image_nums = self._get_image_nums(input_ids).tolist()
 

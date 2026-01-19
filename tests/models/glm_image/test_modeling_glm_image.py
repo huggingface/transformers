@@ -207,7 +207,6 @@ class GlmImageModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
             # Create batch=2 input by duplicating the single sample
             batch_size = 2
             patch_size = config.vision_config.patch_size
-            single_image_len = (self.model_tester.image_size**2) // (patch_size**2)
             patches_per_side = self.model_tester.image_size // patch_size
 
             # Prepare batch inputs
@@ -241,8 +240,12 @@ class GlmImageModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
                 single_outputs = model(**single_inputs)
 
             # Compare predictions (argmax) - this is what matters for generation
-            batch_logits = batch_outputs.logits if hasattr(batch_outputs, "logits") else batch_outputs.last_hidden_state
-            single_logits = single_outputs.logits if hasattr(single_outputs, "logits") else single_outputs.last_hidden_state
+            batch_logits = (
+                batch_outputs.logits if hasattr(batch_outputs, "logits") else batch_outputs.last_hidden_state
+            )
+            single_logits = (
+                single_outputs.logits if hasattr(single_outputs, "logits") else single_outputs.last_hidden_state
+            )
 
             if hasattr(batch_outputs, "logits"):
                 batch_preds = batch_logits[0].argmax(dim=-1)
