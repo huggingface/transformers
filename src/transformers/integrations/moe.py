@@ -108,23 +108,24 @@ def batched_mm_experts_forward(
     final_hidden_states = torch.zeros_like(hidden_states)
 
     # Flatten top_k_index to get expert_ids per selected sample
-    expert_ids = top_k_index.view(-1)
+    expert_ids = top_k_index.reshape(-1)
     token_idx = torch.arange(num_tokens, device=device).unsqueeze(1).expand(-1, num_top_k).reshape(-1)
 
     # Resolve routing weights per selected sample, allowing top_k_weights to be either:
     # - (num_tokens, num_top_k) Qwen2MoE style
     # - (num_tokens, num_experts) DeepseekV2 style
     if top_k_weights.shape == (num_tokens, num_top_k):
-        sample_weights = top_k_weights.view(-1, 1)  # (S, 1)
+        sample_weights = top_k_weights
     elif top_k_weights.shape == (num_tokens, num_experts):
         # TODO: routers that output full expert distribution
         # should probably be corrected to output only top_k weights
-        sample_weights = top_k_weights[token_idx, expert_ids].view(-1, 1)  # (S, 1)
+        sample_weights = top_k_weights[token_idx, expert_ids]
     else:
         raise ValueError(
             f"top_k_weights has an invalid/unsupported shape. It should be either (num_tokens, num_top_k)({num_tokens}, {num_top_k}) "
             f"or (num_tokens, num_experts)({num_tokens}, {num_experts}), but got {top_k_weights.shape}."
         )
+    sample_weights = sample_weights.reshape(-1, 1)  # (S, 1)
 
     # Get current hidden states for selected samples
     selected_hidden_states = hidden_states[token_idx]
@@ -213,23 +214,24 @@ def grouped_mm_experts_forward(
     final_hidden_states = torch.zeros_like(hidden_states)
 
     # Flatten top_k_index to get expert_ids per selected sample
-    expert_ids = top_k_index.view(-1)
+    expert_ids = top_k_index.reshape(-1)
     token_idx = torch.arange(num_tokens, device=device).unsqueeze(1).expand(-1, num_top_k).reshape(-1)
 
     # Resolve routing weights per selected sample, allowing top_k_weights to be either:
     # - (num_tokens, num_top_k) Qwen2MoE style
     # - (num_tokens, num_experts) DeepseekV2 style
     if top_k_weights.shape == (num_tokens, num_top_k):
-        sample_weights = top_k_weights.view(-1, 1)  # (S, 1)
+        sample_weights = top_k_weights
     elif top_k_weights.shape == (num_tokens, num_experts):
         # TODO: routers that output full expert distribution
         # should probably be corrected to output only top_k weights
-        sample_weights = top_k_weights[token_idx, expert_ids].view(-1, 1)  # (S, 1)
+        sample_weights = top_k_weights[token_idx, expert_ids]
     else:
         raise ValueError(
             f"top_k_weights has an invalid/unsupported shape. It should be either (num_tokens, num_top_k)({num_tokens}, {num_top_k}) "
             f"or (num_tokens, num_experts)({num_tokens}, {num_experts}), but got {top_k_weights.shape}."
         )
+    sample_weights = sample_weights.reshape(-1, 1)  # (S, 1)
 
     # Get current hidden states for selected samples
     selected_hidden_states = hidden_states[token_idx]
