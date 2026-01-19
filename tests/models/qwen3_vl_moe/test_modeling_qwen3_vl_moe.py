@@ -64,7 +64,7 @@ class Qwen3VLMoeVisionText2TextModelTester:
             "hidden_act": "silu",
             "hidden_size": 32,
             "vocab_size": 99,
-            "intermediate_size": 37,
+            "intermediate_size": 32,
             "max_position_embeddings": 512,
             "model_type": "qwen3_vl_moe",
             "num_attention_heads": 4,
