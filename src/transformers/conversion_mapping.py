@@ -238,7 +238,7 @@ def _build_checkpoint_conversion_mapping():
     mapping["hunyuan_v1_moe"] = mapping["qwen2_moe"].copy()
     mapping["minimax"] = mapping["mixtral"].copy()
     mapping["deepseek_ocr"] = [
-        WeightRenaming(r"\\\.", "."), # for renaming issues... namely too many escapes
+        WeightRenaming(r"\\\.", "."),  # for renaming issues... namely too many escapes
         WeightRenaming(r"^model\.model\.", "model."),
         WeightRenaming(r"^model\.sam_model\.blocks\.", "sam_model.layers."),
         WeightRenaming(r"^sam_model\.blocks\.", "sam_model.layers."),
