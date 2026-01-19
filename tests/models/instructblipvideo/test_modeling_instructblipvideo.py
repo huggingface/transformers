@@ -626,6 +626,12 @@ class InstructBlipVideoForConditionalGenerationDecoderOnlyTest(
                         raise ValueError("The eager model should not have SDPA attention layers")
 
     def _video_features_prepare_config_and_inputs(self):
+        """
+        Helper method to extract only video-related inputs from the full set of inputs, for testing `get_video_features`.
+
+        InstructBlip's `get_video_features` uses `qformer_input_ids` and `qformer_attention_mask` along with `pixel_values`,
+        so we override this method to keep those, and only discard `input_ids` and `attention_mask`.
+        """
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         del inputs_dict["input_ids"]
         del inputs_dict["attention_mask"]

@@ -569,6 +569,13 @@ class XCLIPModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         self.assertIsNotNone(model)
 
     def _video_features_prepare_config_and_inputs(self):
+        """
+        Helper method to extract only video-related inputs from the full set of inputs, for testing `get_video_features`.
+
+        The model_tester.vision_model_tester.prepare_config_and_inputs() method prepares image inputs
+        where the batch size * time dimension is flattened. So, instead we use the model_tester.prepare_config_and_inputs()
+        which prepares video inputs with shape (batch_size, num_frames, num_channels, height, width) instead.
+        """
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         del inputs_dict["input_ids"]
         del inputs_dict["attention_mask"]

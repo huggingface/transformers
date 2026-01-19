@@ -292,6 +292,12 @@ class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, Generati
         pass
 
     def _video_features_prepare_config_and_inputs(self):
+        """
+        Helper method to extract only video-related inputs from the full set of inputs, for testing `get_video_features`.
+
+        The superclass method will rename "pixel_values" to "pixel_values_videos" automatically, but LlavaOnevision's
+        `get_video_features` uses "pixel_values" as input, so we need to override the inputs accordingly.
+        """
         pixel_values_videos = floats_tensor(
             [
                 self.model_tester.batch_size,

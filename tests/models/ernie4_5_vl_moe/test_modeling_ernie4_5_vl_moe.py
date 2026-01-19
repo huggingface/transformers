@@ -267,6 +267,13 @@ class Ernie4_5_VL_MoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest
         pass
 
     def _video_features_prepare_config_and_inputs(self):
+        """
+        Helper method to extract only video-related inputs from the full set of inputs, for testing `get_video_features`.
+
+        The superclass method simply calls the model_tester.prepare_config_and_inputs_for_common(),
+        but that method only prepared image inputs, i.e. where the temporal dimension in grid_thw is 1.
+        This override prepares proper video inputs with 12 frames.
+        """
         config = self.model_tester.get_config()
         patch_size = config.vision_config.patch_size
         batch_size = self.model_tester.batch_size
