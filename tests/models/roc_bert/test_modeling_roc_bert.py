@@ -569,7 +569,7 @@ class RoCBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     ):
         if pipeline_test_case_name in [
             "FillMaskPipelineTests",
-            "FeatureExtractionPipelineTests",
+            "TextEmbeddingPipelineTests",
             "TextClassificationPipelineTests",
             "TokenClassificationPipelineTests",
         ]:

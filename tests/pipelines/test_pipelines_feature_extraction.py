@@ -33,7 +33,7 @@ if is_torch_available():
 
 
 @is_pipeline_test
-class FeatureExtractionPipelineTests(unittest.TestCase):
+class TextEmbeddingPipelineTests(unittest.TestCase):
     model_mapping = MODEL_MAPPING
 
     @require_torch
