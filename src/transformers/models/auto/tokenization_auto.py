@@ -237,6 +237,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("ovis2", "Qwen2Tokenizer" if is_tokenizers_available() else None),
         ("owlv2", "CLIPTokenizer" if is_tokenizers_available() else None),
         ("owlvit", "CLIPTokenizer" if is_tokenizers_available() else None),
+        ("parakeet_tdt", "ParakeetTokenizer" if is_tokenizers_available() else None),
         ("pegasus", "PegasusTokenizer" if is_tokenizers_available() else None),
         ("pegasus_x", "PegasusTokenizer" if is_tokenizers_available() else None),
         ("perceiver", "PerceiverTokenizer"),

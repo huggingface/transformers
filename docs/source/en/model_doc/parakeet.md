@@ -34,6 +34,12 @@ Parakeet models, [introduced by NVIDIA NeMo](https://developer.nvidia.com/blog/p
     - 1D convolution projection from encoder hidden size to vocabulary size (for optimal NeMo compatibility).
     - CTC loss computation for training.
     - Greedy CTC decoding for inference.
+- [**ParakeetForTDT**](#parakeetfortdt): a Fast Conformer Encoder + a Token-and-Duration Transducer (TDT) decoder
+  - **TDT Decoder**: A transducer-based decoder that predicts both tokens and their durations:
+    - Prediction network (LSTM-based) for autoregressive token prediction.
+    - Joint network combining encoder and decoder outputs.
+    - Separate token and duration heads for parallel prediction.
+    - Greedy TDT decoding with optional timestamp generation.
 
 The original implementation can be found in [NVIDIA NeMo](https://github.com/NVIDIA/NeMo).
 Model checkpoints are to be found under [the NVIDIA organization](https://huggingface.co/nvidia/models?search=parakeet).
@@ -219,3 +225,11 @@ outputs.loss.backward()
 ## ParakeetForCTC
 
 [[autodoc]] ParakeetForCTC
+
+## ParakeetTDTConfig
+
+[[autodoc]] ParakeetTDTConfig
+
+## ParakeetForTDT
+
+[[autodoc]] ParakeetForTDT
