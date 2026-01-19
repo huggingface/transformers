@@ -238,45 +238,29 @@ def _build_checkpoint_conversion_mapping():
     mapping["hunyuan_v1_moe"] = mapping["qwen2_moe"].copy()
     mapping["minimax"] = mapping["mixtral"].copy()
     mapping["deepseek_ocr"] = [
-        WeightRenaming(
-            r"^model\.sam_model\.blocks\.(\d+)\.norm1\.",
-            r"model.sam_model.layers.\1.layer_norm1.",
-        ),
-        WeightRenaming(
-            r"^model\.sam_model\.blocks\.(\d+)\.norm2\.",
-            r"model.sam_model.layers.\1.layer_norm2.",
-        ),
-        WeightRenaming(
-            r"^model\.sam_model\.blocks\.(\d+)\.attn\.",
-            r"model.sam_model.layers.\1.attn.",
-        ),
-        WeightRenaming(
-            r"^model\.sam_model\.blocks\.(\d+)\.mlp\.",
-            r"model.sam_model.layers.\1.mlp.",
-        ),
-        WeightRenaming(
-            r"^model\.sam_model\.patch_embed\.proj\.",
-            "model.sam_model.patch_embed.projection.",
-        ),
-        WeightRenaming(r"^model\.sam_model\.neck\.0\.", "model.sam_model.neck.conv1."),
-        WeightRenaming(r"^model\.sam_model\.neck\.1\.", "model.sam_model.neck.layer_norm1."),
-        WeightRenaming(r"^model\.sam_model\.neck\.2\.", "model.sam_model.neck.conv2."),
-        WeightRenaming(r"^model\.sam_model\.neck\.3\.", "model.sam_model.neck.layer_norm2."),
-        WeightRenaming(
-            r"^model\.vision_model\.transformer\.layers\.",
-            "model.clip_model.vision_model.encoder.layers.",
-        ),
-        WeightRenaming(r"^model\.vision_model\.", "model.clip_model.vision_model."),
-        WeightRenaming(r"^model\.projector\.", "model.multi_modal_projector."),
-        WeightRenaming(r"^model\.embed_tokens\.", "model.language_model.embed_tokens."),
-        WeightRenaming(r"^model\.norm\.", "model.language_model.norm."),
-        WeightRenaming(r"^model\.layers\.", "model.language_model.layers."),
+        WeightRenaming(r"^model\.sam_model\.blocks\.(\d+)\.", r"model.sam_model.layers.\1."),
+        WeightRenaming(r"^model\.sam_model\.layers\.(\d+)\.norm1\.", r"model.sam_model.layers.\1.layer_norm1."),
+        WeightRenaming(r"^model\.sam_model\.layers\.(\d+)\.norm2\.", r"model.sam_model.layers.\1.layer_norm2."),
+        WeightRenaming(r"^model\.sam_model\.patch_embed\.proj\.", r"model.sam_model.patch_embed.projection."),
+        WeightRenaming(r"^model\.sam_model\.neck\.0\.", r"model.sam_model.neck.conv1."),
+        WeightRenaming(r"^model\.sam_model\.neck\.1\.", r"model.sam_model.neck.layer_norm1."),
+        WeightRenaming(r"^model\.sam_model\.neck\.2\.", r"model.sam_model.neck.conv2."),
+        WeightRenaming(r"^model\.sam_model\.neck\.3\.", r"model.sam_model.neck.layer_norm2."),
+        WeightRenaming(r"^model\.vision_model\.transformer\.layers\.", r"model.clip_model.vision_model.encoder.layers."),
+        WeightRenaming(r"^model\.vision_model\.embeddings\.", r"model.clip_model.vision_model.embeddings."),
+        WeightRenaming(r"^model\.vision_model\.pre_layrnorm\.", r"model.clip_model.vision_model.pre_layrnorm."),
+        WeightRenaming(r"^model\.vision_model\.", r"model.clip_model.vision_model."),
+        WeightRenaming(r"^model\.projector\.", r"model.multi_modal_projector."),
+        WeightRenaming(r"^model\.embed_tokens\.", r"model.language_model.embed_tokens."),
+        WeightRenaming(r"^model\.norm\.", r"model.language_model.norm."),
+        WeightRenaming(r"^model\.layers\.", r"model.language_model.layers."),
         WeightConverter(
             source_patterns="qkv_proj",
             target_patterns=["q_proj", "k_proj", "v_proj"],
             operations=[Chunk(dim=0)],
         ),
     ]
+    mapping["deepseek_vl_v2"] = mapping["deepseek_ocr"].copy()
     mapping["minimax_m2"] = mapping["mixtral"].copy()
     mapping["minimax_m2"] += [
         WeightRenaming(".block_sparse_moe.e_score_correction_bias", ".mlp.e_score_correction_bias"),
