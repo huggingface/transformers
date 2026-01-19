@@ -15,7 +15,7 @@ rendered properly in your Markdown viewer.
 -->
 *This model was released on 2025-07-28 and added to Hugging Face Transformers on 2025-07-21.*
 
-# GLM-4.7
+# GLM-4.5, GLM-4.6, GLM-4.7
 
 ## Overview
 
@@ -43,7 +43,7 @@ GLM-4.7 further enhances **Interleaved Thinking** (a feature introduced since GL
 - **Preserved Thinking**: In coding agent scenarios, the model automatically retains all thinking blocks across multi-turn conversations, reusing the existing reasoning instead of re-deriving from scratch. This reduces information loss and inconsistencies, and is well-suited for long-horizon, complex tasks.
 - **Turn-level Thinking**: The model supports per-turn control over reasoning within a session—disable thinking for lightweight requests to reduce latency/cost, enable it for complex tasks to improve accuracy and stability.
 
-More details: https://docs.z.ai/guides/capabilities/thinking-mode
+For more eval results, show cases, and technical details, please visit [GLM-4.7 technical blog](https://z.ai/blog/glm-4.7).
 
 ### GLM-4.6
 
@@ -56,6 +56,8 @@ Compared with GLM-4.5, **GLM-4.6**  brings several key improvements:
 * **Refined writing:** Better aligns with human preferences in style and readability, and performs more naturally in role-playing scenarios.
 
 We evaluated GLM-4.6 across eight public benchmarks covering agents, reasoning, and coding. Results show clear gains over GLM-4.5, with GLM-4.6 also holding competitive advantages over leading domestic and international models such as **DeepSeek-V3.1-Terminus** and **Claude Sonnet 4**.
+
+For more eval results, show cases, and technical details, please visit [GLM-4.6 technical blog](https://z.ai/blog/glm-4.6).
 
 ### GLM-4.5
 
