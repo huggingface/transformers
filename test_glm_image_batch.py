@@ -630,6 +630,62 @@ def test_debug_batch_internals(device: str = "cuda"):
         
         embed_diff = (inputs_embeds_batch[0] - inputs_embeds_single[0]).abs().max().item()
         print(f"Embedding diff: {embed_diff:.6f}")
+        
+        # Check attention mask
+        print("\n--- Checking attention masks ---")
+        print(f"Batch attention_mask: {inputs_batch['attention_mask']}")
+        print(f"Single attention_mask: {inputs_single['attention_mask']}")
+        
+        # Check if the issue is in the language model (GlmImageTextModel) directly
+        print("\n--- Testing language model directly with same position_ids ---")
+        
+        # Prepare identical inputs for both
+        cache_position_batch = torch.arange(inputs_batch['input_ids'].shape[1], device=device)
+        cache_position_single = torch.arange(inputs_single['input_ids'].shape[1], device=device)
+        
+        # Get the language model
+        lang_model = model.model.language_model
+        
+        # Run through language model with explicit position_ids
+        with torch.no_grad():
+            # For batch - use position_ids directly
+            lang_out_batch = lang_model(
+                input_ids=inputs_batch['input_ids'],
+                attention_mask=inputs_batch['attention_mask'],
+                position_ids=pos_ids_batch,
+                cache_position=cache_position_batch,
+            )
+            
+            # For single
+            lang_out_single = lang_model(
+                input_ids=inputs_single['input_ids'],
+                attention_mask=inputs_single['attention_mask'],
+                position_ids=pos_ids_single,
+                cache_position=cache_position_single,
+            )
+        
+        lang_diff = (lang_out_batch.last_hidden_state[0] - lang_out_single.last_hidden_state[0]).abs().max().item()
+        print(f"Language model hidden state diff: {lang_diff:.6f}")
+        
+        # Test with attention_mask=None to see if that's the issue
+        print("\n--- Testing without attention_mask ---")
+        with torch.no_grad():
+            lang_out_batch_no_mask = lang_model(
+                input_ids=inputs_batch['input_ids'],
+                attention_mask=None,
+                position_ids=pos_ids_batch,
+                cache_position=cache_position_batch,
+            )
+            
+            lang_out_single_no_mask = lang_model(
+                input_ids=inputs_single['input_ids'],
+                attention_mask=None,
+                position_ids=pos_ids_single,
+                cache_position=cache_position_single,
+            )
+        
+        lang_diff_no_mask = (lang_out_batch_no_mask.last_hidden_state[0] - lang_out_single_no_mask.last_hidden_state[0]).abs().max().item()
+        print(f"Language model diff (no attention_mask): {lang_diff_no_mask:.6f}")
 
 
 def main():
