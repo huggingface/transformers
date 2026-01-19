@@ -57,8 +57,6 @@ class Qwen3VLMoeVisionText2TextModelTester:
         num_channels=3,
         ignore_index=-100,
         image_size=16,
-        text_config=None,
-        vision_config=None,
         image_token_id=3,
         video_token_id=4,
         vision_start_token_id=5,
@@ -70,57 +68,55 @@ class Qwen3VLMoeVisionText2TextModelTester:
         self.ignore_index = ignore_index
         self.is_training = is_training
 
-        if text_config is None:
-            self.text_config = {
-                "bos_token_id": 0,
-                "eos_token_id": 1,
-                "pad_token_id": 2,
-                "hidden_act": "silu",
-                "hidden_size": 32,
-                "vocab_size": 99,
-                "intermediate_size": 32,
-                "max_position_embeddings": 512,
-                "model_type": "qwen3_vl_moe",
-                "num_attention_heads": 4,
-                "num_key_value_heads": 2,
-                "num_hidden_layers": 2,
-                "moe_intermediate_size": 16,
-                "num_experts_per_tok": 4,
-                "num_experts": 8,
-                "rope_theta": 10000,
-                "tie_word_embeddings": True,
-                "rope_parameters": {"rope_type": "default", "mrope_section": [16, 8, 8], "mrope_interleaved": True},
-            }
-        if vision_config is None:
-            self.vision_config = {
-                "depth": 2,
-                "in_chans": 3,
-                "hidden_act": "gelu_pytorch_tanh",
-                "intermediate_size": 32,
-                "out_hidden_size": 32,
-                "hidden_size": 32,
-                "num_heads": 4,
-                "patch_size": 16,
-                "spatial_merge_size": 1,
-                "temporal_patch_size": 2,
-                "num_position_embeddings": 16,
-                "deepstack_visual_indexes": [0, 1],
-            }
+        self.text_config = {
+            "bos_token_id": 0,
+            "eos_token_id": 1,
+            "pad_token_id": 2,
+            "hidden_act": "silu",
+            "hidden_size": 32,
+            "vocab_size": 99,
+            "intermediate_size": 32,
+            "max_position_embeddings": 512,
+            "model_type": "qwen3_vl_moe",
+            "num_attention_heads": 4,
+            "num_key_value_heads": 2,
+            "num_hidden_layers": 2,
+            "moe_intermediate_size": 16,
+            "num_experts_per_tok": 4,
+            "num_experts": 8,
+            "rope_theta": 10000,
+            "tie_word_embeddings": True,
+            "rope_parameters": {"rope_type": "default", "mrope_section": [16, 8, 8], "mrope_interleaved": True},
+        }
+        self.vision_config = {
+            "depth": 2,
+            "in_chans": 3,
+            "hidden_act": "gelu_pytorch_tanh",
+            "intermediate_size": 32,
+            "out_hidden_size": 32,
+            "hidden_size": 32,
+            "num_heads": 4,
+            "patch_size": 16,
+            "spatial_merge_size": 1,
+            "temporal_patch_size": 2,
+            "num_position_embeddings": 16,
+            "deepstack_visual_indexes": [0, 1],
+        }
 
-        self.vocab_size = text_config["vocab_size"]
-        self.bos_token_id = text_config["bos_token_id"]
-        self.eos_token_id = text_config["eos_token_id"]
-        self.pad_token_id = text_config["pad_token_id"]
-        self.hidden_size = text_config["hidden_size"]
-        self.intermediate_size = text_config["intermediate_size"]
-        self.num_hidden_layers = text_config["num_hidden_layers"]
-        self.num_attention_heads = text_config["num_attention_heads"]
-        self.num_key_value_heads = text_config["num_key_value_heads"]
-        self.rope_theta = text_config["rope_theta"]
-        self.rope_parameters = text_config["rope_parameters"]
-        self.hidden_act = text_config["hidden_act"]
-        self.max_position_embeddings = text_config["max_position_embeddings"]
-        self.model_type = text_config["model_type"]
+        self.vocab_size = self.text_config["vocab_size"]
+        self.bos_token_id = self.text_config["bos_token_id"]
+        self.eos_token_id = self.text_config["eos_token_id"]
+        self.pad_token_id = self.text_config["pad_token_id"]
+        self.hidden_size = self.text_config["hidden_size"]
+        self.intermediate_size = self.text_config["intermediate_size"]
+        self.num_hidden_layers = self.text_config["num_hidden_layers"]
+        self.num_attention_heads = self.text_config["num_attention_heads"]
+        self.num_key_value_heads = self.text_config["num_key_value_heads"]
+        self.rope_theta = self.text_config["rope_theta"]
+        self.rope_parameters = self.text_config["rope_parameters"]
+        self.hidden_act = self.text_config["hidden_act"]
+        self.max_position_embeddings = self.text_config["max_position_embeddings"]
+        self.model_type = self.text_config["model_type"]
 
         self.vision_start_token_id = vision_start_token_id
         self.vision_end_token_id = vision_end_token_id
