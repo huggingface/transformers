@@ -90,7 +90,7 @@ The remainder of this guide illustrates how to:
 Before you begin, make sure you have all the necessary libraries installed:
 
 ```bash
-pip install transformers datasets soundfile torchcodec speechbrain accelerate
+pip install transformers datasets soundfile librosa torchcodec speechbrain accelerate
 ```
 
 Install 🤗Transformers from source as not all the SpeechT5 features have been merged into an official release yet:
