@@ -176,16 +176,6 @@ def grouped_mm_experts_forward(
     offsets = torch.cumsum(num_tokens_per_expert, dim=0, dtype=torch.int32)
 
     # --- Up projection per expert (grouped_mm) ---
-    X = current_states_g
-    print("current_states_g is_contig", X.is_contiguous(), "storage_offset", X.storage_offset(), "mod16", X.data_ptr() % 16)
-    W = self.gate_up_proj
-    print("gate_up_proj data_ptr", W.data_ptr(), "mod16", W.data_ptr() % 16)
-    print("  storage_offset", W.storage_offset())
-    print("  element_size", W.element_size())
-    print("  base_ptr", W.untyped_storage().data_ptr(), "base_mod16", W.untyped_storage().data_ptr() % 16)
-    print("  offset_bytes", W.storage_offset() * W.element_size(), "mod16", (W.storage_offset() * W.element_size()) % 16)
-    print("  is_view", W._base is not None)
-    print()
     gate_up_out = torch._grouped_mm(current_states_g, self.gate_up_proj.transpose(-2, -1), offs=offsets)
     if hasattr(self, "gate_up_proj_bias") and self.gate_up_proj_bias is not None:
         # we should be able to pass bias to the grouped_mm call, but it's still not fully supported

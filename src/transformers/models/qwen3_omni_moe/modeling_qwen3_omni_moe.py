@@ -112,7 +112,7 @@ class Qwen3OmniMoePreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         super()._init_weights(module)
         std = self.config.initializer_range
-        if isinstance(module, Qwen3OmniMoeThinkerTextSparseMoeBlock):
+        if isinstance(module, (Qwen3OmniMoeThinkerTextSparseMoeBlock, Qwen3OmniMoeTalkerTextExperts)):
             init.normal_(module.experts.gate_up_proj, mean=0.0, std=std)
             init.normal_(module.experts.down_proj, mean=0.0, std=std)
             init.normal_(module.gate.weight, mean=0.0, std=std)
