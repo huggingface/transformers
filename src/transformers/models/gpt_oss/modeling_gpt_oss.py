@@ -125,8 +125,7 @@ class GptOssTopKRouter(nn.Module):
     def forward(self, hidden_states):
         router_logits = F.linear(hidden_states, self.weight, self.bias)  # (num_tokens, num_experts)
         router_top_value, router_indices = torch.topk(router_logits, self.top_k, dim=-1)  # (num_tokens, top_k)
-        router_top_value = torch.nn.functional.softmax(router_top_value, dim=1, dtype=router_top_value.dtype)
-        router_scores = router_top_value
+        router_scores = torch.nn.functional.softmax(router_top_value, dim=1, dtype=router_top_value.dtype)
         return router_logits, router_scores, router_indices
 
 
@@ -139,10 +138,10 @@ class GptOssMLP(nn.Module):
 
     def forward(self, hidden_states):
         batch_size, sequence_length, hidden_dim = hidden_states.shape
-        hidden_states = hidden_states.view(-1, hidden_dim)
+        hidden_states = hidden_states.reshape(-1, hidden_dim)
         _, router_scores, router_indices = self.router(hidden_states)
         hidden_states = self.experts(hidden_states, router_indices, router_scores)
-        hidden_states = hidden_states.view(batch_size, sequence_length, hidden_dim)
+        hidden_states = hidden_states.reshape(batch_size, sequence_length, hidden_dim)
         return hidden_states, router_scores
 
 
