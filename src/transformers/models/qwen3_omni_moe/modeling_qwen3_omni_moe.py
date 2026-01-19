@@ -114,8 +114,8 @@ class Qwen3OmniMoePreTrainedModel(PreTrainedModel):
         std = self.config.initializer_range
         if isinstance(module, (Qwen3OmniMoeThinkerTextSparseMoeBlock, Qwen3OmniMoeTalkerTextExperts)):
             # 16 byte alignment
-            module.experts.gate_up_proj = nn.Parameter(module.experts.gate_up_proj.clone())
-            module.experts.down_proj = nn.Parameter(module.experts.down_proj.clone())
+            module.experts.gate_up_proj = nn.Parameter(module.experts.gate_up_proj.detach().clone())
+            module.experts.down_proj = nn.Parameter(module.experts.down_proj.detach().clone())
 
             init.normal_(module.experts.gate_up_proj, mean=0.0, std=std)
             init.normal_(module.experts.down_proj, mean=0.0, std=std)
