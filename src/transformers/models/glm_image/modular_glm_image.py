@@ -176,6 +176,13 @@ class GlmImageTextConfig(Glm4vTextConfig):
         vocab_size (`int`, *optional*, defaults to 168064):
             Vocabulary size of the GlmImage model. Defines the number of different tokens that can be represented by the
             `inputs_ids` passed when calling [`GlmImageModel`]
+        vision_vocab_size (`int`, *optional*, defaults to 16512):
+            Vision vocabulary size of the GlmImage model. Defines the number of different tokens that can be represented
+            by the `inputs_ids` passed when calling [`GlmImageVisionModel`]
+        attention_bias (`bool`, *optional*, defaults to `True`):
+            Whether to add a bias to the queries, keys and values.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether the model's input and output word embeddings should be tied.
         hidden_size (`int`, *optional*, defaults to 4096):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to 13696):
@@ -202,19 +209,12 @@ class GlmImageTextConfig(Glm4vTextConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether the model's input and output word embeddings should be tied.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
-        vision_vocab_size (`int`, *optional*, defaults to 16512):
-            Vision vocabulary size of the GlmImage model. Defines the number of different tokens that can be represented
-            by the `inputs_ids` passed when calling [`GlmImageVisionModel`]
-        attention_bias (`bool`, *optional*, defaults to `True`):
-            Whether to add a bias to the queries, keys and values.
 
     ```python
     >>> from transformers import GlmImageTextModel, GlmImageConfig
