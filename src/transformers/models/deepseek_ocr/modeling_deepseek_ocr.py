@@ -94,6 +94,13 @@ class DeepseekOcrPatchEmbeddings(nn.Module):
 class DeepseekOcrCLIPPreTrainedModel(PreTrainedModel):
     config_class = DeepseekOcrCLIPConfig
 
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, DeepseekOcrVisionEmbeddings):
+            num_positions = module.position_embedding.num_embeddings
+            position_ids = torch.arange(num_positions, device=module.position_embedding.weight.device).unsqueeze(0)
+            module.position_ids = position_ids
+
 
 class DeepseekOcrPreTrainedModel(PreTrainedModel):
     config_class = DeepseekOcrConfig
