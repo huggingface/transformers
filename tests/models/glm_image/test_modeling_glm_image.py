@@ -375,6 +375,27 @@ class GlmImageModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
     def test_generate_compile_model_forward_fullgraph(self):
         pass
 
+    @unittest.skip(
+        reason="GlmImage is a multimodal model that requires pixel_values and image_grid_thw. "
+        "This test drops all inputs except input_ids which causes NoneType iteration error."
+    )
+    def test_flash_attention_2_continue_generate_with_position_ids(self):
+        pass
+
+    @unittest.skip(
+        reason="GlmImage is a multimodal model that requires pixel_values and image_grid_thw. "
+        "This test only uses input_ids and attention_mask which causes NoneType iteration error."
+    )
+    def test_flash_attn_2_fp32_ln(self):
+        pass
+
+    @unittest.skip(
+        reason="GlmImage is a multimodal model that requires pixel_values and image_grid_thw. "
+        "This test only uses input_ids and attention_mask which causes NoneType iteration error."
+    )
+    def test_flash_attn_2_from_config(self):
+        pass
+
 
 @require_torch
 @slow
