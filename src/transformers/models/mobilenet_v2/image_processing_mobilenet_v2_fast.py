@@ -43,7 +43,7 @@ from .image_processing_mobilenet_v2 import MobileNetV2ImageProcessorKwargs
 
 @auto_docstring
 class MobileNetV2ImageProcessorFast(BaseImageProcessorFast):
-    resample = PILImageResampling.BILINEAR
+    resample = PILImageResampling.BICUBIC
     image_mean = IMAGENET_STANDARD_MEAN
     image_std = IMAGENET_STANDARD_STD
     size = {"shortest_edge": 256}
