@@ -57,7 +57,21 @@ class Qwen3VLMoeVisionText2TextModelTester:
         num_channels=3,
         ignore_index=-100,
         image_size=16,
-        text_config={
+        text_config=None,
+        vision_config=None,
+        image_token_id=3,
+        video_token_id=4,
+        vision_start_token_id=5,
+        vision_end_token_id=6,
+        tie_word_embeddings=True,
+        is_training=True,
+    ):
+        self.parent = parent
+        self.ignore_index = ignore_index
+        self.is_training = is_training
+
+        if text_config is None:
+            self.text_config = {
             "bos_token_id": 0,
             "eos_token_id": 1,
             "pad_token_id": 2,
@@ -76,8 +90,9 @@ class Qwen3VLMoeVisionText2TextModelTester:
             "rope_theta": 10000,
             "tie_word_embeddings": True,
             "rope_parameters": {"rope_type": "default", "mrope_section": [16, 8, 8], "mrope_interleaved": True},
-        },
-        vision_config={
+        }
+        if vision_config is None:
+            self.vision_config = {
             "depth": 2,
             "in_chans": 3,
             "hidden_act": "gelu_pytorch_tanh",
@@ -90,20 +105,7 @@ class Qwen3VLMoeVisionText2TextModelTester:
             "temporal_patch_size": 2,
             "num_position_embeddings": 16,
             "deepstack_visual_indexes": [0, 1],
-        },
-        image_token_id=3,
-        video_token_id=4,
-        vision_start_token_id=5,
-        vision_end_token_id=6,
-        tie_word_embeddings=True,
-        is_training=True,
-    ):
-        self.parent = parent
-        self.ignore_index = ignore_index
-        self.is_training = is_training
-
-        self.vision_config = vision_config
-        self.text_config = text_config
+        }
 
         self.vocab_size = text_config["vocab_size"]
         self.bos_token_id = text_config["bos_token_id"]
