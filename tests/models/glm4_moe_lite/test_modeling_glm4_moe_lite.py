@@ -47,7 +47,7 @@ class Glm4MoeLiteModelTester(CausalLMModelTester):
         q_lora_rank=16,
         qk_nope_head_dim=64,
         qk_rope_head_dim=64,
-        v_head_dim=64,
+        v_head_dim=128,
     ):
         super().__init__(parent=parent)
         self.n_routed_experts = n_routed_experts
