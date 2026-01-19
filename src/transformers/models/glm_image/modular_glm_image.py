@@ -890,6 +890,7 @@ class GlmImageModel(Glm4vModel):
         pixel_values: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         images_per_sample: torch.LongTensor | None = None,
+        num_source_images_per_sample: torch.LongTensor | None = None,
         rope_deltas: torch.LongTensor | None = None,
         cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
@@ -900,6 +901,8 @@ class GlmImageModel(Glm4vModel):
             Images are packed across all samples in the batch.
         images_per_sample (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Number of images (including target grids) for each sample in the batch.
+        num_source_images_per_sample (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Number of source images (with pixel_values) for each sample in the batch.
         rope_deltas (`torch.LongTensor` of shape `(batch_size, )`, *optional*):
             The rope index difference between sequence length and multimodal rope.
         """
@@ -911,18 +914,27 @@ class GlmImageModel(Glm4vModel):
         if pixel_values is not None:
             # Process images with batch support
             # Determine which grids are source images (not target grids for generation)
-            if images_per_sample is not None:
-                # Split grids by sample and exclude target grids (last N grids per sample)
+            if images_per_sample is not None and num_source_images_per_sample is not None:
+                # Use explicit source image counts from processor
                 grids_per_sample = torch.split(image_grid_thw, images_per_sample.tolist())
-                # For each sample, source images are all except the last target grids
-                # We need to figure out how many target grids there are (typically 1 or 2)
-                num_source_images_per_sample = []
                 source_grids_list = []
                 for batch_idx in range(batch_size):
                     sample_grids = grids_per_sample[batch_idx]
-                    # Count complete images in this sample's input_ids
+                    num_source = num_source_images_per_sample[batch_idx].item()
+                    if num_source > 0:
+                        source_grids_list.append(sample_grids[:num_source])
+
+                if len(source_grids_list) > 0:
+                    source_grids = torch.cat(source_grids_list, dim=0)
+                else:
+                    source_grids = None
+            elif images_per_sample is not None:
+                # Fallback: try to infer from image_end_token_id count
+                grids_per_sample = torch.split(image_grid_thw, images_per_sample.tolist())
+                source_grids_list = []
+                for batch_idx in range(batch_size):
+                    sample_grids = grids_per_sample[batch_idx]
                     num_complete = (input_ids[batch_idx] == self.config.image_end_token_id).sum().item()
-                    num_source_images_per_sample.append(num_complete)
                     if num_complete > 0:
                         source_grids_list.append(sample_grids[:num_complete])
 
@@ -1038,6 +1050,7 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
         pixel_values: torch.Tensor | None = None,
         image_grid_thw: torch.LongTensor | None = None,
         images_per_sample: torch.LongTensor | None = None,
+        num_source_images_per_sample: torch.LongTensor | None = None,
         cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
@@ -1052,6 +1065,8 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
             Images are packed across all samples in the batch.
         images_per_sample (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Number of images (including target grids) for each sample in the batch.
+        num_source_images_per_sample (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
+            Number of source images (with pixel_values) for each sample in the batch.
 
         Example:
 
@@ -1088,6 +1103,7 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
             pixel_values=pixel_values,
             image_grid_thw=image_grid_thw,
             images_per_sample=images_per_sample,
+            num_source_images_per_sample=num_source_images_per_sample,
             position_ids=position_ids,
             attention_mask=attention_mask,
             past_key_values=past_key_values,
@@ -1127,6 +1143,7 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
         pixel_values=None,
         image_grid_thw=None,
         images_per_sample=None,
+        num_source_images_per_sample=None,
         is_first_iteration=False,
         **kwargs,
     ):
@@ -1146,6 +1163,7 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
 
         model_inputs["position_ids"] = None
         model_inputs["images_per_sample"] = images_per_sample
+        model_inputs["num_source_images_per_sample"] = num_source_images_per_sample
 
         if not is_first_iteration and use_cache:
             model_inputs["pixel_values"] = None
@@ -1182,17 +1200,28 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
         if expand_size == 1:
             return input_ids, model_kwargs
 
-        visual_keys = ["pixel_values", "image_grid_thw", "images_per_sample"]
+        visual_keys = ["pixel_values", "image_grid_thw", "images_per_sample", "num_source_images_per_sample"]
 
         def _expand_dict_for_generation_visual(dict_to_expand):
             image_grid_thw = model_kwargs.get("image_grid_thw", None)
             images_per_sample = model_kwargs.get("images_per_sample", None)
+            num_source_images_per_sample = model_kwargs.get("num_source_images_per_sample", None)
 
             # Use images_per_sample if available, otherwise fall back to counting from input_ids
             if images_per_sample is not None:
                 image_nums = images_per_sample.tolist()
             else:
                 image_nums = self._get_image_nums(input_ids).tolist()
+
+            # Get source image counts per sample
+            if num_source_images_per_sample is not None:
+                source_image_nums = num_source_images_per_sample.tolist()
+            else:
+                # Fallback: infer from image_end_token_id
+                source_image_nums = []
+                for batch_idx in range(len(image_nums)):
+                    num_complete = (input_ids[batch_idx] == self.config.image_end_token_id).sum().item()
+                    source_image_nums.append(num_complete)
 
             def _repeat_interleave_samples(x, lengths, repeat_times):
                 samples = torch.split(x, lengths)
@@ -1203,13 +1232,6 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
             for key in dict_to_expand:
                 if key == "pixel_values":
                     # Split images into samples based on source image counts
-                    # Note: image_nums includes target grids, we need source image pixel counts
-                    source_image_nums = []
-                    for batch_idx in range(len(image_nums)):
-                        # Count complete images (source images) in this sample's input_ids
-                        num_complete = (input_ids[batch_idx] == self.config.image_end_token_id).sum().item()
-                        source_image_nums.append(num_complete)
-
                     if sum(source_image_nums) > 0:
                         # Split grids by sample to compute pixel counts
                         grids_per_sample = torch.split(image_grid_thw, image_nums)
@@ -1230,9 +1252,10 @@ class GlmImageForConditionalGeneration(GlmImagePreTrainedModel, GenerationMixin)
                     dict_to_expand[key] = _repeat_interleave_samples(
                         dict_to_expand[key], lengths=image_nums, repeat_times=expand_size
                     )
-                elif key == "images_per_sample":
+                elif key in ("images_per_sample", "num_source_images_per_sample"):
                     # Simply repeat the counts
-                    dict_to_expand[key] = dict_to_expand[key].repeat_interleave(expand_size, dim=0)
+                    if dict_to_expand.get(key) is not None:
+                        dict_to_expand[key] = dict_to_expand[key].repeat_interleave(expand_size, dim=0)
             return dict_to_expand
 
         def _expand_dict_for_generation(dict_to_expand):
@@ -1442,7 +1465,7 @@ class GlmImageProcessor(ProcessorMixin):
                 token_w=token_w,
                 prev_token_h=prev_h,
                 prev_token_w=prev_w,
-                image_grid_thw=None,  # We'll handle source grids separately
+                is_text_to_image=is_text_to_image,
             )
             all_target_grids.append(target_grid)
 
@@ -1466,6 +1489,8 @@ class GlmImageProcessor(ProcessorMixin):
         image_inputs["images_per_sample"] = torch.tensor(
             [n + num_target_grids for n in images_per_sample], dtype=torch.long
         )
+        # Store number of source images per sample (for model to identify source vs target grids)
+        image_inputs["num_source_images_per_sample"] = torch.tensor(images_per_sample, dtype=torch.long)
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
@@ -1508,9 +1533,10 @@ class GlmImageProcessor(ProcessorMixin):
         token_w: int,
         prev_token_h: int,
         prev_token_w: int,
-        image_grid_thw: None,
+        is_text_to_image: bool = True,
     ):
-        if image_grid_thw is None:
+        if is_text_to_image:
+            # Text-to-image: 2 target grids (large + small preview)
             return torch.tensor(
                 [
                     [1, token_h, token_w],
@@ -1518,8 +1544,11 @@ class GlmImageProcessor(ProcessorMixin):
                 ],
             )
         else:
-            return torch.cat(
-                [image_grid_thw, torch.tensor([[1, token_h, token_w]], device=image_grid_thw.device)], dim=0
+            # Image-to-image: 1 target grid only
+            return torch.tensor(
+                [
+                    [1, token_h, token_w],
+                ],
             )
 
 

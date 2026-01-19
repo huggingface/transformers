@@ -164,7 +164,7 @@ class GlmImageProcessor(ProcessorMixin):
                 token_w=token_w,
                 prev_token_h=prev_h,
                 prev_token_w=prev_w,
-                image_grid_thw=None,  # We'll handle source grids separately
+                is_text_to_image=is_text_to_image,
             )
             all_target_grids.append(target_grid)
 
@@ -188,6 +188,8 @@ class GlmImageProcessor(ProcessorMixin):
         image_inputs["images_per_sample"] = torch.tensor(
             [n + num_target_grids for n in images_per_sample], dtype=torch.long
         )
+        # Store number of source images per sample (for model to identify source vs target grids)
+        image_inputs["num_source_images_per_sample"] = torch.tensor(images_per_sample, dtype=torch.long)
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
@@ -230,9 +232,10 @@ class GlmImageProcessor(ProcessorMixin):
         token_w: int,
         prev_token_h: int,
         prev_token_w: int,
-        image_grid_thw: None,
+        is_text_to_image: bool = True,
     ):
-        if image_grid_thw is None:
+        if is_text_to_image:
+            # Text-to-image: 2 target grids (large + small preview)
             return torch.tensor(
                 [
                     [1, token_h, token_w],
@@ -240,8 +243,11 @@ class GlmImageProcessor(ProcessorMixin):
                 ],
             )
         else:
-            return torch.cat(
-                [image_grid_thw, torch.tensor([[1, token_h, token_w]], device=image_grid_thw.device)], dim=0
+            # Image-to-image: 1 target grid only
+            return torch.tensor(
+                [
+                    [1, token_h, token_w],
+                ],
             )
 
 

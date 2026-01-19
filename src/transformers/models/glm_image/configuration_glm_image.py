@@ -236,11 +236,11 @@ class GlmImageTextConfig(PreTrainedConfig):
         initializer_range: float | None = 0.02,
         rms_norm_eps: int | None = 1e-05,
         use_cache: bool | None = True,
-        tie_word_embeddings: bool | None = False,
         attention_dropout: float | None = 0.0,
         rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
         vision_vocab_size: int | None = 16512,
         attention_bias: bool | None = True,
+        tie_word_embeddings: bool | None = False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -265,9 +265,7 @@ class GlmImageTextConfig(PreTrainedConfig):
         self.attention_dropout = attention_dropout
         self.rope_parameters = rope_parameters
 
-        super().__init__(
-            tie_word_embeddings=tie_word_embeddings, ignore_keys_at_rope_validation={"mrope_section"}, **kwargs
-        )
+        super().__init__(ignore_keys_at_rope_validation={"mrope_section"}, **kwargs)
 
 
 class GlmImageConfig(PreTrainedConfig):
