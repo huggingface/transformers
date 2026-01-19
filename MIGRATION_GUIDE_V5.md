@@ -578,8 +578,8 @@ Linked PRs:
 
 ## Pipelines
 
-`Text2TextPipeline`, as well as the related `SummarizationPipeline` and `TranslationPipeline`, were deprecated and will now be removed.
-`pipeline` classes are intended as a high-level, beginner-friendly API, but for almost all text-to-text tasks, a modern chat model 
+`Text2TextGenerationPipeline`, as well as the related `SummarizationPipeline` and `TranslationPipeline`, were deprecated and will now be removed.
+`pipeline` classes are intended as a high-level beginner-friendly API, but for almost all text-to-text tasks a modern chat model 
 and `TextGenerationPipeline` will provide much higher quality output. As a result, we felt it was misleading for beginners to offer the older pipelines.
 
 If you were using these pipelines before, try using `TextGenerationPipeline` with a chat model instead. For example, for summarization:
@@ -597,6 +597,31 @@ message_history = [
     }
 ]
 print(summarizer(message_history)[0]["generated_text"][-1]["content"])
+```
+
+Similarly, the `image-to-text` pipeline has been removed. This pipeline was used for early image captioning models, but these
+no longer offer competitive performance. Instead, for image captioning tasks we recommend using a modern vision-language chat model
+via the `image-text-to-text` pipeline. For example:
+
+```python
+import torch
+from transformers import pipeline
+
+# Any other VLM will also work - if you're low on memory you can use a smaller one
+captioner = pipeline("image-text-to-text", model="Qwen/Qwen3-VL-4B-Instruct")
+message_history = [
+    {
+        "role": "user",
+        "content": [
+            {
+                "type": "image",
+                "image": "[IMAGE_URL_HERE]",
+            },
+            {"type": "text", "text": "Describe this image."},
+        ],
+    }
+]
+print(captioner(message_history)[0]["generated_text"][-1]["content"])
 ```
 
 - Image text to text pipelines will no longer accept images as a separate argument along with conversation chats. Image data has to be embedded in the chat's "content" field. See [#42359](https://github.com/huggingface/transformers/pull/42359)
