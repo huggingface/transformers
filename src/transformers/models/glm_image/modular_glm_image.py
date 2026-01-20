@@ -742,9 +742,8 @@ class GlmImageModel(Glm4vModel):
                 if curr_grids is None or img_idx >= len(curr_grids):
                     break
                 grid = curr_grids[img_idx]
-                # Note: variable names appear swapped but the logic is correct
                 # grid format is [temporal, height, width]
-                _, num_width_grid, num_height_grid = grid.tolist()
+                _, height, width = grid.tolist()
 
                 # Text tokens before this image
                 llm_pos_length = start - prev_image_end
@@ -752,14 +751,15 @@ class GlmImageModel(Glm4vModel):
                 current_pos += llm_position_ids.shape[-1]
 
                 # Image tokens with 2D spatial encoding
-                image_seq_length = num_height_grid * num_width_grid
-                h_grids = image_seq_length // num_height_grid + current_pos
-                w_grids = image_seq_length // num_width_grid + current_pos
-                position_width = torch.arange(current_pos, w_grids, device=device).repeat(num_width_grid)
-                position_height = torch.arange(current_pos, h_grids, device=device).repeat_interleave(num_height_grid)
+                # For an image with height H and width W:
+                # - position_width cycles [0, 1, ..., W-1] for each row, repeated H times
+                # - position_height stays constant per row, [0]*W, [1]*W, ..., [H-1]*W
+                image_seq_length = height * width
+                position_width = torch.arange(current_pos, current_pos + width, device=device).repeat(height)
+                position_height = torch.arange(current_pos, current_pos + height, device=device).repeat_interleave(width)
                 position_temporal = torch.full((image_seq_length,), current_pos, device=device, dtype=torch.long)
                 vision_position_ids = torch.stack([position_temporal, position_height, position_width], dim=0)
-                current_pos += max(num_height_grid, num_width_grid)
+                current_pos += max(height, width)
 
                 prev_image_end = end
                 curr_position_ids.append(torch.cat([llm_position_ids, vision_position_ids], dim=-1))
