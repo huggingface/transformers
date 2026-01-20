@@ -128,49 +128,7 @@ class Qwen3VLMoeVisionText2TextModelTester(VLMModelTester):
             "image_grid_thw": torch.tensor([[1, 1, 1]] * self.batch_size, device=torch_device),
         }
 
-    def get_text_config(self):
-        """Override to create Qwen3 VL MoE-specific text config"""
-        return self.text_config_class(
-            vocab_size=self.vocab_size,
-            hidden_size=self.hidden_size,
-            intermediate_size=self.intermediate_size,
-            num_hidden_layers=self.num_hidden_layers,
-            num_attention_heads=self.num_attention_heads,
-            num_key_value_heads=self.num_key_value_heads,
-            head_dim=self.head_dim,
-            hidden_act=self.hidden_act,
-            max_position_embeddings=self.max_position_embeddings,
-            rope_parameters=self.rope_parameters,
-            pad_token_id=self.pad_token_id,
-            bos_token_id=self.bos_token_id,
-            eos_token_id=self.eos_token_id,
-            tie_word_embeddings=self.tie_word_embeddings,
-            # MoE-specific parameters
-            decoder_sparse_step=self.decoder_sparse_step,
-            moe_intermediate_size=self.moe_intermediate_size,
-            num_experts_per_tok=self.num_experts_per_tok,
-            num_experts=self.num_experts,
-        )
-
-    def get_vision_config(self):
-        """Override to create Qwen3 VL MoE-specific vision config"""
-        return self.vision_config_class(
-            depth=self.depth,
-            in_channels=self.in_channels,
-            hidden_act=self.vision_hidden_act,
-            intermediate_size=self.vision_intermediate_size,
-            out_hidden_size=self.out_hidden_size,
-            hidden_size=self.vision_hidden_size,
-            num_heads=self.num_heads,
-            patch_size=self.patch_size,
-            spatial_merge_size=self.spatial_merge_size,
-            temporal_patch_size=self.temporal_patch_size,
-            num_position_embeddings=self.num_position_embeddings,
-            deepstack_visual_indexes=self.deepstack_visual_indexes,
-        )
-
     def get_config(self):
-        """Override to create Qwen3VLMoeConfig with proper sub-configs"""
         # Qwen3VLMoeConfig expects text_config and vision_config as dicts, not config objects
         return self.config_class(
             text_config=self.get_text_config().to_dict(),
