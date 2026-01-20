@@ -79,6 +79,7 @@ class GenerationOutput:
         error (Optional[str]): Any error message associated with the request. When None, the request was successful.
         status (RequestStatus): The status of the request.
         created_time (float): The time the request was created.
+        lifespan (tuple[float, float]): The time the request was no longer pending and the time the request finished.
     """
 
     request_id: str
@@ -88,6 +89,7 @@ class GenerationOutput:
     error: str | None = None
     status: RequestStatus = RequestStatus.PENDING
     created_time: float = field(default_factory=time.perf_counter)
+    lifespan: tuple[float, float] = (-1, -1)  # (time request was no longer pending, time request finished)
     timestamps: list[float] | None = None  # Timestamps of the generated tokens
 
     def is_finished(self) -> bool:
@@ -228,10 +230,12 @@ class RequestState:
         return GenerationOutput(
             request_id=self.request_id,
             prompt_ids=self.initial_tokens,
-            status=self.status,
             generated_tokens=self.generated_tokens,
             logprobs=[],
             error=self.error,
+            status=self.status,
+            created_time=self.created_time,
+            lifespan=self.lifespan,
             timestamps=self.timestamps,
         )
 
