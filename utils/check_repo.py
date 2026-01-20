@@ -677,6 +677,23 @@ def find_tested_models(test_file: str) -> set[str]:
             else:
                 tested_class = model_name + _COMMON_MODEL_NAMES_MAP[test_class_type]
             model_tested.add(tested_class)
+    elif "VLMModelTester" in content:
+        base_model_class = re.findall(r"base_model_class\s+=.*", content)  # Required attribute
+        base_class = base_model_class[0].split("=")[1].strip()
+        model_tested.add(base_class)
+
+        model_name = base_class.replace("Model", "")
+        # Optional attributes: if not set explicitly, the tester will attempt to infer and use the corresponding class
+        for test_class_type in [
+            "causal_lm_class",
+            "conditional_generation_class",
+        ]:
+            tested_class = re.findall(rf"{test_class_type}\s+=.*", content)
+            if tested_class:
+                tested_class = tested_class[0].split("=")[1].strip()
+            else:
+                tested_class = model_name + _COMMON_MODEL_NAMES_MAP[test_class_type]
+            model_tested.add(tested_class)
 
     return model_tested
 
