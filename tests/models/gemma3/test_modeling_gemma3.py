@@ -257,10 +257,7 @@ class Gemma3Vision2TextModelTester(VLMModelTester):
         sequence_classification_class = Gemma3ForSequenceClassification
         all_model_classes = (Gemma3Model, Gemma3ForConditionalGeneration, Gemma3ForSequenceClassification)
 
-    # Gemma3-specific configuration
-    mm_tokens_per_image = 2
-
-    def __init__(self, parent, **kwargs):
+    def __init__(self, parent, mm_tokens_per_image=2, **kwargs):
         kwargs.setdefault("image_size", 20)
         kwargs.setdefault("patch_size", 5)
         kwargs.setdefault("num_key_value_heads", 1)
@@ -268,27 +265,20 @@ class Gemma3Vision2TextModelTester(VLMModelTester):
         kwargs.setdefault("seq_length", 24)  # Need seq_length >= 10 for bidirectional attention test
         super().__init__(parent, **kwargs)
 
-    # Tester method overrides
+        self.mm_tokens_per_image = mm_tokens_per_image
 
     @property
     def num_image_tokens(self):
-        """Gemma3 pools image tokens: int(sqrt(mm_tokens_per_image))^2"""
+        # Gemma3 pools image tokens: int(sqrt(mm_tokens_per_image))^2
         tokens_per_side = int(self.mm_tokens_per_image**0.5)
         return tokens_per_side * tokens_per_side
 
     def create_attention_mask(self, input_ids):
-        """Gemma3 uses padding mask for bidirectional attention on image tokens"""
+        # Gemma3 uses padding mask for bidirectional attention on image tokens
         return input_ids.ne(self.pad_token_id).to(torch_device)
 
-    def place_image_tokens(self, input_ids, config):
-        """Place image tokens at the start of each sequence"""
-        input_ids = input_ids.clone()
-        input_ids[input_ids == config.image_token_index] = self.pad_token_id
-        input_ids[:, : self.num_image_tokens] = config.image_token_index
-        return input_ids
-
     def get_additional_inputs(self, config, input_ids, pixel_values):
-        """Gemma3 requires specific token_type_ids for bidirectional attention on image tokens"""
+        # Gemma3 requires specific token_type_ids for bidirectional attention on image tokens
         token_type_ids = torch.zeros_like(input_ids)
         token_type_ids[input_ids == config.image_token_index] = 1
         return {"token_type_ids": token_type_ids}
