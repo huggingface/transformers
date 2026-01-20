@@ -124,6 +124,11 @@ def batched_mm_experts_forward(
         out_per_sample = out_per_sample + self.down_proj_bias[expert_ids]
 
     # Apply routing weights
+    # Apply all_reduce_backward to routing weights for correct router gradient in TP
+    # This is needed because expert outputs are partial (before all_reduce_output),
+    # so ∂L/∂routing_weights would be different on each GPU without this
+    if has_device_mesh:
+        sample_weights = all_reduce_backward(sample_weights, self._device_mesh)
     out_per_sample = out_per_sample * sample_weights.unsqueeze(-1)  # (S, hidden_dim)
 
     # Accumulate results back to the final_hidden_states using original token indices
@@ -211,6 +216,11 @@ def grouped_mm_experts_forward(
         out_per_sample_g = out_per_sample_g + self.down_proj_bias[expert_ids_g]
 
     # Apply routing weights
+    # Apply all_reduce_backward to routing weights for correct router gradient in TP
+    # This is needed because expert outputs are partial (before all_reduce_output),
+    # so ∂L/∂routing_weights would be different on each GPU without this
+    if has_device_mesh:
+        sample_weights_g = all_reduce_backward(sample_weights_g, self._device_mesh)
     out_per_sample_g = out_per_sample_g * sample_weights_g.unsqueeze(-1)
 
     # Restore original order

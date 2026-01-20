@@ -171,7 +171,14 @@ class MixtralExperts(nn.Module):
             gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
             current_hidden_states = self.act_fn(gate) * up
             current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
-            current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
+            # Apply all_reduce_backward to routing weights for correct router gradient in TP
+            # This is needed because expert outputs are partial (before all_reduce_output),
+            # so ∂L/∂routing_weights would be different on each GPU without this
+            if hasattr(self, "_device_mesh") and self._device_mesh is not None:
+                routing_weights = all_reduce_backward(top_k_weights[token_idx, top_k_pos, None], self._device_mesh)
+            else:
+                routing_weights = top_k_weights[token_idx, top_k_pos, None]
+            current_hidden_states = current_hidden_states * routing_weights
             final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
 
         return final_hidden_states
