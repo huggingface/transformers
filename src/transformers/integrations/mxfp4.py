@@ -511,8 +511,12 @@ def load_and_swizzle_mxfp4(module, param_name, param_value, target_device, trito
             blocks = blocks.reshape(local_experts, module.intermediate_size * 2, -1)
         else:
             blocks = blocks.reshape(local_experts, -1, module.intermediate_size // 2)
-        if getattr(target_device, "type", target_device) == "cpu":
-            target_device = torch.accelerator.current_accelerator().type if hasattr(torch, "accelerator") else "cuda"
+        if (
+            getattr(target_device, "type", target_device) == "cpu"
+            and hasattr(torch, "accelerator")
+            and torch.accelerator.current_accelerator() is not None
+        ):
+            target_device = torch.accelerator.current_accelerator().type
         blocks = blocks.to(target_device).contiguous()
         scales = scales.to(target_device).contiguous()
         with on_device(target_device):
@@ -551,8 +555,12 @@ def swizzle_mxfp4_convertops(blocks, scales, module, proj, target_device, triton
     )
 
     local_experts = blocks.size(0)
-    if getattr(target_device, "type", target_device) == "cpu":
-        target_device = torch.accelerator.current_accelerator().type if hasattr(torch, "accelerator") else "cuda"
+    if (
+        getattr(target_device, "type", target_device) == "cpu"
+        and hasattr(torch, "accelerator")
+        and torch.accelerator.current_accelerator() is not None
+    ):
+        target_device = torch.accelerator.current_accelerator().type
 
     blocks = blocks.to(target_device).contiguous()
     scales = scales.to(target_device).contiguous()
@@ -561,8 +569,6 @@ def swizzle_mxfp4_convertops(blocks, scales, module, proj, target_device, triton
         blocks = blocks.reshape(local_experts, module.intermediate_size * 2, -1)
     else:
         blocks = blocks.reshape(local_experts, -1, module.intermediate_size // 2)
-    if getattr(target_device, "type", target_device) == "cpu":
-        target_device = "cuda"
 
     with on_device(target_device):
         triton_weight_tensor, weight_scale = swizzle_mxfp4(
