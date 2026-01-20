@@ -113,12 +113,12 @@ class Chunk(ConversionOps):
     ) -> dict[str, torch.Tensor]:
         tensors = next(iter(input_dict.values()))
         tensor = tensors[0] if isinstance(tensors, list) else tensors
-        targets = self.get_target_pattern(input_dict, target_patterns)
+        targets = self.get_target_patterns(input_dict, target_patterns)
         sizes = len(targets)
         chunks = torch.chunk(tensor, sizes, dim=self.dim)
         return dict(zip(targets, chunks))
 
-    def get_target_pattern(self, input_dict: dict, target_patterns: list[str]) -> list[str]:
+    def get_target_patterns(self, input_dict: dict, target_patterns: list[str]) -> list[str]:
         # Here we always return the target patterns
         if len(input_dict) > 1 or len(target_patterns) == 1:
             raise ValueError("Undefined Operation encountered!")
@@ -145,7 +145,7 @@ class Concatenate(ConversionOps):
     ) -> dict[str, torch.Tensor]:
         target_pattern = self.get_target_pattern(target_patterns)
         all_tensors = []
-        # Very important to keep the relative order of the source patterms here, so we iterate over them not the
+        # Very important to keep the relative order of the source patterns here, so we iterate over them not the
         # input directly as it's unordered!
         for source_pattern in source_patterns:
             tensors = input_dict[source_pattern]
@@ -243,6 +243,44 @@ class SplitModulelist(ConversionOps):
     @property
     def reverse_op(self) -> ConversionOps:
         return MergeModulelist(self.dim)
+
+
+class Transpose(ConversionOps):
+    """
+    Transposes the given tensor along dim0 and dim1.
+    """
+
+    def __init__(self, dim0: int = 0, dim1: int = 1):
+        self.dim0 = dim0
+        self.dim1 = dim1
+
+    @torch.no_grad
+    def convert(
+        self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str], **kwargs
+    ) -> dict[str, torch.Tensor]:
+        target_pattern = self.get_target_pattern(input_dict, source_patterns, target_patterns)
+        tensors = next(iter(input_dict.values()))
+        tensor = tensors[0] if isinstance(tensors, list) else tensors
+        return {target_pattern: torch.transpose(tensor, dim0=self.dim0, dim1=self.dim1).contiguous()}
+
+    def get_target_pattern(
+        self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str]
+    ) -> str:
+        if len(input_dict) != 1:
+            raise ValueError("Undefined Operation encountered!")
+        # Here it's the first operation of a chain, so return the source
+        if len(target_patterns) > 1:
+            if len(source_patterns) == 1:
+                return source_patterns[0]
+            else:
+                raise ValueError("Undefined Operation encountered!")
+        # Here it's the only operation, or the last operation in a chain, so we return the target
+        else:
+            return target_patterns[0]
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return Transpose(dim0=self.dim1, dim1=self.dim0)
 
 
 class PermuteForRope(ConversionOps):
@@ -400,43 +438,6 @@ class ErnieSplitAndDecoupleTextVisionExperts(ConversionOps):
     @property
     def reverse_op(self) -> ConversionOps:
         return ErnieFuseAndSplitTextVisionExperts(stack_dim=self.stack_dim, concat_dim=self.concat_dim)
-
-
-class Transpose(ConversionOps):
-    """
-    Transposes the given tensor along dim0 and dim1.
-    """
-
-    def __init__(self, dim0: int = 0, dim1: int = 1):
-        self.dim0 = dim0
-        self.dim1 = dim1
-
-    @torch.no_grad()
-    def convert(
-        self,
-        input_dict: dict[str, list[torch.Tensor]],
-        source_patterns: list[str],
-        target_patterns: list[str],
-        config,
-        **kwargs,
-    ) -> dict[str, list[torch.Tensor]]:
-        if len(input_dict) != len(target_patterns):
-            raise ValueError(
-                f"Transpose conversion can only happen on each key ({len(input_dict)}) "
-                f"and should match exact one target ({len(target_patterns)})."
-            )
-
-        output: dict[str, list[torch.Tensor]] = {}
-        for key, target_pattern in zip(input_dict.keys(), target_patterns):
-            tensor = input_dict.get(key, [])
-            if len(tensor) != 1:
-                raise ValueError(f"Transpose conversion requires exactly one tensor, found {len(tensor)}.")
-            output[target_pattern] = torch.transpose(tensor[0], dim0=self.dim0, dim1=self.dim1).contiguous()
-        return output
-
-    @property
-    def reverse_op(self) -> ConversionOps:
-        return Transpose(dim0=self.dim1, dim1=self.dim0)
 
 
 @dataclass(slots=True)
@@ -739,7 +740,7 @@ def dot_natural_key(s: str):
 @contextmanager
 def log_conversion_errors(
     first_target_key: str,
-    conversion_errors: MutableMapping[str, str],
+    conversion_errors: MutableMapping[str, str] | None,
     extras: Any = None,
     op: list[ConversionOps] | ConversionOps | None = None,
 ):
@@ -748,6 +749,9 @@ def log_conversion_errors(
     try:
         yield
     except Exception as e:
+        # During reverse mapping, we do not log and skip errors
+        if conversion_errors is None:
+            raise e
 
         def _format_op_name(curr_op: list[ConversionOps] | ConversionOps | None) -> str | None:
             if curr_op is None:

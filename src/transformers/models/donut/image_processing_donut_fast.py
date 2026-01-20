@@ -131,10 +131,6 @@ class DonutImageProcessorFast(BaseImageProcessorFast):
         padding = (pad_left, pad_top, pad_right, pad_bottom)
         return F.pad(image, padding)
 
-    def pad(self, *args, **kwargs):
-        logger.info("pad is deprecated and will be removed in version 4.27. Please use pad_image instead.")
-        return self.pad_image(*args, **kwargs)
-
     def thumbnail(
         self,
         image: "torch.Tensor",

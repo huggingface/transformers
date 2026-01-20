@@ -62,8 +62,6 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
     patch_size = 14
     temporal_patch_size = 2
     merge_size = 2
-    min_pixels = None
-    max_pixels = None
     valid_kwargs = Qwen2VLImageProcessorKwargs
     model_input_names = ["pixel_values", "image_grid_thw"]
 
@@ -82,7 +80,7 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
         if "shortest_edge" not in size or "longest_edge" not in size:
             raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
 
-        super().__init__(size=size, min_pixels=min_pixels, max_pixels=max_pixels, **kwargs)
+        super().__init__(size=size, **kwargs)
 
     def _further_process_kwargs(
         self,
@@ -105,7 +103,7 @@ class Qwen2VLImageProcessorFast(BaseImageProcessorFast):
         else:
             size = {**self.size}
 
-        return super()._further_process_kwargs(size=size, min_pixels=min_pixels, max_pixels=max_pixels, **kwargs)
+        return super()._further_process_kwargs(size=size, **kwargs)
 
     @auto_docstring
     def preprocess(

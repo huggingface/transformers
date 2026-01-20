@@ -50,7 +50,8 @@ def process_file(
         # we always save the generated content, to be able to update dependant files
         with open(file_path, "w", encoding="utf-8", newline="\n") as modeling_file:
             modeling_file.write(generated_modeling_content[file_type])
-        console.print(f"[bold blue]Overwritten {file_path} with the generated content.[/bold blue]")
+        if not show_diff:
+            console.print(f"[bold blue]Overwritten {file_path} with the generated content.[/bold blue]")
         if show_diff:
             console.print(f"\n[bold red]Differences found between the generated code and {file_path}:[/bold red]\n")
             diff_text = "\n".join(diff_list)
@@ -58,7 +59,6 @@ def process_file(
             console.print(syntax)
         return 1
     else:
-        console.print(f"[bold green]No differences found for {file_path}.[/bold green]")
         return 0
 
 
@@ -181,12 +181,8 @@ if __name__ == "__main__":
     else:
         models_in_diff = get_models_in_diff()
         if not models_in_diff and not args.check_all:
-            console.print(
-                "[bold green]No models files or model tests in the diff, skipping modular checks[/bold green]"
-            )
             exit(0)
 
-    skipped_models = set()
     non_matching_files = []
     ordered_files, dependencies = find_priority_list(args.files)
     flat_ordered_files = [item for sublist in ordered_files for item in sublist]
@@ -198,18 +194,12 @@ if __name__ == "__main__":
     #  - ... and so on
     # files (models) within the same list are *independent* of each other;
     # we start applying modular conversion to each list in parallel, starting from the first list
-
-    console.print(f"[bold yellow]Number of dependency levels: {len(ordered_files)}[/bold yellow]")
-    console.print(f"[bold yellow]Files per level: {tuple(len(x) for x in ordered_files)}[/bold yellow]")
-
     try:
         for dependency_level_files in ordered_files:
             # Filter files guaranteed no diff
             files_to_check = []
             for file_path in dependency_level_files:
-                if not args.check_all and guaranteed_no_diff(file_path, dependencies, models_in_diff):
-                    skipped_models.add(file_path.split("/")[-2])  # save model folder name
-                else:
+                if args.check_all or not guaranteed_no_diff(file_path, dependencies, models_in_diff):
                     files_to_check.append(file_path)
 
             if not files_to_check:
@@ -260,9 +250,3 @@ if __name__ == "__main__":
         diff_models = set(file_path.split("/")[-2] for file_path in non_matching_files)  # noqa
         models_str = "\n - " + "\n - ".join(sorted(diff_models))
         raise ValueError(f"Some diff and their modeling code did not match. Models in diff:{models_str}")
-
-    if skipped_models:
-        console.print(
-            f"[bold green]Skipped {len(skipped_models)} models and their dependencies that are not in the diff: "
-            f"{', '.join(sorted(skipped_models))}[/bold green]"
-        )

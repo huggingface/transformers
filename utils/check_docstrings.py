@@ -286,7 +286,6 @@ OBJECTS_TO_IGNORE = {
     "ImageTextToTextPipeline",
     "AnyToAnyPipeline",
     "ImageToImagePipeline",
-    "ImageToTextPipeline",
     "InformerConfig",
     "JukeboxPriorConfig",
     "JukeboxTokenizer",
@@ -438,7 +437,6 @@ OBJECTS_TO_IGNORE = {
     "SplinterConfig",
     "SplinterTokenizerFast",
     "SqueezeBertTokenizerFast",
-    "SummarizationPipeline",
     "Swin2SRImageProcessor",
     "Swinv2Model",
     "SwitchTransformersConfig",
@@ -450,7 +448,6 @@ OBJECTS_TO_IGNORE = {
     "TapasConfig",
     "TapasModel",
     "TapasTokenizer",
-    "Text2TextGenerationPipeline",
     "TextClassificationPipeline",
     "TextGenerationPipeline",
     "TimeSeriesTransformerConfig",
@@ -460,7 +457,6 @@ OBJECTS_TO_IGNORE = {
     "TrainerState",
     "TrainingArguments",
     "TrajectoryTransformerConfig",
-    "TranslationPipeline",
     "TvltImageProcessor",
     "UMT5Config",
     "UperNetConfig",
@@ -1011,8 +1007,6 @@ def find_matching_model_files(check_all: bool = False):
     if not check_all:
         # intersect with module_diff_files
         matching_files = sorted([file for file in matching_files if file in module_diff_files])
-
-    print("    Checking auto_docstrings in the following files:" + "\n    - " + "\n    - ".join(matching_files))
 
     return matching_files
 
@@ -1942,7 +1936,6 @@ def check_docstrings(overwrite: bool = False, check_all: bool = False):
         # quick escape route: if there are no module files in the diff, skip this check
         if len(module_diff_files) == 0:
             return
-        print("    Checking docstrings in the following files:" + "\n    - " + "\n    - ".join(module_diff_files))
 
     failures = []
     hard_failures = []

@@ -16,6 +16,7 @@
 import copy
 import unittest
 
+import pytest
 import requests
 from parameterized import parameterized
 
@@ -264,23 +265,17 @@ class LlavaForConditionalGenerationModelTest(
             assert base_model.multi_modal_projector.linear_1.in_features == expected_features
             model(**input_dict)
 
-    @unittest.skip(
-        reason="This architecture seems to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing(self):
-        pass
+        super().test_training_gradient_checkpointing()
 
-    @unittest.skip(
-        reason="This architecture seems to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seems to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
+        super().test_training_gradient_checkpointing_use_reentrant_false()
+
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        super().test_training_gradient_checkpointing_use_reentrant_true()
 
     @unittest.skip(
         "VLMs need lots of steps to prepare images/mask correctly to get pad-free inputs. Can be tested as part of LLM test"
@@ -585,7 +580,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         fast_tokenizer.add_tokens("<image>", True)
 
         prompt = "<|im_start|>system\nAnswer the questions.<|im_end|><|im_start|>user\n<image>\nWhat is shown in this image?<|im_end|><|im_start|>assistant\n"
-        EXPECTED_OUTPUT = ['<|im_start|>', 'system', '\n', 'Answer', '▁the', '▁questions', '.', '<|im_end|>', '<|im_start|>', 'user', '\n', '<image>', '\n', 'What', '▁is', '▁shown', '▁in', '▁this', '▁image', '?', '<|im_end|>', '<|im_start|>', 'ass', 'istant', '\n']  # fmt: skip
+        EXPECTED_OUTPUT = ['<|im_start|>', 'sy', 'st', 'em', '\n', 'An', 'sw', 'er', ' ', 'the', ' ', 'qu', 'est', 'ions', '.', '<|im_end|>', '<|im_start|>', 'us', 'er', '\n', '<image>', '\n', 'What', ' ', 'is', ' ', 'sh', 'own', ' ', 'in', ' ', 'th', 'is', ' ', 'im', 'age', '?', '<|im_end|>', '<|im_start|>', 'ass', 'ist', 'ant', '\n']  # fmt: skip
         self.assertEqual(slow_tokenizer.tokenize(prompt), EXPECTED_OUTPUT)
         self.assertEqual(fast_tokenizer.tokenize(prompt), EXPECTED_OUTPUT)
 

@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -1158,14 +1157,6 @@ class ErnieForNextSentencePrediction(ErniePreTrainedModel):
         >>> assert logits[0, 0] < logits[0, 1]  # next sentence was random
         ```
         """
-
-        if "next_sentence_label" in kwargs:
-            warnings.warn(
-                "The `next_sentence_label` argument is deprecated and will be removed in a future version, use"
-                " `labels` instead.",
-                FutureWarning,
-            )
-            labels = kwargs.pop("next_sentence_label")
 
         outputs = self.ernie(
             input_ids,

@@ -35,7 +35,6 @@ from transformers.testing_utils import (
     require_deterministic_for_xpu,
     require_flash_attn,
     require_flash_attn_3,
-    require_read_token,
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
@@ -412,17 +411,17 @@ class Gemma3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
                 # We expect a non-causal mask only within same image and no looking ahead to the future
                 self.assertTrue((attention[..., :4, 7:10] == 0).all().item())
 
-    @unittest.skip(reason="SiglipVisionModel (vision backbone) does not support standalone training")
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing(self):
-        pass
+        super().test_training_gradient_checkpointing()
 
-    @unittest.skip(reason="SiglipVisionModel (vision backbone) does not support standalone training")
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(reason="SiglipVisionModel (vision backbone) does not support standalone training")
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
+        super().test_training_gradient_checkpointing_use_reentrant_false()
+
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        super().test_training_gradient_checkpointing_use_reentrant_true()
 
     @unittest.skip("Loading nested configs with overwritten `kwargs` isn't supported yet, FIXME @raushan.")
     def test_load_with_mismatched_shapes(self):
@@ -457,7 +456,6 @@ class Gemma3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
 
 @slow
 @require_torch_accelerator
-@require_read_token
 class Gemma3IntegrationTest(unittest.TestCase):
     def setUp(self):
         self.processor = Gemma3Processor.from_pretrained("google/gemma-3-4b-it", padding_side="left")

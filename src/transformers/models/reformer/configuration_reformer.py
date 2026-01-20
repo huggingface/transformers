@@ -190,6 +190,7 @@ class ReformerConfig(PreTrainedConfig):
         tie_word_embeddings=False,
         use_cache=True,
         classifier_dropout=None,
+        bos_token_id=None,
         **kwargs,
     ):
         self.hash_seed = hash_seed
@@ -222,13 +223,12 @@ class ReformerConfig(PreTrainedConfig):
         self.attn_layers = attn_layers
         self.use_cache = use_cache
         self.classifier_dropout = classifier_dropout
-        super().__init__(
-            pad_token_id=pad_token_id,
-            eos_token_id=eos_token_id,
-            is_decoder=is_decoder,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.pad_token_id = pad_token_id
+        self.eos_token_id = eos_token_id
+        self.bos_token_id = bos_token_id
+        self.is_decoder = is_decoder
+        self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(**kwargs)
 
 
 __all__ = ["ReformerConfig"]

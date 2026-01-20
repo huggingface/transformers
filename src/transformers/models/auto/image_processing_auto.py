@@ -15,7 +15,6 @@
 
 import importlib
 import os
-import warnings
 from collections import OrderedDict
 from typing import TYPE_CHECKING
 
@@ -109,6 +108,7 @@ else:
             ("git", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
             ("glm46v", ("Glm46VImageProcessor", "Glm46VImageProcessorFast")),
             ("glm4v", ("Glm4vImageProcessor", "Glm4vImageProcessorFast")),
+            ("glm_image", ("GlmImageImageProcessor", "GlmImageImageProcessorFast")),
             ("glpn", ("GLPNImageProcessor", "GLPNImageProcessorFast")),
             ("got_ocr2", ("GotOcr2ImageProcessor", "GotOcr2ImageProcessorFast")),
             ("grounding-dino", ("GroundingDinoImageProcessor", "GroundingDinoImageProcessorFast")),
@@ -130,11 +130,13 @@ else:
             ("levit", ("LevitImageProcessor", "LevitImageProcessorFast")),
             ("lfm2_vl", (None, "Lfm2VlImageProcessorFast")),
             ("lightglue", ("LightGlueImageProcessor", "LightGlueImageProcessorFast")),
+            ("lighton_ocr", ("PixtralImageProcessor", "PixtralImageProcessorFast")),
             ("llama4", (None, "Llama4ImageProcessorFast")),
             ("llava", ("LlavaImageProcessor", "LlavaImageProcessorFast")),
             ("llava_next", ("LlavaNextImageProcessor", "LlavaNextImageProcessorFast")),
             ("llava_next_video", ("LlavaNextImageProcessor", "LlavaNextImageProcessorFast")),
             ("llava_onevision", ("LlavaOnevisionImageProcessor", "LlavaOnevisionImageProcessorFast")),
+            ("lw_detr", ("DeformableDetrImageProcessor", "DeformableDetrImageProcessorFast")),
             ("mask2former", ("Mask2FormerImageProcessor", "Mask2FormerImageProcessorFast")),
             ("maskformer", ("MaskFormerImageProcessor", "MaskFormerImageProcessorFast")),
             ("metaclip_2", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
@@ -636,30 +638,14 @@ class AutoImageProcessor:
         )
 
     @staticmethod
-    def register(
-        config_class,
-        image_processor_class=None,
-        slow_image_processor_class=None,
-        fast_image_processor_class=None,
-        exist_ok=False,
-    ):
+    def register(config_class, slow_image_processor_class=None, fast_image_processor_class=None, exist_ok=False):
         """
         Register a new image processor for this class.
 
         Args:
             config_class ([`PreTrainedConfig`]):
                 The configuration corresponding to the model to register.
-            image_processor_class ([`ImageProcessingMixin`]): The image processor to register.
         """
-        if image_processor_class is not None:
-            if slow_image_processor_class is not None:
-                raise ValueError("Cannot specify both image_processor_class and slow_image_processor_class")
-            warnings.warn(
-                "The image_processor_class argument is deprecated and will be removed in v4.42. Please use `slow_image_processor_class`, or `fast_image_processor_class` instead",
-                FutureWarning,
-            )
-            slow_image_processor_class = image_processor_class
-
         if slow_image_processor_class is None and fast_image_processor_class is None:
             raise ValueError("You need to specify either slow_image_processor_class or fast_image_processor_class")
         if slow_image_processor_class is not None and issubclass(slow_image_processor_class, BaseImageProcessorFast):
