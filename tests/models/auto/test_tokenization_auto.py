@@ -33,6 +33,8 @@ from transformers import (
     CTRLTokenizer,
     GPT2Tokenizer,
     HerbertTokenizer,
+    PreTrainedConfig,
+    PreTrainedTokenizerBase,
     PreTrainedTokenizerFast,
     Qwen2Tokenizer,
     Qwen2TokenizerFast,
@@ -254,6 +256,11 @@ class AutoTokenizerTest(unittest.TestCase):
 
         self.assertIsInstance(tokenizer2, tokenizer.__class__)
         self.assertEqual(tokenizer2.vocab_size, 12)
+
+    def test_auto_tokenizer_with_pretrained_config_missing_model_type(self):
+        config = PreTrainedConfig()
+        tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/tiny-random-bert", config=config)
+        self.assertIsInstance(tokenizer, PreTrainedTokenizerBase)
 
     def test_auto_tokenizer_from_local_folder_mistral_detection(self):
         """See #42374 for reference, ensuring proper mistral detection on local tokenizers"""
@@ -616,3 +623,4 @@ class NopConfig(PreTrainedConfig):
 
         tok = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM2-135M-Instruct")
         self.assertTrue(tok.__class__ == TokenizersBackend)
+
