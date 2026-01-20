@@ -23,7 +23,7 @@ from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...integrations import use_kernelized_func
+from ...integrations import use_kernel_func_from_hub, use_kernelized_func
 from ...masking_utils import create_bidirectional_mask, create_bidirectional_sliding_window_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
@@ -38,10 +38,9 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, logging
-from ...utils.generic import can_return_tuple, check_model_inputs, is_flash_attention_requested
-from ...utils.import_utils import is_triton_available
+from ...utils.generic import can_return_tuple, check_model_inputs
 from ..align.modeling_align import eager_attention_forward
-from ..gemma3.modeling_gemma3 import Gemma3RotaryEmbedding, apply_rotary_pos_emb
+from ..gemma3.modeling_gemma3 import Gemma3RotaryEmbedding, rotate_half
 
 
 logger = logging.get_logger(__name__)
@@ -127,11 +126,6 @@ class ModernBertConfig(PreTrainedConfig):
             Whether to use sparse prediction for the masked language model instead of returning the full dense logits.
         sparse_pred_ignore_index (`int`, *optional*, defaults to -100):
             The index to ignore for the sparse prediction.
-        reference_compile (`bool`, *optional*):
-            Whether to compile the layers of the model which were compiled during pretraining. If `None`, then parts of
-            the model will be compiled if 1) `triton` is installed, 2) the model is not on MPS, 3) the model is not
-            shared between devices, and 4) the model is not resized after initialization. If `True`, then the model may
-            be faster in some scenarios.
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to tie weight embeddings
 
@@ -153,6 +147,15 @@ class ModernBertConfig(PreTrainedConfig):
     model_type = "modernbert"
     keys_to_ignore_at_inference = ["past_key_values"]
     default_theta = {"global": 160_000.0, "local": 10_000.0}
+
+    def __setattr__(self, name, value):
+        if name == "reference_compile" and value is not None:
+            logger.warning_once(
+                "The `reference_compile` argument is deprecated and will be removed in a future version. "
+                "Use `torch.compile()` directly on the model instead."
+            )
+            value = None
+        super().__setattr__(name, value)
 
     def __init__(
         self,
@@ -188,7 +191,7 @@ class ModernBertConfig(PreTrainedConfig):
         deterministic_flash_attn: bool | None = False,
         sparse_prediction: bool | None = False,
         sparse_pred_ignore_index: int | None = -100,
-        reference_compile: bool | None = None,
+        reference_compile: bool | None = None,  # Deprecated
         tie_word_embeddings: bool | None = True,
         **kwargs,
     ):
@@ -298,21 +301,13 @@ class ModernBertEmbeddings(nn.Module):
         self.norm = nn.LayerNorm(config.hidden_size, eps=config.norm_eps, bias=config.norm_bias)
         self.drop = nn.Dropout(config.embedding_dropout)
 
-    @torch.compile(dynamic=True)
-    def compiled_embeddings(self, input_ids: torch.LongTensor) -> torch.Tensor:
-        return self.drop(self.norm(self.tok_embeddings(input_ids)))
-
     def forward(
         self, input_ids: torch.LongTensor | None = None, inputs_embeds: torch.Tensor | None = None
     ) -> torch.Tensor:
         if inputs_embeds is not None:
             hidden_states = self.drop(self.norm(inputs_embeds))
         else:
-            hidden_states = (
-                self.compiled_embeddings(input_ids)
-                if self.config.reference_compile
-                else self.drop(self.norm(self.tok_embeddings(input_ids)))
-            )
+            hidden_states = self.drop(self.norm(self.tok_embeddings(input_ids)))
         return hidden_states
 
 
@@ -350,6 +345,33 @@ class ModernBertRotaryEmbedding(Gemma3RotaryEmbedding):
         return super().compute_default_rope_parameters(config, device, seq_len, layer_type)
 
 
+@use_kernel_func_from_hub("rotary_pos_emb")
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
+    """Applies Rotary Position Embedding to the query and key tensors.
+
+    Args:
+        q (`torch.Tensor`): The query tensor.
+        k (`torch.Tensor`): The key tensor.
+        cos (`torch.Tensor`): The cosine part of the rotary embedding.
+        sin (`torch.Tensor`): The sine part of the rotary embedding.
+        unsqueeze_dim (`int`, *optional*, defaults to 1):
+            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
+            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
+            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
+            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
+            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
+            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
+    Returns:
+        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+    """
+    original_dtype = q.dtype
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
+    q_embed = (q.float() * cos) + (rotate_half(q.float()) * sin)
+    k_embed = (k.float() * cos) + (rotate_half(k.float()) * sin)
+    return q_embed.to(original_dtype), k_embed.to(original_dtype)
+
+
 @use_kernelized_func(apply_rotary_pos_emb)
 class ModernBertAttention(nn.Module):
     """Performs multi-headed self attention on a batch of unpadded sequences.
@@ -381,9 +403,6 @@ class ModernBertAttention(nn.Module):
         if layer_idx % config.global_attn_every_n_layers != 0:
             # config.sliding_window = local_attention // 2 (half-window size, e.g. 64 for local_attention=128)
             # +1 is needed because flash attention sets inclusive boundaries (see modeling_flash_attention_utils.py)
-            # i.e., window_size=(w-1, w-1) attends to 2*(w-1)+1 = 2*w-1 tokens total.
-            # To get a total window of 2*sliding_window+1, we need to pass sliding_window+1 here
-            # so it becomes window_size=(sliding_window, sliding_window).
             self.sliding_window = config.sliding_window + 1
         else:
             self.sliding_window = None
@@ -411,17 +430,7 @@ class ModernBertAttention(nn.Module):
         value_states = value_states.transpose(1, 2)
 
         cos, sin = position_embeddings
-        # Flash attention requires float32 for rotary embeddings to match the original implementation
-        # which used a separate ModernBertUnpaddedRotaryEmbedding class
-        if is_flash_attention_requested(self.config):
-            original_dtype = query_states.dtype
-            query_states = query_states.float()
-            key_states = key_states.float()
-            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, unsqueeze_dim=1)
-            query_states = query_states.to(original_dtype)
-            key_states = key_states.to(original_dtype)
-        else:
-            query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, unsqueeze_dim=1)
+        query_states, key_states = apply_rotary_pos_emb(query_states, key_states, cos, sin, unsqueeze_dim=1)
 
         attention_interface = eager_attention_forward
         if self.config._attn_implementation != "eager":
@@ -459,10 +468,6 @@ class ModernBertEncoderLayer(GradientCheckpointingLayer):
         self.mlp = ModernBertMLP(config)
         self.attention_type = config.layer_types[layer_idx]
 
-    @torch.compile(dynamic=True)
-    def compiled_mlp(self, hidden_states: torch.Tensor) -> torch.Tensor:
-        return self.mlp(self.mlp_norm(hidden_states))
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -477,13 +482,7 @@ class ModernBertEncoderLayer(GradientCheckpointingLayer):
             **kwargs,
         )
         hidden_states = hidden_states + attn_output
-        mlp_output = (
-            self.compiled_mlp(hidden_states)
-            if self.config.reference_compile
-            else self.mlp(self.mlp_norm(hidden_states))
-        )
-        hidden_states = hidden_states + mlp_output
-
+        hidden_states = hidden_states + self.mlp(self.mlp_norm(hidden_states))
         return hidden_states
 
 
@@ -585,49 +584,6 @@ class ModernBertPreTrainedModel(PreTrainedModel):
             attn_implementation=attn_implementation, is_init_check=is_init_check
         )
 
-    def _maybe_set_compile(self):
-        if self.config.reference_compile is False:
-            return
-
-        if hasattr(self, "hf_device_map") and len(self.hf_device_map) > 1:
-            if self.config.reference_compile:
-                logger.warning_once(
-                    "If `accelerate` split the model across devices, `torch.compile` will not work. "
-                    "Falling back to non-compiled mode."
-                )
-            self.config.reference_compile = False
-
-        if self.device.type == "mps":
-            if self.config.reference_compile:
-                logger.warning_once(
-                    "Compiling the model with `torch.compile` and using a `torch.mps` device is not supported. "
-                    "Falling back to non-compiled mode."
-                )
-            self.config.reference_compile = False
-
-        if self.device.type == "cpu":
-            if self.config.reference_compile:
-                logger.warning_once(
-                    "Compiling the model with `torch.compile` and using a `torch.cpu` device is not supported. "
-                    "Falling back to non-compiled mode."
-                )
-            self.config.reference_compile = False
-
-        if self.config.reference_compile is None:
-            self.config.reference_compile = is_triton_available()
-
-    def resize_token_embeddings(self, *args, **kwargs):
-        model_embeds = super().resize_token_embeddings(*args, **kwargs)
-
-        if self.config.reference_compile in {True, None}:
-            if self.config.reference_compile:
-                logger.warning_once(
-                    "Resizing token embeddings with `torch.compile` is not supported. Falling back to non-compiled mode."
-                )
-            self.config.reference_compile = False
-
-        return model_embeds
-
 
 @auto_docstring
 class ModernBertModel(ModernBertPreTrainedModel):
@@ -661,8 +617,6 @@ class ModernBertModel(ModernBertPreTrainedModel):
     ) -> BaseModelOutput:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
-
-        self._maybe_set_compile()
 
         if input_ids is not None:
             self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
@@ -745,10 +699,6 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
     def set_output_embeddings(self, new_embeddings: nn.Linear):
         self.decoder = new_embeddings
 
-    @torch.compile(dynamic=True)
-    def compiled_head(self, output: torch.Tensor) -> torch.Tensor:
-        return self.decoder(self.head(output))
-
     @can_return_tuple
     @auto_docstring
     def forward(
@@ -760,8 +710,6 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
         labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | MaskedLMOutput:
-        self._maybe_set_compile()
-
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -782,11 +730,7 @@ class ModernBertForMaskedLM(ModernBertPreTrainedModel):
             last_hidden_state = last_hidden_state[mask_tokens]
             labels = labels[mask_tokens]
 
-        logits = (
-            self.compiled_head(last_hidden_state)
-            if self.config.reference_compile
-            else self.decoder(self.head(last_hidden_state))
-        )
+        logits = self.decoder(self.head(last_hidden_state))
 
         loss = None
         if labels is not None:
@@ -836,8 +780,6 @@ class ModernBertForSequenceClassification(ModernBertPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        self._maybe_set_compile()
-
         if input_ids is not None:
             self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
 
@@ -930,8 +872,6 @@ class ModernBertForTokenClassification(ModernBertPreTrainedModel):
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
         """
-        self._maybe_set_compile()
-
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
@@ -983,8 +923,6 @@ class ModernBertForQuestionAnswering(ModernBertPreTrainedModel):
         end_positions: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor] | QuestionAnsweringModelOutput:
-        self._maybe_set_compile()
-
         outputs = self.model(
             input_ids,
             attention_mask=attention_mask,
@@ -1059,8 +997,6 @@ class ModernBertForMultipleChoice(ModernBertPreTrainedModel):
             if inputs_embeds is not None
             else None
         )
-
-        self._maybe_set_compile()
 
         outputs = self.model(
             input_ids=input_ids,

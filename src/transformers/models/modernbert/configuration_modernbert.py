@@ -23,6 +23,10 @@ from typing import Literal
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...modeling_rope_utils import RopeParameters
+from ...utils import logging
+
+
+logger = logging.get_logger(__name__)
 
 
 class ModernBertConfig(PreTrainedConfig):
@@ -105,11 +109,6 @@ class ModernBertConfig(PreTrainedConfig):
             Whether to use sparse prediction for the masked language model instead of returning the full dense logits.
         sparse_pred_ignore_index (`int`, *optional*, defaults to -100):
             The index to ignore for the sparse prediction.
-        reference_compile (`bool`, *optional*):
-            Whether to compile the layers of the model which were compiled during pretraining. If `None`, then parts of
-            the model will be compiled if 1) `triton` is installed, 2) the model is not on MPS, 3) the model is not
-            shared between devices, and 4) the model is not resized after initialization. If `True`, then the model may
-            be faster in some scenarios.
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to tie weight embeddings
 
@@ -131,6 +130,15 @@ class ModernBertConfig(PreTrainedConfig):
     model_type = "modernbert"
     keys_to_ignore_at_inference = ["past_key_values"]
     default_theta = {"global": 160_000.0, "local": 10_000.0}
+
+    def __setattr__(self, name, value):
+        if name == "reference_compile" and value is not None:
+            logger.warning_once(
+                "The `reference_compile` argument is deprecated and will be removed in a future version. "
+                "Use `torch.compile()` directly on the model instead."
+            )
+            value = None
+        super().__setattr__(name, value)
 
     def __init__(
         self,
@@ -166,7 +174,7 @@ class ModernBertConfig(PreTrainedConfig):
         deterministic_flash_attn: bool | None = False,
         sparse_prediction: bool | None = False,
         sparse_pred_ignore_index: int | None = -100,
-        reference_compile: bool | None = None,
+        reference_compile: bool | None = None,  # Deprecated
         tie_word_embeddings: bool | None = True,
         **kwargs,
     ):
