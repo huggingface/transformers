@@ -101,7 +101,6 @@ class Sam2VideoProcessor(ProcessorMixin):
             A [`BatchEncoding`] with the following fields:
             - `pixel_values` (`torch.Tensor`): The processed image(s).
             - `original_sizes` (`list[list[float]]`): The original sizes of the images.
-            - `reshaped_input_sizes` (`torch.Tensor`): The reshaped input sizes of the images.
             - `labels` (`torch.Tensor`): The processed segmentation maps (if provided).
             - `input_points` (`torch.Tensor`): The processed points.
             - `input_labels` (`torch.Tensor`): The processed labels.
@@ -262,7 +261,7 @@ class Sam2VideoProcessor(ProcessorMixin):
         elif isinstance(data, (int, float)):
             return data
         else:
-            raise ValueError(f"Unsupported data type: {type(data)}")
+            raise TypeError(f"Unsupported data type: {type(data)}")
 
     def _get_nested_dimensions(self, nested_list, max_dims=None):
         """

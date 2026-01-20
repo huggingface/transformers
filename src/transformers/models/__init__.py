@@ -305,6 +305,10 @@ if TYPE_CHECKING:
     from .sam import *
     from .sam2 import *
     from .sam2_video import *
+    from .sam3 import *
+    from .sam3_tracker import *
+    from .sam3_tracker_video import *
+    from .sam3_video import *
     from .sam_hq import *
     from .seamless_m4t import *
     from .seamless_m4t_v2 import *
