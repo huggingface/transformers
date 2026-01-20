@@ -640,15 +640,15 @@ class ContinuousBatchProcessor:
         copy_source, copy_destination = [], []
         while self.scheduler._requests_to_fork:
             # Get the number of children and reset it so it's not forked again
-            state = self.scheduler._requests_to_fork.pop()
-            num_children = state.num_children
-            state.num_children = 0
+            state_to_fork = self.scheduler._requests_to_fork.pop()
+            num_children = state_to_fork.num_children
+            state_to_fork.num_children = 0
             # Create the new request and add them to the scheduler
-            new_request_ids = [f"{state.request_id}__child#{i}" for i in range(num_children)]
+            new_request_ids = [f"{state_to_fork.request_id}__child#{i}" for i in range(num_children)]
             for new_request_id in new_request_ids:
-                self.scheduler.active_requests[new_request_id] = state.fork(new_request_id)
+                self.scheduler.active_requests[new_request_id] = state_to_fork.fork(new_request_id)
             # Fork the cache
-            copy_src, copy_dst = self.cache.fork_request(state.request_id, new_request_ids)
+            copy_src, copy_dst = self.cache.fork_request(state_to_fork.request_id, new_request_ids)
             copy_source.extend(copy_src)
             copy_destination.extend(copy_dst)
             # FIXME: if fork cant be done, create a new pending request without forking instead of crashing everything
