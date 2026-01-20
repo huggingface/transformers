@@ -1431,8 +1431,8 @@ class T5ModelIntegrationTests(unittest.TestCase):
     def test_compile_static_cache(self):
         NUM_TOKENS_TO_GENERATE = 40
         EXPECTED_TEXT_COMPLETION = [
-            "theory of relativity states that 1) the speed of light is constant in all inertial reference frames. the laws of physics are the same for all inertial reference frames.",
-            "ketchup is my favorite condiment.",
+            "theory of relativity states that 1) the speed of light is constant in all inertial reference frames . the laws of physics are the same for all inertial reference frames .",
+            "ketchup is my favorite condiment .",
         ]
 
         prompts = [
@@ -1632,6 +1632,8 @@ class T5ModelIntegrationTests(unittest.TestCase):
         original_summary = tokenizer.decode(original_outputs[0], skip_special_tokens=True)
 
         # Basic verification that we got a reasonable summary
+        print("generated_summary", generated_summary)
+        print("original_summary", original_summary)
         self.assertEqual(generated_summary, original_summary)
 
 
