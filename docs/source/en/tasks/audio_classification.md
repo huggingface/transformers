@@ -36,7 +36,7 @@ To see all architectures and checkpoints compatible with this task, we recommend
 Before you begin, make sure you have all the necessary libraries installed:
 
 ```bash
-pip install transformers datasets evaluate
+pip install transformers datasets evaluate soundfile librosa torchcodec
 ```
 
 We encourage you to login to your Hugging Face account so you can upload and share your model with the community. When prompted, enter your token to login:
@@ -225,6 +225,7 @@ At this point, only three steps remain:
 ...     load_best_model_at_end=True,
 ...     metric_for_best_model="accuracy",
 ...     push_to_hub=True,
+...     report_to="trackio",
 ... )
 
 >>> trainer = Trainer(
