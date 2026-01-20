@@ -109,8 +109,6 @@ class HiggsAudioV2TokenizerConfig(PreTrainedConfig):
         downsample_factor=320,
         **kwargs,
     ):
-        super().__init__(**kwargs)
-
         if acoustic_model_config is None:
             self.acoustic_model_config = DacConfig(
                 encoder_hidden_size=64,
@@ -164,6 +162,8 @@ class HiggsAudioV2TokenizerConfig(PreTrainedConfig):
         if codebook_dim is None:
             codebook_dim = self.acoustic_model_config.hidden_size + self.semantic_model_config.hidden_size
         self.codebook_dim = codebook_dim
+
+        super().__init__(**kwargs)
 
         self.semantic_sample_rate = semantic_sample_rate
         self.downsample_factor = downsample_factor

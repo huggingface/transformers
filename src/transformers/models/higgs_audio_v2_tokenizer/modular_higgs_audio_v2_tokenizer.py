@@ -152,7 +152,7 @@ class HiggsAudioV2TokenizerModel(XcodecModel):
             outputs = self.semantic_model(input_values, output_hidden_states=True)
             hidden_states = outputs.hidden_states
 
-        stacked = torch.stack(hidden_states, dim=1)
+        stacked = torch.stack([h.to(input_values.device) for h in hidden_states], dim=1)
         semantic_features = stacked.mean(dim=1)
 
         semantic_downsample_factor = int(

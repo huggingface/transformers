@@ -47,14 +47,12 @@ All of the snippets below mirror the integration tests in `test_higgs_audio.py`,
 ### Single-speaker smart voice
 
 ```python
-from transformers import AutoProcessor, HiggsAudioV2ForConditionalGeneration, infer_device
+from transformers import AutoProcessor, HiggsAudioV2ForConditionalGeneration
 import torch
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
 model_id = "eustlb/higgs-v2"
-
-processor = AutoProcessor.from_pretrained(model_id, device_map=device)
-model = HiggsAudioV2ForConditionalGeneration.from_pretrained(model_id, device_map=device)
+processor = AutoProcessor.from_pretrained(model_id, device_map="auto")
+model = HiggsAudioV2ForConditionalGeneration.from_pretrained(model_id, device_map="auto")
 
 conversation = [
     {
@@ -103,14 +101,12 @@ processor.save_audio(decoded, "output_single_speaker_smart_voice.wav")
 ### Multi-speaker smart voice
 
 ```python
-from transformers import AutoProcessor, HiggsAudioV2ForConditionalGeneration, infer_device
+from transformers import AutoProcessor, HiggsAudioV2ForConditionalGeneration
 import torch
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
 model_id = "eustlb/higgs-v2"
-
-processor = AutoProcessor.from_pretrained(model_id, device_map=device)
-model = HiggsAudioV2ForConditionalGeneration.from_pretrained(model_id, device_map=device)
+processor = AutoProcessor.from_pretrained(model_id, device_map="auto")
+model = HiggsAudioV2ForConditionalGeneration.from_pretrained(model_id, device_map="auto")
 
 system_message = """You are an AI assistant designed to convert text into speech.
 If the user's message includes a [SPEAKER*] tag, do not read out the tag and generate speech for the following text, using the specified voice.
@@ -176,14 +172,12 @@ processor.save_audio(decoded, "output_multi_speaker_smart_voice.wav")
 ### Zero-shot voice cloning
 
 ```python
-from transformers import AutoProcessor, HiggsAudioV2ForConditionalGeneration, infer_device
+from transformers import AutoProcessor, HiggsAudioV2ForConditionalGeneration
 import torch
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
 model_id = "eustlb/higgs-v2"
-
-processor = AutoProcessor.from_pretrained(model_id, device_map=device)
-model = HiggsAudioV2ForConditionalGeneration.from_pretrained(model_id, device_map=device)
+processor = AutoProcessor.from_pretrained(model_id, device_map="auto")
+model = HiggsAudioV2ForConditionalGeneration.from_pretrained(model_id, device_map="auto")
 
 conversation = [
     {
@@ -250,14 +244,12 @@ processor.save_audio(decoded, "output_zero_shot_voice_cloning.wav")
 ### Multi-speaker voice cloning
 
 ```python
-from transformers import AutoProcessor, HiggsAudioV2ForConditionalGeneration, infer_device
+from transformers import AutoProcessor, HiggsAudioV2ForConditionalGeneration
 import torch
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
 model_id = "eustlb/higgs-v2"
-
-processor = AutoProcessor.from_pretrained(model_id, device_map=device)
-model = HiggsAudioV2ForConditionalGeneration.from_pretrained(model_id, device_map=device)
+processor = AutoProcessor.from_pretrained(model_id, device_map="auto")
+model = HiggsAudioV2ForConditionalGeneration.from_pretrained(model_id, device_map="auto")
 
 conversation = [
     {
@@ -322,14 +314,12 @@ processor.save_audio(decoded, "output_multi_speaker_voice_cloning.wav")
 ### Batched inference
 
 ```python
-from transformers import AutoProcessor, HiggsAudioV2ForConditionalGeneration, infer_device
+from transformers import AutoProcessor, HiggsAudioV2ForConditionalGeneration
 import torch
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
 model_id = "eustlb/higgs-v2"
-
-processor = AutoProcessor.from_pretrained(model_id, device_map=device)
-model = HiggsAudioV2ForConditionalGeneration.from_pretrained(model_id, device_map=device)
+processor = AutoProcessor.from_pretrained(model_id, device_map="auto")
+model = HiggsAudioV2ForConditionalGeneration.from_pretrained(model_id, device_map="auto")
 
 conversation1 = [
     {
@@ -448,14 +438,12 @@ processor.save_audio(decoded, ["output_batched_1.wav", "output_batched_2.wav"])
 > However, when training the model, you need the text head to compute loss on text tokens. To enable it, set `use_text_head=True` when instantiating the model (see example below).
 
 ```python
-from transformers import AutoProcessor, HiggsAudioV2ForConditionalGeneration, infer_device
+from transformers import AutoProcessor, HiggsAudioV2ForConditionalGeneration
 import torch
 
-device = "cuda" if torch.cuda.is_available() else "cpu"
 model_id = "eustlb/higgs-v2"
-
-processor = AutoProcessor.from_pretrained(model_id, device_map=device)
-model = HiggsAudioV2ForConditionalGeneration.from_pretrained(model_id, device_map=device, use_text_head=True)
+processor = AutoProcessor.from_pretrained(model_id, device_map="auto")
+model = HiggsAudioV2ForConditionalGeneration.from_pretrained(model_id, device_map="auto", use_text_head=True)
 
 conversation1 = [
     {

@@ -240,7 +240,7 @@ class XcodecEuclideanCodebook(nn.Module):
         return embed_ind
 
     def decode(self, embed_ind):
-        quantized = F.embedding(embed_ind, self.embed)
+        quantized = F.embedding(embed_ind.to(self.embed.device), self.embed)
         return quantized
 
 
@@ -312,7 +312,7 @@ class XcodecResidualVectorQuantization(nn.Module):
         for i, indices in enumerate(codes):
             quantizer = self.quantizers[i]
             quantized = quantizer.decode(indices)
-            quantized_out = quantized_out + quantized
+            quantized_out = quantized_out + quantized.to(codes.device)
         return quantized_out
 
 
@@ -327,6 +327,7 @@ class XcodecPreTrainedModel(PreTrainedAudioTokenizerBase):
     base_model_prefix = "xcodec"
     main_input_name = "input_values"
     input_modalities = "audio"
+    _no_split_modules = ["XcodecResidualVectorQuantization"]
 
     @torch.no_grad()
     def _init_weights(self, module):
@@ -523,7 +524,7 @@ class XcodecModel(XcodecPreTrainedModel):
         else:
             e_acoustic = self.acoustic_encoder(input_values)
 
-        embeddings = torch.cat([e_acoustic, e_semantic], dim=1)
+        embeddings = torch.cat([e_acoustic.to(e_semantic.device), e_semantic], dim=1)
         embeddings = self.fc(embeddings.transpose(1, 2)).transpose(1, 2)
         audio_codes = self.quantizer.encode(embeddings, bandwidth)
         audio_codes = audio_codes.transpose(0, 1)

@@ -18,6 +18,7 @@ from typing import Optional, Union
 import torch
 import torch.nn as nn
 
+from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
@@ -33,6 +34,7 @@ from ...utils.generic import check_model_inputs
 from ..csm.modeling_csm import CsmBackboneModelEmbeddings
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import LlamaDecoderLayer, LlamaMLP, LlamaModel, LlamaPreTrainedModel, LlamaRMSNorm
+from ...modeling_utils import PreTrainedModel
 from .generation_higgs_audio_v2 import HiggsAudioV2GenerationMixin
 
 
@@ -194,12 +196,12 @@ class HiggsAudioV2Config(LlamaConfig):
         eos_token_id=128009,
         pretraining_tp=1,
         tie_word_embeddings=False,
-        rope_theta=500000.0,
-        rope_scaling={
+        rope_parameters={
             "factor": 32.0,
-            "high_freq_factor": 4.0,
-            "low_freq_factor": 1.0,
-            "original_max_position_embeddings": 8192,
+            "rope_theta": 500000.0,
+            "high_freq_factor": 0.5,
+            "low_freq_factor": 0.125,
+            "original_max_position_embeddings": 1024,
             "rope_type": "llama3",
         },
         attention_bias=False,
@@ -232,8 +234,7 @@ class HiggsAudioV2Config(LlamaConfig):
             eos_token_id=eos_token_id,
             pretraining_tp=pretraining_tp,
             tie_word_embeddings=tie_word_embeddings,
-            rope_theta=rope_theta,
-            rope_scaling=rope_scaling,
+            rope_parameters=rope_parameters,
             attention_bias=attention_bias,
             attention_dropout=attention_dropout,
             mlp_bias=mlp_bias,
@@ -329,8 +330,13 @@ class HiggsAudioV2Embeddings(CsmBackboneModelEmbeddings):
         return inputs_embeds
 
 
-class HiggsAudioV2PreTrainedModel(LlamaPreTrainedModel):
-    pass
+class HiggsAudioV2PreTrainedModel(LlamaPreTrainedModel, PreTrainedModel):
+    @torch.no_grad()
+    def _init_weights(self, module):
+        PreTrainedModel._init_weights(module)
+
+        if isinstance(module, HiggsAudioV2Embeddings):
+            init.copy_(module.audio_tokens_offsets, torch.arange(self.config.num_codebooks) * self.config.codebook_size)
 
 
 class HiggsAudioV2Model(LlamaModel):

@@ -21,7 +21,6 @@
 
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import rope_config_validation
 
 
 class HiggsAudioV2Config(PreTrainedConfig):
@@ -193,12 +192,12 @@ class HiggsAudioV2Config(PreTrainedConfig):
         eos_token_id=128009,
         pretraining_tp=1,
         tie_word_embeddings=False,
-        rope_theta=500000.0,
-        rope_scaling={
+        rope_parameters={
             "factor": 32.0,
-            "high_freq_factor": 4.0,
-            "low_freq_factor": 1.0,
-            "original_max_position_embeddings": 8192,
+            "rope_theta": 500000.0,
+            "high_freq_factor": 0.5,
+            "low_freq_factor": 0.125,
+            "original_max_position_embeddings": 1024,
             "rope_type": "llama3",
         },
         attention_bias=False,
@@ -214,13 +213,6 @@ class HiggsAudioV2Config(PreTrainedConfig):
         audio_stream_eos_id=1025,
         **kwargs,
     ):
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -238,17 +230,17 @@ class HiggsAudioV2Config(PreTrainedConfig):
         self.rms_norm_eps = rms_norm_eps
         self.pretraining_tp = pretraining_tp
         self.use_cache = use_cache
-        self.rope_theta = rope_theta
-        self.rope_scaling = rope_scaling
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.mlp_bias = mlp_bias
         self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
-        # Validate the correctness of rotary position embeddings parameters
-        # BC: if there is a 'type' field, copy it it to 'rope_type'.
-        if self.rope_scaling is not None and "type" in self.rope_scaling:
-            self.rope_scaling["rope_type"] = self.rope_scaling["type"]
-        rope_config_validation(self)
+        self.rope_parameters = rope_parameters
+
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        super().__init__(**kwargs)
         self.num_codebooks = num_codebooks
         self.codebook_size = codebook_size
         self.audio_token_id = audio_token_id
