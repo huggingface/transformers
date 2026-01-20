@@ -59,7 +59,6 @@ class Qwen3VLMoeVisionText2TextModelTester(VLMModelTester):
     vision_end_token_id = 6
 
     def __init__(self, parent, **kwargs):
-        # Qwen3 VL MoE uses different defaults than the base class
         kwargs.setdefault("image_size", 16)
         kwargs.setdefault("patch_size", 16)
         kwargs.setdefault("num_image_tokens", 32)

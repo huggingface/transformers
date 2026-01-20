@@ -270,7 +270,11 @@ class VLMModelTester:
 
     @property
     def text_config_args(self):
-        return list(signature(self.text_config_class.__init__).parameters.keys())
+        args = list(signature(self.text_config_class.__init__).parameters.keys())
+        for token_arg in ["pad_token_id", "bos_token_id", "eos_token_id"]:  # Not always explicitly in the sig
+            if token_arg not in args:
+                args.append(token_arg)
+        return args
 
     @property
     def vision_config_args(self):

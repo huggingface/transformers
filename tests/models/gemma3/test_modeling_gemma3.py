@@ -261,7 +261,6 @@ class Gemma3Vision2TextModelTester(VLMModelTester):
     mm_tokens_per_image = 2
 
     def __init__(self, parent, **kwargs):
-        # Gemma3 uses different defaults than the base class
         kwargs.setdefault("image_size", 20)
         kwargs.setdefault("patch_size", 5)
         kwargs.setdefault("num_key_value_heads", 1)
