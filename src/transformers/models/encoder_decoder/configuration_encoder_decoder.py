@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
@@ -33,6 +32,10 @@ class EncoderDecoderConfig(PreTrainedConfig):
     documentation from [`PreTrainedConfig`] for more information.
 
     Args:
+        pad_token_id (`int`, *optional*):
+            Padding token id.
+        decoder_start_token_id (`int`, *optional*):
+            If an encoder-decoder model starts decoding with a different token than _bos_, the id of that token.
         kwargs (*optional*):
             Dictionary of keyword arguments. Notably:
 
@@ -74,7 +77,12 @@ class EncoderDecoderConfig(PreTrainedConfig):
     sub_configs = {"encoder": AutoConfig, "decoder": AutoConfig}
     has_no_defaults_at_init = True
 
-    def __init__(self, **kwargs):
+    def __init__(
+        self,
+        pad_token_id=None,
+        decoder_start_token_id=None,
+        **kwargs,
+    ):
         super().__init__(**kwargs)
         if "encoder" not in kwargs or "decoder" not in kwargs:
             raise ValueError(
@@ -89,6 +97,8 @@ class EncoderDecoderConfig(PreTrainedConfig):
         self.encoder = AutoConfig.for_model(encoder_model_type, **encoder_config)
         self.decoder = AutoConfig.for_model(decoder_model_type, **decoder_config)
         self.is_encoder_decoder = True
+        self.pad_token_id = pad_token_id
+        self.decoder_start_token_id = decoder_start_token_id
 
     @classmethod
     def from_encoder_decoder_configs(

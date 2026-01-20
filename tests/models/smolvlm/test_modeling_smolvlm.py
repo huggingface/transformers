@@ -38,6 +38,7 @@ from transformers.testing_utils import (
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -321,15 +322,23 @@ class SmolVLMModelTest(ModelTesterMixin, unittest.TestCase):
 
 
 @require_torch
-class SmolVLMForConditionalGenerationModelTest(GenerationTesterMixin, ModelTesterMixin, unittest.TestCase):
+class SmolVLMForConditionalGenerationModelTest(
+    GenerationTesterMixin, ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
     """
     Model tester for `SmolVLMForConditionalGeneration`.
     """
 
     all_model_classes = (SmolVLMForConditionalGeneration,) if is_torch_available() else ()
     all_generative_model_classes = (SmolVLMForConditionalGeneration,) if is_torch_available() else ()
-    pipeline_model_mapping = {"image-text-to-text": SmolVLMForConditionalGeneration} if is_torch_available() else ()
-
+    pipeline_model_mapping = (
+        {
+            "image-text-to-text": SmolVLMForConditionalGeneration,
+            "any-to-any": SmolVLMForConditionalGeneration,
+        }
+        if is_torch_available()
+        else ()
+    )
     test_resize_embeddings = True
 
     def setUp(self):
@@ -344,22 +353,6 @@ class SmolVLMForConditionalGenerationModelTest(GenerationTesterMixin, ModelTeste
     @is_flaky(description="TODO: check why flaky")
     def test_generate_methods_with_logits_to_keep(self):
         super().test_generate_methods_with_logits_to_keep()
-
-    @unittest.skip
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
 
     @unittest.skip(reason="Unsupported")
     def test_generate_with_static_cache(self):

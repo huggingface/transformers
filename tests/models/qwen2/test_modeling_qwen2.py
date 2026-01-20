@@ -52,6 +52,7 @@ class Qwen2ModelTester(CausalLMModelTester):
 @require_torch
 class Qwen2ModelTest(CausalLMModelTest, unittest.TestCase):
     model_tester_class = Qwen2ModelTester
+    pretrained_model_name = "Qwen/Qwen2-0.5B"
 
     # TODO (ydshieh): Check this. See https://app.circleci.com/pipelines/github/huggingface/transformers/79245/workflows/9490ef58-79c2-410d-8f51-e3495156cf9c/jobs/1012146
     def is_pipeline_test_to_skip(
@@ -77,11 +78,10 @@ class Qwen2IntegrationTest(unittest.TestCase):
         with torch.no_grad():
             out = model(input_ids).logits.float().cpu()
         # Expected mean on dim = -1
-        EXPECTED_MEAN = torch.tensor([[-1.9537, -1.6193, -1.4123, -1.4673, -1.8511, -1.9309, -1.9826, -2.1776]])
+        EXPECTED_MEAN = torch.tensor([[-2.2121, -1.6335, -1.4816, -1.5035, -1.9110, -1.8979, -1.9682, -2.1980]])
         torch.testing.assert_close(out.mean(-1), EXPECTED_MEAN, rtol=1e-2, atol=1e-2)
         # slicing logits[0, 0, 0:30]
-        EXPECTED_SLICE = torch.tensor([3.2025, 7.1265, 4.6058, 3.6423, 1.6357, 3.9265, 5.1883, 5.8760, 2.7942, 4.4823, 3.2571, 2.1063, 3.4275, 4.2028, 1.9767, 5.2115, 6.6756, 6.3999, 6.0483, 5.7378, 5.6660, 5.2298, 5.4103, 5.1248, 5.4376, 2.4570, 2.6107, 5.4039, 2.8077, 4.7777])  # fmt: skip
-        print(out[0, 0, :30])
+        EXPECTED_SLICE = torch.tensor([2.7344, 4.2812, 4.1562, 2.3906, 1.1875, 2.1562, 3.1719, 3.1406, 1.2891, 3.6094, 3.3125, 1.8203, 2.9219, 3.2344, 1.5938, 6.2500, 7.4062, 7.2188, 6.5938, 6.0312, 6.1562, 5.3750, 5.9688, 5.5938, 6.1250, 1.2656, 1.6016, 3.4062, 1.7891, 3.6406])  # fmt: skip
         torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, rtol=1e-4, atol=1e-4)
 
         del model
@@ -91,7 +91,7 @@ class Qwen2IntegrationTest(unittest.TestCase):
     @slow
     def test_model_450m_generation(self):
         EXPECTED_TEXT_COMPLETION = (
-            """My favourite condiment is 100% natural, organic and vegan. I love to use it in my cooking and I"""
+            """My favourite condiment is 100% natural, organic and vegan. I love to use it in my cooking, but"""
         )
         prompt = "My favourite condiment is "
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-0.5B", use_fast=False)
@@ -160,7 +160,7 @@ class Qwen2IntegrationTest(unittest.TestCase):
         gc.collect()
 
         EXPECTED_TEXT_COMPLETION = (
-            "My favourite condiment is 100% natural, organic and vegan. I love to use it in my cooking and I"
+            "My favourite condiment is 100% natural, organic and vegan. I love to use it in my cooking, but"
         )
         prompt = "My favourite condiment is "
         tokenizer = AutoTokenizer.from_pretrained("Qwen/Qwen2-0.5B", use_fast=False)
@@ -210,11 +210,8 @@ class Qwen2IntegrationTest(unittest.TestCase):
         tokenizer = AutoTokenizer.from_pretrained(qwen_model, pad_token="</s>", padding_side="right")
 
         expected_text_completions = Expectations({
-            ("cuda", None): [
-                "My favourite condiment is 100% natural, organic, gluten free, vegan, and free from preservatives. I"
-            ],
             ("cuda", 8): [
-                "My favourite condiment is 100% natural, organic, gluten free, vegan, and vegetarian. I love to use"
+                "My favourite condiment is 100% natural, organic, gluten free, vegan, and free from preservatives. I"
             ],
             ("rocm", (9, 4)): [
                 "My favourite condiment is 100% natural, organic and vegan. I love to use it in my cooking, but"

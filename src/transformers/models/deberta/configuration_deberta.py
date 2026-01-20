@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020, Microsoft and the HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,7 +22,7 @@ logger = logging.get_logger(__name__)
 
 class DebertaConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`DebertaModel`] or a [`TFDebertaModel`]. It is
+    This is the configuration class to store the configuration of a [`DebertaModel`]. It is
     used to instantiate a DeBERTa model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the DeBERTa
     [microsoft/deberta-base](https://huggingface.co/microsoft/deberta-base) architecture.
@@ -34,7 +33,7 @@ class DebertaConfig(PreTrainedConfig):
     Arguments:
         vocab_size (`int`, *optional*, defaults to 50265):
             Vocabulary size of the DeBERTa model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`DebertaModel`] or [`TFDebertaModel`].
+            `inputs_ids` passed when calling [`DebertaModel`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):
@@ -55,7 +54,7 @@ class DebertaConfig(PreTrainedConfig):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         type_vocab_size (`int`, *optional*, defaults to 0):
-            The vocabulary size of the `token_type_ids` passed when calling [`DebertaModel`] or [`TFDebertaModel`].
+            The vocabulary size of the `token_type_ids` passed when calling [`DebertaModel`].
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
@@ -112,11 +111,14 @@ class DebertaConfig(PreTrainedConfig):
         relative_attention=False,
         max_relative_positions=-1,
         pad_token_id=0,
+        bos_token_id=None,
+        eos_token_id=None,
         position_biased_input=True,
         pos_att_type=None,
         pooler_dropout=0,
         pooler_hidden_act="gelu",
         legacy=True,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -134,6 +136,9 @@ class DebertaConfig(PreTrainedConfig):
         self.relative_attention = relative_attention
         self.max_relative_positions = max_relative_positions
         self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
         self.position_biased_input = position_biased_input
 
         # Backwards compatibility

@@ -127,7 +127,10 @@ class MixedInt8Test(BaseMixedInt8Test):
         # Models and tokenizer
         self.model_fp16 = AutoModelForCausalLM.from_pretrained(self.model_name, dtype=torch.float16, device_map="auto")
         self.model_8bit = AutoModelForCausalLM.from_pretrained(
-            self.model_name, quantization_config=BitsAndBytesConfig(load_in_8bit=True), device_map="auto"
+            self.model_name,
+            dtype=torch.float16,
+            quantization_config=BitsAndBytesConfig(load_in_8bit=True),
+            device_map="auto",
         )
 
     def tearDown(self):
@@ -145,21 +148,20 @@ class MixedInt8Test(BaseMixedInt8Test):
         r"""
         Test the `get_keys_to_not_convert` function.
         """
-        from accelerate import init_empty_weights
 
         from transformers import AutoModelForMaskedLM, Blip2ForConditionalGeneration, MptForCausalLM, OPTForCausalLM
         from transformers.quantizers.base import get_keys_to_not_convert
 
         model_id = "mosaicml/mpt-7b"
         config = AutoConfig.from_pretrained(model_id, revision="72e5f594ce36f9cabfa2a9fd8f58b491eb467ee7")
-        with init_empty_weights():
+        with torch.device("meta"):
             model = MptForCausalLM(config)
         # The order of the keys does not matter, so we sort them before comparing, same for the other tests.
         self.assertEqual(get_keys_to_not_convert(model).sort(), ["lm_head", "transformer.wte"].sort())
 
         model_id = "Salesforce/blip2-opt-2.7b"
         config = AutoConfig.from_pretrained(model_id, revision="1ef7f63a8f0a144c13fdca8103eb7b4691c74cec")
-        with init_empty_weights():
+        with torch.device("meta"):
             model = Blip2ForConditionalGeneration(config)
         self.assertEqual(
             get_keys_to_not_convert(model).sort(),
@@ -168,13 +170,13 @@ class MixedInt8Test(BaseMixedInt8Test):
 
         model_id = "facebook/opt-350m"
         config = AutoConfig.from_pretrained(model_id, revision="cb32f77e905cccbca1d970436fb0f5e6b58ee3c5")
-        with init_empty_weights():
+        with torch.device("meta"):
             model = OPTForCausalLM(config)
         self.assertEqual(get_keys_to_not_convert(model).sort(), ["lm_head", "model.decoder.embed_tokens"].sort())
 
         model_id = "FacebookAI/roberta-large"
         config = AutoConfig.from_pretrained(model_id, revision="716877d372b884cad6d419d828bac6c85b3b18d9")
-        with init_empty_weights():
+        with torch.device("meta"):
             model = AutoModelForMaskedLM.from_config(config)
         self.assertEqual(
             get_keys_to_not_convert(model).sort(),
@@ -193,14 +195,6 @@ class MixedInt8Test(BaseMixedInt8Test):
         _ = config.to_diff_dict()
 
         _ = config.to_json_string()
-
-    def test_original_dtype(self):
-        r"""
-        A simple test to check if the model successfully stores the original dtype
-        """
-        self.assertTrue(hasattr(self.model_8bit.config, "_pre_quantization_dtype"))
-        self.assertFalse(hasattr(self.model_fp16.config, "_pre_quantization_dtype"))
-        self.assertTrue(self.model_8bit.config._pre_quantization_dtype == torch.float16)
 
     def test_memory_footprint(self):
         r"""
@@ -306,17 +300,10 @@ class MixedInt8Test(BaseMixedInt8Test):
         The test ensures that such operations are prohibited on 8-bit models
         to prevent invalid conversions.
         """
-        with self.assertRaises(ValueError):
-            # Tries with `str`
-            self.model_8bit.to("cpu")
 
         with self.assertRaises(ValueError):
             # Tries with a `dtype``
             self.model_8bit.to(torch.float16)
-
-        with self.assertRaises(ValueError):
-            # Tries with a `device`
-            self.model_8bit.to(torch.device(torch_device))
 
         with self.assertRaises(ValueError):
             # Tries to cast the 8-bit model to float32 using `float()`
@@ -325,6 +312,10 @@ class MixedInt8Test(BaseMixedInt8Test):
         with self.assertRaises(ValueError):
             # Tries to cast the 4-bit model to float16 using `half()`
             self.model_8bit.half()
+
+        # works now with 0.48.0 in bnb
+        self.model_8bit.to("cpu")
+        self.model_8bit.to(torch.device(torch_device))
 
         # Test if we did not break anything
         encoded_input = self.tokenizer(self.input_text, return_tensors="pt")
@@ -427,6 +418,52 @@ class MixedInt8Test(BaseMixedInt8Test):
         output_sequences = model.generate(input_ids=encoded_input["input_ids"].to(torch_device), max_new_tokens=10)
 
         self.assertIn(self.tokenizer.decode(output_sequences[0], skip_special_tokens=True), self.EXPECTED_OUTPUTS)
+
+    def test_compute_module_sizes(self):
+        r"""
+        Test if we compute the right module sizes needed to generate the device map.
+        Also test if we get the right values for `total_byte_count` in `caching_allocator_warmup`.
+        """
+        from transformers.integrations.accelerate import compute_module_sizes
+        from transformers.modeling_utils import expand_device_map, get_total_byte_count
+        from transformers.quantizers import AutoHfQuantizer
+
+        # we need to preprocess the model like that because device_map calculation happens before we load the weights inside the model.
+        # For normal wieghts, it's fine but for quantized weights, the tensors dtype might change during loading.
+        with torch.device("meta"):
+            model = AutoModelForCausalLM.from_config(self.model_fp16.config, dtype=torch.float16)
+            model_size, _ = compute_module_sizes(model, only_modules=False)
+
+            expected_keys = [name for name, _ in model.named_parameters()] + [
+                name for name, _ in model.named_buffers()
+            ]
+            expanded_device_map = expand_device_map({"": torch_device}, expected_keys)
+            total_byte_count = list(get_total_byte_count(model, expanded_device_map).values())[0]
+
+            # testing prequantized = False should be enough, the shape should be the same whether it is pre-quantized or not
+            hf_quantizer = AutoHfQuantizer.from_config(BitsAndBytesConfig(load_in_8bit=True), pre_quantized=False)
+            hf_quantizer.preprocess_model(model=model, config=model.config, device_map=expanded_device_map)
+            quantized_model_size, _ = compute_module_sizes(model, hf_quantizer, only_modules=False)
+
+            expected_keys = [name for name, _ in model.named_parameters()] + [
+                name for name, _ in model.named_buffers()
+            ]
+            expanded_device_map = expand_device_map({"": torch_device}, expected_keys)
+            quantized_total_byte_count = list(get_total_byte_count(model, expanded_device_map, hf_quantizer).values())[
+                0
+            ]
+
+        for name, module in model.named_modules():
+            if isinstance(module, bnb.nn.Linear8bitLt):
+                # from 16 bits to 8 bits
+                assert int(model_size[f"{name}.weight"] // 2) == int(quantized_model_size[f"{name}.weight"])
+
+        # check that we get the same value, as we use `compute_module_sizes` in `get_total_byte_count`
+        assert total_byte_count == model_size[""]
+        assert quantized_total_byte_count == quantized_model_size[""]
+
+        # we should at least have 1.5 times memory reduction in total
+        assert model_size[""] > quantized_model_size[""] * 1.5
 
 
 @require_bitsandbytes

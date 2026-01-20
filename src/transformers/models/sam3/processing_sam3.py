@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,14 +16,13 @@ Processor class for SAM3.
 """
 
 from copy import deepcopy
-from typing import Optional, Union
 
 import numpy as np
 
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding, PreTokenizedInput, TextInput
-from ...utils import TensorType, is_torch_available, logging
+from ...utils import TensorType, auto_docstring, is_torch_available, logging
 from ...utils.import_utils import requires
 
 
@@ -85,63 +83,46 @@ def box_area(boxes):
 
 
 @requires(backends=("torch",))
+@auto_docstring
 class Sam3Processor(ProcessorMixin):
-    r"""
-    Constructs a SAM3 processor which wraps a SAM3 image processor and bounding boxes processing into a
-    single processor.
-
-    [`Sam2Processor`] offers all the functionalities of [`Sam2ImageProcessorFast`] and [`Sam2VideoProcessor`]. See the docstring of
-    [`~Sam2ImageProcessorFast.__call__`] and [`~Sam2VideoProcessor.__call__`] for more information.
-
-    Args:
-        image_processor (`Sam2ImageProcessorFast`):
-            An instance of [`Sam2ImageProcessorFast`].
-        tokenizer ([`PreTrainedTokenizer`, `PreTrainedTokenizerFast`]):
-            An instance of [`PreTrainedTokenizer`, `PreTrainedTokenizerFast`]. The tokenizer is a required input.
+    def __init__(
+        self, image_processor, tokenizer, target_size: int | None = None, point_pad_value: int = -10, **kwargs
+    ):
+        r"""
         target_size (`int`, *optional*):
             The target size (target_size, target_size) to which the image will be resized.
         point_pad_value (`int`, *optional*, defaults to -10):
             The value used for padding input boxes.
-    """
-
-    def __init__(
-        self, image_processor, tokenizer, target_size: Optional[int] = None, point_pad_value: int = -10, **kwargs
-    ):
+        """
         super().__init__(image_processor, tokenizer, **kwargs)
         self.point_pad_value = point_pad_value
         self.target_size = target_size if target_size is not None else self.image_processor.size["height"]
 
+    @auto_docstring
     def __call__(
         self,
-        images: Optional[ImageInput] = None,
-        text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
-        segmentation_maps: Optional[ImageInput] = None,
-        input_boxes: Optional[Union[list[list[list[float]]], torch.Tensor]] = None,
-        input_boxes_labels: Optional[Union[list[list[list[int]]], torch.Tensor]] = None,
-        original_sizes: Optional[Union[list[list[float]], torch.Tensor]] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        segmentation_maps: ImageInput | None = None,
+        input_boxes: list[list[list[float]]] | torch.Tensor | None = None,
+        input_boxes_labels: list[list[list[int]]] | torch.Tensor | None = None,
+        original_sizes: list[list[float]] | torch.Tensor | None = None,
+        return_tensors: str | TensorType | None = None,
         **kwargs,
     ) -> BatchEncoding:
         r"""
-        This method uses [`Sam3ImageProcessorFast.__call__`] method to prepare image(s) for the model. It also prepares bounding boxes for the model if they are provided.
-
-        Args:
-            images (`ImageInput`, *optional*):
-                The image(s) to process.
-            text (`str`, `list[str]`, `list[list[str]]`, *optional*):
-                The text to process.
-            segmentation_maps (`ImageInput`, *optional*):
-                The segmentation maps to process.
-            input_boxes (`list[list[list[float]]]`, `torch.Tensor`, *optional*):
-                The bounding boxes to process.
-            input_boxes_labels (`list[list[int]]`, `torch.Tensor`, *optional*):
-                The labels for the bounding boxes.
-            original_sizes (`list[list[float]]`, `torch.Tensor`, *optional*):
-                The original sizes of the images.
-            return_tensors (`str` or `TensorType`, *optional*):
-                The type of tensors to return.
-            **kwargs:
-                Additional keyword arguments to pass to the image processor.
+        images (`ImageInput`, *optional*):
+            The image(s) to process.
+        text (`str`, `list[str]`, `list[list[str]]`, *optional*):
+            The text to process.
+        segmentation_maps (`ImageInput`, *optional*):
+            The segmentation maps to process.
+        input_boxes (`list[list[list[float]]]`, `torch.Tensor`, *optional*):
+            The bounding boxes to process.
+        input_boxes_labels (`list[list[int]]`, `torch.Tensor`, *optional*):
+            The labels for the bounding boxes.
+        original_sizes (`list[list[float]]`, `torch.Tensor`, *optional*):
+            The original sizes of the images.
 
         Returns:
             A [`BatchEncoding`] with the following fields:
@@ -151,8 +132,9 @@ class Sam3Processor(ProcessorMixin):
             - `input_boxes_labels` (`torch.Tensor`): The processed labels for the bounding boxes.
             - `input_boxes` (`torch.Tensor`): The processed bounding boxes.
         """
+        encoding = None
         if images is not None:
-            encoding_image_processor = self.image_processor(
+            encoding = self.image_processor(
                 images,
                 segmentation_maps=segmentation_maps,
                 return_tensors=return_tensors,
@@ -161,24 +143,21 @@ class Sam3Processor(ProcessorMixin):
         elif original_sizes is not None:
             if isinstance(original_sizes, torch.Tensor):
                 original_sizes = original_sizes.cpu().tolist()
-            encoding_image_processor = BatchEncoding({"original_sizes": original_sizes}, tensor_type=return_tensors)
-        else:
-            raise ValueError("Either images or original_sizes must be provided")
+            encoding = BatchEncoding({"original_sizes": original_sizes}, tensor_type=return_tensors)
+        elif input_boxes is not None:
+            raise ValueError("Either images or original_sizes must be provided if input_boxes is not None")
 
-        original_sizes = encoding_image_processor["original_sizes"]
-        # Check original_sizes is of length 1 or len(images)
-        if images is not None and len(original_sizes) != 1 and len(original_sizes) != len(images):
-            raise ValueError(
-                "original_sizes must be of length 1 or len(images). If you are passing a single image, you must pass a single original_size."
-            )
         text = self._resolve_text_prompts(text, input_boxes)
-
-        encoding_image_processor.update(
-            self.tokenizer(text, return_tensors=return_tensors, padding="max_length", max_length=32)
-        )
+        if text is not None:
+            text_inputs = self.tokenizer(text, return_tensors=return_tensors, padding="max_length", max_length=32)
+            if encoding is not None:
+                encoding.update(text_inputs)
+            else:
+                encoding = text_inputs
 
         # Process input boxes if provided
         if input_boxes is not None:
+            original_sizes = encoding["original_sizes"]
             # Validate and convert inputs to standardized format
             processed_boxes = self._validate_single_input(
                 input_boxes,
@@ -215,14 +194,14 @@ class Sam3Processor(ProcessorMixin):
                     final_boxes, original_sizes, is_bounding_box=True, preserve_padding=True
                 )
                 final_boxes = box_xyxy_to_cxcywh(final_boxes)
-                encoding_image_processor.update({"input_boxes": final_boxes})
+                encoding.update({"input_boxes": final_boxes})
 
             if processed_boxes_labels is not None:
                 padded_boxes_labels = self._pad_nested_list(processed_boxes_labels, boxes_labels_max_dims)
                 final_boxes_labels = torch.tensor(padded_boxes_labels, dtype=torch.int64)
-                encoding_image_processor.update({"input_boxes_labels": final_boxes_labels})
+                encoding.update({"input_boxes_labels": final_boxes_labels})
 
-        return encoding_image_processor
+        return encoding
 
     def _normalize_coordinates(self, coords: "torch.Tensor", original_size, is_bounding_box=False) -> "torch.Tensor":
         """
@@ -465,11 +444,11 @@ class Sam3Processor(ProcessorMixin):
 
     def _validate_single_input(
         self,
-        data: Union[torch.Tensor, np.ndarray, list],
+        data: torch.Tensor | np.ndarray | list,
         expected_depth: int,
         input_name: str,
         expected_format: str,
-        expected_coord_size: Optional[int] = None,
+        expected_coord_size: int | None = None,
     ) -> list:
         """
                 Validate a single input by ensuring proper nesting and raising an error if the input is not valid.

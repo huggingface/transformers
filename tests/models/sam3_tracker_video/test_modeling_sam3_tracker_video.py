@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 the HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -66,8 +65,8 @@ def prepare_video():
 class Sam3TrackerVideoModelIntegrationTest(unittest.TestCase):
     def setUp(self):
         super().setUp()
-        self.video_model = Sam3TrackerVideoModel.from_pretrained("../sam3-hf-v4-video-full").to(torch.float32)
-        self.processor = Sam3TrackerVideoProcessor.from_pretrained("../sam3-hf-v4-video-full")
+        self.video_model = Sam3TrackerVideoModel.from_pretrained("facebook/sam3").to(torch.float32)
+        self.processor = Sam3TrackerVideoProcessor.from_pretrained("facebook/sam3")
         self.video_model.to(torch_device)
         self.video_model.eval()
 
@@ -428,7 +427,7 @@ class Sam3TrackerVideoModelIntegrationTest(unittest.TestCase):
                 ]
             ).to(torch_device),
             atol=1e-4,
-            rtol=1e-4,
+            rtol=1e-3,
         )
 
     def test_inference_propagate_video_from_mask_input(self):

@@ -28,7 +28,7 @@ from transformers.testing_utils import (
     require_bitsandbytes,
     require_flash_attn,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     slow,
     torch_device,
 )
@@ -110,7 +110,7 @@ class JambaModelTester:
         attn_layer_period=8,
         num_attention_heads=2,
         num_key_value_heads=2,
-        intermediate_size=37,
+        intermediate_size=40,
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
@@ -513,7 +513,7 @@ class JambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
             )
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_bitsandbytes
     @pytest.mark.flash_attn_test
     @slow

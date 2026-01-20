@@ -206,24 +206,6 @@ class ColPaliForRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
             self.assertIsInstance(outputs, ColPaliForRetrievalOutput)
 
     @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
-    @unittest.skip(
         reason="From PaliGemma: Some undefined behavior encountered with test versions of this model. Skip for now."
     )
     def test_model_parallelism(self):
@@ -270,8 +252,8 @@ class ColPaliModelIntegrationTest(unittest.TestCase):
         ds = load_dataset("hf-internal-testing/document-visual-retrieval-test", split="test")
 
         # Preprocess the examples
-        batch_images = self.processor(images=ds["image"]).to(torch_device)
-        batch_queries = self.processor(text=ds["query"]).to(torch_device)
+        batch_images = self.processor(images=ds["image"][:]).to(torch_device)
+        batch_queries = self.processor(text=ds["query"][:]).to(torch_device)
 
         # Run inference
         with torch.inference_mode():

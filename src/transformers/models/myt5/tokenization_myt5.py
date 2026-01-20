@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,9 +17,8 @@ import json
 import os
 import warnings
 from collections import defaultdict
-from typing import Optional, Union
 
-from ...tokenization_utils import AddedToken, PreTrainedTokenizer
+from ...tokenization_python import AddedToken, PreTrainedTokenizer
 from ...utils import logging
 
 
@@ -43,7 +41,7 @@ class ByteRewriter:
 
     LEAF = "[LEAF]"
 
-    def __init__(self, rewriting_rules: Union[str, dict[str, str]]):
+    def __init__(self, rewriting_rules: str | dict[str, str]):
         if isinstance(rewriting_rules, str):
             with open(rewriting_rules, "r") as f:
                 rewriting_rules = json.load(f)
@@ -56,7 +54,7 @@ class ByteRewriter:
         reverse_rewriting_rules = {v: k for k, v in rewriting_rules.items()}
         self.reverse_hash_tree = self.construct_hash_tree(reverse_rewriting_rules)
 
-    def add_leaf(self, hash_tree: dict[str, Union[dict, list[str]]], byte_in_sequence: str, byte_out_sequence: str):
+    def add_leaf(self, hash_tree: dict[str, dict | list[str]], byte_in_sequence: str, byte_out_sequence: str):
         """
         Add a leaf with the output byte sequence to the hash tree.
         """
@@ -71,7 +69,7 @@ class ByteRewriter:
 
         tree_pointer[self.LEAF] = byte_out_list
 
-    def construct_hash_tree(self, rewriting_rules: dict[str, str]) -> dict[str, Union[dict, list[str]]]:
+    def construct_hash_tree(self, rewriting_rules: dict[str, str]) -> dict[str, dict | list[str]]:
         """
         Construct a hash tree for rewritten byte sequences.
         """
@@ -84,7 +82,7 @@ class ByteRewriter:
 
         return hash_tree
 
-    def search_hash_tree(self, byte_sequence: list[str]) -> Union[None, list[str]]:
+    def search_hash_tree(self, byte_sequence: list[str]) -> None | list[str]:
         """
         Search the hash tree and return the rewritten byte sequence if found.
         """
@@ -220,7 +218,7 @@ class MyT5Tokenizer(PreTrainedTokenizer):
 
     # Copied from transformers.models.byt5.tokenization_byt5.ByT5Tokenizer.get_special_tokens_mask
     def get_special_tokens_mask(
-        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None, already_has_special_tokens: bool = False
+        self, token_ids_0: list[int], token_ids_1: list[int] | None = None, already_has_special_tokens: bool = False
     ) -> list[int]:
         """
         Retrieve sequence ids from a token list that has no special tokens added. This method is called when adding
@@ -259,7 +257,7 @@ class MyT5Tokenizer(PreTrainedTokenizer):
             return token_ids + [self.eos_token_id]
 
     def create_token_type_ids_from_sequences(
-        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+        self, token_ids_0: list[int], token_ids_1: list[int] | None = None
     ) -> list[int]:
         """
         Create a mask from the two sequences passed to be used in a sequence-pair classification task. MyT5 does not
@@ -282,7 +280,7 @@ class MyT5Tokenizer(PreTrainedTokenizer):
 
     # Copied from transformers.models.byt5.tokenization_byt5.ByT5Tokenizer.build_inputs_with_special_tokens
     def build_inputs_with_special_tokens(
-        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+        self, token_ids_0: list[int], token_ids_1: list[int] | None = None
     ) -> list[int]:
         """
         Build model inputs from a sequence or a pair of sequence for sequence classification tasks by concatenating and
@@ -365,7 +363,7 @@ class MyT5Tokenizer(PreTrainedTokenizer):
         string = bstring.decode("utf-8", errors="ignore")
         return string
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: str | None = None) -> tuple[str]:
         if os.path.isdir(save_directory):
             vocab_file = os.path.join(
                 save_directory, (filename_prefix + "-" if filename_prefix else "") + VOCAB_FILES_NAMES["vocab_file"]

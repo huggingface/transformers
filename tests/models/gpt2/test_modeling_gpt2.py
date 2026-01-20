@@ -22,7 +22,7 @@ from transformers.testing_utils import (
     cleanup,
     require_flash_attn,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     slow,
     torch_device,
 )
@@ -171,6 +171,7 @@ class GPT2ModelTest(CausalLMModelTest, unittest.TestCase):
     )
     test_missing_keys = False
     model_tester_class = GPT2ModelTester
+    model_split_percents = [0.5, 0.6, 0.7]
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
         # Overwritten: special case for DoubleHeads model
@@ -267,18 +268,18 @@ class GPT2ModelTest(CausalLMModelTest, unittest.TestCase):
         super().test_training_gradient_checkpointing()
         self.all_model_classes = self.original_all_model_classes
 
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        # overwritten: GPT2DoubleHeadsModel fails this test, non-standard class
-        self.original_all_model_classes = self.all_model_classes
-        self.all_model_classes = (cls for cls in self.all_model_classes if cls.__name__ != "GPT2DoubleHeadsModel")
-        super().test_training_gradient_checkpointing_use_reentrant()
-        self.all_model_classes = self.original_all_model_classes
-
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         # overwritten: GPT2DoubleHeadsModel fails this test, non-standard class
         self.original_all_model_classes = self.all_model_classes
         self.all_model_classes = (cls for cls in self.all_model_classes if cls.__name__ != "GPT2DoubleHeadsModel")
         super().test_training_gradient_checkpointing_use_reentrant_false()
+        self.all_model_classes = self.original_all_model_classes
+
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        # overwritten: GPT2DoubleHeadsModel fails this test, non-standard class
+        self.original_all_model_classes = self.all_model_classes
+        self.all_model_classes = (cls for cls in self.all_model_classes if cls.__name__ != "GPT2DoubleHeadsModel")
+        super().test_training_gradient_checkpointing_use_reentrant_true()
         self.all_model_classes = self.original_all_model_classes
 
 
@@ -409,7 +410,7 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
         )
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @pytest.mark.flash_attn_test
     @slow
     def test_flash_attn_2_generate_padding_left(self):
@@ -437,10 +438,18 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
         output_fa_2 = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         output_fa_2 = tokenizer.batch_decode(output_fa_2)
 
-        expected_output = [
-            "<|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|>hi, who was born in the city of Kolkata, was a member of the Kolkata",
-            "Hello this is a very long sentence. I'm sorry. I'm sorry. I'm sorry. I'm sorry. I'm sorry",
-        ]
+        expected_output = Expectations(
+            {
+                ("cuda", (8, 6)): [
+                    "<|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|>hi, who was born in the city of Kolkata, was a member of the Kolkata",
+                    "Hello this is a very long sentence. I'm sorry. I'm sorry. I'm sorry. I'm sorry. I'm sorry",
+                ],
+                ("rocm", (9, 4)): [
+                    '<|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|><|endoftext|>hi, who was also a member of the group, said: "We are very happy to have been',
+                    "Hello this is a very long sentence. I'm sorry. I'm sorry. I'm sorry. I'm sorry. I'm sorry",
+                ],
+            }
+        ).get_expectation()
 
         self.assertListEqual(output_native, output_fa_2)
         self.assertListEqual(output_native, expected_output)
@@ -452,6 +461,7 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
         tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
 
         tokenizer.padding_side = "left"
+        max_length = 20
 
         # Define PAD Token = EOS Token = 50256
         tokenizer.pad_token = tokenizer.eos_token
@@ -476,22 +486,22 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
         outputs = model.generate(
             input_ids=input_ids,
             attention_mask=inputs["attention_mask"].to(torch_device),
-            max_length=20,
+            max_length=max_length,
         )
 
         outputs_tt = model.generate(
             input_ids=input_ids,
             attention_mask=inputs["attention_mask"].to(torch_device),
             token_type_ids=token_type_ids,
-            max_length=20,
+            max_length=max_length,
         )
 
         inputs_non_padded = tokenizer(sentences[0], return_tensors="pt").input_ids.to(torch_device)
-        output_non_padded = model.generate(input_ids=inputs_non_padded, max_length=20)
+        output_non_padded = model.generate(input_ids=inputs_non_padded, max_length=max_length)
 
         num_paddings = inputs_non_padded.shape[-1] - inputs["attention_mask"][-1].long().sum().item()
         inputs_padded = tokenizer(sentences[1], return_tensors="pt").input_ids.to(torch_device)
-        output_padded = model.generate(input_ids=inputs_padded, max_length=model.config.max_length - num_paddings)
+        output_padded = model.generate(input_ids=inputs_padded, max_length=max_length - num_paddings)
 
         batch_out_sentence = tokenizer.batch_decode(outputs, skip_special_tokens=True)
         batch_out_sentence_tt = tokenizer.batch_decode(outputs_tt, skip_special_tokens=True)
@@ -513,6 +523,7 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
         tokenizer = GPT2Tokenizer.from_pretrained("openai-community/gpt2")
 
         tokenizer.padding_side = "left"
+        max_length = 20
 
         # This tokenizer has no pad token, so we have to set it in some way
         # Define PAD Token = EOS Token = 50256
@@ -538,22 +549,22 @@ class GPT2ModelLanguageGenerationTest(unittest.TestCase):
         outputs = model.generate(
             input_ids=input_ids,
             attention_mask=inputs["attention_mask"].to(torch_device),
-            max_length=20,
+            max_length=max_length,
         )
 
         outputs_tt = model.generate(
             input_ids=input_ids,
             attention_mask=inputs["attention_mask"].to(torch_device),
             token_type_ids=token_type_ids,
-            max_length=20,
+            max_length=max_length,
         )
 
         inputs_non_padded = tokenizer(sentences[0], return_tensors="pt").input_ids.to(torch_device)
-        output_non_padded = model.generate(input_ids=inputs_non_padded, max_length=20)
+        output_non_padded = model.generate(input_ids=inputs_non_padded, max_length=max_length)
 
         num_paddings = inputs_non_padded.shape[-1] - inputs["attention_mask"][-1].long().sum().item()
         inputs_padded = tokenizer(sentences[1], return_tensors="pt").input_ids.to(torch_device)
-        output_padded = model.generate(input_ids=inputs_padded, max_length=model.config.max_length - num_paddings)
+        output_padded = model.generate(input_ids=inputs_padded, max_length=max_length - num_paddings)
 
         batch_out_sentence = tokenizer.batch_decode(outputs, skip_special_tokens=True)
         batch_out_sentence_tt = tokenizer.batch_decode(outputs_tt, skip_special_tokens=True)

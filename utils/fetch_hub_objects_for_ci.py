@@ -178,17 +178,17 @@ if __name__ == "__main__":
                 local_dir="tiny-random-custom-architecture",
             )
 
-        # For `tests/test_tokenization_mistral_common.py:TestMistralCommonTokenizer`, which eventually calls
+        # For `tests/test_tokenization_mistral_common.py:TestMistralCommonBackend`, which eventually calls
         # `mistral_common.tokens.tokenizers.utils.download_tokenizer_from_hf_hub` which (probably) doesn't have the cache.
         if is_mistral_common_available():
             from mistral_common.tokens.tokenizers.mistral import MistralTokenizer
 
             from transformers import AutoTokenizer
-            from transformers.tokenization_mistral_common import MistralCommonTokenizer
+            from transformers.tokenization_mistral_common import MistralCommonBackend
 
             repo_id = "hf-internal-testing/namespace-mistralai-repo_name-Mistral-Small-3.1-24B-Instruct-2503"
             AutoTokenizer.from_pretrained(repo_id, tokenizer_type="mistral")
-            MistralCommonTokenizer.from_pretrained(repo_id)
+            MistralCommonBackend.from_pretrained(repo_id)
             MistralTokenizer.from_hf_hub(repo_id)
 
             repo_id = "mistralai/Voxtral-Mini-3B-2507"

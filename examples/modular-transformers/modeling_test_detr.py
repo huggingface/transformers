@@ -4,15 +4,16 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_test_detr.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+
 import math
 import warnings
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...integrations import use_kernel_forward_from_hub
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
@@ -105,12 +106,12 @@ class TestDetrDecoderOutput(ModelOutput):
         used to compute the weighted average in the cross-attention heads.
     """
 
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    intermediate_hidden_states: Optional[torch.FloatTensor] = None
-    intermediate_reference_points: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
-    cross_attentions: Optional[tuple[torch.FloatTensor]] = None
+    last_hidden_state: torch.FloatTensor | None = None
+    intermediate_hidden_states: torch.FloatTensor | None = None
+    intermediate_reference_points: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
+    cross_attentions: tuple[torch.FloatTensor] | None = None
 
 
 @dataclass
@@ -137,18 +138,18 @@ class TestDetrModelOutput(ModelOutput):
         Logits of predicted bounding boxes coordinates in the first stage.
     """
 
-    init_reference_points: Optional[torch.FloatTensor] = None
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    intermediate_hidden_states: Optional[torch.FloatTensor] = None
-    intermediate_reference_points: Optional[torch.FloatTensor] = None
-    decoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    decoder_attentions: Optional[tuple[torch.FloatTensor]] = None
-    cross_attentions: Optional[tuple[torch.FloatTensor]] = None
-    encoder_last_hidden_state: Optional[torch.FloatTensor] = None
-    encoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    encoder_attentions: Optional[tuple[torch.FloatTensor]] = None
-    enc_outputs_class: Optional[torch.FloatTensor] = None
-    enc_outputs_coord_logits: Optional[torch.FloatTensor] = None
+    init_reference_points: torch.FloatTensor | None = None
+    last_hidden_state: torch.FloatTensor | None = None
+    intermediate_hidden_states: torch.FloatTensor | None = None
+    intermediate_reference_points: torch.FloatTensor | None = None
+    decoder_hidden_states: tuple[torch.FloatTensor] | None = None
+    decoder_attentions: tuple[torch.FloatTensor] | None = None
+    cross_attentions: tuple[torch.FloatTensor] | None = None
+    encoder_last_hidden_state: torch.FloatTensor | None = None
+    encoder_hidden_states: tuple[torch.FloatTensor] | None = None
+    encoder_attentions: tuple[torch.FloatTensor] | None = None
+    enc_outputs_class: torch.FloatTensor | None = None
+    enc_outputs_coord_logits: torch.FloatTensor | None = None
 
 
 class TestDetrFrozenBatchNorm2d(nn.Module):
@@ -203,10 +204,10 @@ def replace_batch_norm(model):
             new_module = TestDetrFrozenBatchNorm2d(module.num_features)
 
             if module.weight.device != torch.device("meta"):
-                new_module.weight.data.copy_(module.weight)
-                new_module.bias.data.copy_(module.bias)
-                new_module.running_mean.data.copy_(module.running_mean)
-                new_module.running_var.data.copy_(module.running_var)
+                new_module.weight.copy_(module.weight)
+                new_module.bias.copy_(module.bias)
+                new_module.running_mean.copy_(module.running_mean)
+                new_module.running_var.copy_(module.running_var)
 
             model._modules[name] = new_module
 
@@ -405,16 +406,16 @@ class TestDetrMultiscaleDeformableAttention(nn.Module):
 
         self.disable_custom_kernels = config.disable_custom_kernels
 
-    def with_pos_embed(self, tensor: torch.Tensor, position_embeddings: Optional[Tensor]):
+    def with_pos_embed(self, tensor: torch.Tensor, position_embeddings: Tensor | None):
         return tensor if position_embeddings is None else tensor + position_embeddings
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
-        position_embeddings: Optional[torch.Tensor] = None,
+        position_embeddings: torch.Tensor | None = None,
         reference_points=None,
         spatial_shapes=None,
         spatial_shapes_list=None,
@@ -512,16 +513,16 @@ class TestDetrMultiheadAttention(nn.Module):
     def _shape(self, tensor: torch.Tensor, seq_len: int, batch_size: int):
         return tensor.view(batch_size, seq_len, self.num_heads, self.head_dim).transpose(1, 2).contiguous()
 
-    def with_pos_embed(self, tensor: torch.Tensor, position_embeddings: Optional[Tensor]):
+    def with_pos_embed(self, tensor: torch.Tensor, position_embeddings: Tensor | None):
         return tensor if position_embeddings is None else tensor + position_embeddings
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_embeddings: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
+        position_embeddings: torch.Tensor | None = None,
         output_attentions: bool = False,
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         """Input shape: Batch x Time x Channel"""
 
         batch_size, target_len, embed_dim = hidden_states.size()
@@ -624,7 +625,7 @@ class TestDetrEncoderLayer(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
-        position_embeddings: Optional[torch.Tensor] = None,
+        position_embeddings: torch.Tensor | None = None,
         reference_points=None,
         spatial_shapes=None,
         spatial_shapes_list=None,
@@ -723,14 +724,14 @@ class TestDetrDecoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Optional[torch.Tensor] = None,
+        position_embeddings: torch.Tensor | None = None,
         reference_points=None,
         spatial_shapes=None,
         spatial_shapes_list=None,
         level_start_index=None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
+        output_attentions: bool | None = False,
     ):
         """
         Args:
@@ -810,6 +811,7 @@ class TestDetrPreTrainedModel(PreTrainedModel):
     config: TestDetrConfig
     base_model_prefix = "model"
     main_input_name = "pixel_values"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = True
     _no_split_modules = [
         r"TestDetrConvEncoder",
@@ -817,14 +819,15 @@ class TestDetrPreTrainedModel(PreTrainedModel):
         r"TestDetrDecoderLayer",
     ]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         std = self.config.init_std
 
         if isinstance(module, TestDetrLearnedPositionEmbedding):
-            nn.init.uniform_(module.row_embeddings.weight)
-            nn.init.uniform_(module.column_embeddings.weight)
+            init.uniform_(module.row_embeddings.weight)
+            init.uniform_(module.column_embeddings.weight)
         elif isinstance(module, TestDetrMultiscaleDeformableAttention):
-            nn.init.constant_(module.sampling_offsets.weight.data, 0.0)
+            init.constant_(module.sampling_offsets.weight, 0.0)
             default_dtype = torch.get_default_dtype()
             thetas = torch.arange(module.n_heads, dtype=torch.int64).to(default_dtype) * (
                 2.0 * math.pi / module.n_heads
@@ -837,27 +840,28 @@ class TestDetrPreTrainedModel(PreTrainedModel):
             )
             for i in range(module.n_points):
                 grid_init[:, :, i, :] *= i + 1
-            with torch.no_grad():
-                module.sampling_offsets.bias = nn.Parameter(grid_init.view(-1))
-            nn.init.constant_(module.attention_weights.weight.data, 0.0)
-            nn.init.constant_(module.attention_weights.bias.data, 0.0)
-            nn.init.xavier_uniform_(module.value_proj.weight.data)
-            nn.init.constant_(module.value_proj.bias.data, 0.0)
-            nn.init.xavier_uniform_(module.output_proj.weight.data)
-            nn.init.constant_(module.output_proj.bias.data, 0.0)
-        elif isinstance(module, (nn.Linear, nn.Conv2d, nn.BatchNorm2d)):
-            module.weight.normal_(mean=0.0, std=std)
+
+            init.copy_(module.sampling_offsets.bias, grid_init.view(-1))
+            init.constant_(module.attention_weights.weight, 0.0)
+            init.constant_(module.attention_weights.bias, 0.0)
+            init.xavier_uniform_(module.value_proj.weight)
+            init.constant_(module.value_proj.bias, 0.0)
+            init.xavier_uniform_(module.output_proj.weight)
+            init.constant_(module.output_proj.bias, 0.0)
+        elif isinstance(module, (nn.Linear, nn.Conv2d)):
+            init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
-            module.weight.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+            init.normal_(module.weight, mean=0.0, std=std)
+            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
+            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
+                init.zeros_(module.weight[module.padding_idx])
         if hasattr(module, "reference_points") and not self.config.two_stage:
-            nn.init.xavier_uniform_(module.reference_points.weight.data, gain=1.0)
-            nn.init.constant_(module.reference_points.bias.data, 0.0)
+            init.xavier_uniform_(module.reference_points.weight, gain=1.0)
+            init.constant_(module.reference_points.bias, 0.0)
         if hasattr(module, "level_embed"):
-            nn.init.normal_(module.level_embed)
+            init.normal_(module.level_embed)
 
 
 class TestDetrEncoder(TestDetrPreTrainedModel):
@@ -924,6 +928,7 @@ class TestDetrEncoder(TestDetrPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        **kwargs,
     ):
         r"""
         Args:
@@ -1046,6 +1051,7 @@ class TestDetrDecoder(TestDetrPreTrainedModel):
         output_attentions=None,
         output_hidden_states=None,
         return_dict=None,
+        **kwargs,
     ):
         r"""
         Args:
@@ -1267,9 +1273,6 @@ class TestDetrModel(TestDetrPreTrainedModel):
 
         self.post_init()
 
-    def get_encoder(self):
-        return self.encoder
-
     def freeze_backbone(self):
         for name, param in self.backbone.conv_encoder.model.named_parameters():
             param.requires_grad_(False)
@@ -1371,15 +1374,16 @@ class TestDetrModel(TestDetrPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        pixel_mask: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.FloatTensor] = None,
-        encoder_outputs: Optional[torch.FloatTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple[torch.FloatTensor], TestDetrModelOutput]:
+        pixel_mask: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.FloatTensor | None = None,
+        encoder_outputs: torch.FloatTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple[torch.FloatTensor] | TestDetrModelOutput:
         r"""
         decoder_attention_mask (`torch.FloatTensor` of shape `(batch_size, num_queries)`, *optional*):
             Not used by default. Can be used to mask object queries.

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,7 +21,7 @@ python utils/update_metadata.py --token <token> --commit_sha <commit_sha>
 ```
 
 Usage to check all pipelines are properly defined in the constant `PIPELINE_TAGS_AND_AUTO_MODELS` of this script, so
-that new pipelines are properly added as metadata (as used in `make repo-consistency`):
+that new pipelines are properly added as metadata (as used in `make check-repo`):
 
 ```bash
 python utils/update_metadata.py --check-only
@@ -66,6 +65,7 @@ PIPELINE_TAGS_AND_AUTO_MODELS = [
     ("image-classification", "MODEL_FOR_IMAGE_CLASSIFICATION_MAPPING_NAMES", "AutoModelForImageClassification"),
     ("image-segmentation", "MODEL_FOR_IMAGE_SEGMENTATION_MAPPING_NAMES", "AutoModelForImageSegmentation"),
     ("image-text-to-text", "MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES", "AutoModelForImageTextToText"),
+    ("any-to-any", "MODEL_FOR_MULTIMODAL_LM_MAPPING_NAMES", "AutoModelForMultimodalLM"),
     ("image-to-image", "MODEL_FOR_IMAGE_TO_IMAGE_MAPPING_NAMES", "AutoModelForImageToImage"),
     ("fill-mask", "MODEL_FOR_MASKED_LM_MAPPING_NAMES", "AutoModelForMaskedLM"),
     ("object-detection", "MODEL_FOR_OBJECT_DETECTION_MAPPING_NAMES", "AutoModelForObjectDetection"),
@@ -106,7 +106,7 @@ PIPELINE_TAGS_AND_AUTO_MODELS = [
         "MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING_NAMES",
         "AutoModelForVisualQuestionAnswering",
     ),
-    ("image-to-text", "MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES", "AutoModelForVision2Seq"),
+    ("image-to-text", "MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES", "AutoModelForImageTextToText"),
     (
         "zero-shot-image-classification",
         "MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES",

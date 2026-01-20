@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The Fairseq Authors and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -38,7 +37,7 @@ class Wav2Vec2Config(PreTrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 32):
             Vocabulary size of the Wav2Vec2 model. Defines the number of different tokens that can be represented by
-            the `inputs_ids` passed when calling [`Wav2Vec2Model`] or [`TFWav2Vec2Model`]. Vocabulary size of the
+            the `inputs_ids` passed when calling [`Wav2Vec2Model`]. Vocabulary size of the
             model. Defines the different tokens that can be represented by the *inputs_ids* passed to the forward
             method of [`Wav2Vec2Model`].
         hidden_size (`int`, *optional*, defaults to 768):
@@ -260,7 +259,10 @@ class Wav2Vec2Config(PreTrainedConfig):
         adapter_attn_dim=None,
         **kwargs,
     ):
-        super().__init__(**kwargs, pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id)
+        super().__init__(**kwargs)
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
         self.hidden_size = hidden_size
         self.feat_extract_norm = feat_extract_norm
         self.feat_extract_activation = feat_extract_activation

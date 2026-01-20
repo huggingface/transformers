@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -35,7 +34,7 @@ class RoFormerConfig(PreTrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 50000):
             Vocabulary size of the RoFormer model. Defines the number of different tokens that can be represented by
-            the `inputs_ids` passed when calling [`RoFormerModel`] or [`TFRoFormerModel`].
+            the `inputs_ids` passed when calling [`RoFormerModel`].
         embedding_size (`int`, *optional*, defaults to None):
             Dimensionality of the encoder layers and the pooler layer. Defaults to the `hidden_size` if not provided.
         hidden_size (`int`, *optional*, defaults to 768):
@@ -57,7 +56,7 @@ class RoFormerConfig(PreTrainedConfig):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 1536).
         type_vocab_size (`int`, *optional*, defaults to 2):
-            The vocabulary size of the `token_type_ids` passed when calling [`RoFormerModel`] or [`TFRoFormerModel`].
+            The vocabulary size of the `token_type_ids` passed when calling [`RoFormerModel`].
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
@@ -103,12 +102,23 @@ class RoFormerConfig(PreTrainedConfig):
         initializer_range=0.02,
         layer_norm_eps=1e-12,
         pad_token_id=0,
+        bos_token_id=None,
+        eos_token_id=None,
         rotary_value=False,
         use_cache=True,
+        is_decoder=False,
+        add_cross_attention=False,
+        tie_word_embeddings=True,
         **kwargs,
     ):
-        super().__init__(pad_token_id=pad_token_id, **kwargs)
+        super().__init__(**kwargs)
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
 
+        self.is_decoder = is_decoder
+        self.add_cross_attention = add_cross_attention
         self.vocab_size = vocab_size
         self.embedding_size = hidden_size if embedding_size is None else embedding_size
         self.hidden_size = hidden_size

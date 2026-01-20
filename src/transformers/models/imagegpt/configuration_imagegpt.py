@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,7 +22,7 @@ logger = logging.get_logger(__name__)
 
 class ImageGPTConfig(PreTrainedConfig):
     """
-    This is the configuration class to store the configuration of a [`ImageGPTModel`] or a [`TFImageGPTModel`]. It is
+    This is the configuration class to store the configuration of a [`ImageGPTModel`]. It is
     used to instantiate a GPT-2 model according to the specified arguments, defining the model architecture.
     Instantiating a configuration with the defaults will yield a similar configuration to that of the ImageGPT
     [openai/imagegpt-small](https://huggingface.co/openai/imagegpt-small) architecture.
@@ -35,7 +34,7 @@ class ImageGPTConfig(PreTrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 512):
             Vocabulary size of the GPT-2 model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`ImageGPTModel`] or [`TFImageGPTModel`].
+            `inputs_ids` passed when calling [`ImageGPTModel`].
         n_positions (`int`, *optional*, defaults to 32*32):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
@@ -113,8 +112,13 @@ class ImageGPTConfig(PreTrainedConfig):
         tie_word_embeddings=False,
         scale_attn_by_inverse_layer_idx=False,
         reorder_and_upcast_attn=False,
+        add_cross_attention=False,
+        pad_token_id=None,
+        bos_token_id=None,
+        eos_token_id=None,
         **kwargs,
     ):
+        self.add_cross_attention = add_cross_attention
         self.vocab_size = vocab_size
         self.n_positions = n_positions
         self.n_embd = n_embd
@@ -131,9 +135,12 @@ class ImageGPTConfig(PreTrainedConfig):
         self.use_cache = use_cache
         self.scale_attn_by_inverse_layer_idx = scale_attn_by_inverse_layer_idx
         self.reorder_and_upcast_attn = reorder_and_upcast_attn
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
         self.tie_word_embeddings = tie_word_embeddings
 
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+        super().__init__(**kwargs)
 
 
 __all__ = ["ImageGPTConfig"]

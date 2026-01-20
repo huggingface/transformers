@@ -22,7 +22,6 @@ from transformers import BitsAndBytesConfig, ChameleonConfig, is_torch_available
 from transformers.testing_utils import (
     Expectations,
     require_bitsandbytes,
-    require_read_token,
     require_torch,
     slow,
     torch_device,
@@ -246,11 +245,12 @@ class ChameleonVision2SeqModelTester(ChameleonModelTester):
 
 
 @require_torch
-class ChameleonVision2SeqModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class ChameleonVision2SeqModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (ChameleonModel, ChameleonForConditionalGeneration) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "image-text-to-text": ChameleonForConditionalGeneration,
+            "any-to-any": ChameleonForConditionalGeneration,
         }
         if is_torch_available()
         else {}
@@ -327,7 +327,6 @@ class ChameleonVision2SeqModelTest(ModelTesterMixin, GenerationTesterMixin, unit
 class ChameleonIntegrationTest(unittest.TestCase):
     @slow
     @require_bitsandbytes
-    @require_read_token
     def test_model_7b(self):
         model = ChameleonForConditionalGeneration.from_pretrained(
             "facebook/chameleon-7b", quantization_config=BitsAndBytesConfig(load_in_4bit=True), device_map="auto"
@@ -357,7 +356,6 @@ class ChameleonIntegrationTest(unittest.TestCase):
 
     @slow
     @require_bitsandbytes
-    @require_read_token
     def test_model_7b_batched(self):
         model = ChameleonForConditionalGeneration.from_pretrained(
             "facebook/chameleon-7b", quantization_config=BitsAndBytesConfig(load_in_4bit=True), device_map="auto"
@@ -404,7 +402,6 @@ class ChameleonIntegrationTest(unittest.TestCase):
 
     @slow
     @require_bitsandbytes
-    @require_read_token
     def test_model_7b_multi_image(self):
         model = ChameleonForConditionalGeneration.from_pretrained(
             "facebook/chameleon-7b", quantization_config=BitsAndBytesConfig(load_in_4bit=True), device_map="auto"

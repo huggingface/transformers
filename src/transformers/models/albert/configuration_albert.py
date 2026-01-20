@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 The Google AI Language Team Authors and The HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
@@ -20,7 +19,7 @@ from ...configuration_utils import PreTrainedConfig
 
 class AlbertConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`AlbertModel`] or a [`TFAlbertModel`]. It is used
+    This is the configuration class to store the configuration of a [`AlbertModel`]. It is used
     to instantiate an ALBERT model according to the specified arguments, defining the model architecture. Instantiating
     a configuration with the defaults will yield a similar configuration to that of the ALBERT
     [albert/albert-xxlarge-v2](https://huggingface.co/albert/albert-xxlarge-v2) architecture.
@@ -31,7 +30,7 @@ class AlbertConfig(PreTrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 30000):
             Vocabulary size of the ALBERT model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`AlbertModel`] or [`TFAlbertModel`].
+            `inputs_ids` passed when calling [`AlbertModel`].
         embedding_size (`int`, *optional*, defaults to 128):
             Dimensionality of vocabulary embeddings.
         hidden_size (`int`, *optional*, defaults to 4096):
@@ -57,7 +56,7 @@ class AlbertConfig(PreTrainedConfig):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             (e.g., 512 or 1024 or 2048).
         type_vocab_size (`int`, *optional*, defaults to 2):
-            The vocabulary size of the `token_type_ids` passed when calling [`AlbertModel`] or [`TFAlbertModel`].
+            The vocabulary size of the `token_type_ids` passed when calling [`AlbertModel`].
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
@@ -70,6 +69,8 @@ class AlbertConfig(PreTrainedConfig):
             Beginning of stream token id.
         eos_token_id (`int`, *optional*, defaults to 3):
             End of stream token id.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
     Examples:
 
@@ -116,9 +117,14 @@ class AlbertConfig(PreTrainedConfig):
         pad_token_id=0,
         bos_token_id=2,
         eos_token_id=3,
+        tie_word_embeddings=True,
         **kwargs,
     ):
-        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+        super().__init__(**kwargs)
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
 
         self.vocab_size = vocab_size
         self.embedding_size = embedding_size

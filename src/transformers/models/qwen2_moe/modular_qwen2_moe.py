@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The Qwen team, Alibaba Group and the HuggingFace Inc. team. All rights reserved.
 #
 # This code is based on EleutherAI's GPT-NeoX library and the GPT-NeoX
@@ -18,8 +17,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """PyTorch Qwen2MoE model."""
-
-from typing import Optional
 
 import torch
 import torch.nn.functional as F
@@ -106,8 +103,8 @@ class Qwen2MoeTopKRouter(nn.Module):
         if self.norm_topk_prob:
             router_top_value /= router_top_value.sum(dim=-1, keepdim=True)
         router_top_value = router_top_value.to(router_logits.dtype)
-        router_scores = torch.zeros_like(router_logits).scatter_(1, router_indices, router_top_value)
-        return router_scores, router_indices
+        router_scores = router_top_value
+        return router_logits, router_scores, router_indices
 
 
 class Qwen2MoeSparseMoeBlock(nn.Module):
@@ -122,7 +119,7 @@ class Qwen2MoeSparseMoeBlock(nn.Module):
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states_reshaped = hidden_states.view(-1, hidden_dim)
         shared_expert_output = self.shared_expert(hidden_states_reshaped)
-        routing_weights, selected_experts = self.gate(hidden_states_reshaped)
+        _, routing_weights, selected_experts = self.gate(hidden_states_reshaped)
         expert_output = self.experts(hidden_states_reshaped, selected_experts, routing_weights)
 
         shared_expert_output = F.sigmoid(self.shared_expert_gate(hidden_states_reshaped)) * shared_expert_output
@@ -166,17 +163,17 @@ class Qwen2MoeModel(MixtralModel):
         self.norm = Qwen2MoeRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = Qwen2MoeRotaryEmbedding(config=config)
 
-    @check_model_inputs()
+    @check_model_inputs
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):

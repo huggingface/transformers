@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -45,6 +44,7 @@ from transformers.testing_utils import (
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -190,10 +190,14 @@ class JanusVisionText2TextModelTester:
 
 
 @require_torch
-class JanusVisionText2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class JanusVisionText2TextModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (JanusModel, JanusForConditionalGeneration) if is_torch_available() else ()
     all_generative_model_classes = (JanusForConditionalGeneration,) if is_torch_available() else ()
-
+    pipeline_model_mapping = (
+        {"any-to-any": JanusForConditionalGeneration, "image-text-to-text": JanusForConditionalGeneration}
+        if is_torch_available()
+        else {}
+    )
     _is_composite = True
 
     def setUp(self):

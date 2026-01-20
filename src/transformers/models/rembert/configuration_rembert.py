@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright The HuggingFace Team and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -35,7 +34,7 @@ class RemBertConfig(PreTrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 250300):
             Vocabulary size of the RemBERT model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`RemBertModel`] or [`TFRemBertModel`]. Vocabulary size of the model.
+            `inputs_ids` passed when calling [`RemBertModel`]. Vocabulary size of the model.
             Defines the different tokens that can be represented by the *inputs_ids* passed to the forward method of
             [`RemBertModel`].
         hidden_size (`int`, *optional*, defaults to 1152):
@@ -63,7 +62,7 @@ class RemBertConfig(PreTrainedConfig):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         type_vocab_size (`int`, *optional*, defaults to 2):
-            The vocabulary size of the `token_type_ids` passed when calling [`RemBertModel`] or [`TFRemBertModel`].
+            The vocabulary size of the `token_type_ids` passed when calling [`RemBertModel`].
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
@@ -112,10 +111,17 @@ class RemBertConfig(PreTrainedConfig):
         pad_token_id=0,
         bos_token_id=312,
         eos_token_id=313,
+        is_decoder=False,
+        add_cross_attention=False,
         **kwargs,
     ):
-        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+        super().__init__(**kwargs)
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
 
+        self.is_decoder = is_decoder
+        self.add_cross_attention = add_cross_attention
         self.vocab_size = vocab_size
         self.input_embedding_size = input_embedding_size
         self.output_embedding_size = output_embedding_size

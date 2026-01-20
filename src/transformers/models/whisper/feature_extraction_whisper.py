@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,8 +14,6 @@
 """
 Feature extractor class for Whisper
 """
-
-from typing import Optional, Union
 
 import numpy as np
 
@@ -191,22 +188,20 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
 
     def __call__(
         self,
-        raw_speech: Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]],
+        raw_speech: np.ndarray | list[float] | list[np.ndarray] | list[list[float]],
         truncation: bool = True,
-        pad_to_multiple_of: Optional[int] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        return_attention_mask: Optional[bool] = None,
-        padding: Optional[str] = "max_length",
-        max_length: Optional[int] = None,
-        sampling_rate: Optional[int] = None,
-        do_normalize: Optional[bool] = None,
-        device: Optional[str] = "cpu",
-        return_token_timestamps: Optional[bool] = None,
+        pad_to_multiple_of: int | None = None,
+        return_tensors: str | TensorType | None = None,
+        return_attention_mask: bool | None = None,
+        padding: str | None = "max_length",
+        max_length: int | None = None,
+        sampling_rate: int | None = None,
+        do_normalize: bool | None = None,
+        device: str | None = "cpu",
         **kwargs,
     ) -> BatchFeature:
-        """
-        Main method to featurize and prepare for the model one or several sequence(s). Implementation uses PyTorch for
-        the STFT computation if available, otherwise a slower NumPy based one.
+        """Main method to featurize and prepare for the model one or several sequence(s). Implementation uses PyTorch
+        for the STFT computation if available, otherwise a slower NumPy based one.
 
         Args:
             raw_speech (`np.ndarray`, `list[float]`, `list[np.ndarray]`, `list[list[float]]`):
@@ -220,6 +215,11 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
 
                 This is especially useful to enable the use of Tensor Cores on NVIDIA hardware with compute capability
                 `>= 7.5` (Volta), or on TPUs which benefit from having sequence lengths be a multiple of 128.
+            return_tensors (`str` or [`~utils.TensorType`], *optional*):
+                If set, will return tensors instead of list of python integers. Acceptable values are:
+
+                - `'pt'`: Return PyTorch `torch.Tensor` objects.
+                - `'np'`: Return Numpy `np.ndarray` objects.
             return_attention_mask (`bool`, *optional*):
                 Whether to return the attention mask. If left to the default, will return the attention mask according
                 to the specific feature_extractor's default.
@@ -232,29 +232,31 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
                 bugs.
 
                 </Tip>
+            padding (`str` or [`~utils.PaddingStrategy`], *optional*, defaults to `'max_length'`):
+                Activates and controls padding. Accepts the following values:
 
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors instead of list of python integers. Acceptable values are:
+                - `'longest'`: Pad to the longest sequence in the batch (or no padding if only a single sequence is
+                  provided).
+                - `'max_length'` (default): Pad to a maximum length specified with the argument `max_length` or to the
+                  maximum acceptable input length for the model if that argument is not provided.
+                - `'do_not_pad'`: No padding (i.e., can output a batch with sequences of different lengths).
+            max_length (`int`, *optional*):
+                Controls the maximum length to use by one of the truncation/padding parameters.
 
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return Numpy `np.ndarray` objects.
+                If left unset or set to `None`, this will use the predefined model maximum length if a maximum length
+                is required by one of the truncation/padding parameters. If the model has no specific maximum input
+                length (like XLNet) truncation/padding to a maximum length will be deactivated.
             sampling_rate (`int`, *optional*):
                 The sampling rate at which the `raw_speech` input was sampled. It is strongly recommended to pass
                 `sampling_rate` at the forward call to prevent silent errors and allow automatic speech recognition
                 pipeline.
-            padding_value (`float`, *optional*, defaults to 0.0):
-                The value that is used to fill the padding values / vectors.
             do_normalize (`bool`, *optional*, defaults to `False`):
                 Whether or not to zero-mean unit-variance normalize the input. Normalizing can help to significantly
                 improve the performance of the model.
             device (`str`, *optional*, defaults to `'cpu'`):
                 Specifies the device for computation of the log-mel spectrogram of audio signals in the
                 `_torch_extract_fbank_features` method. (e.g., "cpu", "cuda")
-            return_token_timestamps (`bool`, *optional*, defaults to `None`):
-                Deprecated. Use `return_attention_mask` instead from which the number of frames can be inferred.
-
-                Whether or not to return the number of frames of the input raw_speech.
-                These num_frames can be used by the model to compute word level timestamps.
+            **kwargs: Not supported by WhisperFeatureExtractor.__call__() and ignored.
         """
         if sampling_rate is not None:
             if sampling_rate != self.sampling_rate:
@@ -333,12 +335,6 @@ class WhisperFeatureExtractor(SequenceFeatureExtractor):
             if padded_inputs["attention_mask"].shape[1] % self.hop_length != 0:
                 rescaled_attention_mask = rescaled_attention_mask[:, :-1]
             padded_inputs["attention_mask"] = rescaled_attention_mask
-
-        if return_token_timestamps is not None:
-            logger.warning_once(
-                f"`return_token_timestamps` is deprecated for {self.__class__.__name__} and will be removed in Transformers v5. Use `return_attention_mask` instead, as the number of frames can be inferred from it."
-            )
-            padded_inputs["num_frames"] = [len(raw_speech_i) // self.hop_length for raw_speech_i in raw_speech]
 
         if return_tensors is not None:
             padded_inputs = padded_inputs.convert_to_tensors(return_tensors)

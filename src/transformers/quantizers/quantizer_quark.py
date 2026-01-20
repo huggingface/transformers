@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Advanced Micro Devices, Inc. and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -45,12 +44,6 @@ class QuarkHfQuantizer(HfQuantizer):
     """
 
     requires_calibration = True  # On-the-fly quantization with quark is not supported for now.
-    required_packages = ["quark"]
-
-    # Checkpoints are expected to be already quantized when loading a quark model. However, as some keys from
-    # the checkpoint might mismatch the model parameters keys, we use the `create_quantized_param` method
-    # to load the checkpoints, remapping the keys.
-    requires_parameters_quantization = True
 
     def __init__(self, quantization_config, **kwargs):
         super().__init__(quantization_config, **kwargs)
@@ -78,19 +71,44 @@ class QuarkHfQuantizer(HfQuantizer):
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
         return True
 
-    def create_quantized_param(self, model, param, param_name, param_device, **kwargs):
-        from ..modeling_utils import _load_parameter_into_model
-
-        postfix = param_name.split(".")[-1]
-
-        if postfix in CHECKPOINT_KEYS:
-            param_name = param_name.replace(postfix, CHECKPOINT_KEYS[postfix])
-
-        _load_parameter_into_model(model, param_name, param.to(param_device))
-
-    def is_serializable(self, safe_serialization=None):
+    def is_serializable(self):
         return False
 
     @property
     def is_trainable(self):
         return False
+
+    def get_weight_conversions(self):
+        from ..core_model_loading import WeightConverter
+        from ..integrations.quark import QuarkDeserialize
+        # In Quark, quantization is managed through a QParamsLinear module, which holds
+        # separate quantizers for the weights, inputs, and biases (e.g. weight_quantizer
+        # input_quantizer, bias_quantizer, etc.).
+        #
+        # When you call `module.state_dict()`, Quark automatically renames the quantizer
+        # parameters — for example, `input_quantizer.scale` becomes `input_scale` — and
+        # saves them directly at the parent module level.
+        #
+        # This means we cannot simply rename keys like `weight_scale` back to
+        # `weight_quantizer.scale` when loading the state_dict.
+        # Otherwise, the `missing_keys` list would still expect keys such as
+        # `weight_scale`, `bias_scale`, etc.
+        #
+        # To fix this, we keep the expected state_dict keys (like `weight_scale`,
+        # `bias_scale`, etc.) unchanged, and during the conversion step, we explicitly
+        # assign their values into the corresponding quantizer attributes
+        # (`weight_quantizer.scale`, `input_quantizer.scale`, and so on).
+
+        # You can notice here that in target_patterns we use the same key as the source_patterns,
+        # this is because we just want to collect the tensors, and we will rename them later in the convert function.
+        # We cannot rename directly or else the missing_keys list will not be able to find the tensors.
+        converters = []
+        for key in CHECKPOINT_KEYS.keys():
+            converters.append(
+                WeightConverter(
+                    source_patterns=[key],
+                    target_patterns=key,
+                    operations=[QuarkDeserialize(self)],
+                )
+            )
+        return converters

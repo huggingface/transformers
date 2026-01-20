@@ -1,14 +1,12 @@
 import inspect
 import types
-import warnings
 from collections.abc import Iterable
 from typing import TYPE_CHECKING
 
 import numpy as np
 
 from ..data import SquadExample, SquadFeatures, squad_convert_examples_to_features
-from ..modelcard import ModelCard
-from ..tokenization_utils import PreTrainedTokenizer
+from ..tokenization_python import PreTrainedTokenizer
 from ..utils import (
     PaddingStrategy,
     add_end_docstrings,
@@ -179,18 +177,6 @@ class QuestionAnsweringArgumentHandler(ArgumentHandler):
                 inputs = list(args)
         # Generic compatibility with sklearn and Keras
         # Batched data
-        elif "X" in kwargs:
-            warnings.warn(
-                "Passing the `X` argument to the pipeline is deprecated and will be removed in v5. Inputs should be passed using the `question` and `context` keyword arguments instead.",
-                FutureWarning,
-            )
-            inputs = kwargs["X"]
-        elif "data" in kwargs:
-            warnings.warn(
-                "Passing the `data` argument to the pipeline is deprecated and will be removed in v5. Inputs should be passed using the `question` and `context` keyword arguments instead.",
-                FutureWarning,
-            )
-            inputs = kwargs["data"]
         elif "question" in kwargs and "context" in kwargs:
             if isinstance(kwargs["question"], list) and isinstance(kwargs["context"], str):
                 inputs = [{"question": Q, "context": kwargs["context"]} for Q in kwargs["question"]]
@@ -255,22 +241,8 @@ class QuestionAnsweringPipeline(ChunkPipeline):
     default_input_names = "question,context"
     handle_impossible_answer = False
 
-    def __init__(
-        self,
-        model: "PreTrainedModel",
-        tokenizer: PreTrainedTokenizer,
-        modelcard: ModelCard | None = None,
-        task: str = "",
-        **kwargs,
-    ):
-        super().__init__(
-            model=model,
-            tokenizer=tokenizer,
-            modelcard=modelcard,
-            task=task,
-            **kwargs,
-        )
-
+    def __init__(self, model: "PreTrainedModel", tokenizer: PreTrainedTokenizer, task: str = "", **kwargs):
+        super().__init__(model=model, tokenizer=tokenizer, task=task, **kwargs)
         self._args_parser = QuestionAnsweringArgumentHandler()
         self.check_model_type(MODEL_FOR_QUESTION_ANSWERING_MAPPING_NAMES)
 
@@ -297,7 +269,6 @@ class QuestionAnsweringPipeline(ChunkPipeline):
     def _sanitize_parameters(
         self,
         padding=None,
-        topk=None,
         top_k=None,
         doc_stride=None,
         max_answer_len=None,
@@ -319,16 +290,13 @@ class QuestionAnsweringPipeline(ChunkPipeline):
             preprocess_params["max_seq_len"] = max_seq_len
 
         postprocess_params = {}
-        if topk is not None and top_k is None:
-            warnings.warn("topk parameter is deprecated, use top_k instead", UserWarning)
-            top_k = topk
         if top_k is not None:
             if top_k < 1:
                 raise ValueError(f"top_k parameter should be >= 1 (got {top_k})")
             postprocess_params["top_k"] = top_k
         if max_answer_len is not None:
             if max_answer_len < 1:
-                raise ValueError(f"max_answer_len parameter should be >= 1 (got {max_answer_len}")
+                raise ValueError(f"max_answer_len parameter should be >= 1 (got {max_answer_len})")
             postprocess_params["max_answer_len"] = max_answer_len
         if handle_impossible_answer is not None:
             postprocess_params["handle_impossible_answer"] = handle_impossible_answer
@@ -336,7 +304,7 @@ class QuestionAnsweringPipeline(ChunkPipeline):
             postprocess_params["align_to_words"] = align_to_words
         return preprocess_params, {}, postprocess_params
 
-    def __call__(self, *args, **kwargs):
+    def __call__(self, **kwargs):
         """
         Answer the question(s) given as inputs by using the context(s).
 
@@ -374,14 +342,7 @@ class QuestionAnsweringPipeline(ChunkPipeline):
             - **answer** (`str`) -- The answer to the question.
         """
 
-        # Convert inputs to features
-        if args:
-            warnings.warn(
-                "Passing a list of SQuAD examples to the pipeline is deprecated and will be removed in v5. Inputs should be passed using the `question` and `context` keyword arguments instead.",
-                FutureWarning,
-            )
-
-        examples = self._args_parser(*args, **kwargs)
+        examples = self._args_parser(**kwargs)
         if isinstance(examples, (list, tuple)) and len(examples) == 1:
             return super().__call__(examples[0], **kwargs)
         return super().__call__(examples, **kwargs)
