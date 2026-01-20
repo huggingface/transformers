@@ -47,6 +47,7 @@ class Glm4MoeLiteModelTester(CausalLMModelTester):
         q_lora_rank=16,
         qk_nope_head_dim=64,
         qk_rope_head_dim=64,
+        v_head_dim=128,
     ):
         super().__init__(parent=parent)
         self.n_routed_experts = n_routed_experts
@@ -54,6 +55,7 @@ class Glm4MoeLiteModelTester(CausalLMModelTester):
         self.q_lora_rank = q_lora_rank
         self.qk_nope_head_dim = qk_nope_head_dim
         self.qk_rope_head_dim = qk_rope_head_dim
+        self.v_head_dim = v_head_dim
 
 
 @require_torch
@@ -63,7 +65,7 @@ class Glm4MoeModelTest(CausalLMModelTest, unittest.TestCase):
     model_split_percents = [0.5, 0.7, 0.8]
 
     def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
-        """Needs to be overridden as GLM-Lite has special MLA cache format (though we don't really use the MLA)"""
+        """Needs to be overridden as GLM-4.7-Flash has special MLA cache format (though we don't really use the MLA)"""
         self.assertIsInstance(past_key_values, Cache)
 
         # (batch, head, seq_length, head_features)
@@ -103,9 +105,9 @@ class Glm4MoeIntegrationTest(unittest.TestCase):
         ]
 
         prompts = ["[gMASK]<sop>hello", "[gMASK]<sop>tell me"]
-        tokenizer = AutoTokenizer.from_pretrained("zai-org/GLM-4.5")
+        tokenizer = AutoTokenizer.from_pretrained("zai-org/GLM-4.7-Flash")
         model = Glm4MoeLiteForCausalLM.from_pretrained(
-            "zai-org/GLM-Lite", device_map=torch_device, dtype=torch.bfloat16
+            "zai-org/GLM-4.7-Flash", device_map=torch_device, dtype=torch.bfloat16
         )
         inputs = tokenizer(prompts, return_tensors="pt", padding=True).to(model.device)
 
