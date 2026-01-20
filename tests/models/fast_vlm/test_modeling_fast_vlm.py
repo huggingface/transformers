@@ -246,7 +246,7 @@ class FastVlmForConditionalGenerationIntegrationTest(unittest.TestCase):
         prompt = "user\n<image>\nWhat are the things I should be cautious about when I visit this place?\nassistant"
         image_file = "https://llava-vl.github.io/static/images/view.jpg"
         raw_image = Image.open(requests.get(image_file, stream=True).raw)
-        inputs = self.processor(images=raw_image, text=prompt, return_tensors="pt").to(torch_device)
+        inputs = self.processor(images=raw_image, text=prompt, return_tensors="pt").to(torch_device, dtype=model.dtype)
 
         output = model.generate(**inputs, max_new_tokens=20)
         expected_decoded_texts = "user\n\nWhat are the things I should be cautious about when I visit this place?\nassistant\n\nWhen visiting this place, there are a few things you should be cautious about:\n\n1. **"  # fmt: skip
@@ -272,7 +272,8 @@ class FastVlmForConditionalGenerationIntegrationTest(unittest.TestCase):
         image2 = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
 
         inputs = self.processor(images=[image1, image2], text=prompts, return_tensors="pt", padding=True).to(
-            torch_device
+            torch_device,
+            dtype=model.dtype,
         )
 
         output = model.generate(**inputs, max_new_tokens=20)
