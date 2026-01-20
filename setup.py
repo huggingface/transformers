@@ -75,7 +75,6 @@ _deps = [
     "deepspeed>=0.9.3",
     "diffusers",
     "dill<0.3.5",
-    "einops>=0.7.0",
     "evaluate>=0.4.6",
     "faiss-cpu",
     "fastapi",

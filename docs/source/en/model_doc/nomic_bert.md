@@ -1,4 +1,4 @@
-<!--Copyright 2025 the HuggingFace Team. All rights reserved.
+<!--Copyright 2026 the HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -16,7 +16,7 @@ limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-04-20 and added to Hugging Face Transformers on 2026-01-18.*
+*This model was released on 2021-04-20 and added to Hugging Face Transformers on 2026-01-20.*
 
 
 # NomicBERT
@@ -27,7 +27,7 @@ The NomicBERT model currently has no academic papers specifically written about 
 
 - Use [Rotary Position Embeddings](https://huggingface.co/papers/2104.09864.pdf) to allow for context length extrapolation.
 - Use SwiGLU activations, which have [been shown](https://huggingface.co/papers/2002.05202) to [improve model performance](https://www.databricks.com/blog/mosaicbert)
-- Set dropout to 0 during pretraining
+- No dropout
 
 > [!TIP]
 > - NomicBERT can handle very long sequences efficiently (up to 2048 tokens by default).
@@ -36,7 +36,7 @@ The NomicBERT model currently has no academic papers specifically written about 
 > - Supports various heads: classification, QA, token classification, multiple choice, etc.
 
 
-This model was contributed by the community.
+This model was contributed by community members ([Sonny Cooper](https://github.com/ed22699)).
 The original code for nomic-bert-2048 can be found [here](https://huggingface.co/nomic-ai/nomic-bert-2048).
 
 ## Usage examples
@@ -98,7 +98,6 @@ echo -e "Plants create [MASK] through a process known as photosynthesis." | tran
 
 ## Notes
 
-- Inputs should be padded on the right because RoPE handles relative positions differently than absolute embeddings.
 - For extremely long sequences, consider batching or gradient checkpointing to save memory.
 
 ## NomicBertConfig
@@ -133,21 +132,7 @@ echo -e "Plants create [MASK] through a process known as photosynthesis." | tran
 
 [[autodoc]] NomicBertForTokenClassification
 
-## NomicBertLayer
-
-[[autodoc]] NomicBertLayer
-
-## NomicBertLMHeadModel
-
-[[autodoc]] NomicBertLMHeadModel
-    - forward
-
 ## NomicBertModel
 
 [[autodoc]] NomicBertModel
-    - forward
-
-## NomicBertPreTrainedModel
-
-[[autodoc]] NomicBertPreTrainedModel
     - forward
