@@ -1068,19 +1068,12 @@ class RouterParallel(TensorParallelLayer):
             self._prepare_output_fn,
         )
 
-
-class AllReduceOutput(TensorParallelLayer):
+class MoeTensorParalellExperts(TensorParallelLayer):
     """
-    Module-level parallel that applies all-reduce on output (forward) and input gradient (backward).
-
-    Use this when a module's internal computation produces partial sums that need
-    to be reduced across TP ranks, but the module uses custom forward logic
-    (e.g., nn.functional.linear) rather than nn.Linear modules where RowwiseParallel
-    output hooks would be triggered.
-
-    This implements the correct gradient flow for row-parallel style computations:
-    - Forward: all_reduce(partial_output) -> full_output
-    - Backward: all_reduce(partial_input_grad) -> full_input_grad
+    Note: For tensor parallel, the MoEExpertsParallel TP layer handles gradient sync:
+        - all_reduce_backward on hidden_states (for colwise gate_up_proj gradient)
+        - all_reduce_backward on top_k_weights (for router gradient)
+        - all_reduce_forward on output (for partial expert outputs)
     """
 
     def __init__(self, **kwargs):
@@ -1088,10 +1081,24 @@ class AllReduceOutput(TensorParallelLayer):
 
     @staticmethod
     def _prepare_input_fn(mod, inputs, device_mesh):
-        return inputs
+        # inputs = (hidden_states, top_k_index, top_k_weights)
+        hidden_states = inputs[0]
+        top_k_index = inputs[1]
+        top_k_weights = inputs[2]
+
+        # all_reduce_backward on hidden_states for correct colwise (gate_up_proj) gradient
+        hidden_states = all_reduce_backward(hidden_states, device_mesh)
+
+        # all_reduce_backward on routing weights for correct router gradient
+        # This is needed because ∂L/∂routing_weights = ∂L/∂output * partial_expert_output
+        # and partial_expert_output is different on each GPU before all-reduce
+        top_k_weights = all_reduce_backward(top_k_weights, device_mesh)
+
+        return (hidden_states, top_k_index, top_k_weights)
 
     @staticmethod
     def _prepare_output_fn(mod, outputs, device_mesh):
+        # all_reduce_forward to sum partial expert outputs across GPUs
         return all_reduce_forward(outputs, device_mesh)
 
     def shard_tensor(
@@ -1116,9 +1123,6 @@ class AllReduceOutput(TensorParallelLayer):
             self._prepare_input_fn,
             self._prepare_output_fn,
         )
-        # Store device_mesh on module so MoE forward functions can use it for gradient sync
-        module._device_mesh = device_mesh
-        print(f"[DEBUG] AllReduceOutput.prepare_module_tp: Set _device_mesh on {module.__class__.__name__}")
 
 class ParallelInterface(GeneralInterface):
     # Class instance object, so that a call to `register` can be reflected into all other files correctly, even if
@@ -1135,7 +1139,7 @@ class ParallelInterface(GeneralInterface):
             "sequence_parallel": SequenceParallel(),
             "grouped_gemm": GroupedGemmParallel(),
             "ep_router": RouterParallel(),
-            "all_reduce_output": AllReduceOutput(),
+            "moe_tp_experts": MoeTensorParalellExperts(),
         }
         if is_torch_available() and _torch_distributed_available
         else {}

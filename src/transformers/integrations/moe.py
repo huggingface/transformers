@@ -20,7 +20,6 @@ from ..utils.import_utils import is_torch_available
 
 if is_torch_available():
     import torch
-    from .tensor_parallel import all_reduce_backward
 
 
 # Examples of experts class with its eager mm implementation
@@ -95,14 +94,6 @@ def batched_mm_experts_forward(
     # Get current hidden states for selected samples
     current_hidden_states = hidden_states[token_idx]  # (S, hidden_dim)
 
-    # Apply all_reduce_backward for tensor parallel: identity forward, all-reduce gradient backward
-    # This is needed because gate_up_proj uses packed_colwise sharding
-    has_device_mesh = hasattr(self, "_device_mesh") and self._device_mesh is not None
-    print(f"[DEBUG] batched_mm_experts_forward: hasattr _device_mesh = {hasattr(self, '_device_mesh')}, has_device_mesh = {has_device_mesh}")
-    if has_device_mesh:
-        print(f"[DEBUG] batched_mm_experts_forward: Applying all_reduce_backward")
-        current_hidden_states = all_reduce_backward(current_hidden_states, self._device_mesh)
-
     # Select projection matrices for selected experts
     selected_gate_up = self.gate_up_proj[expert_ids]  # (S, hidden_dim, 2 * intermediate_dim)
     selected_down = self.down_proj[expert_ids]  # (S, hidden_dim, intermediate_dim)
@@ -124,11 +115,6 @@ def batched_mm_experts_forward(
         out_per_sample = out_per_sample + self.down_proj_bias[expert_ids]
 
     # Apply routing weights
-    # Apply all_reduce_backward to routing weights for correct router gradient in TP
-    # This is needed because expert outputs are partial (before all_reduce_output),
-    # so ∂L/∂routing_weights would be different on each GPU without this
-    if has_device_mesh:
-        sample_weights = all_reduce_backward(sample_weights, self._device_mesh)
     out_per_sample = out_per_sample * sample_weights.unsqueeze(-1)  # (S, hidden_dim)
 
     # Accumulate results back to the final_hidden_states using original token indices
@@ -183,14 +169,6 @@ def grouped_mm_experts_forward(
     sample_weights_g = sample_weights[perm]
     current_states_g = current_hidden_states[perm]
 
-    # Apply all_reduce_backward for tensor parallel: identity forward, all-reduce gradient backward
-    # This is needed because gate_up_proj uses packed_colwise sharding
-    has_device_mesh = hasattr(self, "_device_mesh") and self._device_mesh is not None
-    print(f"[DEBUG] grouped_mm_experts_forward: hasattr _device_mesh = {hasattr(self, '_device_mesh')}, has_device_mesh = {has_device_mesh}")
-    if has_device_mesh:
-        print(f"[DEBUG] grouped_mm_experts_forward: Applying all_reduce_backward")
-        current_states_g = all_reduce_backward(current_states_g, self._device_mesh)
-
     # Compute offsets for grouped_mm
     # using histc instead of bincount to avoid cuda graph issues
     # (grouped_mm_experts_forward still fails with cuda graphs but because of _grouped_mm internals)
@@ -216,11 +194,6 @@ def grouped_mm_experts_forward(
         out_per_sample_g = out_per_sample_g + self.down_proj_bias[expert_ids_g]
 
     # Apply routing weights
-    # Apply all_reduce_backward to routing weights for correct router gradient in TP
-    # This is needed because expert outputs are partial (before all_reduce_output),
-    # so ∂L/∂routing_weights would be different on each GPU without this
-    if has_device_mesh:
-        sample_weights_g = all_reduce_backward(sample_weights_g, self._device_mesh)
     out_per_sample_g = out_per_sample_g * sample_weights_g.unsqueeze(-1)
 
     # Restore original order
