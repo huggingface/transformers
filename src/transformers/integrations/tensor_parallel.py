@@ -1066,6 +1066,51 @@ class RouterParallel(TensorParallelLayer):
         )
 
 
+class AllReduceOutput(TensorParallelLayer):
+    """
+    Module-level parallel that applies all-reduce on the output.
+
+    Use this when a module's internal computation produces partial sums that need
+    to be reduced across TP ranks, but the module uses custom forward logic
+    (e.g., nn.functional.linear) rather than nn.Linear modules where RowwiseParallel
+    output hooks would be triggered.
+    """
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+
+    @staticmethod
+    def _prepare_input_fn(mod, inputs, device_mesh):
+        return inputs
+
+    @staticmethod
+    def _prepare_output_fn(mod, outputs, device_mesh):
+        return all_reduce_forward(outputs, device_mesh)
+
+    def shard_tensor(
+        self,
+        param,
+        param_type=None,
+        param_casting_dtype=None,
+        to_contiguous=None,
+        rank=None,
+        device_mesh=None,
+        tensor_idx=None,
+    ):
+        # This class doesn't shard tensors - sharding is handled by packed_colwise/rowwise
+        # on the individual weight tensors (gate_up_proj/down_proj)
+        parameter = param[...].to(param_casting_dtype)
+        return parameter, None
+
+    def prepare_module_tp(self, module: nn.Module, device_mesh) -> nn.Module:
+        distribute_module(
+            module,
+            device_mesh,
+            self._prepare_input_fn,
+            self._prepare_output_fn,
+        )
+
+
 class ParallelInterface(GeneralInterface):
     # Class instance object, so that a call to `register` can be reflected into all other files correctly, even if
     # a new instance is created (in order to locally override a given entry)
@@ -1081,6 +1126,7 @@ class ParallelInterface(GeneralInterface):
             "sequence_parallel": SequenceParallel(),
             "grouped_gemm": GroupedGemmParallel(),
             "ep_router": RouterParallel(),
+            "all_reduce_output": AllReduceOutput(),
         }
         if is_torch_available() and _torch_distributed_available
         else {}
