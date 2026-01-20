@@ -71,8 +71,8 @@ def batched_mm_experts_forward(
     device = hidden_states.device
     num_top_k = top_k_index.size(-1)
     num_tokens = hidden_states.size(0)
+    hidden_dim = hidden_states.size(-1)
     num_experts = self.gate_up_proj.size(0)
-    final_hidden_states = torch.zeros_like(hidden_states)
 
     # Flatten top_k_index to get expert_ids per selected sample
     expert_ids = top_k_index.reshape(-1)
@@ -117,10 +117,11 @@ def batched_mm_experts_forward(
     # Apply routing weights
     out_per_sample = out_per_sample * sample_weights.unsqueeze(-1)  # (S, hidden_dim)
 
-    # Accumulate results back to the final_hidden_states using original token indices
-    final_hidden_states.index_add_(0, token_idx, out_per_sample.to(final_hidden_states.dtype))
+    # Accumulate results using deterministic reshape+sum instead of index_add_
+    # (index_add_ with duplicate indices is non-deterministic on CUDA due to atomicAdd)
+    final_hidden_states = out_per_sample.view(num_tokens, num_top_k, hidden_dim).sum(dim=1)
 
-    return final_hidden_states
+    return final_hidden_states.to(hidden_states.dtype)
 
 
 def grouped_mm_experts_forward(
@@ -137,8 +138,8 @@ def grouped_mm_experts_forward(
     device = hidden_states.device
     num_top_k = top_k_index.size(-1)
     num_tokens = hidden_states.size(0)
+    hidden_dim = hidden_states.size(-1)
     num_experts = self.gate_up_proj.size(0)
-    final_hidden_states = torch.zeros_like(hidden_states)
 
     # Flatten top_k_index to get expert_ids per selected sample
     expert_ids = top_k_index.reshape(-1)
@@ -199,10 +200,11 @@ def grouped_mm_experts_forward(
     # Restore original order
     out_per_sample = out_per_sample_g[inv_perm]
 
-    # Accumulate results back to the final_hidden_states using original token indices
-    final_hidden_states.index_add_(0, token_idx, out_per_sample.to(final_hidden_states.dtype))
+    # Accumulate results using deterministic reshape+sum instead of index_add_
+    # (index_add_ with duplicate indices is non-deterministic on CUDA due to atomicAdd)
+    final_hidden_states = out_per_sample.view(num_tokens, num_top_k, hidden_dim).sum(dim=1)
 
-    return final_hidden_states
+    return final_hidden_states.to(hidden_states.dtype)
 
 
 class ExpertsInterface(GeneralInterface):
