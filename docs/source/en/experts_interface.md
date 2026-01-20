@@ -110,15 +110,15 @@ model.forward = torch.compile(model.forward, mode="max-autotune-no-cudagraphs")
 This [benchmark](https://github.com/user-attachments/files/24125816/bench.py) compares different input sizes and experts implementations with and without `torch.compile`.
 
 <iframe
-  src="https://huggingface.co/datasets/docs-benchmarks/experts-backends/embed/viewer/bs1-seq16/train"
-  frameborder="0"
-  width="100%"
-  height="560px"
-></iframe>
-
-<iframe
 	src="https://huggingface-moe-experts-benchmarks.static.hf.space"
 	frameborder="0"
 	width="100%"
 	height="800"
+></iframe>
+
+<iframe
+  src="https://huggingface.co/datasets/docs-benchmarks/experts-backends/embed/viewer/bs1-seq16/train"
+  frameborder="0"
+  width="100%"
+  height="560px"
 ></iframe>
