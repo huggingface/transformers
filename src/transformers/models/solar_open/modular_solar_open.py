@@ -213,6 +213,7 @@ class SolarOpenAttention(Glm4MoeAttention):
     def __init__(self, config: SolarOpenConfig, layer_idx: int | None = None):
         super().__init__(config, layer_idx)
         self.head_dim = config.head_dim
+        self.attention_dropout = 0.0  # SolarOpen does not use attention dropout
 
 
 class SolarOpenRMSNorm(Glm4MoeRMSNorm):
