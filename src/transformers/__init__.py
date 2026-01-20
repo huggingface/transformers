@@ -133,6 +133,7 @@ _import_structure = {
         "is_wandb_available",
     ],
     "loss": [],
+    "modeling_utils": ["PreTrainedModel", "PushToHubMixin", "unwrap_model"],
     "pipelines": [
         "AnyToAnyPipeline",
         "AudioClassificationPipeline",
@@ -617,6 +618,8 @@ if TYPE_CHECKING:
     from .modeling_rope_utils import dynamic_rope_update as dynamic_rope_update
     from .modeling_utils import AttentionInterface as AttentionInterface
     from .modeling_utils import PreTrainedModel as PreTrainedModel
+    from .modeling_utils import PushToHubMixin as PushToHubMixin
+    from .modeling_utils import unwrap_model as unwrap_model
     from .models import *
     from .models.mamba.modeling_mamba import MambaCache as MambaCache
     from .models.timm_wrapper import TimmWrapperImageProcessor as TimmWrapperImageProcessor
