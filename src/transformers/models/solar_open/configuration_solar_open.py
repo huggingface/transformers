@@ -159,6 +159,8 @@ class SolarOpenConfig(PreTrainedConfig):
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
+        self.attention_bias = attention_bias
+        self.attention_dropout = attention_dropout
         self.rope_parameters = rope_parameters
         kwargs.setdefault("partial_rotary_factor", 0.5)  # assign default for BC
 
