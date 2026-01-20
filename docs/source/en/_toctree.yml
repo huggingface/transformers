@@ -963,6 +963,8 @@
         title: UniSpeech-SAT
       - local: model_doc/univnet
         title: UnivNet
+      - local: model_doc/vibevoice
+        title: VibeVoice
       - local: model_doc/vits
         title: VITS
       - local: model_doc/wav2vec2

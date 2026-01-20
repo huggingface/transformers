@@ -437,6 +437,8 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("univnet", "UnivNetConfig"),
         ("upernet", "UperNetConfig"),
         ("vaultgemma", "VaultGemmaConfig"),
+        ("vibevoice", "VibeVoiceConfig"),
+        ("vibevoice_streaming", "VibeVoiceStreamingConfig"),
         ("video_llama_3", "VideoLlama3Config"),
         ("video_llama_3_vision", "VideoLlama3VisionConfig"),
         ("video_llava", "VideoLlavaConfig"),
@@ -916,6 +918,8 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("univnet", "UnivNet"),
         ("upernet", "UPerNet"),
         ("vaultgemma", "VaultGemma"),
+        ("vibevoice", "VibeVoice"),
+        ("vibevoice_streaming", "VibeVoiceStreaming"),
         ("video_llama_3", "VideoLlama3"),
         ("video_llama_3_vision", "VideoLlama3Vision"),
         ("video_llava", "VideoLlava"),
@@ -1034,6 +1038,7 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("parakeet_ctc", "parakeet"),
         ("lasr_encoder", "lasr"),
         ("lasr_ctc", "lasr"),
+        ("vibevoice_streaming", "vibevoice"),
         ("wav2vec2-bert", "wav2vec2_bert"),
     ]
 )

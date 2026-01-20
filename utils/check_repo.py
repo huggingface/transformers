@@ -211,6 +211,11 @@ IGNORE_NON_TESTED = (
         "Ernie4_5_VL_MoeTextModel",  # Building part of bigger (tested) model
         "PeAudioFrameLevelModel",
         "PeAudioVideoModel",
+        "VibeVoiceAcousticCodec",  # Building part of bigger (tested) model.
+        "VibeVoiceDiffusionHead",  # Building part of bigger (tested) model.
+        "VibeVoiceSemanticEncoder",  # Building part of bigger (tested) model.
+        "VibeVoiceStreamingModel",  # Building part of bigger (tested) model.
+        "VibeVoiceStreamingForConditionalGeneration",  # Tested in VibeVoiceStreamingModelTest.
     ]
 )
 
@@ -424,6 +429,9 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "Qwen3OmniMoeThinkerTextModel",  # Building part of a bigger model
     "Ernie4_5_VL_MoeTextModel",  # Building part of a bigger model
     "PeAudioFrameLevelModel",
+    "VibeVoiceAcousticCodec",  # Building part of a bigger model
+    "VibeVoiceDiffusionHead",  # Building part of a bigger model
+    "VibeVoiceStreamingModel",  # Building part of a bigger model
 ]
 
 

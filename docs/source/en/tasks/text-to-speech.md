@@ -20,7 +20,7 @@ rendered properly in your Markdown viewer.
 
 Text-to-speech (TTS) is the task of creating natural-sounding speech from text, where the speech can be generated in multiple
 languages and for multiple speakers. Several text-to-speech models are currently available in 🤗 Transformers, such as [Dia](../model_doc/dia), [CSM](../model_doc/csm),
-[Bark](../model_doc/bark), [MMS](../model_doc/mms), [VITS](../model_doc/vits) and [SpeechT5](../model_doc/speecht5).
+[Bark](../model_doc/bark), [MMS](../model_doc/mms), [VITS](../model_doc/vits), [SpeechT5](../model_doc/speecht5), and [VibeVoice](../model_doc/vibevoice).
 
 You can easily generate audio using the `"text-to-audio"` pipeline (or its alias - `"text-to-speech"`).
 Here's an example of how you would use the `"text-to-speech"` pipeline with [CSM](https://huggingface.co/sesame/csm-1b):

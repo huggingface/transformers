@@ -125,6 +125,30 @@ SPECIAL_CASES_TO_ALLOW = {
     "IdeficsPerceiverConfig": True,
     "GptOssConfig": True,
     "LwDetrConfig": True,
+    "VibeVoiceAcousticCodecConfig": [
+        "conv_bias",
+        "conv_norm",
+        "corpus_normalize",
+        "disable_last_norm",
+        "weight_init_value",
+    ],
+    "VibeVoiceConfig": ["num_speakers"],
+    "VibeVoiceDiffusionHeadConfig": [
+        "ddpm_batch_mul",
+        "ddpm_beta_schedule",
+        "ddpm_num_inference_steps",
+        "ddpm_num_steps",
+        "diffusion_type",
+        "prediction_type",
+        "speech_vae_dim",
+    ],
+    "VibeVoiceSemanticEncoderConfig": [
+        "conv_bias",
+        "conv_norm",
+        "corpus_normalize",
+        "disable_last_norm",
+        "weight_init_value",
+    ],
 }
 
 # Common and important attributes, even if they do not always appear in the modeling files (can be a regex pattern)
