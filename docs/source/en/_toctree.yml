@@ -243,6 +243,12 @@
       title: llama.cpp
     title: Local deployment
   - sections:
+    - local: community_integrations/nanotron
+      title: Nanotron
+    - local: community_integrations/torchtitan
+      title: torchtitan
+    title: Pretraining
+  - sections:
     - local: community_integrations/axolotl
       title: Axolotl
     - local: community_integrations/trl
