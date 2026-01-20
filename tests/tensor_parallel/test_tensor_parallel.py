@@ -1093,8 +1093,6 @@ def _test_model_moe_backward_pass_impl(rank, dtype=torch.float32):
     # Set tolerance based on dtype
     atol, rtol = (1e-5, 1e-5)
 
-    # Disable weight tying to avoid gradient mismatch between replicated embed_tokens
-    # and sharded lm_head when weights are tied
     config = AutoConfig.from_pretrained(model_id)
     config.tie_word_embeddings = False
 
