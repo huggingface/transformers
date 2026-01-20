@@ -35,8 +35,6 @@ from typing import TYPE_CHECKING, Any, Literal
 import numpy as np
 import packaging.version
 
-from transformers.utils.import_utils import _is_package_available
-
 
 if os.getenv("WANDB_MODE") == "offline":
     print("[INFO] Running in WANDB offline mode")
@@ -58,7 +56,6 @@ logger = logging.get_logger(__name__)
 
 if is_torch_available():
     import torch
-    import torch.distributed as dist
 
 # comet_ml requires to be imported before any ML frameworks
 _MIN_COMET_VERSION = "3.43.2"
