@@ -742,7 +742,9 @@ class GlmImageModel(Glm4vModel):
                 if curr_grids is None or img_idx >= len(curr_grids):
                     break
                 grid = curr_grids[img_idx]
-                _, num_height_grid, num_width_grid = grid.tolist()
+                # Note: variable names appear swapped but the logic is correct
+                # grid format is [temporal, height, width]
+                _, num_width_grid, num_height_grid = grid.tolist()
 
                 # Text tokens before this image
                 llm_pos_length = start - prev_image_end
