@@ -74,6 +74,8 @@ class VocosEncodecPreTrainedModel(VocosPreTrainedModel):
         if isinstance(module, (VocosEncodecISTFTHead)):
             window = torch.hann_window(module.win_length)
             init.copy_(module.window, window)
+        if isinstance(module, VocosEncodecModel):
+            init.copy_(module.codebook_weights, torch.zeros_like(module.codebook_weights))
         elif isinstance(module, nn.Linear):
             std = getattr(self.config, "initializer_range", 0.02)
             init.normal_(module.weight, mean=0.0, std=std)
