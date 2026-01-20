@@ -14,7 +14,7 @@ permissions: {}
 jobs:
   get-pr-number:
     name: Get PR number
-    if: ${{ github.event.issue.state == 'open' && contains(fromJSON('["ydshieh", "ArthurZucker", "zucchini-nlp", "molbap", "gante", "LysandreJik", "Cyrilvallez", "Rocketknight1", "SunMarc", "eustlb", "MekkCyber", "vasqu", "ivarflakstad", "stevhliu", "ebezzam", "itazap"]'), github.actor) && (startsWith(github.event.comment.body, 'build-doc')) }}
+    if: ${{ github.event.issue.state == 'open' && contains(fromJSON('["ydshieh", "ArthurZucker", "zucchini-nlp", "molbap", "gante", "LysandreJik", "Cyrilvallez", "Rocketknight1", "SunMarc", "eustlb", "MekkCyber", "vasqu", "ivarflakstad", "stevhliu", "ebezzam", "itazap", "tarekziade"]'), github.actor) && (startsWith(github.event.comment.body, 'build-doc')) }}
     uses: ./.github/workflows/get-pr-number.yml
 
   get-pr-info:
