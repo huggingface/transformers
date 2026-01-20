@@ -68,6 +68,10 @@ class SolarOpenConfig(PreTrainedConfig):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
+        attention_bias (`bool`, *optional*, defaults to `False`):
+            Whether to use a bias in the projection layers.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
         num_experts_per_tok (`int`, *optional*, defaults to 8):
             Number of experts per token.
         routed_scaling_factor (`float`, *optional*, defaults to 1.0):
@@ -78,6 +82,8 @@ class SolarOpenConfig(PreTrainedConfig):
             Number of selected groups for each token.
         norm_topk_prob (`bool`, *optional*, defaults to `True`):
             Whether to normalize the topk probabilities.
+        use_qk_norm (`bool`, *optional*, defaults to `False`):
+            Whether to use query-key normalization in the attention.
         bos_token_id (`int`, *optional*):
             Beginning of stream token id.
         eos_token_id (`int`, *optional*):
@@ -127,11 +133,14 @@ class SolarOpenConfig(PreTrainedConfig):
         use_cache: bool = True,
         tie_word_embeddings: bool = False,
         rope_parameters: RopeParameters | None = None,
+        attention_bias: bool = False,
+        attention_dropout: float = 0.0,
         num_experts_per_tok: int = 8,
         routed_scaling_factor: float = 1.0,
         n_group: int = 1,
         topk_group: int = 1,
         norm_topk_prob: bool = True,
+        use_qk_norm: bool = False,
         bos_token_id: int | None = None,
         eos_token_id: int | None = None,
         pad_token_id: int | None = None,
@@ -153,6 +162,8 @@ class SolarOpenConfig(PreTrainedConfig):
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
+        self.attention_bias = attention_bias
+        self.attention_dropout = attention_dropout
         self.rope_parameters = rope_parameters
         kwargs.setdefault("partial_rotary_factor", 0.5)  # assign default for BC
 
@@ -165,6 +176,7 @@ class SolarOpenConfig(PreTrainedConfig):
         self.n_routed_experts = n_routed_experts
         self.routed_scaling_factor = routed_scaling_factor
         self.norm_topk_prob = norm_topk_prob
+        self.use_qk_norm = use_qk_norm
         self.tie_word_embeddings = tie_word_embeddings
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id

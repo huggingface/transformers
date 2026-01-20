@@ -76,6 +76,10 @@ class SolarOpenConfig(Glm4MoeConfig):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
+        attention_bias (`bool`, *optional*, defaults to `False`):
+            Whether to use a bias in the projection layers.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
         num_experts_per_tok (`int`, *optional*, defaults to 8):
             Number of experts per token.
         routed_scaling_factor (`float`, *optional*, defaults to 1.0):
@@ -86,6 +90,8 @@ class SolarOpenConfig(Glm4MoeConfig):
             Number of selected groups for each token.
         norm_topk_prob (`bool`, *optional*, defaults to `True`):
             Whether to normalize the topk probabilities.
+        use_qk_norm (`bool`, *optional*, defaults to `False`):
+            Whether to use query-key normalization in the attention.
         bos_token_id (`int`, *optional*):
             Beginning of stream token id.
         eos_token_id (`int`, *optional*):
@@ -126,11 +132,14 @@ class SolarOpenConfig(Glm4MoeConfig):
         use_cache: bool = True,
         tie_word_embeddings: bool = False,
         rope_parameters: RopeParameters | None = None,
+        attention_bias: bool = False,
+        attention_dropout: float = 0.0,
         num_experts_per_tok: int = 8,
         routed_scaling_factor: float = 1.0,
         n_group: int = 1,
         topk_group: int = 1,
         norm_topk_prob: bool = True,
+        use_qk_norm: bool = False,
         bos_token_id: int | None = None,
         eos_token_id: int | None = None,
         pad_token_id: int | None = None,
@@ -159,11 +168,14 @@ class SolarOpenConfig(Glm4MoeConfig):
             use_cache=use_cache,
             tie_word_embeddings=tie_word_embeddings,
             rope_parameters=rope_parameters,
+            attention_bias=attention_bias,
+            attention_dropout=attention_dropout,
             num_experts_per_tok=num_experts_per_tok,
             routed_scaling_factor=routed_scaling_factor,
             n_group=n_group,
             topk_group=topk_group,
             norm_topk_prob=norm_topk_prob,
+            use_qk_norm=use_qk_norm,
             bos_token_id=bos_token_id,
             eos_token_id=eos_token_id,
             pad_token_id=pad_token_id,
@@ -172,9 +184,6 @@ class SolarOpenConfig(Glm4MoeConfig):
 
         del self.intermediate_size
         del self.first_k_dense_replace
-        del self.attention_bias
-        del self.attention_dropout
-        del self.use_qk_norm
 
     def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation: set | None = None, **kwargs):
         default_rope_params = RopeParameters(
