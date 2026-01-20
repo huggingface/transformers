@@ -181,8 +181,6 @@ class SolarOpenConfig(Glm4MoeConfig):
 
         del self.intermediate_size
         del self.first_k_dense_replace
-        del self.attention_bias
-        del self.attention_dropout
         del self.use_qk_norm
 
     def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation: set | None = None, **kwargs):
