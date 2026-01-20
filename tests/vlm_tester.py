@@ -204,9 +204,7 @@ class VLMModelTester:
 
     def create_pixel_values(self):
         # Override to 5D for patch-based models
-        return floats_tensor(
-            [self.batch_size, self.num_channels, self.image_size, self.image_size], scale=1.0
-        )
+        return floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size], scale=1.0)
 
     def create_attention_mask(self, input_ids):
         # Override for bidirectional attention models like Gemma3
@@ -397,9 +395,7 @@ class VLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin)
             batch_tensors_to_double = ["input_ids", "attention_mask", "token_type_ids"]
             for key in batch_tensors_to_double:
                 if key in curr_input_dict and curr_input_dict[key] is not None:
-                    curr_input_dict[key] = torch.cat(
-                        [curr_input_dict[key], curr_input_dict[key]], dim=0
-                    )
+                    curr_input_dict[key] = torch.cat([curr_input_dict[key], curr_input_dict[key]], dim=0)
 
             # one image and two image tokens raise an error
             with self.assertRaises(ValueError):
