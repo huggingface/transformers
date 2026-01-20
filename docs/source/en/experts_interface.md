@@ -117,7 +117,7 @@ This [benchmark](https://github.com/user-attachments/files/24125816/bench.py) co
 ></iframe>
 
 <iframe
-	src="https://huggingface-moe-experts.static.hf.space"
+	src="https://huggingface-moe-experts-benchmarks.static.hf.space"
 	frameborder="0"
 	width="100%"
 	height="800"
