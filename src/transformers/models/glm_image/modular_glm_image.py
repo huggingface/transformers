@@ -756,7 +756,9 @@ class GlmImageModel(Glm4vModel):
                 # - position_height stays constant per row, [0]*W, [1]*W, ..., [H-1]*W
                 image_seq_length = height * width
                 position_width = torch.arange(current_pos, current_pos + width, device=device).repeat(height)
-                position_height = torch.arange(current_pos, current_pos + height, device=device).repeat_interleave(width)
+                position_height = torch.arange(current_pos, current_pos + height, device=device).repeat_interleave(
+                    width
+                )
                 position_temporal = torch.full((image_seq_length,), current_pos, device=device, dtype=torch.long)
                 vision_position_ids = torch.stack([position_temporal, position_height, position_width], dim=0)
                 current_pos += max(height, width)
