@@ -125,7 +125,7 @@ class VLMModelTester:
         vision_feature_select_strategy="default",
         vision_feature_layer=-1,
         num_image_tokens=32,
-        **kwargs
+        **kwargs,
     ):
         self.parent = parent
         self.batch_size = batch_size
