@@ -963,6 +963,8 @@
         title: VITS
       - local: model_doc/vocos
         title: Vocos
+      - local: model_doc/vocos_encodec
+        title: VocosEncodec
       - local: model_doc/wav2vec2
         title: Wav2Vec2
       - local: model_doc/wav2vec2-bert

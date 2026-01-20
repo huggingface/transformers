@@ -265,6 +265,7 @@ class VocosModel(VocosPreTrainedModel):
         self,
         input_features: torch.FloatTensor | None = None,
         attention_mask: torch.Tensor | None = None,
+        **kwargs,
     ) -> VocosOutput:
         r"""
         input_features (`torch.FloatTensor` of shape `(batch_size, num_mel_bins, num_frames)`):

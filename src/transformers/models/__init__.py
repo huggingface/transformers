@@ -404,6 +404,7 @@ if TYPE_CHECKING:
     from .vivit import *
     from .vjepa2 import *
     from .vocos import *
+    from .vocos_encodec import *
     from .voxtral import *
     from .wav2vec2 import *
     from .wav2vec2_bert import *

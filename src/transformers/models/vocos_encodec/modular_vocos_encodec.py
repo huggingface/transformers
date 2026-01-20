@@ -117,6 +117,7 @@ class VocosEncodecModel(VocosModel):
         input_features: torch.FloatTensor | None,
         attention_mask: torch.Tensor | None = None,
         bandwidth: float | None = None,
+        **kwargs,
     ) -> VocosEncodecOutput:
         r"""
         input_features (`torch.FloatTensor` of shape `(batch_size, feature_dim, time_dim)`):

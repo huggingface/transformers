@@ -132,7 +132,7 @@ class VocosModelTest(ModelTesterMixin, unittest.TestCase):
         model = VocosModel(config)
         signature = inspect.signature(model.forward)
         arg_names = list(signature.parameters.keys())
-        self.assertListEqual(arg_names, ["input_features", "attention_mask"])
+        self.assertListEqual(arg_names, ["input_features", "attention_mask", "kwargs"])
 
     @unittest.skip(
         reason="The VocosModel is not transformers based, thus it does not have the usual `hidden_states` logic"
