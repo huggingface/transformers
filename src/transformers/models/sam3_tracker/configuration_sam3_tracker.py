@@ -179,7 +179,7 @@ class Sam3TrackerConfig(PreTrainedConfig):
     ... )
 
     >>> # Initializing a Sam3TrackerConfig with `"facebook/sam3_tracker.1_hiera_tiny"` style configuration
-    >>> configuration = Sam3Trackerconfig()
+    >>> configuration = Sam3TrackerConfig()
 
     >>> # Initializing a Sam3TrackerModel (with random weights) from the `"facebook/sam3_tracker.1_hiera_tiny"` style configuration
     >>> model = Sam3TrackerModel(configuration)
