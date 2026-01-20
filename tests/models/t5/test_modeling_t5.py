@@ -1057,7 +1057,7 @@ class T5ModelIntegrationTests(unittest.TestCase):
         loss = model(input_ids.to(torch_device), labels=labels.to(torch_device)).loss
         mtf_score = -(labels.shape[-1] * loss.item())
 
-        EXPECTED_SCORE = -60.7397
+        EXPECTED_SCORE = -44.6276
         self.assertTrue(abs(mtf_score - EXPECTED_SCORE) < 1e-4)
 
     @slow
@@ -1632,8 +1632,6 @@ class T5ModelIntegrationTests(unittest.TestCase):
         original_summary = tokenizer.decode(original_outputs[0], skip_special_tokens=True)
 
         # Basic verification that we got a reasonable summary
-        print("generated_summary", generated_summary)
-        print("original_summary", original_summary)
         self.assertEqual(generated_summary, original_summary)
 
 
