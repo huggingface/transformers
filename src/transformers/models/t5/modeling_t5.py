@@ -556,6 +556,7 @@ class T5PreTrainedModel(PreTrainedModel):
         if torch.get_default_dtype() == torch.bfloat16:
             # Remove wo from dtype_plan for bfloat16, it doesn't need FP32
             self.dtype_plan.pop("wo", None)
+        self.post_init()
 
     @property
     def dummy_inputs(self):
