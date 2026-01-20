@@ -441,16 +441,50 @@ class SamHQVisionModel(SamVisionModel):
     Segment Anything Model HQ (SAM-HQ) for generating masks, given an input image and optional 2D location and bounding boxes.
     """
 )
+class SamHQPositionalEmbedding(nn.Module):
+    """Positional embedding using nn.Parameter to enable proper weight tying during from_pretrained."""
+
+    def __init__(self, config):
+        super().__init__()
+        self.scale = config.scale
+        self.positional_embedding = nn.Parameter(
+            self.scale * torch.randn((2, config.num_pos_feats)), requires_grad=False
+        )
+
+    def forward(self, input_coords, input_shape=None):
+        """Positionally encode points that are normalized to [0,1]."""
+        coordinates = input_coords.clone()
+        if input_shape is not None:
+            coordinates[:, :, :, 0] = coordinates[:, :, :, 0] / input_shape[1]
+            coordinates[:, :, :, 1] = coordinates[:, :, :, 1] / input_shape[0]
+        coordinates = 2 * coordinates - 1
+        coordinates = coordinates.to(self.positional_embedding.dtype)
+        coordinates = coordinates @ self.positional_embedding
+        coordinates = 2 * torch.pi * coordinates
+        return torch.cat([torch.sin(coordinates), torch.cos(coordinates)], dim=-1)
+
+
 class SamHQModel(SamModel):
-    _keys_to_ignore_on_load_missing = ["prompt_encoder.shared_embedding.positional_embedding"]
+    # Tied weights: prompt_encoder.shared_embedding shares weights with shared_image_embedding
+    _tied_weights_keys = {
+        "prompt_encoder.shared_embedding.positional_embedding": "shared_image_embedding.positional_embedding"
+    }
 
     def __init__(self, config):
         super().__init__(config)
         self.vision_encoder = SamHQVisionEncoder(config.vision_config)
-
         self.mask_decoder = SamHQMaskDecoder(config.mask_decoder_config)
 
+        # Share positional embedding (matching original SAM-HQ architecture)
+        self.prompt_encoder.shared_embedding = self.shared_image_embedding
+
         self.post_init()
+
+    def get_expanded_tied_weights_keys(self, all_submodels: bool = False) -> dict:
+        # Override needed because default requires tie_word_embeddings=True (for language models)
+        if self._tied_weights_keys is None:
+            return {}
+        return self._tied_weights_keys.copy()
 
     @torch.no_grad()
     def get_image_embeddings(

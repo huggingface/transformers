@@ -24,7 +24,6 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Optional, Union
 
-import numpy as np
 import torch
 import torch.nn.functional as F
 from torch import Tensor, nn
@@ -411,29 +410,6 @@ class SamHQVisionLayer(GradientCheckpointingLayer):
         layernorm_output = self.layer_norm2(hidden_states)
         hidden_states = hidden_states + self.mlp(layernorm_output)
         return hidden_states
-
-
-class SamHQPositionalEmbedding(nn.Module):
-    def __init__(self, config):
-        super().__init__()
-        self.scale = config.scale
-        self.register_buffer("positional_embedding", self.scale * torch.randn((2, config.num_pos_feats)))
-
-    def forward(self, input_coords, input_shape=None):
-        """Positionally encode points that are normalized to [0,1]."""
-        coordinates = input_coords.clone()
-
-        if input_shape is not None:
-            coordinates[:, :, :, 0] = coordinates[:, :, :, 0] / input_shape[1]
-            coordinates[:, :, :, 1] = coordinates[:, :, :, 1] / input_shape[0]
-
-        # assuming coords are in [0, 1]^2 square and have d_1 x ... x d_n x 2 shape
-        coordinates = 2 * coordinates - 1
-        coordinates = coordinates.to(self.positional_embedding.dtype)
-        coordinates = coordinates @ self.positional_embedding
-        coordinates = 2 * np.pi * coordinates
-        # outputs d_1 x ... x d_n x channel shape
-        return torch.cat([torch.sin(coordinates), torch.cos(coordinates)], dim=-1)
 
 
 @auto_docstring
@@ -1095,6 +1071,34 @@ class SamHQVisionModel(SamHQPreTrainedModel):
         return self.vision_encoder(pixel_values, **kwargs)
 
 
+@auto_docstring(
+    custom_intro="""
+    Segment Anything Model HQ (SAM-HQ) for generating masks, given an input image and optional 2D location and bounding boxes.
+    """
+)
+class SamHQPositionalEmbedding(nn.Module):
+    """Positional embedding using nn.Parameter to enable proper weight tying during from_pretrained."""
+
+    def __init__(self, config):
+        super().__init__()
+        self.scale = config.scale
+        self.positional_embedding = nn.Parameter(
+            self.scale * torch.randn((2, config.num_pos_feats)), requires_grad=False
+        )
+
+    def forward(self, input_coords, input_shape=None):
+        """Positionally encode points that are normalized to [0,1]."""
+        coordinates = input_coords.clone()
+        if input_shape is not None:
+            coordinates[:, :, :, 0] = coordinates[:, :, :, 0] / input_shape[1]
+            coordinates[:, :, :, 1] = coordinates[:, :, :, 1] / input_shape[0]
+        coordinates = 2 * coordinates - 1
+        coordinates = coordinates.to(self.positional_embedding.dtype)
+        coordinates = coordinates @ self.positional_embedding
+        coordinates = 2 * torch.pi * coordinates
+        return torch.cat([torch.sin(coordinates), torch.cos(coordinates)], dim=-1)
+
+
 class SamHQMaskEmbedding(nn.Module):
     def __init__(self, config: SamHQPromptEncoderConfig):
         super().__init__()
@@ -1229,13 +1233,17 @@ class SamHQPromptEncoder(nn.Module):
 
 @auto_docstring(
     custom_intro="""
-    Segment Anything Model HQ (SAM-HQ) for generating masks, given an input image and optional 2D location and bounding boxes.
+    Segment Anything Model (SAM_HQ) for generating segmentation masks, given an input image and
+    input points and labels, boxes, or masks.
     """
 )
 class SamHQModel(SamHQPreTrainedModel):
     input_modalities = ("image", "text")
     _can_record_outputs = {"mask_decoder_attentions": OutputRecorder(SamHQTwoWayAttentionBlock, index=2)}
-    _keys_to_ignore_on_load_missing = ["prompt_encoder.shared_embedding.positional_embedding"]
+    # Tied weights: prompt_encoder.shared_embedding shares weights with shared_image_embedding
+    _tied_weights_keys = {
+        "prompt_encoder.shared_embedding.positional_embedding": "shared_image_embedding.positional_embedding"
+    }
 
     def __init__(self, config):
         super().__init__(config)
@@ -1244,8 +1252,10 @@ class SamHQModel(SamHQPreTrainedModel):
         self.prompt_encoder = SamHQPromptEncoder(config)
         # The module using it is not a PreTrainedModel subclass so we need this
         config.mask_decoder_config._attn_implementation = config._attn_implementation
-
         self.mask_decoder = SamHQMaskDecoder(config.mask_decoder_config)
+
+        # Share positional embedding (matching original SAM-HQ architecture)
+        self.prompt_encoder.shared_embedding = self.shared_image_embedding
         self.post_init()
 
     def get_input_embeddings(self):
@@ -1482,6 +1492,12 @@ class SamHQModel(SamHQPreTrainedModel):
             vision_hidden_states=vision_outputs.hidden_states if pixel_values is not None else None,
             vision_attentions=vision_outputs.attentions if pixel_values is not None else None,
         )
+
+    def get_expanded_tied_weights_keys(self, all_submodels: bool = False) -> dict:
+        # Override needed because default requires tie_word_embeddings=True (for language models)
+        if self._tied_weights_keys is None:
+            return {}
+        return self._tied_weights_keys.copy()
 
 
 __all__ = ["SamHQModel", "SamHQPreTrainedModel", "SamHQVisionModel"]
