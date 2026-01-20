@@ -100,7 +100,6 @@ class Qwen3VLMoeVisionText2TextModelTester(VLMModelTester):
         )
 
     def place_image_tokens(self, input_ids, config):
-        """Place image tokens with vision_start_token_id prefix"""
         input_ids = input_ids.clone()
         # Clear any accidental special tokens first
         input_ids[:, -1] = self.pad_token_id
@@ -113,7 +112,7 @@ class Qwen3VLMoeVisionText2TextModelTester(VLMModelTester):
         return input_ids
 
     def get_additional_inputs(self, config, input_ids, pixel_values):
-        """Qwen3 VL MoE requires image_grid_thw tensor"""
+        # Qwen3VL requires image_grid_thw tensor
         return {
             "image_grid_thw": torch.tensor([[1, 1, 1]] * self.batch_size, device=torch_device),
         }
@@ -134,10 +133,6 @@ class Qwen3VLMoeVisionText2TextModelTester(VLMModelTester):
 
 @require_torch
 class Qwen3VLMoeModelTest(VLMModelTest, unittest.TestCase):
-    """
-    Model tester for `Qwen3VLMoeForConditionalGeneration`.
-    """
-
     model_tester_class = Qwen3VLMoeVisionText2TextModelTester
 
     @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
@@ -153,13 +148,7 @@ class Qwen3VLMoeModelTest(VLMModelTest, unittest.TestCase):
         super().test_training_gradient_checkpointing_use_reentrant_true()
 
     def test_mismatching_num_image_tokens(self):
-        """
-        Tests that VLMs throw an error with explicit message saying what is wrong
-        when number of images don't match number of image tokens in the text.
-        Also we need to test multi-image cases when one prompt has multiple image tokens.
-
-        Override base class to handle Qwen3VLMoe-specific image_grid_thw tensor.
-        """
+        # Override the base test because we need to slice image_grid_thw too
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
