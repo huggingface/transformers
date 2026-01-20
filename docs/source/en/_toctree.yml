@@ -516,13 +516,15 @@
       - local: model_doc/gemma2
         title: Gemma2
       - local: model_doc/glm
-        title: GLM
+        title: GLM-4
       - local: model_doc/glm4
-        title: glm4
+        title: GLM-4-0414
       - local: model_doc/glm4_moe
-        title: glm4_moe
+        title: GLM-4.5, GLM-4.6, GLM-4.7
+      - local: model_doc/glm4_moe_lite
+        title: GLM-4.7-Flash
       - local: model_doc/glm_image
-        title: GlmImage
+        title: GLM-Image
       - local: model_doc/openai-gpt
         title: GPT
       - local: model_doc/gpt_neo
@@ -743,8 +745,6 @@
         title: XLNet
       - local: model_doc/xlstm
         title: xLSTM
-      - local: model_doc/glm4_moe_lite
-        title: y
       - local: model_doc/yoso
         title: YOSO
       - local: model_doc/zamba
