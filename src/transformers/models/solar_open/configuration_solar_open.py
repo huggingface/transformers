@@ -68,6 +68,10 @@ class SolarOpenConfig(PreTrainedConfig):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
+        attention_bias (`bool`, *optional*, defaults to `False`):
+            Whether to use a bias in the projection layers.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
         num_experts_per_tok (`int`, *optional*, defaults to 8):
             Number of experts per token.
         routed_scaling_factor (`float`, *optional*, defaults to 1.0):
@@ -127,6 +131,8 @@ class SolarOpenConfig(PreTrainedConfig):
         use_cache: bool = True,
         tie_word_embeddings: bool = False,
         rope_parameters: RopeParameters | None = None,
+        attention_bias: bool = False,
+        attention_dropout: float = 0.0,
         num_experts_per_tok: int = 8,
         routed_scaling_factor: float = 1.0,
         n_group: int = 1,

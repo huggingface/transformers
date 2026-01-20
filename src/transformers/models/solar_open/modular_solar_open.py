@@ -13,18 +13,19 @@
 # limitations under the License.
 """PyTorch SolarOpen model."""
 
+from torch import nn
+
 from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 from ..glm4_moe.configuration_glm4_moe import Glm4MoeConfig
 from ..glm4_moe.modeling_glm4_moe import (
-    Glm4MoeAttention,
     Glm4MoeForCausalLM,
     Glm4MoeModel,
     Glm4MoeMoE,
     Glm4MoePreTrainedModel,
     Glm4MoeRMSNorm,
 )
-from ..llama.modeling_llama import LlamaDecoderLayer
+from ..llama.modeling_llama import LlamaAttention, LlamaDecoderLayer
 
 
 logger = logging.get_logger(__name__)
@@ -76,6 +77,10 @@ class SolarOpenConfig(Glm4MoeConfig):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
+        attention_bias (`bool`, *optional*, defaults to `False`):
+            Whether to use a bias in the projection layers.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
         num_experts_per_tok (`int`, *optional*, defaults to 8):
             Number of experts per token.
         routed_scaling_factor (`float`, *optional*, defaults to 1.0):
@@ -126,6 +131,8 @@ class SolarOpenConfig(Glm4MoeConfig):
         use_cache: bool = True,
         tie_word_embeddings: bool = False,
         rope_parameters: RopeParameters | None = None,
+        attention_bias: bool = False,
+        attention_dropout: float = 0.0,
         num_experts_per_tok: int = 8,
         routed_scaling_factor: float = 1.0,
         n_group: int = 1,
@@ -159,6 +166,8 @@ class SolarOpenConfig(Glm4MoeConfig):
             use_cache=use_cache,
             tie_word_embeddings=tie_word_embeddings,
             rope_parameters=rope_parameters,
+            attention_bias=attention_bias,
+            attention_dropout=attention_dropout,
             num_experts_per_tok=num_experts_per_tok,
             routed_scaling_factor=routed_scaling_factor,
             n_group=n_group,
@@ -209,11 +218,10 @@ class SolarOpenMoE(Glm4MoeMoE):
     pass
 
 
-class SolarOpenAttention(Glm4MoeAttention):
-    def __init__(self, config: SolarOpenConfig, layer_idx: int | None = None):
+class SolarOpenAttention(LlamaAttention):
+    def __init__(self, config: SolarOpenConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.head_dim = config.head_dim
-        self.attention_dropout = 0.0  # SolarOpen does not use attention dropout
+        self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
 
 
 class SolarOpenRMSNorm(Glm4MoeRMSNorm):
