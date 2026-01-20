@@ -17,6 +17,7 @@ import torch
 
 from ...configuration_utils import PreTrainedConfig
 from ...generation.configuration_utils import GenerationConfig
+from ...utils.generic import is_flash_attention_requested
 from ...utils.metrics import attach_tracer, traced
 from .cache_manager import BlockManager, CacheAllocator, FullAttentionCacheAllocator, SlidingAttentionCacheAllocator
 from .requests import RequestState, get_device_and_memory_breakdown, logger
@@ -172,7 +173,7 @@ class PagedAttentionCache:
         # Infer number of blocks and max batch tokens
         page_size = self.head_dim * self.num_key_value_heads
 
-        if "flash" in self.config._attn_implementation:
+        if is_flash_attention_requested(self.config):
             num_attention_masks = 0  # only used to compute the default memory footprint args
         elif "sliding_attention" in group_types:
             # TODO: when we generalize to allow for block-attn, we can use `num_attention_masks=sum(set(group_types))`
@@ -222,11 +223,18 @@ class PagedAttentionCache:
         # Block management data structures
         self.allow_block_sharing = allow_block_sharing
         self.group_cache_managers: list[CacheAllocator] = []
+        self.num_full_attention_groups = 0
+        self.num_sliding_attention_groups = 0
+        self.max_sliding_window_blocks_per_request = 0
+
         for i, group_type in enumerate(group_types):
             if group_type == "full_attention":
                 cm = FullAttentionCacheAllocator(i, self.block_size, allow_block_sharing=allow_block_sharing)
+                self.num_full_attention_groups += 1
             elif group_type == "sliding_attention":
                 cm = SlidingAttentionCacheAllocator(i, self.block_size, config.sliding_window)
+                self.num_sliding_attention_groups += 1
+                self.max_sliding_window_blocks_per_request = cm._max_blocks_per_request
             else:
                 raise ValueError(f"Invalid group type: {group_type}")
             self.group_cache_managers.append(cm)
@@ -237,16 +245,38 @@ class PagedAttentionCache:
         self.blocks_to_complete: dict[str, int] = {}
         self._total_prefix_length: int = 0  # a counter to measure the impact of prefix sharing, also used in tests
 
+    def will_allocation_be_successful(self, num_requested_blocks: int, allocated_blocks: int) -> bool:
+        """Returns a boolean indicating if the allocation of (num_requested_blocks) blocks will be successful. The
+        number of newly allocated blocks needed is predicted by the following rules:
+        - for full attention groups: since there is no sliding window for full attention layers, one requested block is
+            always equivalent to one newly allocated block for EACH full attention group
+        - for sliding window groups: because of the sliding window, the number of blocks allocated to a request is
+            capped. Using the number of already (allocated_blocks) we can compute the number of new blocks to actually
+            allocate to the request, which can be lower than the number of requested blocks. That number is the same for
+            all sliding window groups, as only one sliding window size is supported.
+        """
+        # This is not in a branch, because it is very rare to have zero full attention layer
+        needed_blocks = num_requested_blocks * self.num_full_attention_groups
+        # Only take this branch if the model has sliding window attention layers
+        if self.num_sliding_attention_groups:
+            blocks_left = max(self.max_sliding_window_blocks_per_request - allocated_blocks, 0)
+            needed_blocks += min(blocks_left, num_requested_blocks) * self.num_sliding_attention_groups
+        return needed_blocks <= self.get_num_free_blocks()
+
     @traced
-    def allocate_blocks(self, n_blocks: int, state: RequestState) -> int:
+    def allocate_blocks(self, n_blocks: int, request_id: str, allocated_blocks: int) -> int | None:
         """Allocate cache blocks across all layer groups for a given request. Actual allocation is done by the cache
         managers, and this method only returns the maximum number of blocks actually allocated across all managers."""
+        # First check allocation will be successful before starting, to avoid partial allocations
+        if not self.will_allocation_be_successful(n_blocks, allocated_blocks):
+            return None
+        # Allocate blocks across all cache managers
         max_allocated = 0
         for cm in self.group_cache_managers:
-            allocated = cm.allocate_blocks(n_blocks, state.request_id, self._block_manager)
-            if allocated is None:
-                return None
-            max_allocated = max(max_allocated, allocated)
+            num_allocated_blocks = cm.allocate_blocks(n_blocks, request_id, self._block_manager)
+            if num_allocated_blocks is None:
+                raise ValueError(f"Failed to allocate {n_blocks} blocks for request {request_id}")
+            max_allocated = max(max_allocated, num_allocated_blocks)
         return max_allocated
 
     @traced

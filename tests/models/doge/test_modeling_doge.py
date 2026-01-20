@@ -17,7 +17,6 @@ import unittest
 
 from transformers import AutoTokenizer, DogeConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
-    require_read_token,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -367,7 +366,6 @@ class DogeIntegrationTest(unittest.TestCase):
             cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
 
     @slow
-    @require_read_token
     def test_Doge_20M_hard(self):
         """
         An integration test for Doge-20M. It tests against a long output to ensure the subtle numerical differences

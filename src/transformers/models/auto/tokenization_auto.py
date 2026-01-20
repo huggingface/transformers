@@ -130,6 +130,15 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("gemma3n", "GemmaTokenizer" if is_tokenizers_available() else None),
         ("gemma3n_text", "GemmaTokenizer" if is_tokenizers_available() else None),
         ("git", "BertTokenizer" if is_tokenizers_available() else None),
+        ("glm", "TokenizersBackend" if is_tokenizers_available() else None),
+        ("glm4", "TokenizersBackend" if is_tokenizers_available() else None),
+        ("glm4_moe", "TokenizersBackend" if is_tokenizers_available() else None),
+        ("glm4_moe_lite", "TokenizersBackend" if is_tokenizers_available() else None),
+        ("glm4v", "TokenizersBackend" if is_tokenizers_available() else None),
+        ("glm4v_moe", "TokenizersBackend" if is_tokenizers_available() else None),
+        ("glm_image", "TokenizersBackend" if is_tokenizers_available() else None),
+        ("glmasr", "TokenizersBackend" if is_tokenizers_available() else None),
+        ("got_ocr2", "TokenizersBackend" if is_tokenizers_available() else None),
         ("gpt-sw3", "GPTSw3Tokenizer" if is_sentencepiece_available() else None),
         ("gpt2", "GPT2Tokenizer" if is_tokenizers_available() else None),
         ("gpt_bigcode", "GPT2Tokenizer" if is_tokenizers_available() else None),
@@ -160,6 +169,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("layoutlmv3", "LayoutLMv3Tokenizer" if is_tokenizers_available() else None),
         ("layoutxlm", "LayoutXLMTokenizer" if is_tokenizers_available() else None),
         ("led", "LEDTokenizer" if is_tokenizers_available() else None),
+        ("lighton_ocr", "Qwen2TokenizerFast" if is_tokenizers_available() else None),
         ("lilt", "RobertaTokenizer" if is_tokenizers_available() else None),
         ("longformer", "RobertaTokenizer" if is_tokenizers_available() else None),
         ("longt5", "T5Tokenizer" if is_tokenizers_available() else None),
@@ -572,18 +582,6 @@ class AutoTokenizer:
         >>> # Explicitly use the sentencepiece backend
         >>> tokenizer = AutoTokenizer.from_pretrained("hf-internal-testing/llama-tokenizer", backend="sentencepiece")
         ```"""
-        use_auth_token = kwargs.pop("use_auth_token", None)
-        if use_auth_token is not None:
-            logger.warning(
-                "The `use_auth_token` argument is deprecated and will be removed in v5 of Transformers. Please use `token` instead.",
-                FutureWarning,
-            )
-            if kwargs.get("token") is not None:
-                raise ValueError(
-                    "`token` and `use_auth_token` are both specified. Please set only the argument `token`."
-                )
-            kwargs["token"] = use_auth_token
-
         config = kwargs.pop("config", None)
         kwargs["_from_auto"] = True
 
@@ -699,7 +697,7 @@ class AutoTokenizer:
                 tokenizer_class = TokenizersBackend
 
             return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-        elif getattr(config, "tokenizer_class"):
+        elif getattr(config, "tokenizer_class", None):
             _class = config.tokenizer_class
             if "PreTrainedTokenizerFast" not in _class:
                 _class = _class.replace("Fast", "")
@@ -718,7 +716,7 @@ class AutoTokenizer:
                 )
             config = config.encoder
 
-        model_type = config_class_to_model_type(type(config).__name__) or config.get("model_type", None)
+        model_type = config_class_to_model_type(type(config).__name__) or getattr(config, "model_type", None)
         if model_type is not None:
             tokenizer_class = TOKENIZER_MAPPING.get(type(config), TokenizersBackend)
             if tokenizer_class is not None:

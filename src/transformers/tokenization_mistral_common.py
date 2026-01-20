@@ -268,6 +268,15 @@ class MistralCommonBackend(PreTrainedTokenizerBase):
         if kwargs and not set(kwargs.keys()).issubset(_VALID_INIT_KWARGS):
             raise ValueError(f"Kwargs {list(kwargs.keys())} are not supported to init `MistralCommonBackend`.")
 
+        self.init_kwargs = {
+            "tokenizer_path": tokenizer_path,
+            "mode": mode,
+            "model_max_length": model_max_length,
+            "padding_side": padding_side,
+            "truncation_side": truncation_side,
+            "model_input_names": model_input_names,
+            "clean_up_tokenization_spaces": clean_up_tokenization_spaces,
+        }
         self._tokenizer_path = Path(tokenizer_path)
         self._mode = self._get_validation_mode(mode)
 

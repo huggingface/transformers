@@ -3084,7 +3084,7 @@ class PreTrainedTokenizerBase(PushToHubMixin):
                 values are:
                 - `'pt'`: Return PyTorch `torch.Tensor` objects.
                 - `'np'`: Return NumPy `np.ndarray` objects.
-            return_dict (`bool`, defaults to `False`):
+            return_dict (`bool`, defaults to `True`):
                 Whether to return a dictionary with named outputs. Has no effect if tokenize is `False`.
             tokenizer_kwargs (`dict[str: Any]`, *optional*): Additional kwargs to pass to the tokenizer.
             return_assistant_tokens_mask (`bool`, defaults to `False`):

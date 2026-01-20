@@ -69,7 +69,6 @@ if is_vision_available():
 
 if is_scipy_available():
     import scipy.special
-    import scipy.stats
 
 
 logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
@@ -1484,7 +1483,6 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
 
         return results
 
-    # Copied from transformers.models.detr.image_processing_detr.DetrImageProcessor.post_process_semantic_segmentation with Detr->ConditionalDetr
     def post_process_semantic_segmentation(self, outputs, target_sizes: list[tuple[int, int]] | None = None):
         """
         Converts the output of [`ConditionalDetrForSegmentation`] into semantic segmentation maps. Only supports PyTorch.
@@ -1501,11 +1499,11 @@ class ConditionalDetrImageProcessor(BaseImageProcessor):
                 corresponding to the target_sizes entry (if `target_sizes` is specified). Each entry of each
                 `torch.Tensor` correspond to a semantic class id.
         """
-        class_queries_logits = outputs.logits  # [batch_size, num_queries, num_classes+1]
+        class_queries_logits = outputs.logits  # [batch_size, num_queries, num_classes]
         masks_queries_logits = outputs.pred_masks  # [batch_size, num_queries, height, width]
 
-        # Remove the null class `[..., :-1]`
-        masks_classes = class_queries_logits.softmax(dim=-1)[..., :-1]
+        # Conditional DETR does not have a null class, so we use all classes
+        masks_classes = class_queries_logits.softmax(dim=-1)
         masks_probs = masks_queries_logits.sigmoid()  # [batch_size, num_queries, height, width]
 
         # Semantic segmentation logits of shape (batch_size, num_classes, height, width)
