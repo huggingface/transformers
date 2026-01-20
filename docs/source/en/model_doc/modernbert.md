@@ -89,6 +89,49 @@ echo -e "Plants create [MASK] through a process known as photosynthesis." | tran
 </hfoption>
 </hfoptions>
 
+## Padding-free inference and training
+
+ModernBERT supports padding-free inference and training. For example, you can leverage the [`DataCollatorWithFlattening`] to prepare your inputs:
+
+```python
+import torch
+from transformers import AutoModelForMaskedLM, AutoTokenizer, DataCollatorWithFlattening
+
+model_id = "answerdotai/ModernBERT-base"
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+collator = DataCollatorWithFlattening(return_flash_attn_kwargs=True)
+
+
+def prepare_text_for_padding_free(texts):
+    # base tokenization with padding and subsequent flattening
+    inputs_dict = tokenizer(texts, return_tensors="pt", padding=True).to("cuda")
+    flattened_features = collator(
+        [
+            {"input_ids": i[a.bool()].tolist()}
+            for i, a in zip(inputs_dict["input_ids"], inputs_dict["attention_mask"])
+        ]
+    )
+
+    for k, v in flattened_features.items():
+        if isinstance(v, torch.Tensor):
+            flattened_features[k] = v.to("cuda")
+
+    return flattened_features
+
+
+inputs = prepare_text_for_padding_free(
+    ["The capital of France is [MASK].", "ModernBERT is a [MASK] model."]
+)
+model = AutoModelForMaskedLM.from_pretrained(
+    model_id, attn_implementation="flash_attention_2", dtype=torch.bfloat16, device_map="cuda"
+)
+
+# Optional: use torch.compile for faster inference
+# model.forward = torch.compile(model.forward, fullgraph=True)
+
+out = model(**inputs)
+```
+
 ## ModernBertConfig
 
 [[autodoc]] ModernBertConfig
