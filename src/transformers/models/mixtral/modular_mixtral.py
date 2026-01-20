@@ -26,6 +26,7 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...integrations import use_experts_implementation
+from ...integrations.tensor_parallel import all_reduce_backward
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
@@ -163,6 +164,10 @@ class MixtralExperts(nn.Module):
                 continue
             top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
             current_state = hidden_states[token_idx]
+            # Apply all_reduce_backward for tensor parallel: identity forward, all-reduce gradient backward
+            # This is needed because gate_up_proj uses packed_colwise sharding
+            if hasattr(self, "_device_mesh") and self._device_mesh is not None:
+                current_state = all_reduce_backward(current_state, self._device_mesh)
             gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
             current_hidden_states = self.act_fn(gate) * up
             current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])

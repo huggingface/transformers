@@ -1071,12 +1071,16 @@ class RouterParallel(TensorParallelLayer):
 
 class AllReduceOutput(TensorParallelLayer):
     """
-    Module-level parallel that applies all-reduce on the output.
+    Module-level parallel that applies all-reduce on output (forward) and input gradient (backward).
 
     Use this when a module's internal computation produces partial sums that need
     to be reduced across TP ranks, but the module uses custom forward logic
     (e.g., nn.functional.linear) rather than nn.Linear modules where RowwiseParallel
     output hooks would be triggered.
+
+    This implements the correct gradient flow for row-parallel style computations:
+    - Forward: all_reduce(partial_output) -> full_output
+    - Backward: all_reduce(partial_input_grad) -> full_input_grad
     """
 
     def __init__(self, **kwargs):
@@ -1112,7 +1116,9 @@ class AllReduceOutput(TensorParallelLayer):
             self._prepare_input_fn,
             self._prepare_output_fn,
         )
-
+        # Store device_mesh on module so MoE forward functions can use it for gradient sync
+        module._device_mesh = device_mesh
+        print(f"[DEBUG] AllReduceOutput.prepare_module_tp: Set _device_mesh on {module.__class__.__name__}")
 
 class ParallelInterface(GeneralInterface):
     # Class instance object, so that a call to `register` can be reflected into all other files correctly, even if
