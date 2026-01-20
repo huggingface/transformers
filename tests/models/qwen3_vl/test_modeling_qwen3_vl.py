@@ -121,10 +121,6 @@ class Qwen3VLVisionText2TextModelTester(VLMModelTester):
 
 @require_torch
 class Qwen3VLModelTest(VLMModelTest, unittest.TestCase):
-    """
-    Model tester for `Qwen3VLForConditionalGeneration`.
-    """
-
     model_tester_class = Qwen3VLVisionText2TextModelTester
 
     @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
@@ -140,11 +136,7 @@ class Qwen3VLModelTest(VLMModelTest, unittest.TestCase):
         super().test_training_gradient_checkpointing_use_reentrant_true()
 
     def test_mismatching_num_image_tokens(self):
-        """
-        Tests that VLMs through an error with explicit message saying what is wrong
-        when number of images don't match number of image tokens in the text.
-        Also we need to test multi-image cases when one prompr has multiple image tokens.
-        """
+        # Override the base test because we need to slice image_grid_thw too
         config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
         for model_class in self.all_model_classes:
             model = model_class(config).to(torch_device)
