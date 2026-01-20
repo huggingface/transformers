@@ -78,14 +78,14 @@ class Qwen3VLVisionText2TextModelTester(VLMModelTester):
         self.rope_theta = 10000
         self.rope_parameters = {"rope_type": "default", "mrope_section": [16, 8, 8], "mrope_interleaved": True}
 
-    # Tester method overrides
-
     def create_pixel_values(self):
         # Qwen3VL expects flattened patches: (total_patches, channels * patch_size^2 * temporal_patch_size)
-        return floats_tensor([
-            self.batch_size * (self.image_size ** 2) // (self.patch_size ** 2),
-            self.num_channels * (self.patch_size ** 2) * self.temporal_patch_size,
-        ])
+        return floats_tensor(
+            [
+                self.batch_size * (self.image_size**2) // (self.patch_size**2),
+                self.num_channels * (self.patch_size**2) * self.temporal_patch_size,
+            ]
+        )
 
     def place_image_tokens(self, input_ids, config):
         # Place image tokens with vision_start_token_id prefix

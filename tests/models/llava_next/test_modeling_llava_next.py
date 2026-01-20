@@ -83,13 +83,15 @@ class LlavaNextVisionText2TextModelTester(VLMModelTester):
 
     def create_pixel_values(self):
         """LlavaNext expects 5D pixel_values: (batch_size, num_patches, channels, height, width)"""
-        return floats_tensor([
-            self.batch_size,
-            self.num_patches_per_image,
-            self.num_channels,
-            self.image_size,
-            self.image_size,
-        ])
+        return floats_tensor(
+            [
+                self.batch_size,
+                self.num_patches_per_image,
+                self.num_channels,
+                self.image_size,
+                self.image_size,
+            ]
+        )
 
     def get_additional_inputs(self, config, input_ids, pixel_values):
         """LlavaNext requires image_sizes tensor"""

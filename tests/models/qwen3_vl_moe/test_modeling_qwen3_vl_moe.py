@@ -90,24 +90,14 @@ class Qwen3VLMoeVisionText2TextModelTester(VLMModelTester):
         self.num_experts_per_tok = 4
         self.num_experts = 8
 
-    # Tester method overrides
-
-    @property
-    def num_image_tokens(self):
-        """Qwen3 VL MoE uses fixed num_image_tokens"""
-        return self._base_num_image_tokens
-
-    @property
-    def seq_length(self):
-        """Override to use fixed num_image_tokens"""
-        return self._base_seq_length + self._base_num_image_tokens
-
     def create_pixel_values(self):
         """Qwen3 VL MoE expects flattened patches: (total_patches, channels * patch_size^2 * temporal_patch_size)"""
-        return floats_tensor([
-            self.batch_size * (self.image_size ** 2) // (self.patch_size ** 2),
-            self.num_channels * (self.patch_size ** 2) * self.temporal_patch_size,
-        ])
+        return floats_tensor(
+            [
+                self.batch_size * (self.image_size**2) // (self.patch_size**2),
+                self.num_channels * (self.patch_size**2) * self.temporal_patch_size,
+            ]
+        )
 
     def place_image_tokens(self, input_ids, config):
         """Place image tokens with vision_start_token_id prefix"""
