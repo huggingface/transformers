@@ -930,8 +930,7 @@ class TrackioCallback(TrainerCallback):
     """
     A [`TrainerCallback`] that logs metrics to Trackio.
 
-    It records training metrics, model (and PEFT) configuration, and GPU memory usage.
-    If `nvidia-ml-py` is installed, GPU power consumption is also tracked.
+    It records training metrics, model (including PEFT) configuration.
 
     **Requires**:
     ```bash
@@ -959,24 +958,8 @@ class TrackioCallback(TrainerCallback):
         [`TrainingArguments`]. Please refer to the docstring of for more details.
         """
         if state.is_world_process_zero:
-            if os.getenv("TRACKIO_PROJECT"):
-                logger.warning(
-                    "The `TRACKIO_PROJECT` environment variable is deprecated and will be removed in a future "
-                    "version. Use TrainingArguments.project instead."
-                )
-                project = os.getenv("TRACKIO_PROJECT")
-            else:
-                project = args.project
-
-            if os.getenv("TRACKIO_SPACE_ID"):
-                logger.warning(
-                    "The `TRACKIO_SPACE_ID` environment variable is deprecated and will be removed in a future "
-                    "version. Use TrainingArguments.trackio_space_id instead."
-                )
-                space_id = os.getenv("TRACKIO_SPACE_ID")
-            else:
-                space_id = args.trackio_space_id
-
+            project = args.project
+            space_id = args.trackio_space_id
             combined_dict = {**args.to_dict()}
 
             if hasattr(model, "config") and model.config is not None:
@@ -1021,31 +1004,12 @@ class TrackioCallback(TrainerCallback):
             "total_flos",
         ]
 
-        if is_torch_available() and torch.cuda.is_available():
-            device_idx = torch.cuda.current_device()
-            total_memory = torch.cuda.get_device_properties(device_idx).total_memory
-            memory_allocated = torch.cuda.memory_allocated(device_idx)
-
-            gpu_memory_logs = {
-                f"gpu/{device_idx}/allocated_memory": memory_allocated / (1024**3),  # GB
-                f"gpu/{device_idx}/memory_usage": memory_allocated / total_memory,  # ratio
-            }
-            if _is_package_available("pynvml"):
-                power = torch.cuda.power_draw(device_idx)
-                gpu_memory_logs[f"gpu/{device_idx}/power"] = power / 1000  # Watts
-            if dist.is_available() and dist.is_initialized():
-                gathered_logs = [None] * dist.get_world_size()
-                dist.all_gather_object(gathered_logs, gpu_memory_logs)
-                gpu_memory_logs = {k: v for d in gathered_logs for k, v in d.items()}
-        else:
-            gpu_memory_logs = {}
-
         if not self._initialized:
             self.setup(args, state, model)
         if state.is_world_process_zero:
             non_scalar_logs = {k: v for k, v in logs.items() if k not in single_value_scalars}
             non_scalar_logs = rewrite_logs(non_scalar_logs)
-            self._trackio.log({**non_scalar_logs, **gpu_memory_logs, "train/global_step": state.global_step})
+            self._trackio.log({**non_scalar_logs, "train/global_step": state.global_step})
 
     def on_save(self, args, state, control, **kwargs):
         return
