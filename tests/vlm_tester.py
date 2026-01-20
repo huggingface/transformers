@@ -16,8 +16,6 @@ import copy
 import unittest
 from inspect import signature
 
-from parameterized import parameterized
-
 from .test_configuration_common import ConfigTester
 from .test_modeling_common import (
     GenerationTesterMixin,
@@ -411,21 +409,6 @@ class VLMModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin)
                     [curr_input_dict["image_sizes"], curr_input_dict["image_sizes"]], dim=0
                 )
             _ = model(**curr_input_dict)
-
-    @parameterized.expand(
-        [
-            (-1,),
-            ([-1],),
-            ([-1, -2],),
-        ],
-    )
-    @unittest.skip(reason="VLMs cannot pass input_embeds without input_ids")
-    def test_inputs_embeds(self):
-        pass
-
-    @unittest.skip(reason="VLMs cannot pass input_embeds without input_ids")
-    def test_inputs_embeds_matches_input_ids(self):
-        pass
 
     @unittest.skip(
         "VLMs need lots of steps to prepare images/mask correctly to get pad-free inputs. "
