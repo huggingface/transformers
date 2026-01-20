@@ -33,6 +33,8 @@ from threading import Thread
 from typing import Optional, TypeVar, get_type_hints
 from zipfile import is_zipfile
 
+from _pyhmll_impl import safetensors, dtype, Device
+
 import torch
 from huggingface_hub import create_repo, is_offline_mode, split_torch_state_dict_into_shards
 from packaging import version
@@ -4165,12 +4167,18 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             all_pointer = set()
             # Checkpoints are safetensors
             if checkpoint_files is not None and checkpoint_files[0].endswith(".safetensors"):
-                merged_state_dict = {}
-                for file in checkpoint_files:
-                    file_pointer = safe_open(file, framework="pt", device="cpu")
-                    all_pointer.add(file_pointer)
-                    for k in file_pointer.keys():
-                        merged_state_dict[k] = file_pointer.get_slice(k)  # don't materialize yet
+                with safetensors(checkpoint_files[0], Device.CUDA) as registry: # TODO : dynamic
+                    merged_state_dict = {}
+
+                    # for file in checkpoint_files:
+                    # file_pointer = safe_open(file, framework="pt", device="cpu")
+                    # all_pointer.add(file_pointer)
+                    # for k in file_pointer.keys():
+                    #     merged_state_dict[k] = file_pointer.get_slice(k)  # don't materialize yet
+                    for name in registry.names():
+                        merged_state_dict[name] = partial(registry.fetch, name)  # TODO: needs to happen in the same thread
+
+
             # User passed an explicit state_dict
             elif state_dict is not None:
                 merged_state_dict = state_dict
@@ -4200,8 +4208,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             )
 
             # finally close all opened file pointers
-            for k in all_pointer:
-                k.__exit__(None, None, None)
+            # for k in all_pointer:
+            #     k.__exit__(None, None, None)
 
         # Marks tied weights as `_is_hf_initialized` to avoid initializing them (it's very important for efficiency)
         model.mark_tied_weights_as_initialized()
