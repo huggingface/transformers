@@ -958,10 +958,7 @@ class TrackioCallback(TrainerCallback):
         [`TrainingArguments`]. Please refer to the docstring of for more details.
         """
         if state.is_world_process_zero:
-            project = args.project
-            space_id = args.trackio_space_id
             combined_dict = {**args.to_dict()}
-
             if hasattr(model, "config") and model.config is not None:
                 model_config = model.config if isinstance(model.config, dict) else model.config.to_dict()
                 combined_dict = {**model_config, **combined_dict}
@@ -970,9 +967,9 @@ class TrackioCallback(TrainerCallback):
                 combined_dict = {"peft_config": peft_config, **combined_dict}
 
             self._trackio.init(
-                project=project,
+                project=args.project,
                 name=args.run_name,
-                space_id=space_id,
+                space_id=args.trackio_space_id,
                 resume="allow",
                 private=args.hub_private_repo,
             )
