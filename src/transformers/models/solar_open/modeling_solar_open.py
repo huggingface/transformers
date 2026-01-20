@@ -310,7 +310,7 @@ class SolarOpenAttention(nn.Module):
         self.num_key_value_groups = config.num_attention_heads // config.num_key_value_heads
         self.scaling = self.head_dim**-0.5
         self.rope_parameters = config.rope_parameters
-        self.attention_dropout = 0.0  # SolarOpen does not use attention dropout
+        self.attention_dropout = config.attention_dropout
         self.is_causal = True
 
         self.q_proj = nn.Linear(
