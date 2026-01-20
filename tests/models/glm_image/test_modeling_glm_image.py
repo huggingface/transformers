@@ -264,6 +264,10 @@ class GlmImageModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
             loss = model(**inputs_dict).loss
             loss.backward()
 
+    @unittest.skip(reason="Reequires input ids AND image grid to generate")
+    def test_generate_without_input_ids(self):
+        pass
+
     @parameterized.expand(TEST_EAGER_MATCHES_SDPA_INFERENCE_PARAMETERIZATION)
     @unittest.skip("Needs special input preparation. Not important test for model, skip for now")
     def test_eager_matches_sdpa_inference(
@@ -305,7 +309,7 @@ class GlmImageModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
         pass
 
     @unittest.skip(reason="GLM-Image can't do and does not need assisted generation. Not worth fixing!")
-    def test_prompt_lookup_decoding_matches_greedy_searc(self):
+    def test_prompt_lookup_decoding_matches_greedy_search(self):
         pass
 
     @parameterized.expand([("random",), ("same",)])

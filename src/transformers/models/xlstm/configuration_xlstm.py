@@ -231,13 +231,11 @@ class xLSTMConfig(PreTrainedConfig):
         self.eos_token_id = eos_token_id
         self.max_inference_chunksize = max_inference_chunksize
 
-        super().__init__(
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            pad_token_id=pad_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.pad_token_id = pad_token_id
+        self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(**kwargs)
 
     @property
     def qk_dim(self):

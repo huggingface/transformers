@@ -17,6 +17,7 @@ import copy
 import unittest
 
 import numpy as np
+import pytest
 import requests
 from huggingface_hub import hf_hub_download
 from parameterized import parameterized
@@ -215,23 +216,17 @@ class VideoLlavaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
     def test_config(self):
         self.config_tester.run_common_tests()
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing(self):
-        pass
+        super().test_training_gradient_checkpointing()
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
+        super().test_training_gradient_checkpointing_use_reentrant_false()
+
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        super().test_training_gradient_checkpointing_use_reentrant_true()
 
     @unittest.skip(
         "VLMs need lots of steps to prepare images/mask correctly to get pad-free inputs. Can be tested as part of LLM test"
