@@ -30,7 +30,7 @@ logger = logging.get_logger(__name__)
 class PPDocLayoutV3Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`PP-DocLayoutV3`]. It is used to instantiate a
-    RT-DETR model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    PP-DocLayoutV3 model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the PP-DocLayoutV3
     [PaddlePaddle/PP-DocLayoutV3_safetensors](https://huggingface.co/PaddlePaddle/PP-DocLayoutV3_safetensors) architecture.
 
@@ -142,7 +142,8 @@ class PPDocLayoutV3Config(PreTrainedConfig):
             Whether the architecture has an encoder decoder structure.
         gp_head_size (`int`, *optional*, defaults to 64):
             The size of the global pointer head.
-
+        gp_dropout_value (`float`, *optional*, defaults to 0.1):
+            The dropout probability in the global pointer head.
     Examples:
 
     ```python
@@ -219,6 +220,7 @@ class PPDocLayoutV3Config(PreTrainedConfig):
         disable_custom_kernels=True,
         is_encoder_decoder=True,
         gp_head_size=64,
+        gp_dropout_value=0.1,
         **kwargs,
     ):
         self.initializer_range = initializer_range
@@ -302,6 +304,7 @@ class PPDocLayoutV3Config(PreTrainedConfig):
         self.anchor_image_size = list(anchor_image_size) if anchor_image_size is not None else None
         self.disable_custom_kernels = disable_custom_kernels
         self.gp_head_size = gp_head_size
+        self.gp_dropout_value = gp_dropout_value
 
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 

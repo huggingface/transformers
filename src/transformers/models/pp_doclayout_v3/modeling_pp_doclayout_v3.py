@@ -45,14 +45,13 @@ class GlobalPointer(nn.Module):
         super().__init__()
         self.head_size = config.gp_head_size
         self.dense = nn.Linear(config.d_model, self.head_size * 2)
-        self.dropout = nn.Dropout(0.1)
+        self.dropout = nn.Dropout(config.gp_dropout_value)
 
     def forward(self, inputs):
         batch_size, sequence_length, _ = inputs.shape
         query_key_projection = self.dense(inputs).reshape(batch_size, sequence_length, 2, self.head_size)
         query_key_projection = self.dropout(query_key_projection)
-        queries = query_key_projection[:, :, 0, :]
-        keys = query_key_projection[:, :, 1, :]
+        queries, keys = torch.unbind(query_key_projection, dim=2)
 
         logits = (queries @ keys.transpose(-2, -1)) / (self.head_size**0.5)
         mask = torch.tril(torch.ones(sequence_length, sequence_length, device=logits.device)).bool()
@@ -239,7 +238,21 @@ class PPDocLayoutV3PreTrainedModel(PreTrainedModel):
 
     @torch.no_grad()
     def _init_weights(self, module):
-        if isinstance(module, PPDocLayoutV3MultiscaleDeformableAttention):
+        """Initialize the weights"""
+        if isinstance(module, PPDocLayoutV3ForObjectDetection):
+            if module.model.decoder.class_embed is not None:
+                layer = module.model.decoder.class_embed
+                prior_prob = self.config.initializer_bias_prior_prob or 1 / (self.config.num_labels + 1)
+                bias = float(-math.log((1 - prior_prob) / prior_prob))
+                init.xavier_uniform_(layer.weight)
+                init.constant_(layer.bias, bias)
+
+            if module.model.decoder.bbox_embed is not None:
+                layer = module.model.decoder.bbox_embed
+                init.constant_(layer.layers[-1].weight, 0)
+                init.constant_(layer.layers[-1].bias, 0)
+
+        elif isinstance(module, PPDocLayoutV3MultiscaleDeformableAttention):
             init.constant_(module.sampling_offsets.weight, 0.0)
             default_dtype = torch.get_default_dtype()
             thetas = torch.arange(module.n_heads, dtype=torch.int64).to(default_dtype) * (
@@ -442,10 +455,11 @@ class MaskFeatFPN(nn.Module):
     ):
         super().__init__()
 
-        assert len(in_channels) == len(fpn_strides), (
-            f"Error: The lengths of 'in_channels' and 'fpn_strides' must be equal. "
-            f"Got len(in_channels)={len(in_channels)} and len(fpn_strides)={len(fpn_strides)}."
-        )
+        if len(in_channels) != len(fpn_strides):
+            raise ValueError(
+                f"The lengths of 'in_channels' and 'fpn_strides' must be equal. "
+                f"Got len(in_channels)={len(in_channels)} and len(fpn_strides)={len(fpn_strides)}."
+            )
 
         reorder_index = np.argsort(fpn_strides, axis=0).tolist()
         in_channels = [in_channels[i] for i in reorder_index]
@@ -780,11 +794,9 @@ class PPDocLayoutV3Encoder(nn.Module):
 
 class PPDocLayoutV3HybridEncoder(nn.Module):
     """
-    Decoder consisting of a projection layer, a set of `PPDocLayoutV3Encoder`, a top-down Feature Pyramid Network
-    (FPN) and a bottom-up Path Aggregation Network (PAN). More details on the paper: https://huggingface.co/papers/2304.08069
-
-    Args:
-        config: PPDocLayoutV3Config
+    Main difference to `RTDetrHybridEncoder`:
+        1. Mask Feature Head: Added `MaskFeatFPN` module (`self.mask_feat_head`) for document - specific mask feature generation.
+        2. Extra Conv Layers: Introduced `self.encoder_mask_lateral` and `self.encoder_mask_output` for mask feature processing and output.
     """
 
     def __init__(self, config: PPDocLayoutV3Config):
@@ -845,8 +857,8 @@ class PPDocLayoutV3HybridEncoder(nn.Module):
             feat_channels=mask_feat_channels[0],
             out_channels=mask_feat_channels[1],
         )
-        self.enc_mask_lateral = BaseConv(config.x4_feat_dim, mask_feat_channels[1], 3, 1, "silu")
-        self.enc_mask_output = nn.Sequential(
+        self.encoder_mask_lateral = BaseConv(config.x4_feat_dim, mask_feat_channels[1], 3, 1, "silu")
+        self.encoder_mask_output = nn.Sequential(
             BaseConv(mask_feat_channels[1], mask_feat_channels[1], 3, 1, "silu"),
             nn.Conv2d(in_channels=mask_feat_channels[1], out_channels=config.num_prototypes, kernel_size=1),
         )
@@ -982,8 +994,8 @@ class PPDocLayoutV3HybridEncoder(nn.Module):
 
         mask_feat = self.mask_feat_head(pan_feature_maps)
         mask_feat = F.interpolate(mask_feat, scale_factor=2, mode="bilinear", align_corners=False)
-        mask_feat += self.enc_mask_lateral(x4_feat[0])
-        mask_feat = self.enc_mask_output(mask_feat)
+        mask_feat += self.encoder_mask_lateral(x4_feat[0])
+        mask_feat = self.encoder_mask_output(mask_feat)
 
         if not return_dict:
             return tuple(v for v in [pan_feature_maps, encoder_states, all_attentions, mask_feat] if v is not None)
@@ -1114,6 +1126,11 @@ def inverse_sigmoid(x, eps=1e-5):
 
 
 class PPDocLayoutV3Decoder(PPDocLayoutV3PreTrainedModel):
+    """
+    Main difference to `RTDetrDecoder`:
+        A new mask generation process is introduced at each decoder layer.
+    """
+
     def __init__(self, config: PPDocLayoutV3Config):
         super().__init__(config)
 
@@ -1146,7 +1163,7 @@ class PPDocLayoutV3Decoder(PPDocLayoutV3PreTrainedModel):
         order_head=None,
         global_pointer=None,
         mask_query_head=None,
-        dec_norm=None,
+        norm=None,
         mask_feat=None,
         output_attentions=None,
         output_hidden_states=None,
@@ -1240,7 +1257,7 @@ class PPDocLayoutV3Decoder(PPDocLayoutV3PreTrainedModel):
             )
 
             # get_pred_class_order_and_mask
-            out_query = dec_norm(hidden_states)
+            out_query = norm(hidden_states)
             mask_query_embed = mask_query_head(out_query)
             batch_size, mask_dim, _ = mask_query_embed.shape
             _, _, mask_h, mask_w = mask_feat.shape
@@ -1647,9 +1664,9 @@ class PPDocLayoutV3Model(PPDocLayoutV3PreTrainedModel):
         self.decoder_input_proj = nn.ModuleList(decoder_input_proj_list)
         self.decoder = PPDocLayoutV3Decoder(config)
 
-        self.dec_order_head = nn.Linear(config.d_model, config.d_model)
-        self.dec_global_pointer = GlobalPointer(config)
-        self.dec_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
+        self.decoder_order_head = nn.Linear(config.d_model, config.d_model)
+        self.decoder_global_pointer = GlobalPointer(config)
+        self.decoder_norm = nn.LayerNorm(config.d_model, eps=config.layer_norm_eps)
         self.decoder.class_embed = self.enc_score_head
         self.decoder.bbox_embed = self.enc_bbox_head
 
@@ -1863,7 +1880,7 @@ class PPDocLayoutV3Model(PPDocLayoutV3PreTrainedModel):
         # _get_pred_class_and_mask
         batch_ind = torch.arange(memory.shape[0], device=output_memory.device).unsqueeze(1)
         target = output_memory[batch_ind, topk_ind]
-        out_query = self.dec_norm(target)
+        out_query = self.decoder_norm(target)
         mask_query_embed = self.mask_query_head(out_query)
         batch_size, mask_dim, _ = mask_query_embed.shape
         _, _, mask_h, mask_w = mask_feat.shape
@@ -1908,10 +1925,10 @@ class PPDocLayoutV3Model(PPDocLayoutV3PreTrainedModel):
             output_attentions=output_attentions,
             output_hidden_states=output_hidden_states,
             return_dict=return_dict,
-            order_head=self.dec_order_head,
-            global_pointer=self.dec_global_pointer,
+            order_head=self.decoder_order_head,
+            global_pointer=self.decoder_global_pointer,
             mask_query_head=self.mask_query_head,
-            dec_norm=self.dec_norm,
+            norm=self.decoder_norm,
             mask_feat=mask_feat,
         )
 
@@ -1954,6 +1971,11 @@ class PPDocLayoutV3Model(PPDocLayoutV3PreTrainedModel):
 
 @dataclass
 class PPDocLayoutV3HybridEncoderOutput(BaseModelOutput):
+    r"""
+    mask_feat (`torch.FloatTensor` of shape `(batch_size, config.num_queries, 200, 200)`):
+        Mask features for each query in the batch.
+    """
+
     mask_feat: torch.FloatTensor = None
 
 
@@ -1970,7 +1992,7 @@ class PPDocLayoutV3ForObjectDetectionOutput(ModelOutput):
     pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
         Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
         values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
-        possible padding). You can use [`~PPDocLayoutV3ImageProcessor.post_process_object_detection`] to retrieve the
+        possible padding). You can use [`~PPDocLayoutV3ImageProcessorFast.post_process_object_detection`] to retrieve the
         unnormalized (absolute) bounding boxes.
     last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`):
         Sequence of hidden-states at the output of the last layer of the decoder of the model.

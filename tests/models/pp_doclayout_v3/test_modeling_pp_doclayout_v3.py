@@ -18,16 +18,20 @@ import inspect
 import math
 import unittest
 
+import requests
 from parameterized import parameterized
 
 from transformers import (
     PPDocLayoutV3Config,
     PPDocLayoutV3ForObjectDetection,
+    PPDocLayoutV3ImageProcessor,
     is_torch_available,
+    is_vision_available,
 )
 from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
+    require_vision,
     slow,
     torch_device,
 )
@@ -39,6 +43,9 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 
 if is_torch_available():
     import torch
+
+if is_vision_available():
+    from PIL import Image
 
 
 class PPDocLayoutV3ModelTester:
@@ -56,7 +63,7 @@ class PPDocLayoutV3ModelTester:
         backbone_config=None,
         # encoder HybridEncoder
         encoder_hidden_dim=32,
-        encoder_in_channels=[128, 256, 512],
+        encoder_in_channels=[32, 32, 32],
         feat_strides=[8, 16, 32],
         encoder_layers=1,
         encoder_ffn_dim=64,
@@ -69,11 +76,13 @@ class PPDocLayoutV3ModelTester:
         activation_function="silu",
         eval_size=None,
         normalize_before=False,
+        mask_feat_channels=[32, 32],
+        x4_feat_dim=32,
         # decoder PPDocLayoutV3Transformer
-        d_model=256,
+        d_model=32,
         num_queries=30,
         decoder_in_channels=[32, 32, 32],
-        decoder_ffn_dim=64,
+        decoder_ffn_dim=8,
         num_feature_levels=3,
         decoder_n_points=4,
         decoder_layers=2,
@@ -112,6 +121,8 @@ class PPDocLayoutV3ModelTester:
         self.activation_function = activation_function
         self.eval_size = eval_size
         self.normalize_before = normalize_before
+        self.mask_feat_channels = mask_feat_channels
+        self.x4_feat_dim = x4_feat_dim
         self.d_model = d_model
         self.num_queries = num_queries
         self.decoder_in_channels = decoder_in_channels
@@ -145,12 +156,25 @@ class PPDocLayoutV3ModelTester:
             "model_type": "hgnet_v2",
             "arch": "L",
             "return_idx": [0, 1, 2, 3],
+            "hidden_sizes": [32, 32, 32, 32],
+            "stem_channels": [3, 32, 32],
+            "stage_in_channels": [32, 32, 32, 32],
+            "stage_mid_channels": [32, 32, 32, 32],
+            "stage_out_channels": [32, 32, 32, 32],
             "freeze_stem_only": True,
             "freeze_at": 0,
             "freeze_norm": True,
             "lr_mult_list": [0, 0.05, 0.05, 0.05, 0.05],
             "out_features": ["stage1", "stage2", "stage3", "stage4"],
         }
+        # depths=[3, 4, 6, 3],
+        # hidden_sizes=[256, 512, 1024, 2048],
+        # stem_channels=[3, 32, 48],
+        # stage_in_channels=[48, 128, 512, 1024],
+        # stage_mid_channels=[48, 96, 192, 384],
+        # stage_out_channels=[128, 512, 1024, 2048],
+        # stage_num_blocks=[1, 1, 3, 1],
+
         return PPDocLayoutV3Config(
             backbone_config=backbone_config,
             encoder_hidden_dim=self.encoder_hidden_dim,
@@ -167,6 +191,8 @@ class PPDocLayoutV3ModelTester:
             activation_function=self.activation_function,
             eval_size=self.eval_size,
             normalize_before=self.normalize_before,
+            mask_feat_channels=self.mask_feat_channels,
+            x4_feat_dim=self.x4_feat_dim,
             d_model=self.d_model,
             num_queries=self.num_queries,
             decoder_in_channels=self.decoder_in_channels,
@@ -240,9 +266,9 @@ class PPDocLayoutV3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
     def test_feed_forward_chunking(self):
         pass
 
-    @unittest.skip(reason="PPDocLayoutV3 does not support this test")
-    def test_model_is_small(self):
-        pass
+    # @unittest.skip(reason="PPDocLayoutV3 does not support this test")
+    # def test_model_is_small(self):
+    #     pass
 
     @unittest.skip(reason="PPDocLayoutV3 does not support training")
     def test_retain_grad_hidden_states_attentions(self):
@@ -279,6 +305,7 @@ class PPDocLayoutV3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
             with torch.no_grad():
                 _ = model(**self._prepare_for_class(inputs_dict, model_class))
 
+    # We have not `num_hidden_layers`, use `encoder_in_channels` instead
     def test_hidden_states_output(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
             model = model_class(config)
@@ -417,7 +444,6 @@ class PPDocLayoutV3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
             if hasattr(self.model_tester, "num_hidden_states_types"):
                 added_hidden_states = self.model_tester.num_hidden_states_types
             else:
-                # RTDetr should maintin encoder_hidden_states output
                 added_hidden_states = 2
             self.assertEqual(out_len + added_hidden_states, len(outputs))
 
@@ -435,7 +461,70 @@ class PPDocLayoutV3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
 
 
 # TODO:
-# @require_torch
-# @require_vision
-# @slow
-# class PPDocLayoutV3ModelIntegrationTest(unittest.TestCase):
+# Later, we will determine these values based on the latest weights.
+@require_torch
+@require_vision
+@slow
+class PPDocLayoutV3ModelIntegrationTest(unittest.TestCase):
+    def setUp(self):
+        model_path = "PaddlePaddle/PP-DocLayoutV3_safetensors"
+        self.model = PPDocLayoutV3ForObjectDetection.from_pretrained(model_path).to(torch_device)
+        self.image_processor = (
+            PPDocLayoutV3ImageProcessor.from_pretrained(model_path) if is_vision_available() else None
+        )
+        url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/layout_demo.jpg"
+        self.image = Image.open(requests.get(url, stream=True).raw)
+
+    def test_inference_object_detection_head(self):
+        inputs = self.image_processor(images=self.image, return_tensors="pt").to(torch_device)
+
+        with torch.no_grad():
+            outputs = self.model(**inputs)
+
+        expected_shape_logits = torch.Size((1, 300, self.model.config.num_labels))
+        expected_logits = torch.tensor(
+            [[-5.6224, -6.5667, -4.9352], [-5.7931, -5.5543, -5.6476], [-4.5742, -5.0603, -7.2864]]
+        ).to(torch_device)
+        self.assertEqual(outputs.logits.shape, expected_shape_logits)
+        torch.testing.assert_close(outputs.logits[0, :3, :3], expected_logits, rtol=2e-4, atol=2e-4)
+
+        expected_shape_boxes = torch.Size((1, 300, 4))
+        expected_boxes = torch.tensor(
+            [[0.4000, 0.9702, 0.3897], [0.3642, 0.3164, 0.3212], [0.3716, 0.1786, 0.3386]]
+        ).to(torch_device)
+        self.assertEqual(outputs.pred_boxes.shape, expected_shape_boxes)
+        torch.testing.assert_close(outputs.pred_boxes[0, :3, :3], expected_boxes, rtol=2e-4, atol=2e-4)
+
+        expected_shape_order_logits = torch.Size((1, 300, 300))
+        expected_order_logits = torch.tensor(
+            [
+                [-10000.0000, -937.0416, -1045.3816],
+                [-10000.0000, -10000.0000, -343.8752],
+                [-10000.0000, -10000.0000, -10000.0000],
+            ]
+        ).to(torch_device)
+        self.assertEqual(outputs.order_logits.shape, expected_shape_order_logits)
+        torch.testing.assert_close(outputs.order_logits[0, :3, :3], expected_order_logits, rtol=2e-4, atol=2e-4)
+
+        # verify postprocessing
+        results = self.image_processor.post_process_object_detection(
+            outputs, threshold=0.5, target_sizes=[self.image.size[::-1]]
+        )[0]
+
+        expected_scores = torch.tensor(
+            [0.9834, 0.9485, 0.9837, 0.9728, 0.9741, 0.9770, 0.9508, 0.9390, 0.9482, 0.8391, 0.9358, 0.8249, 0.9095]
+        ).to(torch_device)
+        torch.testing.assert_close(results["scores"], expected_scores, rtol=2e-4, atol=2e-4)
+
+        expected_labels = [22, 17, 22, 22, 22, 22, 22, 10, 10, 22, 10, 16, 8]
+        self.assertSequenceEqual(results["labels"].tolist(), expected_labels)
+
+        expected_slice_boxes = torch.tensor(
+            [
+                [334.5682, 182.9777, 894.6927, 652.4594],
+                [336.7216, 683.4235, 867.9361, 796.9210],
+                [335.2677, 841.1227, 891.1608, 1453.0148],
+                [919.8677, 183.4835, 1475.8800, 463.4977],
+            ]
+        ).to(torch_device)
+        torch.testing.assert_close(results["boxes"][:4], expected_slice_boxes, rtol=2e-4, atol=2e-4)

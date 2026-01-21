@@ -21,15 +21,14 @@
 from typing import Optional, Union
 
 import torch
-from torchvision.transforms.v2.functional import InterpolationMode
 
-from ...feature_extraction_utils import BatchFeature
-from ...image_processing_utils_fast import BaseImageProcessorFast, SizeDict
+from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...image_utils import PILImageResampling
-from ...utils import requires_backends
+from ...utils import auto_docstring, requires_backends
 from ...utils.generic import TensorType
 
 
+@auto_docstring
 class PPDocLayoutV3ImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BICUBIC
     image_mean = [0, 0, 0]
@@ -72,40 +71,6 @@ class PPDocLayoutV3ImageProcessorFast(BaseImageProcessorFast):
         order_seq.scatter_(1, order_pointers, ranks)
 
         return order_seq
-
-    def _preprocess(
-        self,
-        images: list[torch.Tensor],
-        do_resize: bool,
-        size: SizeDict,
-        interpolation: Optional[InterpolationMode],
-        do_rescale: bool,
-        rescale_factor: float,
-        do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        return_tensors: Optional[Union[str, TensorType]],
-        **kwargs,
-    ) -> BatchFeature:
-        """
-        Preprocess an image or a batch of images so that it can be used by the model.
-        """
-        data = {}
-        processed_images = []
-        for image in images:
-            if do_resize:
-                image = self.resize(image, size=size, interpolation=interpolation)
-            # Fused rescale and normalize
-            image = self.rescale_and_normalize(image, do_rescale, rescale_factor, do_normalize, image_mean, image_std)
-
-            processed_images.append(image)
-
-        images = processed_images
-
-        data.update({"pixel_values": torch.stack(images, dim=0)})
-        encoded_inputs = BatchFeature(data, tensor_type=return_tensors)
-
-        return encoded_inputs
 
     def post_process_object_detection(
         self,

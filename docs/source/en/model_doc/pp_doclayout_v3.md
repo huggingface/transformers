@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2026-x-x and added to Hugging Face Transformers on 2026-x-x.*
+*This model was released on 2026-01-22 and added to Hugging Face Transformers on 2026-01-22.*
 
 # PP-DocLayoutV3
 
@@ -137,10 +137,6 @@ for result in results:
 ## PPDocLayoutV3Config
 
 [[autodoc]] PPDocLayoutV3Config
-
-## PPDocLayoutV3ImageProcessor
-
-[[autodoc]] PPDocLayoutV3ImageProcessor
 
 ## PPDocLayoutV3ImageProcessorFast
 
