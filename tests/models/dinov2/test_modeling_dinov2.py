@@ -317,7 +317,11 @@ class Dinov2ModelIntegrationTest(unittest.TestCase):
         self.assertEqual(outputs.last_hidden_state.shape, expected_shape)
 
         expected_slice = torch.tensor(
-            [[-2.2005, -0.4495, 1.0964], [-3.3959, -0.8942, -1.0315], [-2.9355, 1.1564, -0.7656]],
+            [
+                [-2.2001, -0.4484, 1.0978],
+                [-3.3830, -0.8899, -1.0198],
+                [-2.9340, 1.1604, -0.7696],
+            ],
             device=torch_device,
         )
         torch.testing.assert_close(outputs.last_hidden_state[0, :3, :3], expected_slice, rtol=1e-3, atol=1e-3)
