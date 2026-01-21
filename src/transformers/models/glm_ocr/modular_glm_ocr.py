@@ -274,6 +274,8 @@ class GlmOcrForConditionalGeneration(Glm4vForConditionalGeneration):
 
 __all__ = [
     "GlmOcrConfig",
+    "GlmOcrTextConfig",
+    "GlmOcrVisionConfig",
     "GlmOcrModel",
     "GlmOcrPreTrainedModel",
     "GlmOcrForConditionalGeneration",

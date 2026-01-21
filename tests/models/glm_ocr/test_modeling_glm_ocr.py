@@ -314,9 +314,7 @@ class GlmOcrIntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test(self):
-        model = GlmOcrForConditionalGeneration.from_pretrained(
-            "zai-org/GLM-OCR", dtype="auto", device_map="auto"
-        )
+        model = GlmOcrForConditionalGeneration.from_pretrained("zai-org/GLM-OCR", dtype="auto", device_map="auto")
 
         inputs = self.processor.apply_chat_template(
             self.message, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
@@ -353,9 +351,7 @@ class GlmOcrIntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_batch(self):
-        model = GlmOcrForConditionalGeneration.from_pretrained(
-            "zai-org/GLM-OCR", dtype="auto", device_map="auto"
-        )
+        model = GlmOcrForConditionalGeneration.from_pretrained("zai-org/GLM-OCR", dtype="auto", device_map="auto")
         batch_messages = [self.message] * 2
         inputs = self.processor.apply_chat_template(
             batch_messages, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
@@ -417,9 +413,7 @@ class GlmOcrIntegrationTest(unittest.TestCase):
     @slow
     @require_deterministic_for_xpu
     def test_small_model_integration_test_expand(self):
-        model = GlmOcrForConditionalGeneration.from_pretrained(
-            "zai-org/GLM-OCR", dtype="auto", device_map="auto"
-        )
+        model = GlmOcrForConditionalGeneration.from_pretrained("zai-org/GLM-OCR", dtype="auto", device_map="auto")
         inputs = self.processor.apply_chat_template(
             self.message, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
         ).to(torch_device)
@@ -449,9 +443,7 @@ class GlmOcrIntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_batch_wo_image(self):
-        model = GlmOcrForConditionalGeneration.from_pretrained(
-            "zai-org/GLM-OCR", dtype="auto", device_map="auto"
-        )
+        model = GlmOcrForConditionalGeneration.from_pretrained("zai-org/GLM-OCR", dtype="auto", device_map="auto")
         message_wo_image = [
             {"role": "user", "content": [{"type": "text", "text": "Who are you?"}]},
         ]
@@ -482,9 +474,7 @@ class GlmOcrIntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_batch_different_resolutions(self):
-        model = GlmOcrForConditionalGeneration.from_pretrained(
-            "zai-org/GLM-OCR", dtype="auto", device_map="auto"
-        )
+        model = GlmOcrForConditionalGeneration.from_pretrained("zai-org/GLM-OCR", dtype="auto", device_map="auto")
         batched_messages = [self.message, self.message2]
         inputs = self.processor.apply_chat_template(
             batched_messages,
