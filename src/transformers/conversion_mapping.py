@@ -246,6 +246,7 @@ def _build_checkpoint_conversion_mapping():
     mapping["glm4_moe_lite"] = mapping["qwen2_moe"].copy()
     mapping["glm4v_moe"] = mapping["qwen2_moe"].copy()
     mapping["longcat_flash"] = mapping["qwen2_moe"].copy()
+    mapping["solar_open"] = mapping["qwen2_moe"].copy()
     mapping["qwen3_moe"] = mapping["qwen2_moe"].copy()
     mapping["qwen3_omni_moe"] = mapping["qwen2_moe"].copy()
     mapping["qwen3_omni_moe_thinker"] = mapping["qwen2_moe"].copy()
