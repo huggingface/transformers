@@ -121,7 +121,7 @@ class VibeVoiceProcessor(ProcessorMixin):
                 - **input_ids** -- Token ID sequences ready for the model
                 - **attention_mask** -- Attention masks for the sequences
                 - **input_values** -- Processed audio tensors (if audio provided)
-                - **input_values_mask** -- Masks for valid speech tokens (if audio provided)
+                - **padding_mask** -- Masks for valid speech tokens (if audio provided)
         """
         output_kwargs = self._merge_kwargs(
             VibeVoiceProcessorKwargs,
@@ -160,17 +160,11 @@ class VibeVoiceProcessor(ProcessorMixin):
             audio = make_list_of_audio(audio)
             data = self.feature_extractor(audio, **audio_kwargs)
 
-            # Create mask for audio tokenizer based on compression ratio
-            padding_masks = data["input_values_mask"]
-            speech_tok_compress_ratio = int(audio_kwargs["pad_to_multiple_of"])
-            num_audio_tokens_list = torch.ceil(padding_masks.sum(dim=-1) / speech_tok_compress_ratio).int().tolist()
-            input_values_mask = torch.zeros((len(padding_masks), max(num_audio_tokens_list)), dtype=torch.bool)
-            for i, seq_len in enumerate(num_audio_tokens_list):
-                input_values_mask[i, :seq_len] = True
-            data["input_values_mask"] = input_values_mask
-
             # Expand audio tokens in text (note could be multiple audio per text)
-            audio_token_iter = iter(num_audio_tokens_list)
+            num_audio_tokens = torch.ceil(
+                data["padding_mask"].sum(dim=-1) / audio_kwargs["pad_to_multiple_of"]
+            ).int().tolist()
+            audio_token_iter = iter(num_audio_tokens)
             for i, sample in enumerate(text):
                 def replace_fn(match):
                     return self.audio_diffusion_token * next(audio_token_iter)

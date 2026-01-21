@@ -45,7 +45,7 @@ class VibeVoiceAcousticTokenizerFeatureExtractor(SequenceFeatureExtractor):
 
     """
 
-    model_input_names = ["input_values", "input_values_mask"]
+    model_input_names = ["input_values", "padding_mask"]
 
     def __init__(
         self,
@@ -123,7 +123,7 @@ class VibeVoiceAcousticTokenizerFeatureExtractor(SequenceFeatureExtractor):
         if self.normalize_audio:
             for idx, example in enumerate(audio):
                 rms = torch.sqrt(torch.mean(example**2))
-                example = example * 10 ** (self.target_dB_FS / 20) / (rms + self.eps)
+                example *= 10 ** (self.target_dB_FS / 20) / (rms + self.eps)
                 max_val = torch.max(torch.abs(example))
                 if max_val > 1.0:
                     example = example / (max_val + self.eps)
@@ -140,7 +140,7 @@ class VibeVoiceAcousticTokenizerFeatureExtractor(SequenceFeatureExtractor):
                 return_tensors=return_tensors,
             )
             if return_attention_mask:
-                output_values["input_values_mask"] = output_values.pop("attention_mask")
+                output_values["padding_mask"] = output_values.pop("attention_mask")
 
         # add channel dimension if missing
         if output_values["input_values"].ndim == 2:

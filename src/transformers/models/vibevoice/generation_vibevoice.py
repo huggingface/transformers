@@ -192,7 +192,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
 
         # *************** VibeVoice specific ***************
         input_values = model_kwargs.pop("input_values", None)
-        input_values_mask = model_kwargs.pop("input_values_mask", None)
+        padding_mask = model_kwargs.pop("padding_mask", None)
         noise_scheduler = generation_config.noise_scheduler
         monitor_progress = getattr(generation_config, "monitor_progress", None)
         cfg_scale = generation_config.cfg_scale
@@ -302,11 +302,11 @@ class VibeVoiceGenerationMixin(GenerationMixin):
             # Handle prefill vs normal generation
             if is_prefill:
                 # First step: process speech inputs for conditioning
-                if input_values is not None and input_values_mask is not None:
+                if input_values is not None and padding_mask is not None:
                     model_inputs.update(
                         {
                             "input_values": input_values.to(device=input_ids.device),
-                            "input_values_mask": input_values_mask.to(input_ids.device),
+                            "padding_mask": padding_mask.to(input_ids.device),
                         }
                     )
                 is_prefill = False

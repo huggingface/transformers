@@ -205,10 +205,10 @@ class VibeVoiceAcousticTokenizerFeatureExtractionTest(SequenceFeatureExtractionT
         result = feature_extractor([audio1, audio2], padding=True, return_tensors="pt", return_attention_mask=True)
 
         # Should have padding_mask
-        self.assertIn("input_values_mask", result)
-        self.assertEqual(result.input_values_mask.shape, result.input_values.squeeze(1).shape)
+        self.assertIn("padding_mask", result)
+        self.assertEqual(result.padding_mask.shape, result.input_values.squeeze(1).shape)
 
         # First sample should have some padding (False values at the end)
-        self.assertTrue(torch.any(~result.input_values_mask[0]))
+        self.assertTrue(torch.any(~result.padding_mask[0]))
         # Second sample should have no padding (all True values)
-        self.assertTrue(torch.all(result.input_values_mask[1]))
+        self.assertTrue(torch.all(result.padding_mask[1]))

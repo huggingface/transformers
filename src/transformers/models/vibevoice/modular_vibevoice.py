@@ -336,14 +336,14 @@ class VibeVoiceModel(VibeVoicePreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
-    def get_audio_features(self, input_values, input_values_mask, latent_scaling_factor, latent_bias_factor):
+    def get_audio_features(self, input_values, padding_mask, latent_scaling_factor, latent_bias_factor):
         """
         This method is used to get the audio embeddings from the input features (normalized audio).
 
         Args:
             input_values (`torch.FloatTensor`):
                 Float values of (normalized) audio waveform.
-            input_values_mask (`torch.Tensor` of shape `(batch_size, padded_audio_length)`):
+            padding_mask (`torch.Tensor` of shape `(batch_size, padded_audio_length)`):
                 Padding mask to remove padded parts of audio.
             latent_scaling_factor (`torch.FloatTensor`):
                 Scaling factor for acoustic latents.
@@ -354,20 +354,25 @@ class VibeVoiceModel(VibeVoicePreTrainedModel):
             `torch.FloatTensor`:
                 The audio embeddings.
         """
+        # adjust padding mask according to tokenizer compression
+        tokenizer_hop_length = self.acoustic_tokenizer.config.hop_length
+        num_audio_tokens = torch.ceil(padding_mask.sum(dim=-1) / tokenizer_hop_length).to(torch.int64)
+        padding_mask = torch.arange(max(num_audio_tokens), device=padding_mask.device) < num_audio_tokens[:, None]
+
         with torch.no_grad():
             # combined encoding and sampling: https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modeling_vibevoice_inference.py#L146
             acoustic_latents = self.acoustic_tokenizer.encode(input_values, sample=True).latents
         acoustic_features = (
             acoustic_latents + latent_bias_factor.to(acoustic_latents.device)
         ) * latent_scaling_factor.to(acoustic_latents.device)
-        return self.acoustic_connector(acoustic_features)[input_values_mask]
+        return self.acoustic_connector(acoustic_features)[padding_mask]
 
     def forward(
         self,
         input_ids: torch.LongTensor = None,
         inputs_embeds: Optional[torch.FloatTensor] = None,
         input_values: Optional[torch.FloatTensor] = None,
-        input_values_mask: Optional[torch.BoolTensor] = None,
+        padding_mask: Optional[torch.BoolTensor] = None,
         latent_scaling_factor: Optional[torch.FloatTensor] = None,
         latent_bias_factor: Optional[torch.FloatTensor] = None,
         **kwargs,
@@ -377,7 +382,7 @@ class VibeVoiceModel(VibeVoicePreTrainedModel):
 
         if input_values is not None and input_ids is not None:
             audio_embeds = self.get_audio_features(
-                input_values, input_values_mask, latent_scaling_factor, latent_bias_factor
+                input_values, padding_mask, latent_scaling_factor, latent_bias_factor
             )
 
            # replace text-audio token placeholders with audio embeddings
@@ -415,14 +420,14 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
         labels: Optional[torch.LongTensor] = None,
         logits_to_keep: Union[int, slice] = 0,
         input_values: Optional[torch.FloatTensor] = None,
-        input_values_mask: Optional[torch.BoolTensor] = None,
+        padding_mask: Optional[torch.BoolTensor] = None,
         acoustic_loss_mask: Optional[torch.BoolTensor] = None,
         **kwargs,
     ) -> Union[tuple, VibeVoiceCausalLMOutputWithPast]:
         r"""
         input_values (`torch.FloatTensor`, *optional*):
             Preprocessed audio waveform for voice cloning or speech understanding.
-        input_values_mask (`torch.BoolTensor`, *optional*):
+        padding_mask (`torch.BoolTensor`, *optional*):
             Masks indicating valid input frames.
         acoustic_loss_mask (`torch.BoolTensor`, *optional*):
             Mask to compute diffusion loss only on specific acoustic tokens. Diffusion loss calculation is not supported yet.
@@ -432,7 +437,7 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
             input_ids=input_ids,
             inputs_embeds=inputs_embeds,
             input_values=input_values,
-            input_values_mask=input_values_mask,
+            padding_mask=padding_mask,
             latent_scaling_factor=self.latent_scaling_factor,
             latent_bias_factor=self.latent_bias_factor,
             **kwargs,
