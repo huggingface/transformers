@@ -92,7 +92,7 @@ class GlmOcrVisionConfig(PreTrainedConfig):
         spatial_merge_size=2,
         temporal_patch_size=2,
         out_hidden_size=1536,
-        intermediate_size=4608,
+        intermediate_size=4096,
         initializer_range=0.02,
         **kwargs,
     ):
@@ -195,7 +195,7 @@ class GlmOcrTextConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: int | None = 59246,
+        vocab_size: int | None = 59392,
         hidden_size: int | None = 1024,
         intermediate_size: int | None = 4096,
         num_hidden_layers: int | None = 16,

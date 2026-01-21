@@ -58,7 +58,7 @@ class GlmOcrVisionConfig(Glm4vVisionConfig):
         num_heads=16,
         image_size=336,
         out_hidden_size=1536,
-        intermediate_size=4608,
+        intermediate_size=4096,
         **super_kwargs,
     ):
         super().__init__(**super_kwargs)
@@ -67,7 +67,7 @@ class GlmOcrVisionConfig(Glm4vVisionConfig):
 class GlmOcrTextConfig(Glm4vTextConfig):
     def __init__(
         self,
-        vocab_size: int | None = 59246,
+        vocab_size: int | None = 59392,
         hidden_size: int | None = 1024,
         intermediate_size: int | None = 4096,
         num_hidden_layers: int | None = 16,
