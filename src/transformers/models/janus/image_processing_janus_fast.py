@@ -217,10 +217,10 @@ class JanusImageProcessorFast(BaseImageProcessorFast):
         if do_normalize and do_rescale and return_tensors == "PIL.Image.Image":
             images = [TVF.to_pil_image(image) for image in images]
 
-        data = {"pixel_values": images}
         return_tensors = return_tensors if return_tensors != "PIL.Image.Image" else None
+        images = torch.stack(images, dim=0) if return_tensors == "pt" else images
 
-        return BatchFeature(data=data, tensor_type=return_tensors)
+        return BatchFeature(data={"pixel_values": images}, tensor_type=return_tensors)
 
 
 __all__ = ["JanusImageProcessorFast"]

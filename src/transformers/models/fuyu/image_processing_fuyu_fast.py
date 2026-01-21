@@ -50,6 +50,7 @@ logger = logging.get_logger(__name__)
 class FuyuImageProcessorFast(BaseImageProcessorFast):
     do_resize = True
     size = {"height": 1080, "width": 1920}
+    patch_size = {"height": 30, "width": 30}
     resample = PILImageResampling.BILINEAR
     do_pad = True
     padding_value = 1.0

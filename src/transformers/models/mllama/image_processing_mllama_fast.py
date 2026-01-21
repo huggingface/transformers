@@ -214,6 +214,7 @@ class MllamaImageProcessorFast(BaseImageProcessorFast):
     do_pad = True
     max_image_tiles = 4
     valid_kwargs = MllamaImageProcessorKwargs
+    model_input_names = ["pixel_values", "num_tiles", "aspect_ratio_ids", "aspect_ratio_mask"]
 
     def __init__(self, **kwargs: Unpack[MllamaImageProcessorKwargs]):
         super().__init__(**kwargs)

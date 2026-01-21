@@ -748,7 +748,9 @@ class DetrModelIntegrationTests(unittest.TestCase):
         )
 
     def test_inference_no_head(self):
-        model = DetrModel.from_pretrained("facebook/detr-resnet-50", revision="no_timm").to(torch_device)
+        model = DetrModel.from_pretrained("facebook/detr-resnet-50", revision="no_timm", use_safetensors=False).to(
+            torch_device
+        )
 
         image_processor = self.default_image_processor
         image = prepare_img()
