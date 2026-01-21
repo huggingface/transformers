@@ -61,10 +61,8 @@ if is_torch_available():
 
 if is_torchvision_available():
     import torchvision.transforms.v2.functional as tvF
-temp=tvF
 
     from .image_utils import pil_torch_interpolation_mapping
-
 else:
     pil_torch_interpolation_mapping = None
 
