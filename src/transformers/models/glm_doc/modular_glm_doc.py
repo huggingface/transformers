@@ -19,23 +19,28 @@ import torch.nn.functional as F
 from ..glm4v.configuration_glm4v import Glm4vConfig, Glm4vTextConfig, Glm4vVisionConfig
 from ..glm4v.modeling_glm4v import (
     Glm4vForConditionalGeneration,
+    Glm4VisionMlp,
     Glm4vModel,
     Glm4vModelOutputWithPast,
     Glm4vPreTrainedModel,
+    Glm4vRMSNorm,
     Glm4vTextAttention,
-    Glm4vVisionModel,
     Glm4vVisionAttention,
     Glm4vVisionBlock,
-    Glm4vRMSNorm,
-    Glm4VisionMlp
+    Glm4vVisionModel,
+    Glm4vVisionPatchMerger,
 )
 
 
 class GlmDocRMSNorm(Glm4vRMSNorm):
     pass
 
+
 class GlmDocVisionMlp(Glm4VisionMlp):
-    pass
+    def __init__(self, config, bias: bool = True):
+        super().__init__()
+        self.intermediate_size = config.intermediate_size
+
 
 class GlmDocVisionConfig(Glm4vVisionConfig):
     def __init__(
@@ -121,11 +126,20 @@ class GlmDocVisionBlock(Glm4vVisionBlock):
         self.mlp = GlmDocVisionMlp(config, bias=config.attention_bias)
 
 
+class GlmDocVisionPatchMerger(Glm4vVisionPatchMerger):
+    pass
+
+
 class GlmDocVisionModel(Glm4vVisionModel):
     def __init__(self, config) -> None:
         super().__init__(config)
         del self.embeddings
         del self.post_conv_layernorm
+        self.merger = GlmDocVisionPatchMerger(
+            dim=config.out_hidden_size,
+            context_dim=config.out_hidden_size * config.in_channels,
+            hidden_act=config.hidden_act,
+        )
 
     def forward(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs) -> torch.Tensor:
         """

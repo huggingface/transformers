@@ -67,10 +67,10 @@ class GlmDocRMSNorm(nn.Module):
 
 
 class GlmDocVisionMlp(nn.Module):
-    def __init__(self, config, bias: bool = False):
+    def __init__(self, config, bias: bool = True):
         super().__init__()
         self.hidden_size = config.hidden_size
-        self.intermediate_size = config.out_hidden_size
+        self.intermediate_size = config.intermediate_size
         self.gate_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=bias)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=bias)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=bias)
@@ -558,7 +558,9 @@ class GlmDocVisionModel(GlmDocPreTrainedModel):
 
         self.blocks = nn.ModuleList([GlmDocVisionBlock(config) for _ in range(config.depth)])
         self.merger = GlmDocVisionPatchMerger(
-            dim=config.out_hidden_size, context_dim=config.intermediate_size, hidden_act=config.hidden_act
+            dim=config.out_hidden_size,
+            context_dim=config.out_hidden_size * config.spatial_merge_size**2,
+            hidden_act=config.hidden_act,
         )
         self.downsample = nn.Conv2d(
             in_channels=config.hidden_size,
