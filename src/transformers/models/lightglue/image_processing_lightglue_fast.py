@@ -132,6 +132,7 @@ class LightGlueImageProcessorFast(BaseImageProcessorFast):
         **kwargs,
     ) -> ImageInput:
         # we need to handle image pairs validation and flattening
+        images = self.fetch_images(images)
         return flatten_pair_images(images)
 
     def _preprocess(
