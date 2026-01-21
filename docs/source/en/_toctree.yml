@@ -409,6 +409,8 @@
     title: Main Classes
   - sections:
     - sections:
+      - local: model_doc/aeva
+        title: Aeva
       - local: model_doc/afmoe
         title: AFMoE
       - local: model_doc/albert
