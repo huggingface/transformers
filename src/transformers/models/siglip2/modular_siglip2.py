@@ -17,6 +17,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from tokenizers import normalizers
 
+from transformers.models.gemma.tokenization_gemma import GemmaTokenizer
 from transformers.models.siglip.configuration_siglip import SiglipConfig, SiglipTextConfig, SiglipVisionConfig
 from transformers.models.siglip.modeling_siglip import (
     BaseModelOutput,
@@ -34,7 +35,6 @@ from transformers.models.siglip.modeling_siglip import (
     SiglipVisionTransformer,
 )
 
-from ...gemma.tokenization_gemma import GemmaTokenizer
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
