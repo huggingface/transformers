@@ -285,6 +285,7 @@ def eager_attention_forward(
     if scaling is None:
         scaling = query.size(-1) ** -0.5
 
+    # Take the dot product between "query" and "key" to get the raw attention scores.
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 
     if attention_mask is not None:
@@ -313,6 +314,7 @@ class RTDetrSelfAttention(nn.Module):
         hidden_size: int,
         num_attention_heads: int,
         dropout: float = 0.0,
+        bias: bool = True,
     ):
         super().__init__()
         self.config = config
@@ -321,10 +323,10 @@ class RTDetrSelfAttention(nn.Module):
         self.attention_dropout = dropout
         self.is_causal = False
 
-        self.k_proj = nn.Linear(hidden_size, hidden_size)
-        self.v_proj = nn.Linear(hidden_size, hidden_size)
-        self.q_proj = nn.Linear(hidden_size, hidden_size)
-        self.o_proj = nn.Linear(hidden_size, hidden_size)
+        self.k_proj = nn.Linear(hidden_size, hidden_size, bias=bias)
+        self.v_proj = nn.Linear(hidden_size, hidden_size, bias=bias)
+        self.q_proj = nn.Linear(hidden_size, hidden_size, bias=bias)
+        self.o_proj = nn.Linear(hidden_size, hidden_size, bias=bias)
 
     def forward(
         self,

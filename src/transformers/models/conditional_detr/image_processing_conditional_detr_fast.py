@@ -9,7 +9,7 @@ import pathlib
 from typing import Any, Optional
 
 import torch
-import torch.nn as nn
+from torch import nn
 from torchvision.io import read_image
 from torchvision.transforms.v2 import functional as F
 
