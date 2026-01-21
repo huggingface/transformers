@@ -55,9 +55,10 @@ class GradientCheckpointingLayer(nn.Module):
     """
 
     gradient_checkpointing = False
+    _gradient_checkpointing_use_during_eval = False
 
     def __call__(self, *args, **kwargs):
-        if self.gradient_checkpointing and self.training:
+        if self.gradient_checkpointing and (self.training or self._gradient_checkpointing_use_during_eval):
             do_warn = False
             layer_name = self.__class__.__name__
             message = f"Caching is incompatible with gradient checkpointing in {layer_name}. Setting"
