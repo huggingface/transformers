@@ -3037,7 +3037,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # Tie weights needs to be called here, but it can use the pre-computed `all_tied_weights_keys`
             self.tie_weights(recompute_mapping=False)
 
-    def gradient_checkpointing_enable(self, gradient_checkpointing_kwargs=None):
+    def gradient_checkpointing_enable(self, gradient_checkpointing_kwargs=None, use_during_eval=False):
         """
         Activates gradient checkpointing for the current model.
 
@@ -3047,6 +3047,11 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         Args:
             gradient_checkpointing_kwargs (dict, *optional*):
                 Additional keyword arguments passed along to the `torch.utils.checkpoint.checkpoint` function.
+            use_during_eval (bool, *optional*, defaults to `False`):
+                Whether to use gradient checkpointing during evaluation mode. By default, gradient checkpointing is
+                only used during training. Set this to `True` to also use it during evaluation, which is useful for
+                computing gradient-based metrics (e.g., Hessian approximations) with deterministic gradients while
+                keeping dropout disabled.
         """
         if not self.supports_gradient_checkpointing:
             raise ValueError(f"{self.__class__.__name__} does not support gradient checkpointing.")
@@ -3061,7 +3066,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         _is_using_old_format = "value" in inspect.signature(self._set_gradient_checkpointing).parameters
 
         if not _is_using_old_format:
-            self._set_gradient_checkpointing(enable=True, gradient_checkpointing_func=gradient_checkpointing_func)
+            self._set_gradient_checkpointing(
+                enable=True, gradient_checkpointing_func=gradient_checkpointing_func, use_during_eval=use_during_eval
+            )
         else:
             self.apply(partial(self._set_gradient_checkpointing, value=True))
             logger.warning(
@@ -3079,7 +3086,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             # the gradients to make sure the gradient flows.
             self.enable_input_require_grads()
 
-    def _set_gradient_checkpointing(self, enable: bool = True, gradient_checkpointing_func: Callable = checkpoint):
+    def _set_gradient_checkpointing(
+        self, enable: bool = True, gradient_checkpointing_func: Callable = checkpoint, use_during_eval: bool = False
+    ):
         is_gradient_checkpointing_set = False
 
         # Apply it on the top-level module in case the top-level modules supports it
@@ -3087,12 +3096,14 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if hasattr(self, "gradient_checkpointing"):
             self._gradient_checkpointing_func = gradient_checkpointing_func
             self.gradient_checkpointing = enable
+            self._gradient_checkpointing_use_during_eval = use_during_eval
             is_gradient_checkpointing_set = True
 
         for module in self.modules():
             if hasattr(module, "gradient_checkpointing"):
                 module._gradient_checkpointing_func = gradient_checkpointing_func
                 module.gradient_checkpointing = enable
+                module._gradient_checkpointing_use_during_eval = use_during_eval
                 is_gradient_checkpointing_set = True
 
         if not is_gradient_checkpointing_set:
