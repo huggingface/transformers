@@ -897,21 +897,21 @@ class ParakeetTDTDecoder(nn.Module):
         self, batch_size: int, device: torch.device, dtype: torch.dtype = None
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Initialize LSTM hidden and cell states to zeros."""
-        h = torch.zeros(
+        hidden_state = torch.zeros(
             self.config.decoder_num_layers,
             batch_size,
             self.config.decoder_hidden_size,
             device=device,
             dtype=dtype,
         )
-        c = torch.zeros(
+        cell_state = torch.zeros(
             self.config.decoder_num_layers,
             batch_size,
             self.config.decoder_hidden_size,
             device=device,
             dtype=dtype,
         )
-        return (h, c)
+        return (hidden_state, cell_state)
 
 
 class ParakeetTDTJointNetwork(nn.Module):
