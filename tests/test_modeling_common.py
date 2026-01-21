@@ -3972,10 +3972,12 @@ class ModelTesterMixin:
             # Skip model if it uses a chunked attention implementation which is not torch exportable
             if "for q, k, v in zip(*splits)" in source_code:
                 self.skipTest(reason="Model architecture uses chunked attention which is not torch exportable")
-
             # Skip MoEs that don't support batched_mm experts implementation
-            if "for expert_idx in expert_hit:" in source_code and "use_experts_implementation" not in source_code:
+            if "for expert" in source_code and "use_experts_implementation" not in source_code:
                 self.skipTest(reason="Model architecture uses eager MoE implementation which is not torch exportable")
+            # Skip models that use get_rope_index which is not torch exportable
+            if "get_rope_index" in source_code:
+                self.skipTest(reason="Model architecture uses get_rope_index which is not torch exportable")
 
         def _is_pure_python_object(obj) -> bool:
             if isinstance(obj, (int, float, bool, str)) or obj is None:
@@ -4062,13 +4064,8 @@ class ModelTesterMixin:
 
                 try:
                     exported_program = torch.export.export(model, args=(), kwargs=copy.deepcopy(inputs_dict))
-                # except Exception as e:
-                #     raise e
-                except torch.fx.experimental.symbolic_shapes.GuardOnDataDependentSymNode as e:
-                    warnings.warn(
-                        f"Skipping torch export test for {model_class.__name__} because of data-dependent symbolic shape: {e}"
-                    )
-                    continue
+                except Exception as e:
+                    raise e
 
                 with torch.no_grad():
                     set_seed(1234)
