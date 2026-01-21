@@ -392,6 +392,12 @@ Pipelines available for computer vision tasks include the following.
 
 Pipelines available for natural language processing tasks include the following.
 
+### FillMaskPipeline
+
+[[autodoc]] FillMaskPipeline
+    - __call__
+    - all
+
 ### TableQuestionAnsweringPipeline
 
 [[autodoc]] TableQuestionAnsweringPipeline

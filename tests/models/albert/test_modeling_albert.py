@@ -251,6 +251,7 @@ class AlbertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     pipeline_model_mapping = (
         {
             "text-embedding": AlbertModel,
+            "fill-mask": AlbertForMaskedLM,
             "text-classification": AlbertForSequenceClassification,
             "token-classification": AlbertForTokenClassification,
             "zero-shot": AlbertForSequenceClassification,
