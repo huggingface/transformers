@@ -270,7 +270,7 @@ class StaticLayer(CacheLayerMixin):
         self.max_cache_len = max_cache_len
         self.max_batch_size = max_batch_size
 
-    def init_full_cache(self, key_states: torch.Tensor):
+    def init_full_cache(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None:
         """Init the full batch with max_batch_size ahead of time."""
         if self.max_batch_size is None:
             self.max_batch_size = key_states.shape[0]
@@ -283,12 +283,12 @@ class StaticLayer(CacheLayerMixin):
             device=self.device,
         )
         self.values_full = torch.zeros(
-            (self.max_batch_size, self.num_heads, self.max_cache_len, self.head_dim),
+            (self.max_batch_size, self.num_heads, self.max_cache_len, value_states.shape[-1]),
             dtype=self.dtype,
             device=self.device,
         )
 
-    def lazy_initialization(self, key_states: torch.Tensor):
+    def lazy_initialization(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None:
         """
         Lazy initialization of the keys and values tensors. This allows to get all properties (dtype, device,
         num_heads in case of TP etc...) at runtime directly, which is extremely practical as it avoids moving
@@ -303,7 +303,7 @@ class StaticLayer(CacheLayerMixin):
         not be compiled anyway for performances!
         """
 
-        self.init_full_cache(key_states)
+        self.init_full_cache(key_states, value_states)
 
         self.keys_map = [None] * (self.max_batch_size + 1)
         self.values_map = [None] * (self.max_batch_size + 1)
