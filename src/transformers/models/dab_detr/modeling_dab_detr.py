@@ -231,7 +231,7 @@ class DabDetrConvEncoder(nn.Module):
         return out
 
 
-# Copied from transformers.models.detr.modeling_detr.DetrConvModel with Detr->DabDetr
+# TODO: use modular - Copied from transformers.models.detr.modeling_detr.DetrConvModel with Detr->DabDetr
 class DabDetrConvModel(nn.Module):
     """
     This module adds 2D position embeddings to all intermediate feature maps of the convolutional encoder.
@@ -1393,7 +1393,7 @@ class DabDetrModel(DabDetrPreTrainedModel):
         )
 
 
-# Copied from transformers.models.detr.modeling_detr.DetrMHAttentionMap with Detr->DabDetr
+# TODO: use modular - Copied from transformers.models.detr.modeling_detr.DetrMHAttentionMap with Detr->DabDetr
 class DabDetrMHAttentionMap(nn.Module):
     """This is a 2D attention module, which only returns the attention softmax (no multiplication by value)"""
 

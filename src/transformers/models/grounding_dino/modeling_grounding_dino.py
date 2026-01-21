@@ -410,7 +410,7 @@ class GroundingDinoConvEncoder(nn.Module):
                     if "stage.1" not in name and "stage.2" not in name and "stage.3" not in name:
                         parameter.requires_grad_(False)
 
-    # Copied from transformers.models.detr.modeling_detr.DetrConvEncoder.forward with Detr->GroundingDino
+    # TODO: use modular - Copied from transformers.models.detr.modeling_detr.DetrConvEncoder.forward with Detr->GroundingDino
     def forward(self, pixel_values: torch.Tensor, pixel_mask: torch.Tensor):
         # send pixel_values through the model to get list of feature maps
         features = self.model(pixel_values) if self.config.use_timm_backbone else self.model(pixel_values).feature_maps
@@ -423,7 +423,7 @@ class GroundingDinoConvEncoder(nn.Module):
         return out
 
 
-# Copied from transformers.models.detr.modeling_detr.DetrConvModel with Detr->GroundingDino
+# TODO: use modular - Copied from transformers.models.detr.modeling_detr.DetrConvModel with Detr->GroundingDino
 class GroundingDinoConvModel(nn.Module):
     """
     This module adds 2D position embeddings to all intermediate feature maps of the convolutional encoder.
@@ -549,9 +549,6 @@ class GroundingDinoMultiscaleDeformableAttention(nn.Module):
 
         self.disable_custom_kernels = config.disable_custom_kernels
 
-    def with_pos_embed(self, tensor: torch.Tensor, position_embeddings: Tensor | None):
-        return tensor if position_embeddings is None else tensor + position_embeddings
-
     def forward(
         self,
         hidden_states: torch.Tensor,
@@ -567,7 +564,7 @@ class GroundingDinoMultiscaleDeformableAttention(nn.Module):
     ):
         # add position embeddings to the hidden states before projecting to queries and keys
         if position_embeddings is not None:
-            hidden_states = self.with_pos_embed(hidden_states, position_embeddings)
+            hidden_states = hidden_states + position_embeddings
 
         batch_size, num_queries, _ = hidden_states.shape
         batch_size, sequence_length, _ = encoder_hidden_states.shape
@@ -2323,8 +2320,6 @@ class GroundingDinoMLPPredictionHead(nn.Module):
     """
     Very simple multi-layer perceptron (MLP, also called FFN), used to predict the normalized center coordinates,
     height and width of a bounding box w.r.t. an image.
-
-    Copied from https://github.com/facebookresearch/detr/blob/master/models/detr.py
 
     """
 

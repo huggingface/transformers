@@ -196,7 +196,7 @@ def replace_batch_norm(model):
             replace_batch_norm(module)
 
 
-# Copied from transformers.models.detr.modeling_detr.DetrConvEncoder with Detr->TableTransformer
+# TODO: use modular - Copied from transformers.models.detr.modeling_detr.DetrConvEncoder with Detr->TableTransformer
 class TableTransformerConvEncoder(nn.Module):
     """
     Convolutional backbone, using either the AutoBackbone API or one from the timm library.
@@ -269,7 +269,7 @@ class TableTransformerConvEncoder(nn.Module):
         return out
 
 
-# Copied from transformers.models.detr.modeling_detr.DetrConvModel with Detr->TableTransformer
+# TODO: use modular - Copied from transformers.models.detr.modeling_detr.DetrConvModel with Detr->TableTransformer
 class TableTransformerConvModel(nn.Module):
     """
     This module adds 2D position embeddings to all intermediate feature maps of the convolutional encoder.
@@ -291,7 +291,7 @@ class TableTransformerConvModel(nn.Module):
         return out, pos
 
 
-# Copied from transformers.models.detr.modeling_detr.DetrSinePositionEmbedding with Detr->TableTransformer
+# TODO: use modular - Copied from transformers.models.detr.modeling_detr.DetrSinePositionEmbedding with Detr->TableTransformer
 class TableTransformerSinePositionEmbedding(nn.Module):
     """
     This is a more standard version of the position embedding, very similar to the one used by the Attention is all you
@@ -329,7 +329,7 @@ class TableTransformerSinePositionEmbedding(nn.Module):
         return pos
 
 
-# Copied from transformers.models.detr.modeling_detr.DetrLearnedPositionEmbedding with Detr->TableTransformer
+# TODO: use modular - Copied from transformers.models.detr.modeling_detr.DetrLearnedPositionEmbedding with Detr->TableTransformer
 class TableTransformerLearnedPositionEmbedding(nn.Module):
     """
     This module learns positional embeddings up to a fixed maximum size.
@@ -353,7 +353,7 @@ class TableTransformerLearnedPositionEmbedding(nn.Module):
         return pos
 
 
-# Copied from transformers.models.detr.modeling_detr.build_position_encoding with Detr->TableTransformer
+# TODO: use modular - Copied from transformers.models.detr.modeling_detr.build_position_encoding with Detr->TableTransformer
 def build_position_encoding(config):
     n_steps = config.d_model // 2
     if config.position_embedding_type == "sine":
@@ -367,7 +367,7 @@ def build_position_encoding(config):
     return position_embedding
 
 
-# Copied from transformers.models.detr.modeling_detr.DetrAttention with DETR->TABLE_TRANSFORMER,Detr->TableTransformer
+# TODO: use modular - Copied from transformers.models.detr.modeling_detr.DetrAttention with DETR->TABLE_TRANSFORMER,Detr->TableTransformer
 class TableTransformerAttention(nn.Module):
     """
     Multi-headed attention from 'Attention Is All You Need' paper.
@@ -502,7 +502,7 @@ class TableTransformerAttention(nn.Module):
 
 
 class TableTransformerEncoderLayer(nn.Module):
-    # Copied from transformers.models.detr.modeling_detr.DetrEncoderLayer.__init__ with Detr->TableTransformer
+    # TODO: use modular - Copied from transformers.models.detr.modeling_detr.DetrEncoderLayer.__init__ with Detr->TableTransformer
     def __init__(self, config: TableTransformerConfig):
         super().__init__()
         self.embed_dim = config.d_model
@@ -575,7 +575,7 @@ class TableTransformerEncoderLayer(nn.Module):
 
 
 class TableTransformerDecoderLayer(GradientCheckpointingLayer):
-    # Copied from transformers.models.detr.modeling_detr.DetrDecoderLayer.__init__ with Detr->TableTransformer
+    # TODO: use modular - Copied from transformers.models.detr.modeling_detr.DetrDecoderLayer.__init__ with Detr->TableTransformer
     def __init__(self, config: TableTransformerConfig):
         super().__init__()
         self.embed_dim = config.d_model
@@ -828,7 +828,7 @@ class TableTransformerEncoder(TableTransformerPreTrainedModel):
         )
 
 
-# Copied from transformers.models.detr.modeling_detr.DetrDecoder with DETR->TABLE_TRANSFORMER,Detr->TableTransformer
+# TODO: use modular - Copied from transformers.models.detr.modeling_detr.DetrDecoder with DETR->TABLE_TRANSFORMER,Detr->TableTransformer
 class TableTransformerDecoder(TableTransformerPreTrainedModel):
     """
     Transformer decoder consisting of *config.decoder_layers* layers. Each layer is a [`TableTransformerDecoderLayer`].
@@ -1003,7 +1003,7 @@ class TableTransformerDecoder(TableTransformerPreTrainedModel):
     """
 )
 class TableTransformerModel(TableTransformerPreTrainedModel):
-    # Copied from transformers.models.detr.modeling_detr.DetrModel.__init__ with Detr->TableTransformer
+    # TODO: use modular - Copied from transformers.models.detr.modeling_detr.DetrModel.__init__ with Detr->TableTransformer
     def __init__(self, config: TableTransformerConfig):
         super().__init__(config)
 
@@ -1172,7 +1172,7 @@ class TableTransformerModel(TableTransformerPreTrainedModel):
     """
 )
 class TableTransformerForObjectDetection(TableTransformerPreTrainedModel):
-    # Copied from transformers.models.detr.modeling_detr.DetrForObjectDetection.__init__ with Detr->TableTransformer
+    # TODO: use modular - Copied from transformers.models.detr.modeling_detr.DetrForObjectDetection.__init__ with Detr->TableTransformer
     def __init__(self, config: TableTransformerConfig):
         super().__init__(config)
 
@@ -1306,7 +1306,7 @@ class TableTransformerForObjectDetection(TableTransformerPreTrainedModel):
         )
 
 
-# Copied from transformers.models.detr.modeling_detr.DetrMLPPredictionHead with Detr->TableTransformer,detr->table_transformer
+# TODO: use modular - Copied from transformers.models.detr.modeling_detr.DetrMLPPredictionHead with Detr->TableTransformer,detr->table_transformer
 class TableTransformerMLPPredictionHead(nn.Module):
     """
     Very simple multi-layer perceptron (MLP, also called FFN), used to predict the normalized center coordinates,
