@@ -69,6 +69,7 @@ class LlavaOnevisionImageProcessorFast(BaseImageProcessorFast):
     def preprocess(self, images: ImageInput, **kwargs: Unpack[LlavaOnevisionImageProcessorKwargs]) -> BatchFeature:
         if isinstance(images, (tuple, list)) and isinstance(images[0], (tuple, list)):
             # if the first element is a list, we assume that all elements are lists
+            images = [x for x in images if x]  # handle text-only case
             batch_num_images = [len(x) for x in images]
         elif isinstance(images, (tuple, list)):
             # treat this as a single-image case for backward compatibility

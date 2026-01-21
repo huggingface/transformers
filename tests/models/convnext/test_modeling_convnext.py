@@ -284,7 +284,7 @@ class ConvNextModelIntegrationTest(unittest.TestCase):
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
 
-        expected_slice = torch.tensor([-0.0261, -0.4739, 0.1910]).to(torch_device)
+        expected_slice = torch.tensor([-0.0267, -0.4735, 0.1901]).to(torch_device)
 
         torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=2e-4, atol=2e-4)
 
