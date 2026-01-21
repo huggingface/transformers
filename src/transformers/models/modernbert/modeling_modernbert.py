@@ -425,20 +425,17 @@ class ModernBertPreTrainedModel(PreTrainedModel):
         """
         Checks and dispatches to hhe requested attention implementation.
         """
-        # If the user didn't specify anything, try to use flash_attention_2 if available.
+        # If the user didn't specify anything, try to use flash_attention_2.
         # Otherwise we fall back to the default SDPA -> Eager from the super() method.
-
         try:
-            attn_implementation = (
-                "flash_attention_2"
-                if attn_implementation is None and self._flash_attn_2_can_dispatch()
-                else attn_implementation
+            requested_attn_implementation = "flash_attention_2" if attn_implementation is None else attn_implementation
+            return super()._check_and_adjust_attn_implementation(
+                attn_implementation=requested_attn_implementation, is_init_check=is_init_check
             )
         except (ValueError, ImportError):
-            pass
-        return super()._check_and_adjust_attn_implementation(
-            attn_implementation=attn_implementation, is_init_check=is_init_check
-        )
+            return super()._check_and_adjust_attn_implementation(
+                attn_implementation=attn_implementation, is_init_check=is_init_check
+            )
 
 
 @auto_docstring
