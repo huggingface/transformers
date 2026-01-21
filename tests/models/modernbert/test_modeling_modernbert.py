@@ -617,6 +617,7 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
                     else:
                         torch.testing.assert_close(base_output[0], new_output[0], rtol=rtol, atol=atol)
 
+
 @require_torch
 class ModernBertModelIntegrationTest(unittest.TestCase):
     @slow
@@ -624,9 +625,7 @@ class ModernBertModelIntegrationTest(unittest.TestCase):
         if version.parse(torch.__version__) < version.parse("2.4.0"):
             self.skipTest(reason="This test requires torch >= 2.4 to run.")
 
-        model = ModernBertForMaskedLM.from_pretrained(
-            "answerdotai/ModernBERT-base", attn_implementation="sdpa"
-        )
+        model = ModernBertForMaskedLM.from_pretrained("answerdotai/ModernBERT-base", attn_implementation="sdpa")
         tokenizer = AutoTokenizer.from_pretrained("answerdotai/ModernBERT-base")
 
         inputs = tokenizer("Hello World!", return_tensors="pt")
@@ -646,9 +645,7 @@ class ModernBertModelIntegrationTest(unittest.TestCase):
         if version.parse(torch.__version__) < version.parse("2.4.0"):
             self.skipTest(reason="This test requires torch >= 2.4 to run.")
 
-        model = ModernBertModel.from_pretrained(
-            "answerdotai/ModernBERT-base", attn_implementation="sdpa"
-        )
+        model = ModernBertModel.from_pretrained("answerdotai/ModernBERT-base", attn_implementation="sdpa")
         tokenizer = AutoTokenizer.from_pretrained("answerdotai/ModernBERT-base")
 
         inputs = tokenizer("Hello World!", return_tensors="pt")
@@ -790,7 +787,9 @@ class ModernBertModelIntegrationTest(unittest.TestCase):
         if version.parse(torch.__version__) < version.parse("2.4.0"):
             self.skipTest(reason="This test requires torch >= 2.4 to run.")
 
-        model = ModernBertForMaskedLM.from_pretrained("answerdotai/ModernBERT-base", dtype=torch.float16).to(torch_device)
+        model = ModernBertForMaskedLM.from_pretrained("answerdotai/ModernBERT-base", dtype=torch.float16).to(
+            torch_device
+        )
         tokenizer = AutoTokenizer.from_pretrained("answerdotai/ModernBERT-base")
 
         inputs = tokenizer("Hello World!", return_tensors="pt").to(torch_device)
@@ -801,7 +800,6 @@ class ModernBertModelIntegrationTest(unittest.TestCase):
 
         # compare the actual values for a slice.
         expected_slice = torch.tensor(
-            [[[3.8203, -0.2125, 12.2812], [3.6055, 0.6797, 14.6875], [-5.1094, -3.8105, 11.9922]]],
-            dtype=torch.float16
+            [[[3.8203, -0.2125, 12.2812], [3.6055, 0.6797, 14.6875], [-5.1094, -3.8105, 11.9922]]], dtype=torch.float16
         )
         torch.testing.assert_close(output[:, :3, :3].cpu(), expected_slice, rtol=1e-4, atol=1e-4)
