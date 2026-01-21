@@ -44,11 +44,54 @@ class GlmOcrRMSNorm(Glm4vRMSNorm):
 
 class GlmOcrVisionMlp(Glm4VisionMlp):
     def __init__(self, config, bias: bool = True):
-        super().__init__()
+        super().__init__(config)
         self.intermediate_size = config.intermediate_size
 
 
 class GlmOcrVisionConfig(Glm4vVisionConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`GlmOcrModel`]. It is used to instantiate a
+    GLM-OCR model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of
+    GLM-OCR [zai-org/GLM-OCR](https://huggingface.co/zai-org/GLM-OCR).
+
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
+
+    Args:
+        depth (`int`, *optional*, defaults to 24):
+            Number of layers (depth) in the model.
+        hidden_size (`int`, *optional*, defaults to 1024):
+            Dimensionality of the encoder layers and the pooler layer.
+        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"silu"`,
+            `"relu"`, `"selu"` and `"gelu_new"` are supported.
+        attention_bias (`bool`, *optional*, defaults to `True`):
+            Whether to add a bias to the queries, keys and values.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            Dropout probability for attention weights.
+        num_heads (`int`, *optional*, defaults to 16):
+            Number of attention heads for each attention layer in the Transformer architecture.
+        in_channels (`int`, *optional*, defaults to 3):
+            Number of input channels.
+        image_size (`int` or `list[int]`, *optional*, defaults to 336):
+            The size (resolution) of each image.
+        patch_size (`int`, *optional*, defaults to 14):
+            The size (resolution) of each patch.
+        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
+            The epsilon used by the rms normalization layers.
+        spatial_merge_size (`int`, *optional*, defaults to 2):
+            The size used for merging spatial dimensions.
+        temporal_patch_size (`int`, *optional*, defaults to 2):
+            The size used for patches along the temporal dimension.
+        out_hidden_size (`int`, *optional*, defaults to 1536):
+            The output hidden size of the vision model.
+        intermediate_size (`int`, *optional*, defaults to 4096):
+            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+    """
+
     def __init__(
         self,
         depth=24,
@@ -65,6 +108,64 @@ class GlmOcrVisionConfig(Glm4vVisionConfig):
 
 
 class GlmOcrTextConfig(Glm4vTextConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`GlmOcrModel`]. It is used to instantiate a
+    GLM-OCR model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of
+    GLM-OCR [zai-org/GLM-OCR](https://huggingface.co/zai-org/GLM-OCR).
+
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
+
+    Args:
+        vocab_size (`int`, *optional*, defaults to 59392):
+            Vocabulary size of the GlmOcr model. Defines the number of different tokens that can be represented by the
+            `inputs_ids` passed when calling [`GlmOcrModel`]
+        hidden_size (`int`, *optional*, defaults to 1024):
+            Dimension of the hidden representations.
+        intermediate_size (`int`, *optional*, defaults to 4096):
+            Dimension of the MLP representations.
+        num_hidden_layers (`int`, *optional*, defaults to 16):
+            Number of hidden layers in the Transformer encoder.
+        num_attention_heads (`int`, *optional*, defaults to 16):
+            Number of attention heads for each attention layer in the Transformer encoder.
+        num_key_value_heads (`int`, *optional*, defaults to 8):
+            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
+            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
+            `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
+            converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
+            by meanpooling all the original heads within that group. For more details checkout [this
+            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to `32`.
+        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
+            The non-linear activation function (function or string) in the decoder.
+        max_position_embeddings (`int`, *optional*, defaults to 131072):
+            The maximum sequence length that this model might ever be used with.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
+            The epsilon used by the rms normalization layers.
+        use_cache (`bool`, *optional*, defaults to `True`):
+            Whether or not the model should return the last key/values attentions (not used by all models). Only
+            relevant if `config.is_decoder=True`.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
+
+    ```python
+    >>> from transformers import GlmOcrTextModel, GlmOcrConfig
+
+    >>> # Initializing a GLM-OCR style configuration
+    >>> configuration = GlmOcrConfig()
+
+    >>> # Initializing a model from the GLM-OCR style configuration
+    >>> model = GlmOcrTextModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
     def __init__(
         self,
         vocab_size: int | None = 59392,
@@ -80,6 +181,47 @@ class GlmOcrTextConfig(Glm4vTextConfig):
 
 
 class GlmOcrConfig(Glm4vConfig, nn.Module):
+    r"""
+    This is the configuration class to store the configuration of a [`GlmOcrModel`]. It is used to instantiate a
+    GLM-OCR model according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of
+    GLM-OCR [zai-org/GLM-OCR](https://huggingface.co/zai-org/GLM-OCR).
+
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
+
+    Args:
+        text_config (`Union[PreTrainedConfig, dict]`, *optional*, defaults to `GlmOcrTextConfig`):
+            The config object or dictionary of the text backbone.
+        vision_config (`Union[PreTrainedConfig, dict]`,  *optional*, defaults to `GlmOcrVisionConfig`):
+            The config object or dictionary of the vision backbone.
+        image_token_id (`int`, *optional*, defaults to 59280):
+            The image token index to encode the image prompt.
+        video_token_id (`int`, *optional*, defaults to 59281):
+            The video token index to encode the image prompt.
+        image_start_token_id (`int`, *optional*, defaults to 59256):
+            The image start token index to encode the start of image.
+        image_end_token_id (`int`, *optional*, defaults to 59257):
+            The image end token index to encode the end of image.
+        video_start_token_id (`int`, *optional*, defaults to 59258):
+            The video start token index to encode the start of video.
+        video_end_token_id (`int`, *optional*, defaults to 59259):
+            The video end token index to encode the end of video.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether the model's input and output word embeddings should be tied.
+
+    ```python
+    >>> from transformers import GlmOcrForConditionalGeneration, GlmOcrConfig
+
+    >>> # Initializing a GLM-OCR style configuration
+    >>> configuration = GlmOcrConfig()
+
+    >>> # Initializing a model from the GLM-OCR style configuration
+    >>> model = GlmOcrForConditionalGeneration(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
     def __init__(
         self,
         text_config=None,
