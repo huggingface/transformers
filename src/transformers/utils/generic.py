@@ -457,7 +457,7 @@ if _is_torch_available:
     def _model_output_unflatten(
         values: Iterable[Any],
         context: "_torch_pytree.Context",
-        output_type=None,
+        output_type: type[ModelOutput] | None = None,
     ) -> ModelOutput:
         return output_type(**dict(zip(context, values)))
 
@@ -892,6 +892,7 @@ def check_model_inputs(func=None, *, tie_last_hidden_states=True):
                     arg_value = args[arg_index]
                 elif kwargs.get(arg_name) is not None:
                     arg_value = kwargs[arg_name]
+
                 else:
                     arg_value = getattr(self.config, arg_name, None)
 

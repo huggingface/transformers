@@ -31,7 +31,7 @@ from enum import Enum
 from functools import lru_cache
 from itertools import chain
 from types import ModuleType
-from typing import Any
+from typing import Any, Literal, overload
 
 import packaging.version
 from packaging import version
@@ -43,6 +43,14 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 
 PACKAGE_DISTRIBUTION_MAPPING = importlib.metadata.packages_distributions()
+
+
+@overload
+def _is_package_available(pkg_name: str, return_version: Literal[True]) -> tuple[bool, str]: ...
+
+
+@overload
+def _is_package_available(pkg_name: str, return_version: Literal[False] = False) -> bool: ...
 
 
 def _is_package_available(pkg_name: str, return_version: bool = False) -> tuple[bool, str] | bool:

@@ -327,7 +327,7 @@ def warning_once(self, *args, **kwargs):
     self.warning(*args, **kwargs)
 
 
-logging.Logger.warning_once = warning_once
+logging.Logger.warning_once = warning_once  # type: ignore[attr-defined]
 
 
 @functools.lru_cache(None)
@@ -342,7 +342,7 @@ def info_once(self, *args, **kwargs):
     self.info(*args, **kwargs)
 
 
-logging.Logger.info_once = info_once
+logging.Logger.info_once = info_once  # type: ignore[attr-defined]
 
 
 class EmptyTqdm:

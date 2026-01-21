@@ -295,7 +295,7 @@ def cached_files(
     _raise_exceptions_for_connection_errors: bool = True,
     _commit_hash: str | None = None,
     **deprecated_kwargs,
-) -> str | None:
+) -> list[str] | None:
     """
     Tries to locate several files in a local folder and repo, downloads and cache them if necessary.
 
