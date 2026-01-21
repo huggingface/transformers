@@ -443,12 +443,6 @@ class ModernBertDecoderPreTrainedModel(PreTrainedModel):
                 init.copy_(getattr(module, f"{layer_type}_inv_freq"), curr_inv_freq)
                 init.copy_(getattr(module, f"{layer_type}_original_inv_freq"), curr_inv_freq)
 
-    def _maybe_set_compile(self):
-        raise AttributeError("No need to inherit!")
-
-    def resize_token_embeddings(self, *args, **kwargs):
-        raise AttributeError("No need to inherit!")
-
 
 @auto_docstring
 class ModernBertDecoderModel(ModernBertDecoderPreTrainedModel):

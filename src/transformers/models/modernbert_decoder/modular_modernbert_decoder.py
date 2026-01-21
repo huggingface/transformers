@@ -495,12 +495,6 @@ class ModernBertDecoderPreTrainedModel(ModernBertPreTrainedModel):
     def _check_and_adjust_attn_implementation(self, attn_implementation, is_init_check):
         raise AttributeError("No need to inherit!")
 
-    def _maybe_set_compile(self):
-        raise AttributeError("No need to inherit!")
-
-    def resize_token_embeddings(self, *args, **kwargs):
-        raise AttributeError("No need to inherit!")
-
 
 @auto_docstring
 class ModernBertDecoderModel(ModernBertDecoderPreTrainedModel):
