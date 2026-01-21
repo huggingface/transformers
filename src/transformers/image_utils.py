@@ -17,8 +17,8 @@ import os
 from collections.abc import Iterable
 from dataclasses import dataclass
 from io import BytesIO
-from typing import Optional, Union
 from pathlib import Path
+from typing import Optional, Union
 
 import httpx
 import numpy as np
@@ -456,7 +456,7 @@ def load_image(image: Union[str, Path, "PIL.Image.Image"], timeout: float | None
     requires_backends(load_image, ["vision"])
     if isinstance(image, Path):
         image = str(image)
-        
+
     if isinstance(image, str):
         if image.startswith("http://") or image.startswith("https://"):
             # We need to actually check for a real protocol, otherwise it's impossible to use a local file
