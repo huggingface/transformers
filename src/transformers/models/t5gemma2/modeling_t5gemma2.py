@@ -615,11 +615,11 @@ class T5Gemma2MultiModalProjector(nn.Module):
         self.avg_pool = nn.AvgPool2d(kernel_size=self.kernel_size, stride=self.kernel_size)
 
     def forward(self, vision_outputs: torch.Tensor):
-        batch_size, _, seq_length = vision_outputs.shape
+        batch_size, _, hidden_size = vision_outputs.shape
 
         reshaped_vision_outputs = vision_outputs.transpose(1, 2)
         reshaped_vision_outputs = reshaped_vision_outputs.reshape(
-            batch_size, seq_length, self.patches_per_image, self.patches_per_image
+            batch_size, hidden_size, self.patches_per_image, self.patches_per_image
         )
         reshaped_vision_outputs = reshaped_vision_outputs.contiguous()
 
@@ -775,7 +775,7 @@ class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
         eoi_token_index: int = 256_000,
     ):
         super().__init__(config)
-        self.padding_idx = config.pad_token_id
+        self.padding_idx = config.text_config.pad_token_id
         self.vocab_size = config.text_config.vocab_size
 
         vision_config = config.vision_config

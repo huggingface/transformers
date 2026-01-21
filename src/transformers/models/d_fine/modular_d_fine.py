@@ -218,6 +218,8 @@ class DFineConfig(PreTrainedConfig):
             The method to use for the decoder: `"default"` or `"discrete"`.
         up (`float`, *optional*, defaults to 0.5):
             Controls the upper bounds of the Weighting Function.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
     """
 
     model_type = "d_fine"
@@ -302,6 +304,7 @@ class DFineConfig(PreTrainedConfig):
         decoder_offset_scale=0.5,
         decoder_method="default",
         up=0.5,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         self.initializer_range = initializer_range
@@ -409,6 +412,7 @@ class DFineConfig(PreTrainedConfig):
         self.lqe_hidden_dim = lqe_hidden_dim
         self.lqe_layers = lqe_layers
         self.up = up
+        self.tie_word_embeddings = tie_word_embeddings
 
         if isinstance(self.decoder_n_points, list):
             if len(self.decoder_n_points) != self.num_feature_levels:

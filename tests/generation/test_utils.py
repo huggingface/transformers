@@ -54,7 +54,8 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import is_ipex_available, is_torchdynamo_exporting
+from transformers.utils import is_ipex_available, is_sklearn_available, is_torchdynamo_exporting
+from transformers.utils.generic import is_flash_attention_requested
 
 
 if is_torch_available():
@@ -106,8 +107,6 @@ if is_torch_available():
     from transformers.generation.utils import _speculative_sampling
 
 from unittest.mock import patch
-
-from transformers.utils import is_sklearn_available
 
 
 class GenerationTesterMixin:
@@ -617,12 +616,12 @@ class GenerationTesterMixin:
         config, _ = self.prepare_config_and_inputs_for_generate()
 
         # if no bos token id => cannot generate from None
-        if config.bos_token_id is None:
+        if config.get_text_config(decoder=True).bos_token_id is None:
             self.skipTest(reason="bos_token_id is None")
 
         # hack in case they are equal, otherwise the attn mask will be [0]
-        if config.bos_token_id == config.pad_token_id:
-            config.pad_token_id = None
+        if config.get_text_config(decoder=True).bos_token_id == config.get_text_config(decoder=True).pad_token_id:
+            config.get_text_config(decoder=True).pad_token_id = None
 
         for model_class in self.all_generative_model_classes:
             model = model_class(config).to(torch_device)
@@ -1763,10 +1762,10 @@ class GenerationTesterMixin:
                     inputs_dict[input_name] = input_data
             main_input = inputs_dict[model_class.main_input_name]
 
-            # FA2 doesn't accept masking in the middle of the sequence for now. We usually generate right-padded
+            # FA doesn't accept masking in the middle of the sequence for now. We usually generate right-padded
             # attention masks at test time and, with generate, the mask will be appended with 1s on the right,
-            # resulting in a mask with holes (not supported properly by FA2).
-            if attn_implementation == "flash_attention_2":
+            # resulting in a mask with holes (not supported properly by FA).
+            if is_flash_attention_requested(requested_attention_implementation=attn_implementation):
                 for input_name in ("attention_mask", "decoder_attention_mask", "encoder_attention_mask"):
                     if input_name in inputs_dict:
                         inputs_dict[input_name] = torch.ones_like(inputs_dict[input_name])

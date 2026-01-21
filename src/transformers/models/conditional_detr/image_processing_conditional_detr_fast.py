@@ -688,11 +688,11 @@ class ConditionalDetrImageProcessorFast(BaseImageProcessorFast):
                 corresponding to the target_sizes entry (if `target_sizes` is specified). Each entry of each
                 `torch.Tensor` correspond to a semantic class id.
         """
-        class_queries_logits = outputs.logits  # [batch_size, num_queries, num_classes+1]
+        class_queries_logits = outputs.logits  # [batch_size, num_queries, num_classes]
         masks_queries_logits = outputs.pred_masks  # [batch_size, num_queries, height, width]
 
-        # Remove the null class `[..., :-1]`
-        masks_classes = class_queries_logits.softmax(dim=-1)[..., :-1]
+        # Conditional DETR does not have a null class, so we use all classes
+        masks_classes = class_queries_logits.softmax(dim=-1)
         masks_probs = masks_queries_logits.sigmoid()  # [batch_size, num_queries, height, width]
 
         # Semantic segmentation logits of shape (batch_size, num_classes, height, width)
