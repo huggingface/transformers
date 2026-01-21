@@ -547,13 +547,6 @@ class MT5PreTrainedModel(PreTrainedModel):
     _no_split_modules = ["MT5Block"]
     _keep_in_fp32_modules = ["wo"]
 
-    def post_init(self):
-        # _keep_in_fp32_modules should only prevent fp16 casting, not bfloat16
-        if torch.get_default_dtype() == torch.bfloat16:
-            # Remove wo from dtype_plan for bfloat16, it doesn't need FP32
-            self.dtype_plan.pop("wo", None)
-        super().post_init()
-
     @property
     def dummy_inputs(self):
         input_ids = torch.tensor(DUMMY_INPUTS)

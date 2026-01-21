@@ -1279,8 +1279,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         self._keep_in_fp32_modules_strict = copy.copy(self.__class__._keep_in_fp32_modules_strict)
         self.dtype_plan = {}
 
-        if isinstance(self._keep_in_fp32_modules, list):
-            self.dtype_plan.update(dict.fromkeys(self._keep_in_fp32_modules, torch.float32))
+        # _keep_in_fp32_modules should only prevent FP16 casting, not BF16 (see line 1099 comment)
+        # It will be conditionally added to dtype_plan during from_pretrained based on target dtype
+        # Only _keep_in_fp32_modules_strict is added here as it applies to both FP16 and BF16
         if isinstance(self._keep_in_fp32_modules_strict, list):
             self.dtype_plan.update(dict.fromkeys(self._keep_in_fp32_modules_strict, torch.float32))
 
@@ -4027,6 +4028,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     checkpoint_files=checkpoint_files,
                     use_kernels=use_kernels,
                 )
+
+        # Apply _keep_in_fp32_modules conditionally based on target dtype
+        # _keep_in_fp32_modules should only prevent FP16 casting, not BF16
+        if model._keep_in_fp32_modules is not None and isinstance(model._keep_in_fp32_modules, list):
+            if dtype == torch.float16 or getattr(hf_quantizer, "use_keep_in_fp32_modules", False):
+                model.dtype_plan.update(dict.fromkeys(model._keep_in_fp32_modules, torch.float32))
 
         # Obtain the weight conversion mapping for this model if any are registered
         weight_conversions = get_model_conversion_mapping(model, key_mapping, hf_quantizer)
