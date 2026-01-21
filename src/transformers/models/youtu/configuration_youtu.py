@@ -91,7 +91,7 @@ class YoutuConfig(PreTrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "youtu_llm"
+    model_type = "youtu"
     keys_to_ignore_at_inference = ["past_key_values"]
     base_model_tp_plan = {
         "layers.*.mlp.gate_proj": "colwise",

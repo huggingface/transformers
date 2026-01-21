@@ -275,10 +275,10 @@ class YoutuModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     def test_eager_matches_sdpa_generate(self):
         max_new_tokens = 30
 
-        tokenizer = AutoTokenizer.from_pretrained("tencent/Youtu-LLM-2B-Base")
+        tokenizer = AutoTokenizer.from_pretrained("Junrulu/Youtu-LLM-2B-Base-hf")
 
         model_sdpa = YoutuForCausalLM.from_pretrained(
-            "tencent/Youtu-LLM-2B-Base",
+            "Junrulu/Youtu-LLM-2B-Base-hf",
             dtype=torch.float16,
             attn_implementation="sdpa",
         ).to(torch_device)
@@ -286,7 +286,7 @@ class YoutuModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         self.assertTrue(model_sdpa.config._attn_implementation == "sdpa")
 
         model_eager = YoutuForCausalLM.from_pretrained(
-            "tencent/Youtu-LLM-2B-Base",
+            "Junrulu/Youtu-LLM-2B-Base-hf",
             dtype=torch.float16,
             attn_implementation="eager",
         ).to(torch_device)
@@ -338,9 +338,9 @@ class YoutuIntegrationTest(unittest.TestCase):
             "Simply put, the theory of relativity states that ",
             "My favorite all time favorite condiment is ketchup.",
         ]
-        tokenizer = AutoTokenizer.from_pretrained("tencent/Youtu-LLM-2B-Base")
+        tokenizer = AutoTokenizer.from_pretrained("Junrulu/Youtu-LLM-2B-Base-hf")
         model = YoutuForCausalLM.from_pretrained(
-            "tencent/Youtu-LLM-2B-Base", device_map=torch_device, dtype=torch.float16
+            "Junrulu/Youtu-LLM-2B-Base-hf", device_map=torch_device, dtype=torch.float16
         )
         if model.config.tie_word_embeddings:
             # Youtu-LLM-2B-Base contains extra repeated weights for the tied embeddings, we can tie weights here according to its config
@@ -369,9 +369,9 @@ class YoutuIntegrationTest(unittest.TestCase):
             "Simply put, the theory of relativity states that ",
             "My favorite all time favorite condiment is ketchup.",
         ]
-        tokenizer = AutoTokenizer.from_pretrained("tencent/Youtu-LLM-2B-Base")
+        tokenizer = AutoTokenizer.from_pretrained("Junrulu/Youtu-LLM-2B-Base-hf")
         model = YoutuForCausalLM.from_pretrained(
-            "tencent/Youtu-LLM-2B-Base", device_map=torch_device, dtype=torch.float16
+            "Junrulu/Youtu-LLM-2B-Base-hf", device_map=torch_device, dtype=torch.float16
         )
         if model.config.tie_word_embeddings:
             # Youtu-LLM-2B-Base contains extra repeated weights for the tied embeddings, we can tie weights here according to its config
@@ -404,9 +404,9 @@ class YoutuIntegrationTest(unittest.TestCase):
             "Simply put, the theory of relativity states that ",
             "My favorite all time favorite condiment is ketchup.",
         ]
-        tokenizer = AutoTokenizer.from_pretrained("tencent/Youtu-LLM-2B-Base")
+        tokenizer = AutoTokenizer.from_pretrained("Junrulu/Youtu-LLM-2B-Base-hf")
         model = YoutuForCausalLM.from_pretrained(
-            "tencent/Youtu-LLM-2B-Base", device_map=torch_device, dtype=torch.float16
+            "Junrulu/Youtu-LLM-2B-Base-hf", device_map=torch_device, dtype=torch.float16
         )
         if model.config.tie_word_embeddings:
             # Youtu-LLM-2B-Base contains extra repeated weights for the tied embeddings, we can tie weights here according to its config
