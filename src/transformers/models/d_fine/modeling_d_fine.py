@@ -24,7 +24,6 @@ from dataclasses import dataclass
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import torch.nn.functional as F_t
 from torch import Tensor
 
 from ... import initialization as init
@@ -1021,7 +1020,7 @@ class DFineHybridEncoder(DFinePreTrainedModel):
             top_fpn_feature_map = lateral_conv(top_fpn_feature_map)
             fpn_feature_maps[-1] = top_fpn_feature_map
             # apply fpn block
-            top_fpn_feature_map = F_t.interpolate(top_fpn_feature_map, scale_factor=2.0, mode="nearest")
+            top_fpn_feature_map = F.interpolate(top_fpn_feature_map, scale_factor=2.0, mode="nearest")
             fused_feature_map = torch.concat([top_fpn_feature_map, backbone_feature_map], dim=1)
             new_fpn_feature_map = fpn_block(fused_feature_map)
             fpn_feature_maps.append(new_fpn_feature_map)
@@ -1755,7 +1754,7 @@ class DFineModel(DFinePreTrainedModel):
             dim=1, index=topk_ind.unsqueeze(-1).repeat(1, 1, enc_outputs_coord_logits.shape[-1])
         )
 
-        enc_topk_bboxes = F_t.sigmoid(reference_points_unact)
+        enc_topk_bboxes = F.sigmoid(reference_points_unact)
         if denoising_bbox_unact is not None:
             reference_points_unact = torch.concat([denoising_bbox_unact, reference_points_unact], 1)
 
