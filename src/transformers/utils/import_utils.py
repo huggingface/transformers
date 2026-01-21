@@ -31,7 +31,7 @@ from enum import Enum
 from functools import lru_cache
 from itertools import chain
 from types import ModuleType
-from typing import Any
+from typing import Any, Literal, overload
 
 import packaging.version
 from packaging import version
@@ -43,6 +43,14 @@ logger = logging.get_logger(__name__)  # pylint: disable=invalid-name
 
 
 PACKAGE_DISTRIBUTION_MAPPING = importlib.metadata.packages_distributions()
+
+
+@overload
+def _is_package_available(pkg_name: str, return_version: Literal[True]) -> tuple[bool, str]: ...
+
+
+@overload
+def _is_package_available(pkg_name: str, return_version: Literal[False] = False) -> bool: ...
 
 
 def _is_package_available(pkg_name: str, return_version: bool = False) -> tuple[bool, str] | bool:
@@ -113,7 +121,7 @@ def is_torch_available() -> bool:
         is_available, torch_version = _is_package_available("torch", return_version=True)
         parsed_version = version.parse(torch_version)
         if is_available and parsed_version < version.parse("2.2.0"):
-            logger.warning_once(f"Disabling PyTorch because PyTorch >= 2.2 is required but found {torch_version}")
+            logger.warning_once(f"Disabling PyTorch because PyTorch >= 2.2 is required but found {torch_version}")  # type: ignore[attr-defined]
         return is_available and version.parse(torch_version) >= version.parse("2.2.0")
     except packaging.version.InvalidVersion:
         return False
@@ -866,7 +874,7 @@ def is_ipex_available(min_version: str = "") -> bool:
     torch_major_and_minor = get_major_and_minor_from_version(get_torch_version())
     ipex_major_and_minor = get_major_and_minor_from_version(ipex_version)
     if torch_major_and_minor != ipex_major_and_minor:
-        logger.warning_once(
+        logger.warning_once(  # type: ignore[attr-defined]
             f"Intel Extension for PyTorch {ipex_major_and_minor} needs to work with PyTorch {ipex_major_and_minor}.*,"
             f" but PyTorch {get_torch_version()} is found. Please switch to the matching version and run again."
         )
