@@ -12,10 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+from collections.abc import Callable
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ..glm4v.configuration_glm4v import Glm4vConfig, Glm4vTextConfig, Glm4vVisionConfig
 from ..glm4v.modeling_glm4v import (
     Glm4vForConditionalGeneration,
@@ -29,6 +32,9 @@ from ..glm4v.modeling_glm4v import (
     Glm4vVisionBlock,
     Glm4vVisionModel,
     Glm4vVisionPatchMerger,
+    apply_rotary_pos_emb_vision,
+    eager_attention_forward,
+    is_flash_attention_requested,
 )
 
 
@@ -94,6 +100,7 @@ class GlmDocConfig(Glm4vConfig, nn.Module):
 class GlmDocTextAttention(Glm4vTextAttention, nn.Module):
     def __init__(self, config: GlmDocTextConfig, layer_idx: int | None = None):
         super().__init__()
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=False)
         self.k_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
@@ -118,6 +125,77 @@ class GlmDocVisionAttention(Glm4vVisionAttention):
         self.proj = nn.Linear(config.hidden_size, config.hidden_size, bias=config.attention_bias)
         self.q_norm = GlmDocRMSNorm(self.head_dim, eps=config.rms_norm_eps)
         self.k_norm = GlmDocRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+
+    def forward(
+            self,
+            hidden_states: torch.Tensor,
+            cu_seqlens: torch.Tensor,
+            rotary_pos_emb: torch.Tensor | None = None,
+            position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+            **kwargs,
+    ) -> torch.Tensor:
+        seq_length = hidden_states.shape[0]
+        query_states, key_states, value_states = (
+            self.qkv(hidden_states).reshape(seq_length, 3, self.num_heads, -1).permute(1, 0, 2, 3).unbind(0)
+        )
+
+        query_states = self.q_norm(query_states)
+        key_states = self.k_norm(key_states)
+
+        cos, sin = position_embeddings
+        query_states, key_states = apply_rotary_pos_emb_vision(query_states, key_states, cos, sin)
+        query_states = query_states.transpose(0, 1).unsqueeze(0)
+        key_states = key_states.transpose(0, 1).unsqueeze(0)
+        value_states = value_states.transpose(0, 1).unsqueeze(0)
+
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        if is_flash_attention_requested(self.config):
+            # Flash Attention: Use cu_seqlens for variable length attention
+            max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
+            attn_output, _ = attention_interface(
+                self,
+                query_states,
+                key_states,
+                value_states,
+                attention_mask=None,
+                scaling=self.scaling,
+                dropout=0.0 if not self.training else self.attention_dropout,
+                cu_seq_lens_q=cu_seqlens,
+                cu_seq_lens_k=cu_seqlens,
+                max_length_q=max_seqlen,
+                max_length_k=max_seqlen,
+                is_causal=False,
+                **kwargs,
+            )
+        else:
+            # Other implementations: Process each chunk separately
+            lengths = cu_seqlens[1:] - cu_seqlens[:-1]
+            splits = [
+                torch.split(tensor, lengths.tolist(), dim=2) for tensor in (query_states, key_states, value_states)
+            ]
+
+            attn_outputs = [
+                attention_interface(
+                    self,
+                    q,
+                    k,
+                    v,
+                    attention_mask=None,
+                    scaling=self.scaling,
+                    dropout=0.0 if not self.training else self.attention_dropout,
+                    is_causal=False,
+                    **kwargs,
+                )[0]
+                for q, k, v in zip(*splits)
+            ]
+            attn_output = torch.cat(attn_outputs, dim=1)
+
+        attn_output = attn_output.reshape(seq_length, -1).contiguous()
+        attn_output = self.proj(attn_output)
+        return attn_output
 
 
 class GlmDocVisionBlock(Glm4vVisionBlock):

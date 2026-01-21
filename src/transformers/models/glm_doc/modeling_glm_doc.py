@@ -146,9 +146,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     cos = cos.unsqueeze(unsqueeze_dim)
     sin = sin.unsqueeze(unsqueeze_dim)
 
-    # Interleave them instead of usual shape
-    cos = cos[..., : cos.shape[-1] // 2].repeat_interleave(2, dim=-1)
-    sin = sin[..., : sin.shape[-1] // 2].repeat_interleave(2, dim=-1)
 
     # Keep half or full tensor for later concatenation
     rotary_dim = cos.shape[-1]
@@ -178,7 +175,7 @@ class GlmDocTextAttention(nn.Module):
 
         self.hidden_size = config.hidden_size
         self.num_heads = config.num_attention_heads
-        self.head_dim = self.hidden_size // self.num_heads
+        self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         self.num_key_value_heads = config.num_key_value_heads
         self.num_key_value_groups = self.num_heads // self.num_key_value_heads
         self.is_causal = True
@@ -421,9 +418,12 @@ class GlmDocVisionAttention(nn.Module):
         query_states, key_states, value_states = (
             self.qkv(hidden_states).reshape(seq_length, 3, self.num_heads, -1).permute(1, 0, 2, 3).unbind(0)
         )
+
+        query_states = self.q_norm(query_states)
+        key_states = self.k_norm(key_states)
+
         cos, sin = position_embeddings
         query_states, key_states = apply_rotary_pos_emb_vision(query_states, key_states, cos, sin)
-
         query_states = query_states.transpose(0, 1).unsqueeze(0)
         key_states = key_states.transpose(0, 1).unsqueeze(0)
         value_states = value_states.transpose(0, 1).unsqueeze(0)
@@ -505,6 +505,23 @@ class GlmDocVisionBlock(GradientCheckpointingLayer):
         return hidden_states
 
 
+class GlmDocVisionPatchMerger(nn.Module):
+    def __init__(self, dim: int, context_dim: int, hidden_act: str, bias: bool = False) -> None:
+        super().__init__()
+        self.proj = nn.Linear(dim, dim, bias=bias)
+        self.post_projection_norm = LayerNorm(dim)
+        self.gate_proj = nn.Linear(dim, context_dim, bias=bias)
+        self.up_proj = nn.Linear(dim, context_dim, bias=bias)
+        self.down_proj = nn.Linear(context_dim, dim, bias=bias)
+        self.act1 = nn.GELU()
+        self.act_fn = ACT2FN[hidden_act]
+
+    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
+        hidden_state = self.proj(hidden_state)
+        hidden_state = self.act1(self.post_projection_norm(hidden_state))
+        return self.down_proj(self.act_fn(self.gate_proj(hidden_state)) * self.up_proj(hidden_state))
+
+
 class GlmDocVisionPatchEmbed(nn.Module):
     def __init__(self, config: GlmDocVisionConfig) -> None:
         super().__init__()
@@ -525,23 +542,6 @@ class GlmDocVisionPatchEmbed(nn.Module):
         return hidden_states
 
 
-class GlmDocVisionPatchMerger(nn.Module):
-    def __init__(self, dim: int, context_dim: int, hidden_act: str, bias: bool = False) -> None:
-        super().__init__()
-        self.proj = nn.Linear(dim, dim, bias=bias)
-        self.post_projection_norm = LayerNorm(dim)
-        self.gate_proj = nn.Linear(dim, context_dim, bias=bias)
-        self.up_proj = nn.Linear(dim, context_dim, bias=bias)
-        self.down_proj = nn.Linear(context_dim, dim, bias=bias)
-        self.act1 = nn.GELU()
-        self.act_fn = ACT2FN[hidden_act]
-
-    def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
-        hidden_state = self.proj(hidden_state)
-        hidden_state = self.act1(self.post_projection_norm(hidden_state))
-        return self.down_proj(self.act_fn(self.gate_proj(hidden_state)) * self.up_proj(hidden_state))
-
-
 class GlmDocVisionModel(GlmDocPreTrainedModel):
     config: GlmDocVisionConfig
     input_modalities = ("image", "video")
@@ -559,7 +559,7 @@ class GlmDocVisionModel(GlmDocPreTrainedModel):
         self.blocks = nn.ModuleList([GlmDocVisionBlock(config) for _ in range(config.depth)])
         self.merger = GlmDocVisionPatchMerger(
             dim=config.out_hidden_size,
-            context_dim=config.out_hidden_size * config.spatial_merge_size**2,
+            context_dim=config.out_hidden_size * config.in_channels,
             hidden_act=config.hidden_act,
         )
         self.downsample = nn.Conv2d(
