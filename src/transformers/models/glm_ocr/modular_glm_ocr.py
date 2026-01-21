@@ -166,6 +166,7 @@ class GlmOcrTextConfig(Glm4vTextConfig):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     def __init__(
         self,
         vocab_size: int | None = 59392,
@@ -222,6 +223,7 @@ class GlmOcrConfig(Glm4vConfig, nn.Module):
     >>> # Accessing the model configuration
     >>> configuration = model.config
     ```"""
+
     def __init__(
         self,
         text_config=None,
