@@ -4031,9 +4031,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         # Apply _keep_in_fp32_modules conditionally based on target dtype
         # _keep_in_fp32_modules should only prevent FP16 casting, not BF16
-        if isinstance(model._keep_in_fp32_modules, list):
-            if dtype == torch.float16 or getattr(hf_quantizer, "use_keep_in_fp32_modules", False):
-                model.dtype_plan.update(dict.fromkeys(model._keep_in_fp32_modules, torch.float32))
+        if isinstance(model._keep_in_fp32_modules, list) and dtype == torch.float16:
+            model.dtype_plan.update(dict.fromkeys(model._keep_in_fp32_modules, torch.float32))
 
         # Obtain the weight conversion mapping for this model if any are registered
         weight_conversions = get_model_conversion_mapping(model, key_mapping, hf_quantizer)
