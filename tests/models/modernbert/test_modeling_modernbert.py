@@ -321,31 +321,6 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_for_multiple_choice(*config_and_inputs)
 
-    def test_for_warning_if_padding_and_no_attention_mask(self):
-        (
-            config,
-            input_ids,
-            input_mask,
-            sequence_labels,
-            token_labels,
-            choice_labels,
-        ) = self.model_tester.prepare_config_and_inputs()
-
-        # Set pad tokens in the input_ids
-        input_ids[0, 0] = config.pad_token_id
-
-        # Check for warnings if the attention_mask is missing.
-        logger = logging.get_logger("transformers.modeling_utils")
-        # clear cache so we can test the warning is emitted (from `warning_once`).
-        logger.warning_once.cache_clear()
-
-        with CaptureLogger(logger) as cl:
-            model = ModernBertModel(config=config)
-            model.to(torch_device)
-            model.eval()
-            model(input_ids, attention_mask=None)
-        self.assertIn("We strongly recommend passing in an `attention_mask`", cl.out)
-
     @unittest.skip("ModernBert doesn't use separate classes for SDPA, but a function instead.")
     def test_sdpa_can_dispatch_non_composite_models(self):
         pass
@@ -516,7 +491,9 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
                 f"Model architecture does not support {attn_implementation}, or setting its attention dynamically"
             )
 
-    # Override tests that use from_pretrained to ensure SDPA attention is used instead of FlashAttention
+    # Override tests(from test_save_load to test_model_parallelism) that use from_pretrained to ensure SDPA attention is used instead of FlashAttention.
+    # ModernBERT defaults to FlashAttention when available, but FA only supports fp16 and bf16 data types,
+    # so these tests would fail with fp32. We force SDPA here for dtype compatibility.
     def test_save_load(self):
         for model_class in self.all_model_classes:
             config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -535,7 +512,7 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
                     model.can_generate(), os.path.exists(os.path.join(tmpdirname, GENERATION_CONFIG_NAME))
                 )
 
-                # Force SDPA attention to avoid FlashAttention fp32 error
+                # Force SDPA attention for FA dtype compatibility (FA only supports fp16/bf16)
                 model = model_class.from_pretrained(tmpdirname, attn_implementation="sdpa")
                 model.to(torch_device)
                 with torch.no_grad():
@@ -569,7 +546,7 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
                     model = model_class(config)
                     model.save_pretrained(tmp_dir)
                     # Fails when we don't set ignore_mismatched_sizes=True
-                    # Force SDPA attention to avoid FlashAttention fp32 error
+                    # Force SDPA attention for FA dtype compatibility (FA only supports fp16/bf16)
                     with self.assertRaises(RuntimeError):
                         new_model = AutoModelForSequenceClassification.from_pretrained(
                             tmp_dir, num_labels=42, attn_implementation="sdpa"
@@ -628,7 +605,7 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
                 for max_size in max_gpu_sizes:
                     max_memory = {0: max_size, "cpu": model_size * 2}
-                    # Force SDPA attention to avoid FlashAttention fp32 error
+                    # Force SDPA attention for FA dtype compatibility (FA only supports fp16/bf16)
                     new_model = model_class.from_pretrained(
                         tmp_dir, device_map="auto", max_memory=max_memory, attn_implementation="sdpa"
                     )
@@ -675,7 +652,7 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
                     max_size = int(self.model_split_percents[0] * model_size)
                     max_memory = {0: max_size, "cpu": max_size}
                     # This errors out cause it's missing an offload folder
-                    # Force SDPA attention to avoid FlashAttention fp32 error
+                    # Force SDPA attention for FA dtype compatibility (FA only supports fp16/bf16)
                     new_model = model_class.from_pretrained(
                         tmp_dir,
                         device_map="auto",
@@ -686,7 +663,7 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
                 max_size = int(self.model_split_percents[1] * model_size)
                 max_memory = {0: max_size, "cpu": max_size}
-                # Force SDPA attention to avoid FlashAttention fp32 error
+                # Force SDPA attention for FA dtype compatibility (FA only supports fp16/bf16)
                 new_model = model_class.from_pretrained(
                     tmp_dir,
                     device_map="auto",
@@ -732,7 +709,7 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
                 max_memory = {0: max_size, "cpu": max_size}
 
                 # This doesn't error out as it's in safetensors and doesn't need an offload folder
-                # Force SDPA attention to avoid FlashAttention fp32 error
+                # Force SDPA attention for FA dtype compatibility (FA only supports fp16/bf16)
                 new_model = model_class.from_pretrained(
                     tmp_dir,
                     device_map="auto",
@@ -779,7 +756,7 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
 
                 for max_size in max_gpu_sizes:
                     max_memory = {0: max_size, 1: model_size * 2, "cpu": model_size * 2}
-                    # Force SDPA attention to avoid FlashAttention fp32 error
+                    # Force SDPA attention for FA dtype compatibility (FA only supports fp16/bf16)
                     new_model = model_class.from_pretrained(
                         tmp_dir, device_map="auto", max_memory=max_memory, attn_implementation="sdpa"
                     )

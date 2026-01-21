@@ -618,13 +618,7 @@ class ModernBertModel(ModernBertPreTrainedModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        if input_ids is not None:
-            self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
-
-        if inputs_embeds is not None:
-            seq_len = inputs_embeds.shape[1]
-        else:
-            seq_len = input_ids.shape[1]
+        seq_len = inputs_embeds.shape[1] if inputs_embeds is not None else input_ids.shape[1]
         device = input_ids.device if input_ids is not None else inputs_embeds.device
 
         if position_ids is None:
@@ -780,9 +774,6 @@ class ModernBertForSequenceClassification(ModernBertPreTrainedModel):
             config.num_labels - 1]`. If `config.num_labels == 1` a regression loss is computed (Mean-Square loss), If
             `config.num_labels > 1` a classification loss is computed (Cross-Entropy).
         """
-        if input_ids is not None:
-            self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
-
         outputs = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
