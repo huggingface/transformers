@@ -1150,7 +1150,7 @@ class StaticCache(Cache):
         key_states: torch.Tensor,
         value_states: torch.Tensor,
         layer_idx: int,
-        cache_kwargs: Optional[dict[str, Any]] = None,
+        cache_kwargs: dict[str, Any] | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         return self.layers[layer_idx].update(key_states, value_states, cache_kwargs)
 
