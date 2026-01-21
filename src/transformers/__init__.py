@@ -646,12 +646,12 @@ if TYPE_CHECKING:
     from .pipelines import CsvPipelineDataFormat as CsvPipelineDataFormat
     from .pipelines import DepthEstimationPipeline as DepthEstimationPipeline
     from .pipelines import DocumentQuestionAnsweringPipeline as DocumentQuestionAnsweringPipeline
+    from .pipelines import FillMaskPipeline as FillMaskPipeline
     from .pipelines import ImageClassificationPipeline as ImageClassificationPipeline
     from .pipelines import ImageEmbeddingPipeline as ImageEmbeddingPipeline
     from .pipelines import ImageSegmentationPipeline as ImageSegmentationPipeline
     from .pipelines import ImageTextToTextPipeline as ImageTextToTextPipeline
     from .pipelines import ImageToImagePipeline as ImageToImagePipeline
-    from .pipelines import FillMaskPipeline as FillMaskPipeline
     from .pipelines import JsonPipelineDataFormat as JsonPipelineDataFormat
     from .pipelines import KeypointMatchingPipeline as KeypointMatchingPipeline
     from .pipelines import MaskGenerationPipeline as MaskGenerationPipeline
