@@ -283,7 +283,7 @@ class GlmOcrIntegrationTest(unittest.TestCase):
     def setUp(self):
         cleanup(torch_device, gc_collect=True)
 
-        self.processor = AutoProcessor.from_pretrained("THUDM/GLM-4.1V-9B-Thinking")
+        self.processor = AutoProcessor.from_pretrained("zai-org/GLM-OCR")
         self.message = [
             {
                 "role": "user",
@@ -315,7 +315,7 @@ class GlmOcrIntegrationTest(unittest.TestCase):
     @slow
     def test_small_model_integration_test(self):
         model = GlmOcrForConditionalGeneration.from_pretrained(
-            "THUDM/GLM-4.1V-9B-Thinking", dtype="auto", device_map="auto"
+            "zai-org/GLM-OCR", dtype="auto", device_map="auto"
         )
 
         inputs = self.processor.apply_chat_template(
@@ -354,7 +354,7 @@ class GlmOcrIntegrationTest(unittest.TestCase):
     @slow
     def test_small_model_integration_test_batch(self):
         model = GlmOcrForConditionalGeneration.from_pretrained(
-            "THUDM/GLM-4.1V-9B-Thinking", dtype="auto", device_map="auto"
+            "zai-org/GLM-OCR", dtype="auto", device_map="auto"
         )
         batch_messages = [self.message] * 2
         inputs = self.processor.apply_chat_template(
@@ -378,9 +378,9 @@ class GlmOcrIntegrationTest(unittest.TestCase):
 
     @slow
     def test_small_model_integration_test_with_video(self):
-        processor = AutoProcessor.from_pretrained("THUDM/GLM-4.1V-9B-Thinking", max_image_size={"longest_edge": 50176})
+        processor = AutoProcessor.from_pretrained("zai-org/GLM-OCR", max_image_size={"longest_edge": 50176})
         model = GlmOcrForConditionalGeneration.from_pretrained(
-            "THUDM/GLM-4.1V-9B-Thinking", dtype=torch.float16, device_map="auto"
+            "zai-org/GLM-OCR", dtype=torch.float16, device_map="auto"
         )
         questions = ["Describe this video."]
         video_urls = ["https://huggingface.co/datasets/hf-internal-testing/fixtures_videos/resolve/main/tennis.mp4"]
@@ -418,7 +418,7 @@ class GlmOcrIntegrationTest(unittest.TestCase):
     @require_deterministic_for_xpu
     def test_small_model_integration_test_expand(self):
         model = GlmOcrForConditionalGeneration.from_pretrained(
-            "THUDM/GLM-4.1V-9B-Thinking", dtype="auto", device_map="auto"
+            "zai-org/GLM-OCR", dtype="auto", device_map="auto"
         )
         inputs = self.processor.apply_chat_template(
             self.message, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
@@ -450,7 +450,7 @@ class GlmOcrIntegrationTest(unittest.TestCase):
     @slow
     def test_small_model_integration_test_batch_wo_image(self):
         model = GlmOcrForConditionalGeneration.from_pretrained(
-            "THUDM/GLM-4.1V-9B-Thinking", dtype="auto", device_map="auto"
+            "zai-org/GLM-OCR", dtype="auto", device_map="auto"
         )
         message_wo_image = [
             {"role": "user", "content": [{"type": "text", "text": "Who are you?"}]},
@@ -483,7 +483,7 @@ class GlmOcrIntegrationTest(unittest.TestCase):
     @slow
     def test_small_model_integration_test_batch_different_resolutions(self):
         model = GlmOcrForConditionalGeneration.from_pretrained(
-            "THUDM/GLM-4.1V-9B-Thinking", dtype="auto", device_map="auto"
+            "zai-org/GLM-OCR", dtype="auto", device_map="auto"
         )
         batched_messages = [self.message, self.message2]
         inputs = self.processor.apply_chat_template(
@@ -515,7 +515,7 @@ class GlmOcrIntegrationTest(unittest.TestCase):
     @require_torch_accelerator
     def test_small_model_integration_test_batch_flashatt2(self):
         model = GlmOcrForConditionalGeneration.from_pretrained(
-            "THUDM/GLM-4.1V-9B-Thinking",
+            "zai-org/GLM-OCR",
             dtype=torch.bfloat16,
             attn_implementation="flash_attention_2",
             device_map="auto",
