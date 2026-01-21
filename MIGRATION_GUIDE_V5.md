@@ -653,7 +653,7 @@ The above example can be adapted for visual question answering simply by asking 
 
 ### Other removed pipelines
 
-The `fill-mask` and `image-to-image` pipelines have been removed, and were rarely used. For most image generation tasks, you
+The `image-to-image` pipeline has been removed, as it was rarely updated or used. For most image generation tasks, you
 probably want [🤗 Diffusers](https://huggingface.co/docs/diffusers/index) instead!
 
 ### Other changes
