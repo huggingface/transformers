@@ -890,7 +890,6 @@ class DetrMHAttentionMap(nn.Module):
             key_states, self.k_proj.weight.unsqueeze(-1).unsqueeze(-1), self.k_proj.bias
         ).view(key_hidden_shape)
 
-        # Compute attention weights: (b, q, n, c) @ (b, n, c, h*w) -> (b, q, n, h, w)
         batch_size, num_queries, num_heads, head_dim = query_states.shape
         _, _, _, height, width = key_states.shape
         query_shape = (batch_size * num_heads, num_queries, head_dim)
@@ -901,17 +900,10 @@ class DetrMHAttentionMap(nn.Module):
         key = key_states.permute(0, 1, 3, 4, 2).contiguous().view(key_shape)
 
         attn_weights = (
-            (torch.matmul(query, key.transpose(1, 2)) * self.scaling).view(attn_weights_shape).transpose(1, 2)
+            (torch.matmul(query * self.scaling, key.transpose(1, 2))).view(attn_weights_shape).transpose(1, 2)
         )
 
         if attention_mask is not None:
-            # Prepare mask with min dtype value for additive masking
-            mask_value = torch.finfo(attn_weights.dtype).min
-            attention_mask = torch.where(
-                attention_mask.unsqueeze(1).unsqueeze(1),
-                torch.tensor(mask_value, dtype=attn_weights.dtype, device=attn_weights.device),
-                torch.tensor(0.0, dtype=attn_weights.dtype, device=attn_weights.device),
-            )
             attn_weights = attn_weights + attention_mask
 
         attn_weights = nn.functional.softmax(attn_weights.flatten(2), dim=-1).view(attn_weights.size())
@@ -1647,8 +1639,15 @@ class DetrForSegmentation(DetrPreTrainedModel):
         )
         attention_mask = flattened_mask.view(batch_size, height, width)
 
-        # Note: mask is reversed because the original DETR implementation works with reversed masks
-        bbox_mask = self.bbox_attention(sequence_output, memory, attention_mask=~attention_mask)
+        if attention_mask is not None:
+            min_dtype = torch.finfo(memory.dtype).min
+            attention_mask = torch.where(
+                attention_mask.unsqueeze(1).unsqueeze(1),
+                torch.tensor(0.0, device=memory.device, dtype=memory.dtype),
+                min_dtype,
+            )
+
+        bbox_mask = self.bbox_attention(sequence_output, memory, attention_mask=attention_mask)
 
         seg_masks = self.mask_head(
             features=projected_feature_map,
