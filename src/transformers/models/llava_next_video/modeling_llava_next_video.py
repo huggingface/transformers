@@ -319,7 +319,6 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
 
         self.vocab_size = config.text_config.vocab_size
         self.language_model = AutoModel.from_config(config.text_config)
-        self.pad_token_id = self.config.pad_token_id if self.config.pad_token_id is not None else -1
         self.vision_resampler = LlavaNextVideoPooler(config)
         self.post_init()
 

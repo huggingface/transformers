@@ -660,6 +660,8 @@ class PaddleOCRVLConfig(Qwen2VLConfig):
             The token index to denote start of vision input.
         vision_end_token_id (`int`, *optional*, defaults to 101306):
             The token index to denote end of vision input.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether the model's input and output word embeddings should be tied.
 
     ```python
     >>> from transformers import PaddleOCRVLForConditionalGeneration, PaddleOCRVLConfig
@@ -684,6 +686,7 @@ class PaddleOCRVLConfig(Qwen2VLConfig):
         video_token_id=100296,
         vision_start_token_id=101305,
         vision_end_token_id=101306,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         super().__init__()

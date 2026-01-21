@@ -286,7 +286,6 @@ OBJECTS_TO_IGNORE = {
     "ImageTextToTextPipeline",
     "AnyToAnyPipeline",
     "ImageToImagePipeline",
-    "ImageToTextPipeline",
     "InformerConfig",
     "JukeboxPriorConfig",
     "JukeboxTokenizer",

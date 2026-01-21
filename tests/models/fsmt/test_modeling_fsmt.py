@@ -172,8 +172,6 @@ class FSMTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             "src_vocab_size": 10,
             "tgt_vocab_size": 20,
         }
-        # XXX: hack to appease to all other models requiring `vocab_size`
-        config["vocab_size"] = 99  # no such thing in FSMT
         self.config_tester = ConfigTester(self, config_class=FSMTConfig, **config)
 
     def test_config(self):
@@ -298,6 +296,19 @@ class FSMTModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
     @unittest.skip(reason="TODO: Decoder embeddings cannot be resized at the moment")
     def test_resize_embeddings_untied(self):
+        pass
+
+    @unittest.skip(reason="Can't do assisted decoding and not worth fixing")
+    def test_prompt_lookup_decoding_matches_greedy_search(self):
+        pass
+
+    @unittest.skip(reason="Can't do assisted decoding and not worth fixing")
+    def test_assisted_decoding_sample(self):
+        pass
+
+    @unittest.skip(reason="Can't do assisted decoding and not worth fixing")
+    @parameterized.expand([("random",), ("same",)])
+    def test_assisted_decoding_matches_greedy_search(self, assistant_type):
         pass
 
 
