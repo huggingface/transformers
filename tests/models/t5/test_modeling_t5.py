@@ -1008,7 +1008,12 @@ class T5ModelIntegrationTests(unittest.TestCase):
                 ("rocm", (9, 4)): -19.0846,
             }
         ).get_expectation()
-        self.assertTrue(abs(mtf_score - EXPECTED_SCORE) < 1e-4)
+        torch.testing.assert_close(
+            mtf_score,
+            EXPECTED_SCORE,
+            atol=1e-4,
+            rtol=0.0,
+        )
 
     @slow
     def test_small_v1_1_integration_test(self):
@@ -1034,7 +1039,12 @@ class T5ModelIntegrationTests(unittest.TestCase):
         mtf_score = -(labels.shape[-1] * loss.item())
 
         EXPECTED_SCORE = -40.1645
-        self.assertTrue(abs(mtf_score - EXPECTED_SCORE) < 1e-4)
+        torch.testing.assert_close(
+            mtf_score,
+            EXPECTED_SCORE,
+            atol=1e-4,
+            rtol=0.0,
+        )
 
     @slow
     def test_small_byt5_integration_test(self):
@@ -1058,7 +1068,12 @@ class T5ModelIntegrationTests(unittest.TestCase):
         mtf_score = -(labels.shape[-1] * loss.item())
 
         EXPECTED_SCORE = -44.6276
-        self.assertTrue(abs(mtf_score - EXPECTED_SCORE) < 1e-4)
+        torch.testing.assert_close(
+            mtf_score,
+            EXPECTED_SCORE,
+            atol=1e-4,
+            rtol=0.0,
+        )
 
     @slow
     def test_summarization(self):
