@@ -24,8 +24,18 @@ from ..glm4v.modeling_glm4v import (
     Glm4vPreTrainedModel,
     Glm4vTextAttention,
     Glm4vVisionModel,
+    Glm4vVisionAttention,
+    Glm4vVisionBlock,
+    Glm4vRMSNorm,
+    Glm4VisionMlp
 )
 
+
+class GlmDocRMSNorm(Glm4vRMSNorm):
+    pass
+
+class GlmDocVisionMlp(Glm4VisionMlp):
+    pass
 
 class GlmDocVisionConfig(Glm4vVisionConfig):
     def __init__(
@@ -85,11 +95,30 @@ class GlmDocTextAttention(Glm4vTextAttention, nn.Module):
 
 
 class GlmDocPreTrainedModel(Glm4vPreTrainedModel):
-    _keys_to_ignore_on_load_unexpected = [r"model\.language_model.\.layers\.16.*"]
+    _keys_to_ignore_on_load_unexpected = [r"model\.language_model\.layers\.16.*"]
 
 
 class GlmDocModelOutputWithPast(Glm4vModelOutputWithPast):
     pass
+
+
+class GlmDocVisionAttention(Glm4vVisionAttention):
+    def __init__(self, config: GlmDocVisionConfig) -> None:
+        super().__init__()
+        self.dim = config.hidden_size
+        self.num_heads = config.num_heads
+        self.head_dim = self.dim // self.num_heads
+        self.num_key_value_groups = 1  # needed for eager attention
+        self.qkv = nn.Linear(config.hidden_size, config.hidden_size * 3, bias=config.attention_bias)
+        self.proj = nn.Linear(config.hidden_size, config.hidden_size, bias=config.attention_bias)
+        self.q_norm = GlmDocRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.k_norm = GlmDocRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+
+
+class GlmDocVisionBlock(Glm4vVisionBlock):
+    def __init__(self, config) -> None:
+        super().__init__()
+        self.mlp = GlmDocVisionMlp(config, bias=config.attention_bias)
 
 
 class GlmDocVisionModel(Glm4vVisionModel):
