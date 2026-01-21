@@ -4025,6 +4025,9 @@ class ModelTesterMixin:
                     # disable reference compile for every submodel (modernbert)
                     if hasattr(module.config, "reference_compile"):
                         module.config.reference_compile = False
+                    # disable mamba kernels for every submodel (mamba, jamba)
+                    if hasattr(module.config, "use_mamba_kernels"):
+                        module.config.use_mamba_kernels = False
                 # disable classifier cast for nllb-moe
                 if hasattr(module, "_cast_classifier"):
                     module._cast_classifier = lambda *args, **kwargs: None
