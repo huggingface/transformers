@@ -98,14 +98,14 @@ def video_metadata_validator(value: VideoMetadataType | None = None):
     if isinstance(value, Sequence) and isinstance(value[0], Sequence) and isinstance(value[0][0], dict):
         for sublist in value:
             for item in sublist:
-                if not check_dict_keys(item):
+                if not check_dict_keys(item):  # type: ignore[arg-type]
                     raise ValueError(
                         f"Invalid keys found in video metadata. Valid keys: {valid_keys} got: {list(item.keys())}"
                     )
 
     elif isinstance(value, Sequence) and isinstance(value[0], dict):
         for item in value:
-            if not check_dict_keys(item):
+            if not check_dict_keys(item):  # type: ignore[arg-type]
                 raise ValueError(
                     f"Invalid keys found in video metadata. Valid keys: {valid_keys} got: {list(item.keys())}"
                 )

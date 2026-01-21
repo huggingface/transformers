@@ -25,7 +25,7 @@ style:
 check-repo:
 	ruff check $(check_dirs) setup.py conftest.py
 	ruff format --check $(check_dirs) setup.py conftest.py
-	-ty check $(call get_py_files,src/transformers) setup.py conftest.py
+	ty check $(call get_py_files,src/transformers/utils) --force-exclude --exclude '**/*_pb2*.py'
 	-python utils/custom_init_isort.py --check_only
 	-python utils/sort_auto_mappings.py --check_only
 	-python -c "from transformers import *" || (echo '🚨 import failed, this means you introduced unprotected imports! 🚨'; exit 1)
