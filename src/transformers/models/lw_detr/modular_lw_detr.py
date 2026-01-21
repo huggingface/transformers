@@ -262,6 +262,8 @@ class LwDetrConfig(PreTrainedConfig):
             Relative weight of the L1 error of the bounding box coordinates in the Hungarian matching cost.
         giou_cost (`float`, *optional*, defaults to 2):
             Relative weight of the generalized IoU loss of the bounding box in the Hungarian matching cost.
+        class_loss_coefficient (`float`, *optional*, defaults to 1):
+            Relative weight of the Cross Entropy loss in the object detection loss.
         mask_loss_coefficient (`float`, *optional*, defaults to 1):
             Relative weight of the Focal loss in the panoptic segmentation loss.
         dice_loss_coefficient (`float`, *optional*, defaults to 1):
@@ -326,6 +328,7 @@ class LwDetrConfig(PreTrainedConfig):
         class_cost=2,
         bbox_cost=5,
         giou_cost=2,
+        class_loss_coefficient=1,
         mask_loss_coefficient=1,
         dice_loss_coefficient=1,
         bbox_loss_coefficient=5,
@@ -391,6 +394,7 @@ class LwDetrConfig(PreTrainedConfig):
         self.bbox_cost = bbox_cost
         self.giou_cost = giou_cost
         # Loss coefficients
+        self.class_loss_coefficient = class_loss_coefficient
         self.dice_loss_coefficient = dice_loss_coefficient
         self.bbox_loss_coefficient = bbox_loss_coefficient
         self.giou_loss_coefficient = giou_loss_coefficient
