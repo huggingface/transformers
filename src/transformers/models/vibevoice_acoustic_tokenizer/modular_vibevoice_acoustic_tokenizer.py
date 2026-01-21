@@ -469,22 +469,25 @@ class VibeVoiceAcousticTokenizerModel(VibeVoiceAcousticTokenizerPreTrainedModel)
 
     @can_return_tuple
     @auto_docstring
-    def encode(self, audio, sample=True):
+    def encode(self, audio):
         r"""
         audio (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`):
             Input audio waveform to be encoded into latent representations.
-        sample (`bool`, *optional*):
-            Whether to sample from the output distribution or return the latent as is.
         """
-        
         latents = self.encoder(audio)
-        if sample:
-            batch_size = audio.shape[0]
-            noise_std = self.config.vae_std * torch.randn(batch_size, device=latents.device, dtype=latents.dtype)
-            while noise_std.dim() < latents.dim():
-                noise_std = noise_std.unsqueeze(-1)
-            latents = latents + noise_std * torch.randn_like(latents)
+        return VibeVoiceAcousticTokenizerEncoderOutput(latents=latents)
 
+    @can_return_tuple
+    @auto_docstring
+    def sample(self, latents):
+        r"""
+        latents (`torch.FloatTensor` of shape `(batch_size, channels, sequence_length)`):
+            Input latent representations to be sampled.
+        """
+        noise_std = self.config.vae_std * torch.randn(latents.shape[0], device=latents.device, dtype=latents.dtype)
+        while noise_std.dim() < latents.dim():
+            noise_std = noise_std.unsqueeze(-1)
+        latents = latents + noise_std * torch.randn_like(latents)
         return VibeVoiceAcousticTokenizerEncoderOutput(latents=latents)
 
     @can_return_tuple
@@ -498,7 +501,6 @@ class VibeVoiceAcousticTokenizerModel(VibeVoiceAcousticTokenizerPreTrainedModel)
         use_cache (`bool`, *optional*):
             Whether to use caching for convolution states.
         """
-
         if use_cache and padding_cache is None:
             padding_cache = VibeVoiceAcousticTokenizerConv1dPaddingCache(
                 num_layers=self.decoder.num_conv_layers,
@@ -524,7 +526,9 @@ class VibeVoiceAcousticTokenizerModel(VibeVoiceAcousticTokenizerPreTrainedModel)
         sample (`bool`, *optional*):
             Whether to sample from the output distribution of the encoder, or return the latent as is.
         """
-        encoder_output = self.encode(audio, sample=sample)
+        encoder_output = self.encode(audio)
+        if sample:
+            encoder_output = self.sample(encoder_output.latents)
         decoder_output = self.decode(encoder_output.latents, padding_cache=padding_cache, use_cache=use_cache)
         return VibeVoiceAcousticTokenizerOutput(
             audio=decoder_output.audio,

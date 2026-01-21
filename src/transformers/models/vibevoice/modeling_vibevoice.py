@@ -676,8 +676,8 @@ class VibeVoiceModel(VibeVoicePreTrainedModel):
         padding_mask = torch.arange(max(num_audio_tokens), device=padding_mask.device) < num_audio_tokens[:, None]
 
         with torch.no_grad():
-            # combined encoding and sampling: https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modeling_vibevoice_inference.py#L146
-            acoustic_latents = self.acoustic_tokenizer.encode(input_values, sample=True).latents
+            acoustic_latents = self.acoustic_tokenizer.encode(input_values).latents
+            acoustic_latents = self.acoustic_tokenizer.sample(acoustic_latents).latents
         acoustic_features = (
             acoustic_latents + latent_bias_factor.to(acoustic_latents.device)
         ) * latent_scaling_factor.to(acoustic_latents.device)
