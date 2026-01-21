@@ -14,7 +14,7 @@
 """Fast Image processor class for Swin2SR."""
 
 import torch
-import torchvision.transforms.v2.functional as TVF
+import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_utils import BatchFeature, ChannelDimension, get_image_size
 from ...image_processing_utils_fast import (
@@ -68,7 +68,7 @@ class Swin2SRImageProcessorFast(BaseImageProcessorFast):
         pad_height = (height // size_divisor + 1) * size_divisor - height
         pad_width = (width // size_divisor + 1) * size_divisor - width
 
-        return TVF.pad(
+        return tvF.pad(
             images,
             (0, 0, pad_width, pad_height),
             padding_mode="symmetric",

@@ -7,7 +7,7 @@
 from typing import Optional
 
 import torch
-import torchvision.transforms.v2.functional as TVF
+import torchvision.transforms.v2.functional as tvF
 from PIL import Image, ImageDraw
 
 from ...image_processing_utils_fast import BaseImageProcessorFast, BatchFeature
@@ -84,7 +84,7 @@ def convert_to_grayscale(
     """
     if is_grayscale(image):
         return image
-    return TVF.rgb_to_grayscale(image, num_output_channels=3)
+    return tvF.rgb_to_grayscale(image, num_output_channels=3)
 
 
 @auto_docstring
@@ -121,7 +121,7 @@ class EfficientLoFTRImageProcessorFast(BaseImageProcessorFast):
         rescale_factor: float,
         do_rescale: bool,
         do_resize: bool,
-        interpolation: Optional["TVF.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
         do_grayscale: bool,
         disable_grouping: bool,
         return_tensors: str | TensorType,

@@ -39,7 +39,7 @@ if TYPE_CHECKING:
     from .modeling_depth_pro import DepthProDepthEstimatorOutput
 
 
-import torchvision.transforms.v2.functional as TVF
+import torchvision.transforms.v2.functional as tvF
 
 
 logger = logging.get_logger(__name__)
@@ -63,7 +63,7 @@ class DepthProImageProcessorFast(BaseImageProcessorFast):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["TVF.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,

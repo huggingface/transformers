@@ -18,7 +18,7 @@ from typing import Optional, Union
 
 import numpy as np
 import torch
-import torchvision.transforms.v2.functional as TVF
+import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
@@ -208,7 +208,7 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
                     "do_normalize": False,
                     "do_rescale": False,
                     # Nearest interpolation is used for segmentation maps instead of BILINEAR.
-                    "interpolation": TVF.InterpolationMode.NEAREST_EXACT,
+                    "interpolation": tvF.InterpolationMode.NEAREST_EXACT,
                 }
             )
 
@@ -247,7 +247,7 @@ class EomtImageProcessorFast(BaseImageProcessorFast):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["TVF.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,

@@ -18,7 +18,7 @@ import math
 from typing import Optional
 
 import torch
-import torchvision.transforms.v2.functional as TVF
+import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
@@ -161,7 +161,7 @@ class Gemma3ImageProcessorFast(BaseImageProcessorFast):
         pan_and_scan_min_crop_size: int | None,
         pan_and_scan_max_num_crops: int | None,
         pan_and_scan_min_ratio_to_activate: float | None,
-        interpolation: Optional["TVF.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,

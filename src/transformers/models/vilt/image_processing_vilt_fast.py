@@ -16,7 +16,7 @@
 from typing import Optional
 
 import torch
-import torchvision.transforms.v2.functional as TVF
+import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
@@ -58,7 +58,7 @@ class ViltImageProcessorFast(BaseImageProcessorFast):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["TVF.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
         size_divisor: int | None,
         do_pad: bool,
         do_rescale: bool,
@@ -117,7 +117,7 @@ class ViltImageProcessorFast(BaseImageProcessorFast):
         self,
         images: "torch.Tensor",
         size: SizeDict,
-        interpolation: Optional["TVF.InterpolationMode"] = None,
+        interpolation: Optional["tvF.InterpolationMode"] = None,
         size_divisor: int | None = None,
     ) -> "torch.Tensor":
         """
@@ -126,7 +126,7 @@ class ViltImageProcessorFast(BaseImageProcessorFast):
         Args:
             images (`torch.Tensor`): Image or batch of images to resize.
             size (`dict[str, int]`): Size dictionary with shortest_edge key.
-            interpolation (`TVF.InterpolationMode`, *optional*): Interpolation method to use.
+            interpolation (`tvF.InterpolationMode`, *optional*): Interpolation method to use.
             size_divisor (`int`, *optional*): Value to ensure height/width are divisible by.
 
         Returns:
@@ -165,7 +165,7 @@ class ViltImageProcessorFast(BaseImageProcessorFast):
             new_widths = new_widths // size_divisor * size_divisor
 
         # Resize the image
-        return TVF.resize(images, [new_heights, new_widths], interpolation=interpolation)
+        return tvF.resize(images, [new_heights, new_widths], interpolation=interpolation)
 
     def _pad_batch(
         self,
@@ -205,7 +205,7 @@ class ViltImageProcessorFast(BaseImageProcessorFast):
                 padding_right = max_size[1] - original_size[1]
                 padding = [0, 0, padding_right, padding_bottom]
 
-                padded_images = TVF.pad(stacked_images, padding, fill=0)
+                padded_images = tvF.pad(stacked_images, padding, fill=0)
                 pixel_mask = mask_template.clone()
                 pixel_mask[: original_size[0], : original_size[1]].fill_(1)
                 pixel_masks = pixel_mask.unsqueeze(0).repeat(stacked_images.shape[0], 1, 1)

@@ -20,7 +20,7 @@ from typing import (
 
 import numpy as np
 import torch
-import torchvision.transforms.v2.functional as TVF
+import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_utils import (
     BatchFeature,
@@ -84,7 +84,7 @@ class ZoeDepthImageProcessorFast(BaseImageProcessorFast):
         size: SizeDict,
         keep_aspect_ratio: bool = False,
         ensure_multiple_of: int = 1,
-        interpolation: Optional["TVF.InterpolationMode"] = None,
+        interpolation: Optional["tvF.InterpolationMode"] = None,
     ) -> "torch.Tensor":
         """
         Resize an image or batchd images to target size `(size["height"], size["width"])`. If `keep_aspect_ratio` is `True`, the image
@@ -100,7 +100,7 @@ class ZoeDepthImageProcessorFast(BaseImageProcessorFast):
                 If `True`, the image is resized to the largest possible size such that the aspect ratio is preserved.
             ensure_multiple_of (`int`, *optional*, defaults to 1):
                 The image is resized to a size that is a multiple of this value.
-            interpolation (`TVF.InterpolationMode`, *optional*, defaults to `InterpolationMode.BILINEAR`):
+            interpolation (`tvF.InterpolationMode`, *optional*, defaults to `InterpolationMode.BILINEAR`):
                 Defines the resampling filter to use if resizing the image. Otherwise, the image is resized to size
                 specified in `size`.
         """
@@ -135,7 +135,7 @@ class ZoeDepthImageProcessorFast(BaseImageProcessorFast):
         pad_height = int(np.sqrt(height / 2) * 3)
         pad_width = int(np.sqrt(width / 2) * 3)
 
-        return TVF.pad(images, padding=(pad_width, pad_height), padding_mode="reflect")
+        return tvF.pad(images, padding=(pad_width, pad_height), padding_mode="reflect")
 
     def _preprocess(
         self,
@@ -144,7 +144,7 @@ class ZoeDepthImageProcessorFast(BaseImageProcessorFast):
         size: SizeDict,
         keep_aspect_ratio: bool | None,
         ensure_multiple_of: int | None,
-        interpolation: Optional["TVF.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
         do_pad: bool,
         do_rescale: bool,
         rescale_factor: float | None,
@@ -257,10 +257,10 @@ class ZoeDepthImageProcessorFast(BaseImageProcessorFast):
                     pad_h = int(np.sqrt(source_size[0] / 2) * padding_factor_h)
                     pad_w = int(np.sqrt(source_size[1] / 2) * padding_factor_w)
 
-                depth = TVF.resize(
+                depth = tvF.resize(
                     depth,
                     size=[source_size[0] + 2 * pad_h, source_size[1] + 2 * pad_w],
-                    interpolation=TVF.InterpolationMode.BICUBIC,
+                    interpolation=tvF.InterpolationMode.BICUBIC,
                     antialias=False,
                 )
 
@@ -271,10 +271,10 @@ class ZoeDepthImageProcessorFast(BaseImageProcessorFast):
 
             if target_size is not None:
                 target_size = [target_size[0], target_size[1]]
-                depth = TVF.resize(
+                depth = tvF.resize(
                     depth,
                     size=target_size,
-                    interpolation=TVF.InterpolationMode.BICUBIC,
+                    interpolation=tvF.InterpolationMode.BICUBIC,
                     antialias=False,
                 )
             depth = depth.squeeze(0)

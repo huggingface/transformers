@@ -17,7 +17,7 @@ import warnings
 from typing import Optional
 
 import torch
-import torchvision.transforms.v2.functional as TVF
+import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_utils_fast import (
     BatchFeature,
@@ -61,7 +61,7 @@ class Owlv2ImageProcessorFast(OwlViTImageProcessorFast):
         pad_right = size - width
 
         padding = (0, 0, pad_right, pad_bottom)
-        padded_image = TVF.pad(images, padding, fill=constant_value)
+        padded_image = tvF.pad(images, padding, fill=constant_value)
         return padded_image
 
     def pad(
@@ -133,14 +133,14 @@ class Owlv2ImageProcessorFast(OwlViTImageProcessorFast):
             else:
                 kernel_sizes = 2 * torch.ceil(3 * anti_aliasing_sigma).int() + 1
 
-                filtered = TVF.gaussian_blur(
+                filtered = tvF.gaussian_blur(
                     image, (kernel_sizes[0], kernel_sizes[1]), sigma=anti_aliasing_sigma.tolist()
                 )
 
         else:
             filtered = image
 
-        out = TVF.resize(filtered, size=(size.height, size.width), antialias=False)
+        out = tvF.resize(filtered, size=(size.height, size.width), antialias=False)
 
         return out
 
@@ -149,7 +149,7 @@ class Owlv2ImageProcessorFast(OwlViTImageProcessorFast):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["TVF.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
         do_pad: bool,
         do_rescale: bool,
         rescale_factor: float,

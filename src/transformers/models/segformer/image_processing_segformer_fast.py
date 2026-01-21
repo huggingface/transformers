@@ -21,7 +21,7 @@
 from typing import Optional, Union
 
 import torch
-import torchvision.transforms.v2.functional as TVF
+import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast, group_images_by_shape, reorder_images
@@ -114,7 +114,7 @@ class SegformerImageProcessorFast(BaseImageProcessorFast):
                     "do_normalize": False,
                     "do_rescale": False,
                     # Nearest interpolation is used for segmentation maps instead of BILINEAR.
-                    "interpolation": TVF.InterpolationMode.NEAREST_EXACT,
+                    "interpolation": tvF.InterpolationMode.NEAREST_EXACT,
                 }
             )
             processed_segmentation_maps = self._preprocess(
@@ -128,7 +128,7 @@ class SegformerImageProcessorFast(BaseImageProcessorFast):
         self,
         images: list["torch.Tensor"],
         do_reduce_labels: bool,
-        interpolation: Optional["TVF.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
         do_resize: bool,
         do_rescale: bool,
         do_normalize: bool,

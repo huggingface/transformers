@@ -16,7 +16,7 @@
 from typing import Optional
 
 import torch
-import torchvision.transforms.v2.functional as TVF
+import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
@@ -90,7 +90,7 @@ class TvpImageProcessorFast(BaseImageProcessorFast):
         self,
         image: "torch.Tensor",
         size: SizeDict,
-        interpolation: Optional["TVF.InterpolationMode"] = None,
+        interpolation: Optional["tvF.InterpolationMode"] = None,
         antialias: bool = True,
         **kwargs,
     ) -> "torch.Tensor":
@@ -103,7 +103,7 @@ class TvpImageProcessorFast(BaseImageProcessorFast):
             size (`SizeDict` or `dict`):
                 Size dictionary. If `size` has `longest_edge`, resize the longest edge to that value
                 while maintaining aspect ratio. Otherwise, use the base class resize method.
-            interpolation (`TVF.InterpolationMode`, *optional*):
+            interpolation (`tvF.InterpolationMode`, *optional*):
                 Interpolation method to use.
             antialias (`bool`, *optional*, defaults to `True`):
                 Whether to use antialiasing.
@@ -111,7 +111,7 @@ class TvpImageProcessorFast(BaseImageProcessorFast):
         Returns:
             `torch.Tensor`: The resized image.
         """
-        interpolation = interpolation if interpolation is not None else TVF.InterpolationMode.BILINEAR
+        interpolation = interpolation if interpolation is not None else tvF.InterpolationMode.BILINEAR
 
         # Handle longest_edge case (TVP-specific)
         if size.longest_edge:
@@ -158,7 +158,7 @@ class TvpImageProcessorFast(BaseImageProcessorFast):
         images: list[list["torch.Tensor"]],
         do_resize: bool,
         size: SizeDict | dict,
-        interpolation: Optional["TVF.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
         do_center_crop: bool,
         crop_size: SizeDict | dict,
         do_rescale: bool,

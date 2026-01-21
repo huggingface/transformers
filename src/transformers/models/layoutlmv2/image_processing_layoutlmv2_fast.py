@@ -16,7 +16,7 @@
 from typing import Optional
 
 import torch
-import torchvision.transforms.v2.functional as TVF
+import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_utils_fast import BaseImageProcessorFast, BatchFeature
 from ...image_transforms import ChannelDimension, group_images_by_shape, reorder_images
@@ -57,7 +57,7 @@ class LayoutLMv2ImageProcessorFast(BaseImageProcessorFast):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["TVF.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
         apply_ocr: bool,
         ocr_lang: str | None,
         tesseract_config: str | None,

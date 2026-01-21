@@ -2,7 +2,7 @@ import pathlib
 from typing import Optional
 
 import torch
-import torchvision.transforms.v2.functional as TVF
+import torchvision.transforms.v2.functional as tvF
 
 from transformers.models.detr.image_processing_detr_fast import DetrImageProcessorFast
 
@@ -144,7 +144,7 @@ class RTDetrImageProcessorFast(DetrImageProcessorFast):
         return_segmentation_masks: bool,
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["TVF.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
