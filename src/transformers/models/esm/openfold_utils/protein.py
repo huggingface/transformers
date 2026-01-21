@@ -19,7 +19,7 @@ import dataclasses
 import re
 import string
 from collections.abc import Iterator, Mapping, Sequence
-from typing import Any, Optional
+from typing import Any
 
 import numpy as np
 
@@ -56,17 +56,17 @@ class Protein:
     b_factors: np.ndarray  # [num_res, num_atom_type]
 
     # Chain indices for multi-chain predictions
-    chain_index: Optional[np.ndarray] = None
+    chain_index: np.ndarray | None = None
 
     # Optional remark about the protein. Included as a comment in output PDB
     # files
-    remark: Optional[str] = None
+    remark: str | None = None
 
     # Templates used to generate this protein (prediction-only)
-    parents: Optional[Sequence[str]] = None
+    parents: Sequence[str] | None = None
 
     # Chain corresponding to each parent
-    parents_chain_index: Optional[Sequence[int]] = None
+    parents_chain_index: Sequence[int] | None = None
 
 
 def from_proteinnet_string(proteinnet_str: str) -> Protein:
@@ -79,7 +79,7 @@ def from_proteinnet_string(proteinnet_str: str) -> Protein:
     atom_positions = None
     atom_mask = None
     for g in groups:
-        if "[PRIMARY]" == g[0]:
+        if g[0] == "[PRIMARY]":
             seq = g[1][0].strip()
             for i in range(len(seq)):
                 if seq[i] not in residue_constants.restypes:
@@ -87,7 +87,7 @@ def from_proteinnet_string(proteinnet_str: str) -> Protein:
             aatype = np.array(
                 [residue_constants.restype_order.get(res_symbol, residue_constants.restype_num) for res_symbol in seq]
             )
-        elif "[TERTIARY]" == g[0]:
+        elif g[0] == "[TERTIARY]":
             tertiary: list[list[float]] = []
             for axis in range(3):
                 tertiary.append(list(map(float, g[1][axis].split())))
@@ -96,7 +96,7 @@ def from_proteinnet_string(proteinnet_str: str) -> Protein:
             for i, atom in enumerate(atoms):
                 atom_positions[:, residue_constants.atom_order[atom], :] = np.transpose(tertiary_np[:, i::3])
             atom_positions *= PICO_TO_ANGSTROM
-        elif "[MASK]" == g[0]:
+        elif g[0] == "[MASK]":
             mask = np.array(list(map({"-": 0, "+": 1}.get, g[1][0].strip())))
             atom_mask = np.zeros(
                 (
@@ -300,11 +300,11 @@ def ideal_atom_mask(prot: Protein) -> np.ndarray:
 def from_prediction(
     features: FeatureDict,
     result: ModelOutput,
-    b_factors: Optional[np.ndarray] = None,
-    chain_index: Optional[np.ndarray] = None,
-    remark: Optional[str] = None,
-    parents: Optional[Sequence[str]] = None,
-    parents_chain_index: Optional[Sequence[int]] = None,
+    b_factors: np.ndarray | None = None,
+    chain_index: np.ndarray | None = None,
+    remark: str | None = None,
+    parents: Sequence[str] | None = None,
+    parents_chain_index: Sequence[int] | None = None,
 ) -> Protein:
     """Assembles a protein from a prediction.
 

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +14,7 @@
 """Fast Image processor class for Fuyu."""
 
 import math
-from typing import Optional, Union
+from typing import Optional
 
 import torch
 
@@ -125,13 +124,13 @@ class FuyuImageProcessorFast(BaseImageProcessorFast):
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        do_pad: Optional[bool],
-        padding_value: Optional[float],
-        padding_mode: Optional[str],
-        disable_grouping: Optional[bool],
-        return_tensors: Optional[Union[str, TensorType]],
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        do_pad: bool | None,
+        padding_value: float | None,
+        padding_mode: str | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> FuyuBatchFeature:
         # Group images by size for batched resizing
@@ -186,7 +185,7 @@ class FuyuImageProcessorFast(BaseImageProcessorFast):
             tensor_type=return_tensors,
         )
 
-    def get_num_patches(self, image_height: int, image_width: int, patch_size: Optional[SizeDict] = None) -> int:
+    def get_num_patches(self, image_height: int, image_width: int, patch_size: SizeDict | None = None) -> int:
         """
         Calculate number of patches required to encode an image.
         Args:
@@ -209,7 +208,7 @@ class FuyuImageProcessorFast(BaseImageProcessorFast):
         num_patches = num_patches_per_dim_h * num_patches_per_dim_w
         return num_patches
 
-    def patchify_image(self, image: torch.Tensor, patch_size: Optional[SizeDict] = None) -> torch.Tensor:
+    def patchify_image(self, image: torch.Tensor, patch_size: SizeDict | None = None) -> torch.Tensor:
         """
         Convert an image into a tensor of patches using PyTorch's unfold operation.
         Args:
@@ -242,7 +241,7 @@ class FuyuImageProcessorFast(BaseImageProcessorFast):
         image_placeholder_id: int,
         image_newline_id: int,
         variable_sized: bool,
-        patch_size: Optional[dict[str, int]] = None,
+        patch_size: dict[str, int] | None = None,
     ) -> FuyuBatchFeature:
         """
         Process images for model input. In particular, variable-sized images are handled here.
@@ -366,7 +365,7 @@ class FuyuImageProcessorFast(BaseImageProcessorFast):
 
     def _further_process_kwargs(
         self,
-        patch_size: Optional[dict[str, int]] = None,
+        patch_size: dict[str, int] | None = None,
         **kwargs,
     ) -> dict:
         """

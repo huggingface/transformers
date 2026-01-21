@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Baidu Inc and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import math
-from typing import Any, Optional
+from typing import Any
 
 import torch
 import torch.nn.functional as F
@@ -211,6 +210,8 @@ class DFineConfig(PreTrainedConfig):
             The method to use for the decoder: `"default"` or `"discrete"`.
         up (`float`, *optional*, defaults to 0.5):
             Controls the upper bounds of the Weighting Function.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
     """
 
     model_type = "d_fine"
@@ -295,6 +296,7 @@ class DFineConfig(PreTrainedConfig):
         decoder_offset_scale=0.5,
         decoder_method="default",
         up=0.5,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         self.initializer_range = initializer_range
@@ -402,6 +404,7 @@ class DFineConfig(PreTrainedConfig):
         self.lqe_hidden_dim = lqe_hidden_dim
         self.lqe_layers = lqe_layers
         self.up = up
+        self.tie_word_embeddings = tie_word_embeddings
 
         if isinstance(self.decoder_n_points, list):
             if len(self.decoder_n_points) != self.num_feature_levels:
@@ -450,7 +453,7 @@ class DFineMultiscaleDeformableAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
         reference_points=None,
         encoder_hidden_states=None,
         spatial_shapes=None,
@@ -537,13 +540,13 @@ class DFineDecoderLayer(RTDetrDecoderLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Optional[torch.Tensor] = None,
+        position_embeddings: torch.Tensor | None = None,
         reference_points=None,
         spatial_shapes=None,
         spatial_shapes_list=None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
+        output_attentions: bool | None = False,
     ) -> tuple[torch.Tensor, Any, Any]:
         # Self Attention
         hidden_states_2, self_attn_weights = self.self_attn(
@@ -1068,8 +1071,8 @@ class DFineConvNormLayer(RTDetrConvNormLayer):
         kernel_size: int,
         stride: int,
         groups: int = 1,
-        padding: Optional[int] = None,
-        activation: Optional[str] = None,
+        padding: int | None = None,
+        activation: str | None = None,
     ):
         super().__init__(config, in_channels, out_channels, kernel_size, stride, padding=None, activation=activation)
         self.conv = nn.Conv2d(

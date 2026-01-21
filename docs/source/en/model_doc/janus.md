@@ -205,6 +205,7 @@ for i, image in enumerate(images['pixel_values']):
 ## JanusProcessor
 
 [[autodoc]] JanusProcessor
+    - __call__
 
 ## JanusImageProcessor
 

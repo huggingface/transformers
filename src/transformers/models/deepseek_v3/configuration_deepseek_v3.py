@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 bzantium and the HuggingFace Inc. team. All rights reserved.
 #
 # This code is based on the DeepSeekV3 implementations from the DeepSeek AI team. (https://huggingface.co/deepseek-ai/DeepSeek-V3)
@@ -15,8 +14,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """DeepSeekV3 model configuration"""
-
-from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
@@ -153,40 +150,40 @@ class DeepseekV3Config(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 129280,
-        hidden_size: Optional[int] = 7168,
-        intermediate_size: Optional[int] = 18432,
-        moe_intermediate_size: Optional[int] = 2048,
-        num_hidden_layers: Optional[int] = 61,
-        num_attention_heads: Optional[int] = 128,
-        num_key_value_heads: Optional[int] = 128,
-        n_shared_experts: Optional[int] = 1,
-        n_routed_experts: Optional[int] = 256,
-        routed_scaling_factor: Optional[float] = 2.5,
-        kv_lora_rank: Optional[int] = 512,
-        q_lora_rank: Optional[int] = 1536,
-        qk_rope_head_dim: Optional[int] = 64,
-        v_head_dim: Optional[int] = 128,
-        qk_nope_head_dim: Optional[int] = 128,
-        n_group: Optional[int] = 8,
-        topk_group: Optional[int] = 4,
-        num_experts_per_tok: Optional[int] = 8,
-        first_k_dense_replace: Optional[int] = 3,
-        norm_topk_prob: Optional[bool] = True,
-        hidden_act: Optional[str] = "silu",
-        max_position_embeddings: Optional[int] = 4096,
-        initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[int] = 1e-6,
-        use_cache: Optional[bool] = True,
-        pad_token_id: Optional[int] = None,
-        bos_token_id: Optional[int] = 0,
-        eos_token_id: Optional[int] = 1,
-        pretraining_tp: Optional[int] = 1,
-        tie_word_embeddings: Optional[bool] = False,
-        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        rope_interleave: Optional[bool] = True,
-        attention_bias: Optional[bool] = False,
-        attention_dropout: Optional[float] = 0.0,
+        vocab_size: int | None = 129280,
+        hidden_size: int | None = 7168,
+        intermediate_size: int | None = 18432,
+        moe_intermediate_size: int | None = 2048,
+        num_hidden_layers: int | None = 61,
+        num_attention_heads: int | None = 128,
+        num_key_value_heads: int | None = 128,
+        n_shared_experts: int | None = 1,
+        n_routed_experts: int | None = 256,
+        routed_scaling_factor: float | None = 2.5,
+        kv_lora_rank: int | None = 512,
+        q_lora_rank: int | None = 1536,
+        qk_rope_head_dim: int | None = 64,
+        v_head_dim: int | None = 128,
+        qk_nope_head_dim: int | None = 128,
+        n_group: int | None = 8,
+        topk_group: int | None = 4,
+        num_experts_per_tok: int | None = 8,
+        first_k_dense_replace: int | None = 3,
+        norm_topk_prob: bool | None = True,
+        hidden_act: str | None = "silu",
+        max_position_embeddings: int | None = 4096,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: int | None = 1e-6,
+        use_cache: bool | None = True,
+        pad_token_id: int | None = None,
+        bos_token_id: int | None = 0,
+        eos_token_id: int | None = 1,
+        pretraining_tp: int | None = 1,
+        tie_word_embeddings: bool | None = False,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        rope_interleave: bool | None = True,
+        attention_bias: bool | None = False,
+        attention_dropout: float | None = 0.0,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -227,15 +224,13 @@ class DeepseekV3Config(PreTrainedConfig):
         self.attention_dropout = attention_dropout
         self.rope_parameters = rope_parameters
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        super().__init__(**kwargs)
 
-    def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation: Optional[set] = None, **kwargs):
+    def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation: set | None = None, **kwargs):
         rope_scaling = kwargs.pop("rope_scaling", None)
         self.rope_parameters = rope_scaling or self.rope_parameters
         self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else {}

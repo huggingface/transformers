@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Fast Image processor class for Pix2Struct."""
-
-from typing import Optional, Union
 
 import torch
 from PIL import Image
@@ -65,7 +62,7 @@ class Pix2StructImageProcessorFast(BaseImageProcessorFast):
 
     def _further_process_kwargs(
         self,
-        patch_size: Optional[dict[str, int]] = None,
+        patch_size: dict[str, int] | None = None,
         **kwargs,
     ) -> dict:
         """
@@ -89,8 +86,8 @@ class Pix2StructImageProcessorFast(BaseImageProcessorFast):
         self,
         image: torch.Tensor,
         header: str,
-        font_bytes: Optional[bytes] = None,
-        font_path: Optional[str] = None,
+        font_bytes: bytes | None = None,
+        font_path: str | None = None,
     ) -> torch.Tensor:
         """
         Render header text on image using torch tensors.
@@ -237,7 +234,7 @@ class Pix2StructImageProcessorFast(BaseImageProcessorFast):
     def preprocess(
         self,
         images: ImageInput,
-        header_text: Optional[Union[str, list[str]]] = None,
+        header_text: str | list[str] | None = None,
         **kwargs: Unpack[Pix2StructImageProcessorKwargs],
     ) -> BatchFeature:
         r"""
@@ -249,10 +246,10 @@ class Pix2StructImageProcessorFast(BaseImageProcessorFast):
     def _preprocess_image_like_inputs(
         self,
         images: ImageInput,
-        header_text: Optional[Union[str, list[str]]] = None,
+        header_text: str | list[str] | None = None,
         do_convert_rgb: bool = True,
         input_data_format: ChannelDimension = ChannelDimension.FIRST,
-        device: Optional[Union[str, torch.device]] = None,
+        device: str | torch.device | None = None,
         **kwargs: Unpack[Pix2StructImageProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -292,7 +289,7 @@ class Pix2StructImageProcessorFast(BaseImageProcessorFast):
         do_normalize: bool,
         max_patches: int,
         patch_size: SizeDict,
-        return_tensors: Optional[Union[str, TensorType]],
+        return_tensors: str | TensorType | None,
         disable_grouping: bool,
         **kwargs,
     ) -> BatchFeature:

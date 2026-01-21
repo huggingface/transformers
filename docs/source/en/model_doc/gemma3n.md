@@ -161,6 +161,7 @@ echo -e "Plants create energy through a process known as" | transformers run --t
 ## Gemma3nProcessor
 
 [[autodoc]] Gemma3nProcessor
+    - __call__
 
 ## Gemma3nTextConfig
 

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +14,7 @@
 
 
 import math
-from typing import Optional, Union
+from typing import Optional
 
 import torch
 
@@ -48,7 +47,7 @@ MAX_IMAGE_SIZE = 4096  # 4k resolution as absolute maximum
 
 
 def _resize_output_size_rescale_to_max_len(
-    height: int, width: int, min_len: Optional[int] = 1, max_len: Optional[int] = None
+    height: int, width: int, min_len: int | None = 1, max_len: int | None = None
 ) -> tuple[int, int]:
     """
     Get the output size of the image after resizing given a dictionary specifying the max and min sizes.
@@ -85,7 +84,7 @@ def _resize_output_size_rescale_to_max_len(
 
 
 def _resize_output_size_scale_below_upper_bound(
-    height: int, width: int, max_len: Optional[dict[str, int]] = None
+    height: int, width: int, max_len: dict[str, int] | None = None
 ) -> tuple[int, int]:
     """
     Get the output size of the image after resizing given a dictionary specifying the max and min sizes.
@@ -363,14 +362,14 @@ class Idefics3ImageProcessorFast(BaseImageProcessorFast):
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        do_pad: Optional[bool],
-        do_image_splitting: Optional[bool],
-        max_image_size: Optional[dict[str, int]],
-        return_row_col_info: Optional[bool],
-        disable_grouping: Optional[bool],
-        return_tensors: Optional[Union[str, TensorType]],
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        do_pad: bool | None,
+        do_image_splitting: bool | None,
+        max_image_size: dict[str, int] | None,
+        return_row_col_info: bool | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         """

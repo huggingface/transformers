@@ -107,3 +107,4 @@ with torch.inference_mode():
 ## Ovis2Processor
 
 [[autodoc]] Ovis2Processor
+    - __call__

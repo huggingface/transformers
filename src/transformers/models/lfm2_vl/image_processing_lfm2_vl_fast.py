@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,7 +13,6 @@
 # limitations under the License.
 import math
 from functools import lru_cache
-from typing import Union
 
 import torch
 from torchvision.transforms.v2 import functional as F
@@ -173,6 +171,37 @@ class Lfm2VlImageProcessorKwargs(ImagesKwargs, total=False):
     """
     downsample_factor (`int`, *optional*, defaults to `2`):
         The downsampling factor for images used when resizing the image.
+    do_image_splitting (`bool`, *optional*, defaults to `True`):
+        Whether to split large images into a grid of smaller tiles. When enabled, images exceeding the maximum token
+        limit are divided into multiple tiles based on `min_tiles` and `max_tiles` constraints.
+    min_tiles (`int`, *optional*, defaults to `2`):
+        Minimum number of tiles (width × height) to use when splitting an image into a grid. The grid configuration
+        is chosen to maintain the original aspect ratio while staying within the `min_tiles` and `max_tiles` range.
+    max_tiles (`int`, *optional*, defaults to `10`):
+        Maximum number of tiles (width × height) to use when splitting an image into a grid. The grid configuration
+        is chosen to maintain the original aspect ratio while staying within the `min_tiles` and `max_tiles` range.
+    use_thumbnail (`bool`, *optional*, defaults to `True`):
+        Whether to include a thumbnail version of the image when splitting into tiles. The thumbnail provides a
+        low-resolution overview of the entire image and is added as an additional patch when the grid has more than
+        one tile.
+    min_image_tokens (`int`, *optional*, defaults to `64`):
+        Minimum number of image tokens (patches) to generate for an image. Images smaller than this threshold will
+        be upscaled to meet the minimum token requirement.
+    max_image_tokens (`int`, *optional*, defaults to `256`):
+        Maximum number of image tokens (patches) allowed for a single image. Images exceeding this limit will be
+        split into multiple tiles or downscaled accordingly.
+    encoder_patch_size (`int`, *optional*, defaults to `16`):
+        The patch size used by the vision encoder. Images are divided into patches of this size, and both height
+        and width must be divisible by this value (after accounting for the downsampling factor).
+    tile_size (`int`, *optional*, defaults to `512`):
+        The size of each tile when splitting large images into a grid. Each tile will be resized to this dimension
+        before being processed into patches.
+    max_pixels_tolerance (`float`, *optional*, defaults to `2.0`):
+        Tolerance factor for determining if an image is too large. An image is considered too large if its pixel
+        count exceeds `max_image_tokens * encoder_patch_size^2 * downsample_factor^2 * max_pixels_tolerance`.
+    return_row_col_info (`bool`, *optional*, defaults to `False`):
+        Whether to return row and column information for each image in the batch. When enabled, the output includes
+        `image_rows`, `image_cols`, and `image_sizes` fields indicating the grid layout and dimensions of processed images.
     """
 
     downsample_factor: int
@@ -420,8 +449,8 @@ class Lfm2VlImageProcessorFast(BaseImageProcessorFast):
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Union[float, list[float]],
-        image_std: Union[float, list[float]],
+        image_mean: float | list[float],
+        image_std: float | list[float],
         downsample_factor: int,
         do_image_splitting: bool,
         min_tiles: int,
@@ -432,7 +461,7 @@ class Lfm2VlImageProcessorFast(BaseImageProcessorFast):
         encoder_patch_size: int,
         tile_size: int,
         max_pixels_tolerance: float,
-        return_tensors: Union[str, TensorType],
+        return_tensors: str | TensorType,
         disable_grouping: bool,
         do_pad: bool,
         return_row_col_info: bool,

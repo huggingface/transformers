@@ -250,6 +250,7 @@ A list of official Hugging Face and community (indicated by 🌎) resources to h
 ## LlavaProcessor
 
 [[autodoc]] LlavaProcessor
+    - __call__
 
 ## LlavaModel
 

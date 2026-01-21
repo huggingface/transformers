@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The Intel Labs Team Authors, The Microsoft Research Team Authors and HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +14,7 @@
 """Fast Image processor class for BridgeTower."""
 
 from collections.abc import Iterable
-from typing import Optional, Union
+from typing import Optional
 
 import torch
 from torchvision.transforms.v2 import functional as F
@@ -183,7 +182,7 @@ class BridgeTowerImageProcessorFast(BaseImageProcessorFast):
         self,
         image: "torch.Tensor",
         output_size: tuple[int, int],
-        constant_values: Union[float, Iterable[float]] = 0,
+        constant_values: float | Iterable[float] = 0,
     ) -> "torch.Tensor":
         """
         Pad an image with zeros to the given size.
@@ -206,7 +205,7 @@ class BridgeTowerImageProcessorFast(BaseImageProcessorFast):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        size_divisor: Optional[int],
+        size_divisor: int | None,
         interpolation: Optional["F.InterpolationMode"],
         do_pad: bool,
         do_center_crop: bool,
@@ -214,10 +213,10 @@ class BridgeTowerImageProcessorFast(BaseImageProcessorFast):
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        disable_grouping: Optional[bool],
-        return_tensors: Optional[Union[str, TensorType]],
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         # Group images by size for batched resizing

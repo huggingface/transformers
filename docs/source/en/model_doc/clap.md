@@ -79,6 +79,7 @@ print(f"Text embeddings: {text_features}")
 ## ClapProcessor
 
 [[autodoc]] ClapProcessor
+    - __call__
 
 ## ClapModel
 
