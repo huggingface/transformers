@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch GLM-4-MoE model."""
+"""Testing suite for the PyTorch GLM-4.5, GLM-4.6, GLM-4.7 model."""
 
 import unittest
 
@@ -22,7 +22,6 @@ from packaging import version
 from transformers import is_torch_available
 from transformers.testing_utils import (
     cleanup,
-    require_read_token,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -65,7 +64,6 @@ class Glm4MoeModelTest(CausalLMModelTest, unittest.TestCase):
 
 
 @require_torch_accelerator
-@require_read_token
 @slow
 class Glm4MoeIntegrationTest(unittest.TestCase):
     def tearDown(self):
@@ -75,7 +73,6 @@ class Glm4MoeIntegrationTest(unittest.TestCase):
     @slow
     @require_torch_accelerator
     @pytest.mark.torch_compile_test
-    @require_read_token
     def test_compile_static_cache(self):
         # `torch==2.2` will throw an error on this test (as in other compilation tests), but torch==2.1.2 and torch>2.2
         # work as intended. See https://github.com/pytorch/pytorch/issues/121943

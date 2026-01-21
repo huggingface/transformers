@@ -22,7 +22,6 @@ from transformers.testing_utils import (
     backend_empty_cache,
     require_accelerate,
     require_deterministic_for_xpu,
-    require_read_token,
     require_torch_accelerator,
     require_torch_multi_accelerator,
     slow,
@@ -70,7 +69,6 @@ class FbgemmFp8ConfigTest(unittest.TestCase):
 @require_torch_accelerator
 @unittest.skipIf(not is_torch_xpu_available() and not is_fbgemm_gpu_available(), "test requires fbgemm-gpu or xpu")
 @require_accelerate
-@require_read_token
 class FbgemmFp8Test(unittest.TestCase):
     model_name = "meta-llama/Meta-Llama-3-8B"
 
@@ -153,7 +151,7 @@ class FbgemmFp8Test(unittest.TestCase):
         config = AutoConfig.from_pretrained(model_id, revision="cb32f77e905cccbca1d970436fb0f5e6b58ee3c5")
         quantization_config = FbgemmFp8Config()
 
-        with init_empty_weights():
+        with torch.device("meta"):
             model = OPTForCausalLM(config)
 
         nb_linears = 0
@@ -169,7 +167,7 @@ class FbgemmFp8Test(unittest.TestCase):
 
         self.assertEqual(nb_linears, nb_fbgemm_linear)
 
-        with init_empty_weights():
+        with torch.device("meta"):
             model = OPTForCausalLM(config)
         quantization_config = FbgemmFp8Config(modules_to_not_convert=["fc1"])
         model = replace_with_fbgemm_fp8_linear(

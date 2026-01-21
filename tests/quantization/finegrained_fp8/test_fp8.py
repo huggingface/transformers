@@ -24,20 +24,16 @@ from transformers.testing_utils import (
     backend_empty_cache,
     get_device_properties,
     require_accelerate,
-    require_read_token,
     require_torch_accelerator,
     require_torch_multi_accelerator,
     slow,
     torch_device,
 )
-from transformers.utils import is_accelerate_available, is_torch_available
+from transformers.utils import is_torch_available
 
 
 if is_torch_available():
     import torch
-
-if is_accelerate_available():
-    from accelerate import init_empty_weights
 
 
 @contextmanager
@@ -77,7 +73,6 @@ class FineGrainedFP8ConfigTest(unittest.TestCase):
 
 @slow
 @require_accelerate
-@require_read_token
 @require_torch_accelerator
 @unittest.skipIf(
     get_device_properties()[0] == "cuda"
@@ -129,6 +124,14 @@ class FP8QuantizerTest(unittest.TestCase):
             cls.model_name, device_map=cls.device_map, quantization_config=cls.quantization_config
         )
 
+    def setup(self):
+        """
+        Clear also on each setup (e.g. if a different model is used than the base cls one)
+        """
+        gc.collect()
+        backend_empty_cache(torch_device)
+        gc.collect()
+
     def tearDown(self):
         gc.collect()
         backend_empty_cache(torch_device)
@@ -145,7 +148,7 @@ class FP8QuantizerTest(unittest.TestCase):
         config = AutoConfig.from_pretrained(model_id, revision="cb32f77e905cccbca1d970436fb0f5e6b58ee3c5")
         quantization_config = FineGrainedFP8Config()
 
-        with init_empty_weights():
+        with torch.device("meta"):
             model = OPTForCausalLM(config)
 
         nb_linears = 0
@@ -158,7 +161,7 @@ class FP8QuantizerTest(unittest.TestCase):
             if isinstance(module, FP8Linear):
                 nb_fp8_linear += 1
         self.assertEqual(nb_linears, nb_fp8_linear)
-        with init_empty_weights():
+        with torch.device("meta"):
             model = OPTForCausalLM(config)
         quantization_config = FineGrainedFP8Config()
         model = replace_with_fp8_linear(model, modules_to_not_convert=["fc1"], quantization_config=quantization_config)
@@ -370,6 +373,37 @@ class FP8QuantizerTest(unittest.TestCase):
 
         # we should at least have 1.5 times memory reduction in total
         assert model_size[""] > quantized_model_size[""] * 1.5
+
+    def test_quantized_moe_forward(self):
+        """
+        Checks implicitly if the moe implementation is correct, i.e. it does not crash for cases
+        where the indices go over `top_k` as shown within the Minimax M2 model
+        """
+        model = AutoModelForCausalLM.from_pretrained(
+            "hf-internal-testing/MiniMax-M2-Tiny-FP8",  # single layer version
+            device_map=self.device_map,
+        )
+
+        tokenizer = AutoTokenizer.from_pretrained("MiniMaxAI/MiniMax-M2")
+        messages = [
+            {"role": "user", "content": [{"type": "text", "text": "What is your favourite condiment?"}]},
+            {
+                "role": "assistant",
+                "content": [
+                    {
+                        "type": "text",
+                        "text": "Well, I'm quite partial to a good squeeze of fresh lemon juice. It adds just the right amount of zesty flavour to whatever I'm cooking up in the kitchen!",
+                    }
+                ],
+            },
+            {"role": "user", "content": [{"type": "text", "text": "Do you have mayonnaise recipes?"}]},
+        ]
+        model_inputs = tokenizer.apply_chat_template(messages, return_tensors="pt", add_generation_prompt=True).to(
+            self.device_map
+        )
+
+        # Only caring about this not crashing
+        _ = model.generate(**model_inputs, max_new_tokens=24)
 
 
 @require_torch_accelerator

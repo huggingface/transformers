@@ -19,7 +19,6 @@ import os
 import requests
 import torch
 import yaml
-from accelerate import init_empty_weights
 from PIL import Image
 
 from transformers import (
@@ -373,7 +372,7 @@ def write_model(model_path, input_base_path, model_size, chameleon_version=1):
         vq_config=vq_config,
         vocabulary_map=vocabulary_map,
     )
-    with init_empty_weights():
+    with torch.device("meta"):
         model = ChameleonForConditionalGeneration(config)
 
     model.load_state_dict(state_dict, assign=True, strict=False)

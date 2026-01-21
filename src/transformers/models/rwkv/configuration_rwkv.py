@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The OpenAI Team Authors and HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
@@ -111,10 +110,9 @@ class RwkvConfig(PreTrainedConfig):
 
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
 
-        super().__init__(
-            tie_word_embeddings=tie_word_embeddings, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs
-        )
+        super().__init__(**kwargs)
 
 
 __all__ = ["RwkvConfig"]

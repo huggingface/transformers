@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The Meta AI Authors and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,10 +13,7 @@
 # limitations under the License.
 """PyTorch SAM 2 model."""
 
-from typing import Optional, Union
-
 import torch
-import torch.utils.checkpoint
 
 from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig
@@ -57,7 +53,7 @@ class EdgeTamVisionConfig(PreTrainedConfig):
     documentation from [`PreTrainedConfig`] for more information.
 
     Args:
-        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*):
+        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `timm/repvit_m1.dist_in1k`):
             Configuration for the vision backbone. This is used to instantiate the backbone using
             `AutoModel.from_config`.
         backbone_channel_list (`List[int]`, *optional*, defaults to `[384, 192, 96, 48]`):
@@ -200,9 +196,9 @@ class EdgeTamVisionModel(Sam2VisionModel):
     @check_model_inputs
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_values: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, EdgeTamVisionEncoderOutput]:
+    ) -> tuple | EdgeTamVisionEncoderOutput:
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 

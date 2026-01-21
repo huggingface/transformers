@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_pe_video.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -46,10 +45,10 @@ from .configuration_pe_video import PeVideoConfig, PeVideoEncoderConfig
 @dataclass
 # @auto_docstring
 class PeVideoOutput(ModelOutput):
-    loss: Optional[torch.FloatTensor] = None
-    logits_video_text: Optional[torch.FloatTensor] = None
-    text_video_embeds: Optional[torch.FloatTensor] = None
-    video_embeds: Optional[torch.FloatTensor] = None
+    loss: torch.FloatTensor | None = None
+    logits_video_text: torch.FloatTensor | None = None
+    text_video_embeds: torch.FloatTensor | None = None
+    video_embeds: torch.FloatTensor | None = None
     text_outputs: BaseModelOutputWithPooling = None
     video_outputs: BaseModelOutputWithPooling = None
 
@@ -175,8 +174,8 @@ class PeVideoEncoderEmbedder(nn.Module):
     def forward(
         self,
         pixel_values_videos: torch.Tensor,
-        padding_mask: Optional[torch.Tensor] = None,
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+        padding_mask: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = pixel_values_videos.shape
 
         pixel_values_videos = pixel_values_videos.view(-1, *input_shape[2:])
@@ -208,7 +207,7 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
+    attention_mask: torch.Tensor | None,
     scaling: float,
     dropout: float = 0.0,
     **kwargs: Unpack[TransformersKwargs],
@@ -303,8 +302,8 @@ class PeVideoEncoderAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -367,12 +366,12 @@ class PeVideoEncoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        use_cache: Optional[bool] = False,
-        cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        use_cache: bool | None = False,
+        cache_position: torch.LongTensor | None = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
@@ -452,9 +451,9 @@ class PeVideoEncoderRotaryEmbedding(nn.Module):
 
     @staticmethod
     def compute_default_rope_parameters(
-        config: Optional[PeVideoEncoderConfig] = None,
+        config: PeVideoEncoderConfig | None = None,
         device: Optional["torch.device"] = None,
-        seq_len: Optional[int] = None,
+        seq_len: int | None = None,
     ) -> tuple["torch.Tensor", float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
@@ -525,7 +524,7 @@ class PeVideoEncoder(PeVideoPreTrainedModel):
     def forward(
         self,
         pixel_values_videos: torch.Tensor,
-        padding_mask_videos: Optional[torch.Tensor] = None,
+        padding_mask_videos: torch.Tensor | None = None,
         **kwargs,
     ) -> BaseModelOutputWithPooling:
         inputs_embeds, padding_mask = self.embedder(pixel_values_videos, padding_mask=padding_mask_videos)
@@ -598,9 +597,9 @@ class PeVideoModel(PeVideoPreTrainedModel):
         self,
         input_ids: torch.Tensor,
         pixel_values_videos: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        padding_mask_videos: Optional[torch.Tensor] = None,
-        return_loss: Optional[bool] = None,
+        attention_mask: torch.Tensor | None = None,
+        padding_mask_videos: torch.Tensor | None = None,
+        return_loss: bool | None = None,
         **kwargs,
     ) -> PeVideoOutput:
         video_outputs: BaseModelOutputWithPooling = self.video_encoder(

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 Google AI and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +15,6 @@
 
 import collections
 import math
-from typing import Optional
 
 import numpy as np
 import torch
@@ -294,7 +292,7 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
 class BitDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
-    def __init__(self, drop_prob: Optional[float] = None) -> None:
+    def __init__(self, drop_prob: float | None = None) -> None:
         super().__init__()
         self.drop_prob = drop_prob
 
@@ -672,8 +670,8 @@ class BitModel(BitPreTrainedModel):
     def forward(
         self,
         pixel_values: Tensor,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
     ) -> BaseModelOutputWithPoolingAndNoAttention:
         output_hidden_states = (
@@ -725,10 +723,10 @@ class BitForImageClassification(BitPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        pixel_values: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
     ) -> ImageClassifierOutputWithNoAttention:
         r"""
@@ -778,8 +776,8 @@ class BitBackbone(BitPreTrainedModel, BackboneMixin):
     def forward(
         self,
         pixel_values: Tensor,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
     ) -> BackboneOutput:
         r"""

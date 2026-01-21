@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,7 +13,7 @@
 # limitations under the License.
 """Fast Image processor class for LLaVa."""
 
-from typing import Optional, Union
+from typing import Optional
 
 import torch
 from torchvision.transforms.v2 import functional as F
@@ -57,7 +56,7 @@ class LlavaImageProcessorFast(BaseImageProcessorFast):
     def pad_to_square(
         self,
         images: "torch.Tensor",
-        background_color: Union[int, tuple[int, int, int]] = 0,
+        background_color: int | tuple[int, int, int] = 0,
     ) -> "torch.Tensor":
         """
         Pads an image to a square based on the longest edge.
@@ -108,10 +107,10 @@ class LlavaImageProcessorFast(BaseImageProcessorFast):
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        disable_grouping: Optional[bool],
-        return_tensors: Optional[Union[str, TensorType]],
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         # Group images by size for batched resizing

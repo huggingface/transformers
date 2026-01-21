@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 NllbMoe Authors and HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +14,6 @@
 
 import math
 from collections.abc import Callable
-from typing import Optional, Union
 
 import torch
 import torch.nn as nn
@@ -52,7 +50,7 @@ class NllbMoeScaledWordEmbedding(nn.Embedding):
     This module overrides nn.Embeddings' forward by multiplying with embeddings scale.
     """
 
-    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, embed_scale: Optional[float] = 1.0):
+    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, embed_scale: float | None = 1.0):
         super().__init__(num_embeddings, embedding_dim, padding_idx)
         self.embed_scale = embed_scale
 
@@ -64,7 +62,7 @@ class NllbMoeScaledWordEmbedding(nn.Embedding):
 class NllbMoeSinusoidalPositionalEmbedding(nn.Module):
     """This module produces sinusoidal positional embeddings of any length."""
 
-    def __init__(self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None):
+    def __init__(self, num_positions: int, embedding_dim: int, padding_idx: int | None = None):
         super().__init__()
         self.offset = 2
         self.num_positions = num_positions
@@ -72,7 +70,7 @@ class NllbMoeSinusoidalPositionalEmbedding(nn.Module):
         self.padding_idx = padding_idx
         self.make_weights(num_positions + self.offset, embedding_dim, padding_idx)
 
-    def make_weights(self, num_embeddings: int, embedding_dim: int, padding_idx: Optional[int] = None):
+    def make_weights(self, num_embeddings: int, embedding_dim: int, padding_idx: int | None = None):
         emb_weights = self.get_embedding(num_embeddings, embedding_dim, padding_idx)
         if hasattr(self, "weights"):
             # in forward put the weights on the correct dtype and device of the param
@@ -81,7 +79,7 @@ class NllbMoeSinusoidalPositionalEmbedding(nn.Module):
         self.register_buffer("weights", emb_weights, persistent=False)
 
     @staticmethod
-    def get_embedding(num_embeddings: int, embedding_dim: int, padding_idx: Optional[int] = None):
+    def get_embedding(num_embeddings: int, embedding_dim: int, padding_idx: int | None = None):
         """
         Build sinusoidal embeddings.
 
@@ -104,8 +102,8 @@ class NllbMoeSinusoidalPositionalEmbedding(nn.Module):
     @torch.no_grad()
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
+        input_ids: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         past_key_values_length: int = 0,
     ):
         if input_ids is not None:
@@ -208,7 +206,7 @@ class NllbMoeTop2Router(nn.Module):
         self,
         router_logits: torch.Tensor,
         input_dtype: torch.dtype = torch.float32,
-        padding_mask: Optional[torch.LongTensor] = None,
+        padding_mask: torch.LongTensor | None = None,
     ) -> tuple:
         """
         Computes the `dispatch_mask` and the `dispatch_weights` for each experts. The masks are adapted to the expert
@@ -289,7 +287,7 @@ class NllbMoeTop2Router(nn.Module):
 
         return top_1_mask, router_probs
 
-    def forward(self, hidden_states: torch.Tensor, padding_mask: Optional[torch.LongTensor] = None) -> tuple:
+    def forward(self, hidden_states: torch.Tensor, padding_mask: torch.LongTensor | None = None) -> tuple:
         r"""
         The hidden states are reshaped to simplify the computation of the router probabilities (combining weights for
         each experts.)
@@ -376,7 +374,7 @@ class NllbMoeSparseMLP(nn.Module):
         self.num_experts = config.num_experts
         self.experts = NllbMoeExperts(config, ffn_dim)
 
-    def forward(self, hidden_states: torch.Tensor, padding_mask: Optional[torch.Tensor] = None):
+    def forward(self, hidden_states: torch.Tensor, padding_mask: torch.Tensor | None = None):
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states = hidden_states.view(-1, hidden_dim)
         top_1_mask, router_probs, _ = self.router(hidden_states, padding_mask)
@@ -390,8 +388,8 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
-    scaling: Optional[float] = None,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
     dropout: float = 0.0,
     **kwargs: Unpack[TransformersKwargs],
 ):
@@ -421,12 +419,12 @@ class NllbMoeAttention(nn.Module):
         self,
         embed_dim: int,
         num_heads: int,
-        dropout: Optional[float] = 0.0,
-        is_decoder: Optional[bool] = False,
-        bias: Optional[bool] = True,
-        is_causal: Optional[bool] = False,
-        config: Optional[NllbMoeConfig] = None,
-        layer_idx: Optional[int] = None,
+        dropout: float | None = 0.0,
+        is_decoder: bool | None = False,
+        bias: bool | None = True,
+        is_causal: bool | None = False,
+        config: NllbMoeConfig | None = None,
+        layer_idx: int | None = None,
     ):
         super().__init__()
         self.embed_dim = embed_dim
@@ -453,10 +451,10 @@ class NllbMoeAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        key_value_states: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Cache] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        cache_position: Optional[torch.Tensor] = None,
+        key_value_states: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        attention_mask: torch.Tensor | None = None,
+        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         is_cross_attention = key_value_states is not None
@@ -564,7 +562,7 @@ class NllbMoeEncoderLayer(GradientCheckpointingLayer):
 
 
 class NllbMoeDecoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: NllbMoeConfig, is_sparse: bool = False, layer_idx: Optional[int] = None):
+    def __init__(self, config: NllbMoeConfig, is_sparse: bool = False, layer_idx: int | None = None):
         super().__init__()
         self.embed_dim = config.d_model
         self.is_sparse = is_sparse
@@ -600,11 +598,11 @@ class NllbMoeDecoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Cache] = None,
-        cache_position: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
@@ -717,9 +715,9 @@ class NllbMoeEncoder(NllbMoePreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        inputs_embeds: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ):
         if inputs_embeds is None:
@@ -801,16 +799,16 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
     @check_model_inputs
     def forward(
         self,
-        input_ids: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.Tensor] = None,
+        input_ids: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        use_cache: bool | None = None,
+        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, BaseModelOutputWithPastAndCrossAttentions]:
+    ) -> tuple | BaseModelOutputWithPastAndCrossAttentions:
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
@@ -907,18 +905,18 @@ class NllbMoeModel(NllbMoePreTrainedModel):
     @can_return_tuple
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.LongTensor] = None,
-        encoder_outputs: Optional[tuple[tuple[torch.FloatTensor]]] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.Tensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.LongTensor | None = None,
+        encoder_outputs: tuple[tuple[torch.FloatTensor]] | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple[torch.Tensor], Seq2SeqMoEModelOutput]:
+    ) -> tuple[torch.Tensor] | Seq2SeqMoEModelOutput:
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
                 input_ids=input_ids,
@@ -955,11 +953,11 @@ class NllbMoeModel(NllbMoePreTrainedModel):
 
 
 def load_balancing_loss_func(
-    gate_logits: Union[torch.Tensor, tuple[torch.Tensor], None],
-    num_experts: Optional[int] = None,
+    gate_logits: torch.Tensor | tuple[torch.Tensor] | None,
+    num_experts: int | None = None,
     top_k=2,
-    attention_mask: Optional[torch.Tensor] = None,
-) -> Union[torch.Tensor, int]:
+    attention_mask: torch.Tensor | None = None,
+) -> torch.Tensor | int:
     r"""
     Computes auxiliary load balancing loss as in Switch Transformer - implemented in Pytorch.
 
@@ -1077,20 +1075,20 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel, GenerationMixin):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.LongTensor] = None,
-        encoder_outputs: Optional[tuple[tuple[torch.FloatTensor]]] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_router_logits: Optional[bool] = None,
-        cache_position: Optional[torch.Tensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.LongTensor | None = None,
+        encoder_outputs: tuple[tuple[torch.FloatTensor]] | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        output_router_logits: bool | None = None,
+        cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple[torch.Tensor], Seq2SeqMoEOutput]:
+    ) -> tuple[torch.Tensor] | Seq2SeqMoEOutput:
         output_router_logits = (
             output_router_logits if output_router_logits is not None else self.config.output_router_logits
         )

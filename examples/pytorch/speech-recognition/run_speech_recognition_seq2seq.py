@@ -35,7 +35,7 @@ import logging
 import os
 import sys
 from dataclasses import dataclass, field
-from typing import Any, Optional, Union
+from typing import Any
 
 import datasets
 import evaluate
@@ -77,19 +77,19 @@ class ModelArguments:
     model_name_or_path: str = field(
         metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models"}
     )
-    config_name: Optional[str] = field(
+    config_name: str | None = field(
         default=None,
         metadata={"help": "Pretrained config name or path if not the same as model_name"},
     )
-    tokenizer_name: Optional[str] = field(
+    tokenizer_name: str | None = field(
         default=None,
         metadata={"help": "Pretrained tokenizer name or path if not the same as model_name"},
     )
-    feature_extractor_name: Optional[str] = field(
+    feature_extractor_name: str | None = field(
         default=None,
         metadata={"help": "feature extractor name or path if not the same as model_name"},
     )
-    cache_dir: Optional[str] = field(
+    cache_dir: str | None = field(
         default=None,
         metadata={"help": "Where to store the pretrained models downloaded from huggingface.co"},
     )
@@ -128,19 +128,6 @@ class ModelArguments:
         default=False,
         metadata={"help": "Whether to freeze the entire encoder of the seq2seq model."},
     )
-    forced_decoder_ids: list[list[int]] = field(
-        default=None,
-        metadata={"help": "Deprecated. Please use the `language` and `task` arguments instead."},
-    )
-    suppress_tokens: list[int] = field(
-        default=None,
-        metadata={
-            "help": (
-                "Deprecated. The use of `suppress_tokens` should not be required for the majority of fine-tuning examples."
-                "Should you need to use `suppress_tokens`, please manually update them in the fine-tuning script directly."
-            )
-        },
-    )
     apply_spec_augment: bool = field(
         default=False,
         metadata={
@@ -168,11 +155,11 @@ class DataTrainingArguments:
         default=False,
         metadata={"help": "Overwrite the cached training and evaluation sets"},
     )
-    preprocessing_num_workers: Optional[int] = field(
+    preprocessing_num_workers: int | None = field(
         default=None,
         metadata={"help": "The number of processes to use for the preprocessing."},
     )
-    max_train_samples: Optional[int] = field(
+    max_train_samples: int | None = field(
         default=None,
         metadata={
             "help": (
@@ -181,7 +168,7 @@ class DataTrainingArguments:
             )
         },
     )
-    max_eval_samples: Optional[int] = field(
+    max_eval_samples: int | None = field(
         default=None,
         metadata={
             "help": (
@@ -270,7 +257,7 @@ class DataCollatorSpeechSeq2SeqWithPadding:
     decoder_start_token_id: int
     forward_attention_mask: bool
 
-    def __call__(self, features: list[dict[str, Union[list[int], torch.Tensor]]]) -> dict[str, torch.Tensor]:
+    def __call__(self, features: list[dict[str, list[int] | torch.Tensor]]) -> dict[str, torch.Tensor]:
         # split inputs and labels since they have to be of different lengths and need
         # different padding methods
         model_input_name = self.processor.model_input_names[0]
@@ -431,23 +418,8 @@ def main():
             "only be set for multilingual checkpoints."
         )
 
-    # TODO (Sanchit): deprecate these arguments in v4.41
-    if model_args.forced_decoder_ids is not None:
-        logger.warning(
-            "The use of `forced_decoder_ids` is deprecated and will be removed in v4.41."
-            "Please use the `language` and `task` arguments instead"
-        )
-        model.generation_config.forced_decoder_ids = model_args.forced_decoder_ids
-    else:
-        model.generation_config.forced_decoder_ids = None
-        model.config.forced_decoder_ids = None
-
-    if model_args.suppress_tokens is not None:
-        logger.warning(
-            "The use of `suppress_tokens` is deprecated and will be removed in v4.41."
-            "Should you need `suppress_tokens`, please manually set them in the fine-tuning script."
-        )
-        model.generation_config.suppress_tokens = model_args.suppress_tokens
+    model.generation_config.forced_decoder_ids = None
+    model.config.forced_decoder_ids = None
 
     # 6. Resample speech dataset if necessary
     dataset_sampling_rate = next(iter(raw_datasets.values())).features[data_args.audio_column_name].sampling_rate

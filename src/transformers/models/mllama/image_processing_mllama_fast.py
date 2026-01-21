@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -346,11 +345,11 @@ class MllamaImageProcessorFast(BaseImageProcessorFast):
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        max_image_tiles: Optional[int],
-        return_tensors: Optional[Union[str, TensorType]],
-        disable_grouping: Optional[bool],
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        max_image_tiles: int | None,
+        return_tensors: str | TensorType | None,
+        disable_grouping: bool | None,
         **kwargs,
     ) -> BatchFeature:
         # Group images by size for batched resizing

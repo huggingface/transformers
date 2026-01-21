@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 IBM and the HuggingFace Inc. team. All rights reserved.
 #
 #
@@ -14,8 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """GraniteMoeHybrid model configuration"""
-
-from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
@@ -134,44 +131,44 @@ class GraniteMoeHybridConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 32000,
-        hidden_size: Optional[int] = 4096,
-        intermediate_size: Optional[int] = 11008,
-        num_hidden_layers: Optional[int] = 32,
-        num_attention_heads: Optional[int] = 32,
-        num_key_value_heads: Optional[int] = None,
-        hidden_act: Optional[str] = "silu",
-        max_position_embeddings: Optional[int] = 2048,
-        initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[int] = 1e-6,
-        use_cache: Optional[bool] = True,
-        pad_token_id: Optional[int] = None,
-        bos_token_id: Optional[int] = 1,
-        eos_token_id: Optional[int] = 2,
-        tie_word_embeddings: Optional[bool] = False,
-        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        attention_bias: Optional[bool] = False,
-        attention_dropout: Optional[float] = 0.0,
-        embedding_multiplier: Optional[float] = 1.0,
-        logits_scaling: Optional[float] = 1.0,
-        residual_multiplier: Optional[float] = 1.0,
-        attention_multiplier: Optional[float] = 1.0,
-        num_local_experts: Optional[int] = 8,
-        num_experts_per_tok: Optional[int] = 2,
-        output_router_logits: Optional[bool] = False,
-        router_aux_loss_coef: Optional[float] = 0.001,
-        shared_intermediate_size: Optional[int] = 1024,
-        position_embedding_type: Optional[str] = None,
-        layer_types: Optional[list[str]] = None,
-        mamba_n_heads: Optional[int] = 128,
-        mamba_n_groups: Optional[int] = 1,
-        mamba_d_state: Optional[int] = 256,
-        mamba_d_head: Optional[str] = "auto",
-        mamba_d_conv: Optional[int] = 4,
-        mamba_expand: Optional[int] = 2,
-        mamba_chunk_size: Optional[int] = 256,
-        mamba_conv_bias: Optional[bool] = True,
-        mamba_proj_bias: Optional[bool] = False,
+        vocab_size: int | None = 32000,
+        hidden_size: int | None = 4096,
+        intermediate_size: int | None = 11008,
+        num_hidden_layers: int | None = 32,
+        num_attention_heads: int | None = 32,
+        num_key_value_heads: int | None = None,
+        hidden_act: str | None = "silu",
+        max_position_embeddings: int | None = 2048,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: int | None = 1e-6,
+        use_cache: bool | None = True,
+        pad_token_id: int | None = None,
+        bos_token_id: int | None = 1,
+        eos_token_id: int | None = 2,
+        tie_word_embeddings: bool | None = False,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        attention_bias: bool | None = False,
+        attention_dropout: float | None = 0.0,
+        embedding_multiplier: float | None = 1.0,
+        logits_scaling: float | None = 1.0,
+        residual_multiplier: float | None = 1.0,
+        attention_multiplier: float | None = 1.0,
+        num_local_experts: int | None = 8,
+        num_experts_per_tok: int | None = 2,
+        output_router_logits: bool | None = False,
+        router_aux_loss_coef: float | None = 0.001,
+        shared_intermediate_size: int | None = 1024,
+        position_embedding_type: str | None = None,
+        layer_types: list[str] | None = None,
+        mamba_n_heads: int | None = 128,
+        mamba_n_groups: int | None = 1,
+        mamba_d_state: int | None = 256,
+        mamba_d_head: str | None = "auto",
+        mamba_d_conv: int | None = 4,
+        mamba_expand: int | None = 2,
+        mamba_chunk_size: int | None = 256,
+        mamba_conv_bias: bool | None = True,
+        mamba_proj_bias: bool | None = False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -230,13 +227,11 @@ class GraniteMoeHybridConfig(PreTrainedConfig):
         self.mamba_expand = mamba_expand
         self.layer_types = layer_types
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        super().__init__(**kwargs)
 
     # overwrite the function to use in `HybridMambaAttentionDynamicCache`
     @property

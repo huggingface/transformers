@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -249,6 +248,12 @@ class Florence2ForConditionalGenerationModelTest(
 
     def test_config(self):
         self.config_tester.run_common_tests()
+
+    @unittest.skip(
+        reason="Backnone architecture (BART) has tied weights by default and there is no way to remove it, check: https://github.com/huggingface/transformers/pull/31771#issuecomment-2210915245"
+    )
+    def test_load_save_without_tied_weights(self):
+        pass
 
 
 def prepare_img():

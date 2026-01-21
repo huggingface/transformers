@@ -16,9 +16,9 @@
 
 import copy
 import json
+import math
 import os
-import warnings
-from typing import TYPE_CHECKING, Any, Optional, TypeVar, Union
+from typing import TYPE_CHECKING, Any, TypeVar, Union
 
 from huggingface_hub import create_repo
 from packaging import version
@@ -49,6 +49,9 @@ logger = logging.get_logger(__name__)
 
 # type hinting: specifying the type of config class that inherits from PreTrainedConfig
 SpecificPreTrainedConfigType = TypeVar("SpecificPreTrainedConfigType", bound="PreTrainedConfig")
+
+_FLOAT_TAG_KEY = "__float__"
+_FLOAT_TAG_VALUES = {"Infinity": float("inf"), "-Infinity": float("-inf"), "NaN": float("nan")}
 
 
 class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
@@ -111,19 +114,6 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
             Whether or not the model should return a [`~transformers.utils.ModelOutput`] instead of a plain tuple.
         is_encoder_decoder (`bool`, *optional*, defaults to `False`):
             Whether the model is used as an encoder/decoder or not.
-        is_decoder (`bool`, *optional*, defaults to `False`):
-            Whether to only use the decoder in an encoder-decoder architecture, otherwise it has no effect on
-            decoder-only or encoder-only architectures.
-        cross_attention_hidden_size (`bool`, *optional*):
-            The hidden size of the cross-attention layer in case the model is used as a decoder in an encoder-decoder
-            setting and the cross-attention hidden dimension differs from `self.config.hidden_size`.
-        add_cross_attention (`bool`, *optional*, defaults to `False`):
-            Whether cross-attention layers should be added to the model. Note, this option is only relevant for models
-            that can be used as decoder models within the [`EncoderDecoderModel`] class, which consists of all models
-            in `AUTO_MODELS_FOR_CAUSAL_LM`.
-        tie_encoder_decoder (`bool`, *optional*, defaults to `False`):
-            Whether all encoder weights should be tied to their equivalent decoder weights. This requires the encoder
-            and decoder model to have the exact same parameter names.
         chunk_size_feed_forward (`int`, *optional*, defaults to `0`):
             The chunk size of all feed forward layers in the residual attention blocks. A chunk size of `0` means that
             the feed forward layer is not chunked. A chunk size of n means that the feed forward layer processes `n` <
@@ -134,43 +124,18 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
 
         architectures (`list[str]`, *optional*):
             Model architectures that can be used with the model pretrained weights.
-        finetuning_task (`str`, *optional*):
-            Name of the task used to fine-tune the model.
         id2label (`dict[int, str]`, *optional*):
             A map from index (for instance prediction index, or target index) to label.
         label2id (`dict[str, int]`, *optional*):
             A map from label to index for the model.
         num_labels (`int`, *optional*):
             Number of labels to use in the last layer added to the model, typically for a classification task.
-        task_specific_params (`dict[str, Any]`, *optional*):
-            Additional keyword arguments to store for the current task.
         problem_type (`str`, *optional*):
             Problem type for `XxxForSequenceClassification` models. Can be one of `"regression"`,
             `"single_label_classification"` or `"multi_label_classification"`.
 
-        > Parameters linked to the tokenizer
-
-        tokenizer_class (`str`, *optional*):
-            The name of the associated tokenizer class to use (if none is set, will use the tokenizer associated to the
-            model by default).
-        prefix (`str`, *optional*):
-            A specific prompt that should be added at the beginning of each text before calling the model.
-        bos_token_id (`int`, *optional*):
-            The id of the _beginning-of-stream_ token.
-        pad_token_id (`int`, *optional*):
-            The id of the _padding_ token.
-        eos_token_id (`int`, *optional*):
-            The id of the _end-of-stream_ token.
-        decoder_start_token_id (`int`, *optional*):
-            If an encoder-decoder model starts decoding with a different token than _bos_, the id of that token.
-        sep_token_id (`int`, *optional*):
-            The id of the _separation_ token.
-
         > PyTorch specific parameters
 
-        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
-            Whether the model's input and output word embeddings should be tied. Note that this is only relevant if the
-            model has a output word embedding layer.
         dtype (`str`, *optional*):
             The `dtype` of the weights. This attribute can be used to initialize the model to a non-default `dtype`
             (which is normally `float32`) and thus allow for optimal storage allocation. For example, if the saved
@@ -183,10 +148,10 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
     sub_configs: dict[str, type["PreTrainedConfig"]] = {}
     has_no_defaults_at_init: bool = False
     attribute_map: dict[str, str] = {}
-    base_model_tp_plan: Optional[dict[str, Any]] = None
-    base_model_pp_plan: Optional[dict[str, tuple[list[str]]]] = None
-    base_model_ep_plan: Optional[dict[str, tuple[list[str]]]] = None
-    _auto_class: Optional[str] = None
+    base_model_tp_plan: dict[str, Any] | None = None
+    base_model_pp_plan: dict[str, tuple[list[str]]] | None = None
+    base_model_ep_plan: dict[str, tuple[list[str]]] | None = None
+    _auto_class: str | None = None
 
     def __setattr__(self, key, value):
         if key in super().__getattribute__("attribute_map"):
@@ -205,31 +170,16 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         output_hidden_states: bool = False,
         output_attentions: bool = False,
         return_dict: bool = True,
-        dtype: Optional[Union[str, "torch.dtype"]] = None,
+        dtype: Union[str, "torch.dtype"] | None = None,
         # Common arguments
-        tie_word_embeddings: bool = True,
         chunk_size_feed_forward: int = 0,
         is_encoder_decoder: bool = False,
-        is_decoder: bool = False,
-        cross_attention_hidden_size: Optional[int] = None,
-        add_cross_attention: bool = False,
-        tie_encoder_decoder: bool = False,
         # Fine-tuning task arguments
-        architectures: Optional[list[str]] = None,
-        finetuning_task: Optional[str] = None,
-        id2label: Optional[dict[int, str]] = None,
-        label2id: Optional[dict[str, int]] = None,
-        num_labels: Optional[int] = None,
-        task_specific_params: Optional[dict[str, Any]] = None,
-        problem_type: Optional[str] = None,
-        # Tokenizer kwargs
-        tokenizer_class: Optional[str] = None,
-        prefix: Optional[str] = None,
-        bos_token_id: Optional[int] = None,
-        pad_token_id: Optional[int] = None,
-        eos_token_id: Optional[int] = None,
-        sep_token_id: Optional[int] = None,
-        decoder_start_token_id: Optional[int] = None,
+        architectures: list[str] | None = None,
+        id2label: dict[int, str] | None = None,
+        label2id: dict[str, int] | None = None,
+        num_labels: int | None = None,
+        problem_type: str | None = None,
         **kwargs,
     ):
         # Validation for some arguments
@@ -277,22 +227,15 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         self._output_attentions = output_attentions  # has public property
 
         # Less common kwargs, only used by some models
-        self.tie_word_embeddings = tie_word_embeddings
         self.chunk_size_feed_forward = chunk_size_feed_forward
 
         # Encoder-decoder models attributes
         self.is_encoder_decoder = is_encoder_decoder
-        self.is_decoder = is_decoder  # used in encoder-decoder models to differentiate encoder from decoder
-        self.cross_attention_hidden_size = cross_attention_hidden_size
-        self.add_cross_attention = add_cross_attention
-        self.tie_encoder_decoder = tie_encoder_decoder
 
         # Fine-tuning task attributes
         self.architectures = architectures
-        self.finetuning_task = finetuning_task
         self.id2label = id2label
         self.label2id = label2id
-        self.task_specific_params = task_specific_params
         self.problem_type = problem_type
 
         if self.id2label is None:
@@ -300,15 +243,6 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         else:
             # Keys are always strings in JSON so convert ids to int here.
             self.id2label = {int(key): value for key, value in self.id2label.items()}
-
-        # Tokenizer attributes
-        self.tokenizer_class = tokenizer_class
-        self.prefix = prefix
-        self.bos_token_id = bos_token_id
-        self.pad_token_id = pad_token_id
-        self.eos_token_id = eos_token_id
-        self.sep_token_id = sep_token_id
-        self.decoder_start_token_id = decoder_start_token_id
 
         # Parameters for sequence generation saved in the config are popped instead of loading them.
         for parameter_name in GenerationConfig._get_default_generation_params().keys():
@@ -321,16 +255,11 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         # Attention implementation to use, if relevant (it sets it recursively on sub-configs)
         self._attn_implementation = kwargs.pop("attn_implementation", None)
 
+        # Experts implementation to use, if relevant (it sets it recursively on sub-configs)
+        self._experts_implementation = kwargs.pop("experts_implementation", None)
+
         # Drop the transformers version info
         self.transformers_version = kwargs.pop("transformers_version", None)
-
-        # Deal with gradient checkpointing
-        if kwargs.get("gradient_checkpointing", False):
-            warnings.warn(
-                "Passing `gradient_checkpointing` to a config initialization is deprecated and will be removed in v5 "
-                "Transformers. Using `model.gradient_checkpointing_enable()` instead, or if you are using the "
-                "`Trainer` API, pass `gradient_checkpointing=True` in your `TrainingArguments`."
-            )
 
         # Additional attributes without default values
         for key, value in kwargs.items():
@@ -345,7 +274,7 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         self.label2id = dict(zip(self.id2label.values(), self.id2label.keys()))
 
     @property
-    def name_or_path(self) -> Optional[str]:
+    def name_or_path(self) -> str | None:
         return getattr(self, "_name_or_path", None)
 
     @name_or_path.setter
@@ -413,6 +342,28 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
                     value if not isinstance(value, dict) else value.get(subconfig_key, current_subconfig_attn)
                 )
                 subconfig._attn_implementation = sub_implementation
+
+    @property
+    def _experts_implementation(self):
+        return self._experts_implementation_internal
+
+    @_experts_implementation.setter
+    def _experts_implementation(self, value: str | dict | None):
+        """We set it recursively on the sub-configs as well"""
+        # Set if for current config
+        current_moe = getattr(self, "_experts_implementation", None)
+        experts_implementation = value if not isinstance(value, dict) else value.get("", current_moe)
+        self._experts_implementation_internal = experts_implementation
+
+        # Set it recursively on the subconfigs
+        for subconfig_key in self.sub_configs:
+            subconfig = getattr(self, subconfig_key, None)
+            if subconfig is not None:
+                current_subconfig_moe = getattr(subconfig, "_experts_implementation", None)
+                sub_implementation = (
+                    value if not isinstance(value, dict) else value.get(subconfig_key, current_subconfig_moe)
+                )
+                subconfig._experts_implementation = sub_implementation
 
     @property
     def torch_dtype(self):
@@ -753,8 +704,9 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
             # If both are present, use `dtype`
             kwargs["dtype"] = kwargs.get("dtype", torch_dtype)
 
-        # We remove it from kwargs so that it does not appear in `return_unused_kwargs`.
+        # We remove them from kwargs so that they do not appear in `return_unused_kwargs`.
         config_dict["attn_implementation"] = kwargs.pop("attn_implementation", None)
+        config_dict["experts_implementation"] = kwargs.pop("experts_implementation", None)
 
         config = cls(**config_dict)
 
@@ -812,7 +764,56 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
     def _dict_from_json_file(cls, json_file: str | os.PathLike):
         with open(json_file, encoding="utf-8") as reader:
             text = reader.read()
-        return json.loads(text)
+        config_dict = json.loads(text)
+
+        return cls._decode_special_floats(config_dict)
+
+    @classmethod
+    def _encode_special_floats(cls, obj: Any) -> Any:
+        """
+        Iterates over the passed object and encode specific floats that cannot be JSON-serialized. Python's JSON
+        engine saves floats like `Infinity` (+/-) or `NaN` which are not compatible with other JSON engines.
+
+        It serializes floats like `Infinity` as an object: `{'__float__': Infinity}`.
+        """
+        if isinstance(obj, float):
+            if math.isnan(obj):
+                return {_FLOAT_TAG_KEY: "NaN"}
+            if obj == float("inf"):
+                return {_FLOAT_TAG_KEY: "Infinity"}
+            if obj == float("-inf"):
+                return {_FLOAT_TAG_KEY: "-Infinity"}
+            return obj
+
+        if isinstance(obj, dict):
+            return {k: cls._encode_special_floats(v) for k, v in obj.items()}
+
+        if isinstance(obj, (list, tuple)):
+            return [cls._encode_special_floats(v) for v in obj]
+
+        return obj
+
+    @classmethod
+    def _decode_special_floats(cls, obj: Any) -> Any:
+        """
+        Iterates over the passed object and decode specific floats that cannot be JSON-serialized. Python's JSON
+        engine saves floats like `Infinity` (+/-) or `NaN` which are not compatible with other JSON engines.
+
+        This method deserializes objects like `{'__float__': Infinity}` to their float values like `Infinity`.
+        """
+        if isinstance(obj, dict):
+            if set(obj.keys()) == {_FLOAT_TAG_KEY} and isinstance(obj[_FLOAT_TAG_KEY], str):
+                tag = obj[_FLOAT_TAG_KEY]
+                if tag in _FLOAT_TAG_VALUES:
+                    return _FLOAT_TAG_VALUES[tag]
+                return obj
+
+            return {k: cls._decode_special_floats(v) for k, v in obj.items()}
+
+        if isinstance(obj, list):
+            return [cls._decode_special_floats(v) for v in obj]
+
+        return obj
 
     def __eq__(self, other):
         return isinstance(other, PreTrainedConfig) and (self.__dict__ == other.__dict__)
@@ -932,6 +933,10 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
             config_dict = self.to_diff_dict()
         else:
             config_dict = self.to_dict()
+
+        # Handle +/-Infinity and NaNs
+        config_dict = self._encode_special_floats(config_dict)
+
         return json.dumps(config_dict, indent=2, sort_keys=True) + "\n"
 
     def to_json_file(self, json_file_path: str | os.PathLike, use_diff: bool = True):
@@ -1018,6 +1023,9 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
         Checks and removes if there are any keys in the dict that should not be serialized when saving the config.
         Runs recursive check on the dict, to remove from all sub configs.
         """
+
+        if "_is_quantized" in d:
+            del d["_is_quantized"]
         if "_auto_class" in d:
             del d["_auto_class"]
         if "_output_attentions" in d:
@@ -1026,6 +1034,8 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
             del d["_commit_hash"]
         if "_attn_implementation_internal" in d:
             del d["_attn_implementation_internal"]
+        if "_experts_implementation_internal" in d:
+            del d["_experts_implementation_internal"]
         # Do not serialize `base_model_tp_plan` for now
         if "base_model_tp_plan" in d:
             del d["base_model_tp_plan"]
@@ -1060,11 +1070,15 @@ class PreTrainedConfig(PushToHubMixin, RotaryEmbeddingConfigMixin):
 
     def _get_generation_parameters(self) -> dict[str, Any]:
         """
-        Gets the non-default generation parameters on the PreTrainedConfig instance
+        Checks if there are generation parameters in `PreTrainedConfig` instance. Note that
+        we should not save generation params in PreTrainedConfig, and we will raise error
+        if there are any.
         """
         generation_params = {}
         default_config = self.__class__().to_dict() if not self.has_no_defaults_at_init else {}
         for key in GenerationConfig._get_default_generation_params().keys():
+            if key == "use_cache":
+                continue  # common key for most models
             if hasattr(self, key) and getattr(self, key) is not None and key not in default_config:
                 generation_params[key] = getattr(self, key)
 
@@ -1209,18 +1223,24 @@ if PreTrainedConfig.push_to_hub.__doc__ is not None:
 PretrainedConfig = PreTrainedConfig
 
 
-ALLOWED_LAYER_TYPES = (
+ALLOWED_ATTENTION_LAYER_TYPES = (
     "full_attention",
     "sliding_attention",
     "chunked_attention",
     "linear_attention",  # used in minimax
 )
 
+ALLOWED_MLP_LAYER_TYPES = (
+    "sparse",
+    "dense",
+)
 
-def layer_type_validation(layer_types: list[str], num_hidden_layers: Optional[int] = None):
+
+def layer_type_validation(layer_types: list[str], num_hidden_layers: int | None = None, attention: bool = True):
     """Check that `layer_types` is correctly defined."""
-    if not all(layer_type in ALLOWED_LAYER_TYPES for layer_type in layer_types):
-        raise ValueError(f"The `layer_types` entries must be in {ALLOWED_LAYER_TYPES}")
+    allowed_layer_types = ALLOWED_ATTENTION_LAYER_TYPES if attention else ALLOWED_MLP_LAYER_TYPES
+    if not all(layer_type in allowed_layer_types for layer_type in layer_types):
+        raise ValueError(f"The `layer_types` entries must be in {allowed_layer_types}")
     if num_hidden_layers is not None and num_hidden_layers != len(layer_types):
         raise ValueError(
             f"`num_hidden_layers` ({num_hidden_layers}) must be equal to the number of layer types "

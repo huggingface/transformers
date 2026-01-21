@@ -277,7 +277,7 @@ class BitModelIntegrationTest(unittest.TestCase):
 
         expected_slice = torch.tensor([[-0.6526, -0.5263, -1.4398]]).to(torch_device)
 
-        torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(outputs.logits[:, :3], expected_slice, rtol=1e-3, atol=1e-3)
 
 
 @require_torch

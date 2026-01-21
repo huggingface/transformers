@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 state-spaces/mamba2 org and HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +15,6 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -24,7 +22,7 @@ from torch import nn
 from ... import initialization as init
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
-from ...integrations.hub_kernels import lazy_load_kernel
+from ...integrations import lazy_load_kernel
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_utils import PreTrainedModel
 from ...utils import (
@@ -134,7 +132,7 @@ class Mamba2Cache:
     """
 
     def __init__(
-        self, config: Mamba2Config, batch_size: int, dtype: torch.dtype = torch.float16, device: Optional[str] = None
+        self, config: Mamba2Config, batch_size: int, dtype: torch.dtype = torch.float16, device: str | None = None
     ):
         self.dtype = dtype
         self.conv_kernel_size = config.conv_kernel
@@ -296,9 +294,9 @@ class Mamba2Mixer(nn.Module):
     def cuda_kernels_forward(
         self,
         hidden_states: torch.Tensor,
-        cache_params: Optional[Mamba2Cache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
+        cache_params: Mamba2Cache | None = None,
+        cache_position: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
     ):
         # 1. Gated MLP's linear projection
         hidden_states = apply_mask_to_padding_states(hidden_states, attention_mask)
@@ -459,9 +457,9 @@ class Mamba2Mixer(nn.Module):
     def torch_forward(
         self,
         hidden_states: torch.Tensor,
-        cache_params: Optional[Mamba2Cache]=None,
-        cache_position:Optional[torch.LongTensor]=None,
-        attention_mask: Optional[torch.Tensor]=None
+        cache_params: Mamba2Cache | None=None,
+        cache_position:torch.LongTensor | None=None,
+        attention_mask: torch.Tensor | None=None
     ):
         batch_size, seq_len, _ = hidden_states.shape
         dtype = hidden_states.dtype
@@ -656,9 +654,9 @@ class Mamba2Mixer(nn.Module):
     def forward(
         self,
         hidden_states,
-        cache_params: Optional[Mamba2Cache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
+        cache_params: Mamba2Cache | None = None,
+        cache_position: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
     ):
         if is_fast_path_available and "cuda" in self.in_proj.weight.device.type:
             return self.cuda_kernels_forward(hidden_states, cache_params, cache_position, attention_mask)
@@ -694,9 +692,9 @@ class Mamba2Block(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states,
-        cache_params: Optional[Mamba2Cache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
+        cache_params: Mamba2Cache | None = None,
+        cache_position: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
     ):
         residual = hidden_states
         hidden_states = self.norm(hidden_states.to(dtype=self.norm.weight.dtype))
@@ -784,9 +782,9 @@ class Mamba2Output(ModelOutput):
         Includes both the State space model state matrices after the selective scan, and the Convolutional states
     """
 
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    cache_params: Optional[Mamba2Cache] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    last_hidden_state: torch.FloatTensor | None = None
+    cache_params: Mamba2Cache | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
 
 
 @dataclass
@@ -809,10 +807,10 @@ class Mamba2CausalLMOutput(ModelOutput):
         Includes both the State space model state matrices after the selective scan, and the Convolutional states
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    logits: Optional[torch.FloatTensor] = None
-    cache_params: Optional[Mamba2Cache] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    loss: torch.FloatTensor | None = None
+    logits: torch.FloatTensor | None = None
+    cache_params: Mamba2Cache | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
 
 
 @auto_docstring
@@ -844,16 +842,16 @@ class Mamba2Model(Mamba2PreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.LongTensor] = None,
-        cache_params: Optional[Mamba2Cache] = None,
-        use_cache: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.LongTensor | None = None,
+        cache_params: Mamba2Cache | None = None,
+        use_cache: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs,
-    ) -> Union[tuple, Mamba2Output]:
+    ) -> tuple | Mamba2Output:
         r"""
         cache_params (`Mamba2Cache`, *optional*):
             If passed along, the model uses the previous state in all the blocks (which will give the output for the
@@ -952,9 +950,10 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel, GenerationMixin):
         input_ids,
         inputs_embeds=None,
         use_cache=None,
-        cache_params: Optional[Mamba2Cache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
+        cache_params: Mamba2Cache | None = None,
+        cache_position: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        is_first_iteration: bool | None = False,
         **kwargs,
     ):
         # Overwritten -- uses `cache_params` as opposed to `past_key_values`
@@ -998,18 +997,18 @@ class Mamba2ForCausalLM(Mamba2PreTrainedModel, GenerationMixin):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        cache_params: Optional[Mamba2Cache] = None,
-        labels: Optional[torch.LongTensor] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
+        input_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        cache_params: Mamba2Cache | None = None,
+        labels: torch.LongTensor | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        use_cache: bool | None = None,
+        cache_position: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
         **kwargs,  # for now we need this for generation and loss_function
-    ) -> Union[tuple, Mamba2CausalLMOutput]:
+    ) -> tuple | Mamba2CausalLMOutput:
         r"""
         cache_params (`Mamba2Cache`, *optional*):
             If passed along, the model uses the previous state in all the blocks (which will give the output for the

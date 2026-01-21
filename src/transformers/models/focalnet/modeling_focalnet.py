@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 Microsoft Research and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,7 +16,6 @@
 import collections.abc
 import math
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -51,9 +49,9 @@ class FocalNetEncoderOutput(ModelOutput):
         include the spatial dimensions.
     """
 
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    reshaped_hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    last_hidden_state: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    reshaped_hidden_states: tuple[torch.FloatTensor] | None = None
 
 
 @dataclass
@@ -74,10 +72,10 @@ class FocalNetModelOutput(ModelOutput):
         include the spatial dimensions.
     """
 
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    pooler_output: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    reshaped_hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    last_hidden_state: torch.FloatTensor | None = None
+    pooler_output: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    reshaped_hidden_states: tuple[torch.FloatTensor] | None = None
 
 
 @dataclass
@@ -100,10 +98,10 @@ class FocalNetMaskedImageModelingOutput(ModelOutput):
         include the spatial dimensions.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    reconstruction: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    reshaped_hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    loss: torch.FloatTensor | None = None
+    reconstruction: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    reshaped_hidden_states: tuple[torch.FloatTensor] | None = None
 
 
 @dataclass
@@ -126,10 +124,10 @@ class FocalNetImageClassifierOutput(ModelOutput):
         include the spatial dimensions.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    logits: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    reshaped_hidden_states: Optional[tuple[torch.FloatTensor]] = None
+    loss: torch.FloatTensor | None = None
+    logits: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    reshaped_hidden_states: tuple[torch.FloatTensor] | None = None
 
 
 class FocalNetEmbeddings(nn.Module):
@@ -156,7 +154,7 @@ class FocalNetEmbeddings(nn.Module):
         self.dropout = nn.Dropout(config.hidden_dropout_prob)
 
     def forward(
-        self, pixel_values: Optional[torch.FloatTensor], bool_masked_pos: Optional[torch.BoolTensor] = None
+        self, pixel_values: torch.FloatTensor | None, bool_masked_pos: torch.BoolTensor | None = None
     ) -> tuple[torch.Tensor]:
         embeddings, output_dimensions = self.patch_embeddings(pixel_values)
         embeddings = self.norm(embeddings)
@@ -224,7 +222,7 @@ class FocalNetPatchEmbeddings(nn.Module):
             pixel_values = nn.functional.pad(pixel_values, pad_values)
         return pixel_values
 
-    def forward(self, pixel_values: Optional[torch.FloatTensor]) -> tuple[torch.Tensor, tuple[int]]:
+    def forward(self, pixel_values: torch.FloatTensor | None) -> tuple[torch.Tensor, tuple[int]]:
         _, num_channels, height, width = pixel_values.shape
         if num_channels != self.num_channels:
             raise ValueError(
@@ -263,7 +261,7 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
 class FocalNetDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
-    def __init__(self, drop_prob: Optional[float] = None) -> None:
+    def __init__(self, drop_prob: float | None = None) -> None:
         super().__init__()
         self.drop_prob = drop_prob
 
@@ -522,10 +520,10 @@ class FocalNetEncoder(nn.Module):
         self,
         hidden_states: torch.Tensor,
         input_dimensions: tuple[int, int],
-        output_hidden_states: Optional[bool] = False,
-        output_hidden_states_before_downsampling: Optional[bool] = False,
-        return_dict: Optional[bool] = True,
-    ) -> Union[tuple, FocalNetEncoderOutput]:
+        output_hidden_states: bool | None = False,
+        output_hidden_states_before_downsampling: bool | None = False,
+        return_dict: bool | None = True,
+    ) -> tuple | FocalNetEncoderOutput:
         all_hidden_states = () if output_hidden_states else None
         all_reshaped_hidden_states = () if output_hidden_states else None
 
@@ -624,12 +622,12 @@ class FocalNetModel(FocalNetPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        bool_masked_pos: Optional[torch.BoolTensor] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        pixel_values: torch.FloatTensor | None = None,
+        bool_masked_pos: torch.BoolTensor | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, FocalNetModelOutput]:
+    ) -> tuple | FocalNetModelOutput:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
@@ -707,12 +705,12 @@ class FocalNetForMaskedImageModeling(FocalNetPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        bool_masked_pos: Optional[torch.BoolTensor] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        pixel_values: torch.FloatTensor | None = None,
+        bool_masked_pos: torch.BoolTensor | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, FocalNetMaskedImageModelingOutput]:
+    ) -> tuple | FocalNetMaskedImageModelingOutput:
         r"""
         bool_masked_pos (`torch.BoolTensor` of shape `(batch_size, num_patches)`):
             Boolean masked positions. Indicates which patches are masked (1) and which aren't (0).
@@ -810,12 +808,12 @@ class FocalNetForImageClassification(FocalNetPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        pixel_values: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, FocalNetImageClassifierOutput]:
+    ) -> tuple | FocalNetImageClassifierOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,
@@ -872,8 +870,8 @@ class FocalNetBackbone(FocalNetPreTrainedModel, BackboneMixin):
     def forward(
         self,
         pixel_values: torch.Tensor,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
     ) -> BackboneOutput:
         r"""

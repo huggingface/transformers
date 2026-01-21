@@ -529,7 +529,7 @@ class TorchAoTest(unittest.TestCase):
         quant_config = TorchAoConfig(quant_type=config)
         quantized_model = AutoModelForCausalLM.from_pretrained(
             "jcaip/Llama-4-Scout-17B-two-layers-only-testing",
-            device_map="auto",
+            device_map="cuda",
             dtype=torch.bfloat16,
             quantization_config=quant_config,
         )

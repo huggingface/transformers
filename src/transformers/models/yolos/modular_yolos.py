@@ -1,5 +1,3 @@
-from typing import Optional, Union
-
 import torch
 
 from transformers.models.detr.image_processing_detr_fast import DetrImageProcessorFast
@@ -21,7 +19,7 @@ logger = logging.get_logger(__name__)
 
 
 def get_size_with_aspect_ratio(
-    image_size: tuple[int, int], size: int, max_size: Optional[int] = None, mod_size: int = 16
+    image_size: tuple[int, int], size: int, max_size: int | None = None, mod_size: int = 16
 ) -> tuple[int, int]:
     """
     Computes the output image size given the input image size and the desired output size with multiple of divisible_size.
@@ -71,7 +69,7 @@ def get_size_with_aspect_ratio(
 
 class YolosImageProcessorFast(DetrImageProcessorFast):
     def post_process_object_detection(
-        self, outputs, threshold: float = 0.5, target_sizes: Optional[Union[TensorType, list[tuple]]] = None
+        self, outputs, threshold: float = 0.5, target_sizes: TensorType | list[tuple] = None
     ):
         """
         Converts the raw output of [`YolosForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,

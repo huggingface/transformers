@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020, The RAG Authors and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -109,14 +108,14 @@ class RagConfig(PreTrainedConfig):
         dataset_revision=None,
         **kwargs,
     ):
+        self.bos_token_id = bos_token_id
+        self.pad_token_id = pad_token_id
+        self.eos_token_id = eos_token_id
+        self.decoder_start_token_id = decoder_start_token_id
+        self.prefix = prefix
+        self.vocab_size = vocab_size
         super().__init__(
-            bos_token_id=bos_token_id,
-            pad_token_id=pad_token_id,
-            eos_token_id=eos_token_id,
-            decoder_start_token_id=decoder_start_token_id,
             is_encoder_decoder=is_encoder_decoder,
-            prefix=prefix,
-            vocab_size=vocab_size,
             **kwargs,
         )
         if "question_encoder" not in kwargs or "generator" not in kwargs:

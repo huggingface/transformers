@@ -21,7 +21,6 @@ import inspect
 import os
 import re
 from collections import OrderedDict, defaultdict
-from contextlib import contextmanager
 from typing import TYPE_CHECKING
 
 from safetensors import safe_open
@@ -53,114 +52,6 @@ if TYPE_CHECKING:
 
 
 logger = logging.get_logger(__name__)
-
-
-@contextmanager
-def init_empty_weights(include_buffers: bool = False):
-    """
-    A context manager under which models are initialized with all parameters on the meta device, therefore creating an
-    empty model. Useful when just initializing the model would blow the available RAM.
-
-    Args:
-        include_buffers (`bool`, *optional*):
-            Whether or not to also put all buffers on the meta device while initializing.
-
-    Example:
-
-    ```python
-    import torch.nn as nn
-    from accelerate import init_empty_weights
-
-    # Initialize a model with 100 billions parameters in no time and without using any RAM.
-    with init_empty_weights():
-        tst = nn.Sequential(*[nn.Linear(10000, 10000) for _ in range(1000)])
-    ```
-
-    <Tip warning={true}>
-
-    Any model created under this context manager has no weights. As such you can't do something like
-    `model.to(some_device)` with it. To load weights inside your empty model, see [`load_checkpoint_and_dispatch`].
-    Make sure to overwrite the default device_map param for [`load_checkpoint_and_dispatch`], otherwise dispatch is not
-    called.
-
-    </Tip>
-    """
-    with init_on_device(torch.device("meta"), include_buffers=include_buffers) as f:
-        yield f
-
-
-@contextmanager
-def init_on_device(device: "torch.device", include_buffers: bool = False):
-    """
-    A context manager under which models are initialized with all parameters on the specified device.
-
-    Args:
-        device (`torch.device`):
-            Device to initialize all parameters on.
-        include_buffers (`bool`, *optional*):
-            Whether or not to also put all buffers on the meta device while initializing.
-
-    Example:
-
-    ```python
-    import torch.nn as nn
-    from accelerate import init_on_device
-
-    with init_on_device(device=torch.device("cuda")):
-        tst = nn.Linear(100, 100)  # on `cuda` device
-    ```
-    """
-    if include_buffers:
-        with device:
-            yield
-        return
-
-    old_register_parameter = nn.Module.register_parameter
-    if include_buffers:
-        old_register_buffer = nn.Module.register_buffer
-
-    def register_empty_parameter(module, name, param):
-        old_register_parameter(module, name, param)
-        if param is not None:
-            param_cls = type(module._parameters[name])
-            kwargs = module._parameters[name].__dict__
-            kwargs["requires_grad"] = param.requires_grad
-            module._parameters[name] = param_cls(module._parameters[name].to(device), **kwargs)
-
-    def register_empty_buffer(module, name, buffer, persistent=True):
-        old_register_buffer(module, name, buffer, persistent=persistent)
-        if buffer is not None:
-            module._buffers[name] = module._buffers[name].to(device)
-
-    # Patch tensor creation
-    if include_buffers:
-        tensor_constructors_to_patch = {
-            torch_function_name: getattr(torch, torch_function_name)
-            for torch_function_name in ["empty", "zeros", "ones", "full"]
-        }
-    else:
-        tensor_constructors_to_patch = {}
-
-    def patch_tensor_constructor(fn):
-        def wrapper(*args, **kwargs):
-            kwargs["device"] = device
-            return fn(*args, **kwargs)
-
-        return wrapper
-
-    try:
-        nn.Module.register_parameter = register_empty_parameter
-        if include_buffers:
-            nn.Module.register_buffer = register_empty_buffer
-        for torch_function_name in tensor_constructors_to_patch:
-            setattr(torch, torch_function_name, patch_tensor_constructor(getattr(torch, torch_function_name)))
-        yield
-    finally:
-        nn.Module.register_parameter = old_register_parameter
-        if include_buffers:
-            nn.Module.register_buffer = old_register_buffer
-        for torch_function_name, old_torch_function in tensor_constructors_to_patch.items():
-            setattr(torch, torch_function_name, old_torch_function)
 
 
 def check_and_set_device_map(device_map: "torch.device | int | str | dict | None") -> dict | str | None:
@@ -402,7 +293,7 @@ def _get_device_map(
         # especially if the model uses WeightConverter (because there will be some uncontrollable cpu memory spikes during
         # the conversions before we resave the weights). In those cases, it's better to offload to disk a bit more
         # if we were in-between, as otherwise we blow-up cpu memory
-        if max_memory is None:
+        if max_memory is None and "cpu" in inferred_max_memory:
             inferred_max_memory["cpu"] *= 0.90
 
         if hf_quantizer is not None:
@@ -462,10 +353,13 @@ def accelerate_dispatch(model, hf_quantizer, device_map, offload_folder, offload
         dispatch_model(model, **device_map_kwargs)
 
 
-def expand_device_map(device_map, param_names):
+def expand_device_map(device_map: dict | None, param_names: list[str]):
     """
     Expand a device map to return the correspondence parameter name to device.
     """
+    if device_map is None:
+        return dict.fromkeys(param_names, "cpu")
+
     # Here, we first sort by number of submodules, then length of the full string, to make sure to match correctly
     device_map_regex = re.compile(
         "|".join(rf"({k})" for k in sorted(device_map.keys(), key=lambda x: (x.count("."), len(x)), reverse=True))
@@ -476,6 +370,15 @@ def expand_device_map(device_map, param_names):
         new_device_map[param] = device_map[device_match.group()] if device_match else device_map.get("", "cpu")
 
     return new_device_map
+
+
+def get_device(device_map: dict | None, param_name: str, valid_torch_device: bool = False) -> torch.device | str | int:
+    """Return the device on which `param_name` should be according to the `device_map`. If `valid_torch_device` is `True`,
+    then if the device is `"disk"`, `"cpu"` will be returned instead."""
+    device = expand_device_map(device_map, [param_name])[param_name]
+    if valid_torch_device and device == "disk":
+        return "cpu"
+    return device
 
 
 def accelerate_disk_offload(

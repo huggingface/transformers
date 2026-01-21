@@ -24,7 +24,7 @@
 # limitations under the License.
 
 import math
-from typing import Optional, Union
+from typing import Optional
 
 import torch
 import torch.nn.functional as F
@@ -71,13 +71,13 @@ class PaddleOCRVLImageProcessorFast(BaseImageProcessorFast):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Optional[dict[str, int]] = None,
+        size: dict[str, int] | None = None,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         do_rescale: bool = True,
-        rescale_factor: Union[int, float] = 1 / 255,
+        rescale_factor: int | float = 1 / 255,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
         do_convert_rgb: bool = True,
         min_pixels: int = 384 * 384,
         max_pixels: int = 1536 * 1536,
@@ -122,13 +122,13 @@ class PaddleOCRVLImageProcessorFast(BaseImageProcessorFast):
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        disable_grouping: Optional[bool],
-        return_tensors: Optional[Union[str, TensorType]],
-        patch_size: Optional[int] = None,
-        temporal_patch_size: Optional[int] = None,
-        merge_size: Optional[int] = None,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
+        patch_size: int | None = None,
+        temporal_patch_size: int | None = None,
+        merge_size: int | None = None,
         **kwargs,
     ):
         patch_size = patch_size if patch_size is not None else self.patch_size

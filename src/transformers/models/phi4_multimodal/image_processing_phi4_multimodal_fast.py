@@ -13,7 +13,7 @@
 # limitations under the License.
 
 import math
-from typing import Optional, Union
+from typing import Optional
 
 import torch
 from torchvision.transforms.v2 import functional as F
@@ -142,14 +142,14 @@ class Phi4MultimodalImageProcessorFast(BaseImageProcessorFast):
         images: B x 3 x H x W, B<=max_crops
         """
         B, _, H, W = images.shape
-        if B < max_crops:
+        if max_crops > B:
             pad = torch.zeros(max_crops - B, 3, H, W, dtype=images.dtype, device=images.device)
             images = torch.cat([images, pad], dim=0)
         return images
 
     def pad_mask_to_max_num_crops(self, masks, max_crops=5):
         B, H, W = masks.shape
-        if B < max_crops:
+        if max_crops > B:
             pad = torch.ones(max_crops - B, H, W, dtype=masks.dtype, device=masks.device)
             masks = torch.cat([masks, pad], dim=0)
         return masks
@@ -170,11 +170,11 @@ class Phi4MultimodalImageProcessorFast(BaseImageProcessorFast):
         patch_size: int,
         dynamic_hd: int,
         do_rescale: bool,
-        rescale_factor: Optional[float],
+        rescale_factor: float | None,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        return_tensors: str | TensorType | None = None,
         **kwargs,
     ):
         if size.height != size.width:

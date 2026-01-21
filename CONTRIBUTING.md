@@ -193,7 +193,7 @@ The library has 400+ models with many established patterns:
 - Search for similar models (e.g., other vision-language models)
 - Reuse attention mechanisms, layer implementations, and processing patterns
 - Check models like LLaVA, Idefics2, Fuyu for vision-language patterns
-- Use provided decorators like (`auto_docstring`, `can_return_tuple`, `check_model_inputs` and `_can_record_outputs`) where relevant. 
+- Use provided decorators like (`auto_docstring`, `can_return_tuple`, `check_model_inputs` and `_can_record_outputs`) where relevant.
 - Don't reinvent the wheel
 
 ☐ **7. Run quality checks and read the output**
@@ -202,10 +202,11 @@ Before submitting your PR, install quality dependencies and run the full check s
 
 ```bash
 pip install -e ".[quality]"
-make fixup
+make style
 ```
 
-**Important**: Take time to read the output of `make fixup`. It will:
+**Important**: Take time to read the output of `make style`. It will:
+
 - Lint and format your code automatically
 - Run consistency checks (imports, docstrings, etc.)
 - Show any remaining issues that need manual fixes
@@ -229,7 +230,7 @@ Please ensure your PR completes all following items. See the [full checklist](ht
 - [ ] **Integration tests**: End-to-end tests with exact output matching (text or logits)
 - [ ] **Documentation**: Model docs added/updated in `docs/source/en/model_doc/`
 - [ ] **Pattern reuse**: Verified against similar models (LLaVA, Idefics2, etc.)
-- [ ] **Quality checks**: `make fixup` passes with no errors
+- [ ] **Quality checks**: `make style` passes with no errors
 
 ```
 
@@ -308,15 +309,6 @@ You'll need **[Python 3.9](https://github.com/huggingface/transformers/blob/main
    that can't be automated in one go with:
 
    ```bash
-   make fixup
-   ```
-
-   This target is also optimized to only work with files modified by the PR you're working on.
-
-   If you prefer to run the checks one after the other, the following command applies the
-   style corrections:
-
-   ```bash
    make style
    ```
 
@@ -324,14 +316,7 @@ You'll need **[Python 3.9](https://github.com/huggingface/transformers/blob/main
    controls are run by the CI, but you can run the same checks with:
 
    ```bash
-   make quality
-   ```
-
-   Finally, we have a lot of scripts to make sure we don't forget to update
-   some files when adding a new model. You can run these scripts with:
-
-   ```bash
-   make repo-consistency
+   make check-repo
    ```
 
    To learn more about those checks and how to fix any issues with them, check out the

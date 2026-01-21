@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,7 +18,6 @@ Tokenizer class for Nougat.
 import re
 from functools import partial
 from multiprocessing import Pool
-from typing import Optional, Union
 
 import numpy as np
 from tokenizers import Tokenizer, decoders, normalizers, pre_tokenizers, processors
@@ -398,8 +396,8 @@ class NougatTokenizer(TokenizersBackend):
         bos_token: str = "<s>",
         eos_token: str = "</s>",
         pad_token: str = "<pad>",
-        vocab: Optional[Union[str, dict, list]] = None,
-        merges: Optional[Union[str, list]] = None,
+        vocab: str | dict | list | None = None,
+        merges: str | list | None = None,
         **kwargs,
     ):
         self._vocab = (
@@ -441,23 +439,6 @@ class NougatTokenizer(TokenizersBackend):
         )
         self._tokenizer.decoder = decoders.ByteLevel(add_prefix_space=True, trim_offsets=True, use_regex=True)
 
-        # Set up post processor with bos and eos tokens
-        bos_token_id = self._vocab.get(str(bos_token), 0)
-        eos_token_id = self._vocab.get(str(eos_token), 2)
-        pad_token_id = self._vocab.get(str(pad_token), 1)
-        self._tokenizer.post_processor = processors.TemplateProcessing(
-            single=f"{bos_token}:0 $A:0 {eos_token}:0",
-            pair="$A:0 $B:1",
-            special_tokens=[
-                (str(eos_token), eos_token_id),
-                (str(bos_token), bos_token_id),
-            ],
-        )
-
-        # Enable truncation and padding
-        self._tokenizer.enable_truncation(max_length=4096)
-        self._tokenizer.enable_padding(length=4096, pad_id=pad_token_id, pad_token=str(pad_token))
-
         super().__init__(
             errors=errors,
             unk_token=unk_token,
@@ -466,6 +447,18 @@ class NougatTokenizer(TokenizersBackend):
             pad_token=pad_token,
             **kwargs,
         )
+        self._tokenizer.post_processor = processors.TemplateProcessing(
+            single=f"{bos_token}:0 $A:0 {eos_token}:0",
+            pair="$A:0 $B:1",
+            special_tokens=[
+                (str(eos_token), self.eos_token_id),
+                (str(bos_token), self.bos_token_id),
+            ],
+        )
+
+        # Enable truncation and padding
+        self._tokenizer.enable_truncation(max_length=4096)
+        self._tokenizer.enable_padding(length=4096, pad_id=self.pad_token_id, pad_token=str(pad_token))
 
     def remove_hallucinated_references(self, text: str) -> str:
         """
@@ -629,10 +622,10 @@ class NougatTokenizer(TokenizersBackend):
 
     def post_process_generation(
         self,
-        generation: Union[str, list[str]],
+        generation: str | list[str],
         fix_markdown: bool = True,
-        num_workers: Optional[int] = None,
-    ) -> Union[str, list[str]]:
+        num_workers: int | None = None,
+    ) -> str | list[str]:
         """
         Postprocess a generated text or a list of generated texts.
 

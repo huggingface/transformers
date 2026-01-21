@@ -60,7 +60,6 @@ if is_torch_available():
         Wav2Vec2FeatureExtractor,
         Wav2Vec2ForAudioFrameClassification,
         Wav2Vec2ForCTC,
-        Wav2Vec2ForMaskedLM,
         Wav2Vec2ForPreTraining,
         Wav2Vec2ForSequenceClassification,
         Wav2Vec2ForXVector,
@@ -478,7 +477,7 @@ class Wav2Vec2ModelTester:
 @require_torch
 class Wav2Vec2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (Wav2Vec2ForCTC, Wav2Vec2Model, Wav2Vec2ForMaskedLM, Wav2Vec2ForSequenceClassification, Wav2Vec2ForPreTraining)
+        (Wav2Vec2ForCTC, Wav2Vec2Model, Wav2Vec2ForSequenceClassification, Wav2Vec2ForPreTraining)
         if is_torch_available()
         else ()
     )
@@ -487,7 +486,6 @@ class Wav2Vec2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             "audio-classification": Wav2Vec2ForSequenceClassification,
             "automatic-speech-recognition": Wav2Vec2ForCTC,
             "feature-extraction": Wav2Vec2Model,
-            "fill-mask": Wav2Vec2ForMaskedLM,
         }
         if is_torch_available()
         else {}
@@ -676,7 +674,6 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
         (
             Wav2Vec2ForCTC,
             Wav2Vec2Model,
-            Wav2Vec2ForMaskedLM,
             Wav2Vec2ForSequenceClassification,
             Wav2Vec2ForPreTraining,
             Wav2Vec2ForAudioFrameClassification,

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 Om Research Lab and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,7 +18,6 @@ import warnings
 from collections import OrderedDict
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Optional, Union
 
 import torch
 import torch.nn.functional as F
@@ -57,10 +55,10 @@ class OmDetTurboEncoderOutput(ModelOutput):
         The extracted states from the Feature Pyramid Network (FPN) and Path Aggregation Network (PAN) of the encoder.
     """
 
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
-    extracted_states: Optional[tuple[torch.FloatTensor]] = None
+    last_hidden_state: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
+    extracted_states: tuple[torch.FloatTensor] | None = None
 
 
 @dataclass
@@ -87,14 +85,14 @@ class OmDetTurboDecoderOutput(ModelOutput):
         The intermediate reference points.
     """
 
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[tuple[torch.FloatTensor]]] = None
-    decoder_coords: Optional[torch.FloatTensor] = None
-    decoder_classes: Optional[torch.FloatTensor] = None
-    encoder_coord_logits: Optional[torch.FloatTensor] = None
-    encoder_class_logits: Optional[tuple[torch.FloatTensor]] = None
-    init_reference_points: Optional[torch.FloatTensor] = None
+    last_hidden_state: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[tuple[torch.FloatTensor]] | None = None
+    decoder_coords: torch.FloatTensor | None = None
+    decoder_classes: torch.FloatTensor | None = None
+    encoder_coord_logits: torch.FloatTensor | None = None
+    encoder_class_logits: tuple[torch.FloatTensor] | None = None
+    init_reference_points: torch.FloatTensor | None = None
     intermediate_reference_points: tuple[tuple[torch.FloatTensor]] = None
 
 
@@ -142,19 +140,19 @@ class OmDetTurboObjectDetectionOutput(ModelOutput):
         The number of queried classes for each image.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    decoder_coord_logits: Optional[torch.FloatTensor] = None
-    decoder_class_logits: Optional[torch.FloatTensor] = None
-    init_reference_points: Optional[torch.FloatTensor] = None
-    intermediate_reference_points: Optional[tuple[tuple[torch.FloatTensor]]] = None
-    encoder_coord_logits: Optional[torch.FloatTensor] = None
-    encoder_class_logits: Optional[tuple[torch.FloatTensor]] = None
-    encoder_extracted_states: Optional[torch.FloatTensor] = None
-    decoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    decoder_attentions: Optional[tuple[tuple[torch.FloatTensor]]] = None
-    encoder_hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    encoder_attentions: Optional[tuple[tuple[torch.FloatTensor]]] = None
-    classes_structure: Optional[torch.LongTensor] = None
+    loss: torch.FloatTensor | None = None
+    decoder_coord_logits: torch.FloatTensor | None = None
+    decoder_class_logits: torch.FloatTensor | None = None
+    init_reference_points: torch.FloatTensor | None = None
+    intermediate_reference_points: tuple[tuple[torch.FloatTensor]] | None = None
+    encoder_coord_logits: torch.FloatTensor | None = None
+    encoder_class_logits: tuple[torch.FloatTensor] | None = None
+    encoder_extracted_states: torch.FloatTensor | None = None
+    decoder_hidden_states: tuple[torch.FloatTensor] | None = None
+    decoder_attentions: tuple[tuple[torch.FloatTensor]] | None = None
+    encoder_hidden_states: tuple[torch.FloatTensor] | None = None
+    encoder_attentions: tuple[tuple[torch.FloatTensor]] | None = None
+    classes_structure: torch.LongTensor | None = None
 
 
 @use_kernel_forward_from_hub("MultiScaleDeformableAttention")
@@ -330,16 +328,16 @@ class OmDetTurboMultiscaleDeformableAttention(nn.Module):
 
         self.disable_custom_kernels = config.disable_custom_kernels
 
-    def with_pos_embed(self, tensor: torch.Tensor, position_embeddings: Optional[Tensor]):
+    def with_pos_embed(self, tensor: torch.Tensor, position_embeddings: Tensor | None):
         return tensor if position_embeddings is None else tensor + position_embeddings
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
         encoder_hidden_states=None,
         encoder_attention_mask=None,
-        position_embeddings: Optional[torch.Tensor] = None,
+        position_embeddings: torch.Tensor | None = None,
         reference_points=None,
         spatial_shapes=None,
         spatial_shapes_list=None,
@@ -500,8 +498,8 @@ class OmDetTurboMultiheadAttention(nn.Module):
         queries: torch.Tensor,
         keys: torch.Tensor,
         values: torch.Tensor,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = False,
+        attention_mask: torch.FloatTensor | None = None,
+        output_attentions: bool | None = False,
     ) -> tuple[torch.Tensor]:
         batch_size, seq_length, _ = queries.shape
         query_layer = (
@@ -568,7 +566,7 @@ class OmDetTurboEncoderLayer(nn.Module):
         self,
         hidden_states: torch.Tensor,
         attention_mask: torch.Tensor,
-        position_embeddings: Optional[torch.Tensor] = None,
+        position_embeddings: torch.Tensor | None = None,
         output_attentions: bool = False,
     ):
         """
@@ -623,7 +621,7 @@ class OmDetTurboEncoder(nn.Module):
 
     def forward(
         self, src, src_mask=None, pos_embed=None, output_attentions: bool = False
-    ) -> tuple[Union[torch.Tensor, tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor | tuple[torch.Tensor]]:
         hidden_states = src
         attention = () if output_attentions else None
         for layer in self.layers:
@@ -1488,7 +1486,7 @@ class OmDetTurboForObjectDetection(OmDetTurboPreTrainedModel):
         self.language_backbone.model.set_input_embeddings(value)
 
     def resize_token_embeddings(
-        self, new_num_tokens: Optional[int] = None, pad_to_multiple_of=None, mean_resizing: bool = True
+        self, new_num_tokens: int | None = None, pad_to_multiple_of=None, mean_resizing: bool = True
     ) -> nn.Embedding:
         model_embeds = self.language_backbone.model.resize_token_embeddings(
             new_num_tokens=new_num_tokens, pad_to_multiple_of=pad_to_multiple_of, mean_resizing=mean_resizing
@@ -1506,12 +1504,12 @@ class OmDetTurboForObjectDetection(OmDetTurboPreTrainedModel):
         tasks_input_ids: torch.LongTensor,
         tasks_attention_mask: torch.LongTensor,
         classes_structure: torch.LongTensor,
-        labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        labels: torch.LongTensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple[torch.FloatTensor], OmDetTurboObjectDetectionOutput]:
+    ) -> tuple[torch.FloatTensor] | OmDetTurboObjectDetectionOutput:
         r"""
         classes_input_ids (`torch.LongTensor` of shape `(total_classes (>= batch_size), sequence_length)`):
             Indices of input classes sequence tokens in the vocabulary of the language model.

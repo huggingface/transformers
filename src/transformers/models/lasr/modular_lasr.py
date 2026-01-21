@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team and Google LLC. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +14,6 @@
 
 import itertools
 from collections.abc import Callable
-from typing import Optional, Union
 
 import torch
 from tokenizers import Tokenizer
@@ -73,9 +71,9 @@ class LasrTokenizer(T5Tokenizer, TokenizersBackend):
 
     def _decode(
         self,
-        token_ids: Union[int, list[int]],
+        token_ids: int | list[int],
         skip_special_tokens: bool = False,
-        clean_up_tokenization_spaces: Optional[bool] = None,
+        clean_up_tokenization_spaces: bool | None = None,
         group_tokens: bool = True,
         **kwargs,
     ) -> str:
@@ -278,7 +276,7 @@ class LasrCTCConfig(ParakeetCTCConfig):
         vocab_size=512,
         ctc_loss_reduction="mean",
         ctc_zero_infinity=True,
-        encoder_config: Union[dict, LasrEncoderConfig] = None,
+        encoder_config: dict | LasrEncoderConfig = None,
         pad_token_id=0,
         **kwargs,
     ):
@@ -335,8 +333,8 @@ class LasrEncoderAttention(LlamaAttention):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -392,8 +390,8 @@ class LasrEncoderBlock(ParakeetEncoderBlock):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_embeddings: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
+        position_embeddings: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
@@ -426,6 +424,9 @@ class LasrEncoderBlock(ParakeetEncoderBlock):
 
 
 class LasrPreTrainedModel(ParakeetPreTrainedModel):
+    # padding is incompatible with flex attention as the resulting mask cannot be used to apply padding
+    _supports_flex_attn = False
+
     def _init_weights(self, module):
         PreTrainedModel._init_weights(module)
 
@@ -473,7 +474,7 @@ class LasrEncoder(LasrPreTrainedModel):
     def forward(
         self,
         input_features: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         r"""

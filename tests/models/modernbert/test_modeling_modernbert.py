@@ -27,6 +27,7 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
     require_torch_accelerator,
+    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -505,6 +506,10 @@ class ModernBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCa
             self.skipTest(
                 f"Model architecture does not support {attn_implementation}, or setting its attention dynamically"
             )
+
+    @require_torch_gpu  # modernbert contains triton code which cannot run on CPU, so we only test on GPU
+    def test_all_tensors_are_parameter_or_buffer(self):
+        super().test_all_tensors_are_parameter_or_buffer()
 
 
 @require_torch

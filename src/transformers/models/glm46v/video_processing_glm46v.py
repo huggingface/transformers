@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_glm46v.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 the HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -90,7 +88,7 @@ class Glm46VVideoProcessor(BaseVideoProcessor):
 
     def _further_process_kwargs(
         self,
-        size: Optional[SizeDict] = None,
+        size: SizeDict | None = None,
         **kwargs,
     ) -> dict:
         """
@@ -105,7 +103,7 @@ class Glm46VVideoProcessor(BaseVideoProcessor):
     def sample_frames(
         self,
         metadata: VideoMetadata,
-        fps: Optional[Union[int, float]] = None,
+        fps: int | float | None = None,
         **kwargs,
     ):
         """
@@ -183,17 +181,17 @@ class Glm46VVideoProcessor(BaseVideoProcessor):
         videos: list[torch.Tensor],
         do_convert_rgb: bool = True,
         do_resize: bool = True,
-        size: Optional[SizeDict] = None,
+        size: SizeDict | None = None,
         interpolation: PILImageResampling = PILImageResampling.BICUBIC,
         do_rescale: bool = True,
         rescale_factor: float = 1 / 255.0,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
-        patch_size: Optional[int] = None,
-        temporal_patch_size: Optional[int] = None,
-        merge_size: Optional[int] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        patch_size: int | None = None,
+        temporal_patch_size: int | None = None,
+        merge_size: int | None = None,
+        return_tensors: str | TensorType | None = None,
         **kwargs,
     ):
         grouped_videos, grouped_videos_index = group_videos_by_shape(videos)

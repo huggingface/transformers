@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,7 +13,7 @@
 # limitations under the License.
 """Fast Image processor class for Donut."""
 
-from typing import Optional, Union
+from typing import Optional
 
 import torch
 from torchvision.transforms.v2 import functional as F
@@ -132,10 +131,6 @@ class DonutImageProcessorFast(BaseImageProcessorFast):
         padding = (pad_left, pad_top, pad_right, pad_bottom)
         return F.pad(image, padding)
 
-    def pad(self, *args, **kwargs):
-        logger.info("pad is deprecated and will be removed in version 4.27. Please use pad_image instead.")
-        return self.pad_image(*args, **kwargs)
-
     def thumbnail(
         self,
         image: "torch.Tensor",
@@ -192,10 +187,10 @@ class DonutImageProcessorFast(BaseImageProcessorFast):
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        disable_grouping: Optional[bool],
-        return_tensors: Optional[Union[str, TensorType]],
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         # Group images by size for batched resizing

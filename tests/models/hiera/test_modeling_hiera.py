@@ -557,7 +557,7 @@ class HieraModelIntegrationTest(unittest.TestCase):
 
         expected_slice = torch.tensor([[0.8028, 0.2409, -0.2254, -0.3712, -0.2848]]).to(torch_device)
 
-        torch.testing.assert_close(outputs.logits[0, :5], expected_slice, rtol=1e-4, atol=1e-4)
+        torch.testing.assert_close(outputs.logits[:, :5], expected_slice, rtol=1e-4, atol=1e-4)
 
     def test_inference_interpolate_pos_encoding(self):
         model = HieraModel.from_pretrained("facebook/hiera-tiny-224-hf").to(torch_device)

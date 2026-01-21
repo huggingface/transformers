@@ -38,24 +38,10 @@ config_common_kwargs = {
     "output_hidden_states": True,
     "output_attentions": True,
     "dtype": "float16",
-    "tie_word_embeddings": False,
-    "is_decoder": True,
-    "cross_attention_hidden_size": 128,
-    "add_cross_attention": True,
-    "tie_encoder_decoder": True,
     "chunk_size_feed_forward": 5,
     "architectures": ["BertModel"],
-    "finetuning_task": "translation",
     "id2label": {0: "label"},
     "label2id": {"label": "0"},
-    "tokenizer_class": "BertTokenizerFast",
-    "prefix": "prefix",
-    "bos_token_id": 6,
-    "pad_token_id": 7,
-    "eos_token_id": 8,
-    "sep_token_id": 9,
-    "decoder_start_token_id": 10,
-    "task_specific_params": {"translation": "some_params"},
     "problem_type": "regression",
 }
 
@@ -163,6 +149,7 @@ class ConfigTestUtils(unittest.TestCase):
                 "_name_or_path",
                 "_commit_hash",
                 "_attn_implementation_internal",
+                "_experts_implementation_internal",
                 "transformers_version",
             ],
         )
@@ -329,3 +316,44 @@ class ConfigTestUtils(unittest.TestCase):
 
             config = PreTrainedConfig.from_pretrained(tmpdirname, torch_dtype="float32")
             self.assertEqual(config.dtype, "float32")
+
+    def test_unserializable_json_is_encoded(self):
+        class NewConfig(PreTrainedConfig):
+            def __init__(
+                self,
+                inf_positive: float = float("inf"),
+                inf_negative: float = float("-inf"),
+                nan: float = float("nan"),
+                **kwargs,
+            ):
+                self.inf_positive = inf_positive
+                self.inf_negative = inf_negative
+                self.nan = nan
+
+                super().__init__(**kwargs)
+
+        new_config = NewConfig()
+
+        # All floats should remain as floats when being accessed in the config
+        self.assertIsInstance(new_config.inf_positive, float)
+        self.assertIsInstance(new_config.inf_negative, float)
+        self.assertIsInstance(new_config.nan, float)
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            new_config.save_pretrained(tmpdirname)
+            config_file = Path(tmpdirname) / "config.json"
+            config_contents = json.loads(config_file.read_text())
+            new_config_instance = NewConfig.from_pretrained(tmpdirname)
+
+        # In the serialized JSON file, the non-JSON compatible floats should be updated
+        self.assertDictEqual(config_contents["inf_positive"], {"__float__": "Infinity"})
+        self.assertDictEqual(config_contents["inf_negative"], {"__float__": "-Infinity"})
+        self.assertDictEqual(config_contents["nan"], {"__float__": "NaN"})
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            new_config.save_pretrained(tmpdirname)
+
+        # When reloading the config, it should have correct float values
+        self.assertIsInstance(new_config_instance.inf_positive, float)
+        self.assertIsInstance(new_config_instance.inf_negative, float)
+        self.assertIsInstance(new_config_instance.nan, float)
