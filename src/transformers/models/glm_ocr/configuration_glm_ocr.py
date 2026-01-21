@@ -314,4 +314,4 @@ class GlmOcrConfig(PreTrainedConfig):
         super().__init__(**kwargs)
 
 
-__all__ = ["GlmOcrConfig"]
+__all__ = ["GlmOcrConfig", "GlmOcrTextConfig", "GlmOcrVisionConfig"]
