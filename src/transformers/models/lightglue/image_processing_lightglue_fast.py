@@ -20,7 +20,7 @@
 from typing import TYPE_CHECKING, Optional
 
 import torch
-from torchvision.transforms.v2 import functional as F
+import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast
@@ -105,7 +105,7 @@ def convert_to_grayscale(
     """
     if is_grayscale(image):
         return image
-    return F.rgb_to_grayscale(image, num_output_channels=3)
+    return tvF.rgb_to_grayscale(image, num_output_channels=3)
 
 
 @auto_docstring
@@ -142,7 +142,7 @@ class LightGlueImageProcessorFast(BaseImageProcessorFast):
         rescale_factor: float,
         do_rescale: bool,
         do_resize: bool,
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
         do_grayscale: bool,
         disable_grouping: bool,
         return_tensors: str | TensorType,
