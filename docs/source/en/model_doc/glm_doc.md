@@ -18,11 +18,11 @@ limitations under the License.
 -->
 
 
-# GlmDoc
+# GlmOcr
 
 ## Overview
 
-The GlmDoc model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
+The GlmOcr model was proposed in [<INSERT PAPER NAME HERE>](<INSERT PAPER LINK HERE>) by <INSERT AUTHORS HERE>.
 <INSERT SHORT SUMMARY HERE>
 
 The abstract from the paper is the following:
@@ -40,20 +40,20 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 <INSERT SOME NICE EXAMPLES HERE>
 
-## GlmDocConfig
+## GlmOcrConfig
 
-[[autodoc]] GlmDocConfig
+[[autodoc]] GlmOcrConfig
 
-## GlmDocModel
+## GlmOcrModel
 
-[[autodoc]] GlmDocModel
+[[autodoc]] GlmOcrModel
     - forward
 
-## GlmDocPreTrainedModel
+## GlmOcrPreTrainedModel
 
-[[autodoc]] GlmDocPreTrainedModel
+[[autodoc]] GlmOcrPreTrainedModel
     - forward
 
-## GlmDocForConditionalGeneration
+## GlmOcrForConditionalGeneration
 
-[[autodoc]] GlmDocForConditionalGeneration
+[[autodoc]] GlmOcrForConditionalGeneration

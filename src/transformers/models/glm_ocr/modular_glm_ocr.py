@@ -38,17 +38,17 @@ from ..glm4v.modeling_glm4v import (
 )
 
 
-class GlmDocRMSNorm(Glm4vRMSNorm):
+class GlmOcrRMSNorm(Glm4vRMSNorm):
     pass
 
 
-class GlmDocVisionMlp(Glm4VisionMlp):
+class GlmOcrVisionMlp(Glm4VisionMlp):
     def __init__(self, config, bias: bool = True):
         super().__init__()
         self.intermediate_size = config.intermediate_size
 
 
-class GlmDocVisionConfig(Glm4vVisionConfig):
+class GlmOcrVisionConfig(Glm4vVisionConfig):
     def __init__(
         self,
         depth=24,
@@ -64,7 +64,7 @@ class GlmDocVisionConfig(Glm4vVisionConfig):
         super().__init__(**super_kwargs)
 
 
-class GlmDocTextConfig(Glm4vTextConfig):
+class GlmOcrTextConfig(Glm4vTextConfig):
     def __init__(
         self,
         vocab_size: int | None = 59246,
@@ -80,7 +80,7 @@ class GlmDocTextConfig(Glm4vTextConfig):
         super().__init__(**super_kwargs)
 
 
-class GlmDocConfig(Glm4vConfig, nn.Module):
+class GlmOcrConfig(Glm4vConfig, nn.Module):
     def __init__(
         self,
         text_config=None,
@@ -97,8 +97,8 @@ class GlmDocConfig(Glm4vConfig, nn.Module):
         super().__init__(**super_kwargs)
 
 
-class GlmDocTextAttention(Glm4vTextAttention, nn.Module):
-    def __init__(self, config: GlmDocTextConfig, layer_idx: int | None = None):
+class GlmOcrTextAttention(Glm4vTextAttention, nn.Module):
+    def __init__(self, config: GlmOcrTextConfig, layer_idx: int | None = None):
         super().__init__()
         self.head_dim = getattr(config, "head_dim", config.hidden_size // config.num_attention_heads)
         self.q_proj = nn.Linear(self.hidden_size, self.num_heads * self.head_dim, bias=False)
@@ -106,16 +106,16 @@ class GlmDocTextAttention(Glm4vTextAttention, nn.Module):
         self.v_proj = nn.Linear(self.hidden_size, self.num_key_value_heads * self.head_dim, bias=False)
 
 
-class GlmDocPreTrainedModel(Glm4vPreTrainedModel):
+class GlmOcrPreTrainedModel(Glm4vPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"model\.language_model\.layers\.16.*"]
 
 
-class GlmDocModelOutputWithPast(Glm4vModelOutputWithPast):
+class GlmOcrModelOutputWithPast(Glm4vModelOutputWithPast):
     pass
 
 
-class GlmDocVisionAttention(Glm4vVisionAttention):
-    def __init__(self, config: GlmDocVisionConfig) -> None:
+class GlmOcrVisionAttention(Glm4vVisionAttention):
+    def __init__(self, config: GlmOcrVisionConfig) -> None:
         super().__init__()
         self.dim = config.hidden_size
         self.num_heads = config.num_heads
@@ -123,16 +123,16 @@ class GlmDocVisionAttention(Glm4vVisionAttention):
         self.num_key_value_groups = 1  # needed for eager attention
         self.qkv = nn.Linear(config.hidden_size, config.hidden_size * 3, bias=config.attention_bias)
         self.proj = nn.Linear(config.hidden_size, config.hidden_size, bias=config.attention_bias)
-        self.q_norm = GlmDocRMSNorm(self.head_dim, eps=config.rms_norm_eps)
-        self.k_norm = GlmDocRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.q_norm = GlmOcrRMSNorm(self.head_dim, eps=config.rms_norm_eps)
+        self.k_norm = GlmOcrRMSNorm(self.head_dim, eps=config.rms_norm_eps)
 
     def forward(
-            self,
-            hidden_states: torch.Tensor,
-            cu_seqlens: torch.Tensor,
-            rotary_pos_emb: torch.Tensor | None = None,
-            position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-            **kwargs,
+        self,
+        hidden_states: torch.Tensor,
+        cu_seqlens: torch.Tensor,
+        rotary_pos_emb: torch.Tensor | None = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        **kwargs,
     ) -> torch.Tensor:
         seq_length = hidden_states.shape[0]
         query_states, key_states, value_states = (
@@ -198,22 +198,22 @@ class GlmDocVisionAttention(Glm4vVisionAttention):
         return attn_output
 
 
-class GlmDocVisionBlock(Glm4vVisionBlock):
+class GlmOcrVisionBlock(Glm4vVisionBlock):
     def __init__(self, config) -> None:
         super().__init__()
-        self.mlp = GlmDocVisionMlp(config, bias=config.attention_bias)
+        self.mlp = GlmOcrVisionMlp(config, bias=config.attention_bias)
 
 
-class GlmDocVisionPatchMerger(Glm4vVisionPatchMerger):
+class GlmOcrVisionPatchMerger(Glm4vVisionPatchMerger):
     pass
 
 
-class GlmDocVisionModel(Glm4vVisionModel):
+class GlmOcrVisionModel(Glm4vVisionModel):
     def __init__(self, config) -> None:
         super().__init__(config)
         del self.embeddings
         del self.post_conv_layernorm
-        self.merger = GlmDocVisionPatchMerger(
+        self.merger = GlmOcrVisionPatchMerger(
             dim=config.out_hidden_size,
             context_dim=config.out_hidden_size * config.in_channels,
             hidden_act=config.hidden_act,
@@ -264,17 +264,17 @@ class GlmDocVisionModel(Glm4vVisionModel):
         return hidden_states
 
 
-class GlmDocModel(Glm4vModel):
+class GlmOcrModel(Glm4vModel):
     pass
 
 
-class GlmDocForConditionalGeneration(Glm4vForConditionalGeneration):
+class GlmOcrForConditionalGeneration(Glm4vForConditionalGeneration):
     pass
 
 
 __all__ = [
-    "GlmDocConfig",
-    "GlmDocModel",
-    "GlmDocPreTrainedModel",
-    "GlmDocForConditionalGeneration",
+    "GlmOcrConfig",
+    "GlmOcrModel",
+    "GlmOcrPreTrainedModel",
+    "GlmOcrForConditionalGeneration",
 ]

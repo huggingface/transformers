@@ -19,8 +19,8 @@ from ...utils.import_utils import define_import_structure
 
 
 if TYPE_CHECKING:
-    from .configuration_glm_doc import *
-    from .modeling_glm_doc import *
+    from .configuration_glm_ocr import *
+    from .modeling_glm_ocr import *
 else:
     import sys
 
