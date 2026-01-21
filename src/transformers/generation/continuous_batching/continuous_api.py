@@ -504,7 +504,7 @@ class ContinuousBatchProcessor:
             # First we retrieve the lengths related to the request
             past_length = state.position_offset
             query_length = len(state.tokens_to_process)
-            seqlens_k = self.cache.get_seqlens_k(state.request_id, past_length, query_length)
+            seqlens_k = self.cache.get_seqlens_k(past_length, query_length)
 
             # Then we update the total lengths that are used for slicing
             self.actual_query_length += query_length
@@ -527,8 +527,7 @@ class ContinuousBatchProcessor:
                 cumulative_seqlens_k[layer_type].append(cumulative_seqlens_k[layer_type][-1] + layer_type_seqlen_k)
                 self.max_seqlen_k[layer_type] = max(self.max_seqlen_k[layer_type], layer_type_seqlen_k)
 
-            self.cache.extend_read_indices(state.request_id, past_length, query_length, read_index)
-            self.cache.extend_write_indices(state.request_id, past_length, query_length, write_index)
+            self.cache.extend_read_and_write_indices(state.request_id, past_length, query_length, read_index, write_index)
 
         # When looping over request is done, we can build the actual tensors
         self._build_tensors(

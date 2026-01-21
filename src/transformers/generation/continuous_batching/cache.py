@@ -291,35 +291,29 @@ class PagedAttentionCache:
         return self._block_manager.num_free_blocks
 
     @traced
-    def extend_read_indices(
-        self, request_id: str, past_length: int, query_length: int, read_index: list[list[int]]
+    def extend_read_and_write_indices(
+        self, request_id: str, past_length: int, query_length: int, read_index: list[list[int]], write_index: list[list[int]]
     ) -> None:
         """Retrieve physical cache indices for reading KV states in the cache across all layer groups. This method
         coordinates with all cache managers to build the complete set of read indices needed for attention computation.
         """
-        for cm, read_indices in zip(self.group_cache_managers, read_index):
+        for cm, read_indices, write_indices in zip(self.group_cache_managers, read_index, write_index):
             indices = cm.get_read_indices(request_id, past_length, query_length)
             read_indices.extend(indices)
-
-    @traced
-    def extend_write_indices(
-        self, request_id: str, past_length: int, query_length: int, write_index: list[list[int]]
-    ) -> None:
-        """Retrieve physical cache indices for writing new KV states to the cache across all layer groups. This method
-        coordinates with all cache managers to build the complete set of write indices needed to store computed KV
-        states."""
-        for cm, write_indices in zip(self.group_cache_managers, write_index):
             indices = cm.get_write_indices(request_id, past_length, query_length)
             write_indices.extend(indices)
 
+
     @traced
-    def get_seqlens_k(self, request_id: str, past_length: int, query_length: int) -> dict[str, int]:
+    def get_seqlens_k(self, past_length: int, query_length: int) -> dict[str, int]:
         """Retrieve the key sequence length for the given request_id across all layer types. Returns a dictionary of
         layer types to their corresponding key sequence lengths."""
         seqlens_k = {}
-        for cm in self.group_cache_managers:
-            attn_type, seqlen_k = cm.get_seqlens_k(request_id, past_length, query_length)
-            seqlens_k[attn_type] = seqlen_k
+        if self.num_full_attention_groups > 0:
+            seqlens_k["full_attention"] = past_length + query_length
+        if self.num_sliding_attention_groups > 0:
+            seqlens_k["sliding_attention"] = query_length + min(past_length, self.config.sliding_window - 1)
+        # NOTE: when we add more attention types / different sliding windows, we can go back to looping over CMs
         return seqlens_k
 
     @traced
