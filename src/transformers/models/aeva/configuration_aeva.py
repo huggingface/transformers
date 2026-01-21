@@ -18,101 +18,118 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
+
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 
 
 class AevaConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`AevaModel`]. It is used to instantiate a
-    Aeva model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of [THUDM/GLM-4-100B-A10B](https://huggingface.co/THUDM/GLM-4-100B-A10B).
+    This is the configuration class to store the configuration of an [`AevaModel`]. It is used to instantiate an Aeva
+    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
+    defaults will yield a similar configuration to that of the Aeva-M.
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
 
-
     Args:
         vocab_size (`int`, *optional*, defaults to 151552):
             Vocabulary size of the Aeva model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`AevaModel`]
-        hidden_size (`int`, *optional*, defaults to 4096):
-            Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 10944):
-            Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 46):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 96):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        num_key_value_heads (`int`, *optional*, defaults to 8):
-            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
-            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
-            `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
-            converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details, check out [this
-            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to `32`.
-
-        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-            The non-linear activation function (function or string) in the decoder.
-        max_position_embeddings (`int`, *optional*, defaults to 131072):
-            The maximum sequence length that this model might ever be used with.
+            `inputs_ids` passed when calling [`AevaModel`].
+        hidden_size (`int`, *optional*, defaults to 5120):
+            Dimension of the hidden representations. This is the core semantic anchor that determines all other
+            architectural dimensions through continuous scaling functions.
+        max_position_embeddings (`int`, *optional*):
+            The maximum sequence length that this model might ever be used with. Computed from hidden_size using a
+            hybrid linear-quadratic formula and aligned to 4096 if not specified.
+        num_hidden_layers (`int`, *optional*):
+            Number of hidden layers in the Transformer decoder. Computed as `20*log2(1+hidden_size/1024)*width_factor+12`
+            and rounded to multiples of 4 if not specified.
+        intermediate_size (`int`, *optional*):
+            Dimension of the MLP representations for dense layers. Computed as `hidden_size*(2.4+hidden_size/32768)` and
+            aligned to 64 if not specified.
+        first_k_dense_replace (`int`, *optional*):
+            Number of dense layers at the beginning before MoE layers. Computed as `1+3*hidden_size/5120` if not specified.
+        num_attention_heads (`int`, *optional*):
+            Number of attention heads for each attention layer. Computed as `round(hidden_size/64*(1+hidden_size/16384))`
+            and aligned to 8 if not specified.
+        head_dim (`int`, *optional*):
+            Dimension of each attention head. Computed as `hidden_size//num_attention_heads` if not specified.
+        num_key_value_heads (`int`, *optional*):
+            Number of key_value heads for Grouped Query Attention. Computed based on compression factor that scales
+            inversely with hidden_size, ensuring divisibility with num_attention_heads.
+        use_qk_norm (`bool`, *optional*):
+            Whether to use query-key normalization. Automatically enabled when head_dim>128.
+        attention_bias (`bool`, *optional*, defaults to `True`):
+            Whether to use a bias in the query, key, value and output projection layers during self-attention.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
+        rope_parameters (`dict`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings.
+        use_sliding_window (`bool`, *optional*, defaults to `True`):
+            Whether to use sliding window attention.
+        sliding_window (`int`, *optional*):
+            Size of the sliding window. Computed as 80% of max_position_embeddings and aligned to 128 if not specified.
+        attn_layer_types (`list`, *optional*):
+            Attention type pattern for each layer. Defaults to hybrid sliding/linear attention pattern where deep layers
+            use linear attention at intervals.
+        n_routed_experts (`int`, *optional*):
+            Number of routed experts. Computed as `hidden_size//32` and aligned to 8 if not specified.
+        num_experts_per_tok (`int`, *optional*):
+            Number of selected experts per token. Computed as `4+4*log2(1+hidden_size/4096)` with cap at n_routed_experts//2.
+        moe_intermediate_size (`int`, *optional*):
+            Dimension of the MoE representations. Computed as `hidden_size*(0.3+hidden_size/131072)` and aligned to 64.
+        n_group (`int`, *optional*):
+            Number of groups for routed experts. Computed as `max(1, n_routed_experts/10)`.
+        topk_group (`int`, *optional*, defaults to 1):
+            Number of selected groups for each token.
+        num_local_groups (`int`, *optional*):
+            Number of anchor expert groups. Computed based on n_routed_experts and hidden_size, ensuring divisibility.
+        anchor_intermediate_size (`int`, *optional*):
+            Dimension of the anchor expert representations. Computed as `moe_intermediate_size*0.5` and aligned to 64.
+        n_shared_experts (`int`, *optional*, defaults to 1):
+            Number of shared experts.
+        routed_scaling_factor (`float`, *optional*):
+            Scaling factor for routed expert weights. Computed as `hidden_size/5120` to normalize to GLM-4.5 scale.
+        norm_topk_prob (`bool`, *optional*, defaults to `True`):
+            Whether to normalize the weights of the routed experts.
+        output_router_logits (`bool`, *optional*, defaults to `False`):
+            Whether to return router logits.
+        router_aux_loss_coef (`float`, *optional*, defaults to 0.001):
+            Coefficient for the router auxiliary loss.
+        anchor_alpha (`float`, *optional*, defaults to 0.1):
+            Scaling factor for anchor expert outputs.
+        anchor_intermediate_size_ratio (`float`, *optional*, defaults to 0.5):
+            Ratio of anchor intermediate size to expert intermediate size.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
+        rms_norm_eps (`float`, *optional*, defaults to 1e-5):
             The epsilon used by the rms normalization layers.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether the model's input and output word embeddings should be tied.
-        rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
-            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
-            with longer `max_position_embeddings`.
-        attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
-            Whether to use a bias in the query, key, value and output projection layers during self-attention.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        moe_intermediate_size (`int`, *optional*, defaults to 1408):
-            Intermediate size of the routed expert.
-        num_experts_per_tok (`int`, *optional*, defaults to 8):
-            number of experts per token.
-        n_shared_experts (`int`, *optional*, defaults to 1):
-            Number of shared experts.
-        n_routed_experts (`int`, *optional*, defaults to 128):
-            Number of routed experts.
-        routed_scaling_factor (`float`, *optional*, defaults to 1.0):
-            Scaling factor or routed experts.
-        n_group (`int`, *optional*, defaults to 1):
-            Number of groups for routed experts.
-        topk_group (`int`, *optional*, defaults to 1):
-            Number of selected groups for each token(for each token, ensuring the selected experts is only within `topk_group` groups).
-        first_k_dense_replace (`int`, *optional*, defaults to 1):
-            Number of dense layers in shallow layers(embed->dense->dense->...->dense->moe->moe...->lm_head).
-                                                            \--k dense layers--/
-        norm_topk_prob (`bool`, *optional*, defaults to `True`):
-            Whether to normalize the topk probabilities.
-        use_qk_norm (`bool`, *optional*, defaults to `False`):
-            Whether to use query-key normalization in the attention
-        bos_token_id (`int`, *optional*):
+            Whether to tie weight embeddings.
+        hidden_act (`str` or `function`, *optional*):
+            The non-linear activation function in the decoder. Defaults to "silu".
+        bos_token_id (`int`, *optional*, defaults to 151329):
             Beginning of stream token id.
-        eos_token_id (`int`, *optional*):
-            End of stream token id.
-        pad_token_id (`int`, *optional*):
+        eos_token_id (`list[int]`, *optional*, defaults to [151329, 151336, 151338]):
+            End of stream token ids.
+        pad_token_id (`int`, *optional*, defaults to 151329):
             Padding token id.
 
     ```python
     >>> from transformers import AevaModel, AevaConfig
-
-    >>> # Initializing a Aeva style configuration
+    >>> # Initializing an Aeva style configuration
     >>> configuration = AevaConfig()
-
-    >>> # Initializing a model from the GLM-4-MOE-100B-A10B style configuration
+    >>> # Initializing a model from the Aeva-M style configuration
     >>> model = AevaModel(configuration)
-
     >>> # Accessing the model configuration
     >>> configuration = model.config
-    ```"""
+    ```
+    """
 
     model_type = "aeva"
     keys_to_ignore_at_inference = ["past_key_values"]
@@ -130,11 +147,13 @@ class AevaConfig(PreTrainedConfig):
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
     }
+
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+
     attribute_map = {
         "num_local_experts": "n_routed_experts",
     }
@@ -142,67 +161,158 @@ class AevaConfig(PreTrainedConfig):
     def __init__(
         self,
         vocab_size: int | None = 151552,
-        hidden_size: int | None = 4096,
-        intermediate_size: int | None = 10944,
-        num_hidden_layers: int | None = 46,
-        num_attention_heads: int | None = 96,
-        num_key_value_heads: int | None = 8,
-        hidden_act: str | None = "silu",
-        max_position_embeddings: int | None = 131072,
+        hidden_size: int | None = 5120,
+        max_position_embeddings: int | None = None,
+        num_hidden_layers: int | None = None,
+        intermediate_size: int | None = None,
+        first_k_dense_replace: int | None = None,
+        num_attention_heads: int | None = None,
+        head_dim: int | None = None,
+        num_key_value_heads: int | None = None,
+        use_qk_norm: bool | None = None,
+        attention_bias: bool | None = True,
+        attention_dropout: float | None = 0.0,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        use_sliding_window: bool | None = True,
+        sliding_window: int | None = None,
+        attn_layer_types: list | None = None,
+        n_routed_experts: int | None = None,
+        num_experts_per_tok: int | None = None,
+        moe_intermediate_size: int | None = None,
+        n_group: int | None = None,
+        topk_group: int | None = 1,
+        num_local_groups: int | None = None,
+        anchor_intermediate_size: int | None = None,
+        n_shared_experts: int | None = 1,
+        routed_scaling_factor: float | None = None,
+        norm_topk_prob: bool | None = True,
+        output_router_logits: bool | None = False,
+        router_aux_loss_coef: float | None = 0.001,
+        anchor_alpha: float | None = 0.1,
+        anchor_intermediate_size_ratio: float | None = 0.5,
         initializer_range: float | None = 0.02,
-        rms_norm_eps: int | None = 1e-5,
+        rms_norm_eps: float | None = 1e-5,
         use_cache: bool | None = True,
         tie_word_embeddings: bool | None = False,
-        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
-        attention_bias: bool | None = False,
-        attention_dropout: float | None = 0.0,
-        moe_intermediate_size: int | None = 1408,
-        num_experts_per_tok: int | None = 8,
-        n_shared_experts: int | None = 1,
-        n_routed_experts: int | None = 128,
-        routed_scaling_factor: float | None = 1.0,
-        n_group: int | None = 1,
-        topk_group: int | None = 1,
-        first_k_dense_replace: int | None = 1,
-        norm_topk_prob: bool | None = True,
-        use_qk_norm: bool | None = False,
+        hidden_act: str | None = "silu",
         bos_token_id: int | None = None,
-        eos_token_id: int | None = None,
+        eos_token_id: list[int] | None = None,
         pad_token_id: int | None = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
-        self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
-        self.intermediate_size = intermediate_size
-        self.num_hidden_layers = num_hidden_layers
-        self.num_attention_heads = num_attention_heads
-
-        self.num_key_value_heads = num_key_value_heads
+        raw_pos = min(hidden_size * 32, hidden_size * 25 + (hidden_size**2) / 65536)
+        self.max_position_embeddings = (
+            max_position_embeddings if max_position_embeddings is not None else int(raw_pos) - (int(raw_pos) % 4096)
+        )
+        width_factor = 1 + (hidden_size - 1024) / (hidden_size + 8192)
+        raw_layers = 20 * math.log2(1 + hidden_size / 1024) * width_factor + 12
+        self.num_hidden_layers = (
+            num_hidden_layers if num_hidden_layers is not None else int(raw_layers) - (int(raw_layers) % 4)
+        )
+        raw_intermediate = hidden_size * (2.4 + hidden_size / 32768)
+        self.intermediate_size = (
+            intermediate_size
+            if intermediate_size is not None
+            else int(raw_intermediate) - (int(raw_intermediate) % 64)
+        )
+        self.first_k_dense_replace = (
+            first_k_dense_replace if first_k_dense_replace is not None else 1 + int(3 * hidden_size / 5120)
+        )
+        self.initializer_range = initializer_range if initializer_range is not None else 0.02
+        self.rms_norm_eps = rms_norm_eps if rms_norm_eps is not None else 1e-5
+        self.use_cache = use_cache if use_cache is not None else True
+        self.tie_word_embeddings = tie_word_embeddings if tie_word_embeddings is not None else False
         self.hidden_act = hidden_act
-        self.initializer_range = initializer_range
-        self.rms_norm_eps = rms_norm_eps
-        self.use_cache = use_cache
-        self.attention_bias = attention_bias
-        self.attention_dropout = attention_dropout
-        self.rope_parameters = rope_parameters
-        kwargs.setdefault("partial_rotary_factor", 0.5)  # assign default for BC
 
-        # MoE arguments
-        self.moe_intermediate_size = moe_intermediate_size
-        self.num_experts_per_tok = num_experts_per_tok
-        self.n_group = n_group
-        self.topk_group = topk_group
-        self.n_shared_experts = n_shared_experts
-        self.n_routed_experts = n_routed_experts
-        self.routed_scaling_factor = routed_scaling_factor
-        self.first_k_dense_replace = first_k_dense_replace
-        self.norm_topk_prob = norm_topk_prob
-        self.use_qk_norm = use_qk_norm
-        self.tie_word_embeddings = tie_word_embeddings
-        self.bos_token_id = bos_token_id
-        self.eos_token_id = eos_token_id
-        self.pad_token_id = pad_token_id
+        # Attention
+        raw_heads = hidden_size / 64 * (1 + hidden_size / 16384)
+        self.num_attention_heads = (
+            num_attention_heads
+            if num_attention_heads is not None
+            else int(round(raw_heads)) - (int(round(raw_heads)) % 8)
+        )
+        self.head_dim = head_dim if head_dim is not None else hidden_size // self.num_attention_heads
+        compression_factor = max(1, int(8 - hidden_size / 8192))
+        computed_kv_heads = max(1, self.num_attention_heads // compression_factor)
+        while self.num_attention_heads % computed_kv_heads != 0:
+            computed_kv_heads -= 1
+        self.num_key_value_heads = num_key_value_heads if num_key_value_heads is not None else computed_kv_heads
+        self.use_qk_norm = use_qk_norm if use_qk_norm is not None else (self.head_dim > 128)
+        self.attention_bias = attention_bias if attention_bias is not None else True
+        self.attention_dropout = attention_dropout if attention_dropout is not None else 0.0
+        self.rope_parameters = rope_parameters
+        raw_sw = int(self.max_position_embeddings * 0.8)
+        self.sliding_window = sliding_window if sliding_window is not None else raw_sw - (raw_sw % 128)
+        self.use_sliding_window = use_sliding_window if use_sliding_window is not None else True
+        self.attn_layer_types = (
+            attn_layer_types
+            if attn_layer_types is not None
+            else [
+                (
+                    "linear_attention"
+                    if i > self.num_hidden_layers // 5
+                    and i
+                    % max(
+                        1,
+                        3
+                        - int(
+                            (i - self.num_hidden_layers // 5)
+                            / (self.num_hidden_layers - self.num_hidden_layers // 5)
+                            * 2
+                        ),
+                    )
+                    == 0
+                    else "sliding_attention"
+                )
+                for i in range(self.num_hidden_layers)
+            ]
+        )
+        self.linear_attn_config = {
+            "short_conv_kernel_size": 4,
+            "head_dim": self.head_dim,
+            "num_heads": self.num_attention_heads,
+        }
+
+        # MoE
+        raw_experts = hidden_size // 32
+        self.n_routed_experts = n_routed_experts if n_routed_experts is not None else raw_experts - (raw_experts % 8)
+        raw_active = 4 + 4 * math.log2(1 + hidden_size / 4096)
+        self.num_experts_per_tok = (
+            num_experts_per_tok
+            if num_experts_per_tok is not None
+            else min(int(raw_active), self.n_routed_experts // 2)
+        )
+        raw_moe = hidden_size * 0.3 + hidden_size**2 / 131072
+        self.moe_intermediate_size = (
+            moe_intermediate_size if moe_intermediate_size is not None else int(raw_moe) - (int(raw_moe) % 64)
+        )
+        self.routed_scaling_factor = routed_scaling_factor if routed_scaling_factor is not None else hidden_size / 5120
+        self.n_group = (
+            n_group if n_group is not None else max(1, 1 << (max(1, int(self.n_routed_experts / 10)) - 1).bit_length())
+        )
+        self.topk_group = topk_group if topk_group is not None else 1
+        raw_groups = max(8, int(self.n_routed_experts / (2 + hidden_size / 8192)))
+        self.num_local_groups = num_local_groups if num_local_groups is not None else raw_groups
+        while self.n_routed_experts % self.num_local_groups != 0:
+            self.num_local_groups += 1
+        raw_anchor = int(self.moe_intermediate_size * (anchor_intermediate_size_ratio or 0.5))
+        self.anchor_intermediate_size = (
+            anchor_intermediate_size if anchor_intermediate_size is not None else raw_anchor - (raw_anchor % 64)
+        )
+        self.anchor_alpha = anchor_alpha if anchor_alpha is not None else 0.1
+        self.anchor_intermediate_size_ratio = (
+            anchor_intermediate_size_ratio if anchor_intermediate_size_ratio is not None else 0.5
+        )
+        self.n_shared_experts = n_shared_experts if n_shared_experts is not None else 1
+        self.norm_topk_prob = norm_topk_prob if norm_topk_prob is not None else True
+        self.output_router_logits = output_router_logits if output_router_logits is not None else False
+        self.router_aux_loss_coef = router_aux_loss_coef if router_aux_loss_coef is not None else 0.001
+
+        self.bos_token_id = bos_token_id if bos_token_id is not None else None
+        self.eos_token_id = eos_token_id if eos_token_id is not None else [151329, 151336, 151338]
+        self.pad_token_id = pad_token_id if pad_token_id is not None else 151329
 
         super().__init__(**kwargs)
 

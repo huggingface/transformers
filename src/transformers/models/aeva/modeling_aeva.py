@@ -18,22 +18,34 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import math
 from collections.abc import Callable
-from typing import Optional
+from typing import Any, Optional, Union
 
 import torch
+import torch.nn as nn
 import torch.nn.functional as F
-from torch import nn
+from einops import rearrange
+from fla.layers.utils import get_unpad_data, index_first_axis, pad_input  # pip install flash-linear-attention
+from fla.modules import FusedRMSNormGated, ShortConvolution
+from fla.ops.kda import chunk_kda, fused_recurrent_kda
+from fla.ops.kda.gate import fused_kda_gate
+from rosa_cpp import (  # pip install git+https://github.com/wjie98/rosa_soft.git#subdirectory=rosa_cpp
+    RosaBitsWork,
+    RosaContext,
+    RosaWork,
+    rosa_bits_ops,
+)
 
 from ... import initialization as init
 from ...activations import ACT2FN
-from ...cache_utils import Cache, DynamicCache
+from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...integrations import use_experts_implementation, use_kernel_forward_from_hub, use_kernelized_func
-from ...masking_utils import create_causal_mask
+from ...integrations import use_kernel_forward_from_hub, use_kernelized_func
+from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -42,71 +54,285 @@ from ...utils.generic import check_model_inputs, maybe_autocast
 from .configuration_aeva import AevaConfig
 
 
-class AevaRotaryEmbedding(nn.Module):
-    inv_freq: torch.Tensor  # fix linting for `register_buffer`
-
-    def __init__(self, config: AevaConfig, device=None):
+@use_kernel_forward_from_hub("RMSNorm")
+class AevaRMSNorm(nn.Module):
+    def __init__(self, hidden_size, eps=1e-6):
+        """
+        AevaRMSNorm is equivalent to T5LayerNorm
+        """
         super().__init__()
-        self.max_seq_len_cached = config.max_position_embeddings
-        self.original_max_seq_len = config.max_position_embeddings
+        self.weight = nn.Parameter(torch.ones(hidden_size))
+        self.variance_epsilon = eps
 
-        self.config = config
+    def forward(self, hidden_states):
+        input_dtype = hidden_states.dtype
+        hidden_states = hidden_states.to(torch.float32)
+        variance = hidden_states.pow(2).mean(-1, keepdim=True)
+        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        return self.weight * hidden_states.to(input_dtype)
 
-        self.rope_type = self.config.rope_parameters["rope_type"]
-        rope_init_fn: Callable = self.compute_default_rope_parameters
-        if self.rope_type != "default":
-            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
-        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+    def extra_repr(self):
+        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
 
-        self.register_buffer("inv_freq", inv_freq, persistent=False)
-        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
 
-    @staticmethod
-    def compute_default_rope_parameters(
-        config: AevaConfig | None = None,
-        device: Optional["torch.device"] = None,
-        seq_len: int | None = None,
-    ) -> tuple["torch.Tensor", float]:
-        """
-        Computes the inverse frequencies according to the original RoPE implementation
+class RosaCache:
+    """Rapid Online Suffix Automaton (ROSA) Cache
+
+    Maintains the Suffix Automaton state and necessary buffers for each layer
+    to support fast autoregressive decoding with statistical fallback.
+    """
+
+    def __init__(self) -> None:
+        self.layers: dict[int, RosaContext] = {}
+
+    def get_rosa_context(self, layer_idx: int) -> RosaContext:
+        """Retrieves or initializes the Suffix Automaton context for a specific layer.
+
         Args:
-            config ([`~transformers.PreTrainedConfig`]):
-                The model configuration.
-            device (`torch.device`):
-                The device to use for initialization of the inverse frequencies.
-            seq_len (`int`, *optional*):
-                The current sequence length. Unused for this type of RoPE.
+            layer_idx: The index of the transformer layer.
+
         Returns:
-            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
-            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+            The ROSA context object for the specified layer.
         """
-        base = config.rope_parameters["rope_theta"]
-        partial_rotary_factor = config.rope_parameters.get("partial_rotary_factor", 1.0)
-        head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
-        dim = int(head_dim * partial_rotary_factor)
+        if layer_idx not in self.layers:
+            self.layers[layer_idx] = RosaContext()
 
-        attention_factor = 1.0  # Unused in this type of RoPE
+        return self.layers[layer_idx]
 
-        # Compute the inverse frequencies
-        inv_freq = 1.0 / (
-            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
+    def update(
+        self,
+        query: torch.Tensor,
+        key: torch.Tensor,
+        value: torch.Tensor,
+        layer_idx: int,
+    ) -> Any:
+        """Updates the Suffix Automaton state with new tokens.
+
+        Args:
+            query: The query tensor for the current step.
+            key: The key tensor to be incorporated into the automaton.
+            value: The value tensor associated with the keys.
+            layer_idx: The index of the transformer layer.
+
+        Returns:
+            The output from the ROSA context update (typically attention weights
+            or hidden states).
+        """
+        return self.get_rosa_context(layer_idx).update(query, key, value)
+
+
+class RosaBase(nn.Module):
+    """Rapid Online Suffix Automaton (ROSA) Base Module with Statistical Fallback"""
+
+    def __init__(self) -> None:
+        super().__init__()
+
+    def init_rosa(self, config: AevaConfig, layer_idx: int) -> None:
+        """Initializes ROSA specific parameters and layers based on the config."""
+        self.rosa_layer_idx = layer_idx
+        self.hidden_size = getattr(config, "hidden_size")
+
+        if self.hidden_size % 64 != 0:
+            raise ValueError("hidden_size must be divisible by 64")
+
+        bias = getattr(config, "attention_bias", False)
+        self.rosa_num_qk_bits = 8
+        self.rosa_num_v_bits = self.rosa_num_qk_bits
+        self.rosa_num_heads = getattr(config, "num_attention_heads", self.hidden_size // 8)
+        self.rosa_num_kv_heads = getattr(config, "num_key_value_heads", self.rosa_num_heads)
+
+        if self.rosa_num_kv_heads > self.rosa_num_heads:
+            self.rosa_num_kv_heads = self.rosa_num_heads
+
+        max_pos = getattr(config, "max_position_embeddings", 131072)
+        if max_pos <= 4096:
+            self.rosa_suffix_window = 8
+        elif max_pos <= 32768:
+            self.rosa_suffix_window = 16
+        else:
+            self.rosa_suffix_window = 32
+
+        self.rosa_suffix_factor = None
+
+        wb_input_dim = self.hidden_size + 2 * (self.rosa_num_heads * self.rosa_num_v_bits)
+
+        self.rosa_q_proj = nn.Linear(
+            self.hidden_size,
+            self.rosa_num_heads * self.rosa_num_qk_bits,
+            bias=bias,
         )
-        return inv_freq, attention_factor
+        self.rosa_k_proj = nn.Linear(
+            self.hidden_size,
+            self.rosa_num_kv_heads * self.rosa_num_qk_bits,
+            bias=bias,
+        )
+        self.rosa_v_proj = nn.Linear(
+            self.hidden_size,
+            self.rosa_num_kv_heads * self.rosa_num_v_bits,
+            bias=bias,
+        )
+        self.rosa_o_proj = nn.Linear(
+            self.rosa_num_heads * self.rosa_num_v_bits,
+            self.hidden_size,
+            bias=bias,
+        )
+        self.rosa_fallback_proj = nn.Linear(
+            self.hidden_size,
+            self.rosa_num_heads * self.rosa_num_v_bits,
+            bias=bias,
+        )
+        self.rosa_wb_gate = nn.Sequential(
+            nn.Linear(wb_input_dim, self.hidden_size // 4),
+            nn.Tanh(),
+            nn.Linear(self.hidden_size // 4, 1),
+            nn.Sigmoid(),
+        )
 
-    @torch.no_grad()
-    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
-    def forward(self, x, position_ids):
-        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
-        position_ids_expanded = position_ids[:, None, :].float()
+        self.rosa_v_emb0 = nn.Parameter(torch.zeros(self.rosa_num_heads * self.rosa_num_v_bits))
+        self.rosa_v_emb1 = nn.Parameter(torch.zeros(self.rosa_num_heads * self.rosa_num_v_bits))
+        self.rosa_o_gate = nn.Parameter(torch.zeros(self.hidden_size))
 
-        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
-        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
-            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
-            emb = torch.cat((freqs, freqs), dim=-1)
-            cos = emb.cos() * self.attention_scaling
-            sin = emb.sin() * self.attention_scaling
+        self._reset_parameters(config)
 
-        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+    def rosa_dispatch(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        past_key_values: Any | None = None,
+    ) -> tuple[Union["RosaBitsWork", "RosaWork"], torch.Tensor]:
+        """Dispatches the attention computation.
+
+        Args:
+            hidden_states: Input tensor of shape (batch, seq_len, hidden_size).
+            attention_mask: Attention mask tensor.
+            past_key_values: Cache for past keys and values. If None, performs
+                prefill/first-step computation.
+
+        Returns:
+            A tuple containing the work object (async op) and the original hidden_states.
+        """
+        batch_size, sequence_length, _ = hidden_states.size()
+
+        query_states = self.rosa_q_proj(hidden_states)
+        query_states = query_states.view(
+            batch_size, sequence_length, self.rosa_num_heads, self.rosa_num_qk_bits
+        ).transpose(1, 2)
+
+        key_states = self.rosa_k_proj(hidden_states)
+        key_states = key_states.view(
+            batch_size, sequence_length, self.rosa_num_kv_heads, self.rosa_num_qk_bits
+        ).transpose(1, 2)
+
+        value_states = self.rosa_v_proj(hidden_states)
+        value_states = value_states.view(
+            batch_size, sequence_length, self.rosa_num_kv_heads, self.rosa_num_v_bits
+        ).transpose(1, 2)
+
+        if past_key_values is None:
+            work = rosa_bits_ops(
+                query_states,
+                key_states,
+                value_states,
+                suffix_window=self.rosa_suffix_window,
+                suffix_factor=self.rosa_suffix_factor,
+                attention_mask=attention_mask,
+                async_op=True,
+            )
+            return (work, hidden_states)
+        else:
+            if not hasattr(past_key_values, "_rosa_cache"):
+                # Initialize cache if it doesn't exist
+                past_key_values._rosa_cache = RosaCache()
+
+            cache = past_key_values._rosa_cache
+            work = cache.get_rosa_context(layer_idx=self.rosa_layer_idx).update(
+                query_states, key_states, value_states, 0, async_op=True
+            )
+            return (work, hidden_states)
+
+    def rosa_combine(
+        self,
+        states: tuple[Union["RosaBitsWork", "RosaWork"], torch.Tensor],
+        inject_states: torch.Tensor | None = None,
+    ) -> torch.Tensor:
+        """Combines the results from ROSA attention and statistical fallback.
+
+        Args:
+            states: A tuple containing the work object and original hidden states.
+            inject_states: Optional tensor for residual injection.
+
+        Returns:
+            The final output tensor after combination and projection.
+        """
+        work, hidden_states = states
+        batch_size, sequence_length, _ = hidden_states.size()
+
+        # Wait for async operations and reshape
+        sam_output_flat = work.wait().view(batch_size, sequence_length, -1)
+        fb_output_flat = self.rosa_fallback_proj(hidden_states)
+
+        # Gating mechanism
+        gate_input = torch.cat([hidden_states, sam_output_flat, fb_output_flat], dim=-1)
+        lam = self.rosa_wb_gate(gate_input)
+
+        mixed_output_flat = lam * sam_output_flat + (1.0 - lam) * fb_output_flat
+
+        # Reshape for output projection
+        output = mixed_output_flat.view(batch_size, -1, sequence_length).transpose(1, 2).contiguous()
+
+        # Apply embeddings
+        output = self.rosa_v_emb1 * output + self.rosa_v_emb0 * (1.0 - output)
+
+        # Final projection
+        output = self.rosa_o_proj(output)
+
+        if inject_states is not None:
+            gate = torch.sigmoid(self.rosa_o_gate)
+            output = output * gate + inject_states * (1.0 - gate)
+
+        return output
+
+    def _reset_parameters(self, config: AevaConfig) -> None:
+        """Initializes layer weights following specific ROSA heuristics."""
+        num_layers = getattr(config, "num_hidden_layers", 1)
+        scale = 0.02 / max(1, num_layers)
+
+        # Initialize Q projection
+        self.rosa_q_proj.weight.data.uniform_(-scale, scale)
+
+        # Initialize K projection based on Q
+        q_w = self.rosa_q_proj.weight.data
+        k_w = self.rosa_k_proj.weight.data
+        if q_w.size() == k_w.size():
+            k_w.copy_(q_w)
+        else:
+            if k_w.size(0) <= q_w.size(0):
+                k_w.copy_(q_w[: k_w.size(0)])
+            else:
+                repeats = int(math.ceil(k_w.size(0) / q_w.size(0)))
+                rep = q_w.repeat(repeats, 1)[: k_w.size(0)]
+                k_w.copy_(rep)
+
+        # Initialize V projection orthogonal
+        s0 = self.rosa_v_proj.weight.size(0)
+        s1 = self.rosa_v_proj.weight.size(1)
+        gain = max(1.0, math.sqrt(s0 / s1))
+        nn.init.orthogonal_(self.rosa_v_proj.weight.data, gain=gain)
+
+        # Initialize Output projection to zero
+        nn.init.zeros_(self.rosa_o_proj.weight.data)
+        if self.rosa_o_proj.bias is not None:
+            nn.init.zeros_(self.rosa_o_proj.bias.data)
+
+        # Initialize embeddings
+        self.rosa_v_emb0.data.fill_(-1e-5)
+        self.rosa_v_emb1.data.fill_(1e-5)
+        self.rosa_o_gate.data.zero_()
+
+        # Initialize fallback projection
+        nn.init.xavier_normal_(self.rosa_fallback_proj.weight.data, gain=0.1)
+        if self.rosa_fallback_proj.bias is not None:
+            nn.init.zeros_(self.rosa_fallback_proj.bias.data)
 
 
 def repeat_kv(hidden_states: torch.Tensor, n_rep: int) -> torch.Tensor:
@@ -191,8 +417,8 @@ def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
 
 
 @use_kernelized_func(apply_rotary_pos_emb)
-class AevaAttention(nn.Module):
-    """Multi-headed attention from 'Attention Is All You Need' paper"""
+class AevaAttention(RosaBase):
+    """DeepEmbed Sliding Window Suffix Attention"""
 
     def __init__(self, config: AevaConfig, layer_idx: int | None = None):
         super().__init__()
@@ -204,18 +430,28 @@ class AevaAttention(nn.Module):
         self.rope_parameters = config.rope_parameters
         self.attention_dropout = config.attention_dropout
         self.is_causal = True
+        self.use_qk_norm = config.use_qk_norm
+        self.sliding_window = getattr(config, "sliding_window", None)
+        self.init_rosa(config, layer_idx)
 
         self.q_proj = nn.Linear(
-            config.hidden_size, config.num_attention_heads * self.head_dim, bias=config.attention_bias
+            config.hidden_size, config.num_attention_heads * self.head_dim * 2, bias=config.attention_bias
         )
-        self.k_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        self.k_low_proj = nn.Linear(
+            config.hidden_size, config.num_key_value_heads * (self.head_dim // 4), bias=config.attention_bias
         )
-        self.v_proj = nn.Linear(
-            config.hidden_size, config.num_key_value_heads * self.head_dim, bias=config.attention_bias
+        self.k_up_proj = nn.Linear(
+            config.num_key_value_heads * (self.head_dim // 4), config.num_key_value_heads * self.head_dim, bias=False
         )
+        self.k_deepemb = nn.Embedding(config.vocab_size, config.num_key_value_heads * self.head_dim)
+        self.v_low_proj = nn.Linear(
+            config.hidden_size, config.num_key_value_heads * (self.head_dim // 4), bias=config.attention_bias
+        )
+        self.v_up_proj = nn.Linear(
+            config.num_key_value_heads * (self.head_dim // 4), config.num_key_value_heads * self.head_dim, bias=False
+        )
+        self.v_deepemb = nn.Embedding(config.vocab_size, config.num_key_value_heads * self.head_dim)
         self.o_proj = nn.Linear(config.num_attention_heads * self.head_dim, config.hidden_size, bias=False)
-        self.use_qk_norm = config.use_qk_norm
         if self.use_qk_norm:
             self.q_norm = AevaRMSNorm(self.head_dim, eps=config.rms_norm_eps)
             self.k_norm = AevaRMSNorm(self.head_dim, eps=config.rms_norm_eps)
@@ -224,17 +460,42 @@ class AevaAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: torch.Tensor | None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         past_key_values: Cache | None = None,
         cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor | None]:
+        rosa_states = self.rosa_dispatch(
+            hidden_states,
+            attention_mask,
+            past_key_values,
+        )
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
-        query_states = self.q_proj(hidden_states).view(hidden_shape)
-        key_states = self.k_proj(hidden_states).view(hidden_shape)
-        value_states = self.v_proj(hidden_states).view(hidden_shape)
+        query_states, gate = torch.chunk(
+            self.q_proj(hidden_states).view(*input_shape, -1, self.head_dim * 2),
+            2,
+            dim=-1,
+        )
+        gate = gate.reshape(*input_shape, -1)
+        query_states = query_states.view(hidden_shape)
+
+        if input_ids is not None:
+            ids = input_ids[:, -hidden_states.shape[1] :]
+        else:
+            ids = torch.zeros_like(hidden_states[..., :1]).long()
+
+        k_low = self.k_low_proj(hidden_states)
+        k_up = self.k_up_proj(k_low)
+        k_emb = self.k_deepemb(ids).to(k_up.dtype)
+        key_states = k_up.view(*input_shape, -1, self.head_dim) * k_emb.view(*input_shape, -1, self.head_dim)
+
+        v_low = self.v_low_proj(hidden_states)
+        v_up = self.v_up_proj(v_low)
+        v_emb = self.v_deepemb(ids).to(v_up.dtype)
+        value_states = v_up.view(*input_shape, -1, self.head_dim) * v_emb.view(*input_shape, -1, self.head_dim)
 
         if self.use_qk_norm:  # main diff from Llama
             query_states = self.q_norm(query_states)
@@ -264,12 +525,437 @@ class AevaAttention(nn.Module):
             attention_mask,
             dropout=0.0 if not self.training else self.attention_dropout,
             scaling=self.scaling,
+            sliding_window=self.sliding_window,
             **kwargs,
         )
 
         attn_output = attn_output.reshape(*input_shape, -1).contiguous()
+        attn_output = attn_output * torch.sigmoid(gate)
         attn_output = self.o_proj(attn_output)
+        attn_output = self.rosa_combine(rosa_states, attn_output)
         return attn_output, attn_weights
+
+
+class AevaDynamicCache:
+    """Dynamic Cache with Synaptic Overwriting for Heterogeneous Attention States."""
+
+    is_compileable = False
+
+    def __init__(self, config: "AevaConfig"):
+        super().__init__()
+        self.config = config
+        self.attn_layer_types = (
+            config.attn_layer_types if config.attn_layer_types else ["sliding_attention"] * config.num_hidden_layers
+        )
+        self.max_cache_size = config.sliding_window or 4096
+        self.transformer_layers = [
+            i for i in range(config.num_hidden_layers) if self.attn_layer_types[i] == "sliding_attention"
+        ]
+        linear_layers = [i for i in range(config.num_hidden_layers) if self.attn_layer_types[i] == "linear_attention"]
+
+        self.last_linear_layer = linear_layers[-1] if linear_layers else -1
+        self.conv_states = [None for _ in range(config.num_hidden_layers)]
+        self.recurrent_states = [None for _ in range(config.num_hidden_layers)]
+        self.key_cache = [None for _ in range(config.num_hidden_layers)]
+        self.value_cache = [None for _ in range(config.num_hidden_layers)]
+
+    def __len__(self) -> int:
+        """Return number of attention layers."""
+        return len(self.attn_layer_types)
+
+    def update(
+        self,
+        key_states: torch.Tensor,
+        value_states: torch.Tensor,
+        layer_idx: int,
+        cache_kwargs: dict[str, Any] | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Update cache for a specific layer with a rolling buffer strategy."""
+        if self.key_cache[layer_idx] is None:
+            # Initialize cache
+            self.key_cache[layer_idx] = key_states
+            self.value_cache[layer_idx] = value_states
+        else:
+            curr_len = self.key_cache[layer_idx].shape[-2]
+            if curr_len >= self.max_cache_size:
+                # Rolling update: O(1) memory operation, discarding oldest tokens
+                shift = key_states.shape[-2]
+                self.key_cache[layer_idx] = self.key_cache[layer_idx].roll(-shift, -2)
+                self.value_cache[layer_idx] = self.value_cache[layer_idx].roll(-shift, -2)
+                self.key_cache[layer_idx][..., -shift:, :] = key_states
+                self.value_cache[layer_idx][..., -shift:, :] = value_states
+            else:
+                # Concatenate new states if within size limit
+                self.key_cache[layer_idx] = torch.cat([self.key_cache[layer_idx], key_states], dim=-2)
+                self.value_cache[layer_idx] = torch.cat([self.value_cache[layer_idx], value_states], dim=-2)
+
+        return self.key_cache[layer_idx], self.value_cache[layer_idx]
+
+    def reorder_cache(self, beam_idx: torch.LongTensor) -> None:
+        """Reorder the cache for beam search, given the selected beam indices."""
+        for layer_idx in range(len(self.key_cache)):
+            # Reorder Key/Value caches
+            if self.key_cache[layer_idx] is not None:
+                device = self.key_cache[layer_idx].device
+                beam_idx = beam_idx.to(device)
+                self.key_cache[layer_idx] = self.key_cache[layer_idx].index_select(0, beam_idx)
+                self.value_cache[layer_idx] = self.value_cache[layer_idx].index_select(0, beam_idx)
+
+            # Reorder Conv/Recurrent states
+            if self.conv_states[layer_idx] is not None:
+                device = self.conv_states[layer_idx][0].device
+                beam_idx = beam_idx.to(device)
+                q_conv, k_conv, v_conv = self.conv_states[layer_idx]
+                self.conv_states[layer_idx] = (
+                    q_conv.index_select(0, beam_idx),
+                    k_conv.index_select(0, beam_idx),
+                    v_conv.index_select(0, beam_idx),
+                )
+                self.recurrent_states[layer_idx] = self.recurrent_states[layer_idx].index_select(0, beam_idx)
+
+    def get_seq_length(self, layer_idx: int | None = 0) -> int:
+        """Return the sequence length of the cached states."""
+        # Default to the first transformer layer if the current layer is not one
+        if self.transformer_layers and layer_idx not in self.transformer_layers:
+            layer_idx = self.transformer_layers[0]
+
+        if len(self.key_cache) <= layer_idx or self.key_cache[layer_idx] is None:
+            return 0
+        return self.key_cache[layer_idx].shape[-2]
+
+    def get_mask_sizes(self, cache_position: torch.Tensor, layer_idx: int) -> tuple[int, int]:
+        """
+        Return a tuple (kv_length, kv_offset) corresponding to the length
+        and offset that will be returned for the given layer at `layer_idx`.
+        """
+        kv_offset = 0
+        query_length = cache_position.shape[0]
+        past_seen_tokens = self.get_seq_length(layer_idx)
+        kv_length = query_length + past_seen_tokens
+        return kv_length, kv_offset
+
+    @property
+    def has_previous_state(self) -> bool:
+        """Return True if we have a previous state."""
+        if self.last_linear_layer == -1:
+            return False
+        return self.conv_states[self.last_linear_layer] is not None
+
+
+class SparseProjection(nn.Linear):
+    """Event-Driven Sparse Linear Projection."""
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        """
+        Perform the forward pass for sparse linear projection.
+
+        Applies the linear transformation to the input tensor `x`, and if a
+        `cache_mask` attribute exists and is not None, applies element-wise
+        multiplication with the mask to sparsify the output.
+
+        Args:
+            x (torch.Tensor): Input tensor of shape (batch_size, ..., in_features).
+
+        Returns:
+            torch.Tensor: Output tensor of shape (batch_size, ..., out_features).
+        """
+        proj = super().forward(x)
+        if hasattr(self, "cache_mask") and self.cache_mask is not None:
+            proj = proj * self.cache_mask
+        return proj
+
+
+class AevaLinearAttention(RosaBase):
+    """DeepEmbed Linear Suffix Attention."""
+
+    def __init__(self, config: AevaConfig, layer_idx: int):
+        super().__init__()
+        self.config = config
+        self.layer_idx = layer_idx
+        self.mode = "chunk"
+
+        if self.mode not in ["chunk", "fused_recurrent"]:
+            raise ValueError(f"Not supported mode `{self.mode}`.")
+
+        self.hidden_size = config.hidden_size
+        linear_config = config.linear_attn_config
+        self.head_dim = linear_config["head_dim"]
+        self.num_heads = linear_config["num_heads"]
+        self.head_k_dim = self.head_dim
+        self.num_k_heads = self.num_heads
+        self.conv_size = linear_config["short_conv_kernel_size"]
+        kv_low_dim = self.head_dim // 4
+        projection_k_size = self.head_k_dim * self.num_k_heads
+        projection_size = self.head_dim * self.num_heads
+        self.init_rosa(config, layer_idx)
+
+        self.q_proj = SparseProjection(self.hidden_size, projection_k_size, bias=False)
+        self.q_conv1d = ShortConvolution(
+            hidden_size=projection_k_size,
+            kernel_size=self.conv_size,
+            activation=self.config.hidden_act,
+        )
+        self.k_proj = SparseProjection(self.hidden_size, self.num_k_heads * kv_low_dim, bias=False)
+        self.k_up_proj = nn.Linear(self.num_k_heads * kv_low_dim, projection_k_size, bias=False)
+        self.k_deepemb = nn.Embedding(config.vocab_size, projection_k_size)
+        self.k_conv1d = ShortConvolution(
+            hidden_size=self.num_k_heads * kv_low_dim,
+            kernel_size=self.conv_size,
+            activation=self.config.hidden_act,
+        )
+        self.v_proj = SparseProjection(self.hidden_size, self.num_heads * kv_low_dim, bias=False)
+        self.v_up_proj = nn.Linear(self.num_heads * kv_low_dim, projection_size, bias=False)
+        self.v_deepemb = nn.Embedding(config.vocab_size, projection_size)
+        self.v_conv1d = ShortConvolution(
+            hidden_size=self.num_heads * kv_low_dim,
+            kernel_size=self.conv_size,
+            activation=self.config.hidden_act,
+        )
+        self.A_log = torch.nn.Parameter(
+            torch.log(torch.empty(self.num_heads, dtype=torch.float32).uniform_(1, 16)).view(1, 1, -1, 1)
+        )
+        self.dt_bias = nn.Parameter(torch.empty(projection_size, dtype=torch.float32))
+        self.b_proj = nn.Linear(self.hidden_size, self.num_heads, bias=False)
+        self.f_a_proj = nn.Linear(self.hidden_size, self.head_dim, bias=False)
+        self.f_b_proj = nn.Linear(self.head_dim, projection_size, bias=False)
+        self.g_a_proj = nn.Linear(self.hidden_size, self.head_dim, bias=False)
+        self.g_b_proj = nn.Linear(self.head_dim, projection_size, bias=False)
+        self.o_norm = FusedRMSNormGated(self.head_dim, eps=config.rms_norm_eps, activation="sigmoid")
+        self.o_proj = nn.Linear(projection_size, self.hidden_size, bias=False)
+        nn.init.zeros_(self.k_deepemb.weight)
+        nn.init.zeros_(self.v_deepemb.weight)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor | None = None,
+        cache_params: AevaDynamicCache | None = None,
+        input_ids: torch.LongTensor | None = None,
+        **kwargs: Unpack[dict],
+    ) -> tuple[torch.Tensor, torch.Tensor | None, Cache | None]:
+        """
+        Forward pass for DELSA.
+
+        Args:
+            hidden_states (torch.Tensor): Input tensor of shape
+                (batch_size, seq_len, hidden_size).
+            attention_mask (Optional[torch.Tensor]): Attention mask of shape
+                (batch_size, seq_len). Used for unpadding.
+            cache_params (Optional[DynamicCache2]): Cache object containing
+                conv and recurrent states.
+            input_ids (Optional[torch.LongTensor]): Input token IDs of shape
+                (batch_size, seq_len). Used for DeepEmbed lookup.
+            **kwargs: Additional arguments, potentially containing
+                `padding_mask` or `cu_seqlens`.
+
+        Returns:
+            Tuple[torch.Tensor, Optional[torch.Tensor], Optional[Cache]]:
+                - Output hidden states.
+        """
+        # ROSA dispatch
+        rosa_states = self.rosa_dispatch(hidden_states, attention_mask)
+
+        # Handle attention mask dimensionality
+        if attention_mask is not None:
+            if attention_mask.dim() != 2:
+                attention_mask = kwargs.get("padding_mask")
+
+            if attention_mask is not None and attention_mask.dim() != 2:
+                raise ValueError(
+                    "attention_mask must be a 0-1 matrix of shape [batch_size, seq_len] "
+                    "(0 = padding). 3D masks are not supported here."
+                )
+
+        use_cache = cache_params is not None
+        batch_size, q_len, _ = hidden_states.shape
+
+        # Determine mode based on sequence length and training state
+        mode = "fused_recurrent" if (q_len <= 64 and not self.training) else self.mode
+        if self.training:
+            if mode != "chunk":
+                raise ValueError("Only chunk mode is supported in training.")
+
+        # Prepare Input IDs for DeepEmbed
+        ids = None
+        if input_ids is not None:
+            if attention_mask is None:
+                ids = input_ids[:, -q_len:]
+
+        cu_seqlens = kwargs.get("cu_seqlens")
+        indices = None
+
+        # Unpadding logic
+        if attention_mask is not None:
+            indices, cu_seqlens, _ = get_unpad_data(attention_mask[:, -q_len:])
+            hidden_states = index_first_axis(rearrange(hidden_states, "b s ... -> (b s) ..."), indices).unsqueeze(0)
+
+            # Align input_ids with unpadding
+            if input_ids is not None:
+                flat_ids = rearrange(input_ids[:, -q_len:], "b s -> (b s)")
+                ids = flat_ids[indices].unsqueeze(0)
+
+        # Fallback if ids is still None (e.g. no attention_mask but passed input_ids)
+        if ids is None and input_ids is not None:
+            ids = input_ids[:, -q_len:]
+
+        # Retrieve states from cache
+        conv_state_q, conv_state_k, conv_state_v = None, None, None
+        recurrent_state = None
+        if cache_params is not None:
+            if cache_params.conv_states[self.layer_idx] is not None:
+                (
+                    conv_state_q,
+                    conv_state_k,
+                    conv_state_v,
+                ) = cache_params.conv_states[self.layer_idx]
+            recurrent_state = cache_params.recurrent_states[self.layer_idx]
+
+        # Cache Masking: Only compute the last frame (new sensory input)
+        # while reusing compressed memory
+        if cache_params is not None and recurrent_state is not None:
+            # Q Mask
+            mask = torch.zeros_like(hidden_states)
+            mask[:, -1:, :] = 1.0
+            self.q_proj.cache_mask = mask
+
+            # K Mask (must match output dimension of projections)
+            k_low_dim = self.num_k_heads * (self.head_dim // 4)
+            k_mask = torch.zeros(
+                hidden_states.shape[0],
+                hidden_states.shape[1],
+                k_low_dim,
+                device=hidden_states.device,
+                dtype=hidden_states.dtype,
+            )
+            k_mask[:, -1:, :] = 1.0
+            self.k_proj.cache_mask = k_mask
+
+            # V Mask (must match output dimension of projections)
+            v_low_dim = self.num_heads * (self.head_dim // 4)
+            v_mask = torch.zeros(
+                hidden_states.shape[0],
+                hidden_states.shape[1],
+                v_low_dim,
+                device=hidden_states.device,
+                dtype=hidden_states.dtype,
+            )
+            v_mask[:, -1:, :] = 1.0
+            self.v_proj.cache_mask = v_mask
+        else:
+            self.q_proj.cache_mask = None
+            self.k_proj.cache_mask = None
+            self.v_proj.cache_mask = None
+
+        # Query Path
+        q, conv_state_q = self.q_conv1d(
+            x=self.q_proj(hidden_states),
+            cache=conv_state_q,
+            output_final_state=use_cache,
+            cu_seqlens=cu_seqlens,
+        )
+
+        # Key Path (DEA): Low -> Conv -> Up -> DeepEmbed
+        k_low, conv_state_k = self.k_conv1d(
+            x=self.k_proj(hidden_states),
+            cache=conv_state_k,
+            output_final_state=use_cache,
+            cu_seqlens=cu_seqlens,
+        )
+        k_up = self.k_up_proj(k_low)
+        if ids is not None:
+            k = k_up * self.k_deepemb(ids).to(k_up.dtype)
+        else:
+            k = k_up
+
+        # Value Path (DEA): Low -> Conv -> Up -> DeepEmbed
+        v_low, conv_state_v = self.v_conv1d(
+            x=self.v_proj(hidden_states),
+            cache=conv_state_v,
+            output_final_state=use_cache,
+            cu_seqlens=cu_seqlens,
+        )
+        v_up = self.v_up_proj(v_low)
+        if ids is not None:
+            v = v_up * self.v_deepemb(ids).to(v_up.dtype)
+        else:
+            v = v_up
+
+        # Gate calculations
+        g = self.f_b_proj(self.f_a_proj(hidden_states))
+        g = fused_kda_gate(g, self.A_log, self.dt_bias)
+        beta = self.b_proj(hidden_states).float().sigmoid()
+
+        # Rearrange for attention computation
+        q = rearrange(q, "... (h d) -> ... h d", d=self.head_k_dim)
+        k = rearrange(k, "... (h d) -> ... h d", d=self.head_k_dim)
+        v = rearrange(v, "... (h d) -> ... h d", d=self.head_dim)
+
+        if g.dim() == 3:
+            g = rearrange(g, "... (h d) -> ... h d", h=self.num_heads, d=self.head_dim)
+        elif g.dim() != 4:
+            raise ValueError(f"Unexpected g dimension: {g.dim()}")
+
+        # Sparse Gating:
+        # Peak activation at the head level simulates the firing dynamics of neurons,
+        # with only the top 10% of active heads transmitting signals,
+        # thereby achieving sparse event-driven computation.
+        gate_intensity = g.abs().mean(dim=-1)
+        threshold = gate_intensity.quantile(0.9, dim=1, keepdim=True)
+        spike_mask = (gate_intensity > threshold).float()
+
+        g_sparse = g * spike_mask.unsqueeze(-1)
+        beta_sparse = beta * spike_mask
+
+        # Core Attention (KDA) computation
+        if mode == "chunk":
+            o, recurrent_state = chunk_kda(
+                q=q,
+                k=k,
+                v=v,
+                g=g_sparse,
+                beta=beta_sparse,
+                initial_state=recurrent_state,
+                output_final_state=True,
+                use_qk_l2norm_in_kernel=True,
+                cu_seqlens=cu_seqlens,
+            )
+        else:
+            o, recurrent_state = fused_recurrent_kda(
+                q=q,
+                k=k,
+                v=v,
+                g=g_sparse,
+                beta=beta_sparse,
+                initial_state=recurrent_state,
+                output_final_state=True,
+                use_qk_l2norm_in_kernel=True,
+                cu_seqlens=cu_seqlens,
+            )
+
+        # Update cache
+        if cache_params is not None:
+            cache_params.recurrent_states[self.layer_idx] = recurrent_state
+            cache_params.conv_states[self.layer_idx] = (
+                conv_state_q,
+                conv_state_k,
+                conv_state_v,
+            )
+
+        # Output normalization and projection
+        g = self.g_b_proj(self.g_a_proj(hidden_states))
+        g = rearrange(g, "... (h d) -> ... h d", d=self.head_dim)
+        o = self.o_norm(o, g)
+
+        o = rearrange(o, "b t h d -> b t (h d)")
+        o = self.o_proj(o)
+
+        # Restore padding if unpadding was applied
+        if attention_mask is not None:
+            o = pad_input(o.squeeze(0), indices, batch_size, q_len)
+
+        # ROSA combination
+        o = self.rosa_combine(rosa_states, o)
+        return o, None
 
 
 class AevaMLP(nn.Module):
@@ -292,12 +978,7 @@ class AevaTopkRouter(nn.Module):
     def __init__(self, config: AevaConfig):
         super().__init__()
         self.config = config
-        self.top_k = config.num_experts_per_tok
         self.n_routed_experts = config.n_routed_experts
-        self.routed_scaling_factor = config.routed_scaling_factor
-        self.n_group = config.n_group
-        self.topk_group = config.topk_group
-        self.norm_topk_prob = config.norm_topk_prob
 
         self.weight = nn.Parameter(torch.empty((self.n_routed_experts, config.hidden_size)))
         self.register_buffer("e_score_correction_bias", torch.zeros((self.n_routed_experts), dtype=torch.float32))
@@ -308,79 +989,189 @@ class AevaTopkRouter(nn.Module):
         return router_logits
 
 
-@use_kernel_forward_from_hub("RMSNorm")
-class AevaRMSNorm(nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
-        """
-        AevaRMSNorm is equivalent to T5LayerNorm
-        """
-        super().__init__()
-        self.weight = nn.Parameter(torch.ones(hidden_size))
-        self.variance_epsilon = eps
-
-    def forward(self, hidden_states):
-        input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(torch.float32)
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
-        return self.weight * hidden_states.to(input_dtype)
-
-    def extra_repr(self):
-        return f"{tuple(self.weight.shape)}, eps={self.variance_epsilon}"
-
-
-@use_experts_implementation
 class AevaNaiveMoe(nn.Module):
     """Collection of expert weights stored as 3D tensors."""
 
-    def __init__(self, config):
+    def __init__(self, config: AevaConfig):
         super().__init__()
-        self.num_experts = config.num_local_experts
+        self.num_experts = config.n_routed_experts
         self.hidden_dim = config.hidden_size
-        self.intermediate_dim = config.moe_intermediate_size
-        self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
-        self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
-        self.act_fn = ACT2FN[config.hidden_act]
+        self.config = config
+        self.num_groups = config.num_local_groups
+        self.group_size = self.num_experts // self.num_groups
+        self.tile_size = self._calculate_tile_size()
 
     def forward(
         self,
         hidden_states: torch.Tensor,
-        top_k_index: torch.Tensor,
-        top_k_weights: torch.Tensor,
+        topk_indices: torch.Tensor,
+        topk_weights: torch.Tensor,
+        expert_modules: nn.ModuleList,
+        anchor_modules: nn.ModuleList,
     ) -> torch.Tensor:
-        final_hidden_states = torch.zeros_like(hidden_states)
-        with torch.no_grad():
-            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
-            expert_mask = expert_mask.permute(2, 1, 0)
-            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
+        """
+        Forward pass for ExpertKernel.
 
-        for expert_idx in expert_hit:
-            expert_idx = expert_idx[0]
-            if expert_idx == self.num_experts:
-                continue
-            top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
-            current_state = hidden_states[token_idx]
-            gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
-            current_hidden_states = self.act_fn(gate) * up
-            current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
-            current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
-            final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
+        Args:
+            hidden_states (torch.Tensor): Input tensor [Batch * SeqLen, HiddenDim].
+            topk_indices (torch.Tensor): Selected expert indices
+                [Batch * SeqLen, TopK].
+            topk_weights (torch.Tensor): Routing weights [Batch * SeqLen, TopK].
+            expert_modules (nn.ModuleList): List of Specialist MLPs (owned by
+                HGSCMoE).
+            anchor_modules (nn.ModuleList): List of Anchor MLPs (owned by
+                HGSCMoE).
 
-        return final_hidden_states
+        Returns:
+            torch.Tensor: Processed hidden states.
+        """
+        bt, hidden_dim = hidden_states.shape
+        top_k = topk_indices.shape[1]
+        device = hidden_states.device
+        dtype = hidden_states.dtype
+
+        # Flatten and expand inputs: [BT, D] -> [BT*K, D]
+        inputs = hidden_states.unsqueeze(1).expand(-1, top_k, -1).reshape(-1, hidden_dim)
+        flat_indices = topk_indices.reshape(-1)
+        flat_weights = topk_weights.reshape(-1, 1)
+
+        # Decompose global expert index into group and local indices
+        group_ids = flat_indices // self.group_size
+        local_ids = flat_indices % self.group_size
+
+        # Hierarchical Sorting
+        # Sort primarily by group ID to batch anchor computations
+        sort_keys = group_ids * 1000 + local_ids
+        sorted_indices = torch.argsort(sort_keys, stable=True)
+
+        sorted_inputs = inputs[sorted_indices]
+        sorted_weights = flat_weights[sorted_indices]
+        sorted_group_ids = group_ids[sorted_indices]
+        sorted_local_ids = local_ids[sorted_indices]
+
+        # Pre-allocate output buffer
+        tile_size = self.tile_size
+        total_assignments = bt * top_k
+        output_buffer = torch.empty(total_assignments, hidden_dim, device=device, dtype=torch.float32)
+
+        # Iterate over groups for hierarchical execution
+        unique_groups, group_sizes = torch.unique_consecutive(sorted_group_ids, return_counts=True)
+        current_offset = 0
+
+        for i, group_id in enumerate(unique_groups.tolist()):
+            group_size = group_sizes[i].item()
+            start = current_offset
+            end = current_offset + group_size
+            current_offset = end
+
+            # Slice contiguous data for the current group
+            group_inputs = sorted_inputs[start:end]
+            group_indices = sorted_indices[start:end]
+
+            # Process Anchor Expert
+            anchor = anchor_modules[group_id]
+
+            # Tile padding for GEMM alignment
+            n_tokens = group_size
+            rounded_num = ((n_tokens + tile_size - 1) // tile_size) * tile_size
+            if rounded_num > n_tokens:
+                padding = rounded_num - n_tokens
+                group_inputs_padded = F.pad(group_inputs, (0, 0, 0, padding))
+            else:
+                group_inputs_padded = group_inputs
+
+            # Execute Anchor
+            if self.training:
+                anchor_out = torch.utils.checkpoint.checkpoint(anchor, group_inputs_padded, use_reentrant=False)
+            else:
+                anchor_out = anchor(group_inputs_padded)
+
+            if rounded_num > n_tokens:
+                anchor_out = anchor_out[:n_tokens]
+
+            # Accumulate Anchor Output
+            output_buffer[group_indices] += anchor_out * self.config.anchor_alpha
+
+            # Process Specialist Experts
+            sub_local_ids = sorted_local_ids[start:end]
+            local_sort_args = torch.argsort(sub_local_ids, stable=True)
+
+            local_sorted_weights = sorted_weights[start:end][local_sort_args]
+            local_sorted_inputs = group_inputs[local_sort_args]
+            local_sorted_buffer_indices = group_indices[local_sort_args]
+
+            unique_locals, local_sizes = torch.unique_consecutive(sub_local_ids[local_sort_args], return_counts=True)
+
+            local_offset = 0
+            for j, local_id in enumerate(unique_locals.tolist()):
+                local_size = local_sizes[j].item()
+                l_start = local_offset
+                l_end = local_offset + local_size
+                local_offset = l_end
+
+                expert_inputs = local_sorted_inputs[l_start:l_end]
+                expert_weights = local_sorted_weights[l_start:l_end]
+
+                # Tile padding
+                e_tokens = local_size
+                e_rounded = ((e_tokens + tile_size - 1) // tile_size) * tile_size
+                if e_rounded > e_tokens:
+                    e_padding = e_rounded - e_tokens
+                    expert_inputs_padded = F.pad(expert_inputs, (0, 0, 0, e_padding))
+                    expert_weights = F.pad(expert_weights, (0, 0, 0, e_padding))
+                else:
+                    expert_inputs_padded = expert_inputs
+
+                # Execute Specialist
+                expert_idx = group_id * self.group_size + local_id
+                expert = expert_modules[expert_idx]
+
+                use_checkpoint = self.training and (e_rounded > 128)
+                if use_checkpoint:
+                    expert_out = torch.utils.checkpoint.checkpoint(expert, expert_inputs_padded, use_reentrant=False)
+                else:
+                    expert_out = expert(expert_inputs_padded)
+
+                if e_rounded > e_tokens:
+                    expert_out = expert_out[:e_tokens]
+                    expert_weights = expert_weights[:e_tokens]
+
+                # Accumulate Specialist Output
+                target_indices = local_sorted_buffer_indices[l_start:l_end]
+                output_buffer[target_indices] += expert_out * expert_weights
+
+        # Unsort results and aggregate across top-k paths
+        inverse_indices = torch.argsort(sorted_indices)
+        final_flat_output = output_buffer[inverse_indices]
+        final_hidden_states = final_flat_output.view(bt, top_k, hidden_dim).sum(dim=1)
+
+        return final_hidden_states.to(dtype=dtype)
+
+    def _calculate_tile_size(self) -> int:
+        """Compute optimal TILE_SIZE using GCD."""
+        ref_dim = self.config.moe_intermediate_size
+        optimal_tile = math.gcd(ref_dim, 256)
+        return max(32, optimal_tile)
 
 
 class AevaMoE(nn.Module):
     """
-    A mixed expert module containing shared experts.
+    Hierarchical Grouped Sparse Computation (MoE) with Shared Capacity.
     """
 
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.experts = AevaNaiveMoe(config)
+
+        # Initialize routed experts (token-level specialists)
+        self.experts = nn.ModuleList(
+            [AevaMLP(config, intermediate_size=config.moe_intermediate_size) for _ in range(config.n_routed_experts)]
+        )
+
         self.gate = AevaTopkRouter(config)
         self.shared_experts = AevaMLP(
-            config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
+            config=config,
+            intermediate_size=config.moe_intermediate_size * config.n_shared_experts,
         )
         self.n_routed_experts = config.n_routed_experts
         self.n_group = config.n_group
@@ -389,60 +1180,175 @@ class AevaMoE(nn.Module):
         self.routed_scaling_factor = config.routed_scaling_factor
         self.top_k = config.num_experts_per_tok
 
-    def route_tokens_to_experts(self, router_logits):
-        router_logits = router_logits.sigmoid()
-        router_logits_for_choice = router_logits + self.gate.e_score_correction_bias
-        group_scores = (
-            router_logits_for_choice.view(-1, self.n_group, self.n_routed_experts // self.n_group)
-            .topk(2, dim=-1)[0]
-            .sum(dim=-1)
+        # Initialize anchor experts (group-level)
+        self.num_groups_for_anchors = config.num_local_groups
+        self.group_size_for_anchors = config.n_routed_experts // self.num_groups_for_anchors
+        self.anchors = nn.ModuleList(
+            [
+                AevaMLP(config, intermediate_size=config.anchor_intermediate_size)
+                for _ in range(self.num_groups_for_anchors)
+            ]
         )
+
+        # Computation Kernel
+        self.expert_kernel = AevaNaiveMoe(config)
+
+        # Leak factor for temporal integration (simulating membrane potential decay)
+        self.leak_factor = nn.Parameter(torch.tensor(0.9))
+        # Firing threshold for each expert (simulating action potential threshold)
+        self.firing_threshold = nn.Parameter(torch.ones(self.n_routed_experts) * 0.1)
+
+        # Register buffers for state and constraints
+        self.register_buffer("leak_min", torch.tensor(0.0))
+        self.register_buffer("leak_max", torch.tensor(1.0))
+        # Expert potential: simulates the accumulated membrane potential
+        self.register_buffer("expert_potential", torch.zeros(self.n_routed_experts))
+
+    def route_tokens_to_experts(self, router_logits: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Implement brain-inspired, event-driven routing.
+
+        Softmax activation (Lateral Inhibition).
+        Leaky Integration of potentials (Temporal Memory).
+        Threshold-based Firing (Event-Driven Sparsity).
+        Hierarchical Group Selection.
+        """
+        # Normalize logits to probabilities
+        scores = F.softmax(router_logits, dim=-1)
+
+        # Update Expert Potentials (Leaky Integrate-and-Fire model)
+        leak = torch.clamp(self.leak_factor, self.leak_min, self.leak_max)
+        threshold = F.softplus(self.firing_threshold)
+
+        # Potential decay + new input (mean scores)
+        self.expert_potential = leak * self.expert_potential + scores.mean(dim=0)
+
+        # Determine firing state
+        firing_mask = (self.expert_potential > threshold).float()
+
+        # Reset potential for fired experts (Refractory period simulation)
+        if firing_mask.any():
+            self.expert_potential = self.expert_potential - firing_mask * threshold
+
+        # Apply Event-Driven Mask
+        masked_scores = scores * firing_mask.unsqueeze(0)
+
+        # Hierarchical Grouped TopK Selection
+        scores_for_choice = masked_scores.view(-1, self.n_routed_experts)
+
+        # Group Selection
+        # Reshape to (batch_tokens, n_group, experts_per_group)
+        group_scores = scores_for_choice.view(-1, self.n_group, self.n_routed_experts // self.n_group).sum(dim=-1)
+
         group_idx = torch.topk(group_scores, k=self.topk_group, dim=-1, sorted=False)[1]
         group_mask = torch.zeros_like(group_scores)
         group_mask.scatter_(1, group_idx, 1)
+
+        # Expand group mask back to expert dimension
         score_mask = (
             group_mask.unsqueeze(-1)
             .expand(-1, self.n_group, self.n_routed_experts // self.n_group)
             .reshape(-1, self.n_routed_experts)
         )
-        scores_for_choice = router_logits_for_choice.masked_fill(~score_mask.bool(), 0.0)
+
+        # Mask out experts outside selected groups
+        scores_for_choice = scores_for_choice.masked_fill(~score_mask.bool(), 0.0)
+
+        # Expert Selection
         topk_indices = torch.topk(scores_for_choice, k=self.top_k, dim=-1, sorted=False)[1]
-        topk_weights = router_logits.gather(1, topk_indices)
-        if self.norm_topk_prob:
-            denominator = topk_weights.sum(dim=-1, keepdim=True) + 1e-20
-            topk_weights /= denominator
+
+        # Retrieve Weights
+        # Note: Gather weights from the ORIGINAL scores (before group masking)
+        # to preserve gradient flow for the unmasked probabilities.
+        topk_weights = scores.gather(1, topk_indices)
         topk_weights = topk_weights * self.routed_scaling_factor
+
         return topk_indices, topk_weights
 
-    def forward(self, hidden_states):
+    def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+        """
+        Forward pass of the HGSCMoE layer.
+
+        Args:
+            hidden_states: Input hidden states
+
+        Returns:
+            Tuple of (processed hidden states, router logits)
+        """
         residuals = hidden_states
         orig_shape = hidden_states.shape
+
+        # Routing
         router_logits = self.gate(hidden_states)
         topk_indices, topk_weights = self.route_tokens_to_experts(router_logits)
-        hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
-        hidden_states = self.experts(hidden_states, topk_indices, topk_weights).view(*orig_shape)
+
+        # Sparse Expert Computation
+        flat_hidden_states = hidden_states.view(-1, hidden_states.shape[-1])
+
+        hidden_states = self.expert_kernel(
+            flat_hidden_states,
+            topk_indices,
+            topk_weights,
+            expert_modules=self.experts,
+            anchor_modules=self.anchors,
+        ).view(*orig_shape)
+
+        # Dense Residual Connection
         hidden_states = hidden_states + self.shared_experts(residuals)
-        return hidden_states
+
+        return hidden_states, router_logits
+
+
+def sinkhorn_knopp(matrix: torch.Tensor, iterations: int = 20) -> torch.Tensor:
+    """Project matrix to doubly stochastic manifold."""
+    matrix = torch.exp(matrix)
+    for _ in range(iterations):
+        matrix = matrix / (matrix.sum(dim=-1, keepdim=True) + 1e-8)
+        matrix = matrix / (matrix.sum(dim=-2, keepdim=True) + 1e-8)
+    return matrix
 
 
 class AevaDecoderLayer(GradientCheckpointingLayer):
     def __init__(self, config: AevaConfig, layer_idx: int):
         super().__init__()
         self.hidden_size = config.hidden_size
+        self.layer_idx = layer_idx
+        self.layer_type = config.attn_layer_types[layer_idx]
+        self.num_streams = getattr(config, "num_streams", 4)
+        stream_dim = self.hidden_size * self.num_streams
+        use_moe = layer_idx >= config.first_k_dense_replace
+        is_linear_attn = self.layer_type == "linear_attention"
 
-        self.self_attn = AevaAttention(config=config, layer_idx=layer_idx)
+        self.input_layernorm = AevaRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
+        if is_linear_attn:
+            self.self_attn = AevaLinearAttention(config, layer_idx)
+        else:
+            self.self_attn = AevaAttention(config, layer_idx)
 
-        if layer_idx >= config.first_k_dense_replace:
+        self.post_attention_layernorm = AevaRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
+        if use_moe:
             self.mlp = AevaMoE(config)
         else:
-            self.mlp = AevaMLP(config)
+            self.mlp = AevaMLP(config, intermediate_size=config.intermediate_size)
 
-        self.input_layernorm = AevaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.post_attention_layernorm = AevaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+        self.rosa_norm = AevaRMSNorm(self.hidden_size, eps=config.rms_norm_eps)
+        self.rosa = RosaBase()
+        self.rosa.init_rosa(config, layer_idx)
+        self.mhc_alpha = nn.Parameter(torch.tensor([0.01, 0.01, 0.01]))
+        self.mhc_norm = AevaRMSNorm(stream_dim, eps=config.rms_norm_eps)
+        self.mhc_bias_pre = nn.Parameter(torch.zeros(self.num_streams))
+        self.mhc_phi_pre = nn.Linear(stream_dim, self.num_streams, bias=False)
+        self.mhc_bias_post = nn.Parameter(torch.zeros(self.num_streams))
+        self.mhc_phi_post = nn.Linear(stream_dim, self.num_streams, bias=False)
+        self.mhc_bias_res = nn.Parameter(torch.zeros(self.num_streams, self.num_streams))
+        self.mhc_phi_res = nn.Linear(stream_dim, self.num_streams * self.num_streams, bias=False)
+        self.deepemb = nn.Embedding(config.vocab_size, self.hidden_size)
+        nn.init.ones_(self.deepemb.weight)
 
     def forward(
         self,
         hidden_states: torch.Tensor,
+        input_ids: torch.LongTensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.LongTensor | None = None,
         past_key_values: Cache | None = None,
@@ -450,28 +1356,165 @@ class AevaDecoderLayer(GradientCheckpointingLayer):
         cache_position: torch.LongTensor | None = None,
         position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.Tensor:
+    ) -> tuple[torch.Tensor, tuple[torch.Tensor, ...] | None]:
         residual = hidden_states
-        hidden_states = self.input_layernorm(hidden_states)
-        # Self Attention
-        hidden_states, _ = self.self_attn(
-            hidden_states=hidden_states,
-            attention_mask=attention_mask,
-            position_ids=position_ids,
-            past_key_values=past_key_values,
-            use_cache=use_cache,
-            cache_position=cache_position,
-            position_embeddings=position_embeddings,
-            **kwargs,
-        )
-        hidden_states = residual + hidden_states
+        B, S, C = residual.shape
+        n = self.num_streams
 
-        # Fully Connected
-        residual = hidden_states
-        hidden_states = self.post_attention_layernorm(hidden_states)
-        hidden_states = self.mlp(hidden_states)
-        hidden_states = residual + hidden_states
-        return hidden_states
+        # Expand input to multi-stream representation [B, n, S, C]
+        stream_base = residual.unsqueeze(1).repeat(1, n, 1, 1)
+
+        # Flatten stream for projection computation [B*S, n*C]
+        x_flat = stream_base.permute(0, 2, 1, 3).contiguous().view(B * S, -1)
+        x_norm = self.mhc_norm(x_flat)
+
+        # Compute dynamic projection weights
+        dyn_pre = torch.tanh(self.mhc_phi_pre(x_norm))
+        dyn_post = torch.tanh(self.mhc_phi_post(x_norm))
+        dyn_res = torch.tanh(self.mhc_phi_res(x_norm)).view(B * S, n, n)
+
+        # Apply gating and bias, then enforce constraints
+        H_pre = (self.mhc_alpha[0] * dyn_pre + self.mhc_bias_pre).view(B, S, n)
+        H_post = (self.mhc_alpha[1] * dyn_post + self.mhc_bias_post).view(B, S, n)
+        H_res = (self.mhc_alpha[2] * dyn_res + self.mhc_bias_res).view(B, S, n, n)
+
+        # Manifold constraints
+        H_pre = torch.sigmoid(H_pre)
+        H_post = 2.0 * torch.sigmoid(H_post)
+        H_res = sinkhorn_knopp(H_res)
+
+        # Multi-Stream Read-in: "bsn,bnsc->bsc"
+        block_input = torch.einsum("bsn,bnsc->bsc", H_pre, stream_base)
+
+        # ROSA Processing
+        rosa_output = self.rosa.rosa_combine(
+            states=self.rosa.rosa_dispatch(
+                hidden_states=self.rosa_norm(block_input),
+                attention_mask=attention_mask,
+                past_key_values=past_key_values,
+            ),
+            inject_states=block_input,
+        )
+
+        # Using standard pre-norm convention naming (input_layernorm -> attn)
+        attn_input = self.input_layernorm(rosa_output)
+
+        if self.layer_type == "linear_attention":
+            attn_output, _ = self.self_attn(
+                hidden_states=attn_input,
+                attention_mask=attention_mask,
+                cache_params=past_key_values,
+                **kwargs,
+            )
+        else:
+            attn_output, _ = self.self_attn(
+                hidden_states=attn_input,
+                attention_mask=attention_mask,
+                position_ids=position_ids,
+                past_key_values=past_key_values,
+                use_cache=use_cache,
+                cache_position=cache_position,
+                position_embeddings=position_embeddings,
+                **kwargs,
+            )
+
+        hidden_states = attn_input + attn_output
+
+        # Using standard pre-norm convention naming (post_attention_layernorm -> mlp)
+        mlp_input = self.post_attention_layernorm(hidden_states)
+
+        if isinstance(self.mlp, AevaMoE):
+            block_output, router_logits = self.mlp(mlp_input)
+        else:
+            block_output = self.mlp(mlp_input)
+            router_logits = None
+
+        # Deep-Stream Modulation
+        if input_ids is not None:
+            ids = input_ids[:, -S:] if input_ids.shape[1] != S else input_ids
+            scale = self.deepemb(ids).to(block_output.dtype)
+            block_output = block_output * scale
+
+        block_output = mlp_input + block_output
+
+        # Multi-Stream Read-out
+        stream_update = block_output.unsqueeze(2) * H_post.unsqueeze(-1)
+
+        # Residual Stream Mixing
+        stream_residual = torch.einsum("bsij,bjsc->bsic", H_res, stream_base)
+
+        # Stream Collapse
+        next_stream = stream_update + stream_residual
+        output = next_stream.mean(dim=2)
+
+        return output, router_logits
+
+
+class AevaRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
+    def __init__(self, config: AevaConfig, device=None):
+        super().__init__()
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
+
+        self.config = config
+
+        self.rope_type = self.config.rope_parameters["rope_type"]
+        rope_init_fn: Callable = self.compute_default_rope_parameters
+        if self.rope_type != "default":
+            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+
+    @staticmethod
+    def compute_default_rope_parameters(
+        config: AevaConfig | None = None,
+        device: Optional["torch.device"] = None,
+        seq_len: int | None = None,
+    ) -> tuple["torch.Tensor", float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+            device (`torch.device`):
+                The device to use for initialization of the inverse frequencies.
+            seq_len (`int`, *optional*):
+                The current sequence length. Unused for this type of RoPE.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        base = config.rope_parameters["rope_theta"]
+        partial_rotary_factor = config.rope_parameters.get("partial_rotary_factor", 1.0)
+        head_dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+        dim = int(head_dim * partial_rotary_factor)
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+
+        # Compute the inverse frequencies
+        inv_freq = 1.0 / (
+            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
+        )
+        return inv_freq, attention_factor
+
+    @torch.no_grad()
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
+    def forward(self, x, position_ids):
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
+        position_ids_expanded = position_ids[:, None, :].float()
+
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            emb = torch.cat((freqs, freqs), dim=-1)
+            cos = emb.cos() * self.attention_scaling
+            sin = emb.sin() * self.attention_scaling
+
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
 @auto_docstring
@@ -490,19 +1533,14 @@ class AevaPreTrainedModel(PreTrainedModel):
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": AevaDecoderLayer,
-        "attentions": AevaAttention,
+        "attentions": [AevaAttention, AevaLinearAttention],
     }
-    _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
 
     @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, AevaTopkRouter):
             init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            init.zeros_(module.e_score_correction_bias)
-        elif isinstance(module, AevaNaiveMoe):
-            init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
-            init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
 
 
 @auto_docstring
@@ -515,9 +1553,11 @@ class AevaModel(AevaPreTrainedModel):
         self.vocab_size = config.vocab_size
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.hidden_size, self.padding_idx)
+
         self.layers = nn.ModuleList(
             [AevaDecoderLayer(config, layer_idx) for layer_idx in range(config.num_hidden_layers)]
         )
+
         self.norm = AevaRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
         self.rotary_emb = AevaRotaryEmbedding(config=config)
         self.gradient_checkpointing = False
@@ -536,27 +1576,34 @@ class AevaModel(AevaPreTrainedModel):
         inputs_embeds: torch.FloatTensor | None = None,
         cache_position: torch.LongTensor | None = None,
         use_cache: bool | None = None,
+        output_router_logits: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPast:
+    ) -> MoeModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
-        if inputs_embeds is None:
-            inputs_embeds: torch.Tensor = self.embed_tokens(input_ids)
+        if use_cache:
+            past_key_values = AevaDynamicCache(config=self.config)
 
-        if use_cache and past_key_values is None:
-            past_key_values = DynamicCache(config=self.config)
+        if inputs_embeds is None:
+            inputs_embeds = self.embed_tokens(input_ids)
 
         if cache_position is None:
             past_seen_tokens = past_key_values.get_seq_length() if past_key_values is not None else 0
-            cache_position: torch.Tensor = (
-                torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
-            )
+            cache_position = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device) + past_seen_tokens
 
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        causal_mask = create_causal_mask(
+        all_router_logits = () if output_router_logits else None
+
+        # Determine mask function
+        if self.config.sliding_window is None:
+            mask_function = create_causal_mask
+        else:
+            mask_function = create_sliding_window_causal_mask
+
+        causal_mask = mask_function(
             config=self.config,
             input_embeds=inputs_embeds,
             attention_mask=attention_mask,
@@ -565,14 +1612,26 @@ class AevaModel(AevaPreTrainedModel):
             position_ids=position_ids,
         )
 
+        linear_attn_mask = self._update_linear_attn_mask(attention_mask, cache_position)
+
         hidden_states = inputs_embeds
         position_embeddings = self.rotary_emb(hidden_states, position_ids=position_ids)
 
+        # Decoder layers
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
-            hidden_states = decoder_layer(
+            # Handle different attention types
+            if decoder_layer.layer_type == "linear_attention":
+                layer_mask = linear_attn_mask
+                layer_pos_embeds = None
+            else:
+                layer_mask = causal_mask
+                layer_pos_embeds = position_embeddings
+
+            hidden_states, router_logits = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask,
-                position_embeddings=position_embeddings,
+                input_ids=input_ids,
+                attention_mask=layer_mask,
+                position_embeddings=layer_pos_embeds,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
@@ -580,11 +1639,159 @@ class AevaModel(AevaPreTrainedModel):
                 **kwargs,
             )
 
+            if output_router_logits and router_logits is not None:
+                all_router_logits = all_router_logits + (router_logits,)
+
         hidden_states = self.norm(hidden_states)
-        return BaseModelOutputWithPast(
+
+        return MoeModelOutputWithPast(
             last_hidden_state=hidden_states,
             past_key_values=past_key_values,
+            router_logits=all_router_logits if output_router_logits else None,
         )
+
+    def _update_linear_attn_mask(
+        self, attention_mask: torch.Tensor | None, cache_position: torch.LongTensor
+    ) -> torch.Tensor | None:
+        """
+        Update linear attention mask.
+
+        Note: Left-padding is used for linear attention mask.
+        No need for zeroing states when:
+            1. Cached forward
+            2. Attending to all inputs
+        """
+        linear_attn_mask = attention_mask
+        if cache_position[0] > 0 or (attention_mask is not None and torch.all(attention_mask == 1)):
+            linear_attn_mask = None
+        return linear_attn_mask
+
+
+def load_balancing_loss_for_grouped_routing(
+    gate_logits: torch.Tensor | tuple[torch.Tensor] | None,
+    num_experts: int | None = None,
+    top_k: int = 2,
+    attention_mask: torch.Tensor | None = None,
+    num_groups: int = 1,
+    topk_groups: int = 1,
+) -> torch.Tensor | int:
+    """
+    Computes auxiliary load balancing loss for grouped routing.
+
+    Args:
+        gate_logits: Logits from the gate, tuple of tensors with shape
+            [batch_size * sequence_length, num_experts].
+        num_experts: Number of experts.
+        top_k: Number of experts to route per-token.
+        attention_mask: Attention mask with shape [batch_size, sequence_length].
+        num_groups: Number of expert groups.
+        topk_groups: Number of groups selected per token.
+
+    Returns:
+        The auxiliary loss.
+    """
+    if gate_logits is None or not isinstance(gate_logits, tuple) or num_experts is None:
+        return 0
+
+    # Preparation: Concatenate logits and compute weights
+    compute_device = gate_logits[0].device
+    routing_weights = F.softmax(
+        torch.cat([g.to(compute_device, dtype=torch.float32) for g in gate_logits], dim=0),
+        dim=-1,
+    )
+    batch_seq_len, _ = routing_weights.shape
+
+    # Expert Selection: Handle grouped vs. non-grouped routing
+    if num_groups > 1:
+        experts_per_group = num_experts // num_groups
+
+        # Select top groups
+        group_weights = routing_weights.view(batch_seq_len, num_groups, experts_per_group)
+        group_scores = group_weights.sum(dim=-1)
+        _, selected_groups = torch.topk(group_scores, k=topk_groups, dim=-1, sorted=False)
+
+        group_mask = torch.zeros_like(group_scores)
+        group_mask.scatter_(1, selected_groups, 1)
+
+        # Create expert mask based on selected groups
+        expert_mask_from_groups = (
+            group_mask.unsqueeze(-1).expand(-1, num_groups, experts_per_group).reshape(batch_seq_len, num_experts)
+        )
+
+        # Select experts within chosen groups
+        masked_routing_weights = routing_weights * expert_mask_from_groups
+        _, selected_experts = torch.topk(masked_routing_weights, top_k, dim=-1)
+    else:
+        selected_experts = torch.topk(routing_weights, top_k, dim=-1).indices
+
+    expert_mask = F.one_hot(selected_experts, num_classes=num_experts)
+
+    # Statistics Calculation: Compute token counts and routing probabilities
+    if attention_mask is None:
+        # Global averaging without mask
+        tokens_per_expert = torch.mean(expert_mask.float(), dim=0)
+
+        if num_groups > 1:
+            # Normalize weights within groups
+            effective_weights = routing_weights * expert_mask_from_groups
+            group_norm = effective_weights.sum(dim=-1, keepdim=True).clamp(min=1e-8)
+            normalized_weights = effective_weights / group_norm
+            router_prob_per_expert = torch.mean(normalized_weights, dim=0)
+        else:
+            router_prob_per_expert = torch.mean(routing_weights, dim=0)
+    else:
+        # Masked averaging for padded sequences
+        num_hidden_layers = len(gate_logits)
+
+        # Mask for selected experts (Top-K)
+        expert_attention_mask = (
+            attention_mask[None, :, :, None, None]
+            .expand(
+                (
+                    num_hidden_layers,
+                    attention_mask.size(0),
+                    attention_mask.size(1),
+                    top_k,
+                    num_experts,
+                )
+            )
+            .reshape(-1, top_k, num_experts)
+            .to(compute_device)
+        )
+        tokens_per_expert = torch.sum(expert_mask.float() * expert_attention_mask, dim=0) / (
+            torch.sum(expert_attention_mask, dim=0) + 1e-12
+        )
+
+        # Mask for all experts (Probabilities)
+        router_per_expert_attention_mask = (
+            attention_mask[None, :, :, None]
+            .expand(
+                (
+                    num_hidden_layers,
+                    attention_mask.size(0),
+                    attention_mask.size(1),
+                    num_experts,
+                )
+            )
+            .reshape(-1, num_experts)
+            .to(compute_device)
+        )
+
+        if num_groups > 1:
+            effective_weights = routing_weights * expert_mask_from_groups
+            group_norm = effective_weights.sum(dim=-1, keepdim=True).clamp(min=1e-8)
+            normalized_weights = effective_weights / group_norm
+            router_prob_per_expert = torch.sum(normalized_weights * router_per_expert_attention_mask, dim=0) / (
+                torch.sum(router_per_expert_attention_mask, dim=0) + 1e-12
+            )
+        else:
+            router_prob_per_expert = torch.sum(routing_weights * router_per_expert_attention_mask, dim=0) / (
+                torch.sum(router_per_expert_attention_mask, dim=0) + 1e-12
+            )
+
+    # Loss Calculation: Numerically-stable auxiliary loss
+    overall_loss = torch.sum((tokens_per_expert + 1e-12) * (router_prob_per_expert.unsqueeze(0) + 1e-12))
+    return overall_loss * num_experts
 
 
 @auto_docstring
@@ -615,26 +1822,36 @@ class AevaForCausalLM(AevaPreTrainedModel, GenerationMixin):
         use_cache: bool | None = None,
         cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
+        output_router_logits: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> CausalLMOutputWithPast:
-        r"""
-        Example:
+    ) -> MoeCausalLMOutputWithPast:
+        """
+        Forward pass for the model.
 
+        Example:
         ```python
         >>> from transformers import AutoTokenizer, AevaForCausalLM
 
-        >>> model = AevaForCausalLM.from_pretrained("meta-aeva/Aeva-2-7b-hf")
-        >>> tokenizer = AutoTokenizer.from_pretrained("meta-aeva/Aeva-2-7b-hf")
+        >>> model = AevaForCausalLM.from_pretrained("meta-glm4_moe/Aeva-2-7b-hf")
+        >>> tokenizer = AutoTokenizer.from_pretrained("meta-glm4_moe/Aeva-2-7b-hf")
 
         >>> prompt = "Hey, are you conscious? Can you talk to me?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
 
         >>> # Generate
         >>> generate_ids = model.generate(inputs.input_ids, max_length=30)
-        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
-        "Hey, are you conscious? Can you talk to me?\nI'm not conscious, but I can talk to you."
-        ```"""
-        outputs: BaseModelOutputWithPast = self.model(
+        >>> tokenizer.batch_decode(generate_ids, skip_special_tokens=True,
+        >>>                        clean_up_tokenization_spaces=False)[0]
+        "Hey, are you conscious? Can you talk to me?\nI'm not conscious,
+        but I can talk to you."
+        ```
+        """
+        output_router_logits = (
+            output_router_logits if output_router_logits is not None else self.config.output_router_logits
+        )
+        need_router_logits = self.training and (labels is not None) and output_router_logits
+
+        outputs: MoeModelOutputWithPast = self.model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
@@ -642,24 +1859,50 @@ class AevaForCausalLM(AevaPreTrainedModel, GenerationMixin):
             inputs_embeds=inputs_embeds,
             use_cache=use_cache,
             cache_position=cache_position,
+            output_router_logits=need_router_logits,
             **kwargs,
         )
 
         hidden_states = outputs.last_hidden_state
-        # Only compute necessary logits, and do not upcast them to float if we are not computing the loss
-        slice_indices = slice(-logits_to_keep, None) if isinstance(logits_to_keep, int) else logits_to_keep
+
+        # Only compute necessary logits, and do not upcast them to float
+        # if we are not computing the loss
+        if isinstance(logits_to_keep, int):
+            slice_indices = slice(-logits_to_keep, None)
+        else:
+            slice_indices = logits_to_keep
+
         logits = self.lm_head(hidden_states[:, slice_indices, :])
 
         loss = None
+        aux_loss = None
         if labels is not None:
-            loss = self.loss_function(logits=logits, labels=labels, vocab_size=self.config.vocab_size, **kwargs)
+            loss = self.loss_function(
+                logits=logits,
+                labels=labels,
+                vocab_size=self.config.vocab_size,
+                **kwargs,
+            )
 
-        return CausalLMOutputWithPast(
+            if self.training and (outputs.router_logits is not None):
+                aux_loss = load_balancing_loss_for_grouped_routing(
+                    gate_logits=outputs.router_logits,
+                    num_experts=self.config.n_routed_experts,
+                    top_k=self.config.num_experts_per_tok,
+                    attention_mask=attention_mask,
+                    num_groups=self.config.n_group,
+                    topk_groups=self.config.topk_group,
+                )
+                loss = loss + self.config.router_aux_loss_coef * aux_loss
+
+        return MoeCausalLMOutputWithPast(
             loss=loss,
+            aux_loss=aux_loss,
             logits=logits,
             past_key_values=outputs.past_key_values,
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
+            router_logits=outputs.router_logits if need_router_logits else None,
         )
 
 
