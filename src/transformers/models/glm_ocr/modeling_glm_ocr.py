@@ -1571,4 +1571,10 @@ class GlmOcrForConditionalGeneration(GlmOcrPreTrainedModel, GenerationMixin):
         return input_ids, model_kwargs
 
 
-__all__ = ["GlmOcrModel", "GlmOcrPreTrainedModel", "GlmOcrForConditionalGeneration"]
+__all__ = [
+    "GlmOcrTextModel",
+    "GlmOcrVisionModel",
+    "GlmOcrModel",
+    "GlmOcrPreTrainedModel",
+    "GlmOcrForConditionalGeneration",
+]

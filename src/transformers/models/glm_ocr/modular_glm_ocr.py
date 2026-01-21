@@ -73,7 +73,6 @@ class GlmOcrTextConfig(Glm4vTextConfig):
         num_hidden_layers: int | None = 16,
         num_attention_heads: int | None = 16,
         num_key_value_heads: int | None = 8,
-        hidden_act: str | None = "silu",
         max_position_embeddings: int | None = 131072,
         **super_kwargs,
     ):
@@ -276,6 +275,8 @@ __all__ = [
     "GlmOcrConfig",
     "GlmOcrTextConfig",
     "GlmOcrVisionConfig",
+    "GlmOcrTextModel",  # noqa: F822
+    "GlmOcrVisionModel",
     "GlmOcrModel",
     "GlmOcrPreTrainedModel",
     "GlmOcrForConditionalGeneration",
