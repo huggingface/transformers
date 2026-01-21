@@ -80,8 +80,12 @@
       title: Experts backends
     - local: continuous_batching
       title: Continuous batching
-    - local: kernel_doc/overview
-      title: Kernels in transformers
+    - sections:
+      - local: kernel_doc/overview
+        title: Kernels
+      - local: kernel_doc/loading_kernels
+        title: Loading kernels
+      title: Kernels
     - local: perf_torch_compile
       title: torch.compile
     - local: perf_infer_gpu_multi
@@ -224,19 +228,35 @@
   title: Quantization
 - isExpanded: false
   sections:
-  - local: community_integrations/sglang
-    title: SGLang
-  - local: community_integrations/tensorrt-llm
-    title: TensorRT-LLM
-  - local: community_integrations/vllm
-    title: vLLM
-  - local: community_integrations/transformers_as_backend
-    title: Building a compatible model backend for inference
+  - sections:
+    - local: community_integrations/sglang
+      title: SGLang
+    - local: community_integrations/tensorrt-llm
+      title: TensorRT-LLM
+    - local: community_integrations/vllm
+      title: vLLM
+    - local: community_integrations/transformers_as_backend
+      title: Building a compatible model backend for inference
+    title: Inference engines
   - sections:
     - local: community_integrations/llama_cpp
       title: llama.cpp
     title: Local deployment
-  title: Community integrations
+  - sections:
+    - local: community_integrations/nanotron
+      title: Nanotron
+    - local: community_integrations/torchtitan
+      title: torchtitan
+    title: Pretraining
+  - sections:
+    - local: community_integrations/axolotl
+      title: Axolotl
+    - local: community_integrations/trl
+      title: TRL
+    - local: community_integrations/unsloth
+      title: Unsloth
+    title: Fine-tuning
+  title: Ecosystem integrations
 - isExpanded: false
   sections:
   - sections:
@@ -705,6 +725,8 @@
         title: RWKV
       - local: model_doc/seed_oss
         title: Seed-Oss
+      - local: model_doc/solar_open
+        title: SolarOpen
       - local: model_doc/splinter
         title: Splinter
       - local: model_doc/squeezebert
