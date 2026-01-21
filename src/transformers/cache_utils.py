@@ -258,14 +258,35 @@ class StaticLayer(CacheLayerMixin):
     Args:
         max_cache_len (`int`):
             Maximum number of tokens that can be stored, used for tensor preallocation.
+        max_batch_size(`int`, *optional*):
+            Maximum batch size that can be stored
     """
 
     is_compileable = True
     is_sliding = False
 
-    def __init__(self, max_cache_len: int):
+    def __init__(self, max_cache_len: int, max_batch_size: int | None = None):
         super().__init__()
         self.max_cache_len = max_cache_len
+        self.max_batch_size = max_batch_size
+
+    def init_full_cache(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None:
+        """Init the full batch with max_batch_size ahead of time."""
+        if self.max_batch_size is None:
+            self.max_batch_size = key_states.shape[0]
+        _, self.num_heads, _, self.head_dim = key_states.shape
+        self.dtype, self.device = key_states.dtype, key_states.device
+
+        self.keys_full = torch.zeros(
+            (self.max_batch_size, self.num_heads, self.max_cache_len, self.head_dim),
+            dtype=self.dtype,
+            device=self.device,
+        )
+        self.values_full = torch.zeros(
+            (self.max_batch_size, self.num_heads, self.max_cache_len, value_states.shape[-1]),
+            dtype=self.dtype,
+            device=self.device,
+        )
 
     def lazy_initialization(self, key_states: torch.Tensor, value_states: torch.Tensor) -> None:
         """
@@ -281,30 +302,27 @@ class StaticLayer(CacheLayerMixin):
         i.e. `mode="reduce-overhead"` is known to fail). But it will in general work correctly, and prefill should
         not be compiled anyway for performances!
         """
-        self.dtype, self.device = key_states.dtype, key_states.device
-        self.max_batch_size, self.num_heads = key_states.shape[:2]
-        self.v_head_dim = value_states.shape[-1]
-        self.k_head_dim = key_states.shape[-1]
 
-        self.keys = torch.zeros(
-            (self.max_batch_size, self.num_heads, self.max_cache_len, self.k_head_dim),
-            dtype=self.dtype,
-            device=self.device,
-        )
-        self.values = torch.zeros(
-            (self.max_batch_size, self.num_heads, self.max_cache_len, self.v_head_dim),
-            dtype=self.dtype,
-            device=self.device,
-        )
-        # Note: `mark_static_address` is used to tag the cache as a fixed data pointer, preventing compiled graph
-        # breaks when updating the cache. However, it is not supported when tracing the graph, so we skip it in this case.
-        # As prefill should never be compiled, this is not an issue and it will still be run (except when users compile
-        # prefill explicitly, but this should be avoided!)
-        if not is_torchdynamo_compiling():
-            torch._dynamo.mark_static_address(self.keys)
-            torch._dynamo.mark_static_address(self.values)
+        self.init_full_cache(key_states, value_states)
 
+        self.keys_map = [None] * (self.max_batch_size + 1)
+        self.values_map = [None] * (self.max_batch_size + 1)
+        for batch_size in range(1, self.max_batch_size + 1):
+            self.keys_map[batch_size] = self.keys_full[:batch_size]
+            self.values_map[batch_size] = self.values_full[:batch_size]
+            # Note: `mark_static_address` is used to tag the cache as a fixed data pointer, preventing compiled graph
+            # breaks when updating the cache. However, it is not supported when tracing the graph, so we skip it in this case.
+            # As prefill should never be compiled, this is not an issue and it will still be run (except when users compile
+            # prefill explicitly, but this should be avoided!)
+            if not is_torchdynamo_compiling():
+                torch._dynamo.mark_static_address(self.keys_map[batch_size])
+                torch._dynamo.mark_static_address(self.values_map[batch_size])
         self.is_initialized = True
+        batch_size = key_states.shape[0]
+
+        # Slice to current batch size
+        self.keys = self.keys_map[batch_size]
+        self.values = self.values_map[batch_size]
 
     def update(
         self,
@@ -334,15 +352,28 @@ class StaticLayer(CacheLayerMixin):
             cache_position if cache_position is not None else torch.arange(key_states.shape[-2], device=self.device)
         )
 
-        # Update the cache
+        batch_size = key_states.shape[0]
+        self.keys = self.keys_map[batch_size]
+        self.values = self.values_map[batch_size]
+
+        self._current_batch_size = batch_size
+
         try:
+            # Try index_copy_ first (faster when it works)
             self.keys.index_copy_(2, cache_position, key_states)
             self.values.index_copy_(2, cache_position, value_states)
-        except NotImplementedError:
+        except (NotImplementedError, RuntimeError):
             # Fallback for devices like MPS where index_copy_ might not be supported.
             self.keys[:, :, cache_position] = key_states
             self.values[:, :, cache_position] = value_states
+
         return self.keys, self.values
+
+    def reset(self):
+        if self.is_initialized:
+            self.keys_full.zero_()
+            self.values_full.zero_()
+            self._current_batch_size = None
 
     def get_mask_sizes(self, cache_position: torch.Tensor) -> tuple[int, int]:
         """Return the length and offset of the cache, used to generate the attention mask"""
@@ -352,13 +383,27 @@ class StaticLayer(CacheLayerMixin):
 
     def get_seq_length(self) -> int:
         """Returns the sequence length of the cached states."""
-        # Occupied cache == any slot in the 3rd dim (sequence length) holds a non-zero value. To save on compute, let's
-        # limit the check to the first batch member and head dimension.
         return (self.keys[0, 0].any(dim=-1)).sum() if self.is_initialized else 0
 
     def get_max_cache_shape(self) -> int:
         """Return the maximum cache shape of the cache"""
         return self.max_cache_len
+
+    def reorder_cache(self, beam_idx: torch.LongTensor):
+        """Reorders this layer's cache for beam search."""
+        if beam_idx.device != self.device:
+            beam_idx = beam_idx.to(self.device)
+
+        current_batch_size = beam_idx.shape[0]
+        # Use the map to get the view for the current batch size
+        current_keys = self.keys_map[current_batch_size]
+        current_values = self.values_map[current_batch_size]
+
+        new_keys = current_keys.index_select(0, beam_idx)
+        new_values = current_values.index_select(0, beam_idx)
+
+        current_keys.copy_(new_keys)
+        current_values.copy_(new_values)
 
 
 class StaticSlidingWindowLayer(StaticLayer):
@@ -372,13 +417,15 @@ class StaticSlidingWindowLayer(StaticLayer):
             Maximum number of tokens that can be stored, used for tensor preallocation.
         sliding_window (`int`):
             The size of the sliding window.
+        max_batch_size(`int`, *optional*):
+            Maximum batch size that can be stored
     """
 
     is_sliding = True
 
-    def __init__(self, max_cache_len: int, sliding_window: int):
+    def __init__(self, max_cache_len: int, sliding_window: int, max_batch_size: int | None = None):
         effective_max_cache_len = min(sliding_window, max_cache_len)
-        super().__init__(max_cache_len=effective_max_cache_len)
+        super().__init__(max_cache_len=effective_max_cache_len, max_batch_size=max_batch_size)
         self.cumulative_length = 0
 
     def update(
@@ -409,6 +456,10 @@ class StaticSlidingWindowLayer(StaticLayer):
             cache_position if cache_position is not None else torch.arange(key_states.shape[-2], device=self.device)
         )
 
+        batch_size = key_states.shape[0]
+        self.keys = self.keys_map[batch_size]
+        self.values = self.values_map[batch_size]
+
         cumulative_length = self.cumulative_length
         is_full = cumulative_length >= self.max_cache_len
         # Update it now that we saved the value above
@@ -427,10 +478,10 @@ class StaticSlidingWindowLayer(StaticLayer):
                 new_keys[:, :, index] = key_states
                 new_values[:, :, index] = value_states
 
-                # Copy back into `self` (do not just assign again) in order to keep the static dynamo address
-                self.keys.copy_(new_keys)
-                self.values.copy_(new_values)
-                # Very important to return the `self` tensors here, as they have the static dynamo address
+                # Copy back into the batch-sliced portion (NOT the full cache)
+                self.keys[:batch_size].copy_(new_keys)
+                self.values[:batch_size].copy_(new_values)
+                # Return the batch-sliced view
                 return self.keys, self.values
             # Already full but using more than 1 new token (e.g. prefill caching, chat continuation, etc...)
             else:
@@ -453,13 +504,13 @@ class StaticSlidingWindowLayer(StaticLayer):
                 self.keys[:, :, cache_position] = key_states
                 self.values[:, :, cache_position] = value_states
 
-            # Very important to return the `self` tensors here, as they have the static dynamo address
+            # Return the batch-sliced view
             return self.keys, self.values
 
         # We only cache the last `sliding_window` tokens
-        self.keys.copy_(full_key_states[:, :, -self.max_cache_len :, :])
-        self.values.copy_(full_value_states[:, :, -self.max_cache_len :, :])
-        # we should return the whole states instead of `self.keys/values` here, as otherwise we lose some context
+        self.keys[:batch_size].copy_(full_key_states[:, :, -self.max_cache_len :, :])
+        self.values[:batch_size].copy_(full_value_states[:, :, -self.max_cache_len :, :])
+        # we should return the whole states instead of sliced cache here, as otherwise we lose some context
         return full_key_states, full_value_states
 
     def get_mask_sizes(self, cache_position: torch.Tensor) -> tuple[int, int]:
@@ -484,6 +535,12 @@ class StaticSlidingWindowLayer(StaticLayer):
     def get_seq_length(self) -> int:
         """Returns the sequence length of the cached states."""
         return self.cumulative_length
+
+    def reset(self):
+        if self.is_initialized:
+            self.keys.zero_()
+            self.values.zero_()
+        self.cumulative_length = 0
 
 
 class QuantizedLayer(DynamicLayer):
@@ -1021,6 +1078,8 @@ class StaticCache(Cache):
         offload_only_non_sliding (`bool`, *optional*, defaults to `True`):
             If `offloading` is `True`, this further decides if only the non-sliding layers will be offloaded (because
             usually the sliding layers are small in size, so there is no need to offload them, and skipping it is faster).
+        max_batch_size (`int`, *optional*):
+            The maximum batch size that will be used with this Cache .
 
     Example:
 
@@ -1049,6 +1108,7 @@ class StaticCache(Cache):
         max_cache_len: int,
         offloading: bool = False,
         offload_only_non_sliding: bool = True,
+        max_batch_size: int | None = None,
         **kwargs,
     ):
         config = config.get_text_config(decoder=True)
@@ -1068,18 +1128,38 @@ class StaticCache(Cache):
         layers = []
         for layer_type in layer_types:
             if layer_type == "sliding_attention":
-                layer = StaticSlidingWindowLayer(max_cache_len=max_cache_len, sliding_window=config.sliding_window)
+                layer = StaticSlidingWindowLayer(
+                    max_cache_len=max_cache_len, sliding_window=config.sliding_window, max_batch_size=max_batch_size
+                )
             elif layer_type == "chunked_attention":
                 # From a cache point of view, both sliding and chunked are the same in how they should behave and how many
                 # states they should return - only the mask changes to make them different at the end!
                 layer = StaticSlidingWindowLayer(
-                    max_cache_len=max_cache_len, sliding_window=config.attention_chunk_size
+                    max_cache_len=max_cache_len,
+                    sliding_window=config.attention_chunk_size,
+                    max_batch_size=max_batch_size,
                 )
             else:
-                layer = StaticLayer(max_cache_len=max_cache_len)
+                layer = StaticLayer(max_cache_len=max_cache_len, max_batch_size=max_batch_size)
             layers.append(layer)
 
         super().__init__(layers=layers, offloading=offloading, offload_only_non_sliding=offload_only_non_sliding)
+
+    def update(
+        self,
+        key_states: torch.Tensor,
+        value_states: torch.Tensor,
+        layer_idx: int,
+        cache_kwargs: dict[str, Any] | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor]:
+        return self.layers[layer_idx].update(key_states, value_states, cache_kwargs)
+
+    def reset(self):
+        for layer in self.layers:
+            layer.reset()
+
+    def __len__(self):
+        return len(self.layers)
 
 
 class QuantizedCache(Cache):

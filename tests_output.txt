@@ -1,0 +1,695 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.3, pytest-8.4.2, pluggy-1.6.0 -- /home/vedth/stuhdy/transformers/venv/bin/python3
+cachedir: .pytest_cache
+hypothesis profile 'default'
+rootdir: /home/vedth/stuhdy/transformers
+configfile: pyproject.toml
+plugins: timeout-2.4.0, rich-0.2.0, xdist-3.8.0, rerunfailures-15.1, anyio-4.11.0, order-1.3.0, asyncio-1.3.0, hypothesis-6.148.3
+asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=function, asyncio_default_test_loop_scope=function
+created: 2/2 workers
+2 workers [191 items]
+
+scheduling tests via LoadScheduling
+
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_can_load_with_global_device_set <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_eager_matches_fa2_generate <- tests/generation/test_utils.py 
+[gw1] [  0%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_eager_matches_fa2_generate <- tests/generation/test_utils.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_eager_matches_fa3_generate <- tests/generation/test_utils.py 
+[gw1] [  1%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_eager_matches_fa3_generate <- tests/generation/test_utils.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_eager_matches_sdpa_inference_00_fp16_pad_left_sdpa_kernels <- tests/test_modeling_common.py 
+[gw1] [  1%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_eager_matches_sdpa_inference_00_fp16_pad_left_sdpa_kernels <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_eager_matches_sdpa_inference_01_fp16_pad_left <- tests/test_modeling_common.py 
+[gw1] [  2%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_eager_matches_sdpa_inference_01_fp16_pad_left <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_eager_matches_sdpa_inference_02_fp16_pad_left_no_attn_mask_sdpa_kernels <- tests/test_modeling_common.py 
+[gw1] [  2%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_eager_matches_sdpa_inference_02_fp16_pad_left_no_attn_mask_sdpa_kernels <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_eager_matches_sdpa_inference_03_fp16_pad_left_no_attn_mask <- tests/test_modeling_common.py 
+[gw1] [  3%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_eager_matches_sdpa_inference_03_fp16_pad_left_no_attn_mask <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_eager_matches_sdpa_inference_04_fp16_pad_right_sdpa_kernels <- tests/test_modeling_common.py 
+[gw1] [  3%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_eager_matches_sdpa_inference_04_fp16_pad_right_sdpa_kernels <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_eager_matches_sdpa_inference_05_fp16_pad_right <- tests/test_modeling_common.py 
+[gw1] [  4%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_eager_matches_sdpa_inference_05_fp16_pad_right <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_eager_matches_sdpa_inference_06_fp16_pad_right_no_attn_mask_sdpa_kernels <- tests/test_modeling_common.py 
+[gw1] [  4%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_eager_matches_sdpa_inference_06_fp16_pad_right_no_attn_mask_sdpa_kernels <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_eager_matches_sdpa_inference_07_fp16_pad_right_no_attn_mask <- tests/test_modeling_common.py 
+[gw1] [  5%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_eager_matches_sdpa_inference_07_fp16_pad_right_no_attn_mask <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_eager_matches_sdpa_inference_08_fp32_pad_left_sdpa_kernels <- tests/test_modeling_common.py 
+[gw1] [  5%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_eager_matches_sdpa_inference_08_fp32_pad_left_sdpa_kernels <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_eager_matches_sdpa_inference_09_fp32_pad_left <- tests/test_modeling_common.py 
+[gw1] [  6%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_eager_matches_sdpa_inference_09_fp32_pad_left <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_eager_matches_sdpa_inference_10_fp32_pad_left_no_attn_mask_sdpa_kernels <- tests/test_modeling_common.py 
+[gw1] [  6%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_eager_matches_sdpa_inference_10_fp32_pad_left_no_attn_mask_sdpa_kernels <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_eager_matches_sdpa_inference_11_fp32_pad_left_no_attn_mask <- tests/test_modeling_common.py 
+[gw1] [  7%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_eager_matches_sdpa_inference_11_fp32_pad_left_no_attn_mask <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_eager_matches_sdpa_inference_12_fp32_pad_right_sdpa_kernels <- tests/test_modeling_common.py 
+[gw1] [  7%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_eager_matches_sdpa_inference_12_fp32_pad_right_sdpa_kernels <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_eager_matches_sdpa_inference_13_fp32_pad_right <- tests/test_modeling_common.py 
+[gw1] [  8%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_eager_matches_sdpa_inference_13_fp32_pad_right <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_eager_matches_sdpa_inference_14_fp32_pad_right_no_attn_mask_sdpa_kernels <- tests/test_modeling_common.py 
+[gw1] [  8%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_eager_matches_sdpa_inference_14_fp32_pad_right_no_attn_mask_sdpa_kernels <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_eager_matches_sdpa_inference_15_fp32_pad_right_no_attn_mask <- tests/test_modeling_common.py 
+[gw1] [  9%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_eager_matches_sdpa_inference_15_fp32_pad_right_no_attn_mask <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_eager_matches_sdpa_inference_16_bf16_pad_left_sdpa_kernels <- tests/test_modeling_common.py 
+[gw1] [  9%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_eager_matches_sdpa_inference_16_bf16_pad_left_sdpa_kernels <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_eager_matches_sdpa_inference_17_bf16_pad_left <- tests/test_modeling_common.py 
+[gw1] [ 10%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_eager_matches_sdpa_inference_17_bf16_pad_left <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_eager_matches_sdpa_inference_18_bf16_pad_left_no_attn_mask_sdpa_kernels <- tests/test_modeling_common.py 
+[gw1] [ 10%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_eager_matches_sdpa_inference_18_bf16_pad_left_no_attn_mask_sdpa_kernels <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_eager_matches_sdpa_inference_19_bf16_pad_left_no_attn_mask <- tests/test_modeling_common.py 
+[gw1] [ 11%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_eager_matches_sdpa_inference_19_bf16_pad_left_no_attn_mask <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_eager_matches_sdpa_inference_20_bf16_pad_right_sdpa_kernels <- tests/test_modeling_common.py 
+[gw1] [ 12%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_eager_matches_sdpa_inference_20_bf16_pad_right_sdpa_kernels <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_eager_matches_sdpa_inference_21_bf16_pad_right <- tests/test_modeling_common.py 
+[gw1] [ 12%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_eager_matches_sdpa_inference_21_bf16_pad_right <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_eager_matches_sdpa_inference_22_bf16_pad_right_no_attn_mask_sdpa_kernels <- tests/test_modeling_common.py 
+[gw1] [ 13%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_eager_matches_sdpa_inference_22_bf16_pad_right_no_attn_mask_sdpa_kernels <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_eager_matches_sdpa_inference_23_bf16_pad_right_no_attn_mask <- tests/test_modeling_common.py 
+[gw1] [ 13%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_eager_matches_sdpa_inference_23_bf16_pad_right_no_attn_mask <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_eager_matches_sdpa_inference_24_fp32_pad_left_output_attentions <- tests/test_modeling_common.py 
+[gw1] [ 14%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_eager_matches_sdpa_inference_24_fp32_pad_left_output_attentions <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_eager_padding_matches_padding_free_with_position_ids 
+[gw1] [ 14%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_eager_padding_matches_padding_free_with_position_ids 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_feed_forward_chunking <- tests/test_modeling_common.py 
+[gw1] [ 15%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_feed_forward_chunking <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_flash_attention_2_continue_generate_with_position_ids <- tests/generation/test_utils.py 
+[gw1] [ 15%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_flash_attention_2_continue_generate_with_position_ids <- tests/generation/test_utils.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_flash_attention_2_padding_matches_padding_free_with_position_ids <- tests/generation/test_utils.py 
+[gw1] [ 16%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_flash_attention_2_padding_matches_padding_free_with_position_ids <- tests/generation/test_utils.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_flash_attention_2_padding_matches_padding_free_with_position_ids_and_fa_kwargs <- tests/generation/test_utils.py 
+[gw1] [ 16%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_flash_attention_2_padding_matches_padding_free_with_position_ids_and_fa_kwargs <- tests/generation/test_utils.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_flash_attention_3_padding_matches_padding_free_with_position_ids <- tests/generation/test_utils.py 
+[gw1] [ 17%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_flash_attention_3_padding_matches_padding_free_with_position_ids <- tests/generation/test_utils.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_flash_attention_3_padding_matches_padding_free_with_position_ids_and_fa_kwargs <- tests/generation/test_utils.py 
+[gw1] [ 17%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_flash_attention_3_padding_matches_padding_free_with_position_ids_and_fa_kwargs <- tests/generation/test_utils.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_flash_attn_2_can_compile_with_attention_mask_None_without_graph_break <- tests/test_modeling_common.py 
+[gw1] [ 18%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_flash_attn_2_can_compile_with_attention_mask_None_without_graph_break <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_flash_attn_2_can_dispatch_composite_models <- tests/test_modeling_common.py 
+[gw1] [ 18%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_flash_attn_2_can_dispatch_composite_models <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_flash_attn_2_equivalence <- tests/causal_lm_tester.py 
+[gw1] [ 19%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_flash_attn_2_equivalence <- tests/causal_lm_tester.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_flash_attn_2_fp32_ln <- tests/test_modeling_common.py 
+[gw1] [ 19%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_flash_attn_2_fp32_ln <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_flash_attn_2_from_config <- tests/test_modeling_common.py 
+[gw1] [ 20%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_flash_attn_2_from_config <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_flash_attn_2_inference_equivalence <- tests/test_modeling_common.py 
+[gw1] [ 20%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_flash_attn_2_inference_equivalence <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_flash_attn_2_inference_equivalence_right_padding <- tests/test_modeling_common.py 
+[gw1] [ 21%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_flash_attn_2_inference_equivalence_right_padding <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_flash_attn_3_can_dispatch_composite_models <- tests/test_modeling_common.py 
+[gw1] [ 21%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_flash_attn_3_can_dispatch_composite_models <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_flash_attn_3_from_config <- tests/test_modeling_common.py 
+[gw1] [ 22%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_flash_attn_3_from_config <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_flash_attn_3_inference_equivalence <- tests/test_modeling_common.py 
+[gw1] [ 23%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_flash_attn_3_inference_equivalence <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_flash_attn_3_inference_equivalence_right_padding <- tests/test_modeling_common.py 
+[gw1] [ 23%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_flash_attn_3_inference_equivalence_right_padding <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_flash_attn_kernels_inference_equivalence <- tests/test_modeling_common.py 
+[gw1] [ 24%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_flash_attn_kernels_inference_equivalence <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_flash_attn_kernels_mps_inference_equivalence <- tests/test_modeling_common.py 
+[gw1] [ 24%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_flash_attn_kernels_mps_inference_equivalence <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_flex_attention_with_grads <- tests/test_modeling_common.py 
+[gw0] [ 25%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_can_load_with_global_device_set <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_attention_outputs <- tests/test_modeling_common.py 
+[gw0] [ 25%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_attention_outputs <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_attn_implementation_composite_models <- tests/test_modeling_common.py 
+[gw0] [ 26%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_attn_implementation_composite_models <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_batching_equivalence <- tests/test_modeling_common.py 
+[gw0] [ 26%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_batching_equivalence <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_bc_torch_dtype <- tests/test_modeling_common.py 
+[gw0] [ 27%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_bc_torch_dtype <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_can_be_initialized_on_meta <- tests/test_modeling_common.py 
+[gw0] [ 27%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_can_be_initialized_on_meta <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_can_init_all_missing_weights <- tests/test_modeling_common.py 
+[gw0] [ 28%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_can_init_all_missing_weights <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_can_load_from_already_mapped_keys <- tests/test_modeling_common.py 
+[gw0] [ 28%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_can_load_from_already_mapped_keys <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_can_load_ignoring_mismatched_shapes <- tests/test_modeling_common.py 
+[gw0] [ 29%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_can_load_ignoring_mismatched_shapes <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_can_load_with_device_context_manager <- tests/test_modeling_common.py 
+[gw0] [ 29%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_can_load_with_device_context_manager <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_can_set_attention_dynamically <- tests/test_modeling_common.py 
+[gw0] [ 30%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_can_set_attention_dynamically <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_can_set_attention_dynamically_composite_model <- tests/test_modeling_common.py 
+[gw0] [ 30%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_can_set_attention_dynamically_composite_model <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_can_use_safetensors <- tests/test_modeling_common.py 
+[gw0] [ 31%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_can_use_safetensors <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_cannot_load_with_meta_device_context_manager <- tests/test_modeling_common.py 
+[gw0] [ 31%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_cannot_load_with_meta_device_context_manager <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_causal_lm_can_accept_training_kwargs <- tests/causal_lm_tester.py 
+[gw0] [ 32%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_causal_lm_can_accept_training_kwargs <- tests/causal_lm_tester.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_config <- tests/causal_lm_tester.py 
+[gw0] [ 32%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_config <- tests/causal_lm_tester.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_config_attn_implementation_setter <- tests/test_modeling_common.py 
+[gw0] [ 33%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_config_attn_implementation_setter <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_correct_missing_keys <- tests/test_modeling_common.py 
+[gw0] [ 34%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_correct_missing_keys <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_cpu_offload <- tests/test_modeling_common.py 
+[gw0] [ 34%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_cpu_offload <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_custom_4d_attention_mask <- tests/generation/test_utils.py 
+[gw0] [ 35%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_custom_4d_attention_mask <- tests/generation/test_utils.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_determinism <- tests/test_modeling_common.py 
+[gw0] [ 35%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_determinism <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_disk_offload_bin <- tests/test_modeling_common.py 
+[gw0] [ 36%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_disk_offload_bin <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_disk_offload_safetensors <- tests/test_modeling_common.py 
+[gw0] [ 36%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_disk_offload_safetensors <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_model_rope_scaling_from_config_2_yarn <- tests/causal_lm_tester.py 
+[gw0] [ 37%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_model_rope_scaling_from_config_2_yarn <- tests/causal_lm_tester.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_model_weights_reload_no_missing_tied_weights <- tests/test_modeling_common.py 
+[gw0] [ 37%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_model_weights_reload_no_missing_tied_weights <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_multi_gpu_data_parallel_forward <- tests/test_modeling_common.py 
+[gw0] [ 38%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_multi_gpu_data_parallel_forward <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_num_layers_is_small <- tests/test_modeling_common.py 
+[gw0] [ 38%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_num_layers_is_small <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_peft_gradient_checkpointing_enable_disable <- tests/test_modeling_common.py 
+[gw0] [ 39%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_peft_gradient_checkpointing_enable_disable <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_any_to_any <- tests/test_pipeline_mixin.py 
+[gw0] [ 39%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_any_to_any <- tests/test_pipeline_mixin.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_any_to_any_fp16 <- tests/test_pipeline_mixin.py 
+[gw0] [ 40%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_any_to_any_fp16 <- tests/test_pipeline_mixin.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_audio_classification <- tests/test_pipeline_mixin.py 
+[gw0] [ 40%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_audio_classification <- tests/test_pipeline_mixin.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_audio_classification_fp16 <- tests/test_pipeline_mixin.py 
+[gw0] [ 41%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_audio_classification_fp16 <- tests/test_pipeline_mixin.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_automatic_speech_recognition <- tests/test_pipeline_mixin.py 
+[gw0] [ 41%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_automatic_speech_recognition <- tests/test_pipeline_mixin.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_automatic_speech_recognition_fp16 <- tests/test_pipeline_mixin.py 
+[gw0] [ 42%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_automatic_speech_recognition_fp16 <- tests/test_pipeline_mixin.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_depth_estimation <- tests/test_pipeline_mixin.py 
+[gw0] [ 42%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_depth_estimation <- tests/test_pipeline_mixin.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_depth_estimation_fp16 <- tests/test_pipeline_mixin.py 
+[gw0] [ 43%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_depth_estimation_fp16 <- tests/test_pipeline_mixin.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_document_question_answering <- tests/test_pipeline_mixin.py 
+[gw0] [ 43%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_document_question_answering <- tests/test_pipeline_mixin.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_document_question_answering_fp16 <- tests/test_pipeline_mixin.py 
+[gw0] [ 44%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_document_question_answering_fp16 <- tests/test_pipeline_mixin.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_feature_extraction <- tests/test_pipeline_mixin.py 
+[gw0] [ 45%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_feature_extraction <- tests/test_pipeline_mixin.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_feature_extraction_fp16 <- tests/test_pipeline_mixin.py 
+[gw0] [ 45%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_feature_extraction_fp16 <- tests/test_pipeline_mixin.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_fill_mask <- tests/test_pipeline_mixin.py 
+[gw0] [ 46%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_fill_mask <- tests/test_pipeline_mixin.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_fill_mask_fp16 <- tests/test_pipeline_mixin.py 
+[gw0] [ 46%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_fill_mask_fp16 <- tests/test_pipeline_mixin.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_image_classification <- tests/test_pipeline_mixin.py 
+[gw0] [ 47%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_image_classification <- tests/test_pipeline_mixin.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_image_classification_fp16 <- tests/test_pipeline_mixin.py 
+[gw0] [ 47%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_image_classification_fp16 <- tests/test_pipeline_mixin.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_image_feature_extraction <- tests/test_pipeline_mixin.py 
+[gw0] [ 48%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_image_feature_extraction <- tests/test_pipeline_mixin.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_image_feature_extraction_fp16 <- tests/test_pipeline_mixin.py 
+[gw0] [ 48%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_image_feature_extraction_fp16 <- tests/test_pipeline_mixin.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_image_segmentation <- tests/test_pipeline_mixin.py 
+[gw0] [ 49%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_image_segmentation <- tests/test_pipeline_mixin.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_image_segmentation_fp16 <- tests/test_pipeline_mixin.py 
+[gw0] [ 49%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_image_segmentation_fp16 <- tests/test_pipeline_mixin.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_image_text_to_text <- tests/test_pipeline_mixin.py 
+[gw0] [ 50%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_image_text_to_text <- tests/test_pipeline_mixin.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_image_text_to_text_fp16 <- tests/test_pipeline_mixin.py 
+[gw0] [ 50%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_image_text_to_text_fp16 <- tests/test_pipeline_mixin.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_image_to_text <- tests/test_pipeline_mixin.py 
+[gw0] [ 51%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_image_to_text <- tests/test_pipeline_mixin.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_image_to_text_fp16 <- tests/test_pipeline_mixin.py 
+[gw0] [ 51%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_image_to_text_fp16 <- tests/test_pipeline_mixin.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_mask_generation <- tests/test_pipeline_mixin.py 
+[gw0] [ 52%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_mask_generation <- tests/test_pipeline_mixin.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_mask_generation_fp16 <- tests/test_pipeline_mixin.py 
+[gw0] [ 52%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_mask_generation_fp16 <- tests/test_pipeline_mixin.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_object_detection <- tests/test_pipeline_mixin.py 
+[gw0] [ 53%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_object_detection <- tests/test_pipeline_mixin.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_object_detection_fp16 <- tests/test_pipeline_mixin.py 
+[gw0] [ 53%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_object_detection_fp16 <- tests/test_pipeline_mixin.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_question_answering <- tests/test_pipeline_mixin.py 
+[gw0] [ 54%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_question_answering <- tests/test_pipeline_mixin.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_question_answering_fp16 <- tests/test_pipeline_mixin.py 
+[gw0] [ 54%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_question_answering_fp16 <- tests/test_pipeline_mixin.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_summarization <- tests/test_pipeline_mixin.py 
+[gw0] [ 55%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_summarization <- tests/test_pipeline_mixin.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_summarization_fp16 <- tests/test_pipeline_mixin.py 
+[gw0] [ 56%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_summarization_fp16 <- tests/test_pipeline_mixin.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_table_question_answering <- tests/test_pipeline_mixin.py 
+[gw0] [ 56%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_table_question_answering <- tests/test_pipeline_mixin.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_table_question_answering_fp16 <- tests/test_pipeline_mixin.py 
+[gw0] [ 57%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_table_question_answering_fp16 <- tests/test_pipeline_mixin.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_text2text_generation <- tests/test_pipeline_mixin.py 
+[gw0] [ 57%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_text2text_generation <- tests/test_pipeline_mixin.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_text2text_generation_fp16 <- tests/test_pipeline_mixin.py 
+[gw0] [ 58%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_text2text_generation_fp16 <- tests/test_pipeline_mixin.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_text_classification <- tests/test_pipeline_mixin.py 
+[gw0] [ 58%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_text_classification <- tests/test_pipeline_mixin.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_text_classification_fp16 <- tests/test_pipeline_mixin.py 
+[gw0] [ 59%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_text_classification_fp16 <- tests/test_pipeline_mixin.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_text_generation <- tests/test_pipeline_mixin.py 
+[gw0] [ 59%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_text_generation <- tests/test_pipeline_mixin.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_text_generation_fp16 <- tests/test_pipeline_mixin.py 
+[gw0] [ 60%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_text_generation_fp16 <- tests/test_pipeline_mixin.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_text_to_audio <- tests/test_pipeline_mixin.py 
+[gw0] [ 60%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_text_to_audio <- tests/test_pipeline_mixin.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_text_to_audio_fp16 <- tests/test_pipeline_mixin.py 
+[gw0] [ 61%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_text_to_audio_fp16 <- tests/test_pipeline_mixin.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_token_classification <- tests/test_pipeline_mixin.py 
+[gw0] [ 61%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_token_classification <- tests/test_pipeline_mixin.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_token_classification_fp16 <- tests/test_pipeline_mixin.py 
+[gw0] [ 62%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_token_classification_fp16 <- tests/test_pipeline_mixin.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_translation <- tests/test_pipeline_mixin.py 
+[gw0] [ 62%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_translation <- tests/test_pipeline_mixin.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_translation_fp16 <- tests/test_pipeline_mixin.py 
+[gw0] [ 63%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_translation_fp16 <- tests/test_pipeline_mixin.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_video_classification <- tests/test_pipeline_mixin.py 
+[gw0] [ 63%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_video_classification <- tests/test_pipeline_mixin.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_video_classification_fp16 <- tests/test_pipeline_mixin.py 
+[gw0] [ 64%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_video_classification_fp16 <- tests/test_pipeline_mixin.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_visual_question_answering <- tests/test_pipeline_mixin.py 
+[gw0] [ 64%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_visual_question_answering <- tests/test_pipeline_mixin.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_visual_question_answering_fp16 <- tests/test_pipeline_mixin.py 
+[gw0] [ 65%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_visual_question_answering_fp16 <- tests/test_pipeline_mixin.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_zero_shot <- tests/test_pipeline_mixin.py 
+[gw0] [ 65%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_zero_shot <- tests/test_pipeline_mixin.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_zero_shot_audio_classification <- tests/test_pipeline_mixin.py 
+[gw0] [ 66%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_zero_shot_audio_classification <- tests/test_pipeline_mixin.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_zero_shot_audio_classification_fp16 <- tests/test_pipeline_mixin.py 
+[gw0] [ 67%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_zero_shot_audio_classification_fp16 <- tests/test_pipeline_mixin.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_zero_shot_fp16 <- tests/test_pipeline_mixin.py 
+[gw0] [ 67%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_zero_shot_fp16 <- tests/test_pipeline_mixin.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_zero_shot_image_classification <- tests/test_pipeline_mixin.py 
+[gw0] [ 68%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_zero_shot_image_classification <- tests/test_pipeline_mixin.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_zero_shot_image_classification_fp16 <- tests/test_pipeline_mixin.py 
+[gw0] [ 68%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_zero_shot_image_classification_fp16 <- tests/test_pipeline_mixin.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_zero_shot_object_detection <- tests/test_pipeline_mixin.py 
+[gw0] [ 69%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_zero_shot_object_detection <- tests/test_pipeline_mixin.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_zero_shot_object_detection_fp16 <- tests/test_pipeline_mixin.py 
+[gw0] [ 69%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_pipeline_zero_shot_object_detection_fp16 <- tests/test_pipeline_mixin.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_problem_types <- tests/test_modeling_common.py 
+[gw0] [ 70%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_problem_types <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_question_answering_model <- tests/causal_lm_tester.py 
+[gw0] [ 70%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_question_answering_model <- tests/causal_lm_tester.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_resize_embeddings_untied <- tests/test_modeling_common.py 
+[gw0] [ 71%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_resize_embeddings_untied <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_resize_embeddings_untied_with_deepspeed <- tests/test_modeling_common.py 
+[gw0] [ 71%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_resize_embeddings_untied_with_deepspeed <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_resize_embeddings_untied_with_deepspeed_multi_gpu <- tests/test_modeling_common.py 
+[gw0] [ 72%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_resize_embeddings_untied_with_deepspeed_multi_gpu <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_resize_position_vector_embeddings <- tests/test_modeling_common.py 
+[gw0] [ 72%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_resize_position_vector_embeddings <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_resize_tokens_embeddings <- tests/test_modeling_common.py 
+[gw0] [ 73%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_resize_tokens_embeddings <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_resize_tokens_embeddings_with_deepspeed <- tests/test_modeling_common.py 
+[gw0] [ 73%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_resize_tokens_embeddings_with_deepspeed <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_resize_tokens_embeddings_with_deepspeed_multi_gpu <- tests/test_modeling_common.py 
+[gw0] [ 74%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_resize_tokens_embeddings_with_deepspeed_multi_gpu <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_retain_grad_hidden_states_attentions <- tests/test_modeling_common.py 
+[gw0] [ 74%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_retain_grad_hidden_states_attentions <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_reverse_loading_mapping <- tests/test_modeling_common.py 
+[gw0] [ 75%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_reverse_loading_mapping <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_save_load <- tests/test_modeling_common.py 
+[gw0] [ 75%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_save_load <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_save_load_keys_to_ignore_on_save <- tests/test_modeling_common.py 
+[gw0] [ 76%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_save_load_keys_to_ignore_on_save <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_sdpa_can_compile_dynamic <- tests/test_modeling_common.py 
+[gw0] [ 76%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_sdpa_can_compile_dynamic <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_sdpa_can_dispatch_composite_models <- tests/test_modeling_common.py 
+[gw0] [ 77%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_sdpa_can_dispatch_composite_models <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_sdpa_can_dispatch_non_composite_models <- tests/test_modeling_common.py 
+[gw0] [ 78%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_sdpa_can_dispatch_non_composite_models <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_sdpa_can_dispatch_on_flash <- tests/test_modeling_common.py 
+[gw0] [ 78%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_sdpa_can_dispatch_on_flash <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_sdpa_padding_matches_padding_free_with_position_ids 
+[gw0] [ 79%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_sdpa_padding_matches_padding_free_with_position_ids 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_sequence_classification_model <- tests/causal_lm_tester.py 
+[gw0] [ 79%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_sequence_classification_model <- tests/causal_lm_tester.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_sequence_classification_model_for_multi_label <- tests/causal_lm_tester.py 
+[gw0] [ 80%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_sequence_classification_model_for_multi_label <- tests/causal_lm_tester.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_sequence_classification_model_for_single_label <- tests/causal_lm_tester.py 
+[gw0] [ 80%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_sequence_classification_model_for_single_label <- tests/causal_lm_tester.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_sliding_window_mask <- tests/test_modeling_common.py 
+[gw0] [ 81%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_sliding_window_mask <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_tied_weights_keys <- tests/test_modeling_common.py 
+[gw0] [ 81%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_tied_weights_keys <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_token_classification_model <- tests/causal_lm_tester.py 
+[gw0] [ 82%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_token_classification_model <- tests/causal_lm_tester.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_torch_compile_for_training <- tests/test_modeling_common.py 
+[gw0] [ 82%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_torch_compile_for_training <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_torch_export <- tests/test_modeling_common.py 
+[gw0] [ 83%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_torch_export <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_torch_save_load <- tests/test_modeling_common.py 
+[gw0] [ 83%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_torch_save_load <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_tp_plan_matches_params <- tests/test_modeling_common.py 
+[gw0] [ 84%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_tp_plan_matches_params <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_training <- tests/test_modeling_common.py 
+[gw0] [ 84%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_training <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_training_gradient_checkpointing <- tests/test_modeling_common.py 
+[gw0] [ 85%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_training_gradient_checkpointing <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_training_gradient_checkpointing_use_reentrant <- tests/test_modeling_common.py 
+[gw0] [ 85%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_training_gradient_checkpointing_use_reentrant <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_training_gradient_checkpointing_use_reentrant_false <- tests/test_modeling_common.py 
+[gw0] [ 86%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_training_gradient_checkpointing_use_reentrant_false <- tests/test_modeling_common.py 
+[gw1] [ 86%] FAILED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_flex_attention_with_grads <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_forward_with_logits_to_keep <- tests/generation/test_utils.py 
+[gw1] [ 87%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_forward_with_logits_to_keep <- tests/generation/test_utils.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_from_pretrained_no_checkpoint <- tests/test_modeling_common.py 
+[gw1] [ 87%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_from_pretrained_no_checkpoint <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_generate_from_inputs_embeds <- venv/lib/python3.12/site-packages/_pytest/mark/structures.py 
+[gw1] [ 88%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_generate_from_inputs_embeds <- venv/lib/python3.12/site-packages/_pytest/mark/structures.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_generate_from_inputs_embeds_0_greedy <- tests/generation/test_utils.py 
+[gw1] [ 89%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_generate_from_inputs_embeds_0_greedy <- tests/generation/test_utils.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_generate_from_inputs_embeds_1_beam_search <- tests/generation/test_utils.py 
+[gw1] [ 89%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_generate_from_inputs_embeds_1_beam_search <- tests/generation/test_utils.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_generation_tester_mixin_inheritance <- tests/test_modeling_common.py 
+[gw1] [ 90%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_generation_tester_mixin_inheritance <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_gradient_checkpointing_backward_compatibility <- tests/test_modeling_common.py 
+[gw1] [ 90%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_gradient_checkpointing_backward_compatibility <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_gradient_checkpointing_enable_disable <- tests/test_modeling_common.py 
+[gw1] [ 91%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_gradient_checkpointing_enable_disable <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_hidden_states_output <- tests/test_modeling_common.py 
+[gw1] [ 91%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_hidden_states_output <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_inputs_embeds <- tests/test_modeling_common.py 
+[gw1] [ 92%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_inputs_embeds <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_inputs_embeds_matches_input_ids <- tests/test_modeling_common.py 
+[gw1] [ 92%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_inputs_embeds_matches_input_ids <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_internal_model_config_and_subconfig_are_same <- tests/test_modeling_common.py 
+[gw1] [ 93%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_internal_model_config_and_subconfig_are_same <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_keep_in_fp32_modules <- tests/test_modeling_common.py 
+[gw1] [ 93%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_keep_in_fp32_modules <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_load_save_without_tied_weights <- tests/test_modeling_common.py 
+[gw1] [ 94%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_load_save_without_tied_weights <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_load_with_mismatched_shapes <- tests/test_modeling_common.py 
+[gw1] [ 94%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_load_with_mismatched_shapes <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_model <- tests/causal_lm_tester.py 
+[gw1] [ 95%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_model <- tests/causal_lm_tester.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_model_base_model_prefix <- tests/test_modeling_common.py 
+[gw1] [ 95%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_model_base_model_prefix <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_model_get_set_embeddings <- tests/test_modeling_common.py 
+[gw1] [ 96%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_model_get_set_embeddings <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_model_is_small <- tests/test_modeling_common.py 
+[gw1] [ 96%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_model_is_small <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_model_main_input_name <- tests/test_modeling_common.py 
+[gw1] [ 97%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_model_main_input_name <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_model_outputs_equivalence 
+[gw1] [ 97%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_model_outputs_equivalence 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_model_parallelism <- tests/test_modeling_common.py 
+[gw1] [ 98%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_model_parallelism <- tests/test_modeling_common.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_model_rope_scaling_frequencies 
+[gw1] [ 98%] SKIPPED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_model_rope_scaling_frequencies 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_model_rope_scaling_from_config_0_linear <- tests/causal_lm_tester.py 
+[gw1] [ 99%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_model_rope_scaling_from_config_0_linear <- tests/causal_lm_tester.py 
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_model_rope_scaling_from_config_1_dynamic <- tests/causal_lm_tester.py 
+[gw1] [100%] PASSED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_model_rope_scaling_from_config_1_dynamic <- tests/causal_lm_tester.py 
+
+=================================== FAILURES ===================================
+________________ AfmoeModelTest.test_flex_attention_with_grads _________________
+[gw1] linux -- Python 3.12.3 /home/vedth/stuhdy/transformers/venv/bin/python3
+
+self = <tests.models.afmoe.test_modeling_afmoe.AfmoeModelTest testMethod=test_flex_attention_with_grads>
+
+    @require_torch_accelerator
+    def test_flex_attention_with_grads(self):
+        for model_class in self.all_model_classes:
+            config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+            inputs_dict = self._prepare_for_class(inputs_dict, model_class)
+            model = model_class(config).to(device=torch_device)
+    
+            # If not all sub-models support flex, skip the test
+            if not all(
+                submodel._supports_flex_attn for submodel in model.modules() if isinstance(submodel, PreTrainedModel)
+            ):
+                self.skipTest(reason="At least some parts of this model do not support flex attention")
+    
+            # Set default attention to flex and update config values
+            config = self._prepare_config_headdim(config, 16)  # specific to triton
+    
+            if model_class._can_set_attn_implementation():
+                model = model_class(config).to(device=torch_device)
+                model.set_attn_implementation("flex_attention")
+                self.assertTrue(model.config._attn_implementation == "flex_attention")
+            else:
+                config._attn_implementation = "flex_attention"
+                model = model_class(config).to(device=torch_device)
+    
+            # Elaborate workaround for encoder-decoder models as some do not specify their main input
+            dummy_inputs = {model.main_input_name: inputs_dict[model.main_input_name].to(torch_device)}
+            for key in getattr(self, "additional_model_inputs", []):
+                # Some models don't have all `additional_model_inputs`, especially when we
+                # craft cases to test model in different settings
+                if key in inputs_dict:
+                    dummy_inputs[key] = inputs_dict[key].to(torch_device)
+    
+            if config.is_encoder_decoder:
+                dummy_inputs["decoder_input_ids"] = inputs_dict["decoder_input_ids"].to(torch_device)
+                dummy_inputs["decoder_attention_mask"] = inputs_dict["decoder_attention_mask"].to(torch_device)
+    
+            # If this does not raise an error, the test passes (see https://github.com/huggingface/transformers/pull/35605)
+>           _ = model(**dummy_inputs)
+                ^^^^^^^^^^^^^^^^^^^^^
+
+tests/test_modeling_common.py:3761: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+venv/lib/python3.12/site-packages/torch/nn/modules/module.py:1775: in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+venv/lib/python3.12/site-packages/torch/nn/modules/module.py:1786: in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/transformers/utils/generic.py:919: in wrapper
+    outputs = func(self, *args, **kwargs)
+              ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/transformers/models/afmoe/modeling_afmoe.py:629: in forward
+    hidden_states = decoder_layer(
+src/transformers/modeling_layers.py:94: in __call__
+    return super().__call__(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+venv/lib/python3.12/site-packages/torch/nn/modules/module.py:1775: in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+venv/lib/python3.12/site-packages/torch/nn/modules/module.py:1786: in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/transformers/models/afmoe/modeling_afmoe.py:479: in forward
+    hidden_states, _ = self.self_attn(
+venv/lib/python3.12/site-packages/torch/nn/modules/module.py:1775: in _wrapped_call_impl
+    return self._call_impl(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+venv/lib/python3.12/site-packages/torch/nn/modules/module.py:1786: in _call_impl
+    return forward_call(*args, **kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+src/transformers/models/afmoe/modeling_afmoe.py:415: in forward
+    output, attn_weights = attention_interface(
+src/transformers/integrations/flex_attention.py:290: in flex_attention_forward
+    flex_attention_output = compile_friendly_flex_attention(
+src/transformers/integrations/flex_attention.py:97: in compile_friendly_flex_attention
+    return flex_attention_compiled(
+venv/lib/python3.12/site-packages/torch/_dynamo/eval_frame.py:845: in compile_wrapper
+    raise e.remove_dynamo_frames() from None  # see TORCHDYNAMO_VERBOSE=1
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+venv/lib/python3.12/site-packages/torch/_inductor/compile_fx.py:990: in _compile_fx_inner
+    raise InductorError(e, currentframe()).with_traceback(
+venv/lib/python3.12/site-packages/torch/_inductor/compile_fx.py:974: in _compile_fx_inner
+    mb_compiled_graph = fx_codegen_and_compile(
+venv/lib/python3.12/site-packages/torch/_inductor/compile_fx.py:1695: in fx_codegen_and_compile
+    return scheme.codegen_and_compile(gm, example_inputs, inputs_to_check, graph_kwargs)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+venv/lib/python3.12/site-packages/torch/_inductor/compile_fx.py:1505: in codegen_and_compile
+    compiled_module = graph.compile_to_module()
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^
+venv/lib/python3.12/site-packages/torch/_inductor/graph.py:2319: in compile_to_module
+    return self._compile_to_module()
+           ^^^^^^^^^^^^^^^^^^^^^^^^^
+venv/lib/python3.12/site-packages/torch/_inductor/graph.py:2329: in _compile_to_module
+    mod = self._compile_to_module_lines(wrapper_code)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+venv/lib/python3.12/site-packages/torch/_inductor/graph.py:2397: in _compile_to_module_lines
+    mod = PyCodeCache.load_by_key_path(
+venv/lib/python3.12/site-packages/torch/_inductor/codecache.py:3548: in load_by_key_path
+    mod = _reload_python_module(key, path, set_sys_modules=in_toplevel)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+venv/lib/python3.12/site-packages/torch/_inductor/runtime/compile_tasks.py:33: in _reload_python_module
+    exec(code, mod.__dict__, mod.__dict__)
+/tmp/torchinductor_vedth/ep/cep56kylllvniz3gr37e3fcgkrhmfv4xgxeohcmrpjftdphbcicz.py:624: in <module>
+    async_compile.wait(globals())
+venv/lib/python3.12/site-packages/torch/_inductor/async_compile.py:631: in wait
+    self._wait_futures(scope)
+venv/lib/python3.12/site-packages/torch/_inductor/async_compile.py:651: in _wait_futures
+    kernel = result.result()
+             ^^^^^^^^^^^^^^^
+venv/lib/python3.12/site-packages/torch/_inductor/codecache.py:4289: in result
+    return self.result_fn()
+           ^^^^^^^^^^^^^^^^
+venv/lib/python3.12/site-packages/torch/_inductor/async_compile.py:470: in get_result
+    kernel.precompile(
+venv/lib/python3.12/site-packages/torch/_inductor/runtime/triton_heuristics.py:451: in precompile
+    self._make_launchers()
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <torch._inductor.runtime.triton_heuristics.CachingAutotuner object at 0x798615294fe0>
+
+    def _make_launchers(self):
+        if len(self.launchers) == len(self.compile_results):
+            return
+    
+        from torch._dynamo.device_interface import DeviceGuard
+    
+        device_interface = self.get_device_interface()
+    
+        # load binary to the correct device
+        with DeviceGuard(device_interface, self.triton_meta["device"]):
+            # need to initialize context
+            with dynamo_timed(
+                "CachingAutotuner.synchronize",
+                # Deliberately avoid overloading pt2_compile_events:
+                log_pt2_compile_event=False,
+            ):
+                device_interface.synchronize(device_interface.current_device())
+    
+            launchers = []
+            exc = None
+            for result in self.compile_results:
+                try:
+                    launchers.append(result.make_launcher())
+    
+                except (OutOfResources, PTXASError, torch.cuda.OutOfMemoryError) as e:
+                    exc = e
+        if len(launchers) == 0:
+>           raise RuntimeError(f"No valid triton configs. {type(exc).__name__}: {exc}")
+E           torch._inductor.exc.InductorError: RuntimeError: No valid triton configs. OutOfMemoryError: out of resource: triton_tem_fused_0 Required: 147968 Hardware limit:101376 Reducing block sizes or `num_stages` may help.
+E           
+E           Set TORCHDYNAMO_VERBOSE=1 for the internal stack trace (please do this especially if you're reporting a bug to PyTorch). For even more developer context, set TORCH_LOGS="+dynamo"
+
+venv/lib/python3.12/site-packages/torch/_inductor/runtime/triton_heuristics.py:619: InductorError
+=============================== warnings summary ===============================
+<frozen importlib._bootstrap>:488
+<frozen importlib._bootstrap>:488
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type SwigPyPacked has no __module__ attribute
+
+<frozen importlib._bootstrap>:488
+<frozen importlib._bootstrap>:488
+  <frozen importlib._bootstrap>:488: DeprecationWarning: builtin type SwigPyObject has no __module__ attribute
+
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_batching_equivalence
+  /home/vedth/stuhdy/transformers/tests/test_modeling_common.py:1091: UserWarning: Using a non-tuple sequence for multidimensional indexing is deprecated and will be changed in pytorch 2.9; use x[tuple(seq)] instead of x[seq]. In pytorch 2.9 this will be interpreted as tensor index, x[torch.tensor(seq)], which will result either in an error or a different result (Triggered internally at /pytorch/torch/csrc/autograd/python_variable_indexing.cpp:345.)
+    batched_row = batched_object[slice_ids]
+
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_flex_attention_with_grads
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_flex_attention_with_grads
+  /home/vedth/stuhdy/transformers/venv/lib/python3.12/site-packages/torch/nn/attention/flex_attention.py:1083: DeprecationWarning: _compile flag on create_block_mask was originally added to work around a torch.compile limitation. That limitation has since been addressed. So, to compile create_block_mask, we suggest doing torch.compile(create_block_mask). This still works for now, but will be removed in the future.
+    warnings.warn(
+
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_flex_attention_with_grads
+  /home/vedth/stuhdy/transformers/venv/lib/python3.12/site-packages/torch/nn/attention/flex_attention.py:1622: FutureWarning: return_lse is deprecated and will be removed in v2.10. Please use return_aux=AuxRequest(lse=True) instead.
+    _warn_once(
+
+tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_generate_from_inputs_embeds
+  /usr/lib/python3.12/unittest/case.py:690: DeprecationWarning: It is deprecated to return a value that is not None from a test case (<bound method hub_retry.<locals>.decorator.<locals>.wrapper of <tests.models.afmoe.test_modeling_afmoe.AfmoeModelTest testMethod=test_generate_from_inputs_embeds>>)
+    return self.run(*args, **kwds)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+-- generated xml file: /home/vedth/stuhdy/transformers/test-results/junit.xml --
+=========================== short test summary info ============================
+SKIPPED [1] tests/generation/test_utils.py:1849: test is slow
+SKIPPED [1] tests/generation/test_utils.py:1857: test requires Flash Attention 3
+SKIPPED [1] tests/models/afmoe/test_modeling_afmoe.py:107: Afmoe applies key/query norm which doesn't work with packing
+SKIPPED [1] tests/generation/test_utils.py:1865: AfmoeForCausalLM does not support Flash Attention.
+SKIPPED [1] tests/generation/test_utils.py:2082: test is slow
+SKIPPED [1] tests/generation/test_utils.py:2089: test is slow
+SKIPPED [1] tests/generation/test_utils.py:2098: test requires Flash Attention 3
+SKIPPED [1] tests/generation/test_utils.py:2105: test requires Flash Attention 3
+SKIPPED [1] tests/test_modeling_common.py:3367: test is slow
+SKIPPED [1] tests/test_modeling_common.py:3294: This model is not a composite model!
+SKIPPED [1] tests/causal_lm_tester.py:596: test is slow
+SKIPPED [1] tests/test_modeling_common.py:3306: test requires bitsandbytes
+SKIPPED [1] tests/test_modeling_common.py:3462: test is slow
+SKIPPED [1] tests/test_modeling_common.py:2894: test is slow
+SKIPPED [1] tests/test_modeling_common.py:2902: test is slow
+SKIPPED [1] tests/test_modeling_common.py:3300: test requires Flash Attention 3
+SKIPPED [1] tests/test_modeling_common.py:3469: test requires Flash Attention 3
+SKIPPED [1] tests/test_modeling_common.py:2910: test requires Flash Attention 3
+SKIPPED [1] tests/test_modeling_common.py:2918: test requires Flash Attention 3
+SKIPPED [1] tests/test_modeling_common.py:2876: test is slow
+SKIPPED [1] tests/test_modeling_common.py:2884: test requires MPS
+SKIPPED [1] tests/test_modeling_common.py:2926: Model is not a composite model.
+SKIPPED [1] tests/test_modeling_common.py:4162: No conversion found for this model
+SKIPPED [1] tests/test_modeling_common.py:3981: This model is not composite
+SKIPPED [1] tests/generation/test_utils.py:2149: AfmoeForCausalLM is not guaranteed to work with custom 4D attention masks
+SKIPPED [1] tests/test_modeling_common.py:2327: test requires multiple CUDA GPUs
+SKIPPED [1] tests/test_pipeline_mixin.py:595: AfmoeModelTest::test_pipeline_any_to_any_float32 is skipped: `any-to-any` is not in `self.pipeline_model_mapping` for `AfmoeModelTest`.
+SKIPPED [1] tests/test_pipeline_mixin.py:601: AfmoeModelTest::test_pipeline_any_to_any_float16 is skipped: `any-to-any` is not in `self.pipeline_model_mapping` for `AfmoeModelTest`.
+SKIPPED [1] tests/test_pipeline_mixin.py:493: AfmoeModelTest::test_pipeline_audio_classification_float32 is skipped: `audio-classification` is not in `self.pipeline_model_mapping` for `AfmoeModelTest`.
+SKIPPED [1] tests/test_pipeline_mixin.py:497: AfmoeModelTest::test_pipeline_audio_classification_float16 is skipped: `audio-classification` is not in `self.pipeline_model_mapping` for `AfmoeModelTest`.
+SKIPPED [1] tests/test_pipeline_mixin.py:502: AfmoeModelTest::test_pipeline_automatic_speech_recognition_float32 is skipped: `automatic-speech-recognition` is not in `self.pipeline_model_mapping` for `AfmoeModelTest`.
+SKIPPED [1] tests/test_pipeline_mixin.py:506: AfmoeModelTest::test_pipeline_automatic_speech_recognition_float16 is skipped: `automatic-speech-recognition` is not in `self.pipeline_model_mapping` for `AfmoeModelTest`.
+SKIPPED [1] tests/test_pipeline_mixin.py:511: AfmoeModelTest::test_pipeline_depth_estimation_float32 is skipped: `depth-estimation` is not in `self.pipeline_model_mapping` for `AfmoeModelTest`.
+SKIPPED [1] tests/test_pipeline_mixin.py:518: AfmoeModelTest::test_pipeline_depth_estimation_float16 is skipped: `depth-estimation` is not in `self.pipeline_model_mapping` for `AfmoeModelTest`.
+SKIPPED [1] tests/test_pipeline_mixin.py:525: test requires PyTesseract
+SKIPPED [1] tests/test_pipeline_mixin.py:532: test requires PyTesseract
+SKIPPED [1] tests/test_pipeline_mixin.py:539: AfmoeModelTest::test_pipeline_feature_extraction_float32 is skipped: Could not find any model architecture in the tiny models JSON file for `feature-extraction`.
+SKIPPED [1] tests/test_pipeline_mixin.py:543: AfmoeModelTest::test_pipeline_feature_extraction_float16 is skipped: Could not find any model architecture in the tiny models JSON file for `feature-extraction`.
+SKIPPED [1] tests/test_pipeline_mixin.py:548: AfmoeModelTest::test_pipeline_fill_mask_float32 is skipped: `fill-mask` is not in `self.pipeline_model_mapping` for `AfmoeModelTest`.
+SKIPPED [1] tests/test_pipeline_mixin.py:552: AfmoeModelTest::test_pipeline_fill_mask_float16 is skipped: `fill-mask` is not in `self.pipeline_model_mapping` for `AfmoeModelTest`.
+SKIPPED [1] tests/test_pipeline_mixin.py:557: AfmoeModelTest::test_pipeline_image_classification_float32 is skipped: `image-classification` is not in `self.pipeline_model_mapping` for `AfmoeModelTest`.
+SKIPPED [1] tests/test_pipeline_mixin.py:563: AfmoeModelTest::test_pipeline_image_classification_float16 is skipped: `image-classification` is not in `self.pipeline_model_mapping` for `AfmoeModelTest`.
+SKIPPED [1] tests/test_pipeline_mixin.py:618: AfmoeModelTest::test_pipeline_image_feature_extraction_float32 is skipped: `image-feature-extraction` is not in `self.pipeline_model_mapping` for `AfmoeModelTest`.
+SKIPPED [1] tests/test_pipeline_mixin.py:625: AfmoeModelTest::test_pipeline_image_feature_extraction_float16 is skipped: `image-feature-extraction` is not in `self.pipeline_model_mapping` for `AfmoeModelTest`.
+SKIPPED [1] tests/test_pipeline_mixin.py:569: AfmoeModelTest::test_pipeline_image_segmentation_float32 is skipped: `image-segmentation` is not in `self.pipeline_model_mapping` for `AfmoeModelTest`.
+SKIPPED [1] tests/test_pipeline_mixin.py:576: AfmoeModelTest::test_pipeline_image_segmentation_float16 is skipped: `image-segmentation` is not in `self.pipeline_model_mapping` for `AfmoeModelTest`.
+SKIPPED [1] tests/test_pipeline_mixin.py:583: AfmoeModelTest::test_pipeline_image_text_to_text_float32 is skipped: `image-text-to-text` is not in `self.pipeline_model_mapping` for `AfmoeModelTest`.
+SKIPPED [1] tests/test_pipeline_mixin.py:589: AfmoeModelTest::test_pipeline_image_text_to_text_float16 is skipped: `image-text-to-text` is not in `self.pipeline_model_mapping` for `AfmoeModelTest`.
+SKIPPED [1] tests/test_pipeline_mixin.py:607: AfmoeModelTest::test_pipeline_image_to_text_float32 is skipped: `image-to-text` is not in `self.pipeline_model_mapping` for `AfmoeModelTest`.
+SKIPPED [1] tests/test_pipeline_mixin.py:612: AfmoeModelTest::test_pipeline_image_to_text_float16 is skipped: `image-to-text` is not in `self.pipeline_model_mapping` for `AfmoeModelTest`.
+SKIPPED [1] tests/test_pipeline_mixin.py:632: `run_pipeline_test` is currently not implemented.
+SKIPPED [1] tests/test_pipeline_mixin.py:639: `run_pipeline_test` is currently not implemented.
+SKIPPED [1] tests/test_pipeline_mixin.py:646: AfmoeModelTest::test_pipeline_object_detection_float32 is skipped: `object-detection` is not in `self.pipeline_model_mapping` for `AfmoeModelTest`.
+SKIPPED [1] tests/test_pipeline_mixin.py:653: AfmoeModelTest::test_pipeline_object_detection_float16 is skipped: `object-detection` is not in `self.pipeline_model_mapping` for `AfmoeModelTest`.
+SKIPPED [1] tests/test_pipeline_mixin.py:660: AfmoeModelTest::test_pipeline_question_answering_float32 is skipped: `question-answering` is not in `self.pipeline_model_mapping` for `AfmoeModelTest`.
+SKIPPED [1] tests/test_pipeline_mixin.py:664: AfmoeModelTest::test_pipeline_question_answering_float16 is skipped: `question-answering` is not in `self.pipeline_model_mapping` for `AfmoeModelTest`.
+SKIPPED [1] tests/test_pipeline_mixin.py:669: AfmoeModelTest::test_pipeline_summarization_float32 is skipped: `summarization` is not in `self.pipeline_model_mapping` for `AfmoeModelTest`.
+SKIPPED [1] tests/test_pipeline_mixin.py:673: AfmoeModelTest::test_pipeline_summarization_float16 is skipped: `summarization` is not in `self.pipeline_model_mapping` for `AfmoeModelTest`.
+SKIPPED [1] tests/test_pipeline_mixin.py:678: AfmoeModelTest::test_pipeline_table_question_answering_float32 is skipped: `table-question-answering` is not in `self.pipeline_model_mapping` for `AfmoeModelTest`.
+SKIPPED [1] tests/test_pipeline_mixin.py:682: AfmoeModelTest::test_pipeline_table_question_answering_float16 is skipped: `table-question-answering` is not in `self.pipeline_model_mapping` for `AfmoeModelTest`.
+SKIPPED [1] tests/test_pipeline_mixin.py:687: AfmoeModelTest::test_pipeline_text2text_generation_float32 is skipped: `text2text-generation` is not in `self.pipeline_model_mapping` for `AfmoeModelTest`.
+SKIPPED [1] tests/test_pipeline_mixin.py:691: AfmoeModelTest::test_pipeline_text2text_generation_float16 is skipped: `text2text-generation` is not in `self.pipeline_model_mapping` for `AfmoeModelTest`.
+SKIPPED [1] tests/test_pipeline_mixin.py:696: AfmoeModelTest::test_pipeline_text_classification_float32 is skipped: `text-classification` is not in `self.pipeline_model_mapping` for `AfmoeModelTest`.
+SKIPPED [1] tests/test_pipeline_mixin.py:700: AfmoeModelTest::test_pipeline_text_classification_float16 is skipped: `text-classification` is not in `self.pipeline_model_mapping` for `AfmoeModelTest`.
+SKIPPED [1] tests/test_pipeline_mixin.py:705: AfmoeModelTest::test_pipeline_text_generation_float32 is skipped: Could not find any model architecture in the tiny models JSON file for `text-generation`.
+SKIPPED [1] tests/test_pipeline_mixin.py:710: AfmoeModelTest::test_pipeline_text_generation_float16 is skipped: Could not find any model architecture in the tiny models JSON file for `text-generation`.
+SKIPPED [1] tests/test_pipeline_mixin.py:715: AfmoeModelTest::test_pipeline_text_to_audio_float32 is skipped: `text-to-audio` is not in `self.pipeline_model_mapping` for `AfmoeModelTest`.
+SKIPPED [1] tests/test_pipeline_mixin.py:720: AfmoeModelTest::test_pipeline_text_to_audio_float16 is skipped: `text-to-audio` is not in `self.pipeline_model_mapping` for `AfmoeModelTest`.
+SKIPPED [1] tests/test_pipeline_mixin.py:725: AfmoeModelTest::test_pipeline_token_classification_float32 is skipped: `token-classification` is not in `self.pipeline_model_mapping` for `AfmoeModelTest`.
+SKIPPED [1] tests/test_pipeline_mixin.py:729: AfmoeModelTest::test_pipeline_token_classification_float16 is skipped: `token-classification` is not in `self.pipeline_model_mapping` for `AfmoeModelTest`.
+SKIPPED [1] tests/test_pipeline_mixin.py:734: AfmoeModelTest::test_pipeline_translation_float32 is skipped: `translation` is not in `self.pipeline_model_mapping` for `AfmoeModelTest`.
+SKIPPED [1] tests/test_pipeline_mixin.py:738: AfmoeModelTest::test_pipeline_translation_float16 is skipped: `translation` is not in `self.pipeline_model_mapping` for `AfmoeModelTest`.
+SKIPPED [1] tests/test_pipeline_mixin.py:743: AfmoeModelTest::test_pipeline_video_classification_float32 is skipped: `video-classification` is not in `self.pipeline_model_mapping` for `AfmoeModelTest`.
+SKIPPED [1] tests/test_pipeline_mixin.py:750: AfmoeModelTest::test_pipeline_video_classification_float16 is skipped: `video-classification` is not in `self.pipeline_model_mapping` for `AfmoeModelTest`.
+SKIPPED [1] tests/test_pipeline_mixin.py:757: AfmoeModelTest::test_pipeline_visual_question_answering_float32 is skipped: `visual-question-answering` is not in `self.pipeline_model_mapping` for `AfmoeModelTest`.
+SKIPPED [1] tests/test_pipeline_mixin.py:763: AfmoeModelTest::test_pipeline_visual_question_answering_float16 is skipped: `visual-question-answering` is not in `self.pipeline_model_mapping` for `AfmoeModelTest`.
+SKIPPED [1] tests/test_pipeline_mixin.py:769: AfmoeModelTest::test_pipeline_zero_shot_float32 is skipped: `zero-shot` is not in `self.pipeline_model_mapping` for `AfmoeModelTest`.
+SKIPPED [1] tests/test_pipeline_mixin.py:778: AfmoeModelTest::test_pipeline_zero_shot_audio_classification_float32 is skipped: `zero-shot-audio-classification` is not in `self.pipeline_model_mapping` for `AfmoeModelTest`.
+SKIPPED [1] tests/test_pipeline_mixin.py:783: AfmoeModelTest::test_pipeline_zero_shot_audio_classification_float16 is skipped: `zero-shot-audio-classification` is not in `self.pipeline_model_mapping` for `AfmoeModelTest`.
+SKIPPED [1] tests/test_pipeline_mixin.py:773: AfmoeModelTest::test_pipeline_zero_shot_float16 is skipped: `zero-shot` is not in `self.pipeline_model_mapping` for `AfmoeModelTest`.
+SKIPPED [1] tests/test_pipeline_mixin.py:788: AfmoeModelTest::test_pipeline_zero_shot_image_classification_float32 is skipped: `zero-shot-image-classification` is not in `self.pipeline_model_mapping` for `AfmoeModelTest`.
+SKIPPED [1] tests/test_pipeline_mixin.py:793: AfmoeModelTest::test_pipeline_zero_shot_image_classification_float16 is skipped: `zero-shot-image-classification` is not in `self.pipeline_model_mapping` for `AfmoeModelTest`.
+SKIPPED [1] tests/test_pipeline_mixin.py:799: AfmoeModelTest::test_pipeline_zero_shot_object_detection_float32 is skipped: `zero-shot-object-detection` is not in `self.pipeline_model_mapping` for `AfmoeModelTest`.
+SKIPPED [1] tests/test_pipeline_mixin.py:805: AfmoeModelTest::test_pipeline_zero_shot_object_detection_float16 is skipped: `zero-shot-object-detection` is not in `self.pipeline_model_mapping` for `AfmoeModelTest`.
+SKIPPED [1] tests/causal_lm_tester.py:404: Model does not support question answering
+SKIPPED [1] tests/test_modeling_common.py:1908: test requires deepspeed
+SKIPPED [1] tests/test_modeling_common.py:1920: test requires deepspeed
+SKIPPED [1] tests/test_modeling_common.py:1561: Model does not have position embeddings
+SKIPPED [1] tests/test_modeling_common.py:1796: test requires deepspeed
+SKIPPED [1] tests/test_modeling_common.py:1808: test requires deepspeed
+SKIPPED [1] tests/test_modeling_common.py:4084: No conversion found for this model
+SKIPPED [1] tests/test_modeling_common.py:3167: test is slow
+SKIPPED [1] tests/test_modeling_common.py:3023: AfmoeModel does not support SDPA
+SKIPPED [1] tests/test_modeling_common.py:3086: test is slow
+SKIPPED [1] tests/models/afmoe/test_modeling_afmoe.py:111: Afmoe  applies key/query norm which doesn't work with packing
+SKIPPED [1] tests/causal_lm_tester.py:341: Model does not support sequence classification
+SKIPPED [1] tests/causal_lm_tester.py:370: Model does not support sequence classification
+SKIPPED [1] tests/causal_lm_tester.py:355: Model does not support sequence classification
+SKIPPED [1] tests/test_modeling_common.py:3476: Model does not support sliding window mask
+SKIPPED [1] tests/causal_lm_tester.py:387: Model does not support token classification
+SKIPPED [1] tests/test_modeling_common.py:3530: test is slow
+SKIPPED [1] tests/test_modeling_common.py:3580: test is slow
+SKIPPED [1] tests/test_modeling_common.py:4042: Model does not have a TP plan.
+SKIPPED [1] tests/test_modeling_common.py:3896: No subconfigs so the test does not make sense
+SKIPPED [1] tests/models/afmoe/test_modeling_afmoe.py:119: Afmoe has moe, output can be different
+SKIPPED [1] tests/test_modeling_common.py:2492: test requires multiple accelerators
+SKIPPED [1] tests/models/afmoe/test_modeling_afmoe.py:115: Afmoe  applies key/query norm which doesn't work with packing
+FAILED tests/models/afmoe/test_modeling_afmoe.py::AfmoeModelTest::test_flex_attention_with_grads - torch._inductor.exc.InductorError: RuntimeError: No valid triton configs. OutOfMemoryError: out of resource: triton_tem_fused_0 Required: 147968 Hardware limit:101376 Reducing block sizes or `num_stages` may help.
+
+Set TORCHDYNAMO_VERBOSE=1 for the internal stack trace (please do this especially if you're reporting a bug to PyTorch). For even more developer context, set TORCH_LOGS="+dynamo"
+======= 1 failed, 83 passed, 107 skipped, 9 warnings in 73.49s (0:01:13) =======
