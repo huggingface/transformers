@@ -422,6 +422,7 @@ class TapasModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     pipeline_model_mapping = (
         {
             "text-embedding": TapasModel,
+            "fill-mask": TapasForMaskedLM,
             "table-question-answering": TapasForQuestionAnswering,
             "text-classification": TapasForSequenceClassification,
             "zero-shot": TapasForSequenceClassification,

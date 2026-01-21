@@ -218,6 +218,7 @@ class MBartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     pipeline_model_mapping = (
         {
             "text-embedding": MBartModel,
+            "fill-mask": MBartForConditionalGeneration,
             "text-classification": MBartForSequenceClassification,
             "text-generation": MBartForCausalLM,
             "zero-shot": MBartForSequenceClassification,

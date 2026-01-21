@@ -229,6 +229,7 @@ class SqueezeBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
     pipeline_model_mapping = (
         {
             "text-embedding": SqueezeBertModel,
+            "fill-mask": SqueezeBertForMaskedLM,
             "text-classification": SqueezeBertForSequenceClassification,
             "token-classification": SqueezeBertForTokenClassification,
             "zero-shot": SqueezeBertForSequenceClassification,

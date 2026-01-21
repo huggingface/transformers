@@ -430,6 +430,7 @@ class BigBirdModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     pipeline_model_mapping = (
         {
             "text-embedding": BigBirdModel,
+            "fill-mask": BigBirdForMaskedLM,
             "text-classification": BigBirdForSequenceClassification,
             "text-generation": BigBirdForCausalLM,
             "token-classification": BigBirdForTokenClassification,

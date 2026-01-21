@@ -359,6 +359,7 @@ class RemBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     pipeline_model_mapping = (
         {
             "text-embedding": RemBertModel,
+            "fill-mask": RemBertForMaskedLM,
             "text-classification": RemBertForSequenceClassification,
             "text-generation": RemBertForCausalLM,
             "token-classification": RemBertForTokenClassification,
