@@ -86,3 +86,15 @@ filterwarnings = [
     "ignore:builtin type SwigPyObject has no __module__ attribute:DeprecationWarning",
     "ignore:builtin type swigvarlink has no __module__ attribute:DeprecationWarning",
 ]
+
+[tool.ty]
+# ty type checker configuration
+# Using default settings for comprehensive type checking
+
+[tool.ty.rules]
+# Disable specific rules that produce false positives or are too strict for this codebase
+possibly-missing-attribute = "ignore"  # False positives on conditional checks (e.g., inputs_embeds.size() after checking is not None)
+invalid-method-override = "ignore"     # Parameter name differences are acceptable (e.g., x vs input, new_embeddings vs value)
+not-subscriptable = "ignore"           # False positives on tensor slicing (e.g., self.position_ids[:, :seq_length])
+no-matching-overload = "ignore"        # False positives on torch.zeros and similar functions accepting Size/tuple
+unsupported-operator = "ignore"        # False positives on tuple concatenation with += when properly initialized
