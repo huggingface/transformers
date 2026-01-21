@@ -960,6 +960,8 @@ class DFineHybridEncoder(RTDetrHybridEncoder):
             num_blocks = round(3 * config.depth_mult)
             self.pan_blocks.append(DFineRepNCSPELAN4(config, numb_blocks=num_blocks))
 
+        self.post_init()
+
 
 class DFineDecoder(RTDetrDecoder):
     """

@@ -50,7 +50,7 @@ from ...utils import (
     torch_int,
 )
 from ...utils.backbone_utils import load_backbone
-from ...utils.generic import OutputRecorder, can_return_tuple, check_model_inputs
+from ...utils.generic import can_return_tuple, check_model_inputs
 from ..conditional_detr.modeling_conditional_detr import inverse_sigmoid
 from ..deformable_detr.modeling_deformable_detr import DeformableDetrMultiscaleDeformableAttention
 from ..detr.image_processing_detr_fast import DetrImageProcessorFast
@@ -1103,9 +1103,7 @@ class RTDetrHybridEncoder(RTDetrPreTrainedModel):
         config: RTDetrConfig
     """
 
-    _can_record_outputs = {
-        "attentions": OutputRecorder(RTDetrSelfAttention, layer_name="self_attn", index=1),
-    }
+    _can_record_outputs = {"attentions": RTDetrSelfAttention}
 
     def __init__(self, config: RTDetrConfig):
         super().__init__(config)
@@ -1162,6 +1160,8 @@ class RTDetrHybridEncoder(RTDetrPreTrainedModel):
             pan_block = RTDetrCSPRepLayer(config)
             self.downsample_convs.append(downsample_conv)
             self.pan_blocks.append(pan_block)
+
+        self.post_init()
 
     @check_model_inputs(tie_last_hidden_states=False)
     def forward(
@@ -1241,8 +1241,8 @@ class RTDetrHybridEncoder(RTDetrPreTrainedModel):
 class RTDetrDecoder(RTDetrPreTrainedModel):
     _can_record_outputs = {
         "hidden_states": RTDetrDecoderLayer,
-        "attentions": OutputRecorder(RTDetrSelfAttention, layer_name="self_attn", index=1),
-        "cross_attentions": OutputRecorder(RTDetrMultiscaleDeformableAttention, layer_name="encoder_attn", index=1),
+        "attentions": RTDetrSelfAttention,
+        "cross_attentions": RTDetrMultiscaleDeformableAttention,
     }
 
     def __init__(self, config: RTDetrConfig):

@@ -36,7 +36,7 @@ from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, is_torchdynamo_compiling, torch_int
 from ...utils.backbone_utils import load_backbone
-from ...utils.generic import OutputRecorder, can_return_tuple, check_model_inputs
+from ...utils.generic import can_return_tuple, check_model_inputs
 from .configuration_d_fine import DFineConfig
 
 
@@ -925,9 +925,7 @@ class DFineHybridEncoder(DFinePreTrainedModel):
         config: DFineConfig
     """
 
-    _can_record_outputs = {
-        "attentions": OutputRecorder(DFineSelfAttention, layer_name="self_attn", index=1),
-    }
+    _can_record_outputs = {"attentions": DFineSelfAttention}
 
     def __init__(self, config: DFineConfig):
         super().__init__(config)
@@ -965,6 +963,8 @@ class DFineHybridEncoder(DFinePreTrainedModel):
             self.downsample_convs.append(DFineSCDown(config, 3, 2))
             num_blocks = round(3 * config.depth_mult)
             self.pan_blocks.append(DFineRepNCSPELAN4(config, numb_blocks=num_blocks))
+
+        self.post_init()
 
     @check_model_inputs(tie_last_hidden_states=False)
     def forward(
@@ -1108,8 +1108,8 @@ class DFineDecoder(DFinePreTrainedModel):
 
     _can_record_outputs = {
         "hidden_states": DFineDecoderLayer,
-        "attentions": OutputRecorder(DFineSelfAttention, layer_name="self_attn", index=1),
-        "cross_attentions": OutputRecorder(DFineMultiscaleDeformableAttention, layer_name="encoder_attn", index=1),
+        "attentions": DFineSelfAttention,
+        "cross_attentions": DFineMultiscaleDeformableAttention,
     }
 
     def __init__(self, config: DFineConfig):

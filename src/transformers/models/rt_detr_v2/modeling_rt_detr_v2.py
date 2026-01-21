@@ -37,7 +37,7 @@ from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, is_torchdynamo_compiling, torch_int
 from ...utils.backbone_utils import load_backbone
-from ...utils.generic import OutputRecorder, can_return_tuple, check_model_inputs
+from ...utils.generic import can_return_tuple, check_model_inputs
 from .configuration_rt_detr_v2 import RTDetrV2Config
 
 
@@ -559,8 +559,8 @@ def inverse_sigmoid(x, eps=1e-5):
 class RTDetrV2Decoder(RTDetrV2PreTrainedModel):
     _can_record_outputs = {
         "hidden_states": RTDetrV2DecoderLayer,
-        "attentions": OutputRecorder(RTDetrV2SelfAttention, layer_name="self_attn", index=1),
-        "cross_attentions": OutputRecorder(RTDetrV2MultiscaleDeformableAttention, layer_name="encoder_attn", index=1),
+        "attentions": RTDetrV2SelfAttention,
+        "cross_attentions": RTDetrV2MultiscaleDeformableAttention,
     }
 
     def __init__(self, config: RTDetrV2Config):
@@ -1028,9 +1028,7 @@ class RTDetrV2HybridEncoder(RTDetrV2PreTrainedModel):
         config: RTDetrV2Config
     """
 
-    _can_record_outputs = {
-        "attentions": OutputRecorder(RTDetrV2SelfAttention, layer_name="self_attn", index=1),
-    }
+    _can_record_outputs = {"attentions": RTDetrV2SelfAttention}
 
     def __init__(self, config: RTDetrV2Config):
         super().__init__(config)
@@ -1087,6 +1085,8 @@ class RTDetrV2HybridEncoder(RTDetrV2PreTrainedModel):
             pan_block = RTDetrV2CSPRepLayer(config)
             self.downsample_convs.append(downsample_conv)
             self.pan_blocks.append(pan_block)
+
+        self.post_init()
 
     @check_model_inputs(tie_last_hidden_states=False)
     def forward(
