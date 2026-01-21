@@ -48,6 +48,7 @@ if is_torch_available():
         BartForSequenceClassification,
         BartModel,
         BartTokenizer,
+        pipeline,
     )
     from transformers.models.bart.modeling_bart import BartDecoder, BartEncoder, shift_tokens_right
 
@@ -408,6 +409,7 @@ class BartModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     pipeline_model_mapping = (
         {
             "text-embedding": BartModel,
+            "fill-mask": BartForConditionalGeneration,
             "text-classification": BartForSequenceClassification,
             "text-generation": BartForCausalLM,
             "zero-shot": BartForSequenceClassification,
@@ -899,6 +901,21 @@ class BartModelIntegrationTests(unittest.TestCase):
             [[[0.7144, 0.8143, -1.2813], [0.7144, 0.8143, -1.2813], [-0.0467, 2.5911, -2.1845]]], device=torch_device
         )
         torch.testing.assert_close(output[:, :3, :3], expected_slice, rtol=1e-3, atol=1e-3)
+
+    @slow
+    def test_base_mask_filling(self):
+        pbase = pipeline(task="fill-mask", model="facebook/bart-base")
+        src_text = [" I went to the <mask>."]
+        results = [x["token_str"] for x in pbase(src_text)]
+        assert " bathroom" in results
+
+    @slow
+    def test_large_mask_filling(self):
+        plarge = pipeline(task="fill-mask", model="facebook/bart-large")
+        src_text = [" I went to the <mask>."]
+        results = [x["token_str"] for x in plarge(src_text)]
+        expected_results = [" bathroom", " gym", " wrong", " movies", " hospital"]
+        self.assertListEqual(results, expected_results)
 
     @slow
     def test_mnli_inference(self):

@@ -550,6 +550,7 @@ class RoCBertModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     pipeline_model_mapping = (
         {
             "text-embedding": RoCBertModel,
+            "fill-mask": RoCBertForMaskedLM,
             "text-classification": RoCBertForSequenceClassification,
             "text-generation": RoCBertForCausalLM,
             "token-classification": RoCBertForTokenClassification,

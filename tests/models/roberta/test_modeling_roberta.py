@@ -383,6 +383,7 @@ class RobertaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
     pipeline_model_mapping = (
         {
             "text-embedding": RobertaModel,
+            "fill-mask": RobertaForMaskedLM,
             "text-classification": RobertaForSequenceClassification,
             "text-generation": RobertaForCausalLM,
             "token-classification": RobertaForTokenClassification,

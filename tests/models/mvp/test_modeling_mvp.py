@@ -408,6 +408,7 @@ class MvpModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin,
     pipeline_model_mapping = (
         {
             "text-embedding": MvpModel,
+            "fill-mask": MvpForConditionalGeneration,
             "text-classification": MvpForSequenceClassification,
             "text-generation": MvpForCausalLM,
             "zero-shot": MvpForSequenceClassification,

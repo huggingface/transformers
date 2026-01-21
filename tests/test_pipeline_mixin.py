@@ -62,6 +62,7 @@ from .pipelines.test_pipelines_automatic_speech_recognition import AutomaticSpee
 from .pipelines.test_pipelines_depth_estimation import DepthEstimationPipelineTests
 from .pipelines.test_pipelines_document_question_answering import DocumentQuestionAnsweringPipelineTests
 from .pipelines.test_pipelines_feature_extraction import TextEmbeddingPipelineTests
+from .pipelines.test_pipelines_fill_mask import FillMaskPipelineTests
 from .pipelines.test_pipelines_image_classification import ImageClassificationPipelineTests
 from .pipelines.test_pipelines_image_feature_extraction import ImageEmbeddingPipelineTests
 from .pipelines.test_pipelines_image_segmentation import ImageSegmentationPipelineTests
@@ -87,6 +88,7 @@ pipeline_test_mapping = {
     "depth-estimation": {"test": DepthEstimationPipelineTests},
     "document-question-answering": {"test": DocumentQuestionAnsweringPipelineTests},
     "text-embedding": {"test": TextEmbeddingPipelineTests},
+    "fill-mask": {"test": FillMaskPipelineTests},
     "image-classification": {"test": ImageClassificationPipelineTests},
     "image-embedding": {"test": ImageEmbeddingPipelineTests},
     "image-segmentation": {"test": ImageSegmentationPipelineTests},
@@ -524,6 +526,15 @@ class PipelineTesterMixin:
     @require_torch
     def test_pipeline_text_embedding_fp16(self):
         self.run_task_tests(task="text-embedding", dtype="float16")
+
+    @is_pipeline_test
+    def test_pipeline_fill_mask(self):
+        self.run_task_tests(task="fill-mask")
+
+    @is_pipeline_test
+    @require_torch
+    def test_pipeline_fill_mask_fp16(self):
+        self.run_task_tests(task="fill-mask", dtype="float16")
 
     @is_pipeline_test
     @require_torch
