@@ -187,6 +187,8 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("glm_image_vision", "GlmImageVisionModel"),
         ("glm_image_vqmodel", "GlmImageVQVAE"),
         ("glm_ocr", "GlmOcrModel"),
+        ("glm_ocr_text", "GlmOcrTextModel"),
+        ("glm_ocr_vision", "GlmOcrVisionModel"),
         ("glmasr", "GlmAsrForConditionalGeneration"),
         ("glmasr_encoder", "GlmAsrEncoder"),
         ("glpn", "GLPNModel"),

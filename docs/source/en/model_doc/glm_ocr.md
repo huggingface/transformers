@@ -44,16 +44,30 @@ The original code can be found [here](<INSERT LINK TO GITHUB REPO HERE>).
 
 [[autodoc]] GlmOcrConfig
 
+## GlmOcrVisionConfig
+
+[[autodoc]] GlmOcrVisionConfig
+
+## GlmOcrTextConfig
+
+[[autodoc]] GlmOcrTextConfig
+
+## GlmOcrVisionModel
+
+[[autodoc]] GlmOcrVisionModel
+- forward
+
+## GlmOcrTextModel
+
+[[autodoc]] GlmOcrTextModel
+- forward
+
 ## GlmOcrModel
 
 [[autodoc]] GlmOcrModel
-    - forward
-
-## GlmOcrPreTrainedModel
-
-[[autodoc]] GlmOcrPreTrainedModel
-    - forward
+- forward
 
 ## GlmOcrForConditionalGeneration
 
 [[autodoc]] GlmOcrForConditionalGeneration
+- forward
