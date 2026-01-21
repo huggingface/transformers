@@ -12,7 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import torch
 import torch.nn as nn
+import torch.nn.functional as F
 
 from ..glm4v.configuration_glm4v import Glm4vConfig, Glm4vTextConfig, Glm4vVisionConfig
 from ..glm4v.modeling_glm4v import (
@@ -21,6 +23,7 @@ from ..glm4v.modeling_glm4v import (
     Glm4vModelOutputWithPast,
     Glm4vPreTrainedModel,
     Glm4vTextAttention,
+    Glm4vVisionModel,
 )
 
 
@@ -82,11 +85,62 @@ class GlmDocTextAttention(Glm4vTextAttention, nn.Module):
 
 
 class GlmDocPreTrainedModel(Glm4vPreTrainedModel):
-    pass
+    _keys_to_ignore_on_load_unexpected = [r"model\.language_model.\.layers\.16.*"]
 
 
 class GlmDocModelOutputWithPast(Glm4vModelOutputWithPast):
     pass
+
+
+class GlmDocVisionModel(Glm4vVisionModel):
+    def __init__(self, config) -> None:
+        super().__init__(config)
+        del self.embeddings
+        del self.post_conv_layernorm
+
+    def forward(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs) -> torch.Tensor:
+        """
+        Args:
+            hidden_states (`torch.Tensor` of shape `(seq_len, hidden_size)`):
+                The final hidden states of the model.
+            grid_thw (`torch.Tensor` of shape `(num_images_or_videos, 3)`):
+                The temporal, height and width of feature shape of each image in LLM.
+
+        Returns:
+            `torch.Tensor`: hidden_states.
+        """
+        hidden_states = self.patch_embed(hidden_states)
+        rotary_pos_emb, image_type_ids = self.rot_pos_emb(grid_thw)
+        emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
+        position_embeddings = (emb.cos(), emb.sin())
+
+        cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
+            dim=0,
+            # Select dtype based on the following factors:
+            #  - FA2 requires that cu_seqlens_q must have dtype int32
+            #  - torch.onnx.export requires that cu_seqlens_q must have same dtype as grid_thw
+            # See https://github.com/huggingface/transformers/pull/34852 for more information
+            dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32,
+        )
+        cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0)
+
+        for blk in self.blocks:
+            hidden_states = blk(
+                hidden_states,
+                cu_seqlens=cu_seqlens,
+                position_embeddings=position_embeddings,
+            )
+
+        hidden_states = self.post_layernorm(hidden_states)
+
+        hidden_states = hidden_states.view(
+            -1, self.spatial_merge_size, self.spatial_merge_size, hidden_states.shape[-1]
+        )
+        hidden_states = hidden_states.permute(0, 3, 1, 2)
+        hidden_states = self.downsample(hidden_states).view(-1, self.config.out_hidden_size)
+
+        hidden_states = self.merger(hidden_states)
+        return hidden_states
 
 
 class GlmDocModel(Glm4vModel):

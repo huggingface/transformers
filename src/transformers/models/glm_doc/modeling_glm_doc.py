@@ -325,6 +325,7 @@ class GlmDocPreTrainedModel(PreTrainedModel):
         "hidden_states": GlmDocTextDecoderLayer,
         "attentions": GlmDocTextAttention,
     }
+    _keys_to_ignore_on_load_unexpected = [r"model\.language_model.\.layers\.16.*"]
 
     def _init_weights(self, module):
         super()._init_weights(module)
@@ -406,81 +407,6 @@ class GlmDocVisionPatchMerger(nn.Module):
         hidden_state = self.proj(hidden_state)
         hidden_state = self.act1(self.post_projection_norm(hidden_state))
         return self.down_proj(self.act_fn(self.gate_proj(hidden_state)) * self.up_proj(hidden_state))
-
-
-class GlmDocVisionEmbeddings(nn.Module):
-    def __init__(self, config: GlmDocVisionConfig):
-        super().__init__()
-        self.config = config
-        self.embed_dim = config.hidden_size
-        self.image_size = config.image_size
-        self.patch_size = config.patch_size
-
-        self.num_patches = (self.image_size // self.patch_size) ** 2
-        self.num_positions = self.num_patches
-        self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
-        self.interpolated_method = "bicubic"
-
-    def forward(self, embeddings, lengths, image_shapes, h_coords, w_coords) -> torch.Tensor:
-        """
-        Forward pass with integrated position encoding adaptation using 2D interpolation.
-
-        Args:
-            embeddings: Input embeddings tensor
-            lengths (torch.Tensor): Sequence lengths for each image in the batch.
-            image_shapes (torch.Tensor): Tensor of shape [batch_size, 3] representing the image shapes (t, h, w).
-            h_coords (torch.Tensor): Tensor of shape [total_seq] representing the h coordinate for each patch.
-            w_coords (torch.Tensor): Tensor of shape [total_seq] representing the w coordinate for each patch.
-
-        Returns:
-            torch.Tensor: Embeddings with adapted position encoding added.
-        """
-        # Get position embedding parameters
-        pos_embed_weight = self.position_embedding.weight
-        hidden_size = pos_embed_weight.shape[1]
-        device = pos_embed_weight.device
-
-        # Convert inputs to tensors if needed
-        if isinstance(lengths, list):
-            lengths = torch.tensor(lengths, device=device, dtype=torch.long)
-
-        # Prepare 2D position embedding
-        orig_size_sq = pos_embed_weight.shape[0]
-        orig_size = int(orig_size_sq**0.5)
-        pos_embed_2d = (
-            pos_embed_weight.view(orig_size, orig_size, hidden_size)
-            .permute(2, 0, 1)
-            .unsqueeze(0)
-            .to(device=device, dtype=torch.float32)
-        )
-
-        # Calculate target dimensions for each patch
-        target_h = torch.cat([image_shapes[i, 1].repeat(lengths[i]) for i in range(len(lengths))]).to(
-            device=device, dtype=torch.float32
-        )
-        target_w = torch.cat([image_shapes[i, 2].repeat(lengths[i]) for i in range(len(lengths))]).to(
-            device=device, dtype=torch.float32
-        )
-
-        # Normalize coordinates to [-1, 1] range for grid_sample
-        norm_w = ((w_coords + 0.5) / target_w) * 2 - 1
-        norm_h = ((h_coords + 0.5) / target_h) * 2 - 1
-
-        # Create sampling grid
-        grid = torch.stack((norm_w, norm_h), dim=-1).unsqueeze(0).unsqueeze(2)
-
-        # Perform bicubic interpolation
-        interpolated_embed_fp32 = F.grid_sample(
-            pos_embed_2d, grid, mode=self.interpolated_method, align_corners=False, padding_mode="border"
-        )
-
-        # Reshape and convert back to original dtype
-        adapted_pos_embed_fp32 = interpolated_embed_fp32.squeeze(0).squeeze(-1).permute(1, 0)
-        adapted_pos_embed = adapted_pos_embed_fp32.to(pos_embed_weight.dtype).to(embeddings.device)
-
-        # Add adapted position encoding to embeddings
-        embeddings = embeddings + adapted_pos_embed
-        return embeddings
 
 
 def rotate_half(x):
@@ -614,6 +540,109 @@ class GlmDocVisionBlock(GradientCheckpointingLayer):
         return hidden_states
 
 
+class GlmDocVisionModel(GlmDocPreTrainedModel):
+    config: GlmDocVisionConfig
+    input_modalities = ("image", "video")
+    _no_split_modules = ["GlmDocVisionBlock"]
+
+    def __init__(self, config) -> None:
+        super().__init__(config)
+        self.spatial_merge_size = config.spatial_merge_size
+        self.patch_size = config.patch_size
+        self.patch_embed = GlmDocVisionPatchEmbed(config)
+
+        head_dim = config.hidden_size // config.num_heads
+        self.rotary_pos_emb = GlmDocVisionRotaryEmbedding(head_dim // 2)
+
+        self.blocks = nn.ModuleList([GlmDocVisionBlock(config) for _ in range(config.depth)])
+        self.merger = GlmDocVisionPatchMerger(
+            dim=config.out_hidden_size, context_dim=config.intermediate_size, hidden_act=config.hidden_act
+        )
+        self.downsample = nn.Conv2d(
+            in_channels=config.hidden_size,
+            out_channels=config.out_hidden_size,
+            kernel_size=config.spatial_merge_size,
+            stride=config.spatial_merge_size,
+        )
+        self.post_layernorm = GlmDocRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
+
+        self.gradient_checkpointing = False
+        self.post_init()
+
+    def rot_pos_emb(self, grid_thw):
+        pos_ids = []
+        for t, h, w in grid_thw:
+            hpos_ids = torch.arange(h).unsqueeze(1).expand(-1, w)
+            hpos_ids = hpos_ids.reshape(
+                h // self.spatial_merge_size,
+                self.spatial_merge_size,
+                w // self.spatial_merge_size,
+                self.spatial_merge_size,
+            )
+            hpos_ids = hpos_ids.permute(0, 2, 1, 3)
+            hpos_ids = hpos_ids.flatten()
+
+            wpos_ids = torch.arange(w).unsqueeze(0).expand(h, -1)
+            wpos_ids = wpos_ids.reshape(
+                h // self.spatial_merge_size,
+                self.spatial_merge_size,
+                w // self.spatial_merge_size,
+                self.spatial_merge_size,
+            )
+            wpos_ids = wpos_ids.permute(0, 2, 1, 3)
+            wpos_ids = wpos_ids.flatten()
+            pos_ids.append(torch.stack([hpos_ids, wpos_ids], dim=-1).repeat(t, 1))
+        pos_ids = torch.cat(pos_ids, dim=0)
+        max_grid_size = grid_thw[:, 1:].max()
+        rotary_pos_emb_full = self.rotary_pos_emb(max_grid_size)
+        rotary_pos_emb = rotary_pos_emb_full[pos_ids].flatten(1)
+        return rotary_pos_emb, pos_ids
+
+    def forward(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs) -> torch.Tensor:
+        """
+        Args:
+            hidden_states (`torch.Tensor` of shape `(seq_len, hidden_size)`):
+                The final hidden states of the model.
+            grid_thw (`torch.Tensor` of shape `(num_images_or_videos, 3)`):
+                The temporal, height and width of feature shape of each image in LLM.
+
+        Returns:
+            `torch.Tensor`: hidden_states.
+        """
+        hidden_states = self.patch_embed(hidden_states)
+        rotary_pos_emb, image_type_ids = self.rot_pos_emb(grid_thw)
+        emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
+        position_embeddings = (emb.cos(), emb.sin())
+
+        cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
+            dim=0,
+            # Select dtype based on the following factors:
+            #  - FA2 requires that cu_seqlens_q must have dtype int32
+            #  - torch.onnx.export requires that cu_seqlens_q must have same dtype as grid_thw
+            # See https://github.com/huggingface/transformers/pull/34852 for more information
+            dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32,
+        )
+        cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0)
+
+        for blk in self.blocks:
+            hidden_states = blk(
+                hidden_states,
+                cu_seqlens=cu_seqlens,
+                position_embeddings=position_embeddings,
+            )
+
+        hidden_states = self.post_layernorm(hidden_states)
+
+        hidden_states = hidden_states.view(
+            -1, self.spatial_merge_size, self.spatial_merge_size, hidden_states.shape[-1]
+        )
+        hidden_states = hidden_states.permute(0, 3, 1, 2)
+        hidden_states = self.downsample(hidden_states).view(-1, self.config.out_hidden_size)
+
+        hidden_states = self.merger(hidden_states)
+        return hidden_states
+
+
 class GlmDocTextRotaryEmbedding(nn.Module):
     inv_freq: torch.Tensor  # fix linting for `register_buffer`
 
@@ -689,122 +718,6 @@ class GlmDocTextRotaryEmbedding(nn.Module):
         chunks = freqs.split(section, dim=-1)
         result = torch.cat([chunk[i % 3] for i, chunk in enumerate(chunks)], dim=-1)
         return result
-
-
-class GlmDocVisionModel(GlmDocPreTrainedModel):
-    config: GlmDocVisionConfig
-    input_modalities = ("image", "video")
-    _no_split_modules = ["GlmDocVisionBlock"]
-
-    def __init__(self, config) -> None:
-        super().__init__(config)
-        self.spatial_merge_size = config.spatial_merge_size
-        self.patch_size = config.patch_size
-
-        self.embeddings = GlmDocVisionEmbeddings(config)
-        self.patch_embed = GlmDocVisionPatchEmbed(config)
-
-        head_dim = config.hidden_size // config.num_heads
-        self.rotary_pos_emb = GlmDocVisionRotaryEmbedding(head_dim // 2)
-
-        self.blocks = nn.ModuleList([GlmDocVisionBlock(config) for _ in range(config.depth)])
-        self.merger = GlmDocVisionPatchMerger(
-            dim=config.out_hidden_size, context_dim=config.intermediate_size, hidden_act=config.hidden_act
-        )
-
-        self.post_conv_layernorm = GlmDocRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-        self.downsample = nn.Conv2d(
-            in_channels=config.hidden_size,
-            out_channels=config.out_hidden_size,
-            kernel_size=config.spatial_merge_size,
-            stride=config.spatial_merge_size,
-        )
-        self.post_layernorm = GlmDocRMSNorm(config.hidden_size, eps=config.rms_norm_eps)
-
-        self.gradient_checkpointing = False
-        self.post_init()
-
-    def rot_pos_emb(self, grid_thw):
-        pos_ids = []
-        for t, h, w in grid_thw:
-            hpos_ids = torch.arange(h).unsqueeze(1).expand(-1, w)
-            hpos_ids = hpos_ids.reshape(
-                h // self.spatial_merge_size,
-                self.spatial_merge_size,
-                w // self.spatial_merge_size,
-                self.spatial_merge_size,
-            )
-            hpos_ids = hpos_ids.permute(0, 2, 1, 3)
-            hpos_ids = hpos_ids.flatten()
-
-            wpos_ids = torch.arange(w).unsqueeze(0).expand(h, -1)
-            wpos_ids = wpos_ids.reshape(
-                h // self.spatial_merge_size,
-                self.spatial_merge_size,
-                w // self.spatial_merge_size,
-                self.spatial_merge_size,
-            )
-            wpos_ids = wpos_ids.permute(0, 2, 1, 3)
-            wpos_ids = wpos_ids.flatten()
-            pos_ids.append(torch.stack([hpos_ids, wpos_ids], dim=-1).repeat(t, 1))
-        pos_ids = torch.cat(pos_ids, dim=0)
-        max_grid_size = grid_thw[:, 1:].max()
-        rotary_pos_emb_full = self.rotary_pos_emb(max_grid_size)
-        rotary_pos_emb = rotary_pos_emb_full[pos_ids].flatten(1)
-        return rotary_pos_emb, pos_ids
-
-    def forward(self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs) -> torch.Tensor:
-        """
-        Args:
-            hidden_states (`torch.Tensor` of shape `(seq_len, hidden_size)`):
-                The final hidden states of the model.
-            grid_thw (`torch.Tensor` of shape `(num_images_or_videos, 3)`):
-                The temporal, height and width of feature shape of each image in LLM.
-
-        Returns:
-            `torch.Tensor`: hidden_states.
-        """
-        hidden_states = self.patch_embed(hidden_states)
-        hidden_states = self.post_conv_layernorm(hidden_states)
-        rotary_pos_emb, image_type_ids = self.rot_pos_emb(grid_thw)
-        emb = torch.cat((rotary_pos_emb, rotary_pos_emb), dim=-1)
-        position_embeddings = (emb.cos(), emb.sin())
-
-        cu_seqlens = torch.repeat_interleave(grid_thw[:, 1] * grid_thw[:, 2], grid_thw[:, 0]).cumsum(
-            dim=0,
-            # Select dtype based on the following factors:
-            #  - FA2 requires that cu_seqlens_q must have dtype int32
-            #  - torch.onnx.export requires that cu_seqlens_q must have same dtype as grid_thw
-            # See https://github.com/huggingface/transformers/pull/34852 for more information
-            dtype=grid_thw.dtype if torch.jit.is_tracing() else torch.int32,
-        )
-        cu_seqlens = F.pad(cu_seqlens, (1, 0), value=0)
-        seqlens = (cu_seqlens[1:] - cu_seqlens[:-1]).tolist()
-        hidden_states = self.embeddings(
-            hidden_states,
-            seqlens,
-            grid_thw,
-            image_type_ids[:, 0].to(hidden_states.device),
-            image_type_ids[:, 1].to(hidden_states.device),
-        )
-
-        for blk in self.blocks:
-            hidden_states = blk(
-                hidden_states,
-                cu_seqlens=cu_seqlens,
-                position_embeddings=position_embeddings,
-            )
-
-        hidden_states = self.post_layernorm(hidden_states)
-
-        hidden_states = hidden_states.view(
-            -1, self.spatial_merge_size, self.spatial_merge_size, hidden_states.shape[-1]
-        )
-        hidden_states = hidden_states.permute(0, 3, 1, 2)
-        hidden_states = self.downsample(hidden_states).view(-1, self.config.out_hidden_size)
-
-        hidden_states = self.merger(hidden_states)
-        return hidden_states
 
 
 @auto_docstring
