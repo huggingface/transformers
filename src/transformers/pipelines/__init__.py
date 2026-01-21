@@ -61,6 +61,7 @@ from .base import (
 )
 from .depth_estimation import DepthEstimationPipeline
 from .document_question_answering import DocumentQuestionAnsweringPipeline
+from .fill_mask import FillMaskPipeline
 from .image_classification import ImageClassificationPipeline
 from .image_embedding import ImageEmbeddingPipeline
 from .image_segmentation import ImageSegmentationPipeline
@@ -177,6 +178,12 @@ SUPPORTED_TASKS = {
         "impl": TableQuestionAnsweringPipeline,
         "pt": (AutoModelForTableQuestionAnswering,) if is_torch_available() else (),
         "default": {"model": ("google/tapas-base-finetuned-wtq", "e3dde19")},
+        "type": "text",
+    },
+    "fill-mask": {
+        "impl": FillMaskPipeline,
+        "pt": (AutoModelForMaskedLM,) if is_torch_available() else (),
+        "default": {"model": ("distilbert/distilroberta-base", "fb53ab8")},
         "type": "text",
     },
     "text-generation": {
