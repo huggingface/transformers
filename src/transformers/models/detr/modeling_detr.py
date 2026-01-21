@@ -42,7 +42,7 @@ from ...utils import (
     requires_backends,
 )
 from ...utils.backbone_utils import load_backbone
-from ...utils.generic import OutputRecorder, can_return_tuple, check_model_inputs
+from ...utils.generic import can_return_tuple, check_model_inputs
 from .configuration_detr import DetrConfig
 
 
@@ -339,12 +339,16 @@ class DetrSinePositionEmbedding(nn.Module):
     """
 
     def __init__(
-        self, num_pos_feats: int = 64, temperature: int = 10000, normalize: bool = False, scale: float | None = None
+        self,
+        num_position_features: int = 64,
+        temperature: int = 10000,
+        normalize: bool = False,
+        scale: float | None = None,
     ):
         super().__init__()
         if scale is not None and normalize is False:
             raise ValueError("normalize should be True if scale is passed")
-        self.num_pos_feats = num_pos_feats
+        self.num_position_features = num_position_features
         self.temperature = temperature
         self.normalize = normalize
         self.scale = 2 * math.pi if scale is None else scale
@@ -366,8 +370,8 @@ class DetrSinePositionEmbedding(nn.Module):
             y_embed = y_embed / (y_embed[:, -1:, :] + eps) * self.scale
             x_embed = x_embed / (x_embed[:, :, -1:] + eps) * self.scale
 
-        dim_t = torch.arange(self.num_pos_feats, dtype=torch.int64, device=device).to(dtype)
-        dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.num_pos_feats)
+        dim_t = torch.arange(self.num_position_features, dtype=torch.int64, device=device).to(dtype)
+        dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode="floor") / self.num_position_features)
 
         pos_x = x_embed[:, :, :, None] / dim_t
         pos_y = y_embed[:, :, :, None] / dim_t
@@ -413,6 +417,7 @@ class DetrLearnedPositionEmbedding(nn.Module):
         return pos
 
 
+# Copied from transformers.models.bert.modeling_bert.eager_attention_forward
 def eager_attention_forward(
     module: nn.Module,
     query: torch.Tensor,
@@ -426,6 +431,7 @@ def eager_attention_forward(
     if scaling is None:
         scaling = query.size(-1) ** -0.5
 
+    # Take the dot product between "query" and "key" to get the raw attention scores.
     attn_weights = torch.matmul(query, key.transpose(2, 3)) * scaling
 
     if attention_mask is not None:
@@ -454,6 +460,7 @@ class DetrSelfAttention(nn.Module):
         hidden_size: int,
         num_attention_heads: int,
         dropout: float = 0.0,
+        bias: bool = True,
     ):
         super().__init__()
         self.config = config
@@ -462,10 +469,10 @@ class DetrSelfAttention(nn.Module):
         self.attention_dropout = dropout
         self.is_causal = False
 
-        self.k_proj = nn.Linear(hidden_size, hidden_size)
-        self.v_proj = nn.Linear(hidden_size, hidden_size)
-        self.q_proj = nn.Linear(hidden_size, hidden_size)
-        self.o_proj = nn.Linear(hidden_size, hidden_size)
+        self.k_proj = nn.Linear(hidden_size, hidden_size, bias=bias)
+        self.v_proj = nn.Linear(hidden_size, hidden_size, bias=bias)
+        self.q_proj = nn.Linear(hidden_size, hidden_size, bias=bias)
+        self.o_proj = nn.Linear(hidden_size, hidden_size, bias=bias)
 
     def forward(
         self,
@@ -520,6 +527,7 @@ class DetrCrossAttention(nn.Module):
         hidden_size: int,
         num_attention_heads: int,
         dropout: float = 0.0,
+        bias: bool = True,
     ):
         super().__init__()
         self.config = config
@@ -528,10 +536,10 @@ class DetrCrossAttention(nn.Module):
         self.attention_dropout = dropout
         self.is_causal = False
 
-        self.k_proj = nn.Linear(hidden_size, hidden_size)
-        self.v_proj = nn.Linear(hidden_size, hidden_size)
-        self.q_proj = nn.Linear(hidden_size, hidden_size)
-        self.o_proj = nn.Linear(hidden_size, hidden_size)
+        self.k_proj = nn.Linear(hidden_size, hidden_size, bias=bias)
+        self.v_proj = nn.Linear(hidden_size, hidden_size, bias=bias)
+        self.q_proj = nn.Linear(hidden_size, hidden_size, bias=bias)
+        self.o_proj = nn.Linear(hidden_size, hidden_size, bias=bias)
 
     def forward(
         self,
@@ -751,88 +759,106 @@ class DetrDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
-def _expand(tensor, length: int):
-    return tensor.unsqueeze(1).repeat(1, int(length), 1, 1, 1).flatten(0, 1)
+class DetrConvBlock(nn.Module):
+    """Basic conv block: Conv3x3 -> GroupNorm -> Activation."""
+
+    def __init__(self, in_channels: int, out_channels: int, activation: str = "relu"):
+        super().__init__()
+        self.conv = nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1)
+        self.norm = nn.GroupNorm(min(8, out_channels), out_channels)
+        self.activation = ACT2FN[activation]
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.activation(self.norm(self.conv(x)))
+
+
+class DetrFPNFusionStage(nn.Module):
+    """Single FPN fusion stage combining low-resolution features with high-resolution FPN features."""
+
+    def __init__(self, fpn_channels: int, current_channels: int, output_channels: int, activation: str = "relu"):
+        super().__init__()
+        self.fpn_adapter = nn.Conv2d(fpn_channels, current_channels, kernel_size=1)
+        self.refine = DetrConvBlock(current_channels, output_channels, activation)
+
+    def forward(self, features: torch.Tensor, fpn_features: torch.Tensor) -> torch.Tensor:
+        """
+        Args:
+            features: Current features to upsample, shape (B*Q, current_channels, H_in, W_in)
+            fpn_features: FPN features at target resolution, shape (B*Q, fpn_channels, H_out, W_out)
+
+        Returns:
+            Fused and refined features, shape (B*Q, output_channels, H_out, W_out)
+        """
+        fpn_features = self.fpn_adapter(fpn_features)
+        features = nn.functional.interpolate(features, size=fpn_features.shape[-2:], mode="nearest")
+        return self.refine(fpn_features + features)
 
 
 class DetrMaskHeadSmallConv(nn.Module):
     """
-    Simple convolutional head, using group norm. Upsampling is done using a FPN approach
+    Segmentation mask head that generates per-query masks using FPN-based progressive upsampling.
+
+    Combines attention maps (spatial localization) with encoder features (semantics) and progressively
+    upsamples through multiple scales, fusing with FPN features for high-resolution detail.
     """
 
-    def __init__(self, dim, fpn_dims, context_dim):
+    def __init__(
+        self,
+        input_channels: int,
+        fpn_channels: list[int],
+        hidden_size: int,
+        activation_function: str = "relu",
+    ):
         super().__init__()
+        if input_channels % 8 != 0:
+            raise ValueError(f"input_channels must be divisible by 8, got {input_channels}")
 
-        if dim % 8 != 0:
-            raise ValueError(
-                "The hidden_size + number of attention heads must be divisible by 8 as the number of groups in"
-                " GroupNorm is set to 8"
-            )
+        self.conv1 = DetrConvBlock(input_channels, input_channels, activation_function)
+        self.conv2 = DetrConvBlock(input_channels, hidden_size // 2, activation_function)
 
-        inter_dims = [dim, context_dim // 2, context_dim // 4, context_dim // 8, context_dim // 16, context_dim // 64]
+        # Progressive channel reduction: /2 -> /4 -> /8 -> /16
+        self.fpn_stages = nn.ModuleList(
+            [
+                DetrFPNFusionStage(fpn_channels[0], hidden_size // 2, hidden_size // 4, activation_function),
+                DetrFPNFusionStage(fpn_channels[1], hidden_size // 4, hidden_size // 8, activation_function),
+                DetrFPNFusionStage(fpn_channels[2], hidden_size // 8, hidden_size // 16, activation_function),
+            ]
+        )
 
-        self.lay1 = nn.Conv2d(dim, dim, 3, padding=1)
-        self.gn1 = nn.GroupNorm(8, dim)
-        self.lay2 = nn.Conv2d(dim, inter_dims[1], 3, padding=1)
-        self.gn2 = nn.GroupNorm(min(8, inter_dims[1]), inter_dims[1])
-        self.lay3 = nn.Conv2d(inter_dims[1], inter_dims[2], 3, padding=1)
-        self.gn3 = nn.GroupNorm(min(8, inter_dims[2]), inter_dims[2])
-        self.lay4 = nn.Conv2d(inter_dims[2], inter_dims[3], 3, padding=1)
-        self.gn4 = nn.GroupNorm(min(8, inter_dims[3]), inter_dims[3])
-        self.lay5 = nn.Conv2d(inter_dims[3], inter_dims[4], 3, padding=1)
-        self.gn5 = nn.GroupNorm(min(8, inter_dims[4]), inter_dims[4])
-        self.out_lay = nn.Conv2d(inter_dims[4], 1, 3, padding=1)
+        self.output_conv = nn.Conv2d(hidden_size // 16, 1, kernel_size=3, padding=1)
 
-        self.dim = dim
+    def forward(
+        self,
+        features: torch.Tensor,
+        attention_masks: torch.Tensor,
+        fpn_features: list[torch.Tensor],
+    ) -> torch.Tensor:
+        """
+        Args:
+            features: Encoder output features, shape (batch_size, hidden_size, H, W)
+            attention_masks: Cross-attention maps from decoder, shape (batch_size, num_queries, num_heads, H, W)
+            fpn_features: List of 3 FPN features from low to high resolution, each (batch_size, C, H, W)
 
-        self.adapter1 = nn.Conv2d(fpn_dims[0], inter_dims[1], 1)
-        self.adapter2 = nn.Conv2d(fpn_dims[1], inter_dims[2], 1)
-        self.adapter3 = nn.Conv2d(fpn_dims[2], inter_dims[3], 1)
+        Returns:
+            Predicted masks, shape (batch_size * num_queries, 1, output_H, output_W)
+        """
+        num_queries = attention_masks.shape[1]
 
-        for m in self.modules():
-            if isinstance(m, nn.Conv2d):
-                init.kaiming_uniform_(m.weight, a=1)
-                init.constant_(m.bias, 0)
+        # Expand to (batch_size * num_queries) dimension
+        features = features.unsqueeze(1).expand(-1, num_queries, -1, -1, -1).flatten(0, 1)
+        attention_masks = attention_masks.flatten(0, 1)
+        fpn_features = [
+            fpn_feat.unsqueeze(1).expand(-1, num_queries, -1, -1, -1).flatten(0, 1) for fpn_feat in fpn_features
+        ]
 
-    def forward(self, x: torch.Tensor, bbox_mask: torch.Tensor, fpns: list[torch.Tensor]):
-        # here we concatenate x, the projected feature map, of shape (batch_size, d_model, height/32, width/32) with
-        # the bbox_mask = the attention maps of shape (batch_size, n_queries, n_heads, height/32, width/32).
-        # We expand the projected feature map to match the number of heads.
-        x = torch.cat([_expand(x, bbox_mask.shape[1]), bbox_mask.flatten(0, 1)], 1)
+        hidden_states = torch.cat([features, attention_masks], dim=1)
+        hidden_states = self.conv1(hidden_states)
+        hidden_states = self.conv2(hidden_states)
 
-        x = self.lay1(x)
-        x = self.gn1(x)
-        x = nn.functional.relu(x)
-        x = self.lay2(x)
-        x = self.gn2(x)
-        x = nn.functional.relu(x)
+        for fpn_stage, fpn_feat in zip(self.fpn_stages, fpn_features):
+            hidden_states = fpn_stage(hidden_states, fpn_feat)
 
-        cur_fpn = self.adapter1(fpns[0])
-        if cur_fpn.size(0) != x.size(0):
-            cur_fpn = _expand(cur_fpn, x.size(0) // cur_fpn.size(0))
-        x = cur_fpn + nn.functional.interpolate(x, size=cur_fpn.shape[-2:], mode="nearest")
-        x = self.lay3(x)
-        x = self.gn3(x)
-        x = nn.functional.relu(x)
-
-        cur_fpn = self.adapter2(fpns[1])
-        if cur_fpn.size(0) != x.size(0):
-            cur_fpn = _expand(cur_fpn, x.size(0) // cur_fpn.size(0))
-        x = cur_fpn + nn.functional.interpolate(x, size=cur_fpn.shape[-2:], mode="nearest")
-        x = self.lay4(x)
-        x = self.gn4(x)
-        x = nn.functional.relu(x)
-
-        cur_fpn = self.adapter3(fpns[2])
-        if cur_fpn.size(0) != x.size(0):
-            cur_fpn = _expand(cur_fpn, x.size(0) // cur_fpn.size(0))
-        x = cur_fpn + nn.functional.interpolate(x, size=cur_fpn.shape[-2:], mode="nearest")
-        x = self.lay5(x)
-        x = self.gn5(x)
-        x = nn.functional.relu(x)
-
-        x = self.out_lay(x)
-        return x
+        return self.output_conv(hidden_states)
 
 
 class DetrMHAttentionMap(nn.Module):
@@ -849,7 +875,6 @@ class DetrMHAttentionMap(nn.Module):
         self.head_dim = hidden_size // num_attention_heads
         self.scaling = self.head_dim**-0.5
         self.attention_dropout = dropout
-        self.dropout = nn.Dropout(dropout)
 
         self.q_proj = nn.Linear(hidden_size, hidden_size, bias=bias)
         self.k_proj = nn.Linear(hidden_size, hidden_size, bias=bias)
@@ -868,25 +893,26 @@ class DetrMHAttentionMap(nn.Module):
         # Compute attention weights: (b, q, n, c) @ (b, n, c, h*w) -> (b, q, n, h, w)
         batch_size, num_queries, num_heads, head_dim = query_states.shape
         _, _, _, height, width = key_states.shape
+        query_shape = (batch_size * num_heads, num_queries, head_dim)
+        key_shape = (batch_size * num_heads, height * width, head_dim)
+        attn_weights_shape = (batch_size, num_heads, num_queries, height, width)
 
-        query = (
-            (query_states * self.scaling)
-            .permute(0, 2, 1, 3)
-            .contiguous()
-            .view(batch_size * num_heads, num_queries, head_dim)
-        )
-        key = key_states.permute(0, 1, 3, 4, 2).contiguous().view(batch_size * num_heads, height * width, head_dim)
+        query = query_states.transpose(1, 2).contiguous().view(query_shape)
+        key = key_states.permute(0, 1, 3, 4, 2).contiguous().view(key_shape)
 
         attn_weights = (
-            torch.matmul(query, key.transpose(1, 2))
-            .view(batch_size, num_heads, num_queries, height, width)
-            .permute(0, 2, 1, 3, 4)
+            (torch.matmul(query, key.transpose(1, 2)) * self.scaling).view(attn_weights_shape).transpose(1, 2)
         )
 
         if attention_mask is not None:
-            attn_weights = attn_weights.masked_fill(
-                attention_mask.unsqueeze(1).unsqueeze(1), torch.finfo(attn_weights.dtype).min
+            # Prepare mask with min dtype value for additive masking
+            mask_value = torch.finfo(attn_weights.dtype).min
+            attention_mask = torch.where(
+                attention_mask.unsqueeze(1).unsqueeze(1),
+                torch.tensor(mask_value, dtype=attn_weights.dtype, device=attn_weights.device),
+                torch.tensor(0.0, dtype=attn_weights.dtype, device=attn_weights.device),
             )
+            attn_weights = attn_weights + attention_mask
 
         attn_weights = nn.functional.softmax(attn_weights.flatten(2), dim=-1).view(attn_weights.size())
         attn_weights = nn.functional.dropout(attn_weights, p=self.attention_dropout, training=self.training)
@@ -905,7 +931,7 @@ class DetrPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_attention_backend = True
-    _supports_flex_attn = True
+    _supports_flex_attn = True  # Uses create_bidirectional_masks for attention masking
     _keys_to_ignore_on_load_unexpected = [
         r"detr\.model\.backbone\.model\.layer\d+\.0\.downsample\.1\.num_batches_tracked"
     ]
@@ -915,7 +941,14 @@ class DetrPreTrainedModel(PreTrainedModel):
         std = self.config.init_std
         xavier_std = self.config.init_xavier_std
 
-        if isinstance(module, DetrMHAttentionMap):
+        if isinstance(module, DetrMaskHeadSmallConv):
+            # DetrMaskHeadSmallConv uses kaiming initialization for all its Conv2d layers
+            for m in module.modules():
+                if isinstance(m, nn.Conv2d):
+                    init.kaiming_uniform_(m.weight, a=1)
+                    if m.bias is not None:
+                        init.constant_(m.bias, 0)
+        elif isinstance(module, DetrMHAttentionMap):
             init.zeros_(module.k_proj.bias)
             init.zeros_(module.q_proj.bias)
             init.xavier_uniform_(module.k_proj.weight, gain=xavier_std)
@@ -923,7 +956,7 @@ class DetrPreTrainedModel(PreTrainedModel):
         elif isinstance(module, DetrLearnedPositionEmbedding):
             init.uniform_(module.row_embeddings.weight)
             init.uniform_(module.column_embeddings.weight)
-        if isinstance(module, (nn.Linear, nn.Conv2d)):
+        elif isinstance(module, (nn.Linear, nn.Conv2d)):
             init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
                 init.zeros_(module.bias)
@@ -946,10 +979,7 @@ class DetrEncoder(DetrPreTrainedModel):
         config (`DetrConfig`): Model configuration object.
     """
 
-    _can_record_outputs = {
-        "hidden_states": DetrEncoderLayer,
-        "attentions": OutputRecorder(DetrSelfAttention, layer_name="self_attn", index=1),
-    }
+    _can_record_outputs = {"hidden_states": DetrEncoderLayer, "attentions": DetrSelfAttention}
 
     def __init__(self, config: DetrConfig):
         super().__init__(config)
@@ -1014,8 +1044,8 @@ class DetrDecoder(DetrPreTrainedModel):
 
     _can_record_outputs = {
         "hidden_states": DetrDecoderLayer,
-        "attentions": OutputRecorder(DetrSelfAttention, layer_name="self_attn", index=1),
-        "cross_attentions": OutputRecorder(DetrCrossAttention, layer_name="encoder_attn", index=1),
+        "attentions": DetrSelfAttention,
+        "cross_attentions": DetrCrossAttention,
     }
 
     def __init__(self, config: DetrConfig):
@@ -1452,6 +1482,21 @@ class DetrForSegmentation(DetrPreTrainedModel):
     _checkpoint_conversion_mapping = {
         "bbox_attention.q_linear": "bbox_attention.q_proj",
         "bbox_attention.k_linear": "bbox_attention.k_proj",
+        # Mask head refactor
+        "mask_head.lay1": "mask_head.conv1.conv",
+        "mask_head.gn1": "mask_head.conv1.norm",
+        "mask_head.lay2": "mask_head.conv2.conv",
+        "mask_head.gn2": "mask_head.conv2.norm",
+        "mask_head.adapter1": "mask_head.fpn_stages.0.fpn_adapter",
+        "mask_head.lay3": "mask_head.fpn_stages.0.refine.conv",
+        "mask_head.gn3": "mask_head.fpn_stages.0.refine.norm",
+        "mask_head.adapter2": "mask_head.fpn_stages.1.fpn_adapter",
+        "mask_head.lay4": "mask_head.fpn_stages.1.refine.conv",
+        "mask_head.gn4": "mask_head.fpn_stages.1.refine.norm",
+        "mask_head.adapter3": "mask_head.fpn_stages.2.fpn_adapter",
+        "mask_head.lay5": "mask_head.fpn_stages.2.refine.conv",
+        "mask_head.gn5": "mask_head.fpn_stages.2.refine.norm",
+        "mask_head.out_lay": "mask_head.output_conv",
     }
 
     def __init__(self, config: DetrConfig):
@@ -1465,7 +1510,10 @@ class DetrForSegmentation(DetrPreTrainedModel):
         intermediate_channel_sizes = self.detr.model.backbone.intermediate_channel_sizes
 
         self.mask_head = DetrMaskHeadSmallConv(
-            hidden_size + number_of_heads, intermediate_channel_sizes[::-1][-3:], hidden_size
+            input_channels=hidden_size + number_of_heads,
+            fpn_channels=intermediate_channel_sizes[::-1][-3:],
+            hidden_size=hidden_size,
+            activation_function=config.activation_function,
         )
 
         self.bbox_attention = DetrMHAttentionMap(hidden_size, number_of_heads, dropout=0.0)
@@ -1603,7 +1651,9 @@ class DetrForSegmentation(DetrPreTrainedModel):
         bbox_mask = self.bbox_attention(sequence_output, memory, attention_mask=~attention_mask)
 
         seg_masks = self.mask_head(
-            projected_feature_map, bbox_mask, [vision_features[2][0], vision_features[1][0], vision_features[0][0]]
+            features=projected_feature_map,
+            attention_masks=bbox_mask,
+            fpn_features=[vision_features[2][0], vision_features[1][0], vision_features[0][0]],
         )
 
         pred_masks = seg_masks.view(batch_size, self.detr.config.num_queries, seg_masks.shape[-2], seg_masks.shape[-1])

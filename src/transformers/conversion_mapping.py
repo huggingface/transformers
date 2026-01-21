@@ -189,11 +189,6 @@ def _build_checkpoint_conversion_mapping():
             WeightRenaming(r"layers.(\d+).fc1", r"layers.\1.mlp.fc1"),
             WeightRenaming(r"layers.(\d+).fc2", r"layers.\1.mlp.fc2"),
         ],
-        "rt_detr_v2": [
-            WeightRenaming("out_proj", "o_proj"),
-            WeightRenaming(r"layers.(\d+).fc1", r"layers.\1.mlp.fc1"),
-            WeightRenaming(r"layers.(\d+).fc2", r"layers.\1.mlp.fc2"),
-        ],
         "conditional_detr": [
             WeightRenaming("backbone.conv_encoder", "backbone"),
             WeightRenaming("self_attn.out_proj", "self_attn.o_proj"),
@@ -306,6 +301,7 @@ def _build_checkpoint_conversion_mapping():
     ]
     mapping["flex_olmo"] = mapping["qwen2_moe"].copy()
     mapping["olmoe"] = mapping["qwen2_moe"].copy()
+    mapping["rt_detr_v2"] = mapping["rt_detr"].copy()
 
     return mapping
 
