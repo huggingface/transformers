@@ -454,8 +454,6 @@ def load_image(image: Union[str, Path, "PIL.Image.Image"], timeout: float | None
         `PIL.Image.Image`: A PIL Image.
     """
     requires_backends(load_image, ["vision"])
-    
-    # Convert Path to string
     if isinstance(image, Path):
         image = str(image)
         
