@@ -4115,7 +4115,7 @@ class ColoredFormatter(logging.Formatter):
     }
 
     # Loggers that should be dimmed (less important/verbose)
-    DIMMED_LOGGERS = {"httpx", "httpcore", "urllib3"}
+    DIMMED_LOGGERS = {"httpx", "httpcore", "urllib3", "requests"}
 
     def __init__(self, fmt: str | None = None, datefmt: str | None = None):
         super().__init__(fmt, datefmt)
