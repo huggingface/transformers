@@ -18,6 +18,7 @@ import inspect
 import math
 import unittest
 
+import pytest
 import requests
 from parameterized import parameterized
 
@@ -452,6 +453,7 @@ class PPDocLayoutV3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
 @require_torch
 @require_vision
 @slow
+@pytest.mark.xfail(reason="Weigths will determine the values of these tests")
 class PPDocLayoutV3ModelIntegrationTest(unittest.TestCase):
     def setUp(self):
         model_path = "PaddlePaddle/PP-DocLayoutV3_safetensors"
