@@ -19,6 +19,7 @@ import torch
 import torch.nn as nn
 
 from ...activations import ACT2FN
+from ... import initialization as init
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple
@@ -108,7 +109,6 @@ class VibeVoiceAcousticTokenizerCausalConv1d(nn.Module):
         self.conv = nn.Conv1d(
             in_channels, out_channels, kernel_size, stride, dilation=dilation, groups=groups, bias=bias
         )
-        # Padding for causality: https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modular_vibevoice_tokenizer.py#L263C28-L263C72
         self.causal_padding = (kernel_size - 1) * dilation - (stride - 1)
         if self.causal_padding < 0:
             raise ValueError(
@@ -122,15 +122,9 @@ class VibeVoiceAcousticTokenizerCausalConv1d(nn.Module):
         hidden_states: torch.Tensor,
         padding_cache: VibeVoiceAcousticTokenizerConv1dPaddingCache | None = None,
     ) -> torch.Tensor:
-        """
-        Forward pass with optional streaming support via cache.
-        Original code: https://github.com/vibevoice-community/VibeVoice/blob/63a21e2b45e908be63765bf312a9ecfb3a588315/vibevoice/modular/modular_vibevoice_tokenizer.py#L296
-        """
-
         if padding_cache is not None:
             layer_padding = padding_cache.update(hidden_states, self.layer_idx)
         else:
-            # non-streaming mode: https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modular_vibevoice_tokenizer.py#L365
             layer_padding = torch.zeros(
                 hidden_states.shape[0],
                 hidden_states.shape[1],
@@ -160,7 +154,6 @@ class VibeVoiceAcousticTokenizerCausalConvTranspose1d(nn.Module):
 
         self.stride = stride
         self.layer_idx = layer_idx
-        # Different padding for transposed convolution: https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modular_vibevoice_tokenizer.py#L423
         self.padding_total = kernel_size - stride
         self.causal_padding = kernel_size - 1
 
@@ -456,8 +449,8 @@ class VibeVoiceAcousticTokenizerPreTrainedModel(PreTrainedModel):
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, VibeVoiceAcousticTokenizerConvNext1dLayer):
-            nn.init.constant_(module.gamma, self.config.layer_scale_init_value)
-            nn.init.constant_(module.ffn_gamma, self.config.layer_scale_init_value)
+            init.constant_(module.gamma, self.config.layer_scale_init_value)
+            init.constant_(module.ffn_gamma, self.config.layer_scale_init_value)
 
 
 @auto_docstring
