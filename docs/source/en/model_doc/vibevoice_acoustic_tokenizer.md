@@ -1,4 +1,4 @@
-<!--Copyright 2025 Microsoft and The HuggingFace Team. All rights reserved.
+<!--Copyright 2026 Microsoft and The HuggingFace Team. All rights reserved.
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use this file except in compliance with
 the License. You may obtain a copy of the License at
@@ -26,7 +26,7 @@ rendered properly in your Markdown viewer.
 
 [VibeVoice](https://huggingface.co/papers/2508.19205) is a novel framework for synthesizing high-fidelity, long-form speech with multiple speakers by employing a next-token diffusion approach within a Large Language Model (LLM) structure. It's designed to capture the authentic conversational "vibe" and is particularly suited for generating audio content like podcasts and multi-participant audiobooks.
 
-One key feature of VibeVoice is the use of two continuous speech tokenizers, one for extracting acoustic features (this model) and another for [semantic](./vibevoice_semantic_tokenizer) features.
+One key feature of VibeVoice is the use of two continuous speech tokenizers, one for extracting acoustic features and another for semantic features.
 
 A model checkpoint is available at [bezzam/VibeVoice-AcousticTokenizer](https://huggingface.co/bezzam/VibeVoice-AcousticTokenizer)
 
@@ -45,9 +45,9 @@ Below is example usage to encode and decode audio:
 
 ```python
 import torch
+from scipy.io import wavfile
 from transformers import AutoFeatureExtractor, VibeVoiceAcousticTokenizerModel
 from transformers.audio_utils import load_audio_librosa
-from scipy.io import wavfile
 
 
 model_id = "bezzam/VibeVoice-AcousticTokenizer"
@@ -55,34 +55,38 @@ sampling_rate = 24000
 
 # load audio
 audio = load_audio_librosa(
-    "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Alice_woman.wav", 
-    sampling_rate=sampling_rate
+    "https://hf.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Alice_woman.wav",
+    sampling_rate=sampling_rate,
 )
 
 # load model
-device = "cuda" if torch.cuda.is_available() else "cpu"
 feature_extractor = AutoFeatureExtractor.from_pretrained(model_id)
-model = VibeVoiceAcousticTokenizerModel.from_pretrained(
-    model_id, device_map=device,
-).eval()
+model = VibeVoiceAcousticTokenizerModel.from_pretrained(model_id, device_map="auto")
+print("Model loaded on device:", model.device)
+print("Model dtype:", model.dtype)
 
 # preprocess audio
 inputs = feature_extractor(
-    audio, 
+    audio,
     sampling_rate=sampling_rate,
     padding=True,
     pad_to_multiple_of=3200,
-    return_attention_mask=False,
-    return_tensors="pt"
-).to(device)
-print("Input audio shape:", inputs.input_features.shape)
+    return_tensors="pt",
+).to(model.device, model.dtype)
+print("Input audio shape:", inputs.input_values.shape)
 # Input audio shape: torch.Size([1, 1, 224000])
 
 # encode
 with torch.no_grad():
-    encoded_outputs = model.encode(inputs.input_features)
+    encoded_outputs = model.encode(inputs.input_values)
 print("Latent shape:", encoded_outputs.latents.shape)
 # Latent shape: torch.Size([1, 70, 64])
+
+# VAE sampling
+with torch.no_grad():
+    encoded_outputs = model.sample(encoded_outputs.latents)
+print("Noisy latents shape:", encoded_outputs.latents.shape)
+# Noisy latents shape: torch.Size([1, 70, 64])
 
 # decode
 with torch.no_grad():
@@ -92,7 +96,8 @@ print("Reconstructed audio shape:", decoded_outputs.audio.shape)
 
 # Save audio
 output_fp = "vibevoice_acoustic_tokenizer_reconstructed.wav"
-wavfile.write(output_fp, sampling_rate, decoded_outputs.audio.squeeze().cpu().numpy())
+wavfile.write(output_fp, sampling_rate, decoded_outputs.audio.squeeze().float().cpu().numpy())
+print(f"Reconstructed audio saved to : {output_fp}")
 ```
 
 
@@ -110,6 +115,7 @@ wavfile.write(output_fp, sampling_rate, decoded_outputs.audio.squeeze().cpu().nu
 ## VibeVoiceAcousticTokenizerModel
 
 [[autodoc]] VibeVoiceAcousticTokenizerModel
-    - decode
     - encode
+    - sample
+    - decode
     - forward

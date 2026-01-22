@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -74,8 +74,6 @@ class VibeVoiceAcousticTokenizerFeatureExtractor(SequenceFeatureExtractor):
         return_tensors: Optional[Union[str, type]] = None,
     ) -> BatchFeature:
         """
-        Main method to prepare audio for the VibeVoice model.
-
         Args:
             audio (`np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`:
                 The sequence or batch of sequences to be processed. Each sequence can be a numpy array, a torch tensor,
