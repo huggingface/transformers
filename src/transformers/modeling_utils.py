@@ -29,6 +29,7 @@ from contextlib import contextmanager
 from enum import Enum
 from functools import partial, wraps
 from itertools import cycle
+from pathlib import Path
 from threading import Thread
 from typing import Optional, TypeVar, get_type_hints
 from zipfile import is_zipfile
@@ -4167,7 +4168,12 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             all_pointer = set()
             # Checkpoints are safetensors
             if checkpoint_files is not None and checkpoint_files[0].endswith(".safetensors"):
-                with safetensors(checkpoint_files[0], Device.CUDA) as registry: # TODO : dynamic
+                # Hack to retrieve back index.json to leverage the optimized hmll path
+                if len(checkpoint_files) == 1:
+                    source, is_shared = checkpoint_files[0], False
+                else:
+                    source, is_shared = Path(checkpoint_files[0]).parent.joinpath("model.safetensors.index.json"), True
+                with safetensors(source, Device.CUDA, is_shared) as registry: # TODO : dynamic
                     merged_state_dict = {}
 
                     # for file in checkpoint_files:
