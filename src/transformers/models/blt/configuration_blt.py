@@ -70,7 +70,7 @@ class BltLocalEncoderConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         super().__init__(**kwargs, tie_word_embeddings=False)
 
 
-class BltLocalDecoderConfig(PreTrainedConfig):
+class BltLocalDecoderConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     """
     Configuration class for the Blt Local Decoder component.
     """
