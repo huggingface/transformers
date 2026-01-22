@@ -384,6 +384,30 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         if self._should_update_post_processor:
             self.update_post_processor()
 
+    def __setattr__(self, key, value):
+        """
+        Override __setattr__ to update the post-processor when special tokens are modified.
+        This ensures that changes to bos_token, eos_token, etc. are reflected in the
+        post-processor, allowing modified special tokens to be used during encoding.
+        """
+        # Get the base key
+        key_without_id = key
+        if key.endswith("_id") or key.endswith("_ids"):
+            key_without_id = key[:-3] if not key.endswith("_ids") else key[:-4]
+
+        # Check if this is a special token attribute before PreTrainedTokenizerBase call
+        is_special_token = (
+            hasattr(self, "SPECIAL_TOKENS_ATTRIBUTES") and key_without_id in self.SPECIAL_TOKENS_ATTRIBUTES
+        )
+
+        # PreTrainedTokenizerBase.__setattr__ handles special token map updates when applicable
+        super().__setattr__(key, value)
+
+        # After PreTrainedTokenizerBase has processed the assignment, update the post-processor (if needed)
+        if is_special_token and hasattr(self, "_tokenizer") and self._tokenizer is not None:
+            # Update the post-processor to reflect the new special token
+            self.update_post_processor()
+
     @property
     def is_fast(self) -> bool:
         return True
