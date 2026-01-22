@@ -22,6 +22,7 @@ import numpy as np
 from transformers import (
     CONFIG_NAME,
     DeformableDetrImageProcessor,
+    DetrImageProcessor,
     RfDetrConfig,
     RfDetrDinov2Config,
     is_torch_available,
@@ -44,7 +45,7 @@ from ...test_pipeline_mixin import PipelineTesterMixin
 if is_torch_available():
     import torch
 
-    from transformers import RfDetrDinov2Backbone, RfDetrForObjectDetection, RfDetrModel
+    from transformers import RfDetrDinov2Backbone, RfDetrForInstanceSegmentation, RfDetrForObjectDetection, RfDetrModel
 
 if is_vision_available():
     from PIL import Image
@@ -52,6 +53,7 @@ if is_vision_available():
 CHECKPOINT = {
     "base": "stevenbucaille/rf-detr-base",
     "large": "stevenbucaille/rf-detr-large",
+    "segmentation": "stevenbucaille/rf-detr-segmentation",
 }
 
 
@@ -128,6 +130,7 @@ class RfDetrModelTester:
                     high=self.num_labels, size=(self.n_targets,), device=torch_device
                 )
                 target["boxes"] = torch.rand(self.n_targets, 4, device=torch_device)
+                target["masks"] = torch.rand(self.n_targets, self.image_size, self.image_size, device=torch_device)
                 labels.append(target)
 
         config = self.get_config()
@@ -208,9 +211,15 @@ class RfDetrModelTester:
 
 @require_torch
 class RfDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
-    all_model_classes = (RfDetrModel, RfDetrForObjectDetection) if is_torch_available() else ()
+    all_model_classes = (
+        (RfDetrModel, RfDetrForObjectDetection, RfDetrForInstanceSegmentation) if is_torch_available() else ()
+    )
     pipeline_model_mapping = (
-        {"image-feature-extraction": RfDetrModel, "object-detection": RfDetrForObjectDetection}
+        {
+            "image-feature-extraction": RfDetrModel,
+            "object-detection": RfDetrForObjectDetection,
+            "instance-segmentation": RfDetrForInstanceSegmentation,
+        }
         if is_torch_available()
         else {}
     )
@@ -223,7 +232,7 @@ class RfDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
 
         if return_labels:
-            if model_class.__name__ == "RfDetrForObjectDetection":
+            if model_class.__name__ in ["RfDetrForObjectDetection", "RfDetrForInstanceSegmentation"]:
                 labels = []
                 for i in range(self.model_tester.batch_size):
                     target = {}
@@ -232,6 +241,13 @@ class RfDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                     )
                     target["boxes"] = torch.ones(
                         self.model_tester.n_targets, 4, device=torch_device, dtype=torch.float
+                    )
+                    target["masks"] = torch.ones(
+                        self.model_tester.n_targets,
+                        self.model_tester.image_size,
+                        self.model_tester.image_size,
+                        device=torch_device,
+                        dtype=torch.float,
                     )
                     labels.append(target)
                 inputs_dict["labels"] = labels
@@ -316,11 +332,14 @@ class RfDetrModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
             out_len = len(outputs)
 
-            correct_outlen = 8  # 6 + attentions + cross_attentions
-
-            # Object Detection model returns pred_logits, pred_boxes and auxiliary outputs
-            if model_class.__name__ == "RfDetrForObjectDetection":
-                correct_outlen += 2
+            if model_class.__name__ == "RfDetrModel":
+                correct_outlen = 9  # 7 + attentions + cross_attentions
+            if model_class.__name__ in "RfDetrForObjectDetection":
+                correct_outlen = 11  # 9 + attentions + cross_attentions
+                if "labels" in inputs_dict:
+                    correct_outlen += 3  # loss, loss_dict and auxiliary outputs is added to beginning
+            elif model_class.__name__ == "RfDetrForInstanceSegmentation":
+                correct_outlen = 10  # 11 + attentions + cross_attentions
                 if "labels" in inputs_dict:
                     correct_outlen += 3  # loss, loss_dict and auxiliary outputs is added to beginning
 
@@ -498,6 +517,7 @@ class RfDetrModelIntegrationTest(unittest.TestCase):
             return {
                 "base": DeformableDetrImageProcessor.from_pretrained(CHECKPOINT["base"]),
                 "large": DeformableDetrImageProcessor.from_pretrained(CHECKPOINT["large"]),
+                "segmentation": DetrImageProcessor.from_pretrained(CHECKPOINT["segmentation"]),
             }
 
     @slow
@@ -633,6 +653,81 @@ class RfDetrModelIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(results["scores"][:4], expected_scores, atol=1e-3, rtol=2e-4)
         self.assertSequenceEqual(results["labels"][:4].tolist(), expected_labels)
         torch.testing.assert_close(results["boxes"][:4], expected_slice_boxes, atol=1e-3, rtol=2e-4)
+
+    @slow
+    def test_inference_segmentation(self):
+        size = "segmentation"
+        model = RfDetrForInstanceSegmentation.from_pretrained(CHECKPOINT[size], attn_implementation="eager").to(
+            torch_device
+        )
+
+        image_processor = self.default_image_processor[size]
+        image = prepare_img()
+        encoding = image_processor(images=image, return_tensors="pt").to(torch_device)
+        pixel_values = encoding["pixel_values"].to(torch_device)
+        pixel_mask = encoding["pixel_mask"].to(torch_device)
+        with torch.no_grad():
+            outputs = model(pixel_values, pixel_mask)
+
+        expected_logits_shape = torch.Size((1, model.config.num_queries, model.config.num_labels))
+        self.assertEqual(outputs.logits.shape, expected_logits_shape)
+
+        score_expectations = Expectations(
+            {
+                ("cpu", None): [-7.05877, -4.23362, -6.54288, -8.13384, -6.36838],
+            }
+        )
+        expected_logits = torch.tensor(score_expectations.get_expectation()).to(torch_device)
+        torch.testing.assert_close(outputs.logits.flatten()[:5], expected_logits, rtol=2e-3, atol=2e-3)
+
+        expected_boxes_shape = torch.Size((1, model.config.num_queries, 4))
+        self.assertEqual(outputs.pred_boxes.shape, expected_boxes_shape)
+
+        score_expectations = Expectations(
+            {
+                ("cpu", None): [0.25603, 0.55164, 0.48340, 0.87798, 0.73861],
+            }
+        )
+        expected_boxes = torch.tensor(score_expectations.get_expectation()).to(torch_device)
+
+        torch.testing.assert_close(outputs.pred_boxes.flatten()[:5], expected_boxes, rtol=2e-3, atol=2e-3)
+
+        expected_masks_shape = torch.Size(
+            (
+                1,
+                model.config.num_queries,
+                pixel_values.shape[-2] // model.config.mask_downsample_ratio,
+                pixel_values.shape[-1] // model.config.mask_downsample_ratio,
+            )
+        )
+        self.assertEqual(outputs.pred_masks.shape, expected_masks_shape)
+
+        score_expectations = Expectations(
+            {
+                ("cpu", None): [-16.72129, -16.17153, -17.06426, -17.29409, -17.78559],
+            }
+        )
+        expected_masks = torch.tensor(score_expectations.get_expectation()).to(torch_device)
+
+        torch.testing.assert_close(outputs.pred_masks.flatten()[:5], expected_masks, rtol=2e-3, atol=2e-3)
+
+        results = image_processor.post_process_instance_segmentation(
+            outputs, threshold=0.0, target_sizes=[image.size[::-1]]
+        )[0]
+
+        expected_labels = [17, 75, 75, 17]
+        score_expectations = Expectations(
+            {
+                ("cpu", None): [0.98604, 0.985644, 0.950492, 0.967915],
+            }
+        )
+        expected_scores = torch.tensor(score_expectations.get_expectation()).to(torch.float32)
+
+        predicted_labels = [segment["label_id"] for segment in results["segments_info"]]
+        predicted_scores = torch.tensor([segment["score"] for segment in results["segments_info"]])
+
+        self.assertSequenceEqual(predicted_labels, expected_labels)
+        torch.testing.assert_close(predicted_scores, expected_scores, atol=1e-3, rtol=2e-4)
 
 
 class RfDetrDinov2ModelTester:
