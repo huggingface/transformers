@@ -4,7 +4,7 @@ import unittest
 from parameterized import parameterized
 
 from transformers import AutoModelForCausalLM, AutoTokenizer, GenerationConfig
-from transformers.testing_utils import Expectations, slow, torch_device
+from transformers.testing_utils import Expectations, slow
 
 
 _TEST_PROMPTS = [
@@ -108,17 +108,6 @@ class TestBatchGeneration(unittest.TestCase):
     )
     def test_generate_batch_with_sampling(self, attn_impl, num_blocks, block_size, max_batch_tokens):
         """Test batch generation with do_sampling=True to verify sampling works correctly."""
-        if (
-            attn_impl
-            in [
-                "paged|flex_attention",
-            ]
-            and torch_device == "cpu"
-        ):
-            self.skipTest(
-                f"CPU only support flash/sdpa/eager paged attention for now, but found {attn_impl}. Skipping test."
-            )
-
         self.model.config.attn_implementation = attn_impl
 
         generation_config = GenerationConfig(
