@@ -315,8 +315,7 @@ class Lfm2VlImageProcessorFast(BaseImageProcessorFast):
             .unfold(3, size=tile_size, step=tile_size)
             .contiguous()
             .view(batch_size, num_channels, -1, tile_size, tile_size)
-            .permute(2, 0, 1, 3, 4)
-            .reshape(batch_size, -1, num_channels, tile_size, tile_size)
+            .permute(0, 2, 1, 3, 4)
         )
 
         # Re-order processed images to a nested image structure, so it can be reordered back correctly
