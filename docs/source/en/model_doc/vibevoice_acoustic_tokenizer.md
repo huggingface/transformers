@@ -26,7 +26,7 @@ rendered properly in your Markdown viewer.
 
 [VibeVoice](https://huggingface.co/papers/2508.19205) is a novel framework for synthesizing high-fidelity, long-form speech with multiple speakers by employing a next-token diffusion approach within a Large Language Model (LLM) structure. It's designed to capture the authentic conversational "vibe" and is particularly suited for generating audio content like podcasts and multi-participant audiobooks.
 
-One key feature of VibeVoice is the use of two continuous speech tokenizers, one for extracting acoustic features and another for semantic features.
+One key feature of VibeVoice is the use of two continuous audio tokenizers, one for extracting acoustic features and another for semantic features.
 
 A model checkpoint is available at [bezzam/VibeVoice-AcousticTokenizer](https://huggingface.co/bezzam/VibeVoice-AcousticTokenizer)
 
@@ -36,7 +36,7 @@ This model was contributed by [Eric Bezzam](https://huggingface.co/bezzam).
 
 The architecture is a mirror-symmetric encoder-decoder structure. The encoder employs a hierarchical design with 7 stages of ConvNeXt-like blocks, which use 1D depth-wise causal convolutionsfor efficient streaming processing. Six downsampling layers achieve a cumulative 3200X downsampling rate from a 24kHz input, yielding 7.5 tokens/frames per second. Each encoder/decoder component has approximately 340M parameters. The training objective follows that of [DAC](./dac), including its discriminator and loss designs.
 
-Acoustic Tokenizer adopts the principles of a Variational Autoencoder (VAE). The encoder which maps the input audio to the parameters of a latent distribution, namely the mean. Along with a fixed standard deviation, a latent vector is then sampling using the reparameterization trick. Please refer to the [technical report](https://huggingface.co/papers/2508.19205) for further details.
+Acoustic Tokenizer adopts the principles of a Variational Autoencoder (VAE). The encoder maps the input audio to the parameters of a latent distribution, namely the mean. Along with a fixed standard deviation, a latent vector is then sampling using the reparameterization trick. Please refer to the [technical report](https://huggingface.co/papers/2508.19205) for further details.
 
 
 ## Usage
@@ -76,28 +76,36 @@ inputs = feature_extractor(
 print("Input audio shape:", inputs.input_values.shape)
 # Input audio shape: torch.Size([1, 1, 224000])
 
-# encode
 with torch.no_grad():
     encoded_outputs = model.encode(inputs.input_values)
-print("Latent shape:", encoded_outputs.latents.shape)
-# Latent shape: torch.Size([1, 70, 64])
+    print("Latent shape:", encoded_outputs.latents.shape)
+    # Latent shape: torch.Size([1, 70, 64])
 
-# VAE sampling
-with torch.no_grad():
+    # VAE sampling (optional)
     encoded_outputs = model.sample(encoded_outputs.latents)
-print("Noisy latents shape:", encoded_outputs.latents.shape)
-# Noisy latents shape: torch.Size([1, 70, 64])
-
-# decode
-with torch.no_grad():
+    print("Noisy latents shape:", encoded_outputs.latents.shape)
+    # Noisy latents shape: torch.Size([1, 70, 64])
+    
     decoded_outputs = model.decode(**encoded_outputs)
-print("Reconstructed audio shape:", decoded_outputs.audio.shape)
-# Reconstructed audio shape: torch.Size([1, 1, 224000])
+    print("Reconstructed audio shape:", decoded_outputs.audio.shape)
+    # Reconstructed audio shape: torch.Size([1, 1, 224000])
 
 # Save audio
 output_fp = "vibevoice_acoustic_tokenizer_reconstructed.wav"
 wavfile.write(output_fp, sampling_rate, decoded_outputs.audio.squeeze().float().cpu().numpy())
 print(f"Reconstructed audio saved to : {output_fp}")
+```
+
+For streaming, the `use_cache` parameter can be used when decoding:
+```python
+# `padding_cache` can be initialized after a first pass
+padding_cache = None
+decoded_outputs = model.decode(**encoded_outputs, padding_cache=paddingS_cache, use_cache=True)
+
+# `padding_cache` can be extracted from `decoded_outputs` for subsequent passes
+padding_cache = decoded_outputs.padding_cache
+print("Number of cached layers:", len(padding_cache.per_layer_in_channels))
+# Number of cached layers: 34
 ```
 
 

@@ -138,7 +138,7 @@ class VibeVoiceAcousticTokenizerCausalConv1d(nn.Module):
 
 
 class VibeVoiceAcousticTokenizerCausalConvTranspose1d(nn.Module):
-    """Causal ConvTranspose1d with optional streaming support via VibeVoiceAcousticTokenizerConv1dPaddingCache."""
+    """ConvTranspose1d with built-in causal padding and optional streaming support through a cache."""
 
     def __init__(
         self,
@@ -282,8 +282,6 @@ class VibeVoiceAcousticTokenizerEncoderLayer(nn.Module):
 
 
 class VibeVoiceAcousticTokenizerEncoder(nn.Module):
-    """Encoder component for the VibeVoice tokenizer that converts audio to latent representations."""
-
     def __init__(self, config):
         super().__init__()
 
@@ -373,8 +371,6 @@ class VibeVoiceAcousticTokenizerDecoderLayer(nn.Module):
 
 
 class VibeVoiceAcousticTokenizerDecoder(nn.Module):
-    """Decoder component for the VibeVoice tokenizer that converts latent representations back to audio."""
-
     def __init__(self, config):
         super().__init__()
 
@@ -432,10 +428,12 @@ class VibeVoiceAcousticTokenizerPreTrainedModel(PreTrainedModel):
             init.constant_(module.ffn_gamma, self.config.layer_scale_init_value)
 
 
-@auto_docstring
+@auto_docstring(
+    custom_intro="""
+    VibeVoice acoustic tokenizer with an encoder and decoder for continuous acoustic tokens.
+    """
+)
 class VibeVoiceAcousticTokenizerModel(VibeVoiceAcousticTokenizerPreTrainedModel):
-    """VibeVoice speech tokenizer model combining encoder and decoder for acoustic tokens"""
-
     def __init__(self, config):
         super().__init__(config)
         self.encoder = VibeVoiceAcousticTokenizerEncoder(config)
