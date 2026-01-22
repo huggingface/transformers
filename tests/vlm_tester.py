@@ -211,12 +211,12 @@ class VLMModelTester:
 
     def place_image_tokens(self, input_ids, config):
         # Override if the image tokens shouldn't be placed at the start of the test sequence
-        image_token_index = getattr(config, "image_token_index", self.image_token_index)
+        image_token_id = getattr(config, "image_token_id", self.image_token_id)
         # Clear any accidental image tokens first
         input_ids = input_ids.clone()
-        input_ids[input_ids == image_token_index] = self.bos_token_id
+        input_ids[input_ids == image_token_id] = self.bos_token_id
         # Place image tokens at the start
-        input_ids[:, : self.num_image_tokens] = image_token_index
+        input_ids[:, : self.num_image_tokens] = image_token_id
         return input_ids
 
     def get_additional_inputs(self, config, input_ids, pixel_values):
