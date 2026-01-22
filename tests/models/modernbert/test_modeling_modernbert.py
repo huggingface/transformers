@@ -25,6 +25,7 @@ from transformers.modeling_utils import FLASH_ATTN_KERNEL_FALLBACK
 from transformers.models.auto import get_values
 from transformers.testing_utils import (
     CaptureLogger,
+    Expectations,
     force_serialization_as_bin_files,
     require_accelerate,
     require_flash_attn,
@@ -799,7 +800,16 @@ class ModernBertModelIntegrationTest(unittest.TestCase):
         self.assertEqual(output.shape, expected_shape)
 
         # compare the actual values for a slice.
-        expected_slice = torch.tensor(
-            [[[3.8203, -0.2125, 12.2812], [3.6055, 0.6797, 14.6875], [-5.1094, -3.8105, 11.9922]]], dtype=torch.float16
-        )
+        expected_slice = Expectations(
+            {
+                ("cuda", None): torch.tensor(
+                    [[[3.8203, -0.2125, 12.2812], [3.6055, 0.6797, 14.6875], [-5.1094, -3.8105, 11.9922]]],
+                    dtype=torch.float16,
+                ),
+                ("xpu", None): torch.tensor(
+                    [[[3.8555, -0.1993, 12.2969], [3.6387, 0.6943, 14.7109], [-5.1172, -3.8086, 11.9844]]],
+                    dtype=torch.float16,
+                ),
+            }
+        ).get_expectation()
         torch.testing.assert_close(output[:, :3, :3].cpu(), expected_slice, rtol=1e-4, atol=1e-4)
