@@ -36,7 +36,7 @@ from transformers.models.siglip.modeling_siglip import (
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ...utils.generic import is_flash_attention_requested
+from ...utils.generic import check_model_inputs, is_flash_attention_requested
 
 
 class Siglip2TextConfig(SiglipTextConfig):
@@ -315,7 +315,7 @@ class Siglip2MultiheadAttentionPoolingHead(SiglipMultiheadAttentionPoolingHead):
 
 class Siglip2VisionModel(SiglipVisionModel):
     # Update: add `spatial_shapes` and `pixel_attention_mask`
-    @can_return_tuple
+    @check_model_inputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,

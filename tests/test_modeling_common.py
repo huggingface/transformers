@@ -4846,6 +4846,16 @@ class ModelTesterMixin:
             )
             self.assertEqual(last_hidden_state.shape, expected_shape, "last_hidden_state shape mismatch")
 
+            config, inputs_dict = self._text_features_prepare_config_and_inputs()
+            config.return_dict = False
+
+            model = model_class(config).eval()
+            model = model.to(torch_device)
+
+            with torch.no_grad():
+                outputs = model.get_text_features(**inputs_dict)
+            self.assertTrue(isinstance(outputs, tuple), "get_text_features() must return a tuple if return_dict=False")
+
     def test_get_text_features_hidden_states(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
             model = model_class(copy.deepcopy(config))
@@ -4991,6 +5001,18 @@ class ModelTesterMixin:
                 f"hidden_size mismatch, full shape: {last_hidden_state_shape}",
             )
 
+            config, inputs_dict = self._image_features_prepare_config_and_inputs()
+            config.return_dict = False
+
+            model = model_class(config).eval()
+            model = model.to(torch_device)
+
+            with torch.no_grad():
+                outputs = model.get_image_features(**inputs_dict)
+            self.assertTrue(
+                isinstance(outputs, tuple), "get_image_features() must return a tuple if return_dict=False"
+            )
+
     def test_get_image_features_hidden_states(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
             model = model_class(copy.deepcopy(config))
@@ -5115,6 +5137,18 @@ class ModelTesterMixin:
                 f"hidden_size mismatch, full shape: {last_hidden_state_shape}",
             )
 
+            config, inputs_dict = self._audio_features_prepare_config_and_inputs()
+            config.return_dict = False
+
+            model = model_class(config).eval()
+            model = model.to(torch_device)
+
+            with torch.no_grad():
+                outputs = model.get_audio_features(**inputs_dict)
+            self.assertTrue(
+                isinstance(outputs, tuple), "get_audio_features() must return a tuple if return_dict=False"
+            )
+
     def test_get_audio_features_hidden_states(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
             model = model_class(copy.deepcopy(config))
@@ -5237,6 +5271,18 @@ class ModelTesterMixin:
                 last_hidden_state_shape[-1],
                 hidden_size,
                 f"hidden_size mismatch, full shape: {last_hidden_state_shape}",
+            )
+
+            config, inputs_dict = self._video_features_prepare_config_and_inputs()
+            config.return_dict = False
+
+            model = model_class(config).eval()
+            model = model.to(torch_device)
+
+            with torch.no_grad():
+                outputs = model.get_video_features(**inputs_dict)
+            self.assertTrue(
+                isinstance(outputs, tuple), "get_video_features() must return a tuple if return_dict=False"
             )
 
     def test_get_video_features_hidden_states(self):

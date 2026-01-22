@@ -529,10 +529,6 @@ class Siglip2Encoder(nn.Module):
 
 class Siglip2VisionTransformer(Siglip2PreTrainedModel):
     _input_embed_layer = "patch_embedding"
-    _can_record_outputs = {
-        "hidden_states": Siglip2EncoderLayer,
-        "attentions": Siglip2Attention,
-    }
 
     def __init__(self, config: Siglip2VisionConfig):
         super().__init__(config)
@@ -548,7 +544,6 @@ class Siglip2VisionTransformer(Siglip2PreTrainedModel):
 
         self.post_init()
 
-    @check_model_inputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -762,7 +757,7 @@ class Siglip2VisionModel(Siglip2PreTrainedModel):
     def get_input_embeddings(self) -> nn.Module:
         return self.vision_model.embeddings.patch_embedding
 
-    @can_return_tuple
+    @check_model_inputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,

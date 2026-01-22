@@ -620,10 +620,6 @@ class SiglipTextModel(SiglipPreTrainedModel):
 
 class SiglipVisionTransformer(SiglipPreTrainedModel):
     _input_embed_layer = "patch_embedding"
-    _can_record_outputs = {
-        "hidden_states": SiglipEncoderLayer,
-        "attentions": SiglipAttention,
-    }
 
     def __init__(self, config: SiglipVisionConfig):
         super().__init__(config)
@@ -639,7 +635,6 @@ class SiglipVisionTransformer(SiglipPreTrainedModel):
 
         self.post_init()
 
-    @check_model_inputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
