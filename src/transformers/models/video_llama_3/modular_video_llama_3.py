@@ -47,7 +47,7 @@ from ...utils import (
     can_return_tuple,
     logging,
 )
-from ...utils.generic import check_model_inputs
+from ...utils.generic import check_model_inputs, is_flash_attention_requested
 from ...video_utils import (
     VideoInput,
     group_videos_by_shape,
@@ -169,6 +169,8 @@ class VideoLlama3Config(PreTrainedConfig):
             The image token index to encode the image prompt.
         video_token_id (`int`, *optional*, defaults to 151656):
             The video token index to encode the image prompt.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether to tie weight embeddings
     """
 
     model_type = "video_llama_3"
@@ -181,6 +183,7 @@ class VideoLlama3Config(PreTrainedConfig):
         vision_config=None,
         image_token_id=151655,
         video_token_id=151656,
+        tie_word_embeddings=False,
         **kwargs,
     ):
         if isinstance(vision_config, dict):
@@ -205,6 +208,7 @@ class VideoLlama3Config(PreTrainedConfig):
 
         self.image_token_id = image_token_id
         self.video_token_id = video_token_id
+        self.tie_word_embeddings = tie_word_embeddings
 
         super().__init__(**kwargs)
 
@@ -312,7 +316,7 @@ class VideoLlama3VisionAttention(SiglipAttention):
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
 
-        if self.config._attn_implementation == "flash_attention_2":
+        if is_flash_attention_requested(self.config):
             # Flash Attention 2: Use cu_seqlens for variable length attention
             max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
             attn_output, attn_weights = attention_interface(
@@ -1473,9 +1477,6 @@ class VideoLlama3VideoProcessor(Qwen2VLVideoProcessor):
     valid_kwargs = VideoLlama3VideoProcessorInitKwargs
     model_input_names = ["pixel_values_videos", "video_grid_thw", "video_merge_sizes", "video_compression_mask"]
 
-    def _further_process_kwargs(self):
-        raise AttributeError("VideoLlama3 never supported min/max pixels, no need to copy from Qwen")
-
     def _get_compression_mask(
         self,
         pixel_values_videos: torch.FloatTensor,
@@ -1532,8 +1533,6 @@ class VideoLlama3VideoProcessor(Qwen2VLVideoProcessor):
         do_normalize: bool,
         image_mean: float | list[float] | None,
         image_std: float | list[float] | None,
-        min_pixels: int | None = None,
-        max_pixels: int | None = None,
         patch_size: int | None = None,
         temporal_patch_size: int | None = None,
         merge_size: int | None = None,
@@ -1553,8 +1552,8 @@ class VideoLlama3VideoProcessor(Qwen2VLVideoProcessor):
                     height,
                     width,
                     factor=patch_size * merge_size,
-                    min_pixels=min_pixels,
-                    max_pixels=max_pixels // shape[0],
+                    min_pixels=size["shortest_edge"],
+                    max_pixels=size["longest_edge"] // shape[0],
                 )
                 stacked_videos = self.resize(
                     image=stacked_videos,

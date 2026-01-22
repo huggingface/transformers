@@ -41,6 +41,7 @@ from ...utils import (
     auto_docstring,
     can_return_tuple,
     logging,
+    torch_compilable_check,
 )
 from ...utils.generic import OutputRecorder, check_model_inputs
 from ..auto import AutoModel
@@ -119,8 +120,6 @@ class T5Gemma2TextConfig(Gemma3TextConfig, PreTrainedConfig):
             End of stream token id.
         bos_token_id (`int`, *optional*, defaults to 2):
             Beginning of stream token id.
-        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
-            Whether to tie weight embeddings
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -160,7 +159,6 @@ class T5Gemma2TextConfig(Gemma3TextConfig, PreTrainedConfig):
         pad_token_id: int | None = 0,
         eos_token_id: int | None = 1,
         bos_token_id: int | None = 2,
-        tie_word_embeddings: bool | None = True,
         attention_bias: bool | None = False,
         attention_dropout: float | None = 0.0,
         query_pre_attn_scalar: int | None = 256,
@@ -171,6 +169,9 @@ class T5Gemma2TextConfig(Gemma3TextConfig, PreTrainedConfig):
         rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
         **kwargs,
     ):
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -202,13 +203,7 @@ class T5Gemma2TextConfig(Gemma3TextConfig, PreTrainedConfig):
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
         self.rope_parameters = rope_parameters
-        PreTrainedConfig.__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        PreTrainedConfig.__init__(**kwargs)
 
 
 class T5Gemma2EncoderConfig(Gemma3Config):
@@ -269,8 +264,6 @@ class T5Gemma2DecoderConfig(Gemma3TextConfig, PreTrainedConfig):
             End of stream token id.
         bos_token_id (`int`, *optional*, defaults to 2):
             Beginning of stream token id.
-        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
-            Whether to tie weight embeddings
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -310,7 +303,6 @@ class T5Gemma2DecoderConfig(Gemma3TextConfig, PreTrainedConfig):
         pad_token_id: int | None = 0,
         eos_token_id: int | None = 1,
         bos_token_id: int | None = 2,
-        tie_word_embeddings: bool | None = True,
         attention_bias: bool | None = False,
         attention_dropout: float | None = 0.0,
         query_pre_attn_scalar: int | None = 256,
@@ -321,6 +313,9 @@ class T5Gemma2DecoderConfig(Gemma3TextConfig, PreTrainedConfig):
         rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
         **kwargs,
     ):
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -352,13 +347,7 @@ class T5Gemma2DecoderConfig(Gemma3TextConfig, PreTrainedConfig):
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
         self.rope_parameters = rope_parameters
-        PreTrainedConfig.__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        PreTrainedConfig.__init__(**kwargs)
 
 
 class T5Gemma2Config(PreTrainedConfig):
@@ -388,6 +377,9 @@ class T5Gemma2Config(PreTrainedConfig):
         image_token_index (`int`, *optional*, defaults to 256001):
             The image token index to encode the image prompt. Defaults to 256001, which is right after the eoi_token_index.
             Note this is different from Gemma 3.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
+
     ```python
     >>> from transformers import T5Gemma2Config, T5Gemma2Model
     >>> t5gemma2_config = T5Gemma2Config.from_pretrained("google/t5gemma-270m-270m")
@@ -418,6 +410,7 @@ class T5Gemma2Config(PreTrainedConfig):
         classifier_dropout_rate: float = 0.0,
         initializer_range: float = 0.02,
         image_token_index: int = 256_001,
+        tie_word_embeddings: bool | None = True,
         **kwargs,
     ):
         if isinstance(encoder, dict):
@@ -478,6 +471,7 @@ class T5Gemma2Config(PreTrainedConfig):
         self.initializer_range = initializer_range
         self.eoi_token_index = encoder.eoi_token_index
         self.image_token_index = image_token_index
+        self.tie_word_embeddings = tie_word_embeddings
 
     def __setattr__(self, key, value):
         shared_attr_with_submodules = [
@@ -832,7 +826,7 @@ class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
         eoi_token_index: int = 256_000,
     ):
         super().__init__(config)
-        self.padding_idx = config.pad_token_id
+        self.padding_idx = config.text_config.pad_token_id
         self.vocab_size = config.text_config.vocab_size
 
         vision_config = config.vision_config
@@ -895,10 +889,10 @@ class T5Gemma2Encoder(T5Gemma2PreTrainedModel):
         n_image_tokens = special_image_mask.sum()
         special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
         n_image_features = image_features.shape[0] * image_features.shape[1]
-        if inputs_embeds[special_image_mask].numel() != image_features.numel():
-            raise ValueError(
-                f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
-            )
+        torch_compilable_check(
+            inputs_embeds[special_image_mask].numel() == image_features.numel(),
+            f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}",
+        )
         return special_image_mask
 
     def preprocess_image_features(

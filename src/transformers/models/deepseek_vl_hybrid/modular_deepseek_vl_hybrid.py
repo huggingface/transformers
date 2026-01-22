@@ -16,7 +16,7 @@ from typing import Optional, Union
 
 import torch
 import torch.nn as nn
-from torchvision.transforms.v2 import functional as F
+import torchvision.transforms.v2.functional as tvF
 
 from ... import initialization as init
 from ...cache_utils import Cache
@@ -843,8 +843,8 @@ class DeepseekVLHybridImageProcessorFast(DeepseekVLImageProcessorFast):
         size: SizeDict,
         high_res_size: SizeDict,
         min_size: int,
-        interpolation: Optional["F.InterpolationMode"],
-        high_res_interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
+        high_res_interpolation: Optional["tvF.InterpolationMode"],
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
