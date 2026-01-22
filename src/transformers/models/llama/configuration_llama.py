@@ -19,7 +19,7 @@
 """LLaMA model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 
 
 class LlamaConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):

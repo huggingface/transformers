@@ -14,7 +14,7 @@
 """AFMoE model configuration"""
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 from ...utils import logging
 
 

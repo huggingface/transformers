@@ -19,7 +19,7 @@
 # limitations under the License.
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 
 
 class ArceeConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):

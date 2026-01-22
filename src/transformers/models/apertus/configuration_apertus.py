@@ -19,7 +19,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin, RotaryEmbeddingConfigMixin
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 
 
 class ApertusConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
