@@ -182,6 +182,8 @@ class LlavaModel(LlavaPreTrainedModel):
 
         image_features = self.multi_modal_projector(selected_image_feature)
 
+        # If image_sizes is provided, we need to split the image features accordingly,
+        # but only if the image_sizes is not None (the default in this and related architectures)
         if kwargs.get("image_sizes") is not None:
             split_sizes = (
                 (torch.as_tensor(kwargs["image_sizes"], device=image_features.device) // self.vision_tower.patch_size)
