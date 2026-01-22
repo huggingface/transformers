@@ -23,7 +23,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class DbrxAttentionConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class DbrxAttentionConfig(PreTrainedConfig):
     """Configuration class for Dbrx Attention.
 
     [`DbrxAttention`] class. It is used to instantiate attention layers
@@ -118,7 +118,7 @@ class DbrxFFNConfig(PreTrainedConfig):
             raise ValueError(f"Found unknown {kwargs=}")
 
 
-class DbrxConfig(PreTrainedConfig):
+class DbrxConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
 
     This is the configuration class to store the configuration of a [`DbrxModel`]. It is used to instantiate a Dbrx model according to the

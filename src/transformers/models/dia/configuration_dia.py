@@ -94,7 +94,7 @@ class DiaEncoderConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         super().__init__(**kwargs)
 
 
-class DiaDecoderConfig(PreTrainedConfig):
+class DiaDecoderConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`DiaDecoder`]. It is used to instantiate a Dia
     decoder according to the specified arguments, defining the decoder architecture.
