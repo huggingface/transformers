@@ -233,10 +233,6 @@ class VLMModelTester:
         if self.use_input_mask:
             input_mask = self.create_attention_mask(input_ids)
 
-        token_type_ids = None
-        if self.use_token_type_ids:
-            token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
-
         config = self.get_config()
 
         # Place image tokens in input_ids using template method
