@@ -872,7 +872,7 @@ class Trainer:
 
         # 1 - Align EOS token. EOS is more complex than the others, as `generation_config` may hold more than one EOS
         # token.
-        tokenizer_has_new_eos = tokenizer.eos_token_id != self.model.config.eos_token_id
+        tokenizer_has_new_eos = tokenizer.eos_token_id != getattr(self.model.config, "eos_token_id", None)
         if model_has_generation_config:
             # `generation_config.eos_token_id` is None: direct comparison
             if self.model.generation_config.eos_token_id is None:
@@ -896,7 +896,7 @@ class Trainer:
                 self.model.generation_config.eos_token_id = [token for token in all_eos_tokens if token is not None]
 
         # 2 - Align BOS
-        tokenizer_has_new_bos = tokenizer.bos_token_id != self.model.config.bos_token_id
+        tokenizer_has_new_bos = tokenizer.bos_token_id != getattr(self.model.config, "bos_token_id", None)
         if model_has_generation_config:
             tokenizer_has_new_bos |= tokenizer.bos_token_id != self.model.generation_config.bos_token_id
 
@@ -907,7 +907,7 @@ class Trainer:
                 self.model.generation_config.bos_token_id = tokenizer.bos_token_id
 
         # 3 - Align PAD
-        tokenizer_has_new_pad = tokenizer.pad_token_id != self.model.config.pad_token_id
+        tokenizer_has_new_pad = tokenizer.pad_token_id != getattr(self.model.config, "pad_token_id", None)
         if model_has_generation_config:
             tokenizer_has_new_pad |= tokenizer.pad_token_id != self.model.generation_config.pad_token_id
 

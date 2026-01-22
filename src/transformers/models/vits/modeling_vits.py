@@ -29,7 +29,7 @@ from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, ModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, logging
+from ...utils import auto_docstring, logging, torch_compilable_check
 from .configuration_vits import VitsConfig
 
 
@@ -210,10 +210,10 @@ def _rational_quadratic_spline(
     """
     upper_bound = tail_bound
     lower_bound = -tail_bound
-
-    if torch.min(inputs) < lower_bound or torch.max(inputs) > upper_bound:
-        raise ValueError("Input to a transform is not within its domain")
-
+    torch_compilable_check(
+        (inputs.min() >= lower_bound) & (inputs.max() <= upper_bound),
+        f"Inputs are outside the range [{lower_bound}, {upper_bound}]",
+    )
     num_bins = unnormalized_widths.shape[-1]
 
     if min_bin_width * num_bins > 1.0:
@@ -283,8 +283,10 @@ def _rational_quadratic_spline(
         c = -input_delta * intermediate2
 
         discriminant = b.pow(2) - 4 * a * c
-        if not (discriminant >= 0).all():
-            raise RuntimeError(f"invalid discriminant {discriminant}")
+        torch_compilable_check(
+            torch.all(discriminant >= 0),
+            f"Discriminant has negative values {discriminant}",
+        )
 
         root = (2 * c) / (-b - torch.sqrt(discriminant))
         outputs = root * input_bin_widths + input_cumwidths
