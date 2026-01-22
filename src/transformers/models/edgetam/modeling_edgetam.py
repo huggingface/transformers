@@ -1108,7 +1108,7 @@ class EdgeTamModel(EdgeTamPreTrainedModel):
         >>> processor = AutoProcessor.from_pretrained("danelcsb/edgetam.1_hiera_tiny")
 
         >>> img_url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/model_doc/sam-car.png"
-        >>> with httpx.stream("GET", img_url) as response:
+        >>> with httpx.stream("GET", url) as response:
         ...     raw_image = Image.open(BytesIO(response.read())).convert("RGB")
         >>> input_points = [[[400, 650]]]  # 2D location of a window on the car
         >>> inputs = processor(images=raw_image, input_points=input_points, return_tensors="pt")
