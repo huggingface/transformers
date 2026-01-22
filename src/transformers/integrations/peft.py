@@ -18,6 +18,7 @@ import os
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any, Literal, Optional
 
+from ..conversion_mapping import get_model_conversion_mapping
 from ..core_model_loading import (
     Concatenate,
     ConversionOps,
@@ -38,7 +39,7 @@ from ..utils import (
 )
 from ..utils.hub import DownloadKwargs
 from ..utils.loading_report import log_state_dict_report
-from ..conversion_mapping import get_model_conversion_mapping
+
 
 if is_torch_available():
     import torch
@@ -67,15 +68,12 @@ def _block_diag_3d(*tensors):
     Ns = [t.shape[1] for t in tensors]
     Ms = [t.shape[2] for t in tensors]
 
-    out = torch.zeros(
-        B, sum(Ns), sum(Ms),
-        device=device, dtype=dtype
-    )
+    out = torch.zeros(B, sum(Ns), sum(Ms), device=device, dtype=dtype)
 
     i = j = 0
     for t in tensors:
         n, m = t.shape[1:]
-        out[:, i:i + n, j:j + m] = t
+        out[:, i : i + n, j : j + m] = t
         i += n
         j += m
 
@@ -133,9 +131,9 @@ class PeftConcatenate(Concatenate):
             output_dict = {full_layer_name: torch.block_diag(*input_dict.values())}
         else:
             out = _block_diag_3d(*input_dict.values())  # shape = experts, 2*out_feat, 2*r
-            out = torch.permute(out, (2, 0, 1))         # shape = 2*r, experts, 2*out_feat
+            out = torch.permute(out, (2, 0, 1))  # shape = 2*r, experts, 2*out_feat
             r, e, o = out.shape
-            out = out.flatten(0, 1)                     # PEFT expects flattened
+            out = out.flatten(0, 1)  # PEFT expects flattened
             output_dict = {full_layer_name: out}
         return output_dict
 
@@ -165,7 +163,7 @@ class FlattenDims(ConversionOps):
     ) -> dict[str, list[torch.Tensor]]:
         output_dict = {k: v.flatten(*self.dims) for k, v in input_dict.items()}
         # FIXME
-        print("="*50, "FLATTEN")
+        print("=" * 50, "FLATTEN")
         print(input_dict.keys())
         print([v.shape for v in input_dict.values()], "=>", [v.shape for v in output_dict.values()])
         return output_dict
@@ -204,7 +202,6 @@ class PermuteDims(ConversionOps):
 
     def __repr__(self):
         return f"{self.__class__.__name__}(dims={self.dims})"
-
 
 
 def _build_peft_weight_mapping(
@@ -894,6 +891,7 @@ def maybe_load_adapters(
 
 # TODO: These functions will be added to PEFT in release 0.19.0. Drop them here once 0.19.0 becomes the min PEFT
 # version.
+
 
 def _convert_peft_config_mixtral(peft_config):
     peft_config.target_parameters = peft_config.target_parameters or set()

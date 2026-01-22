@@ -560,7 +560,6 @@ class WeightTransform:
             branches.append(f"(?P<{group_name}>{pattern})")
         object.__setattr__(self, "compiled_sources", re.compile("|".join(branches)))
 
-
     def __post_init__(self):
         if isinstance(self.source_patterns, str):
             self.source_patterns = [self.source_patterns]
