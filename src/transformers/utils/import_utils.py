@@ -622,11 +622,6 @@ def is_torchvision_v2_available() -> bool:
 
 
 @lru_cache
-def is_einops_available() -> bool:
-    return _is_package_available("einops")
-
-
-@lru_cache
 def is_galore_torch_available() -> bool:
     return _is_package_available("galore_torch")
 

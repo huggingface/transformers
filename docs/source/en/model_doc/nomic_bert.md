@@ -16,14 +16,14 @@ limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2021-04-20 and added to Hugging Face Transformers on 2026-01-20.*
+*This model was released on 2021-04-20 and added to Hugging Face Transformers on 2026-01-22.*
 
 
 # NomicBERT
 
 ## Overview
 
-The NomicBERT model currently has no academic papers specifically written about it, however, the [nomic-bert-2048](https://huggingface.co/nomic-ai/nomic-bert-2048) card clearly describes the model’s architecture and training approach: it extends BERT to a 2048 token context length, and modifies the BERT training procedure. Notable changes include: 
+The NomicBERT model currently has no academic papers specifically written about it, however, the [nomic-embed-text-v1.5](https://huggingface.co/nomic-ai/nomic-embed-text-v1.5) card clearly describes the model’s architecture and training approach: it extends BERT to a 2048 token context length, and modifies the BERT training procedure. Notable changes include: 
 
 - Use [Rotary Position Embeddings](https://huggingface.co/papers/2104.09864.pdf) to allow for context length extrapolation.
 - Use SwiGLU activations, which have [been shown](https://huggingface.co/papers/2002.05202) to [improve model performance](https://www.databricks.com/blog/mosaicbert)
@@ -37,7 +37,7 @@ The NomicBERT model currently has no academic papers specifically written about 
 
 
 This model was contributed by community members ([Sonny Cooper](https://github.com/ed22699)).
-The original code for nomic-bert-2048 can be found [here](https://huggingface.co/nomic-ai/nomic-bert-2048).
+The original code for nomic-embed-text-v1.5 can be found [here](https://huggingface.co/nomic-ai/nomic-embed-text-v1.5).
 
 ## Usage examples
 The example below demonstrates how to predict the `[MASK]` token with [`Pipeline`], [`AutoModel`], and from the command line.
@@ -51,7 +51,7 @@ from transformers import pipeline
 
 pipeline = pipeline(
     task="fill-mask",
-    model="nomic-ai/nomic-bert-2048",
+    model="nomic-ai/nomic-embed-text-v1.5",
     dtype=torch.float16,
     device=0
 )
@@ -69,7 +69,7 @@ tokenizer = AutoTokenizer.from_pretrained(
     "google-bert/bert-base-uncased",
 )
 model = AutoModelForMaskedLM.from_pretrained(
-    "nomic-ai/nomic-bert-2048",
+    "nomic-ai/nomic-embed-text-v1.5",
     dtype=torch.float16,
     device_map="auto"
 )

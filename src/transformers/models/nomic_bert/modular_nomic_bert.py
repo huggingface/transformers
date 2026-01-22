@@ -13,20 +13,23 @@
 # limitations under the License.
 
 import math
+from collections.abc import Callable
+from typing import Optional
 
 import torch
 import torch.nn as nn
 
 from ...cache_utils import Cache, DynamicCache
+from ...integrations import use_kernel_func_from_hub, use_kernelized_func
 from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPoolingAndCrossAttentions,
 )
-from ...utils.import_utils import is_einops_available
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, RopeParameters, dynamic_rope_update
+from ...utils.generic import maybe_autocast
 from ..bert.configuration_bert import BertConfig
 from ..bert.modeling_bert import (
     BertAttention,
-    BertCrossAttention,
     BertEmbeddings,
     BertEncoder,
     BertForMaskedLM,
@@ -54,20 +57,11 @@ from ..bert.modeling_bert import (
 )
 
 
-def _check_einops_available():
-    if not is_einops_available():
-        raise ImportError(
-            "NomicBERT requires the `einops` library. "
-            "Please install it with `pip install einops` or "
-            "`pip install transformers[torch]`."
-        )
-
-
 class NomicBertConfig(BertConfig):
     r"""
     This is the configuration class to store the configuration of a [`NomicBertModel`]. It is used to instantiate an NomicBERT
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the [nomic-ai/nomic-bert-2048](https://huggingface.co/nomic-ai/nomic-bert-2048).
+    defaults will yield a similar configuration to that of the [nomic-ai/nomic-embed-text-v1.5](https://huggingface.co/nomic-ai/nomic-embed-text-v1.5).
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
@@ -117,6 +111,10 @@ class NomicBertConfig(BertConfig):
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to tie the input and output word embeddings. If set to `True`, the same embedding matrix
             is used for both input embeddings and output logits.
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
         max_position_embeddings (`int`, *optional*, defaults to 2048):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
@@ -160,6 +158,7 @@ class NomicBertConfig(BertConfig):
         type_vocab_size=2,
         pad_vocab_size_multiple=1,
         tie_word_embeddings=True,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
         max_position_embeddings=2048,
         pad_token_id=0,
         **kwargs,
@@ -188,43 +187,109 @@ class NomicBertConfig(BertConfig):
         self.rotary_emb_scale_base = rotary_emb_scale_base
         self.rotary_emb_interleaved = rotary_emb_interleaved
         self.pad_vocab_size_multiple = pad_vocab_size_multiple
+        self.rope_parameters = rope_parameters
 
 
 class NomicBertEmbeddings(BertEmbeddings):
-    """
-    NomicBERT embeddings adapted from BertEmbeddings.
-    Overrides embedding layer only if vocab padding is required.
-    """
+    pass
 
-    def __init__(self, config):
-        super().__init__(config)
+class NomicBertRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor
 
-        if getattr(config, "pad_vocab_size_multiple", None) and config.pad_vocab_size_multiple > 1:
-            padded_vocab_size = self._round_to_multiple(config.vocab_size, config.pad_vocab_size_multiple)
-            self.word_embeddings = nn.Embedding(
-                padded_vocab_size,
-                config.hidden_size,
-                padding_idx=config.pad_token_id,
-            )
+    def __init__(self, config: NomicBertConfig, device=None):
+        super().__init__()
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
 
-    def _round_to_multiple(self, value: int, multiple: int) -> int:
-        return ((value + multiple - 1) // multiple) * multiple
+        self.config = config
 
-    def create_position_ids_from_input_ids(self, input_ids, padding_idx, past_key_values_length=0):
+        self.rope_type = self.config.rope_parameters["rope_type"]
+        rope_init_fn: Callable = self.compute_default_rope_parameters
+        if self.rope_type != "default":
+            rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type]
+        inv_freq, self.attention_scaling = rope_init_fn(self.config, device)
+
+        self.register_buffer("inv_freq", inv_freq, persistent=False)
+        self.register_buffer("original_inv_freq", inv_freq.clone(), persistent=False)
+
+    @staticmethod
+    def compute_default_rope_parameters(
+        config: NomicBertConfig | None = None,
+        device: Optional["torch.device"] = None,
+        seq_len: int | None = None,
+    ) -> tuple["torch.Tensor", float]:
         """
-        Replace non-padding symbols with their position numbers. Position numbers begin at padding_idx+1.
-        Padding symbols are ignored. This is modified from wrapped models to support left padding.
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+            device (`torch.device`):
+                The device to use for initialization of the inverse frequencies.
+            seq_len (`int`, *optional*):
+                The current sequence length. Unused for this type of RoPE.
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
         """
-        # The series of 1s and 0s (1 for valid, 0 for pad)
-        mask = input_ids.ne(padding_idx).int()
+        base = config.rope_parameters["rope_theta"]
+        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
 
-        # cumsum gives [0, 1, 2...] for valid tokens, but we need to handle left padding logic
-        # For RoPE, we usually want strictly incremental IDs 0, 1, 2... for the valid tokens.
-        incremental_indices = (torch.cumsum(mask, dim=1).type_as(mask) + past_key_values_length - 1) * mask
+        attention_factor = 1.0  # Unused in this type of RoPE
 
-        return incremental_indices.long()
+        # Compute the inverse frequencies
+        inv_freq = 1.0 / (
+            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
+        )
+        return inv_freq, attention_factor
+
+    @torch.no_grad()
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
+    def forward(self, x, position_ids):
+        inv_freq_expanded = self.inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
+        position_ids_expanded = position_ids[:, None, :].float()
+
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            emb = torch.cat((freqs, freqs), dim=-1)
+            cos = emb.cos() * self.attention_scaling
+            sin = emb.sin() * self.attention_scaling
+
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
 
 
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
+
+
+@use_kernel_func_from_hub("rotary_pos_emb")
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
+    """Applies Rotary Position Embedding to the query and key tensors.
+
+    Args:
+        q (`torch.Tensor`): The query tensor.
+        k (`torch.Tensor`): The key tensor.
+        cos (`torch.Tensor`): The cosine part of the rotary embedding.
+        sin (`torch.Tensor`): The sine part of the rotary embedding.
+        unsqueeze_dim (`int`, *optional*, defaults to 1):
+            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
+            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
+            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
+            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
+            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
+            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
+    Returns:
+        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+    """
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    return q_embed, k_embed
+@use_kernelized_func(apply_rotary_pos_emb)
 class NomicBertSelfAttention(BertSelfAttention):
     """
     Custom Self-Attention mechanism for NomicBERT.
@@ -234,21 +299,6 @@ class NomicBertSelfAttention(BertSelfAttention):
 
     def __init__(self, config, position_embedding_type=None, is_causal=False, layer_idx=None):
         super().__init__(config, position_embedding_type=position_embedding_type)
-
-        self.layer_idx = layer_idx
-        self.is_causal = is_causal
-
-        rotary_dim = int(self.attention_head_size * config.rotary_emb_fraction)
-        # Initialize the RoPE module.
-        if rotary_dim > 0:
-            self.rotary_emb = RotaryEmbedding(
-                dim=rotary_dim,
-                base=config.rotary_emb_base,
-                scale_base=config.rotary_emb_scale_base,
-                interleaved=config.rotary_emb_interleaved,
-            )
-        else:
-            self.rotary_emb = None
 
     def transpose_for_scores(self, x):
         new_x_shape = x.size()[:-1] + (self.num_attention_heads, self.attention_head_size)
@@ -265,56 +315,41 @@ class NomicBertSelfAttention(BertSelfAttention):
         past_key_values=None,
         output_attentions=False,
         position_ids=None,
+        position_embeddings=None,
+        cache_position = None,
         **kwargs,
     ):
-        # Let BERT do QKV projection
         batch_size, seq_len, hidden_size = hidden_states.size()
-        num_heads = self.num_attention_heads
-        head_size = hidden_size // num_heads
+        # Let BERT do QKV projection
+        query_layer = self.transpose_for_scores(self.query(hidden_states))
+        key_layer = self.transpose_for_scores(self.key(hidden_states))
+        value_layer = self.transpose_for_scores(self.value(hidden_states))
 
-        query_layer = self.query(hidden_states).view(batch_size, seq_len, num_heads, head_size).permute(0, 2, 1, 3)
-        key_layer = self.key(hidden_states).view(batch_size, seq_len, num_heads, head_size).permute(0, 2, 1, 3)
-        value_layer = self.value(hidden_states).view(batch_size, seq_len, num_heads, head_size).permute(0, 2, 1, 3)
+        # Apply Rotary Position Embeddings
+        if position_embeddings is not None:
+            cos, sin = position_embeddings
+            query_layer, key_layer = apply_rotary_pos_emb(query_layer, key_layer, cos, sin)
 
-        # Calculate RoPE offset
-        seq_len_offset = 0
+        # Fallback
+        elif position_ids is not None and isinstance(position_ids, tuple) and len(position_ids) == 2:
+            cos, sin = position_ids
+            query_layer, key_layer = apply_rotary_pos_emb(query_layer, key_layer, cos, sin)
+
+        # Handle KV Cache
         if past_key_values is not None:
             if not isinstance(past_key_values, Cache):
-                raise ValueError("NomicBert only supports Cache-based past_key_values")
-            # New DynamicCache path
-            seq_len_offset = past_key_values.get_seq_length(self.layer_idx)
-
-        # Rotate Q and K here to encode relative positions.
-        if self.rotary_emb is not None:
-            q_rot, q_pass = query_layer[..., : self.rotary_emb.dim], query_layer[..., self.rotary_emb.dim :]
-            k_rot, k_pass = key_layer[..., : self.rotary_emb.dim], key_layer[..., self.rotary_emb.dim :]
-
-            # Use position_ids if available (fixes left-padding), else fallback to offset
-            if position_ids is not None:
-                # Assisted decoding with position_ids
-                q_rot, k_rot = self.rotary_emb(q_rot, k_rot, position_ids=position_ids)
-
-            elif past_key_values is not None:
-                q_rot, k_rot = self.rotary_emb(q_rot, k_rot, seqlen_offset=seq_len_offset)
-
+                key_layer, value_layer = past_key_values.update(key_layer, value_layer, self.layer_idx)
             else:
-                # Standard decoding with scalar offset
-                q_rot, k_rot = self.rotary_emb(q_rot, k_rot)
+                # Update DynamicCache
+                cache_kwargs = {}
+                if position_embeddings is not None:
+                    cos, sin = position_embeddings
+                    cache_kwargs = {"sin": sin, "cos": cos, "cache_position": cache_position}
 
-            query_layer = torch.cat([q_rot, q_pass], dim=-1)
-            key_layer = torch.cat([k_rot, k_pass], dim=-1)
+                key_layer, value_layer = past_key_values.update(
+                    key_layer, value_layer, self.layer_idx, cache_kwargs
+                )
 
-        if past_key_values is None and self.is_decoder and kwargs.get("use_cache", True):
-            past_key_values = DynamicCache()
-
-        # Update the KV cache if present
-        if past_key_values is not None:
-            if not isinstance(past_key_values, Cache):
-                raise ValueError("NomicBert only supports Cache-based past_key_values")
-
-            # Update cache with ONLY new KV
-            # update() returns full cached KV (past + new)
-            key_layer, value_layer = past_key_values.update(key_layer, value_layer, self.layer_idx)
 
         # Calculate Attention Scores
         attention_scores = torch.matmul(query_layer, key_layer.transpose(-1, -2))
@@ -323,28 +358,14 @@ class NomicBertSelfAttention(BertSelfAttention):
 
         # Apply mask if present
         if attention_mask is not None:
-            score_len = attention_scores.size(-1)
-            mask_len = attention_mask.size(-1)
-
-            if mask_len != score_len:
-                if mask_len < score_len:
-                    # Pad the mask on the left with zeros (0.0 means visible/keep in additive mask)
-                    pad_len = score_len - mask_len
-                    padding = torch.zeros(
-                        attention_mask.size()[:-1] + (pad_len,),
-                        dtype=attention_mask.dtype,
-                        device=attention_mask.device,
-                    )
-                    attention_mask = torch.cat([padding, attention_mask], dim=-1)
-                elif mask_len > score_len:
-                    # Rare edge case: slice mask if it's too long
-                    attention_mask = attention_mask[..., -score_len:]
-
             attention_scores = attention_scores + attention_mask
 
         # Normalize to Probabilities
         attention_probs = nn.functional.softmax(attention_scores, dim=-1)
         attention_probs = self.dropout(attention_probs)
+
+        if head_mask is not None:
+            attention_probs = attention_probs * head_mask
 
         # Calculate Weighted Sum (Context)
         context_layer = torch.matmul(attention_probs, value_layer)
@@ -352,7 +373,8 @@ class NomicBertSelfAttention(BertSelfAttention):
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
 
         # Flatten 'Heads' and 'HeadDim' back into a single 'Hidden' dimension
-        context_layer = context_layer.view(batch_size, seq_len, hidden_size)
+        new_context_layer_shape = context_layer.size()[:-2] + (hidden_size,)
+        context_layer = context_layer.view(new_context_layer_shape)
 
         outputs = (context_layer, attention_probs) if output_attentions else (context_layer,)
 
@@ -362,256 +384,19 @@ class NomicBertSelfAttention(BertSelfAttention):
         return outputs
 
 
-class RotaryEmbedding(nn.Module):
-    """
-    Rotary Position Embedding (RoPE) module for applying rotary embeddings to query and key tensors.
-    RoPE encodes relative positional information by rotating the query and key vectors in the complex plane.
-    """
-
-    def __init__(
-        self,
-        dim: int,
-        base=10000,
-        scale_base=None,
-        interleaved=False,
-        device=None,
-    ):
-        """
-        Initialize RotaryEmbedding.
-
-        Args:
-            dim: The dimension of the rotary embeddings.
-            base: The base frequency for computing inverse frequencies. Defaults to 10000.
-            scale_base: Optional scaling base for the rotary embeddings. If provided, enables scaled rotary embeddings.
-            interleaved: If True, rotate pairs of even and odd dimensions (GPT-J style) instead
-                of 1st half and 2nd half (GPT-NeoX style). Defaults to False.
-            device: Optional device to initialize buffers on.
-        """
-        super().__init__()
-        self.dim = dim
-        assert self.dim % 2 == 0
-        self.base = float(base)
-        # Generate and save the inverse frequency buffer (non trainable)
-        # This computes 1 / (base^(2i/dim)) for i in [0, dim/2)
-        self.inv_freq = self._compute_inv_freq(device)
-        self.register_buffer("inv_freq", self.inv_freq, persistent=False)
-        self.interleaved = interleaved
-        self.scale_base = scale_base
-
-        self._seq_len_cached = 0
-        self._cos_cached = None
-        self._sin_cached = None
-
-    def _rotate_half(self, x, interleaved=False):
-        """
-        Rotate half of the input tensor for rotary embedding computation.
-
-        For non-interleaved (GPT-NeoX style): splits tensor into two halves and rotates them.
-        For interleaved (GPT-J style): rotates pairs of even and odd dimensions.
-
-        Args:
-            x: Input tensor of shape (..., headdim)
-            interleaved: Whether to use interleaved rotation pattern
-
-        Returns:
-            Rotated tensor of the same shape as input
-        """
-        if not interleaved:
-            # GPT-NeoX style
-            x1, x2 = x.chunk(2, dim=-1)
-            return torch.cat((-x2, x1), dim=-1)
-        else:
-            # GPT-J style
-            x1, x2 = x[..., ::2], x[..., 1::2]
-            _check_einops_available()
-            from einops import rearrange
-
-            return rearrange(torch.stack((-x2, x1), dim=-1), "... d two -> ... (d two)", two=2)
-
-    def apply_rotary_emb(self, x, cos, sin, offset=0, position_ids=None, interleaved=False):
-        """
-        Apply rotary embeddings to input tensor.
-
-        The rotary embedding is applied as: x_rot = x * cos + rotate_half(x) * sin
-        Only the first `rotary_dim` dimensions are rotated; the rest remain unchanged.
-
-        Args:
-            x: Input tensor of shape (batch_size, seqlen, nheads, headdim)
-            cos: Cosine values of shape (seqlen, rotary_dim / 2) or (batch_size, seqlen, rotary_dim / 2)
-            sin: Sine values of shape (seqlen, rotary_dim / 2) or (batch_size, seqlen, rotary_dim / 2)
-            offset: Offset for slicing cos/sin tensors. Used for KV cache scenarios.
-            interleaved: Whether to use interleaved rotation pattern
-
-        Returns:
-            Tensor with rotary embeddings applied to the first `rotary_dim` dimensions
-        """
-        ro_dim = self.dim
-
-        if position_ids is not None:
-            cos = cos[position_ids]
-            sin = sin[position_ids]
-        else:
-            seq_len = x.shape[2]
-            cos, sin = (
-                cos[offset : offset + seq_len, : ro_dim // 2],
-                sin[offset : offset + seq_len, : ro_dim // 2],
-            )
-
-        _check_einops_available()
-        from einops import repeat
-
-        if cos.dim() == 2:
-            pattern = "s d -> 1 1 s (2 d)" if not interleaved else "s d -> 1 1 s (d 2)"
-            cos = repeat(cos, pattern)
-            sin = repeat(sin, pattern)
-        elif cos.dim() == 3:
-            pattern = "b s d -> b 1 s (2 d)" if not interleaved else "b s d -> b 1 s (d 2)"
-            cos = repeat(cos, pattern)
-            sin = repeat(sin, pattern)
-
-        return torch.cat(
-            [x[..., :ro_dim] * cos + self._rotate_half(x[..., :ro_dim], interleaved) * sin, x[..., ro_dim:]],
-            dim=-1,
-        )
-
-    def _compute_inv_freq(self, device=None):
-        """
-        Compute inverse frequencies for rotary embeddings.
-
-        Computes 1 / (base^(2i/dim)) for i in [0, dim/2), which are the frequencies
-        used to generate the rotary embeddings.
-
-        Args:
-            device: Optional device to create the tensor on
-
-        Returns:
-            Tensor of shape (dim // 2,) containing inverse frequencies
-        """
-        return 1.0 / (self.base ** (torch.arange(0, self.dim, 2, device=device, dtype=torch.float32) / self.dim))
-
-    def _update_cos_sin_cache(self, seqlen, device=None, dtype=None):
-        """
-        Update the cached cosine and sine values for rotary embeddings.
-
-        The cache is recomputed when:
-        - The sequence length increases beyond the cached length
-        - The device changes (e.g., during tracing)
-        - The dtype changes
-        - Switching from inference to training mode
-
-        Args:
-            seqlen: Target sequence length for the cache
-            device: Device to create tensors on
-            dtype: Data type for the output cos/sin tensors
-        """
-        # Reset the cache if sequence length has changed, device changed, dtype changed,
-        # or switching from inference mode to training
-        if (
-            seqlen > self._seq_len_cached
-            or self._cos_cached is None
-            or self._cos_cached.device != device
-            or self._cos_cached.dtype != dtype
-            or (self.training and self._cos_cached.is_inference())
-        ):
-            self._seq_len_cached = seqlen
-            t = torch.arange(seqlen, device=device, dtype=torch.float32)
-            # Use fp32 for computation to maintain precision
-            # inv_freq multiplied with t produces large values, and using bf16/fp16
-            # would lose significant precision and change cos/sin outputs
-            if self.inv_freq.dtype != torch.float32:
-                inv_freq = self._compute_inv_freq(device=device)
-            else:
-                inv_freq = self.inv_freq
-            # Compute frequencies: outer product of positions and inverse frequencies
-            # Shape: (seqlen, dim // 2)
-            # Note: Using torch.outer instead of einsum to avoid AMP converting fp32 to fp16
-            freqs = torch.outer(t, inv_freq)
-
-            # Compute cosine and sine, then convert to target dtype
-            self._cos_cached = torch.cos(freqs).to(dtype)
-            self._sin_cached = torch.sin(freqs).to(dtype)
-
-    def forward(
-        self,
-        q: torch.Tensor,
-        k: torch.Tensor,
-        seqlen_offset: int | torch.Tensor = 0,
-        position_ids: torch.Tensor | None = None,
-        max_seqlen: int | None = None,
-    ) -> tuple[torch.Tensor, torch.Tensor]:
-        """
-        Apply rotary position embeddings to query and key tensors.
-
-        Args:
-            q: Query tensor of shape (batch_size, seqlen, nheads, headdim)
-            k: Key tensor of shape (batch_size, seqlen, nheads, headdim)
-            seqlen_offset: Offset for sequence positions. Can be:
-                - An integer: all sequences are shifted by this amount (common in KV cache scenarios)
-                - A tensor of shape (batch_size,): each sequence has its own offset
-                Defaults to 0.
-            position_ids: Position IDs tensor of shape (batch_size, seqlen). If provided, it overrides the default
-                position IDs computed from `seqlen_offset`.
-            max_seqlen: Maximum sequence length for cache update. If provided and seqlen_offset
-                is a tensor, updates the cache up to this length. Useful for batched inference
-                with variable-length sequences.
-
-        Returns:
-            Tuple of (q_rot, k_rot) with rotary embeddings applied. Both tensors have the same
-            shape as the input q and k tensors.
-        """
-        # Determine needed cache size
-        if max_seqlen is not None:
-            needed_len = max_seqlen
-        elif position_ids is not None:
-            # Ensure cache is large enough for the largest position ID
-            needed_len = position_ids.max().item() + 1
-        else:
-            needed_len = q.shape[2] + (seqlen_offset if isinstance(seqlen_offset, int) else 0)
-
-        # Update cache
-        if needed_len > self._seq_len_cached:
-            self._update_cos_sin_cache(needed_len, device=q.device, dtype=q.dtype)
-        elif self._cos_cached.device != q.device or self._cos_cached.dtype != q.dtype:
-            self._update_cos_sin_cache(needed_len, device=q.device, dtype=q.dtype)
-
-        q_rot = self.apply_rotary_emb(
-            q, self._cos_cached, self._sin_cached, seqlen_offset, position_ids, self.interleaved
-        )
-        k_rot = self.apply_rotary_emb(
-            k, self._cos_cached, self._sin_cached, seqlen_offset, position_ids, self.interleaved
-        )
-        return q_rot, k_rot
-
-
-class NomicBertCrossAttention(BertCrossAttention):
-    pass
-
-
 class NomicBertSelfOutput(BertSelfOutput):
     pass
 
 
 class NomicBertAttention(BertAttention):
-    """
-    This module overrides the standard `BertAttention` to incorporate Rotary Positional Embeddings (RoPE)
-    via `NomicBertSelfAttention` and `position_ids` propagation. It handles the specific
-    initialization requirements of NomicBERT while maintaining compatibility with the
-    Transformers library build system.
-    """
-
     def __init__(
-        self, config, position_embedding_type=None, layer_idx=None, is_cross_attention=False, is_causal=False
+        self, config, position_embedding_type=None, layer_idx=None, is_cross_attention=False
     ):
         super().__init__(config, position_embedding_type=position_embedding_type)
 
-        self.is_cross_attention = is_cross_attention
-
-        if is_cross_attention:
-            self.self = NomicBertCrossAttention(config)
-        else:
-            self.self = NomicBertSelfAttention(
-                config, position_embedding_type=position_embedding_type, layer_idx=layer_idx, is_causal=is_causal
-            )
+        self.self = NomicBertSelfAttention(
+            config, position_embedding_type=position_embedding_type, layer_idx=layer_idx
+        )
 
         self.output = NomicBertSelfOutput(config)
 
@@ -716,13 +501,6 @@ class NomicBertOutput(BertOutput):
 
 
 class NomicBertLayer(BertLayer):
-    """
-    NomicBERT Layer.
-    Overrides standard BERT components to incorporate:
-    Rotary Positional Embeddings (RoPE) in the Attention mechanism.
-    And SwiGLU activation in the Intermediate layer.
-    """
-
     def __init__(self, config, layer_idx=None):
         super().__init__(config)
         self.layer_idx = layer_idx
@@ -764,15 +542,13 @@ class NomicBertEncoder(BertEncoder):
     to be passed during initialization via kwargs.
     """
 
-    def __init__(self, config, layer_class=None, **kwargs):
+    def __init__(self, config, **kwargs):
         super().__init__(config, **kwargs)
 
         self.gradient_checkpointing = False
-        # Use NomicBertLayer by default if not specified
-        layer_class = layer_class or NomicBertLayer
 
         # Re-initialize self.layer with the correct index passed to each layer
-        self.layer = nn.ModuleList([layer_class(config, layer_idx=i) for i in range(config.num_hidden_layers)])
+        self.layer = nn.ModuleList([NomicBertLayer(config, layer_idx=i) for i in range(config.num_hidden_layers)])
 
     def forward(
         self,
@@ -915,7 +691,6 @@ class NomicBertPreTrainingHeads(BertPreTrainingHeads):
 
 
 class NomicBertPreTrainedModel(BertPreTrainedModel):
-    _supports_cache_class = True
     supports_gradient_checkpointing = True
 
 

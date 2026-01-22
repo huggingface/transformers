@@ -18,15 +18,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 from ...configuration_utils import PreTrainedConfig
+from ...modeling_rope_utils import RopeParameters
 
 
 class NomicBertConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`NomicBertModel`]. It is used to instantiate an NomicBERT
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
-    defaults will yield a similar configuration to that of the [nomic-ai/nomic-bert-2048](https://huggingface.co/nomic-ai/nomic-bert-2048).
+    defaults will yield a similar configuration to that of the [nomic-ai/nomic-embed-text-v1.5](https://huggingface.co/nomic-ai/nomic-embed-text-v1.5).
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
@@ -76,6 +76,10 @@ class NomicBertConfig(PreTrainedConfig):
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to tie the input and output word embeddings. If set to `True`, the same embedding matrix
             is used for both input embeddings and output logits.
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
         max_position_embeddings (`int`, *optional*, defaults to 2048):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
@@ -119,6 +123,7 @@ class NomicBertConfig(PreTrainedConfig):
         type_vocab_size=2,
         pad_vocab_size_multiple=1,
         tie_word_embeddings=True,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
         max_position_embeddings=2048,
         pad_token_id=0,
         **kwargs,
@@ -145,6 +150,7 @@ class NomicBertConfig(PreTrainedConfig):
         self.rotary_emb_scale_base = rotary_emb_scale_base
         self.rotary_emb_interleaved = rotary_emb_interleaved
         self.pad_vocab_size_multiple = pad_vocab_size_multiple
+        self.rope_parameters = rope_parameters
 
 
 __all__ = ["NomicBertConfig"]
