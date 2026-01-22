@@ -678,9 +678,7 @@ class NopConfig(PreTrainedConfig):
             try:
                 os.chdir(tmp_dir)
 
-                tokenizer = AutoTokenizer.from_pretrained(
-                    fake_model_id, local_files_only=True, trust_remote_code=True
-                )
+                tokenizer = AutoTokenizer.from_pretrained(fake_model_id, local_files_only=True, trust_remote_code=True)
                 self.assertEqual(tokenizer.__class__.__name__, "NopTokenizer")
                 self.assertTrue(tokenizer.special_attribute_present)
             finally:
