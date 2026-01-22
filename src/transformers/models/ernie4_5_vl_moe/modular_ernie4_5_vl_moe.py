@@ -535,10 +535,6 @@ class Ernie4_5_VL_MoeTextAttention(Ernie4_5_MoeAttention):
     pass
 
 
-class Ernie4_5_VL_MoeVisionAttention(Qwen2_5_VLVisionAttention):
-    pass
-
-
 class Ernie4_5_VL_MoeRMSNorm(Ernie4_5_MoeRMSNorm):
     pass
 
@@ -702,6 +698,10 @@ class Ernie4_5_VL_MoeDecoderLayer(GradientCheckpointingLayer):
         hidden_states = hidden_states + residual
 
         return hidden_states
+
+
+class Ernie4_5_VL_MoeVisionAttention(Qwen2_5_VLVisionAttention):
+    pass
 
 
 class Ernie4_5_VL_MoeVisionBlock(Qwen2_5_VLVisionBlock):
