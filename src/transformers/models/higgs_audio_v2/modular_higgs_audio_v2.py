@@ -38,9 +38,6 @@ from ...modeling_utils import PreTrainedModel
 from .generation_higgs_audio_v2 import HiggsAudioV2GenerationMixin
 
 
-if is_torch_flex_attn_available():
-    pass
-
 
 logger = logging.get_logger(__name__)
 
