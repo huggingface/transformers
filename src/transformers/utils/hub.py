@@ -168,7 +168,8 @@ def define_sagemaker_information():
 
     sagemaker_params = json.loads(os.getenv("SM_FRAMEWORK_PARAMS", "{}"))
     runs_distributed_training = "sagemaker_distributed_dataparallel_enabled" in sagemaker_params
-    account_id = os.getenv("TRAINING_JOB_ARN").split(":")[4] if "TRAINING_JOB_ARN" in os.environ else None
+    training_job_arn = os.getenv("TRAINING_JOB_ARN")
+    account_id = training_job_arn.split(":")[4] if training_job_arn is not None else None
 
     sagemaker_object = {
         "sm_framework": os.getenv("SM_FRAMEWORK_MODULE", None),
@@ -773,7 +774,10 @@ class PushToHubMixin:
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             # Save all files.
-            self.save_pretrained(tmp_dir, max_shard_size=max_shard_size)
+            if hasattr(self, "save_pretrained"):
+                self.save_pretrained(tmp_dir, max_shard_size=max_shard_size)
+            else:
+                raise AttributeError("The object must have a save_pretrained method to use push_to_hub")
 
             # Update model card
             model_card.save(os.path.join(tmp_dir, "README.md"))

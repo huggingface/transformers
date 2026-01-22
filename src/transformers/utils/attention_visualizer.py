@@ -222,7 +222,10 @@ class AttentionMaskVisualizer:
         )
 
         if causal_mask is not None:
-            attention_mask = ~causal_mask.bool()
+            if hasattr(causal_mask, "bool"):
+                attention_mask = ~causal_mask.bool()
+            else:
+                attention_mask = ~causal_mask
         else:
             attention_mask = attention_mask.unsqueeze(1).unsqueeze(1).expand(batch_size, 1, seq_length, seq_length)
         top_bottom_border = "##" * (
