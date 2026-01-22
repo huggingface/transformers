@@ -149,7 +149,7 @@ class HiggsAudioV2TokenizerResidualUnit(nn.Module):
         return hidden_state + output_tensor
 
 
-class SemanticEncoderBlock(nn.Module):
+class HiggsAudioV2TokenizerSemanticEncoderBlock(nn.Module):
     def __init__(self, config: HiggsAudioV2TokenizerConfig, in_channels: int, out_channels: int, stride: int):
         super().__init__()
         self.res_units = nn.ModuleList(
@@ -189,7 +189,7 @@ class SemanticEncoder(nn.Module):
         conv_blocks = []
         for i, stride in enumerate(config.strides):
             out_channels = int(config.semantic_hidden_size * config.channel_ratios[i])
-            conv_blocks += [SemanticEncoderBlock(config, in_channels, out_channels, stride)]
+            conv_blocks += [HiggsAudioV2TokenizerSemanticEncoderBlock(config, in_channels, out_channels, stride)]
             in_channels = out_channels
 
         self.conv_blocks = nn.ModuleList(conv_blocks)
