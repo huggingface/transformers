@@ -167,7 +167,6 @@ class DINOv3ConvNextModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Te
 
     test_resize_embeddings = False
     has_attentions = False
-    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = DINOv3ConvNextModelTester(self)

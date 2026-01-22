@@ -142,7 +142,6 @@ class Sam2VisionModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (Sam2VisionModel,) if is_torch_available() else ()
 
     test_resize_embeddings = False
-    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = Sam2VisionModelTester(self)

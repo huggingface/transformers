@@ -238,6 +238,7 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     all_model_classes = (Mamba2Model, Mamba2ForCausalLM) if is_torch_available() else ()
     has_attentions = False  # Mamba does not support attentions
     test_missing_keys = False
+    test_torch_exportable = False  # uses custom kernels by default, not compatible with torch.export
 
     pipeline_model_mapping = (
         {"feature-extraction": Mamba2Model, "text-generation": Mamba2ForCausalLM} if is_torch_available() else {}

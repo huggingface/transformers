@@ -52,6 +52,7 @@ from ...utils import (
     filter_out_non_signature_kwargs,
     is_vision_available,
     logging,
+    torch_compilable_check,
 )
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..blip.image_processing_blip import BlipImageProcessor
@@ -922,12 +923,12 @@ class JanusModel(JanusPreTrainedModel):
             special_image_mask = input_ids == self.config.image_token_id
 
         n_image_tokens = special_image_mask.sum()
+        n_image_features = image_features.shape[0] * image_features.shape[1]
         special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-        if inputs_embeds[special_image_mask].numel() != image_features.numel():
-            n_image_features = image_features.shape[0] * image_features.shape[1]
-            raise ValueError(
-                f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
-            )
+        torch_compilable_check(
+            inputs_embeds[special_image_mask].numel() == image_features.numel(),
+            f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {n_image_features}",
+        )
         return special_image_mask
 
     @can_return_tuple

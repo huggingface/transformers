@@ -21,6 +21,7 @@ from .core_model_loading import (
     Chunk,
     Concatenate,
     ErnieFuseAndSplitTextVisionExperts,
+    Force16BytesAlignment,
     MergeModulelist,
     Transpose,
     WeightConverter,
@@ -40,6 +41,23 @@ if TYPE_CHECKING:
 
 def _build_checkpoint_conversion_mapping():
     mapping = {
+        "gpt_oss": [
+            # NOTE: These converters are only applied if the model is being loaded from pre-dequantized checkpoint.
+            # If you are dequantizing the model on the fly, these converters will be ignored because the tensors
+            # that match these patterns are only created after dequantization.
+            # That's not an issue for now since the dequantization converters already ensure 16 bytes alignment
+            # by enforcing contiguity.
+            WeightConverter(
+                source_patterns="mlp.experts.gate_up_proj$",
+                target_patterns="mlp.experts.gate_up_proj",
+                operations=[Force16BytesAlignment()],
+            ),
+            WeightConverter(
+                source_patterns="mlp.experts.down_proj$",
+                target_patterns="mlp.experts.down_proj",
+                operations=[Force16BytesAlignment()],
+            ),
+        ],
         "mixtral": [
             WeightRenaming(".block_sparse_moe.gate", ".mlp.gate"),
             WeightConverter(
@@ -349,6 +367,13 @@ def get_model_conversion_mapping(
 
     # Add the ones from the quantizer as well if provided
     if hf_quantizer is not None:
+        # NOTE: Since get_weight_conversions() only serve to dequantize, we would normally want to apply them first.
+        # However, for now it's not possible to cascade converters (i.e., applying model-specific conversions on top
+        # of tensors created by the dequantization conversions)
+        # This means that if a model has model-specific conversions and is being dequantized, the model-specific conversion
+        # that relies on tensors created by dequantization conversions will not be applied.
+        # GptOss example: with Mxfp4Config(dequantize=True), Force16BytesAlignment converters are ignored because the tensors
+        # "mlp.experts.gate_up_proj$" and "mlp.experts.down_proj$" are only created after dequantization conversions are applied.
         weight_conversions.extend(hf_quantizer.get_weight_conversions())
 
     return weight_conversions
