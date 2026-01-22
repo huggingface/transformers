@@ -330,3 +330,32 @@ class ViTModelIntegrationTest(unittest.TestCase):
         # forward pass to make sure inference works in fp16
         with torch.no_grad():
             _ = model(pixel_values)
+
+
+def test_vit_interpolate_pos_encoding_allows_different_resolution():
+    import torch
+    from transformers import ViTConfig, ViTModel
+
+    config = ViTConfig(
+        image_size=224,
+        patch_size=16,
+        hidden_size=64,
+        num_hidden_layers=2,
+        num_attention_heads=2,
+        intermediate_size=128,
+    )
+
+    model = ViTModel(config)
+    model.eval()
+
+    pixel_values = torch.randn(1, 3, 256, 256)
+
+    with torch.no_grad():
+        outputs = model(
+            pixel_values=pixel_values,
+            interpolate_pos_encoding=True,
+        )
+
+    assert outputs.last_hidden_state is not None
+    assert outputs.last_hidden_state.shape[0] == 1
+
