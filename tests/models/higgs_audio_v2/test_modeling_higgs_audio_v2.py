@@ -27,7 +27,6 @@ from transformers import (
 )
 from transformers.testing_utils import (
     cleanup,
-    require_read_token,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -374,13 +373,11 @@ class HiggsAudioV2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
                 "output_scores": True,
             }
 
-            print("=" * 50)
             # Traditional way of generating text, with `return_dict_in_generate` to return the past key values
             outputs = model.generate(**inputs, **generate_kwargs, max_new_tokens=4)
 
             # Let's generate again, but passing the past key values in between (3 + 1 = 4 tokens). Note that the
             # inputs may need to be tweaked across `generate` calls (like the attention mask).
-            print("=" * 50)
             outputs_cached = model.generate(**inputs, **generate_kwargs, max_new_tokens=3)
 
             # Continue from the tokens generated above, preparing the inputs accordingly
@@ -407,6 +404,15 @@ class HiggsAudioV2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
                 mask = inputs["input_ids"][:, -num_gen_audio_inputs_ids:] == config.eos_token_id
                 inputs["audio_input_ids_mask"][:, -num_gen_audio_inputs_ids:][mask] = False
 
+            # Pop multimodal data since they are already cached and we'll raise an error
+            # if there are multimodal data which don't belong anywhere inside `text_tokens`
+            keys_to_pop = []
+            for key in inputs:
+                if ("pixel" in key or key in ["image_patches", "input_feature"]) and key != model.main_input_name:
+                    keys_to_pop.append(key)
+            for key in keys_to_pop:
+                inputs.pop(key)
+
             first_caches_scores = outputs_cached.scores
             outputs_cached = model.generate(**inputs, **generate_kwargs, max_new_tokens=1)
             full_cached_scores = first_caches_scores + outputs_cached.scores
@@ -414,17 +420,9 @@ class HiggsAudioV2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
 
             # The two sets of generated text and past kv should be equal to each other
             self.assertTrue(has_similar_generate_outputs(outputs, outputs_cached))
-            for layer_idx in range(len(outputs_cached.past_key_values)):
-                for kv_idx in range(len(outputs_cached.past_key_values[layer_idx])):
-                    self.assertTrue(
-                        torch.allclose(
-                            outputs.past_key_values[layer_idx][kv_idx],
-                            outputs_cached.past_key_values[layer_idx][kv_idx],
-                        )
-                    )
+            self._check_caches_are_equal(outputs.past_key_values, outputs_cached.past_key_values)
 
 
-@require_read_token
 class HiggsAudioV2ForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.checkpoint_name = "eustlb/higgs-v2"
