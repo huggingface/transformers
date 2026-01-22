@@ -225,7 +225,7 @@ class VLMModelTester:
 
     # End of overridable methods/properties
 
-    def prepare_config_and_inputs(self):
+    def prepare_config_and_inputs_for_common(self):
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         pixel_values = self.create_pixel_values()
 
@@ -238,11 +238,6 @@ class VLMModelTester:
             token_type_ids = ids_tensor([self.batch_size, self.seq_length], self.type_vocab_size)
 
         config = self.get_config()
-
-        return config, input_ids, token_type_ids, input_mask, pixel_values
-
-    def prepare_config_and_inputs_for_common(self):
-        config, input_ids, token_type_ids, input_mask, pixel_values = self.prepare_config_and_inputs()
 
         # Place image tokens in input_ids using template method
         input_ids = self.place_image_tokens(input_ids, config)
