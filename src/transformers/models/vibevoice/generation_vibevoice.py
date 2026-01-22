@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2025 The Microsoft Team and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The Microsoft Team and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -15,7 +15,7 @@
 
 import importlib
 from dataclasses import dataclass
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 import torch
 
@@ -27,8 +27,12 @@ from ...generation import (
     LogitsProcessorList,
 )
 from ...generation.stopping_criteria import StoppingCriteriaList
-from ...generation.utils import GenerateNonBeamOutput
+from ...generation.utils import GenerateNonBeamOutput, ALL_CACHE_NAMES
 from ...utils import logging
+
+
+if TYPE_CHECKING:
+    from ...generation.streamers import BaseStreamer
 
 
 logger = logging.get_logger(__name__)
@@ -42,26 +46,21 @@ class VibeVoiceGenerateOutput(GenerateDecoderOnlyOutput):
     Args:
         audio (`list(torch.FloatTensor)` of length `batch_size`):
             The generated audio.
-        reach_max_step_sample (`torch.BoolTensor`, *optional*):
-            Boolean tensor indicating which samples reached maximum generation steps.
     """
 
     audio: Optional[list[torch.FloatTensor]] = None
-    reach_max_step_sample: Optional[torch.BoolTensor] = None
 
 
 class VibeVoiceTokenConstraintProcessor(LogitsProcessor):
-    """Constrains token generation to only valid tokens during speech generation."""
+    """Constrains token generation to only valid tokens during audio generation."""
 
     def __init__(self, valid_token_ids: list[int], device: torch.device = None):
         self.valid_token_ids = torch.tensor(valid_token_ids, dtype=torch.long, device=device)
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        # Create a mask for valid tokens
+        # Create and apply mask for valid tokens
         mask = torch.full_like(scores, float("-inf"))
         mask[:, self.valid_token_ids] = 0
-
-        # Apply mask to scores
         scores = scores + mask
         return scores
 
@@ -138,11 +137,8 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         Indeed, VibeVoice model requires a custom generation sampling step:
         1. Extract VibeVoice-specific parameters and setup diffusion components
         2. Setup negative generation for classifier-free guidance
-        3. Generate tokens with diffusion-based speech synthesis for speech tokens
+        3. Generate tokens with diffusion-based synthesis for audio tokens
         4. Apply stopping criteria (EOS token and max length)
-
-        Expected streamer object can take the form of the following from the original code base:
-        https://github.com/vibevoice-community/VibeVoice/blob/b9d561240ada3ee5d8fb5812bebb32f7ecfd97ae/vibevoice/modular/streamer.py#L13
         """
         # init values
         pad_token_id = generation_config._pad_token_tensor
@@ -164,9 +160,25 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         batch_size, cur_len = input_ids.shape[:2]
         this_peer_finished = False
         unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
-        model_kwargs = self._get_initial_cache_position(cur_len, input_ids.device, model_kwargs)
+
+        model_forward = (
+            self.get_compiled_call(generation_config.compile_config)
+            if self._valid_auto_compile_criteria(model_kwargs, generation_config)
+            else self.__call__
+        )
+        
+        # TODO (ebezzam) in original _sample
+        # # Assisted generation completes the prefill stage in candidate generator so that
+        # # we don't have several `prefill` calls in one generation loop. Skip `_prefill` for assistants
+        # if not generation_config.is_assistant:
+        #     outputs = self._prefill(input_ids, generation_config, model_kwargs)
+        #     prefill_consumed = False
+        # else:
+        #     model_kwargs = self._get_initial_cache_position(input_ids.shape[1], input_ids.device, model_kwargs)
+        #     prefill_consumed = True
 
         # *************** VibeVoice specific ***************
+        model_kwargs = self._get_initial_cache_position(cur_len, input_ids.device, model_kwargs)
         input_values = model_kwargs.pop("input_values", None)
         padding_mask = model_kwargs.pop("padding_mask", None)
         noise_scheduler = generation_config.noise_scheduler
@@ -180,11 +192,9 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         semantic_cache = None
         is_prefill = True
         inputs_embeds = None
-
-        # Output audio
         audio_chunks = [[] for _ in range(batch_size)]
 
-        # Token constraints for VibeVoice - only allow speech tokens
+        # Token constraints for VibeVoice - only allow audio tokens
         valid_tokens = [
             self.config.audio_bos_token_id,
             self.config.audio_eos_token_id,
@@ -252,24 +262,20 @@ class VibeVoiceGenerationMixin(GenerationMixin):
             generation_config.max_length - initial_length_per_sample,
             torch.full_like(initial_length_per_sample, max_steps),
         )
-        step = 0
         # ============================================
 
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             # *************** VibeVoice specific ***************
             if monitor_progress is not None:
-                current_steps = torch.full((batch_size,), step, dtype=torch.long, device=input_ids.device)
+                current_steps = torch.full((batch_size,), cur_len - initial_length, dtype=torch.long, device=input_ids.device)
                 progress_tensor = torch.stack((current_steps, max_step_per_sample), dim=1)
                 monitor_progress(progress_tensor)
-            # ============================================
 
-            # prepare model inputs
             model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
 
-            # *************** VibeVoice specific ***************
             # Handle prefill vs normal generation
             if is_prefill:
-                # First step: process speech inputs for conditioning
+                # First step: process audio inputs for conditioning
                 if input_values is not None and padding_mask is not None:
                     model_inputs.update(
                         {
@@ -285,10 +291,15 @@ class VibeVoiceGenerationMixin(GenerationMixin):
 
             # Set logits_to_keep for positive pass
             model_inputs["logits_to_keep"] = 1
-            outputs = self(**model_inputs, return_dict=True)
+            outputs = model_forward(**model_inputs, return_dict=True)
             # ============================================
 
-            # synced_gpus: don't waste resources running the code we don't need; kwargs must be updated before skipping
+            # TODO (ebezzam) in original _sample
+            # if prefill_consumed:
+            #     model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
+            #     with self._optimize_model_for_decode():
+            #         outputs = model_forward(**model_inputs, return_dict=True)
+            # prefill_consumed = True
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs,
                 model_kwargs,
@@ -315,10 +326,10 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                 if output_hidden_states:
                     decoder_hidden_states += (outputs.hidden_states,)
 
-            # *************** VibeVoice specific ***************
             # token selection
+            # *************** VibeVoice specific ***************
             # NOTE (ebezzam): For VibeVoice, we always use deterministic token selection
-            # regardless of do_sample setting. The real sampling happens in the diffusion
+            # regardless of `do_sample` setting. Sampling instead happens in the diffusion
             # process for audio generation, not in token selection.
             if do_sample:
                 logger.warning(
@@ -326,7 +337,6 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                     "Tokens will be selected using argmax regardless of do_sample=True."
                 )
             next_tokens = torch.argmax(next_token_scores, dim=-1)
-
             # ============================================
 
             # finished sentences should have their next token be a padding token
@@ -339,7 +349,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                 streamer.put(next_tokens.cpu())
 
             # *************** VibeVoice specific ***************
-            # Handle speech start tokens
+            # Perform audio generation with diffusion head
             diffusion_start_mask = unfinished_sequences.bool() & (next_tokens == self.config.audio_bos_token_id)
             if diffusion_start_mask.any():
                 diffusion_start_indices = diffusion_start_mask.nonzero(as_tuple=False).squeeze(1)
@@ -373,7 +383,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                     negative_model_inputs["input_ids"] = None
                 negative_model_inputs["logits_to_keep"] = 0
 
-                negative_outputs = self(**negative_model_inputs, return_dict=True)
+                negative_outputs = model_forward(**negative_model_inputs, return_dict=True)
                 negative_model_kwargs = self._update_model_kwargs_for_generation(
                     negative_outputs,
                     negative_model_kwargs,
@@ -387,10 +397,10 @@ class VibeVoiceGenerationMixin(GenerationMixin):
 
                 noise_scheduler.set_timesteps(num_inference_steps=n_diffusion_steps)
                 condition = torch.cat([positive_condition, negative_condition], dim=0).to(diffusion_head_device)
-                speech = torch.randn(condition.shape[0], self.config.acoustic_tokenizer_config.hidden_size).to(condition)
+                noisy_audio_latent = torch.randn(condition.shape[0], self.config.acoustic_tokenizer_config.hidden_size).to(condition)
 
                 for timestep in noise_scheduler.timesteps:
-                    half = speech[: len(speech) // 2]
+                    half = noisy_audio_latent[: len(noisy_audio_latent) // 2]
                     combined = torch.cat([half, half], dim=0)
                     eps = self.model.diffusion_head(
                         combined, timestep.repeat(combined.shape[0]).to(combined), condition=condition
@@ -398,13 +408,13 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                     cond_eps, uncond_eps = torch.split(eps, len(eps) // 2, dim=0)
                     half_eps = uncond_eps + cfg_scale * (cond_eps - uncond_eps)
                     eps = torch.cat([half_eps, half_eps], dim=0)
-                    speech = noise_scheduler.step(eps, timestep, speech).prev_sample
-                speech_latent = speech[: len(speech) // 2].unsqueeze(1)
+                    noisy_audio_latent = noise_scheduler.step(eps, timestep, noisy_audio_latent).prev_sample
+                audio_latent = noisy_audio_latent[: len(noisy_audio_latent) // 2].unsqueeze(1)
 
                 # Decode to audio
-                scaled_latent = speech_latent / self.latent_scaling_factor.to(
-                    speech_latent.device
-                ) - self.latent_bias_factor.to(speech_latent.device)
+                scaled_latent = audio_latent / self.latent_scaling_factor.to(
+                    audio_latent.device
+                ) - self.latent_bias_factor.to(audio_latent.device)
                 if len(diffusion_indices) != batch_size:
                     # pad non-diffusion samples with zeros
                     padded_latent = torch.zeros(batch_size, scaled_latent.shape[1], scaled_latent.shape[2]).to(
@@ -419,14 +429,10 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                     use_cache=self.config.use_cache,
                 )
                 audio_chunk = audio_output.audio
-                acoustic_cache = audio_output.padding_cache
-
-                # Store and stream audio
                 for i, sample_idx in enumerate(diffusion_indices):
                     idx = sample_idx.item()
                     audio_chunks[idx].append(audio_chunk[i])
-                if streamer is not None:
-                    streamer.put(audio_chunk, diffusion_indices)
+                acoustic_cache = audio_output.padding_cache
 
                 # Get semantic features for next step
                 semantic_outputs = self.model.semantic_tokenizer.encode(
@@ -438,13 +444,12 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                 semantic_cache = semantic_outputs.padding_cache
 
                 # Combine features for next input
-                acoustic_embed = self.model.acoustic_connector(speech_latent)
+                acoustic_embed = self.model.acoustic_connector(audio_latent)
                 semantic_embed = self.model.semantic_connector(semantic_features)
                 diffusion_embeds = acoustic_embed + semantic_embed
                 next_inputs_embeds[diffusion_indices] = diffusion_embeds
 
             inputs_embeds = next_inputs_embeds
-            step += 1
             # ============================================
 
             unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
@@ -463,27 +468,26 @@ class VibeVoiceGenerationMixin(GenerationMixin):
             streamer.end()
 
         # *************** VibeVoice specific ***************
-        # Prepare final audio outputs
-        final_audio_outputs = []
-        for sample_chunks in audio_chunks:
-            if sample_chunks:
-                final_audio_outputs.append(torch.cat(sample_chunks, dim=-1))
-            else:
-                final_audio_outputs.append(None)
+        generated_audio = [torch.cat(chunks, dim=-1) if chunks else None for chunks in audio_chunks]
+        # ============================================
 
         if return_dict_in_generate:
+            cache = None
+            if any(cache_key in model_kwargs for cache_key in ALL_CACHE_NAMES):
+                cache_key = next(cache_key for cache_key in ALL_CACHE_NAMES if cache_key in model_kwargs)
+                cache = model_kwargs[cache_key]
+            # *************** VibeVoice specific ***************
             return VibeVoiceGenerateOutput(
                 sequences=input_ids,
                 scores=scores,
                 logits=raw_logits,
                 attentions=decoder_attentions,
                 hidden_states=decoder_hidden_states,
-                past_key_values=model_kwargs.get("past_key_values"),
-                audio=final_audio_outputs,
-                reach_max_step_sample=(step >= max_step_per_sample).any(),
+                past_key_values=cache,
+                audio=generated_audio,
             )
         else:
-            # NOTE (ebezzam): new tokens in input_ids are simply speech tokens (mainly `audio_diffusion_token_id`)
-            # so returning `input_ids` is insufficient for generated audio
-            return final_audio_outputs
+            # NOTE (ebezzam): new tokens in input_ids are simply audio tokens (mainly `audio_diffusion_token_id`)
+            # so returning `input_ids` is insufficient for generating audio
+            return generated_audio
         # ============================================
