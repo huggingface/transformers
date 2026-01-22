@@ -50,7 +50,7 @@ def update_key_name(mapping: dict[str, Any]) -> dict[str, Any]:
         mapping = {k: k for k in mapping}
         not_mapping = True
 
-    bucket: dict[tuple[str, Any], list[set[int]]] = defaultdict(list)
+    bucket: dict[str, list[set[int] | Any]] = defaultdict(list)
     for key, val in mapping.items():
         digs = _DIGIT_RX.findall(key)
         patt = _pattern_of(key)

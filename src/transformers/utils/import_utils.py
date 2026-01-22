@@ -239,8 +239,10 @@ def is_torch_npu_available(check_device=False) -> bool:
     if check_device:
         try:
             # Will raise a RuntimeError if no NPU is found
-            _ = torch.npu.device_count()
-            return torch.npu.is_available()
+            if hasattr(torch, "npu"):
+                _ = torch.npu.device_count()
+                return torch.npu.is_available()
+            return False
         except RuntimeError:
             return False
     return hasattr(torch, "npu") and torch.npu.is_available()
@@ -290,7 +292,7 @@ def is_torch_mlu_available() -> bool:
     pytorch_cndev_based_mlu_check_previous_value = os.environ.get("PYTORCH_CNDEV_BASED_MLU_CHECK")
     try:
         os.environ["PYTORCH_CNDEV_BASED_MLU_CHECK"] = str(1)
-        available = torch.mlu.is_available()
+        available = torch.mlu.is_available() if hasattr(torch, "mlu") else False
     finally:
         if pytorch_cndev_based_mlu_check_previous_value:
             os.environ["PYTORCH_CNDEV_BASED_MLU_CHECK"] = pytorch_cndev_based_mlu_check_previous_value
@@ -317,8 +319,10 @@ def is_torch_musa_available(check_device=False) -> bool:
     if check_device:
         try:
             # Will raise a RuntimeError if no MUSA is found
-            _ = torch.musa.device_count()
-            return torch.musa.is_available()
+            if hasattr(torch, "musa"):
+                _ = torch.musa.device_count()
+                return torch.musa.is_available()
+            return False
         except RuntimeError:
             return False
     return hasattr(torch, "musa") and torch.musa.is_available()
@@ -456,12 +460,12 @@ def is_torch_bf16_gpu_available() -> bool:
     if is_torch_hpu_available():
         return True
     if is_torch_npu_available():
-        return torch.npu.is_bf16_supported()
+        return torch.npu.is_bf16_supported() if hasattr(torch, "npu") else False
     if is_torch_mps_available():
         # Note: Emulated in software by Metal using fp32 for hardware without native support (like M1/M2)
         return torch.backends.mps.is_macos_or_newer(14, 0)
     if is_torch_musa_available():
-        return torch.musa.is_bf16_supported()
+        return torch.musa.is_bf16_supported() if hasattr(torch, "musa") else False
     return False
 
 
@@ -521,9 +525,10 @@ def is_torch_tf32_available() -> bool:
     import torch
 
     if is_torch_musa_available():
-        device_info = torch.musa.get_device_properties(torch.musa.current_device())
-        if f"{device_info.major}{device_info.minor}" >= "22":
-            return True
+        if hasattr(torch, "musa"):
+            device_info = torch.musa.get_device_properties(torch.musa.current_device())
+            if f"{device_info.major}{device_info.minor}" >= "22":
+                return True
         return False
     if not torch.cuda.is_available() or torch.version.cuda is None:
         return False
@@ -546,10 +551,12 @@ def enable_tf32(enable: bool) -> None:
     pytorch_version = version.parse(get_torch_version())
     if pytorch_version >= version.parse("2.9.0"):
         precision_mode = "tf32" if enable else "ieee"
-        torch.backends.fp32_precision = precision_mode
+        if hasattr(torch.backends, "fp32_precision"):
+            torch.backends.fp32_precision = precision_mode
     else:
         if is_torch_musa_available():
-            torch.backends.mudnn.allow_tf32 = enable
+            if hasattr(torch.backends, "mudnn"):
+                torch.backends.mudnn.allow_tf32 = enable
         else:
             torch.backends.cuda.matmul.allow_tf32 = enable
             torch.backends.cudnn.allow_tf32 = enable
@@ -1325,7 +1332,7 @@ def is_torchdynamo_exporting() -> bool:
         try:
             import torch._dynamo as dynamo
 
-            return dynamo.is_exporting()
+            return dynamo.is_exporting() if hasattr(dynamo, "is_exporting") else False
         except Exception:
             return False
 
@@ -2020,7 +2027,7 @@ class _LazyModule(ModuleType):
 
     # Needed for autocompletion in an IDE
     def __dir__(self):
-        result = super().__dir__()
+        result = list(super().__dir__())
         # The elements of self.__all__ that are submodules may or may not be in the dir already, depending on whether
         # they have been accessed or not. So we only add the elements of self.__all__ that are not already in the dir.
         for attr in self.__all__:
@@ -2270,10 +2277,12 @@ def direct_transformers_import(path: str, file="__init__.py") -> ModuleType:
     name = "transformers"
     location = os.path.join(path, file)
     spec = importlib.util.spec_from_file_location(name, location, submodule_search_locations=[path])
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    module = sys.modules[name]
-    return module
+    if spec is not None and spec.loader is not None:
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        module = sys.modules[name]
+        return module
+    raise ImportError(f"Could not load module {name} from {location}")
 
 
 class VersionComparison(Enum):
@@ -2287,13 +2296,13 @@ class VersionComparison(Enum):
     @staticmethod
     def from_string(version_string: str) -> "VersionComparison":
         string_to_operator = {
-            "=": VersionComparison.EQUAL.value,
-            "==": VersionComparison.EQUAL.value,
-            "!=": VersionComparison.NOT_EQUAL.value,
-            ">": VersionComparison.GREATER_THAN.value,
-            "<": VersionComparison.LESS_THAN.value,
-            ">=": VersionComparison.GREATER_THAN_OR_EQUAL.value,
-            "<=": VersionComparison.LESS_THAN_OR_EQUAL.value,
+            "=": VersionComparison.EQUAL,
+            "==": VersionComparison.EQUAL,
+            "!=": VersionComparison.NOT_EQUAL,
+            ">": VersionComparison.GREATER_THAN,
+            "<": VersionComparison.LESS_THAN,
+            ">=": VersionComparison.GREATER_THAN_OR_EQUAL,
+            "<=": VersionComparison.LESS_THAN_OR_EQUAL,
         }
 
         return string_to_operator[version_string]

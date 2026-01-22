@@ -93,7 +93,6 @@ filterwarnings = [
 
 [tool.ty.rules]
 # Disable specific rules that produce false positives or are too strict for this codebase
-possibly-missing-attribute = "ignore"  # False positives on conditional checks (e.g., inputs_embeds.size() after checking is not None)
 invalid-method-override = "ignore"     # Parameter name differences are acceptable (e.g., x vs input, new_embeddings vs value)
 not-subscriptable = "ignore"           # False positives on tensor slicing (e.g., self.position_ids[:, :seq_length])
 no-matching-overload = "ignore"        # False positives on torch.zeros and similar functions accepting Size/tuple
@@ -101,7 +100,6 @@ unsupported-operator = "ignore"        # False positives on tuple concatenation 
 unresolved-import = "ignore"           # Optional dependencies (mlx, torch_npu, habana_frameworks, etc.) checked at runtime
 call-non-callable = "ignore"           # Mixin pattern issues where classes are used as both types and callables
 unresolved-reference = "ignore"        # Forward references with noqa: F821 that ty doesn't respect
-unresolved-attribute = "ignore"        # Mixin patterns, conditional imports (jinja2), dynamic torch attributes
 invalid-argument-type = "ignore"       # Complex type narrowing and union type issues
 not-iterable = "ignore"                # Complex async/Future type patterns
 invalid-return-type = "ignore"         # Return type mismatches that would require refactoring
