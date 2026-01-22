@@ -171,7 +171,7 @@ class LoadStateDictConfig:
     Bundles arguments for state-dict loading and finalization to keep call sites lightweight.
     """
 
-    pretrained_model_name_or_path: str | None
+    pretrained_model_name_or_path: str | None = None
     ignore_mismatched_sizes: bool = False
     sharded_metadata: dict | None = None
     device_map: dict | None = None

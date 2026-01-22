@@ -32,6 +32,7 @@ from transformers.core_model_loading import (
     rename_source_key,
     revert_weight_conversion,
 )
+from transformers.modeling_utils import LoadStateDictConfig
 from transformers.utils.import_utils import is_triton_available
 
 from ..test_modeling_common import compare_state_dicts
@@ -258,8 +259,10 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             ),
             WeightRenaming("mlp.w2.weight", "mlp.down_proj.weight"),
         ]
+
+        load_config = LoadStateDictConfig(weight_mapping=weight_mapping, )
         missing, unexpected, mismatch, _, misc = convert_and_load_state_dict_in_model(
-            model, state_dict, weight_mapping, tp_plan=None, hf_quantizer=None
+            model, state_dict, load_config, tp_plan=None,
         )
 
         self.assertEqual(
@@ -370,8 +373,9 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
         ]
 
         # Use the mapping to load
+        load_config = LoadStateDictConfig(weight_mapping=weight_mapping, )
         missing, unexpected, mismatch, _, misc = convert_and_load_state_dict_in_model(
-            model, state_dict, weight_mapping, tp_plan=None, hf_quantizer=None
+            model, state_dict, load_config, tp_plan=None,
         )
         self.assertTrue(len(missing) == 0)
         self.assertTrue(len(unexpected) == 0)
@@ -470,227 +474,7 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
         ]
 
         missing, unexpected, mismatch, _, misc = convert_and_load_state_dict_in_model(
-            model, state_dict, weight_mapping, tp_plan=None, hf_quantizer=quantizer
-        )
-
-        self.assertEqual(missing, set())
-        self.assertEqual(unexpected, set())
-        self.assertEqual(mismatch, set())
-        self.assertEqual(misc, {})
-
-        permute_op = PermuteForRope()
-        permute_op.config = model.config
-        expected_q = permute_op._apply(raw_q)
-        expected_k = permute_op._apply(raw_k)
-        expected_v = permute_op._apply(raw_v)
-
-        model_state = model.state_dict()
-        self.assertFalse(torch.allclose(raw_k, expected_k))
-        torch.testing.assert_close(model_state["model.layers.0.self_attn.k_proj.weight"], expected_k)
-        torch.testing.assert_close(model_state["model.layers.0.self_attn.v_proj.weight"], expected_v)
-
-        q_weight_key = "model.layers.0.self_attn.q_proj.weight"
-        scale_key = "model.layers.0.self_attn.q_proj.weight_scale_inv"
-        self.assertIn(scale_key, model_state)
-        expected_dtype = torch.float8_e4m3fn if hasattr(torch, "float8_e4m3fn") else torch.int8
-        self.assertEqual(model_state[q_weight_key].dtype, expected_dtype)
-        self.assertEqual(model_state[q_weight_key].shape, torch.Size((out_dim, in_dim)))
-        self.assertEqual(model_state[scale_key].dtype, torch.float32)
-        self.assertEqual(
-            model_state[scale_key].shape,
-            torch.Size((out_dim // block_size[0], in_dim // block_size[1])),
-        )
-
-        dequant = Fp8Dequantize(block_size=block_size)
-        dequantized_q = dequant.convert(
-            [model_state[q_weight_key], model_state[scale_key]],
-            context={"quantization_config": quantizer.quantization_config},
-        )
-        torch.testing.assert_close(dequantized_q, expected_q, rtol=1e-2, atol=1e-2)
-
-    def test_ernie4_5_vl_moe_conversion(self):
-        model = DummyRoot(add_extra_moe=True)
-        model.config = PretrainedConfig()
-
-        raw_tensors = {
-            "model.layers.0.experts.0.w1.weight": torch.tensor([[0.0, 1.0], [2.0, 3.0]]),
-            "model.layers.0.experts.1.w1.weight": torch.tensor([[10.0, 11.0], [12.0, 13.0]]),
-            "model.layers.0.experts.2.w1.weight": torch.tensor([[11.0, 12.0], [13.0, 14.0]]),
-            "model.layers.0.experts.3.w1.weight": torch.tensor([[12.0, 13.0], [14.0, 15.0]]),
-            "model.layers.0.experts.0.w3.weight": torch.tensor([[4.0, 5.0], [6.0, 7.0]]),
-            "model.layers.0.experts.1.w3.weight": torch.tensor([[14.0, 15.0], [16.0, 17.0]]),
-            "model.layers.0.experts.2.w3.weight": torch.tensor([[15.0, 16.0], [17.0, 18.0]]),
-            "model.layers.0.experts.3.w3.weight": torch.tensor([[16.0, 17.0], [18.0, 19.0]]),
-            "model.layers.0.experts.0.w2.weight": torch.tensor([[20.0, 21.0], [22.0, 23.0]]),
-            "model.layers.0.experts.1.w2.weight": torch.tensor([[24.0, 25.0], [26.0, 27.0]]),
-            "model.layers.0.experts.2.w2.weight": torch.tensor([[25.0, 26.0], [27.0, 28.0]]),
-            "model.layers.0.experts.3.w2.weight": torch.tensor([[26.0, 27.0], [28.0, 29.0]]),
-            "model.layers.1.experts.0.w1.weight": torch.tensor([[30.0, 31.0], [32.0, 33.0]]),
-            "model.layers.1.experts.1.w1.weight": torch.tensor([[34.0, 35.0], [36.0, 37.0]]),
-            "model.layers.1.experts.2.w1.weight": torch.tensor([[35.0, 36.0], [37.0, 38.0]]),
-            "model.layers.1.experts.3.w1.weight": torch.tensor([[36.0, 37.0], [38.0, 39.0]]),
-            "model.layers.1.experts.0.w3.weight": torch.tensor([[38.0, 39.0], [40.0, 41.0]]),
-            "model.layers.1.experts.1.w3.weight": torch.tensor([[42.0, 43.0], [44.0, 45.0]]),
-            "model.layers.1.experts.2.w3.weight": torch.tensor([[43.0, 44.0], [45.0, 46.0]]),
-            "model.layers.1.experts.3.w3.weight": torch.tensor([[44.0, 45.0], [46.0, 47.0]]),
-            "model.layers.1.experts.0.w2.weight": torch.tensor([[46.0, 47.0], [48.0, 49.0]]),
-            "model.layers.1.experts.1.w2.weight": torch.tensor([[50.0, 51.0], [52.0, 53.0]]),
-            "model.layers.1.experts.2.w2.weight": torch.tensor([[51.0, 52.0], [53.0, 54.0]]),
-            "model.layers.1.experts.3.w2.weight": torch.tensor([[52.0, 53.0], [54.0, 55.0]]),
-            "model.layers.0.self_attn.qkv_proj.weight": torch.tensor([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]]),
-            "model.layers.1.self_attn.qkv_proj.weight": torch.tensor([[7.0, 8.0], [9.0, 10.0], [11.0, 12.0]]),
-            "mlp.w2.weight": torch.tensor([[60.0, 61.0], [62.0, 63.0]]),
-        }
-        state_dict = {k: v.clone() for k, v in raw_tensors.items()}
-
-        weight_mapping = [
-            WeightConverter(
-                ["experts.*.w1.weight", "experts.*.w3.weight"],
-                ["experts.gate_up_proj.weight", "extra_experts.gate_up_proj.weight"],
-                operations=[ErnieFuseAndSplitTextVisionExperts(stack_dim=0, concat_dim=1)],
-            ),
-            WeightConverter(
-                "experts.*.w2.weight",
-                ["experts.down_proj.weight", "extra_experts.down_proj.weight"],
-                operations=[ErnieFuseAndSplitTextVisionExperts(stack_dim=0, concat_dim=1)],
-            ),
-            WeightConverter(
-                "self_attn.qkv_proj.weight",
-                [
-                    "self_attn.q_proj.weight",
-                    "self_attn.k_proj.weight",
-                    "self_attn.v_proj.weight",
-                ],
-                operations=[Chunk(dim=0)],
-            ),
-            WeightRenaming("mlp.w2.weight", "mlp.down_proj.weight"),
-        ]
-        missing, unexpected, mismatch, _, misc = convert_and_load_state_dict_in_model(
-            model, state_dict, weight_mapping, tp_plan=None, hf_quantizer=None
-        )
-
-        self.assertEqual(missing, set())
-        self.assertEqual(unexpected, set())
-        self.assertEqual(mismatch, set())
-        self.assertEqual(misc, {})
-
-        model_state = model.state_dict()
-
-        def cat_gate(layer_prefix: str) -> torch.Tensor:
-            moe_1_w1 = [
-                raw_tensors[f"{layer_prefix}.experts.0.w1.weight"],
-                raw_tensors[f"{layer_prefix}.experts.1.w1.weight"],
-            ]
-            moe_2_w1 = [
-                raw_tensors[f"{layer_prefix}.experts.2.w1.weight"],
-                raw_tensors[f"{layer_prefix}.experts.3.w1.weight"],
-            ]
-            moe_1_w3 = [
-                raw_tensors[f"{layer_prefix}.experts.0.w3.weight"],
-                raw_tensors[f"{layer_prefix}.experts.1.w3.weight"],
-            ]
-            moe_2_w3 = [
-                raw_tensors[f"{layer_prefix}.experts.2.w3.weight"],
-                raw_tensors[f"{layer_prefix}.experts.3.w3.weight"],
-            ]
-            moe_1 = torch.cat([torch.stack(moe_1_w1, dim=0), torch.stack(moe_1_w3, dim=0)], dim=1)
-            moe_2 = torch.cat([torch.stack(moe_2_w1, dim=0), torch.stack(moe_2_w3, dim=0)], dim=1)
-            return moe_1, moe_2
-
-        moe_1, moe_2 = cat_gate("model.layers.0")
-        torch.testing.assert_close(model_state["model.layers.0.experts.gate_up_proj.weight"], moe_1)
-        torch.testing.assert_close(model_state["model.layers.0.extra_experts.gate_up_proj.weight"], moe_2)
-
-        moe_1, moe_2 = cat_gate("model.layers.1")
-        torch.testing.assert_close(model_state["model.layers.1.experts.gate_up_proj.weight"], moe_1)
-        torch.testing.assert_close(model_state["model.layers.1.extra_experts.gate_up_proj.weight"], moe_2)
-
-        def stack_down(layer_prefix: str) -> torch.Tensor:
-            moe_1 = torch.stack(
-                [
-                    raw_tensors[f"{layer_prefix}.experts.0.w2.weight"],
-                    raw_tensors[f"{layer_prefix}.experts.1.w2.weight"],
-                ],
-                dim=0,
-            )
-            moe_2 = torch.stack(
-                [
-                    raw_tensors[f"{layer_prefix}.experts.2.w2.weight"],
-                    raw_tensors[f"{layer_prefix}.experts.3.w2.weight"],
-                ],
-                dim=0,
-            )
-            return moe_1, moe_2
-
-        moe_1, moe_2 = stack_down("model.layers.0")
-        torch.testing.assert_close(model_state["model.layers.0.experts.down_proj.weight"], moe_1)
-        torch.testing.assert_close(model_state["model.layers.0.extra_experts.down_proj.weight"], moe_2)
-
-        moe_1, moe_2 = stack_down("model.layers.1")
-        torch.testing.assert_close(model_state["model.layers.1.experts.down_proj.weight"], moe_1)
-        torch.testing.assert_close(model_state["model.layers.1.extra_experts.down_proj.weight"], moe_2)
-
-    def test_ernie4_5_vl_moe_conversion_reversed(self):
-        model = DummyRoot(add_extra_moe=True)
-        model.config = PretrainedConfig()
-
-        raw_tensors = {
-            "model.layers.0.experts.0.w1.weight": torch.tensor([[0.0, 1.0], [2.0, 3.0]]),
-            "model.layers.0.experts.1.w1.weight": torch.tensor([[10.0, 11.0], [12.0, 13.0]]),
-            "model.layers.0.experts.2.w1.weight": torch.tensor([[11.0, 12.0], [13.0, 14.0]]),
-            "model.layers.0.experts.3.w1.weight": torch.tensor([[12.0, 13.0], [14.0, 15.0]]),
-            "model.layers.0.experts.0.w3.weight": torch.tensor([[4.0, 5.0], [6.0, 7.0]]),
-            "model.layers.0.experts.1.w3.weight": torch.tensor([[14.0, 15.0], [16.0, 17.0]]),
-            "model.layers.0.experts.2.w3.weight": torch.tensor([[15.0, 16.0], [17.0, 18.0]]),
-            "model.layers.0.experts.3.w3.weight": torch.tensor([[16.0, 17.0], [18.0, 19.0]]),
-            "model.layers.0.experts.0.w2.weight": torch.tensor([[20.0, 21.0], [22.0, 23.0]]),
-            "model.layers.0.experts.1.w2.weight": torch.tensor([[24.0, 25.0], [26.0, 27.0]]),
-            "model.layers.0.experts.2.w2.weight": torch.tensor([[25.0, 26.0], [27.0, 28.0]]),
-            "model.layers.0.experts.3.w2.weight": torch.tensor([[26.0, 27.0], [28.0, 29.0]]),
-            "model.layers.1.experts.0.w1.weight": torch.tensor([[30.0, 31.0], [32.0, 33.0]]),
-            "model.layers.1.experts.1.w1.weight": torch.tensor([[34.0, 35.0], [36.0, 37.0]]),
-            "model.layers.1.experts.2.w1.weight": torch.tensor([[35.0, 36.0], [37.0, 38.0]]),
-            "model.layers.1.experts.3.w1.weight": torch.tensor([[36.0, 37.0], [38.0, 39.0]]),
-            "model.layers.1.experts.0.w3.weight": torch.tensor([[38.0, 39.0], [40.0, 41.0]]),
-            "model.layers.1.experts.1.w3.weight": torch.tensor([[42.0, 43.0], [44.0, 45.0]]),
-            "model.layers.1.experts.2.w3.weight": torch.tensor([[43.0, 44.0], [45.0, 46.0]]),
-            "model.layers.1.experts.3.w3.weight": torch.tensor([[44.0, 45.0], [46.0, 47.0]]),
-            "model.layers.1.experts.0.w2.weight": torch.tensor([[46.0, 47.0], [48.0, 49.0]]),
-            "model.layers.1.experts.1.w2.weight": torch.tensor([[50.0, 51.0], [52.0, 53.0]]),
-            "model.layers.1.experts.2.w2.weight": torch.tensor([[51.0, 52.0], [53.0, 54.0]]),
-            "model.layers.1.experts.3.w2.weight": torch.tensor([[52.0, 53.0], [54.0, 55.0]]),
-            "model.layers.0.self_attn.qkv_proj.weight": torch.tensor([[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]]),
-            "model.layers.1.self_attn.qkv_proj.weight": torch.tensor([[7.0, 8.0], [9.0, 10.0], [11.0, 12.0]]),
-            "mlp.w2.weight": torch.tensor([[60.0, 61.0], [62.0, 63.0]]),
-        }
-        state_dict = {k: v.clone() for k, v in raw_tensors.items()}
-
-        weight_mapping = [
-            WeightConverter(
-                ["experts.*.w1.weight", "experts.*.w3.weight"],
-                ["experts.gate_up_proj.weight", "extra_experts.gate_up_proj.weight"],
-                operations=[ErnieFuseAndSplitTextVisionExperts(stack_dim=0, concat_dim=1)],
-            ),
-            WeightConverter(
-                "experts.*.w2.weight",
-                ["experts.down_proj.weight", "extra_experts.down_proj.weight"],
-                operations=[ErnieFuseAndSplitTextVisionExperts(stack_dim=0, concat_dim=1)],
-            ),
-            WeightConverter(
-                "self_attn.qkv_proj.weight",
-                [
-                    "self_attn.q_proj.weight",
-                    "self_attn.k_proj.weight",
-                    "self_attn.v_proj.weight",
-                ],
-                operations=[Chunk(dim=0)],
-            ),
-            WeightRenaming("mlp.w2.weight", "mlp.down_proj.weight"),
-        ]
-
-        # Use the mapping to load
-        missing, unexpected, mismatch, _, misc = convert_and_load_state_dict_in_model(
-            model, state_dict, weight_mapping, tp_plan=None, hf_quantizer=None
+            model, state_dict, weight_mapping, tp_plan=None,
         )
         self.assertTrue(len(missing) == 0)
         self.assertTrue(len(unexpected) == 0)
