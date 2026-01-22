@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Boson AI and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -118,11 +117,8 @@ class HiggsAudioV2TokenizerVectorQuantization(nn.Module):
     def __init__(self, config: HiggsAudioV2TokenizerConfig):
         super().__init__()
         self.codebook = HiggsAudioV2TokenizerEuclideanCodebook(config)
-        codebook_dim = config.codebook_dim
-        dim = config.hidden_size
-        requires_projection = codebook_dim != dim
-        self.project_in = nn.Linear(dim, codebook_dim) if requires_projection else nn.Identity()
-        self.project_out = nn.Linear(codebook_dim, dim) if requires_projection else nn.Identity()
+        self.project_in = nn.Linear(config.hidden_size, config.codebook_dim)
+        self.project_out = nn.Linear(config.codebook_dim, config.hidden_size)
 
     def encode(self, hidden_states):
         hidden_states = hidden_states.permute(0, 2, 1)
