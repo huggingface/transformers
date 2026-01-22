@@ -404,9 +404,19 @@ class TokenizersBackend(PreTrainedTokenizerBase):
         super().__setattr__(key, value)
 
         # After PreTrainedTokenizerBase has processed the assignment, update the post-processor (if needed)
-        if is_special_token and hasattr(self, "_tokenizer") and self._tokenizer is not None:
+        if (
+            is_special_token
+            and hasattr(self, "_tokenizer")
+            and self._tokenizer is not None
+            and value is not None
+            and getattr(self, "_should_update_post_processor", False)
+        ):
             # Update the post-processor to reflect the new special token
-            self.update_post_processor()
+            try:
+                self.update_post_processor()
+            except (ValueError, AttributeError):
+                # If update fails, the post-processor will be updated on next valid assignment
+                pass
 
     @property
     def is_fast(self) -> bool:
