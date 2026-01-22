@@ -26,7 +26,8 @@ from ...generation import (
     LogitsProcessor,
     LogitsProcessorList,
 )
-from ...generation.stopping_criteria import EosTokenCriteria, MaxLengthCriteria, StoppingCriteriaList
+from ...generation.stopping_criteria import StoppingCriteriaList
+from ...generation.utils import GenerateNonBeamOutput
 from ...utils import logging
 
 
@@ -66,27 +67,6 @@ class VibeVoiceTokenConstraintProcessor(LogitsProcessor):
 
 
 class VibeVoiceGenerationMixin(GenerationMixin):
-    def _get_stopping_criteria(
-        self,
-        *args,
-        **kwargs,
-    ) -> StoppingCriteriaList:
-        criteria = super()._get_stopping_criteria(*args, **kwargs)
-
-        kept_criteria = StoppingCriteriaList()
-        for criterion in criteria:
-            if not isinstance(criterion, MaxLengthCriteria):
-                if isinstance(criterion, EosTokenCriteria):
-                    logger.debug(
-                        f"VibeVoice handles EOS tokens internally, ignoring {criterion.__class__.__name__} stopping criteria."
-                    )
-                else:
-                    logger.warning(
-                        f"VibeVoice does not support {criterion.__class__.__name__} stopping criteria, it will be ignored."
-                    )
-            else:
-                kept_criteria.append(criterion)
-        return kept_criteria
 
     def _prepare_generation_config(self, generation_config: Optional[GenerationConfig], **kwargs):
         """
@@ -98,10 +78,9 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         VibeVoice-specific parameters include:
         - `noise_scheduler`: An optional noise scheduler instance to use instead of the default.
         - `monitor_progress`: A callable to monitor generation progress. If provided, this function can be called to
-            report the progress of the audio generation. The function takes a tensor argument `p` of shape `(n, 3)`,
-            where `n` is the batch size. `p[i, 0]` contains the current generation step for batch item `i`, `p[i, 1]`
-            contains the maximum generation steps for batch item `i` (which may vary based on input length), and
-            `p[i, 2]` contains the actual completion step for finished samples. No return value is expected.
+            report the progress of the audio generation. The function takes a tensor argument `p` of shape `(n, 2)`,
+            where `n` is the batch size. `p[i, 0]` contains the current generation step for batch item `i`, and `p[i, 1]`
+            contains the maximum generation steps for batch item `i`. No return value is expected.
         - `cfg_scale`: A classifier-free guidance scale to use during generation.
         - `n_diffusion_steps`: Number of diffusion steps to use during generation of each audio chunk.
         """
@@ -149,9 +128,9 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         stopping_criteria: StoppingCriteriaList,
         generation_config: GenerationConfig,
         synced_gpus: bool = False,
-        streamer=None,
+        streamer: Optional["BaseStreamer"] = None,
         **model_kwargs,
-    ):
+    ) -> GenerateNonBeamOutput | torch.LongTensor:
         """
         This method overrides [~generation.utils.GenerationMixin._sample].
         To ease maintenance, modifications are marked with the comment "VibeVoice specific".
@@ -160,10 +139,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         1. Extract VibeVoice-specific parameters and setup diffusion components
         2. Setup negative generation for classifier-free guidance
         3. Generate tokens with diffusion-based speech synthesis for speech tokens
-        4. Apply VibeVoice-specific stopping conditions alongside standard criteria
-
-        VibeVoice supports stopping criteria through internal finished_tags logic combined with
-        the standard stopping criteria framework.
+        4. Apply stopping criteria (EOS token and max length)
 
         Expected streamer object can take the form of the following from the original code base:
         https://github.com/vibevoice-community/VibeVoice/blob/b9d561240ada3ee5d8fb5812bebb32f7ecfd97ae/vibevoice/modular/streamer.py#L13
@@ -202,7 +178,6 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         # State tracking
         acoustic_cache = None
         semantic_cache = None
-        finished_tags = torch.zeros(batch_size, dtype=torch.bool, device=input_ids.device)
         is_prefill = True
         inputs_embeds = None
 
@@ -277,21 +252,14 @@ class VibeVoiceGenerationMixin(GenerationMixin):
             generation_config.max_length - initial_length_per_sample,
             torch.full_like(initial_length_per_sample, max_steps),
         )
-        completion_steps = torch.zeros(batch_size, dtype=torch.long, device=input_ids.device)
         step = 0
         # ============================================
 
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             # *************** VibeVoice specific ***************
-            # Check for external streaming termination
-            if streamer is not None and hasattr(streamer, "finished_flags"):
-                if any(streamer.finished_flags):
-                    break
-
             if monitor_progress is not None:
                 current_steps = torch.full((batch_size,), step, dtype=torch.long, device=input_ids.device)
-                current_steps[finished_tags] = completion_steps[finished_tags]
-                progress_tensor = torch.stack((current_steps, max_step_per_sample, completion_steps), dim=1)
+                progress_tensor = torch.stack((current_steps, max_step_per_sample), dim=1)
                 monitor_progress(progress_tensor)
             # ============================================
 
@@ -359,8 +327,6 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                 )
             next_tokens = torch.argmax(next_token_scores, dim=-1)
 
-            # Force finished samples to generate EOS tokens
-            next_tokens[finished_tags] = self.config.eos_token_id
             # ============================================
 
             # finished sentences should have their next token be a padding token
@@ -369,38 +335,12 @@ class VibeVoiceGenerationMixin(GenerationMixin):
 
             # update generated ids, model inputs, and length for next step
             input_ids = torch.cat([input_ids, next_tokens[:, None]], dim=-1)
+            if streamer is not None:
+                streamer.put(next_tokens.cpu())
 
             # *************** VibeVoice specific ***************
-            # Handle EOS detection and completion tracking
-            # TODO: can we use default stopping criteria??
-            eos_mask = next_tokens == self.config.eos_token_id
-            if eos_mask.any():
-                new_eos_indices = eos_mask & ~finished_tags
-                if new_eos_indices.any():
-                    finished_tags[new_eos_indices] = True
-                    completion_steps[new_eos_indices] = step + 1
-                    new_eos_idx_list = new_eos_indices.nonzero(as_tuple=False).squeeze(1)
-                    if streamer is not None:
-                        streamer.end(new_eos_idx_list)
-
-                    if monitor_progress is not None:
-                        current_steps = torch.full((batch_size,), step + 1, dtype=torch.long, device=input_ids.device)
-                        current_steps[finished_tags] = max_step_per_sample[finished_tags]
-                        progress_tensor = torch.stack((current_steps, max_step_per_sample, completion_steps), dim=1)
-                        monitor_progress(progress_tensor)
-
-            # Handle max length termination
-            max_length_reached = step >= max_step_per_sample
-            new_max_length_mask = max_length_reached & ~finished_tags
-            if new_max_length_mask.any():
-                finished_tags[new_max_length_mask] = True
-                completion_steps[new_max_length_mask] = step + 1
-                new_max_length_indices = new_max_length_mask.nonzero(as_tuple=False).squeeze(1)
-                if streamer is not None:
-                    streamer.end(new_max_length_indices)
-
             # Handle speech start tokens
-            diffusion_start_mask = ~finished_tags & (next_tokens == self.config.audio_bos_token_id)
+            diffusion_start_mask = unfinished_sequences.bool() & (next_tokens == self.config.audio_bos_token_id)
             if diffusion_start_mask.any():
                 diffusion_start_indices = diffusion_start_mask.nonzero(as_tuple=False).squeeze(1)
                 # Update negative generation state
@@ -421,7 +361,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
             next_inputs_embeds = self.get_input_embeddings()(next_tokens).unsqueeze(1)
 
             # Handle diffusion tokens
-            diffusion_mask = ~finished_tags & (next_tokens == self.config.audio_diffusion_token_id)
+            diffusion_mask = unfinished_sequences.bool() & (next_tokens == self.config.audio_diffusion_token_id)
             negative_outputs = None
             if diffusion_mask.any():
                 diffusion_indices = diffusion_mask.nonzero(as_tuple=False).squeeze(1)
@@ -448,20 +388,6 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                 noise_scheduler.set_timesteps(num_inference_steps=n_diffusion_steps)
                 condition = torch.cat([positive_condition, negative_condition], dim=0).to(diffusion_head_device)
                 speech = torch.randn(condition.shape[0], self.config.acoustic_tokenizer_config.hidden_size).to(condition)
-
-                # # TODO (ebezzam) something like below to use `do_sample`? only problem is original would differ and would break integration tests
-                # if do_sample:
-                #     # Stochastic generation: use random noise
-                #     speech = torch.randn(condition.shape[0], self.config.acoustic_hidden_size).to(condition)
-                # else:
-                #     # Deterministic generation: use reproducible noise based on conditioning content
-                #     # This ensures same input gives same output, but different inputs get different noise patterns
-                #     seed = int(torch.sum(condition).item() * 1000) % (2**31)  # Simple hash of conditioning
-                #     generator = torch.Generator(device=condition.device).manual_seed(seed)
-                #     speech = torch.randn(
-                #         condition.shape[0], self.config.acoustic_hidden_size,
-                #         generator=generator, device=condition.device
-                #     )
 
                 for timestep in noise_scheduler.timesteps:
                     half = speech[: len(speech) // 2]
@@ -518,12 +444,8 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                 next_inputs_embeds[diffusion_indices] = diffusion_embeds
 
             inputs_embeds = next_inputs_embeds
-            unfinished_sequences = unfinished_sequences & ~finished_tags.long()
             step += 1
             # ============================================
-
-            if streamer is not None:
-                streamer.put(next_tokens.cpu())
 
             unfinished_sequences = unfinished_sequences & ~stopping_criteria(input_ids, scores)
             this_peer_finished = unfinished_sequences.max() == 0
@@ -558,7 +480,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                 hidden_states=decoder_hidden_states,
                 past_key_values=model_kwargs.get("past_key_values"),
                 audio=final_audio_outputs,
-                reach_max_step_sample=completion_steps >= max_step_per_sample,
+                reach_max_step_sample=(step >= max_step_per_sample).any(),
             )
         else:
             # NOTE (ebezzam): new tokens in input_ids are simply speech tokens (mainly `audio_diffusion_token_id`)
