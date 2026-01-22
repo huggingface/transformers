@@ -24,7 +24,7 @@ from ...modeling_rope_utils import RopeParameters
 
 class GlmOcrVisionConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`GlmOcrModel`]. It is used to instantiate a
+    This is the configuration class to store the configuration of a [`GlmOcrVisionConfig`]. It is used to instantiate a
     GLM-OCR model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of
     GLM-OCR [zai-org/GLM-OCR](https://huggingface.co/zai-org/GLM-OCR).
@@ -109,7 +109,7 @@ class GlmOcrVisionConfig(PreTrainedConfig):
 
 class GlmOcrTextConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`GlmOcrModel`]. It is used to instantiate a
+    This is the configuration class to store the configuration of a [`GlmOcrTextConfig`]. It is used to instantiate a
     GLM-OCR model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of
     GLM-OCR [zai-org/GLM-OCR](https://huggingface.co/zai-org/GLM-OCR).

@@ -50,7 +50,7 @@ class GlmOcrVisionMlp(Glm4VisionMlp):
 
 class GlmOcrVisionConfig(Glm4vVisionConfig):
     r"""
-    This is the configuration class to store the configuration of a [`GlmOcrModel`]. It is used to instantiate a
+    This is the configuration class to store the configuration of a [`GlmOcrVisionConfig`]. It is used to instantiate a
     GLM-OCR model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of
     GLM-OCR [zai-org/GLM-OCR](https://huggingface.co/zai-org/GLM-OCR).
@@ -109,7 +109,7 @@ class GlmOcrVisionConfig(Glm4vVisionConfig):
 
 class GlmOcrTextConfig(Glm4vTextConfig):
     r"""
-    This is the configuration class to store the configuration of a [`GlmOcrModel`]. It is used to instantiate a
+    This is the configuration class to store the configuration of a [`GlmOcrTextConfig`]. It is used to instantiate a
     GLM-OCR model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of
     GLM-OCR [zai-org/GLM-OCR](https://huggingface.co/zai-org/GLM-OCR).
@@ -260,10 +260,6 @@ class GlmOcrModelOutputWithPast(Glm4vModelOutputWithPast):
 class GlmOcrVisionAttention(Glm4vVisionAttention):
     def __init__(self, config: GlmOcrVisionConfig) -> None:
         super().__init__()
-        self.dim = config.hidden_size
-        self.num_heads = config.num_heads
-        self.head_dim = self.dim // self.num_heads
-        self.num_key_value_groups = 1  # needed for eager attention
         self.qkv = nn.Linear(config.hidden_size, config.hidden_size * 3, bias=config.attention_bias)
         self.proj = nn.Linear(config.hidden_size, config.hidden_size, bias=config.attention_bias)
         self.q_norm = GlmOcrRMSNorm(self.head_dim, eps=config.rms_norm_eps)
