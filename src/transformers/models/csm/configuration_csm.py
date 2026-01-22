@@ -261,6 +261,9 @@ class CsmConfig(PreTrainedConfig):
         "codec_config": AutoConfig,
         "depth_decoder_config": CsmDepthDecoderConfig,
     }
+    attribute_map = {
+        "codebook_size": "vocab_size",
+    }
 
     def __init__(
         self,
