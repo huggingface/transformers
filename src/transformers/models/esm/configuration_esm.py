@@ -101,16 +101,6 @@ class TrunkConfig:
 
         if self.max_recycles <= 0:
             raise ValueError(f"`max_recycles` should be positive, got {self.max_recycles}.")
-        if self.sequence_state_dim % self.sequence_state_dim != 0:
-            raise ValueError(
-                "`sequence_state_dim` should be a round multiple of `sequence_state_dim`, got"
-                f" {self.sequence_state_dim} and {self.sequence_state_dim}."
-            )
-        if self.pairwise_state_dim % self.pairwise_state_dim != 0:
-            raise ValueError(
-                "`pairwise_state_dim` should be a round multiple of `pairwise_state_dim`, got"
-                f" {self.pairwise_state_dim} and {self.pairwise_state_dim}."
-            )
 
         sequence_num_heads = self.sequence_state_dim // self.sequence_head_width
         pairwise_num_heads = self.pairwise_state_dim // self.pairwise_head_width
