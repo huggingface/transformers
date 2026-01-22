@@ -307,11 +307,12 @@ class NotebookProgressCallback(TrainerCallback):
 
     def on_step_end(self, args, state, control, **kwargs):
         epoch = int(state.epoch) if int(state.epoch) == state.epoch else f"{state.epoch:.2f}"
-        self.training_tracker.update(
-            state.global_step + 1,
-            comment=f"Epoch {epoch}/{state.num_train_epochs}",
-            force_update=self._force_next_update,
-        )
+        if self.training_tracker is not None:
+            self.training_tracker.update(
+                state.global_step + 1,
+                comment=f"Epoch {epoch}/{state.num_train_epochs}",
+                force_update=self._force_next_update,
+            )
         self._force_next_update = False
 
     def on_prediction_step(self, args, state, control, eval_dataloader=None, **kwargs):
@@ -337,7 +338,8 @@ class NotebookProgressCallback(TrainerCallback):
             values = {"Training Loss": logs["loss"]}
             # First column is necessarily Step sine we're not in epoch eval strategy
             values["Step"] = state.global_step
-            self.training_tracker.write_line(values)
+            if self.training_tracker is not None:
+                self.training_tracker.write_line(values)
 
     def on_evaluate(self, args, state, control, metrics=None, **kwargs):
         if self.training_tracker is not None:
@@ -351,6 +353,8 @@ class NotebookProgressCallback(TrainerCallback):
                 values["Epoch"] = int(state.epoch)
             else:
                 values["Step"] = state.global_step
+            if metrics is None:
+                metrics = {}
             metric_key_prefix = "eval"
             for k in metrics:
                 if k.endswith("_loss"):
@@ -374,9 +378,10 @@ class NotebookProgressCallback(TrainerCallback):
             self._force_next_update = True
 
     def on_train_end(self, args, state, control, **kwargs):
-        self.training_tracker.update(
-            state.global_step,
-            comment=f"Epoch {int(state.epoch)}/{state.num_train_epochs}",
-            force_update=True,
-        )
-        self.training_tracker = None
+        if self.training_tracker is not None:
+            self.training_tracker.update(
+                state.global_step,
+                comment=f"Epoch {int(state.epoch)}/{state.num_train_epochs}",
+                force_update=True,
+            )
+            self.training_tracker = None

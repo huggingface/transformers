@@ -171,7 +171,10 @@ class QuantizationConfigMixin:
             `str`: String containing all the attributes that make up this configuration instance in JSON format.
         """
         if use_diff is True:
-            config_dict = self.to_diff_dict()
+            if hasattr(self, "to_diff_dict"):
+                config_dict = self.to_diff_dict()
+            else:
+                config_dict = self.to_dict()
         else:
             config_dict = self.to_dict()
         return json.dumps(config_dict, indent=2, sort_keys=True) + "\n"
@@ -1254,7 +1257,11 @@ class CompressedTensorsConfig(QuantizationConfigMixin):
     def is_quantization_compressed(self):
         from compressed_tensors.quantization import QuantizationStatus
 
-        return self.is_quantized and self.quantization_config.quantization_status == QuantizationStatus.COMPRESSED
+        return (
+            self.is_quantized
+            and self.quantization_config is not None
+            and self.quantization_config.quantization_status == QuantizationStatus.COMPRESSED
+        )
 
     @property
     def is_sparsification_compressed(self):

@@ -41,6 +41,10 @@ logger = logging.get_logger(__name__)
 
 if is_jinja_available():
     import jinja2
+    import jinja2.exceptions
+    import jinja2.ext
+    import jinja2.nodes
+    import jinja2.runtime
     from jinja2.ext import Extension
     from jinja2.sandbox import ImmutableSandboxedEnvironment
 else:
@@ -393,6 +397,7 @@ def _compile_jinja_template(chat_template):
         raise ImportError(
             "apply_chat_template requires jinja2 to be installed. Please install it using `pip install jinja2`."
         )
+    assert jinja2 is not None
 
     class AssistantTracker(Extension):
         # This extension is used to track the indices of assistant-generated tokens in the rendered chat
@@ -415,6 +420,7 @@ def _compile_jinja_template(chat_template):
             rv = caller()
             if self.is_active():
                 # Only track generation indices if the tracker is active
+                assert self._rendered_blocks is not None and self._generation_indices is not None
                 start_index = len("".join(self._rendered_blocks))
                 end_index = start_index + len(rv)
                 self._generation_indices.append((start_index, end_index))
@@ -442,6 +448,7 @@ def _compile_jinja_template(chat_template):
         )
 
     def raise_exception(message):
+        assert jinja2 is not None
         raise jinja2.exceptions.TemplateError(message)
 
     def tojson(x, ensure_ascii=False, indent=None, separators=None, sort_keys=False):
