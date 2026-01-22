@@ -279,7 +279,6 @@ class ChameleonVision2SeqModelTest(ModelTesterMixin, GenerationTesterMixin, Pipe
         if is_torch_available()
         else {}
     )
-    # skip_test_image_features_output_shape = True  # Align uses index 1 for hidden_size instead of last index
 
     def setUp(self):
         self.model_tester = ChameleonVision2SeqModelTester(self)
