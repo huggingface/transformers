@@ -221,29 +221,26 @@ class VibeVoiceAcousticTokenizerConvNext1dLayer(nn.Module):
 
 
 class VibeVoiceAcousticTokenizerEncoderStem(nn.Module):
-    def __init__(self, config, layer_idx=None):
+    def __init__(self, config):
         super().__init__()
 
-        depth = config.depths[0]
-        intermediate_channels = config.n_filters
         self.conv = VibeVoiceAcousticTokenizerCausalConv1d(
             in_channels=config.channels,
-            out_channels=intermediate_channels,
+            out_channels=config.n_filters,
             kernel_size=config.kernel_size,
             bias=config.bias,
-            layer_idx=layer_idx,
+            layer_idx=0,
         )
         self.stage = nn.ModuleList(
             [
                 VibeVoiceAcousticTokenizerConvNext1dLayer(
                     config,
-                    hidden_size=intermediate_channels,
-                    layer_idx=layer_idx + depth_idx + 1 if layer_idx is not None else None,
+                    hidden_size=config.n_filters,
+                    layer_idx=layer_idx,
                 )
-                for depth_idx in range(depth)
+                for layer_idx in range(1, config.depths[0] + 1)
             ]
         )
-        self.num_layers = depth + 1
 
     def forward(self, hidden_states, padding_cache=None):
         hidden_states = self.conv(hidden_states, padding_cache=padding_cache)
