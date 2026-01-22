@@ -20,6 +20,8 @@ from transformers import (
     Qwen3VLConfig,
     Qwen3VLForConditionalGeneration,
     Qwen3VLModel,
+    Qwen3VLTextConfig,
+    Qwen3VLTextModel,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -296,3 +298,114 @@ class Qwen3VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
                 video_grid_thw=video_grid_thw,
             )
             self.assertIsNotNone(outputs)
+
+
+class Qwen3VLTextModelTester:
+    def __init__(
+        self,
+        parent,
+        batch_size=3,
+        seq_length=7,
+        is_training=True,
+        vocab_size=99,
+        hidden_size=32,
+        intermediate_size=37,
+        num_hidden_layers=2,
+        num_attention_heads=4,
+        num_key_value_heads=2,
+        head_dim=8,
+        max_position_embeddings=128,
+        hidden_act="silu",
+        rms_norm_eps=1e-6,
+        attention_bias=False,
+        attention_dropout=0.0,
+        rope_parameters={"rope_type": "default", "mrope_section": [16, 8, 8], "mrope_interleaved": True},
+    ):
+        self.parent = parent
+        self.batch_size = batch_size
+        self.seq_length = seq_length
+        self.is_training = is_training
+
+        self.vocab_size = vocab_size
+        self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.num_key_value_heads = num_key_value_heads
+        self.head_dim = head_dim
+        self.max_position_embeddings = max_position_embeddings
+        self.hidden_act = hidden_act
+        self.rms_norm_eps = rms_norm_eps
+        self.attention_bias = attention_bias
+        self.attention_dropout = attention_dropout
+        self.rope_parameters = rope_parameters
+
+    def get_config(self, **kwargs):
+        # regression case (pad_token_id should default to None)
+        return Qwen3VLTextConfig(
+            vocab_size=self.vocab_size,
+            hidden_size=self.hidden_size,
+            intermediate_size=self.intermediate_size,
+            num_hidden_layers=self.num_hidden_layers,
+            num_attention_heads=self.num_attention_heads,
+            num_key_value_heads=self.num_key_value_heads,
+            head_dim=self.head_dim,
+            hidden_act=self.hidden_act,
+            max_position_embeddings=self.max_position_embeddings,
+            rms_norm_eps=self.rms_norm_eps,
+            attention_bias=self.attention_bias,
+            attention_dropout=self.attention_dropout,
+            rope_parameters=self.rope_parameters,
+            **kwargs,
+        )
+
+    def prepare_config_and_inputs(self):
+        config = self.get_config()
+        input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
+        attention_mask = torch.ones(input_ids.shape, dtype=torch.long, device=torch_device)
+        return config, input_ids, attention_mask
+
+    def prepare_config_and_inputs_for_common(self):
+        config, input_ids, attention_mask = self.prepare_config_and_inputs()
+        inputs_dict = {
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+        }
+        return config, inputs_dict
+
+
+@require_torch
+class Qwen3VLTextModelTest(ModelTesterMixin, unittest.TestCase):
+    """
+    Model tester for `Qwen3VLTextModel`
+    """
+
+    all_model_classes = (Qwen3VLTextModel,) if is_torch_available() else ()
+
+    def setUp(self):
+        self.model_tester = Qwen3VLTextModelTester(self)
+        self.config_tester = ConfigTester(self, config_class=Qwen3VLTextConfig, has_text_modality=False)
+
+    def test_config(self):
+        self.config_tester.run_common_tests()
+
+    def test_model(self):
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device)
+            model.eval()
+            with torch.no_grad():
+                outputs = model(**inputs_dict)
+            self.assertIsNotNone(outputs)
+
+    def test_init_without_pad_token_id(self):
+        """
+        Regression test for: AttributeError: 'Qwen3VLTextConfig' object has no attribute 'pad_token_id'
+        """
+        config = self.model_tester.get_config()  # pad_token_id intentionally omitted -> should be None
+        model = Qwen3VLTextModel(config).to(torch_device)
+
+        self.assertTrue(hasattr(model.config, "pad_token_id"))
+        self.assertIsNone(model.config.pad_token_id)
+        self.assertIsNone(model.padding_idx)
+        self.assertIsNone(model.embed_tokens.padding_idx)
