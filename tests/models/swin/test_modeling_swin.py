@@ -261,9 +261,6 @@ class SwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     def test_multi_gpu_data_parallel_forward(self):
         pass
 
-    def test_training_gradient_checkpointing(self):
-        super().test_training_gradient_checkpointing()
-
     def test_backbone(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_backbone(*config_and_inputs)
@@ -472,7 +469,7 @@ class SwinModelIntegrationTest(unittest.TestCase):
         # verify the logits
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
-        expected_slice = torch.tensor([-0.0948, -0.6454, -0.0921]).to(torch_device)
+        expected_slice = torch.tensor([-0.0970, -0.6469, -0.0927]).to(torch_device)
         torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow

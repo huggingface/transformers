@@ -20,7 +20,7 @@ def get_target_dtype(query: torch.Tensor, module: torch.nn.Module) -> torch.dtyp
                 else torch.get_autocast_gpu_dtype()
             )
         # Handle the case where the model is quantized
-        elif hasattr(module.config, "quantization_config"):
+        elif hasattr(module.config, "_is_quantized"):
             return module.config.dtype
         else:
             return next(layer for layer in module.modules() if isinstance(layer, torch.nn.Linear)).weight.dtype
@@ -42,7 +42,7 @@ def flash_attention_forward(
 ) -> tuple[torch.Tensor, None]:
     if kwargs.get("output_attentions", False):
         logger.warning_once(
-            "`flash_attention_2` does not support `output_attentions=True`."
+            "Flash Attention does not support `output_attentions=True`."
             " Please set your attention to `eager` if you want any of these features."
         )
 

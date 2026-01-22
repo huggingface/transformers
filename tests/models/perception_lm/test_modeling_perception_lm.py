@@ -28,7 +28,6 @@ from transformers import (
 from transformers.testing_utils import (
     cleanup,
     require_bitsandbytes,
-    require_read_token,
     require_torch,
     slow,
     torch_device,
@@ -282,13 +281,13 @@ class PerceptionLMForConditionalGenerationModelTest(ModelTesterMixin, Generation
         self.all_model_classes = (PerceptionLMForConditionalGeneration,) if is_torch_available() else ()
         super().test_training_gradient_checkpointing()
 
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        self.all_model_classes = (PerceptionLMForConditionalGeneration,) if is_torch_available() else ()
-        super().test_training_gradient_checkpointing_use_reentrant()
-
     def test_training_gradient_checkpointing_use_reentrant_false(self):
         self.all_model_classes = (PerceptionLMForConditionalGeneration,) if is_torch_available() else ()
         super().test_training_gradient_checkpointing_use_reentrant_false()
+
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        self.all_model_classes = (PerceptionLMForConditionalGeneration,) if is_torch_available() else ()
+        super().test_training_gradient_checkpointing_use_reentrant_true()
 
     @unittest.skip(
         reason="PE/TIMM's attention implementation is self configured and won't raise ValueError on global attention implementation."
@@ -374,7 +373,6 @@ TEST_MODEL_PATH = "facebook/Perception-LM-1B"
 @require_torch
 @require_bitsandbytes
 @slow
-@require_read_token
 class PerceptionLMForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.processor = AutoProcessor.from_pretrained(TEST_MODEL_PATH)

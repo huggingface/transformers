@@ -24,7 +24,6 @@ from transformers.testing_utils import (
     backend_empty_cache,
     get_device_properties,
     require_accelerate,
-    require_read_token,
     require_torch_accelerator,
     require_torch_multi_accelerator,
     slow,
@@ -74,7 +73,6 @@ class FineGrainedFP8ConfigTest(unittest.TestCase):
 
 @slow
 @require_accelerate
-@require_read_token
 @require_torch_accelerator
 @unittest.skipIf(
     get_device_properties()[0] == "cuda"

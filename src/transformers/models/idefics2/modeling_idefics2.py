@@ -30,7 +30,7 @@ from ...modeling_outputs import BaseModelOutput, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ...utils.generic import check_model_inputs
+from ...utils.generic import check_model_inputs, is_flash_attention_requested
 from ..auto import AutoModel
 from .configuration_idefics2 import Idefics2Config, Idefics2PerceiverConfig, Idefics2VisionConfig
 
@@ -490,7 +490,7 @@ class Idefics2VisionTransformer(Idefics2PreTrainedModel):
         # avoiding passing the attention_mask, which is equivalent to attending to the full sequence
         if not torch.any(~patch_attention_mask):
             patch_attention_mask = None
-        elif self.config._attn_implementation != "flash_attention_2":
+        elif not is_flash_attention_requested(self.config):
             patch_attention_mask = _prepare_4d_attention_mask(patch_attention_mask, hidden_states.dtype)
 
         encoder_outputs: BaseModelOutput = self.encoder(
@@ -693,7 +693,7 @@ class Idefics2PerceiverResampler(Idefics2PreTrainedModel):
     config: Idefics2PerceiverConfig
     input_modalities = ("image",)
     _supports_sdpa = True
-    _supports_flash_attention_2 = True
+    _supports_flash_attn = True
     _supports_flex_attn = True
 
     def __init__(self, config) -> None:
@@ -733,7 +733,7 @@ class Idefics2PerceiverResampler(Idefics2PreTrainedModel):
         attention_mask = torch.cat([attention_mask, latent_attention_mask], dim=-1)
         attention_mask = (
             _prepare_4d_attention_mask(attention_mask, latents.dtype, tgt_len=self.n_latents)
-            if self.config._attn_implementation != "flash_attention_2"
+            if not is_flash_attention_requested(self.config)
             else attention_mask
         )
 

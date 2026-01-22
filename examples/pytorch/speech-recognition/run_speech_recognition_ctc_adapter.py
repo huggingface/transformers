@@ -33,7 +33,6 @@ import logging
 import os
 import re
 import sys
-import warnings
 from dataclasses import dataclass, field
 
 import datasets
@@ -53,7 +52,6 @@ from transformers import (
     HfArgumentParser,
     Trainer,
     TrainingArguments,
-    Wav2Vec2Processor,
     set_seed,
 )
 from transformers.models.wav2vec2.modeling_wav2vec2 import WAV2VEC2_ADAPTER_SAFE_FILE
@@ -568,11 +566,9 @@ def main():
                 with open(vocab_file, "w") as file:
                     json.dump(vocab_dict, file)
 
-        # if tokenizer has just been created
-        # it is defined by `tokenizer_class` if present in config else by `model_type`
         tokenizer_kwargs = {
-            "config": config if config.tokenizer_class is not None else None,
-            "tokenizer_type": (config.model_type if config.tokenizer_class is None else None),
+            "config": config,
+            "tokenizer_type": config.model_type,
             "unk_token": unk_token,
             "pad_token": pad_token,
             "word_delimiter_token": word_delimiter_token,
@@ -726,17 +722,7 @@ def main():
             tokenizer.save_pretrained(training_args.output_dir)
             config.save_pretrained(training_args.output_dir)
 
-    try:
-        processor = AutoProcessor.from_pretrained(training_args.output_dir)
-    except (OSError, KeyError):
-        warnings.warn(
-            "Loading a processor from a feature extractor config that does not"
-            " include a `processor_class` attribute is deprecated and will be removed in v5. Please add the following "
-            " attribute to your `preprocessor_config.json` file to suppress this warning: "
-            " `'processor_class': 'Wav2Vec2Processor'`",
-            FutureWarning,
-        )
-        processor = Wav2Vec2Processor.from_pretrained(training_args.output_dir)
+    processor = AutoProcessor.from_pretrained(training_args.output_dir)
 
     # Instantiate custom data collator
     data_collator = DataCollatorCTCWithPadding(processor=processor)

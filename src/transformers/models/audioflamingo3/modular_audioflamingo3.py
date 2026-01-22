@@ -168,9 +168,6 @@ class AudioFlamingo3ForConditionalGeneration(VoxtralForConditionalGeneration):
         audio_embeds = audio_embeds[valid_mask.to(audio_embeds.device)]
         return audio_embeds
 
-    def get_audio_embeds(self):
-        raise NotImplementedError("This method is not supported for AudioFlamingo3ForConditionalGeneration.")
-
     @can_return_tuple
     @auto_docstring
     def forward(

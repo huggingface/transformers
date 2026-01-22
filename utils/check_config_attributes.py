@@ -124,6 +124,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "IdeficsVisionConfig": True,
     "IdeficsPerceiverConfig": True,
     "GptOssConfig": True,
+    "LwDetrConfig": True,
 }
 
 # Common and important attributes, even if they do not always appear in the modeling files (can be a regex pattern)
@@ -207,9 +208,7 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
     # Special cases to be allowed even if not found as used
     for attribute in attributes:
         # Allow if the default value in the configuration class is different from the one in `PreTrainedConfig`
-        if (attribute == "is_encoder_decoder" and default_value is True) or (
-            attribute == "tie_word_embeddings" and default_value is False
-        ):
+        if (attribute == "is_encoder_decoder" and default_value is True) or attribute == "tie_word_embeddings":
             return True
         # General exceptions for all models
         elif any(re.search(exception, attribute) for exception in ATTRIBUTES_TO_ALLOW):

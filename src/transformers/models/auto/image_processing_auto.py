@@ -15,7 +15,6 @@
 
 import importlib
 import os
-import warnings
 from collections import OrderedDict
 from typing import TYPE_CHECKING
 
@@ -48,9 +47,14 @@ from .configuration_auto import (
 
 logger = logging.get_logger(__name__)
 
-
-FORCE_FAST_IMAGE_PROCESSOR = ["Qwen2VLImageProcessor"]
-
+# These image processors use Lanczos interpolation, which is not supported by fast image processors.
+# To avoid important differences in outputs, we default to using the slow image processors for these processors.
+DEFAULT_TO_SLOW_IMAGE_PROCESSORS = [
+    "ChameleonImageProcessor",
+    "FlavaImageProcessor",
+    "Idefics3ImageProcessor",
+    "SmolVLMImageProcessor",
+]
 
 if TYPE_CHECKING:
     # This significantly improves completion suggestion performance when
@@ -109,6 +113,7 @@ else:
             ("git", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
             ("glm46v", ("Glm46VImageProcessor", "Glm46VImageProcessorFast")),
             ("glm4v", ("Glm4vImageProcessor", "Glm4vImageProcessorFast")),
+            ("glm_image", ("GlmImageImageProcessor", "GlmImageImageProcessorFast")),
             ("glpn", ("GLPNImageProcessor", "GLPNImageProcessorFast")),
             ("got_ocr2", ("GotOcr2ImageProcessor", "GotOcr2ImageProcessorFast")),
             ("grounding-dino", ("GroundingDinoImageProcessor", "GroundingDinoImageProcessorFast")),
@@ -130,11 +135,13 @@ else:
             ("levit", ("LevitImageProcessor", "LevitImageProcessorFast")),
             ("lfm2_vl", (None, "Lfm2VlImageProcessorFast")),
             ("lightglue", ("LightGlueImageProcessor", "LightGlueImageProcessorFast")),
+            ("lighton_ocr", ("PixtralImageProcessor", "PixtralImageProcessorFast")),
             ("llama4", (None, "Llama4ImageProcessorFast")),
             ("llava", ("LlavaImageProcessor", "LlavaImageProcessorFast")),
             ("llava_next", ("LlavaNextImageProcessor", "LlavaNextImageProcessorFast")),
             ("llava_next_video", ("LlavaNextImageProcessor", "LlavaNextImageProcessorFast")),
             ("llava_onevision", ("LlavaOnevisionImageProcessor", "LlavaOnevisionImageProcessorFast")),
+            ("lw_detr", ("DeformableDetrImageProcessor", "DeformableDetrImageProcessorFast")),
             ("mask2former", ("Mask2FormerImageProcessor", "Mask2FormerImageProcessorFast")),
             ("maskformer", ("MaskFormerImageProcessor", "MaskFormerImageProcessorFast")),
             ("metaclip_2", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
@@ -533,24 +540,20 @@ class AutoImageProcessor:
                 image_processor_auto_map = config.auto_map["AutoImageProcessor"]
 
         image_processor_class = None
-        # TODO: @yoni, change logic in v4.52 (when use_fast set to True by default)
         if image_processor_type is not None:
             # if use_fast is not set and the processor was saved with a fast processor, we use it, otherwise we use the slow processor.
             if use_fast is None:
                 use_fast = image_processor_type.endswith("Fast")
-                if not use_fast and image_processor_type in FORCE_FAST_IMAGE_PROCESSOR and is_torchvision_available():
-                    use_fast = True
+                if (
+                    not use_fast
+                    and is_torchvision_available()
+                    and image_processor_type not in DEFAULT_TO_SLOW_IMAGE_PROCESSORS
+                ):
                     logger.warning_once(
                         f"The image processor of type `{image_processor_type}` is now loaded as a fast processor by default, even if the model checkpoint was saved with a slow processor. "
                         "This is a breaking change and may produce slightly different outputs. To continue using the slow processor, instantiate this class with `use_fast=False`. "
-                        "Note that this behavior will be extended to all models in a future release."
                     )
-                if not use_fast:
-                    logger.warning_once(
-                        "Using a slow image processor as `use_fast` is unset and a slow processor was saved with this model. "
-                        "`use_fast=True` will be the default behavior in v4.52, even if the model was saved with a slow processor. "
-                        "This will result in minor differences in outputs. You'll still be able to use a slow processor with `use_fast=False`."
-                    )
+                    use_fast = True
             if use_fast and not image_processor_type.endswith("Fast"):
                 image_processor_type += "Fast"
             if use_fast and not is_torchvision_available():
@@ -636,30 +639,14 @@ class AutoImageProcessor:
         )
 
     @staticmethod
-    def register(
-        config_class,
-        image_processor_class=None,
-        slow_image_processor_class=None,
-        fast_image_processor_class=None,
-        exist_ok=False,
-    ):
+    def register(config_class, slow_image_processor_class=None, fast_image_processor_class=None, exist_ok=False):
         """
         Register a new image processor for this class.
 
         Args:
             config_class ([`PreTrainedConfig`]):
                 The configuration corresponding to the model to register.
-            image_processor_class ([`ImageProcessingMixin`]): The image processor to register.
         """
-        if image_processor_class is not None:
-            if slow_image_processor_class is not None:
-                raise ValueError("Cannot specify both image_processor_class and slow_image_processor_class")
-            warnings.warn(
-                "The image_processor_class argument is deprecated and will be removed in v4.42. Please use `slow_image_processor_class`, or `fast_image_processor_class` instead",
-                FutureWarning,
-            )
-            slow_image_processor_class = image_processor_class
-
         if slow_image_processor_class is None and fast_image_processor_class is None:
             raise ValueError("You need to specify either slow_image_processor_class or fast_image_processor_class")
         if slow_image_processor_class is not None and issubclass(slow_image_processor_class, BaseImageProcessorFast):

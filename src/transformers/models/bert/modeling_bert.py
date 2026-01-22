@@ -14,7 +14,6 @@
 # limitations under the License.
 """PyTorch BERT model."""
 
-import warnings
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -1092,14 +1091,6 @@ class BertForNextSentencePrediction(BertPreTrainedModel):
         >>> assert logits[0, 0] < logits[0, 1]  # next sentence was random
         ```
         """
-
-        if "next_sentence_label" in kwargs:
-            warnings.warn(
-                "The `next_sentence_label` argument is deprecated and will be removed in a future version, use"
-                " `labels` instead.",
-                FutureWarning,
-            )
-            labels = kwargs.pop("next_sentence_label")
 
         outputs = self.bert(
             input_ids,

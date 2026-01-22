@@ -73,7 +73,6 @@ if is_vision_available():
 
 if is_scipy_available():
     import scipy.special
-    import scipy.stats
 
 if TYPE_CHECKING:
     from .modeling_grounding_dino import GroundingDinoObjectDetectionOutput
