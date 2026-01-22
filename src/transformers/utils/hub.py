@@ -709,6 +709,10 @@ class PushToHubMixin:
             revision=revision,
         )
 
+    def save_pretrained(self, *args, **kwargs):
+        # explicit contract
+        raise NotImplementedError(f"{self.__class__.__name__} must implement `save_pretrained` to use `push_to_hub`.")
+
     def push_to_hub(
         self,
         repo_id: str,
@@ -774,10 +778,7 @@ class PushToHubMixin:
 
         with tempfile.TemporaryDirectory() as tmp_dir:
             # Save all files.
-            if hasattr(self, "save_pretrained"):
-                self.save_pretrained(tmp_dir, max_shard_size=max_shard_size)
-            else:
-                raise AttributeError("The object must have a save_pretrained method to use push_to_hub")
+            self.save_pretrained(tmp_dir, max_shard_size=max_shard_size)
 
             # Update model card
             model_card.save(os.path.join(tmp_dir, "README.md"))
