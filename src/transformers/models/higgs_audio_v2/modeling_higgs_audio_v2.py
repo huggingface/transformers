@@ -689,18 +689,17 @@ class HiggsAudioV2ForConditionalGeneration(HiggsAudioV2PreTrainedModel, HiggsAud
             Can be obtained using `output_labels=True` when calling [`HiggsAudioV2Processor`].
 
         Returns:
-            [`~models.modeling_outputs.BaseModelOutputWithPast`]:
-                Usual decoder outputs with the placeholder positions already substituted by their corresponding
-                audio embeddings.
+            [`~models.modeling_outputs.CausalLMOutputWithPast`]:
+                A [`~models.modeling_outputs.CausalLMOutputWithPast`] containing the logits, loss (if labels are provided),
+                and other outputs from the model.
 
         Example:
 
         ```python
-        >>> from transformers import AutoProcessor, HiggsAudioV2Model
-        >>> import torch
-        >>> device = "cuda" if torch.cuda.is_available() else "cpu"
-        >>> processor = AutoProcessor.from_pretrained("eustlb/higgs-v2", device_map=device)
-        >>> model = HiggsAudioV2Model.from_pretrained("eustlb/higgs-v2", device_map=device)
+        >>> from transformers import AutoProcessor, HiggsAudioV2ForConditionalGeneration
+        >>> model_id = "eustlb/higgs-v2"
+        >>> processor = AutoProcessor.from_pretrained(model_id, device_map="auto")
+        >>> model = HiggsAudioV2ForConditionalGeneration.from_pretrained(model_id, device_map="auto")
         >>> conversation = [
         ...     {
         ...         "role": "system",
