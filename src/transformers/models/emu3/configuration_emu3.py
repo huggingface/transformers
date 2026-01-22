@@ -15,10 +15,10 @@
 
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 
 
-class Emu3VQVAEConfig(PreTrainedConfig):
+class Emu3VQVAEConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`Emu3VQVAE`]. It is used to instantiate an VQ-VAE
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the

@@ -19,7 +19,7 @@ import torch
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import logging
@@ -40,7 +40,7 @@ from ..qwen2.modeling_qwen2 import Qwen2Model, Qwen2RotaryEmbedding
 logger = logging.get_logger(__name__)
 
 
-class SmolLM3Config(PreTrainedConfig):
+class SmolLM3Config(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`SmolLM3Model`]. It is used to instantiate a
     SmolLM3 model according to the specified arguments, defining the model architecture. Instantiating a configuration

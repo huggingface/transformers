@@ -14,14 +14,14 @@
 """Blt model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class BltLocalEncoderConfig(PreTrainedConfig):
+class BltLocalEncoderConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     """
     Configuration class for the Blt Local Encoder component.
     """

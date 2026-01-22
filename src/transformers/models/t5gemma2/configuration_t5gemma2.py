@@ -21,7 +21,7 @@
 from typing import Any
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 from ...utils import logging
 from ..siglip import SiglipVisionConfig
 
@@ -29,7 +29,7 @@ from ..siglip import SiglipVisionConfig
 logger = logging.get_logger(__name__)
 
 
-class T5Gemma2TextConfig(PreTrainedConfig):
+class T5Gemma2TextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`T5Gemma2TextModel`]. It is used to instantiate the encoder's
     text model portion of the T5Gemma2 Model according to the specified arguments, defining the model architecture. Instantiating
@@ -302,7 +302,7 @@ class T5Gemma2EncoderConfig(PreTrainedConfig):
         super().__init__(**kwargs)
 
 
-class T5Gemma2DecoderConfig(PreTrainedConfig):
+class T5Gemma2DecoderConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`T5Gemma2DecoderModel`]. It is used to instantiate the decoder
     text model portion of the T5Gemma2 Model according to the specified arguments, defining the model architecture. Instantiating

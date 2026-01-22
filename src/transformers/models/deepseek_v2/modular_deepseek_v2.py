@@ -20,7 +20,7 @@ from torch import nn
 
 from ... import initialization as init
 from ...cache_utils import Cache
-from ...modeling_rope_utils import RopeParameters, dynamic_rope_update
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...utils import is_grouped_mm_available, logging
 from ...utils.generic import is_flash_attention_requested, maybe_autocast

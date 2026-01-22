@@ -15,7 +15,7 @@
 
 from transformers.utils import auto_docstring, logging
 
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
     LlamaForCausalLM,

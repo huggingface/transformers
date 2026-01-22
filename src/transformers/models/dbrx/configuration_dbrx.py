@@ -16,14 +16,14 @@
 from typing import Any
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 from ...utils import logging
 
 
 logger = logging.get_logger(__name__)
 
 
-class DbrxAttentionConfig(PreTrainedConfig):
+class DbrxAttentionConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     """Configuration class for Dbrx Attention.
 
     [`DbrxAttention`] class. It is used to instantiate attention layers

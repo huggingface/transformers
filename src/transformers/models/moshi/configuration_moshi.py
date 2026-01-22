@@ -14,7 +14,7 @@
 """Moshi model configuration"""
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 from ...utils import logging
 from ..auto.configuration_auto import AutoConfig
 
@@ -22,7 +22,7 @@ from ..auto.configuration_auto import AutoConfig
 logger = logging.get_logger(__name__)
 
 
-class MoshiDepthConfig(PreTrainedConfig):
+class MoshiDepthConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`MoshiDepthDecoder`]. It is used to instantiate a
     Moshi depth decoder model according to the specified arguments, defining the Moshi depth decoder config.

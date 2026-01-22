@@ -15,7 +15,7 @@
 
 import torch.nn as nn
 
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 from ...utils import auto_docstring, can_return_tuple
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (

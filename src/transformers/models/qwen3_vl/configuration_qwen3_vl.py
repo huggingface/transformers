@@ -18,7 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 
 
 class Qwen3VLVisionConfig(PreTrainedConfig):
@@ -59,7 +59,7 @@ class Qwen3VLVisionConfig(PreTrainedConfig):
         self.deepstack_visual_indexes = deepstack_visual_indexes
 
 
-class Qwen3VLTextConfig(PreTrainedConfig):
+class Qwen3VLTextConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`Qwen3VLTextModel`]. It is used to instantiate a
     Qwen3-VL model according to the specified arguments, defining the model architecture. Instantiating a configuration

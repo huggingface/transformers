@@ -22,10 +22,10 @@
 from typing import Literal
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import RopeParameters
+from ...modeling_rope_utils import RopeParameters, RotaryEmbeddingConfigMixin
 
 
-class ModernBertConfig(PreTrainedConfig):
+class ModernBertConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`ModernBertModel`]. It is used to instantiate an ModernBert
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
