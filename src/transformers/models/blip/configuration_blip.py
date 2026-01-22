@@ -118,14 +118,12 @@ class BlipTextConfig(PreTrainedConfig):
         label_smoothing=0.0,
         **kwargs,
     ):
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            sep_token_id=sep_token_id,
-            **kwargs,
-        )
+        super().__init__(**kwargs)
 
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.sep_token_id = sep_token_id
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.encoder_hidden_size = encoder_hidden_size
@@ -251,8 +249,8 @@ class BlipConfig(PreTrainedConfig):
             A float in [0.0, 1.0]. Specifies the amount of smoothing when computing the loss, where 0.0 means no smoothing. The targets
             become a mixture of the original ground truth and a uniform distribution as described in
             `Rethinking the Inception Architecture for Computer Vision <https://huggingface.co/papers/1512.00567>`__. Default: :math:`0.0`.
-        kwargs (*optional*):
-            Dictionary of keyword arguments.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
     Example:
 
@@ -288,6 +286,7 @@ class BlipConfig(PreTrainedConfig):
         logit_scale_init_value=2.6592,
         image_text_hidden_size=256,
         label_smoothing=0.0,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         if text_config is None:
@@ -313,6 +312,7 @@ class BlipConfig(PreTrainedConfig):
         self.initializer_range = 0.02
         self.image_text_hidden_size = image_text_hidden_size
         self.label_smoothing = label_smoothing
+        self.tie_word_embeddings = tie_word_embeddings
         super().__init__(**kwargs)
 
 

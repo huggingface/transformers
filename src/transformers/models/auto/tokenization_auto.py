@@ -169,6 +169,7 @@ TOKENIZER_MAPPING_NAMES = OrderedDict[str, str | None](
         ("layoutlmv3", "LayoutLMv3Tokenizer" if is_tokenizers_available() else None),
         ("layoutxlm", "LayoutXLMTokenizer" if is_tokenizers_available() else None),
         ("led", "LEDTokenizer" if is_tokenizers_available() else None),
+        ("lighton_ocr", "Qwen2TokenizerFast" if is_tokenizers_available() else None),
         ("lilt", "RobertaTokenizer" if is_tokenizers_available() else None),
         ("longformer", "RobertaTokenizer" if is_tokenizers_available() else None),
         ("longt5", "T5Tokenizer" if is_tokenizers_available() else None),
@@ -696,7 +697,7 @@ class AutoTokenizer:
                 tokenizer_class = TokenizersBackend
 
             return tokenizer_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
-        elif getattr(config, "tokenizer_class"):
+        elif getattr(config, "tokenizer_class", None):
             _class = config.tokenizer_class
             if "PreTrainedTokenizerFast" not in _class:
                 _class = _class.replace("Fast", "")
@@ -715,7 +716,7 @@ class AutoTokenizer:
                 )
             config = config.encoder
 
-        model_type = config_class_to_model_type(type(config).__name__) or config.get("model_type", None)
+        model_type = config_class_to_model_type(type(config).__name__) or getattr(config, "model_type", None)
         if model_type is not None:
             tokenizer_class = TOKENIZER_MAPPING.get(type(config), TokenizersBackend)
             if tokenizer_class is not None:

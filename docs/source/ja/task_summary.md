@@ -233,22 +233,7 @@ NLPタスクは、テキストが私たちにとって自然なコミュニケ�
 質問応答の一般的なタイプは次の2つです：
 
 * 抽出型：質問と一部のコンテキストが与えられた場合、モデルがコンテキストから抽出する必要のあるテキストのスパンが回答となります。
-* 抽象的：質問と一部のコンテキストが与えられた場合、回答はコンテキストから生成されます。このアプローチは、[`QuestionAnsweringPipeline`]ではなく[`Text2TextGenerationPipeline`]で処理されます。
-
-
-```py
->>> from transformers import pipeline
-
->>> question_answerer = pipeline(task="question-answering")
->>> preds = question_answerer(
-...     question="What is the name of the repository?",
-...     context="The name of the repository is huggingface/transformers",
-... )
->>> print(
-...     f"score: {round(preds['score'], 4)}, start: {preds['start']}, end: {preds['end']}, answer: {preds['answer']}"
-... )
-score: 0.9327, start: 30, end: 54, answer: huggingface/transformers
-```
+* 抽象的：質問と一部のコンテキストが与えられた場合、回答はコンテキストから生成されます。
 
 ### Summarization
 
@@ -257,18 +242,7 @@ score: 0.9327, start: 30, end: 54, answer: huggingface/transformers
 質問応答と同様に、要約には2つのタイプがあります：
 
 * 抽出的要約：元のテキストから最も重要な文を識別して抽出します。
-* 抽象的要約：元のテキストからターゲットの要約（入力文書に含まれていない新しい単語を含むことがあります）を生成します。[`SummarizationPipeline`]は抽象的なアプローチを使用しています。
-
-
-```py
->>> from transformers import pipeline
-
->>> summarizer = pipeline(task="summarization")
->>> summarizer(
-...     "In this work, we presented the Transformer, the first sequence transduction model based entirely on attention, replacing the recurrent layers most commonly used in encoder-decoder architectures with multi-headed self-attention. For translation tasks, the Transformer can be trained significantly faster than architectures based on recurrent or convolutional layers. On both WMT 2014 English-to-German and WMT 2014 English-to-French translation tasks, we achieve a new state of the art. In the former task our best model outperforms even all previously reported ensembles."
-... )
-[{'summary_text': ' The Transformer is the first sequence transduction model based entirely on attention . It replaces the recurrent layers most commonly used in encoder-decoder architectures with multi-headed self-attention . For translation tasks, the Transformer can be trained significantly faster than architectures based on recurrent or convolutional layers .'}]
-```
+* 抽象的要約：元のテキストからターゲットの要約（入力文書に含まれていない新しい単語を含むことがあります）を生成します。
 
 ### Translation
 

@@ -32,7 +32,7 @@ from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...processing_utils import Unpack
-from ...utils import logging
+from ...utils import logging, torch_compilable_check
 from ..auto import CONFIG_MAPPING, AutoConfig
 
 
@@ -80,6 +80,8 @@ class LlavaNextVideoConfig(PreTrainedConfig):
             Sequence length of one image embedding.
         video_seq_length (`int`, *optional*, defaults to 288):
             Sequence length of one video embedding.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether to tie weight embeddings
 
     Example:
 
@@ -122,6 +124,7 @@ class LlavaNextVideoConfig(PreTrainedConfig):
         spatial_pool_stride=2,
         image_seq_length=576,
         video_seq_length=288,
+        tie_word_embeddings=False,
         **kwargs,
     ):
         self.video_token_index = video_token_index
@@ -132,6 +135,7 @@ class LlavaNextVideoConfig(PreTrainedConfig):
         self.image_token_index = image_token_index
         self.projector_hidden_act = projector_hidden_act
         self.multimodal_projector_bias = multimodal_projector_bias
+        self.tie_word_embeddings = tie_word_embeddings
 
         if vision_feature_select_strategy not in ["default", "full"]:
             raise ValueError(
@@ -174,12 +178,6 @@ class LlavaNextVideoConfig(PreTrainedConfig):
         self.text_config = text_config
 
         super().__init__(**kwargs)
-
-        # Due to a mismatch at model addition-time, the `tie_word_embeddings` was saved in the text config, even
-        # though it concerns the main model, while it was set to False by default in the main model... So we hardcode a fix here
-        if not self.tie_word_embeddings and self.text_config.tie_word_embeddings:
-            self.tie_word_embeddings = True
-            self.text_config.tie_word_embeddings = False
 
 
 class LlavaNextVideoModelOutputWithPast(LlavaNextModelOutputWithPast):
@@ -423,18 +421,19 @@ class LlavaNextVideoModel(LlavaNextModel):
 
         n_image_tokens = special_image_mask.sum()
         special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-        if image_features is not None and inputs_embeds[special_image_mask].numel() != image_features.numel():
-            raise ValueError(
-                f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {image_features.shape[0]}"
+        if image_features is not None:
+            torch_compilable_check(
+                inputs_embeds[special_image_mask].numel() == image_features.numel(),
+                f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {image_features.shape[0]}",
             )
 
         n_video_tokens = special_video_mask.sum()
         special_video_mask = special_video_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-        if video_features is not None and inputs_embeds[special_video_mask].numel() != video_features.numel():
-            raise ValueError(
-                f"Videos features and image tokens do not match: tokens: {n_video_tokens}, features {video_features.shape[0]}"
+        if video_features is not None:
+            torch_compilable_check(
+                inputs_embeds[special_video_mask].numel() == video_features.numel(),
+                f"Video features and video tokens do not match, tokens: {n_video_tokens}, features: {video_features.shape[0]}",
             )
-
         return special_image_mask, special_video_mask
 
     def forward(
@@ -461,10 +460,10 @@ class LlavaNextVideoModel(LlavaNextModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        self.vision_feature_layer = (
+        vision_feature_layer = (
             vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
         )
-        self.vision_feature_select_strategy = (
+        vision_feature_select_strategy = (
             vision_feature_select_strategy
             if vision_feature_select_strategy is not None
             else self.config.vision_feature_select_strategy
@@ -480,8 +479,8 @@ class LlavaNextVideoModel(LlavaNextModel):
             image_features = self.get_image_features(
                 pixel_values,
                 image_sizes,
-                vision_feature_layer=self.vision_feature_layer,
-                vision_feature_select_strategy=self.vision_feature_select_strategy,
+                vision_feature_layer=vision_feature_layer,
+                vision_feature_select_strategy=vision_feature_select_strategy,
             )
             image_features = torch.cat(image_features, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask, _ = self.get_placeholder_mask(
@@ -492,8 +491,8 @@ class LlavaNextVideoModel(LlavaNextModel):
         if pixel_values_videos is not None:
             video_features = self.get_video_features(
                 pixel_values_videos,
-                vision_feature_layer=self.vision_feature_layer,
-                vision_feature_select_strategy=self.vision_feature_select_strategy,
+                vision_feature_layer=vision_feature_layer,
+                vision_feature_select_strategy=vision_feature_select_strategy,
             )
             video_features = [feature.flatten(0, 1) for feature in video_features]
             video_feature_lens = [feature.size(0) for feature in video_features]
