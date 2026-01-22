@@ -141,3 +141,7 @@ for result in results:
 ## PPDocLayoutV3ImageProcessorFast
 
 [[autodoc]] PPDocLayoutV3ImageProcessorFast
+
+## PPDocLayoutV3HybridEncoderOutput
+
+[[autodoc]] PPDocLayoutV3HybridEncoderOutput

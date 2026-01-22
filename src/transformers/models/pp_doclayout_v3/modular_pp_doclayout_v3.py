@@ -128,7 +128,7 @@ class PPDocLayoutV3Config(PreTrainedConfig):
             feed-forward modules.
         hidden_expansion (`float`, *optional*, defaults to 1.0):
             Expansion ratio to enlarge the dimension size of RepVGGBlock and CSPRepLayer.
-        mask_feat_channels (`list[int]`, *optional*, defaults to `[64, 64]`):
+        mask_feature_channels (`list[int]`, *optional*, defaults to `[64, 64]`):
             The channels of the multi-level features for mask enhancement.
         x4_feat_dim (`int`, *optional*, defaults to 128):
             The dimension of the x4 feature map.
@@ -171,7 +171,7 @@ class PPDocLayoutV3Config(PreTrainedConfig):
             Whether to disable custom kernels.
         is_encoder_decoder (`bool`, *optional*, defaults to `True`):
             Whether the architecture has an encoder decoder structure.
-        gp_head_size (`int`, *optional*, defaults to 64):
+        global_pointer_head_size (`int`, *optional*, defaults to 64):
             The size of the global pointer head.
         gp_dropout_value (`float`, *optional*, defaults to 0.1):
             The dropout probability in the global pointer head.
@@ -228,7 +228,7 @@ class PPDocLayoutV3Config(PreTrainedConfig):
         eval_size=None,
         normalize_before=False,
         hidden_expansion=1.0,
-        mask_feat_channels=[64, 64],
+        mask_feature_channels=[64, 64],
         x4_feat_dim=128,
         # decoder PPDocLayoutV3Transformer
         d_model=256,
@@ -250,7 +250,7 @@ class PPDocLayoutV3Config(PreTrainedConfig):
         anchor_image_size=None,
         disable_custom_kernels=True,
         is_encoder_decoder=True,
-        gp_head_size=64,
+        global_pointer_head_size=64,
         gp_dropout_value=0.1,
         **kwargs,
     ):
@@ -312,7 +312,7 @@ class PPDocLayoutV3Config(PreTrainedConfig):
         self.eval_size = list(eval_size) if eval_size is not None else None
         self.normalize_before = normalize_before
         self.hidden_expansion = hidden_expansion
-        self.mask_feat_channels = mask_feat_channels
+        self.mask_feature_channels = mask_feature_channels
         self.x4_feat_dim = x4_feat_dim
 
         # ---- decoder ----
@@ -334,7 +334,7 @@ class PPDocLayoutV3Config(PreTrainedConfig):
         self.learn_initial_query = learn_initial_query
         self.anchor_image_size = list(anchor_image_size) if anchor_image_size is not None else None
         self.disable_custom_kernels = disable_custom_kernels
-        self.gp_head_size = gp_head_size
+        self.global_pointer_head_size = global_pointer_head_size
         self.gp_dropout_value = gp_dropout_value
 
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
@@ -454,7 +454,7 @@ class PPDocLayoutV3ImageProcessorFast(BaseImageProcessorFast):
 class GlobalPointer(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.head_size = config.gp_head_size
+        self.head_size = config.global_pointer_head_size
         self.dense = nn.Linear(config.d_model, self.head_size * 2)
         self.dropout = nn.Dropout(config.gp_dropout_value)
 
@@ -477,12 +477,6 @@ class PPDocLayoutV3MultiscaleDeformableAttention(RTDetrMultiscaleDeformableAtten
 
 @auto_docstring
 class PPDocLayoutV3PreTrainedModel(RTDetrPreTrainedModel):
-    config: PPDocLayoutV3Config
-    base_model_prefix = "pp_doclayout_v3"
-    main_input_name = "pixel_values"
-    input_modalities = ("image",)
-    _no_split_modules = [r"PPDocLayoutV3HybridEncoder", r"PPDocLayoutV3DecoderLayer"]
-
     @torch.no_grad()
     def _init_weights(self, module):
         if isinstance(module, PPDocLayoutV3ForObjectDetection):
@@ -610,14 +604,14 @@ class PPDocLayoutV3DecoderOutput(RTDetrDecoderOutput):
         Tuple of `torch.FloatTensor` (one for each layer) of shape `(batch_size, num_heads, sequence_length,
         sequence_length)`. Attentions weights of the decoder's cross-attention layer, after the attention softmax,
         used to compute the weighted average in the cross-attention heads.
-    dec_out_order_logits (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, config.num_queries, config.num_queries)`):
+    decoder_out_order_logits (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, config.num_queries, config.num_queries)`):
         Stacked order logits (order logits of each layer of the decoder).
-    dec_out_masks (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, config.num_queries, 200, 200)`):
+    decoder_out_masks (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, config.num_queries, 200, 200)`):
         Stacked masks (masks of each layer of the decoder).
     """
 
-    dec_out_order_logits: Optional[torch.FloatTensor] = None
-    dec_out_masks: Optional[torch.FloatTensor] = None
+    decoder_out_order_logits: Optional[torch.FloatTensor] = None
+    decoder_out_masks: Optional[torch.FloatTensor] = None
 
 
 @dataclass
@@ -674,23 +668,34 @@ class BaseConv(ResNetConvLayer):
     pass
 
 
+class ScaleHead(nn.Module):
+    def __init__(self, in_channels, feature_channels, fpn_stride, base_stride, align_corners=False):
+        super().__init__()
+        head_length = max(1, int(np.log2(fpn_stride) - np.log2(base_stride)))
+        self.layers = nn.ModuleList()
+        for k in range(head_length):
+            in_c = in_channels if k == 0 else feature_channels
+            self.layers.append(BaseConv(in_c, feature_channels, 3, 1, "silu"))
+            if fpn_stride != base_stride:
+                self.layers.append(nn.Upsample(scale_factor=2, mode="bilinear", align_corners=align_corners))
+
+    def forward(self, x):
+        for layer in self.layers:
+            x = layer(x)
+        return x
+
+
 class MaskFeatFPN(nn.Module):
     def __init__(
         self,
         in_channels=[256, 256, 256],
         fpn_strides=[32, 16, 8],
-        feat_channels=256,
+        feature_channels=256,
         dropout_ratio=0.0,
         out_channels=256,
         align_corners=False,
     ):
         super().__init__()
-
-        if len(in_channels) != len(fpn_strides):
-            raise ValueError(
-                f"The lengths of 'in_channels' and 'fpn_strides' must be equal. "
-                f"Got len(in_channels)={len(in_channels)} and len(fpn_strides)={len(fpn_strides)}."
-            )
 
         reorder_index = np.argsort(fpn_strides, axis=0).tolist()
         in_channels = [in_channels[i] for i in reorder_index]
@@ -705,17 +710,16 @@ class MaskFeatFPN(nn.Module):
 
         self.scale_heads = nn.ModuleList()
         for i in range(len(fpn_strides)):
-            head_length = max(1, int(np.log2(fpn_strides[i]) - np.log2(fpn_strides[0])))
-            scale_head = []
-            for k in range(head_length):
-                in_c = in_channels[i] if k == 0 else feat_channels
-                scale_head.append(nn.Sequential(BaseConv(in_c, feat_channels, 3, 1, "silu")))
-                if fpn_strides[i] != fpn_strides[0]:
-                    scale_head.append(nn.Upsample(scale_factor=2, mode="bilinear", align_corners=align_corners))
-
-            self.scale_heads.append(nn.Sequential(*scale_head))
-
-        self.output_conv = BaseConv(feat_channels, out_channels, 3, 1, "silu")
+            self.scale_heads.append(
+                ScaleHead(
+                    in_channels=in_channels[i],
+                    feature_channels=feature_channels,
+                    fpn_stride=fpn_strides[i],
+                    base_stride=fpn_strides[0],
+                    align_corners=align_corners,
+                )
+            )
+        self.output_conv = BaseConv(feature_channels, out_channels, 3, 1, "silu")
 
     def forward(self, inputs):
         x = [inputs[i] for i in self.reorder_index]
@@ -732,10 +736,22 @@ class MaskFeatFPN(nn.Module):
         return output
 
 
+class EncoderMaskOutput(nn.Module):
+    def __init__(self, in_channels, num_prototypes):
+        super().__init__()
+        self.base_conv = BaseConv(in_channels, in_channels, 3, 1, "silu")
+        self.conv = nn.Conv2d(in_channels, num_prototypes, kernel_size=1)
+
+    def forward(self, x):
+        x = self.base_conv(x)
+        x = self.conv(x)
+        return x
+
+
 class PPDocLayoutV3HybridEncoder(RTDetrHybridEncoder):
     """
     Main difference to `RTDetrHybridEncoder`:
-        1. Mask Feature Head: Added `MaskFeatFPN` module (`self.mask_feat_head`) for document - specific mask feature generation.
+        1. Mask Feature Head: Added `MaskFeatFPN` module (`self.mask_feature_head`) for document - specific mask feature generation.
         2. Extra Conv Layers: Introduced `self.encoder_mask_lateral` and `self.encoder_mask_output` for mask feature processing and output.
     """
 
@@ -743,17 +759,16 @@ class PPDocLayoutV3HybridEncoder(RTDetrHybridEncoder):
         super().__init__()
 
         feat_strides = config.feat_strides
-        mask_feat_channels = config.mask_feat_channels
-        self.mask_feat_head = MaskFeatFPN(
+        mask_feature_channels = config.mask_feature_channels
+        self.mask_feature_head = MaskFeatFPN(
             [self.encoder_hidden_dim] * len(feat_strides),
             feat_strides,
-            feat_channels=mask_feat_channels[0],
-            out_channels=mask_feat_channels[1],
+            feature_channels=mask_feature_channels[0],
+            out_channels=mask_feature_channels[1],
         )
-        self.encoder_mask_lateral = BaseConv(config.x4_feat_dim, mask_feat_channels[1], 3, 1, "silu")
-        self.encoder_mask_output = nn.Sequential(
-            BaseConv(mask_feat_channels[1], mask_feat_channels[1], 3, 1, "silu"),
-            nn.Conv2d(in_channels=mask_feat_channels[1], out_channels=config.num_prototypes, kernel_size=1),
+        self.encoder_mask_lateral = BaseConv(config.x4_feat_dim, mask_feature_channels[1], 3, 1, "silu")
+        self.encoder_mask_output = EncoderMaskOutput(
+            in_channels=mask_feature_channels[1], num_prototypes=config.num_prototypes
         )
 
     def forward(
@@ -786,14 +801,6 @@ class PPDocLayoutV3HybridEncoder(RTDetrHybridEncoder):
                 Starting index of each feature map.
             valid_ratios (`torch.FloatTensor` of shape `(batch_size, num_feature_levels, 2)`):
                 Ratio of valid area in each feature level.
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
-                for more detail.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -867,7 +874,7 @@ class PPDocLayoutV3HybridEncoder(RTDetrHybridEncoder):
             new_pan_feature_map = pan_block(fused_feature_map)
             pan_feature_maps.append(new_pan_feature_map)
 
-        mask_feat = self.mask_feat_head(pan_feature_maps)
+        mask_feat = self.mask_feature_head(pan_feature_maps)
         mask_feat = F.interpolate(mask_feat, scale_factor=2, mode="bilinear", align_corners=False)
         mask_feat += self.encoder_mask_lateral(x4_feat[0])
         mask_feat = self.encoder_mask_output(mask_feat)
@@ -937,15 +944,6 @@ class PPDocLayoutV3Decoder(RTDetrDecoder):
                 Indexes for the start of each feature level. In range `[0, sequence_length]`.
             valid_ratios (`torch.FloatTensor` of shape `(batch_size, num_feature_levels, 2)`, *optional*):
                 Ratio of valid area in each feature level.
-
-            output_attentions (`bool`, *optional*):
-                Whether or not to return the attentions tensors of all attention layers. See `attentions` under
-                returned tensors for more detail.
-            output_hidden_states (`bool`, *optional*):
-                Whether or not to return the hidden states of all layers. See `hidden_states` under returned tensors
-                for more detail.
-            return_dict (`bool`, *optional*):
-                Whether or not to return a [`~file_utils.ModelOutput`] instead of a plain tuple.
         """
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -963,8 +961,8 @@ class PPDocLayoutV3Decoder(RTDetrDecoder):
         intermediate = ()
         intermediate_reference_points = ()
         intermediate_logits = ()
-        dec_out_order_logits = ()
-        dec_out_masks = ()
+        decoder_out_order_logits = ()
+        decoder_out_masks = ()
 
         reference_points = F.sigmoid(reference_points)
 
@@ -1009,7 +1007,7 @@ class PPDocLayoutV3Decoder(RTDetrDecoder):
             out_mask = torch.bmm(mask_query_embed, mask_feat.flatten(start_dim=2)).reshape(
                 batch_size, mask_dim, mask_h, mask_w
             )
-            dec_out_masks += (out_mask,)
+            decoder_out_masks += (out_mask,)
 
             if self.class_embed is not None:
                 logits = self.class_embed(out_query)
@@ -1018,7 +1016,7 @@ class PPDocLayoutV3Decoder(RTDetrDecoder):
             if order_head is not None and global_pointer is not None:
                 valid_query = out_query[:, -self.num_queries :] if self.num_queries is not None else out_query
                 order_logits = global_pointer(order_head(valid_query))
-                dec_out_order_logits += (order_logits,)
+                decoder_out_order_logits += (order_logits,)
 
             if output_attentions:
                 all_self_attns += (layer_outputs[1],)
@@ -1032,8 +1030,8 @@ class PPDocLayoutV3Decoder(RTDetrDecoder):
         if self.class_embed is not None:
             intermediate_logits = torch.stack(intermediate_logits, dim=1)
         if order_head is not None and global_pointer is not None:
-            dec_out_order_logits = torch.stack(dec_out_order_logits, dim=1)
-        dec_out_masks = torch.stack(dec_out_masks, dim=1)
+            decoder_out_order_logits = torch.stack(decoder_out_order_logits, dim=1)
+        decoder_out_masks = torch.stack(decoder_out_masks, dim=1)
 
         # add hidden states from the last decoder layer
         if output_hidden_states:
@@ -1047,8 +1045,8 @@ class PPDocLayoutV3Decoder(RTDetrDecoder):
                     intermediate,
                     intermediate_logits,
                     intermediate_reference_points,
-                    dec_out_order_logits,
-                    dec_out_masks,
+                    decoder_out_order_logits,
+                    decoder_out_masks,
                     all_hidden_states,
                     all_self_attns,
                     all_cross_attentions,
@@ -1060,8 +1058,8 @@ class PPDocLayoutV3Decoder(RTDetrDecoder):
             intermediate_hidden_states=intermediate,
             intermediate_logits=intermediate_logits,
             intermediate_reference_points=intermediate_reference_points,
-            dec_out_order_logits=dec_out_order_logits,
-            dec_out_masks=dec_out_masks,
+            decoder_out_order_logits=decoder_out_order_logits,
+            decoder_out_masks=decoder_out_masks,
             hidden_states=all_hidden_states,
             attentions=all_self_attns,
             cross_attentions=all_cross_attentions,
@@ -1333,8 +1331,8 @@ class PPDocLayoutV3Model(RTDetrModel):
             decoder_hidden_states=decoder_outputs.hidden_states,
             decoder_attentions=decoder_outputs.attentions,
             cross_attentions=decoder_outputs.cross_attentions,
-            out_order_logits=decoder_outputs.dec_out_order_logits,
-            out_masks=decoder_outputs.dec_out_masks,
+            out_order_logits=decoder_outputs.decoder_out_order_logits,
+            out_masks=decoder_outputs.decoder_out_masks,
             encoder_last_hidden_state=encoder_outputs.last_hidden_state,
             encoder_hidden_states=encoder_outputs.hidden_states,
             encoder_attentions=encoder_outputs.attentions,
@@ -1348,6 +1346,7 @@ class PPDocLayoutV3Model(RTDetrModel):
 
 
 @dataclass
+@auto_docstring
 class PPDocLayoutV3HybridEncoderOutput(BaseModelOutput):
     r"""
     mask_feat (`torch.FloatTensor` of shape `(batch_size, config.num_queries, 200, 200)`):

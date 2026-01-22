@@ -1,5 +1,5 @@
 # coding = utf-8
-# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -24,7 +24,7 @@ from parameterized import parameterized
 from transformers import (
     PPDocLayoutV3Config,
     PPDocLayoutV3ForObjectDetection,
-    PPDocLayoutV3ImageProcessor,
+    PPDocLayoutV3ImageProcessorFast,
     is_torch_available,
     is_vision_available,
 )
@@ -76,7 +76,7 @@ class PPDocLayoutV3ModelTester:
         activation_function="silu",
         eval_size=None,
         normalize_before=False,
-        mask_feat_channels=[32, 32],
+        mask_feature_channels=[32, 32],
         x4_feat_dim=32,
         # decoder PPDocLayoutV3Transformer
         d_model=32,
@@ -121,7 +121,7 @@ class PPDocLayoutV3ModelTester:
         self.activation_function = activation_function
         self.eval_size = eval_size
         self.normalize_before = normalize_before
-        self.mask_feat_channels = mask_feat_channels
+        self.mask_feature_channels = mask_feature_channels
         self.x4_feat_dim = x4_feat_dim
         self.d_model = d_model
         self.num_queries = num_queries
@@ -146,7 +146,6 @@ class PPDocLayoutV3ModelTester:
     def prepare_config_and_inputs(self):
         pixel_values = floats_tensor([self.batch_size, self.num_channels, self.image_size, self.image_size])
         config = self.get_config()
-        # config.num_labels = self.num_labels
 
         return config, pixel_values
 
@@ -167,14 +166,6 @@ class PPDocLayoutV3ModelTester:
             "lr_mult_list": [0, 0.05, 0.05, 0.05, 0.05],
             "out_features": ["stage1", "stage2", "stage3", "stage4"],
         }
-        # depths=[3, 4, 6, 3],
-        # hidden_sizes=[256, 512, 1024, 2048],
-        # stem_channels=[3, 32, 48],
-        # stage_in_channels=[48, 128, 512, 1024],
-        # stage_mid_channels=[48, 96, 192, 384],
-        # stage_out_channels=[128, 512, 1024, 2048],
-        # stage_num_blocks=[1, 1, 3, 1],
-
         return PPDocLayoutV3Config(
             backbone_config=backbone_config,
             encoder_hidden_dim=self.encoder_hidden_dim,
@@ -191,7 +182,7 @@ class PPDocLayoutV3ModelTester:
             activation_function=self.activation_function,
             eval_size=self.eval_size,
             normalize_before=self.normalize_before,
-            mask_feat_channels=self.mask_feat_channels,
+            mask_feature_channels=self.mask_feature_channels,
             x4_feat_dim=self.x4_feat_dim,
             d_model=self.d_model,
             num_queries=self.num_queries,
@@ -265,10 +256,6 @@ class PPDocLayoutV3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.Tes
     @unittest.skip(reason="Feed forward chunking is not implemented")
     def test_feed_forward_chunking(self):
         pass
-
-    # @unittest.skip(reason="PPDocLayoutV3 does not support this test")
-    # def test_model_is_small(self):
-    #     pass
 
     @unittest.skip(reason="PPDocLayoutV3 does not support training")
     def test_retain_grad_hidden_states_attentions(self):
@@ -470,7 +457,7 @@ class PPDocLayoutV3ModelIntegrationTest(unittest.TestCase):
         model_path = "PaddlePaddle/PP-DocLayoutV3_safetensors"
         self.model = PPDocLayoutV3ForObjectDetection.from_pretrained(model_path).to(torch_device)
         self.image_processor = (
-            PPDocLayoutV3ImageProcessor.from_pretrained(model_path) if is_vision_available() else None
+            PPDocLayoutV3ImageProcessorFast.from_pretrained(model_path) if is_vision_available() else None
         )
         url = "https://paddle-model-ecology.bj.bcebos.com/paddlex/imgs/demo_image/layout_demo.jpg"
         self.image = Image.open(requests.get(url, stream=True).raw)

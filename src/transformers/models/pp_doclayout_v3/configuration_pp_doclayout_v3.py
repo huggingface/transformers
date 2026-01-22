@@ -97,7 +97,7 @@ class PPDocLayoutV3Config(PreTrainedConfig):
             feed-forward modules.
         hidden_expansion (`float`, *optional*, defaults to 1.0):
             Expansion ratio to enlarge the dimension size of RepVGGBlock and CSPRepLayer.
-        mask_feat_channels (`list[int]`, *optional*, defaults to `[64, 64]`):
+        mask_feature_channels (`list[int]`, *optional*, defaults to `[64, 64]`):
             The channels of the multi-level features for mask enhancement.
         x4_feat_dim (`int`, *optional*, defaults to 128):
             The dimension of the x4 feature map.
@@ -140,7 +140,7 @@ class PPDocLayoutV3Config(PreTrainedConfig):
             Whether to disable custom kernels.
         is_encoder_decoder (`bool`, *optional*, defaults to `True`):
             Whether the architecture has an encoder decoder structure.
-        gp_head_size (`int`, *optional*, defaults to 64):
+        global_pointer_head_size (`int`, *optional*, defaults to 64):
             The size of the global pointer head.
         gp_dropout_value (`float`, *optional*, defaults to 0.1):
             The dropout probability in the global pointer head.
@@ -197,7 +197,7 @@ class PPDocLayoutV3Config(PreTrainedConfig):
         eval_size=None,
         normalize_before=False,
         hidden_expansion=1.0,
-        mask_feat_channels=[64, 64],
+        mask_feature_channels=[64, 64],
         x4_feat_dim=128,
         # decoder PPDocLayoutV3Transformer
         d_model=256,
@@ -219,7 +219,7 @@ class PPDocLayoutV3Config(PreTrainedConfig):
         anchor_image_size=None,
         disable_custom_kernels=True,
         is_encoder_decoder=True,
-        gp_head_size=64,
+        global_pointer_head_size=64,
         gp_dropout_value=0.1,
         **kwargs,
     ):
@@ -281,7 +281,7 @@ class PPDocLayoutV3Config(PreTrainedConfig):
         self.eval_size = list(eval_size) if eval_size is not None else None
         self.normalize_before = normalize_before
         self.hidden_expansion = hidden_expansion
-        self.mask_feat_channels = mask_feat_channels
+        self.mask_feature_channels = mask_feature_channels
         self.x4_feat_dim = x4_feat_dim
 
         # ---- decoder ----
@@ -303,7 +303,7 @@ class PPDocLayoutV3Config(PreTrainedConfig):
         self.learn_initial_query = learn_initial_query
         self.anchor_image_size = list(anchor_image_size) if anchor_image_size is not None else None
         self.disable_custom_kernels = disable_custom_kernels
-        self.gp_head_size = gp_head_size
+        self.global_pointer_head_size = global_pointer_head_size
         self.gp_dropout_value = gp_dropout_value
 
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
