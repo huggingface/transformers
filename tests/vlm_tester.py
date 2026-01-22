@@ -229,17 +229,14 @@ class VLMModelTester:
         input_ids = ids_tensor([self.batch_size, self.seq_length], self.vocab_size)
         pixel_values = self.create_pixel_values()
 
-        input_mask = None
-        if self.use_input_mask:
-            input_mask = self.create_attention_mask(input_ids)
-
         config = self.get_config()
 
         # Place image tokens in input_ids using template method
         input_ids = self.place_image_tokens(input_ids, config)
 
-        # Recreate attention mask with final input_ids (after image tokens are placed)
+        # Create attention mask with final input_ids (after image tokens are placed)
         # This is important for models that use padding masks based on token values
+        input_mask = None
         if self.use_input_mask:
             input_mask = self.create_attention_mask(input_ids)
 
