@@ -17,7 +17,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 import collections.abc
 import math
 import warnings
@@ -26,8 +25,8 @@ from dataclasses import dataclass
 from typing import Any
 
 import torch
-import torch.nn.functional as F
 from torch import Tensor, nn
+from torch.nn import functional as F
 
 from ... import initialization as init
 from ...activations import ACT2CLS, ACT2FN
@@ -37,9 +36,9 @@ from ...modeling_outputs import BackboneOutput, BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import meshgrid
-from ...utils import ModelOutput, auto_docstring, torch_int
+from ...utils import auto_docstring, torch_int
 from ...utils.backbone_utils import BackboneMixin
-from ...utils.generic import TransformersKwargs, check_model_inputs
+from ...utils.generic import ModelOutput, TransformersKwargs, can_return_tuple, check_model_inputs
 from .configuration_rf_detr import RfDetrConfig, RfDetrDinov2Config
 
 
@@ -594,7 +593,6 @@ class RfDetrDinov2Backbone(RfDetrDinov2PreTrainedModel, BackboneMixin):
 
                     num_h_patches = height // patch_size
                     num_w_patches = width // patch_size
-                    hidden_batch_size, seq_len, channels = hidden_state.shape
 
                     if self.config.num_windows > 1:
                         hidden_state = window_unpartition(
@@ -1207,6 +1205,8 @@ class RfDetrModelOutput(ModelOutput):
         foreground and background).
     enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
         Logits of predicted bounding boxes coordinates in the first stage.
+    backbone_features (list of `torch.FloatTensor` of shape `(batch_size, config.num_channels, config.image_size, config.image_size)`):
+        Features from the backbone.
     """
 
     init_reference_points: torch.FloatTensor | None = None
@@ -1215,6 +1215,8 @@ class RfDetrModelOutput(ModelOutput):
     intermediate_reference_points: torch.FloatTensor | None = None
     enc_outputs_class: torch.FloatTensor | None = None
     enc_outputs_coord_logits: torch.FloatTensor | None = None
+
+    backbone_features: list[torch.Tensor] = None
 
 
 @dataclass
@@ -1547,8 +1549,8 @@ class RfDetrModel(RfDetrPreTrainedModel):
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = AutoImageProcessor.from_pretrained("stevenbucaille/RfDetr_small_60e_coco")
-        >>> model = DeformableDetrModel.from_pretrained("stevenbucaille/RfDetr_small_60e_coco")
+        >>> image_processor = AutoImageProcessor.from_pretrained("stevenbucaille/rfdetr_small_60e_coco")
+        >>> model = DeformableDetrModel.from_pretrained("stevenbucaille/rfdetr_small_60e_coco")
 
         >>> inputs = image_processor(images=image, return_tensors="pt")
 
@@ -1556,7 +1558,7 @@ class RfDetrModel(RfDetrPreTrainedModel):
 
         >>> last_hidden_states = outputs.last_hidden_state
         >>> list(last_hidden_states.shape)
-        [1, 300, 256]
+        [1, 200, 256]
         ```"""
         batch_size, num_channels, height, width = pixel_values.shape
         device = pixel_values.device
@@ -1564,12 +1566,9 @@ class RfDetrModel(RfDetrPreTrainedModel):
         if pixel_mask is None:
             pixel_mask = torch.ones(((batch_size, height, width)), dtype=torch.long, device=device)
 
-        # Extract multi-scale feature maps of same resolution `config.d_model` (cf Figure 4 in paper)
-        # First, sent pixel_values + pixel_mask through Backbone to obtain the features
-        # which is a list of tuples
+        # First, retrieve feature maps from backbone
         features = self.backbone(pixel_values, pixel_mask)
 
-        # Then, apply 1x1 convolution to reduce the channel dimension to d_model (256 by default)
         sources = []
         masks = []
         for level, (source, mask) in enumerate(features):
@@ -1578,15 +1577,18 @@ class RfDetrModel(RfDetrPreTrainedModel):
             if mask is None:
                 raise ValueError("No attention mask was provided")
 
+        # Get initial reference points and query features
         if self.training:
             reference_points = self.reference_point_embed.weight
             query_feat = self.query_feat.weight
         else:
-            # only use one group in inference
+            # only use first group of reference points and query features during inference
+            # reference_points (num_queries, 4) : spatial locations of the queries
+            # query_feat (num_queries, d_model) : features of the queries
             reference_points = self.reference_point_embed.weight[: self.num_queries]
             query_feat = self.query_feat.weight[: self.num_queries]
 
-        # Prepare encoder inputs (by flattening)
+        # Prepare decoder inputs (by flattening)
         source_flatten = []
         mask_flatten = []
         spatial_shapes_list = []
@@ -1598,15 +1600,22 @@ class RfDetrModel(RfDetrPreTrainedModel):
             mask = mask.flatten(1)
             source_flatten.append(source)
             mask_flatten.append(mask)
+        # source_flatten (batch_size, sum(H*W), d_model) : flattened multi-scale feature maps
+        # mask_flatten (batch_size, sum(H*W)) : flattened mask
+        # spatial_shapes (num_levels, 2) : spatial shapes of the feature maps
+        # level_start_index (num_levels,) : start index of each level in source_flatten
+        # valid_ratios (batch_size, num_levels, 2) : valid ratios of the feature maps
         source_flatten = torch.cat(source_flatten, 1)
         mask_flatten = torch.cat(mask_flatten, 1)
         spatial_shapes = torch.as_tensor(spatial_shapes_list, dtype=torch.long, device=source_flatten.device)
         level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
         valid_ratios = torch.stack([self.get_valid_ratio(m, dtype=source_flatten.dtype) for m in masks], 1)
 
+        # Duplicate query features and reference points for each image in the batch
         target = query_feat.unsqueeze(0).expand(batch_size, -1, -1)
         reference_points = reference_points.unsqueeze(0).expand(batch_size, -1, -1)
 
+        # Generate encoder output proposals
         object_query_embedding, output_proposals = self.gen_encoder_output_proposals(
             source_flatten, ~mask_flatten, spatial_shapes_list
         )
@@ -1616,6 +1625,7 @@ class RfDetrModel(RfDetrPreTrainedModel):
         topk_coords_logits = []
         object_query_undetach = []
 
+        # Iterate over each group of object queries to refine the object queries
         for group_id in range(group_detr):
             group_object_query = self.enc_output[group_id](object_query_embedding)
             group_object_query = self.enc_output_norm[group_id](group_object_query)
@@ -1638,18 +1648,25 @@ class RfDetrModel(RfDetrPreTrainedModel):
             topk_coords_logits.append(group_topk_coords_logits)
             object_query_undetach.append(group_object_query_undetach)
 
+        # Concatenate the object queries and reference points from all groups
         topk_coords_logits = torch.cat(topk_coords_logits, 1)
         object_query_undetach = torch.cat(object_query_undetach, 1)
 
+        # Get the class and coordinate logits from the object queries
+        # enc_outputs_class (batch_size, num_queries, d_model) : object queries
+        # enc_outputs_coord_logits (batch_size, num_queries, 4) : coordinate logits of the object queries
         enc_outputs_class = object_query_undetach
         enc_outputs_coord_logits = topk_coords_logits
 
+        # Refine the reference points using the coordinate logits
         two_stage_len = topk_coords_logits.shape[-2]
         reference_points_two_stage_subset = reference_points[..., :two_stage_len, :]
         reference_points_subset = reference_points[..., two_stage_len:, :]
         reference_points_two_stage_subset = refine_bboxes(topk_coords_logits, reference_points_two_stage_subset)
         reference_points = torch.cat([reference_points_two_stage_subset, reference_points_subset], dim=-2)
         init_reference_points = reference_points
+
+        # Pass the object queries and reference points to the decoder
         decoder_outputs = self.decoder(
             inputs_embeds=target,
             reference_points=reference_points,
@@ -1662,11 +1679,19 @@ class RfDetrModel(RfDetrPreTrainedModel):
             **kwargs,
         )
 
+        # init_reference_points (batch_size, num_queries, 4) : initial reference points
+        # last_hidden_state (batch_size, num_queries, d_model) : final object queries
+        # intermediate_hidden_states (batch_size, num_decoder_layers, num_queries, d_model) : intermediate object queries
+        # intermediate_reference_points (batch_size, num_decoder_layers, num_queries, 4) : intermediate reference points
+        # backbone_features list(batch_size, num_levels, d_model, H, W) : backbone features
+        # enc_outputs_class (batch_size, num_queries, d_model) : encoder outputs object queries
+        # enc_outputs_coord_logits (batch_size, num_queries, 4) : coordinate logits of encoder object queries
         return RfDetrModelOutput(
             init_reference_points=init_reference_points,
             last_hidden_state=decoder_outputs.last_hidden_state,
             intermediate_hidden_states=decoder_outputs.intermediate_hidden_states,
             intermediate_reference_points=decoder_outputs.intermediate_reference_points,
+            backbone_features=sources,
             enc_outputs_class=enc_outputs_class,
             enc_outputs_coord_logits=enc_outputs_coord_logits,
         )
@@ -1709,6 +1734,8 @@ class RfDetrObjectDetectionOutput(ModelOutput):
         foreground and background).
     enc_outputs_coord_logits (`torch.FloatTensor` of shape `(batch_size, sequence_length, 4)`, *optional*, returned when `config.with_box_refine=True` and `config.two_stage=True`):
         Logits of predicted bounding boxes coordinates in the first stage.
+    backbone_features (list of `torch.FloatTensor` of shape `(batch_size, config.num_channels, config.image_size, config.image_size)`):
+        Features from the backbone.
     """
 
     loss: torch.FloatTensor | None = None
@@ -1722,6 +1749,8 @@ class RfDetrObjectDetectionOutput(ModelOutput):
     intermediate_reference_points: torch.FloatTensor | None = None
     enc_outputs_class: Any = None
     enc_outputs_coord_logits: torch.FloatTensor | None = None
+
+    backbone_features: list[torch.Tensor] = None
 
 
 @auto_docstring(
@@ -1771,15 +1800,15 @@ class RfDetrForObjectDetection(RfDetrPreTrainedModel):
         Examples:
 
         ```python
-        >>> from transformers import AutoImageProcessor, RfDetrForObjectDetection
+        >>> from transformers import AutoImageProcessor, LwDetrForObjectDetection
         >>> from PIL import Image
         >>> import requests
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
         >>> image = Image.open(requests.get(url, stream=True).raw)
 
-        >>> image_processor = AutoImageProcessor.from_pretrained("stevenbucaille/RfDetr_small_60e_coco")
-        >>> model = RfDetrForObjectDetection.from_pretrained("stevenbucaille/RfDetr_small_60e_coco")
+        >>> image_processor = AutoImageProcessor.from_pretrained("stevenbucaille/lwdetr_small_60e_coco")
+        >>> model = LwDetrForObjectDetection.from_pretrained("stevenbucaille/lwdetr_small_60e_coco")
 
         >>> inputs = image_processor(images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -1807,20 +1836,16 @@ class RfDetrForObjectDetection(RfDetrPreTrainedModel):
 
         last_hidden_states = outputs.last_hidden_state
         intermediate_reference_points = outputs.intermediate_reference_points
-        enc_outputs_class_logits = outputs.enc_outputs_class
+        enc_outputs_class = outputs.enc_outputs_class
         enc_outputs_boxes_logits = outputs.enc_outputs_coord_logits
 
+        # Get logits and boxes from first stage object queries
+        enc_outputs_class_logits = self.get_encoder_outputs_class_logits(enc_outputs_class)
+
+        # Get logits and boxes from second stage object queries
         logits = self.class_embed(last_hidden_states)
         pred_boxes_delta = self.bbox_embed(last_hidden_states)
         pred_boxes = refine_bboxes(intermediate_reference_points[-1], pred_boxes_delta)
-
-        enc_outputs_class_logits_list = enc_outputs_class_logits.split(self.config.num_queries, dim=1)
-        pred_class = []
-        group_detr = self.config.group_detr if self.training else 1
-        for group_index in range(group_detr):
-            group_pred_class = self.model.enc_out_class_embed[group_index](enc_outputs_class_logits_list[group_index])
-            pred_class.append(group_pred_class)
-        enc_outputs_class_logits = torch.cat(pred_class, dim=1)
 
         loss, loss_dict, auxiliary_outputs = None, None, None
         if labels is not None:
@@ -1855,12 +1880,253 @@ class RfDetrForObjectDetection(RfDetrPreTrainedModel):
             init_reference_points=outputs.init_reference_points,
             enc_outputs_class=enc_outputs_class_logits,
             enc_outputs_coord_logits=enc_outputs_boxes_logits,
+            backbone_features=outputs.backbone_features,
+        )
+
+    def get_encoder_outputs_class_logits(self, enc_outputs_class_logits: torch.Tensor) -> Tensor:
+        enc_outputs_class_logits_list = enc_outputs_class_logits.split(self.config.num_queries, dim=1)
+        group_detr = self.config.group_detr if self.training else 1
+        pred_class = [
+            self.model.enc_out_class_embed[group_index](enc_outputs_class_logits_list[group_index])
+            for group_index in range(group_detr)
+        ]
+        enc_outputs_class_logits = torch.cat(pred_class, dim=1)
+        return enc_outputs_class_logits
+
+
+@dataclass
+@auto_docstring(
+    custom_intro="""
+    Output type of [`RfDetrForInstanceSegmentation`].
+    """
+)
+class RfDetrInstanceSegmentationOutput(ModelOutput):
+    r"""
+    loss (`torch.FloatTensor` of shape `(1,)`, *optional*, returned when `labels` are provided)):
+        Total loss as a linear combination of a negative log-likehood (cross-entropy) for class prediction and a
+        bounding box loss. The latter is defined as a linear combination of the L1 loss and the generalized
+        scale-invariant IoU loss.
+    loss_dict (`Dict`, *optional*):
+        A dictionary containing the individual losses. Useful for logging.
+    logits (`torch.FloatTensor` of shape `(batch_size, num_queries, num_classes + 1)`):
+        Classification logits (including no-object) for all queries.
+    pred_boxes (`torch.FloatTensor` of shape `(batch_size, num_queries, 4)`):
+        Normalized boxes coordinates for all queries, represented as (center_x, center_y, width, height). These
+        values are normalized in [0, 1], relative to the size of each individual image in the batch (disregarding
+        possible padding). You can use [`~DeformableDetrProcessor.post_process_object_detection`] to retrieve the
+        unnormalized bounding boxes.
+    pred_masks (`torch.FloatTensor` of shape `(batch_size, num_queries, height/4, width/4)`):
+        Segmentation masks logits for all queries. See also
+        [`~DetrImageProcessor.post_process_semantic_segmentation`] or
+        [`~DetrImageProcessor.post_process_instance_segmentation`]
+        [`~DetrImageProcessor.post_process_panoptic_segmentation`] to evaluate semantic, instance and panoptic
+        segmentation masks respectively.
+    auxiliary_outputs (`list[Dict]`, *optional*):
+        Optional, only returned when auxiliary losses are activated (i.e. `config.auxiliary_loss` is set to `True`)
+        and labels are provided. It is a list of dictionaries containing the two above keys (`logits` and
+        `pred_boxes`) for each decoder layer.
+    init_reference_points (`torch.FloatTensor` of shape  `(batch_size, num_queries, 4)`):
+        Initial reference points sent through the Transformer decoder.
+    last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_queries, hidden_size)`, *optional*):
+        Sequence of hidden-states at the output of the last layer of the decoder of the model.
+    intermediate_hidden_states (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, hidden_size)`):
+        Stacked intermediate hidden states (output of each layer of the decoder).
+    intermediate_reference_points (`torch.FloatTensor` of shape `(batch_size, config.decoder_layers, num_queries, 4)`):
+        Stacked intermediate reference points (reference points of each layer of the decoder).
+    enc_outputs_mask_logits (`torch.FloatTensor` of shape `(batch_size, num_queries, width, height)`, *optional*):
+        Mask logits from the encoder for all queries.
+    """
+
+    loss: torch.FloatTensor | None = None
+    loss_dict: dict | None = None
+    logits: torch.FloatTensor | None = None
+    pred_boxes: torch.FloatTensor | None = None
+    pred_masks: torch.FloatTensor = None
+    auxiliary_outputs: list[dict] | None = None
+    init_reference_points: torch.FloatTensor | None = None
+    last_hidden_state: torch.FloatTensor | None = None
+    intermediate_hidden_states: torch.FloatTensor | None = None
+    intermediate_reference_points: torch.FloatTensor | None = None
+    enc_outputs_mask_logits: torch.FloatTensor | None = None
+
+
+class RfDetrSegmentationBlock(nn.Module):
+    """This corresponds to the `Block` class in the original implementation.
+
+    There are two equivalent implementations: [DwConv, LayerNorm (channels_first), Conv, GELU,1x1 Conv]; all in (N, C,
+    H, W) (2) [DwConv, Permute to (N, H, W, C), LayerNorm (channels_last), Linear, GELU, Linear]; Permute back
+
+    The authors used (2) as they find it slightly faster in PyTorch.
+
+    Args:
+        config ([`RfDetrConfig`]): Model configuration class.
+        dim (`int`): Number of input channels.
+        drop_path (`float`): Stochastic depth rate. Default: 0.0.
+    """
+
+    def __init__(self, config: RfDetrConfig):
+        super().__init__()
+        dim = config.d_model
+        self.dwconv = nn.Conv2d(dim, dim, kernel_size=3, padding=1, groups=dim)  # depthwise conv
+        self.layernorm = RfDetrLayerNorm(dim, eps=1e-6)
+        self.pwconv1 = nn.Linear(dim, dim)  # pointwise/1x1 convs, implemented with linear layers
+        self.act = ACT2FN[config.segmentation_head_activation_function]
+
+    def forward(self, features: torch.Tensor) -> torch.Tensor:
+        residual = features
+        features = self.dwconv(features)
+        features = features.permute(0, 2, 3, 1)  # (N, C, H, W) -> (N, H, W, C)
+        features = self.layernorm(features)
+        features = self.pwconv1(features)
+        features = self.act(features)
+        features = features.permute(0, 3, 1, 2)  # (N, H, W, C) -> (N, C, H, W)
+        features = features + residual
+        return features
+
+
+class RfDetrSegmentationMLPBlock(nn.Module):
+    def __init__(self, config: RfDetrConfig):
+        super().__init__()
+        dim = config.d_model
+        self.norm_in = nn.LayerNorm(dim)
+        self.in_linear = nn.Linear(dim, dim * 4)
+        self.act = ACT2FN[config.segmentation_head_activation_function]
+        self.out_linear = nn.Linear(dim * 4, dim)
+
+    def forward(self, features: torch.Tensor) -> torch.Tensor:
+        residual = features
+        features = self.norm_in(features)
+        features = self.in_linear(features)
+        features = self.act(features)
+        features = self.out_linear(features)
+        features = features + residual
+        return features
+
+
+class RfDetrForInstanceSegmentation(RfDetrPreTrainedModel):
+    def __init__(self, config: RfDetrConfig):
+        super().__init__(config)
+
+        self.rf_detr = RfDetrForObjectDetection(config)
+
+        num_blocks = config.decoder_layers
+        self.downsample_ratio = config.mask_downsample_ratio
+        self.blocks = nn.ModuleList([RfDetrSegmentationBlock(config) for _ in range(num_blocks)])
+        self.spatial_features_proj = nn.Conv2d(config.d_model, config.d_model, kernel_size=1)
+
+        self.query_features_block = RfDetrSegmentationMLPBlock(config)
+        self.query_features_proj = nn.Linear(config.d_model, config.d_model)
+
+        self.bias = nn.Parameter(torch.zeros(1), requires_grad=True)
+
+        self.post_init()
+
+    def segmentation_head(self, spatial_features, query_features, image_size: torch.Size, skip_blocks: bool = False):
+        # spatial features: (B, C, H, W)
+        # query features: [(B, N, C)] for each decoder layer
+        # output: (B, N, H*r, W*r)
+        target_size = (image_size[0] // self.downsample_ratio, image_size[1] // self.downsample_ratio)
+        spatial_features = F.interpolate(spatial_features, size=target_size, mode="bilinear", align_corners=False)
+        list_mask_logits = []
+        if not skip_blocks:
+            for block, qf in zip(self.blocks, query_features):
+                spatial_features = block(spatial_features)
+                spatial_features_proj = self.spatial_features_proj(spatial_features)
+                qf = self.query_features_block(qf)
+                qf = self.query_features_proj(qf)
+                mask_logits = torch.einsum("bchw,bnc->bnhw", spatial_features_proj, qf)
+                mask_logits = mask_logits + self.bias
+                list_mask_logits.append(mask_logits)
+        else:
+            query_features = self.query_features_block(query_features)
+            query_features = self.query_features_proj(query_features)
+            mask_logits = torch.einsum("bchw,bnc->bnhw", spatial_features, query_features)
+            mask_logits = mask_logits + self.bias
+            list_mask_logits.append(mask_logits)
+
+        return list_mask_logits
+
+    @check_model_inputs
+    @can_return_tuple
+    @auto_docstring
+    def forward(
+        self,
+        pixel_values: torch.FloatTensor = None,
+        pixel_mask: torch.LongTensor | None = None,
+        labels: list[dict] | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> dict[str, torch.Tensor]:
+        image_size = pixel_values.shape[-2:]
+
+        outputs = self.rf_detr.model(
+            pixel_values,
+            pixel_mask=pixel_mask,
+            **kwargs,
+        )
+
+        spatial_features = outputs.backbone_features[-1]
+        last_hidden_states = outputs.last_hidden_state
+        intermediate_reference_points = outputs.intermediate_reference_points
+        enc_outputs_class = outputs.enc_outputs_class
+        enc_outputs_boxes_logits = outputs.enc_outputs_coord_logits
+        query_features = outputs.intermediate_hidden_states
+        last_hidden_state = outputs.last_hidden_state
+
+        # First stage segmentation proposals
+        enc_outputs_class_logits = self.rf_detr.get_encoder_outputs_class_logits(enc_outputs_class)
+        enc_outputs_masks = self.segmentation_head(spatial_features, enc_outputs_class, image_size, skip_blocks=True)
+        enc_outputs_masks = torch.cat(enc_outputs_masks, dim=1)
+
+        # Second stage segmentation proposals
+        logits = self.rf_detr.class_embed(last_hidden_states)
+        pred_boxes_delta = self.rf_detr.bbox_embed(last_hidden_states)
+        pred_boxes = refine_bboxes(intermediate_reference_points[-1], pred_boxes_delta)
+        outputs_masks = self.segmentation_head(spatial_features, query_features, image_size)
+
+        pred_masks = outputs_masks[-1]
+
+        loss, loss_dict, auxiliary_outputs = None, None, None
+        if labels is not None:
+            outputs_class, outputs_coord = None, None
+            if self.config.auxiliary_loss:
+                intermediate_hidden_states = outputs.intermediate_hidden_states
+                outputs_coord_delta = self.rf_detr.bbox_embed(intermediate_hidden_states)
+                outputs_coord = refine_bboxes(intermediate_reference_points, outputs_coord_delta)
+                outputs_class = self.rf_detr.class_embed(intermediate_hidden_states)
+            loss, loss_dict, auxiliary_outputs = self.loss_function(
+                logits,
+                labels,
+                self.device,
+                pred_boxes,
+                pred_masks,
+                self.config,
+                outputs_class,
+                outputs_coord,
+                outputs_masks,
+                enc_outputs_class_logits,
+                enc_outputs_boxes_logits,
+                enc_outputs_masks,
+            )
+
+        return RfDetrInstanceSegmentationOutput(
+            loss=loss,
+            loss_dict=loss_dict,
+            logits=logits,
+            pred_boxes=pred_boxes,
+            pred_masks=pred_masks,
+            auxiliary_outputs=auxiliary_outputs,
+            last_hidden_state=last_hidden_state,
+            intermediate_hidden_states=outputs.intermediate_hidden_states,
+            intermediate_reference_points=outputs.intermediate_reference_points,
+            init_reference_points=outputs.init_reference_points,
+            enc_outputs_mask_logits=enc_outputs_masks,
         )
 
 
 __all__ = [
     "RfDetrModel",
     "RfDetrForObjectDetection",
+    "RfDetrForInstanceSegmentation",
     "RfDetrPreTrainedModel",
     "RfDetrDinov2Backbone",
     "RfDetrDinov2PreTrainedModel",

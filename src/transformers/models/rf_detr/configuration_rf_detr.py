@@ -17,8 +17,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
-
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
 from ...utils.backbone_utils import BackboneConfigMixin, get_aligned_output_features_output_indices
@@ -249,7 +247,10 @@ class RfDetrConfig(PreTrainedConfig):
             Alpha parameter in the focal loss.
         auxiliary_loss (`bool`, *optional*, defaults to `True`):
             Whether auxiliary decoding losses (loss at each decoder layer) are to be used.
-
+        mask_downsample_ratio (`int`, *optional*, defaults to 4):
+            The downsample ratio for the segmentation masks compared to the input image resolution.
+        segmentation_head_activation_function (`str`, *optional*, defaults to `"gelu"`):
+            The non-linear activation function in the segmentation head. Supported values are `"relu"`, `"silu"`, `"gelu"`.
     Examples:
 
     ```python
@@ -299,6 +300,7 @@ class RfDetrConfig(PreTrainedConfig):
         class_cost=2,
         bbox_cost=5,
         giou_cost=2,
+        class_loss_coefficient=1,
         mask_loss_coefficient=1,
         dice_loss_coefficient=1,
         bbox_loss_coefficient=5,
@@ -306,6 +308,12 @@ class RfDetrConfig(PreTrainedConfig):
         eos_coefficient=0.1,
         focal_alpha=0.25,
         auxiliary_loss=True,
+        mask_point_sample_ratio=16,
+        # segmentation
+        mask_downsample_ratio=4,
+        mask_class_loss_coefficient=5.0,
+        mask_dice_loss_coefficient=5.0,
+        segmentation_head_activation_function="gelu",
         **kwargs,
     ):
         self.layer_norm_eps = layer_norm_eps
@@ -378,12 +386,20 @@ class RfDetrConfig(PreTrainedConfig):
         self.bbox_cost = bbox_cost
         self.giou_cost = giou_cost
         # Loss coefficients
+        self.class_loss_coefficient = class_loss_coefficient
+        self.mask_loss_coefficient = mask_loss_coefficient
         self.dice_loss_coefficient = dice_loss_coefficient
         self.bbox_loss_coefficient = bbox_loss_coefficient
         self.giou_loss_coefficient = giou_loss_coefficient
+        self.mask_class_loss_coefficient = mask_class_loss_coefficient
+        self.mask_dice_loss_coefficient = mask_dice_loss_coefficient
         self.eos_coefficient = eos_coefficient
         self.focal_alpha = focal_alpha
         self.disable_custom_kernels = disable_custom_kernels
+        self.mask_point_sample_ratio = mask_point_sample_ratio
+        # segmentation
+        self.mask_downsample_ratio = mask_downsample_ratio
+        self.segmentation_head_activation_function = segmentation_head_activation_function
         super().__init__(**kwargs)
 
 
