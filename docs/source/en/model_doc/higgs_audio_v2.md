@@ -48,7 +48,6 @@ All of the snippets below mirror the integration tests in `test_higgs_audio.py`,
 
 ```python
 from transformers import AutoProcessor, HiggsAudioV2ForConditionalGeneration
-import torch
 
 model_id = "eustlb/higgs-v2"
 processor = AutoProcessor.from_pretrained(model_id, device_map="auto")
@@ -102,7 +101,6 @@ processor.save_audio(decoded, "output_single_speaker_smart_voice.wav")
 
 ```python
 from transformers import AutoProcessor, HiggsAudioV2ForConditionalGeneration
-import torch
 
 model_id = "eustlb/higgs-v2"
 processor = AutoProcessor.from_pretrained(model_id, device_map="auto")
@@ -173,7 +171,6 @@ processor.save_audio(decoded, "output_multi_speaker_smart_voice.wav")
 
 ```python
 from transformers import AutoProcessor, HiggsAudioV2ForConditionalGeneration
-import torch
 
 model_id = "eustlb/higgs-v2"
 processor = AutoProcessor.from_pretrained(model_id, device_map="auto")
@@ -245,11 +242,15 @@ processor.save_audio(decoded, "output_zero_shot_voice_cloning.wav")
 
 ```python
 from transformers import AutoProcessor, HiggsAudioV2ForConditionalGeneration
-import torch
 
 model_id = "eustlb/higgs-v2"
 processor = AutoProcessor.from_pretrained(model_id, device_map="auto")
 model = HiggsAudioV2ForConditionalGeneration.from_pretrained(model_id, device_map="auto")
+
+user_message = """[SPEAKER0] I can't believe you did that without even asking me first!
+[SPEAKER1] Oh, come on! It wasn't a big deal, and I knew you would overreact like this.
+[SPEAKER0] Overreact? You made a decision that affects both of us without even considering my opinion!
+[SPEAKER1] Because I didn't have time to sit around waiting for you to make up your mind! Someone had to act."""
 
 conversation = [
     {
@@ -291,7 +292,7 @@ conversation = [
         "content": [
             {
                 "type": "text",
-                "text": "[SPEAKER0] I can't believe you did that without even asking me first!"
+                "text": user_message
             }
         ]
     },
@@ -315,7 +316,6 @@ processor.save_audio(decoded, "output_multi_speaker_voice_cloning.wav")
 
 ```python
 from transformers import AutoProcessor, HiggsAudioV2ForConditionalGeneration
-import torch
 
 model_id = "eustlb/higgs-v2"
 processor = AutoProcessor.from_pretrained(model_id, device_map="auto")
@@ -418,7 +418,7 @@ conversation2 = [
 ]
 
 inputs = processor.apply_chat_template(
-    conversation,
+    [conversation1, conversation2],
     add_generation_prompt=True,
     tokenize=True,
     return_dict=True,
@@ -439,7 +439,6 @@ processor.save_audio(decoded, ["output_batched_1.wav", "output_batched_2.wav"])
 
 ```python
 from transformers import AutoProcessor, HiggsAudioV2ForConditionalGeneration
-import torch
 
 model_id = "eustlb/higgs-v2"
 processor = AutoProcessor.from_pretrained(model_id, device_map="auto")
