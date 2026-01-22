@@ -33,13 +33,7 @@ from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
-from ...utils import (
-    ModelOutput,
-    TransformersKwargs,
-    auto_docstring,
-    torch_compilable_check,
-    torch_int,
-)
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, torch_compilable_check, torch_int
 from ...utils.backbone_utils import load_backbone
 from ...utils.generic import can_return_tuple, check_model_inputs
 from .configuration_d_fine import DFineConfig
