@@ -333,29 +333,26 @@ class VibeVoiceAcousticTokenizerConvNext1dLayer(nn.Module):
 
 
 class VibeVoiceAcousticTokenizerEncoderStem(nn.Module):
-    def __init__(self, config, layer_idx=None):
+    def __init__(self, config):
         super().__init__()
 
-        depth = config.depths[0]
-        intermediate_channels = config.n_filters
         self.conv = VibeVoiceAcousticTokenizerCausalConv1d(
             in_channels=config.channels,
-            out_channels=intermediate_channels,
+            out_channels=config.n_filters,
             kernel_size=config.kernel_size,
             bias=config.bias,
-            layer_idx=layer_idx,
+            layer_idx=0,
         )
         self.stage = nn.ModuleList(
             [
                 VibeVoiceAcousticTokenizerConvNext1dLayer(
                     config,
-                    hidden_size=intermediate_channels,
-                    layer_idx=layer_idx + depth_idx + 1 if layer_idx is not None else None,
+                    hidden_size=config.n_filters,
+                    layer_idx=layer_idx,
                 )
-                for depth_idx in range(depth)
+                for layer_idx in range(1, config.depths[0] + 1)
             ]
         )
-        self.num_layers = depth + 1
 
     def forward(self, hidden_states, padding_cache=None):
         hidden_states = self.conv(hidden_states, padding_cache=padding_cache)
@@ -368,16 +365,12 @@ class VibeVoiceAcousticTokenizerEncoderLayer(nn.Module):
     def __init__(self, config, stage_idx):
         super().__init__()
 
-        # `layer_idx` offset by stem layers and previous encoder layers
-        layer_idx = config.depths[0] + 1
-        for prev_stage_idx in range(stage_idx):
-            layer_idx += config.depths[prev_stage_idx + 1] + 1
+        depth_idx = stage_idx + 1  # first depth is for stem layer
+        layer_idx = sum(depth + 1 for depth in config.depths[:depth_idx])
+        intermediate_channels = int(config.n_filters * (2 ** (depth_idx)))
 
-        depth = config.depths[stage_idx + 1]
-        in_channels = int(config.n_filters * (2**stage_idx))
-        intermediate_channels = int(config.n_filters * (2 ** (stage_idx + 1)))
         self.conv = VibeVoiceAcousticTokenizerCausalConv1d(
-            in_channels=in_channels,
+            in_channels=int(config.n_filters * (2**stage_idx)),
             out_channels=intermediate_channels,
             kernel_size=int(config.downsampling_ratios[stage_idx] * 2),
             stride=config.downsampling_ratios[stage_idx],
@@ -387,12 +380,11 @@ class VibeVoiceAcousticTokenizerEncoderLayer(nn.Module):
         self.stage = nn.ModuleList(
             [
                 VibeVoiceAcousticTokenizerConvNext1dLayer(
-                    config, hidden_size=intermediate_channels, layer_idx=layer_idx + depth_idx + 1
+                    config, hidden_size=intermediate_channels, layer_idx=layer_idx + offset
                 )
-                for depth_idx in range(depth)
+                for offset in range(1, config.depths[depth_idx] + 1)
             ]
         )
-        self.num_layers = depth + 1
 
     def forward(self, hidden_states, padding_cache=None):
         hidden_states = self.conv(hidden_states, padding_cache=padding_cache)
@@ -407,22 +399,19 @@ class VibeVoiceAcousticTokenizerEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        layer_idx = 0
-        self.stem = VibeVoiceAcousticTokenizerEncoderStem(config, layer_idx=layer_idx)
-        layer_idx += self.stem.num_layers
-
+        self.stem = VibeVoiceAcousticTokenizerEncoderStem(config)
         self.conv_layers = nn.ModuleList(
-            VibeVoiceAcousticTokenizerEncoderLayer(config, stage_idx)
-            for stage_idx in range(len(config.downsampling_ratios))
+            [
+                VibeVoiceAcousticTokenizerEncoderLayer(config, stage_idx)
+                for stage_idx in range(len(config.downsampling_ratios))
+            ]
         )
-        layer_idx += sum(layer.num_layers for layer in self.conv_layers)
-
         self.head = VibeVoiceAcousticTokenizerCausalConv1d(
             in_channels=int(config.n_filters * (2 ** len(config.downsampling_ratios))),
             out_channels=config.hidden_size,
             kernel_size=config.kernel_size,
             bias=config.bias,
-            layer_idx=layer_idx,
+            layer_idx=sum(depth + 1 for depth in config.depths),
         )
 
     def forward(self, hidden_states, padding_cache=None):
@@ -508,40 +497,37 @@ class VibeVoiceAcousticTokenizerDecoder(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        layer_idx = 0
-        self.stem = VibeVoiceAcousticTokenizerDecoderStem(config, layer_idx=layer_idx)
-        layer_idx += self.stem.num_layers
-
+        self.stem = VibeVoiceAcousticTokenizerDecoderStem(config)
         self.conv_layers = nn.ModuleList(
-            VibeVoiceAcousticTokenizerDecoderLayer(config, stage_idx)
-            for stage_idx in range(len(config.upsampling_ratios))
+            [
+                VibeVoiceAcousticTokenizerDecoderLayer(config, stage_idx)
+                for stage_idx in range(len(config.upsampling_ratios))
+            ]
         )
-        layer_idx += sum(layer.num_layers for layer in self.conv_layers)
-
         self.head = VibeVoiceAcousticTokenizerCausalConv1d(
             in_channels=config.n_filters,
             out_channels=config.channels,
             kernel_size=config.kernel_size,
             bias=config.bias,
-            layer_idx=layer_idx,
+            layer_idx=sum(depth + 1 for depth in config.depths),
         )
 
         # Parameters for cache creation
-        self.num_conv_layers = layer_idx + 1
-        self.per_conv_layer_padding_mode = ["constant"] * self.num_conv_layers
+        self.num_conv_layers = sum(depth + 1 for depth in config.depths) + 1
         self.per_conv_layer_padding = [self.stem.conv.causal_padding]
         self.per_conv_layer_in_channels = [self.stem.conv.conv.in_channels]
-        for block in self.stem.stage:
-            self.per_conv_layer_padding.append(block.mixer.causal_padding)
-            self.per_conv_layer_in_channels.append(block.mixer.conv.in_channels)
+        self.per_conv_layer_padding.extend([block.mixer.causal_padding for block in self.stem.stage])
+        self.per_conv_layer_in_channels.extend([block.mixer.conv.in_channels for block in self.stem.stage])
+
         for layer in self.conv_layers:
             self.per_conv_layer_padding.append(layer.convtr.causal_padding)
             self.per_conv_layer_in_channels.append(layer.convtr.convtr.in_channels)
-            for block in layer.stage:
-                self.per_conv_layer_padding.append(block.mixer.causal_padding)
-                self.per_conv_layer_in_channels.append(block.mixer.conv.in_channels)
+            self.per_conv_layer_padding.extend([block.mixer.causal_padding for block in layer.stage])
+            self.per_conv_layer_in_channels.extend([block.mixer.conv.in_channels for block in layer.stage])
+
         self.per_conv_layer_padding.append(self.head.causal_padding)
         self.per_conv_layer_in_channels.append(self.head.conv.in_channels)
+        self.per_conv_layer_padding_mode = ["constant" for _ in self.per_conv_layer_padding]
 
     def forward(self, hidden_states, padding_cache=None):
         hidden_states = self.stem(hidden_states, padding_cache=padding_cache)

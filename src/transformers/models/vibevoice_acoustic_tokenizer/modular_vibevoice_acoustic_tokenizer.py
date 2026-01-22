@@ -395,6 +395,7 @@ class VibeVoiceAcousticTokenizerDecoder(nn.Module):
         )
 
         # Parameters for cache creation
+        self.num_conv_layers = sum(depth + 1 for depth in config.depths) + 1
         self.per_conv_layer_padding = [self.stem.conv.causal_padding]
         self.per_conv_layer_in_channels = [self.stem.conv.conv.in_channels]
         self.per_conv_layer_padding.extend([block.mixer.causal_padding for block in self.stem.stage])
