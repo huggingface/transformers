@@ -4229,11 +4229,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                 with safetensors(source, Device.CUDA, is_shared) as registry: # TODO : dynamic
                     merged_state_dict = {}
 
-                    # for file in checkpoint_files:
-                    # file_pointer = safe_open(file, framework="pt", device="cpu")
-                    # all_pointer.add(file_pointer)
-                    # for k in file_pointer.keys():
-                    #     merged_state_dict[k] = file_pointer.get_slice(k)  # don't materialize yet
                     for name in registry.names():
                         merged_state_dict[name] = partial(registry.fetch, name)  # TODO: needs to happen in the same thread
             # Checkpoints are .bin
