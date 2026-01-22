@@ -1071,7 +1071,7 @@ def _get_cache_dict(cache: DynamicCache):
         logging.warning("DynamicCache + torch.export is tested on torch 2.6.0+ and may not work on earlier versions.")
 
     return {
-        "cache": [(layer.keys, layer.values) for layer in cache.layers],
+        "cache": [(layer.keys, layer.values) for layer in cache.layers if layer.keys is not None],
     }
 
 
