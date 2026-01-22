@@ -35,7 +35,7 @@ from typing import TYPE_CHECKING, Any, Literal
 import numpy as np
 import packaging.version
 
-from transformers.utils.import_utils import _is_package_available
+from transformers.utils.import_utils import is_pynvml_available
 
 
 if os.getenv("WANDB_MODE") == "offline":
@@ -1030,7 +1030,7 @@ class TrackioCallback(TrainerCallback):
                 f"gpu/{device_idx}/allocated_memory": memory_allocated / (1024**3),  # GB
                 f"gpu/{device_idx}/memory_usage": memory_allocated / total_memory,  # ratio
             }
-            if _is_package_available("pynvml"):
+            if is_pynvml_available():
                 power = torch.cuda.power_draw(device_idx)
                 gpu_memory_logs[f"gpu/{device_idx}/power"] = power / 1000  # Watts
             if dist.is_available() and dist.is_initialized():
