@@ -767,7 +767,8 @@ class Emu3VQVAE(PreTrainedModel):
         hidden_states = self.encoder(pixel_values)
 
         # b t c h w -> b c t h w
-        conv_hidden_states = self.quant_conv(hidden_states.permute(0, 2, 1, 3, 4))
+        conv_hidden_states = hidden_states.permute(0, 2, 1, 3, 4)
+        conv_hidden_states = self.quant_conv(conv_hidden_states)
 
         # b c t h w -> b t c h w
         conv_hidden_states = conv_hidden_states.permute(0, 2, 1, 3, 4)
