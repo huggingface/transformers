@@ -304,6 +304,7 @@ class VibeVoiceAcousticTokenizerIntegrationTest(unittest.TestCase):
         """
         Reproducer which generates JSON of expected outputs:
         https://gist.github.com/ebezzam/507dfd544e0a0f12402966503cbc73e6#file-reproducer_tokenizer-py
+        NOTE (ebezzam): had to compute expected outputs on CI runners for passing tests
         """
         dtype = torch.bfloat16
 
