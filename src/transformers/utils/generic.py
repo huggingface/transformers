@@ -892,7 +892,6 @@ def check_model_inputs(func=None, *, tie_last_hidden_states=True):
                     arg_value = args[arg_index]
                 elif kwargs.get(arg_name) is not None:
                     arg_value = kwargs[arg_name]
-
                 else:
                     arg_value = getattr(self.config, arg_name, None)
 

@@ -313,6 +313,8 @@ def warning_advice(self, *args, **kwargs):
     self.warning(*args, **kwargs)
 
 
+# TODO: ideally we should have a new logger class, e.g. TransformerLogger that adds these new methods
+# instead of monkey patching
 logging.Logger.warning_advice = warning_advice  # type: ignore[unresolved-attribute]
 
 
