@@ -892,6 +892,8 @@ def check_model_inputs(func=None, *, tie_last_hidden_states=True):
 
             if use_cache is not None:
                 if getattr(self, "gradient_checkpointing", False) and self.training and use_cache:
+                    # TODO: ideally we should have a new logger class, e.g. TransformerLogger that adds these new methods
+                    # instead of monkey patching
                     logger.warning_once(  # type: ignore[attr-defined]
                         "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
                     )
