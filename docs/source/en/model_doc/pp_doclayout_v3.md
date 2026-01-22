@@ -29,7 +29,7 @@ TBD.
 
 ### Single input inference
 
-The example below demonstrates how to generate text with PaddleOCRVL using [`Pipeline`] or the [`AutoModel`].
+The example below demonstrates how to generate text with PP-DocLayoutV3 using [`Pipeline`] or the [`AutoModel`].
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
@@ -76,7 +76,7 @@ for result in results:
 
 ### Batched inference
 
-PaddleOCRVL also supports batched inference. We advise users to use `padding_side="left"` when computing batched generation as it leads to more accurate results. Here is how you can do it with PaddleOCRVL using [`Pipeline`] or the [`AutoModel`]:
+PP-DocLayoutV3 also supports batched inference. We advise users to use `padding_side="left"` when computing batched generation as it leads to more accurate results. Here is how you can do it with PP-DocLayoutV3 using [`Pipeline`] or the [`AutoModel`]:
 
 <hfoptions id="usage">
 <hfoption id="Pipeline">
