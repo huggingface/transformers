@@ -109,6 +109,8 @@ class Qwen3VLTextConfig(PreTrainedConfig):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
+        pad_token_id (`int`, *optional*, defaults to `None`):
+            The id of the padding token. If unset, the config is treated as not having a dedicated padding token.
 
     ```python
     >>> from transformers import Qwen3VLTextModel, Qwen3VLTextConfig
