@@ -18,7 +18,7 @@ rendered properly in your Markdown viewer.
 
 [[open-in-colab]]
 
-Audio-text-to-text models, are language models that take audio and text inputs and generate text outputs. These models combine audio understanding with language generation capabilities, enabling tasks like audio question answering, audio reasoning, and spoken dialogue understanding. Unlike traditional ASR models that simply transcribe speech, audio-text-to-text models can reason about audio content, follow instructions, and generate contextual responses.
+Audio-text-to-text models, take audio and text inputs and generate text outputs. These models can understand audio and generate text, enabling tasks like audio question answering, audio reasoning, and spoken dialogue understanding. Unlike traditional ASR models that simply transcribe speech, audio-text-to-text models can reason about audio content, follow instructions, and generate contextual responses.
 
 This guide will show you how to:
 
