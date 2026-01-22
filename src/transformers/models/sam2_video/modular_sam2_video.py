@@ -977,7 +977,7 @@ class Sam2VideoPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = "video"
     _supports_sdpa = True
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_attention_backend = True
 
     @torch.no_grad()
@@ -1893,7 +1893,6 @@ class Sam2VideoModel(Sam2Model):
         self,
         temporal_positions_and_previous_outputs: list[tuple[int, dict]],
         device: torch.device,
-        dtype: torch.dtype,
     ) -> tuple[list[torch.Tensor], list[torch.Tensor]]:
         """
         Concatenate memory features and positional embeddings from previous frames.
@@ -1910,11 +1909,11 @@ class Sam2VideoModel(Sam2Model):
 
             # Load memory features (potentially from CPU to GPU)
             # Features are flattened: (Batch, Channels, H, W) -> (H*W, Batch, Channels)
-            memory_features = prev_output_data["maskmem_features"].to(device=device, dtype=dtype, non_blocking=True)
+            memory_features = prev_output_data["maskmem_features"].to(device, non_blocking=True)
             memories_to_concatenate.append(memory_features)
 
             # Spatial positional encoding (potentially from CPU to GPU)
-            spatial_memory_pos_embed = prev_output_data["maskmem_pos_enc"].to(device=device, dtype=dtype, non_blocking=True)
+            spatial_memory_pos_embed = prev_output_data["maskmem_pos_enc"].to(device, non_blocking=True)
 
             # Add temporal positional encoding
             # self.memory_temporal_positional_encoding shape: (NumMaskMem, 1, 1, MemDim)
@@ -2113,7 +2112,7 @@ class Sam2VideoModel(Sam2Model):
         )
 
         memories_to_concatenate, memory_positional_embeddings_to_concatenate = self._build_memory_attention_inputs(
-            temporal_positions_and_previous_outputs, device, dtype=inference_session.dtype
+            temporal_positions_and_previous_outputs, device
         )
 
         # Step 3: Get and process object pointers
@@ -2133,7 +2132,7 @@ class Sam2VideoModel(Sam2Model):
                 num_object_pointer_tokens = object_pointers.shape[0]
 
         # Step 4: Concatenate all retrieved memories and their positional embeddings
-        combined_memory = torch.cat(memories_to_concatenate, dim=0)
+        combined_memory = torch.cat(memories_to_concatenate, dim=0).to(dtype=inference_session.dtype)
         combined_memory_positional_embeddings = torch.cat(memory_positional_embeddings_to_concatenate, dim=0)
 
         # Step 5: Forward through the memory attention mechanism
