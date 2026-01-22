@@ -182,24 +182,20 @@ class Owlv2VisionModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip(reason="OwlV2 does not support training yet")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training(self):
         pass
 
-    @unittest.skip(reason="OwlV2 does not support training yet")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     @slow
@@ -315,24 +311,20 @@ class Owlv2TextModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip(reason="OwlV2 does not support training yet")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training(self):
         pass
 
-    @unittest.skip(reason="OwlV2 does not support training yet")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     @unittest.skip(reason="OWLV2 does not use inputs_embeds")
@@ -574,24 +566,20 @@ class Owlv2ForObjectDetectionTest(ModelTesterMixin, unittest.TestCase):
     def test_forward_signature(self):
         pass
 
-    @unittest.skip(reason="OwlV2 does not support training yet")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training(self):
         pass
 
-    @unittest.skip(reason="OwlV2 does not support training yet")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     @slow
@@ -735,7 +723,7 @@ class Owlv2ModelIntegrationTest(unittest.TestCase):
                 [-3.3644, -4.0717, -4.0717, -4.0717],
                 [-2.9425, -4.0717, -4.0717, -4.0717],
             ]
-        )
+        ).to(torch_device)
 
         torch.testing.assert_close(model.box_bias[:3, :4], expected_default_box_bias, rtol=1e-4, atol=1e-4)
 

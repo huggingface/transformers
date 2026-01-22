@@ -31,7 +31,7 @@ from ...image_transforms import center_to_corners_format, corners_to_center_form
 from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...pytorch_utils import compile_compatible_method_lru_cache
-from ...utils import ModelOutput, auto_docstring, is_torchdynamo_compiling, torch_int
+from ...utils import ModelOutput, auto_docstring, torch_compilable_check, torch_int
 from ...utils.backbone_utils import load_backbone
 from .configuration_rt_detr_v2 import RTDetrV2Config
 
@@ -177,10 +177,10 @@ class RTDetrV2MultiscaleDeformableAttention(nn.Module):
 
         batch_size, num_queries, _ = hidden_states.shape
         batch_size, sequence_length, _ = encoder_hidden_states.shape
-        if not is_torchdynamo_compiling() and (spatial_shapes[:, 0] * spatial_shapes[:, 1]).sum() != sequence_length:
-            raise ValueError(
-                "Make sure to align the spatial shapes with the sequence length of the encoder hidden states"
-            )
+        torch_compilable_check(
+            (spatial_shapes[:, 0] * spatial_shapes[:, 1]).sum() == sequence_length,
+            "Make sure to align the spatial shapes with the sequence length of the encoder hidden states",
+        )
 
         value = self.value_proj(encoder_hidden_states)
         if attention_mask is not None:

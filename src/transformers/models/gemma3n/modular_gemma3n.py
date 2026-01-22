@@ -29,7 +29,7 @@ from ...modeling_outputs import BaseModelOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
 from ...utils.generic import check_model_inputs
 from ..auto import AutoModel
 from ..gemma2.configuration_gemma2 import Gemma2Config
@@ -152,6 +152,8 @@ class Gemma3nTextConfig(Gemma2Config, PreTrainedConfig):
             The sparsity factor used to extract the top-k activations for a given layer. The provided Sequence must
             explicitly provide a sparsity value for each layer in the model. By default, the first 10 layers are
             sparse with a sparsity factor of 0.95 and the rest are dense.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
     ```python
     >>> from transformers import Gemma3nTextModel, Gemma3nTextConfig
@@ -202,6 +204,7 @@ class Gemma3nTextConfig(Gemma2Config, PreTrainedConfig):
         num_kv_shared_layers: int = 15,
         laurel_rank: int = 64,
         activation_sparsity_pattern: float | Sequence[float] | None = None,
+        tie_word_embeddings: bool | None = True,
         **kwargs,
     ):
         if isinstance(intermediate_size, Sequence) and (intsize_len := len(intermediate_size)) != num_hidden_layers:
@@ -212,6 +215,9 @@ class Gemma3nTextConfig(Gemma2Config, PreTrainedConfig):
         elif not isinstance(intermediate_size, Sequence):
             intermediate_size = [intermediate_size] * num_hidden_layers
 
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
         self.vocab_size = vocab_size
         self.vocab_size_per_layer_input = vocab_size_per_layer_input
         self.max_position_embeddings = max_position_embeddings
@@ -261,12 +267,11 @@ class Gemma3nTextConfig(Gemma2Config, PreTrainedConfig):
             )
         self.activation_sparsity_pattern = activation_sparsity_pattern
         self.rope_parameters = rope_parameters
-        PreTrainedConfig.__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            **kwargs,
-        )
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
+        PreTrainedConfig.__init__(**kwargs)
 
     def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation=None, **kwargs):
         rope_scaling = kwargs.pop("rope_scaling", None)
@@ -538,7 +543,8 @@ class Gemma3nConfig(PreTrainedConfig):
             The audio token index to encode the audio prompt.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
     Example:
 
@@ -576,15 +582,16 @@ class Gemma3nConfig(PreTrainedConfig):
         text_config: Gemma3nTextConfig | dict[str, Any] | None = None,
         vision_config: Gemma3nVisionConfig | dict[str, Any] | None = None,
         audio_config: Gemma3nAudioConfig | dict[str, Any] | None = None,
-        audio_soft_tokens_per_image: int = 188,
-        vision_soft_tokens_per_image: int = 256,
-        boi_token_id: int = 255_999,
-        eoi_token_id: int = 262_144,
-        image_token_id: int = 262_145,
-        boa_token_id: int = 256_000,
-        eoa_token_id: int = 262_272,
-        audio_token_id: int = 262_273,
-        initializer_range: float = 0.02,
+        audio_soft_tokens_per_image: int | None = 188,
+        vision_soft_tokens_per_image: int | None = 256,
+        boi_token_id: int | None = 255_999,
+        eoi_token_id: int | None = 262_144,
+        image_token_id: int | None = 262_145,
+        boa_token_id: int | None = 256_000,
+        eoa_token_id: int | None = 262_272,
+        audio_token_id: int | None = 262_273,
+        initializer_range: float | None = 0.02,
+        tie_word_embeddings: bool | None = True,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -620,6 +627,7 @@ class Gemma3nConfig(PreTrainedConfig):
         self.eoa_token_id = eoa_token_id
         self.audio_token_id = audio_token_id
         self.initializer_range = initializer_range
+        self.tie_word_embeddings = tie_word_embeddings
 
 
 class Gemma3nModelOutputWithPast(PaligemmaModelOutputWithPast):
@@ -1662,7 +1670,7 @@ class Gemma3nTextAltUp(nn.Module):
         innovation = activated - predictions[self.config.altup_active_idx]  # (batch, num_tokens, hidden_size)
         innovation = innovation.repeat(self.config.altup_num_inputs, 1, 1, 1)  # Repeat on dim0 to match predictions
 
-        if self.config.altup_coef_clip is not None:
+        if self.training and self.config.altup_coef_clip is not None:
             self.correction_coefs.weight.data.clamp_(-self.config.altup_coef_clip, self.config.altup_coef_clip)
 
         # all_coefs adapted from jax.numpy.einsum("...p,pi->...i", ...)
@@ -1688,21 +1696,13 @@ class Gemma3nTextAltUp(nn.Module):
         return self.forward(corrected)
 
 
-def apply_rotary_pos_emb(
-    x: torch.Tensor,
-    cos: torch.Tensor,
-    sin: torch.Tensor,
-    position_ids: torch.Tensor | None = None,
-    unsqueeze_dim: int = 1,
-):
+def apply_rotary_pos_emb(x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor, unsqueeze_dim: int = 1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
     Args:
         x (`torch.Tensor`): The tensor to embed.
         cos (`torch.Tensor`): The cosine part of the rotary embedding.
         sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`, *optional*):
-            Deprecated and unused.
         unsqueeze_dim (`int`, *optional*, defaults to 1):
             The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
             sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
@@ -2250,16 +2250,18 @@ class Gemma3nModel(PaliGemmaModel):
 
         n_image_tokens = special_image_mask.sum()
         special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-        if image_features is not None and inputs_embeds[special_image_mask].numel() != image_features.numel():
-            raise ValueError(
-                f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {image_features.shape[0] * image_features.shape[1]}"
+        if image_features is not None:
+            torch_compilable_check(
+                inputs_embeds[special_image_mask].numel() == image_features.numel(),
+                f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {image_features.shape[0] * image_features.shape[1]}",
             )
 
         n_audio_tokens = special_audio_mask.sum()
         special_audio_mask = special_audio_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-        if audio_features is not None and inputs_embeds[special_audio_mask].numel() != audio_features.numel():
-            raise ValueError(
-                f"Audio features and image tokens do not match: tokens: {n_audio_tokens}, features {audio_features.shape[0] * audio_features.shape[1]}"
+        if audio_features is not None:
+            torch_compilable_check(
+                inputs_embeds[special_audio_mask].numel() == audio_features.numel(),
+                f"Audio features and audio tokens do not match, tokens: {n_audio_tokens}, features: {audio_features.shape[0] * audio_features.shape[1]}",
             )
 
         return special_image_mask, special_audio_mask

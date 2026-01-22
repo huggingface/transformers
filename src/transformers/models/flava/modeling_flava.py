@@ -836,7 +836,8 @@ class FlavaTextModel(FlavaPreTrainedModel):
             attention_mask = torch.ones(input_shape, device=input_ids.device)
 
         extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(
-            attention_mask, input_shape, input_ids.device
+            attention_mask,
+            input_shape,
         )
 
         embedding_output = self.embeddings(
@@ -923,7 +924,8 @@ class FlavaMultimodalModel(FlavaPreTrainedModel):
             attention_mask = torch.ones((batch_size, seq_length), device=hidden_states.device)
 
         extended_attention_mask: torch.Tensor = self.get_extended_attention_mask(
-            attention_mask, (batch_size, seq_length), hidden_states.device
+            attention_mask,
+            (batch_size, seq_length),
         )
 
         encoder_outputs = self.encoder(
@@ -1841,7 +1843,8 @@ class FlavaForPreTraining(FlavaPreTrainedModel):
             image_embedding = self.flava.image_projection(image_embeddings[:, 0, :])
             image_embedding = nn.functional.normalize(image_embedding, dim=-1)
 
-            self.flava.logit_scale.data.clamp_(LOGIT_SCALE_CLAMP_MIN, LOGIT_SCALE_CLAMP_MAX)
+            if self.training:
+                self.flava.logit_scale.data.clamp_(LOGIT_SCALE_CLAMP_MIN, LOGIT_SCALE_CLAMP_MAX)
 
             logits_per_image, logits_per_text, gc_labels = self.global_contrastive_head(
                 image_embedding, text_embedding, self.flava.logit_scale

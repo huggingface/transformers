@@ -34,7 +34,6 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
     CausalLMOutput,
-    MaskedLMOutput,
     SequenceClassifierOutput,
     TokenClassifierOutput,
     Wav2Vec2BaseModelOutput,
@@ -1599,53 +1598,6 @@ class Wav2Vec2ForPreTraining(Wav2Vec2PreTrainedModel):
         )
 
 
-@auto_docstring
-class Wav2Vec2ForMaskedLM(Wav2Vec2PreTrainedModel):
-    def __init__(self, config):
-        super().__init__(config)
-
-        warnings.warn(
-            "The class `Wav2Vec2ForMaskedLM` is deprecated. Please use `Wav2Vec2ForCTC` instead.", FutureWarning
-        )
-
-        self.wav2vec2 = Wav2Vec2Model(config)
-        self.dropout = nn.Dropout(config.final_dropout)
-        self.lm_head = nn.Linear(config.hidden_size, config.vocab_size)
-
-        # Initialize weights and apply final processing
-        self.post_init()
-
-    @auto_docstring
-    def forward(
-        self,
-        input_values: torch.FloatTensor,
-        attention_mask: torch.LongTensor | None = None,
-        output_attentions: bool | None = None,
-        output_hidden_states: bool | None = None,
-        return_dict: bool | None = None,
-        labels: torch.Tensor | None = None,
-        **kwargs,
-    ) -> tuple | MaskedLMOutput:
-        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-
-        outputs = self.wav2vec2(
-            input_values,
-            output_attentions=output_attentions,
-            output_hidden_states=output_hidden_states,
-            return_dict=return_dict,
-        )
-
-        hidden_states = outputs[0]
-        hidden_states = self.dropout(hidden_states)
-        logits = self.lm_head(hidden_states)
-
-        if not return_dict:
-            output = (logits,) + outputs[2:]
-            return output
-
-        return MaskedLMOutput(logits=logits, hidden_states=outputs.hidden_states, attentions=outputs.attentions)
-
-
 @auto_docstring(
     custom_intro="""
     Wav2Vec2 Model with a `language modeling` head on top for Connectionist Temporal Classification (CTC).
@@ -2192,7 +2144,6 @@ class Wav2Vec2ForXVector(Wav2Vec2PreTrainedModel):
 __all__ = [
     "Wav2Vec2ForAudioFrameClassification",
     "Wav2Vec2ForCTC",
-    "Wav2Vec2ForMaskedLM",
     "Wav2Vec2ForPreTraining",
     "Wav2Vec2ForSequenceClassification",
     "Wav2Vec2ForXVector",

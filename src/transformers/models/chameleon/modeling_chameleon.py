@@ -36,6 +36,7 @@ from ...utils import (
     auto_docstring,
     can_return_tuple,
     logging,
+    torch_compilable_check,
 )
 from ...utils.generic import maybe_autocast
 from .configuration_chameleon import ChameleonConfig, ChameleonVQVAEConfig
@@ -140,7 +141,7 @@ def rotate_half(x):
 
 
 # Copied from transformers.models.llama.modeling_llama.apply_rotary_pos_emb
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
     Args:
@@ -148,8 +149,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
         k (`torch.Tensor`): The key tensor.
         cos (`torch.Tensor`): The cosine part of the rotary embedding.
         sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`, *optional*):
-            Deprecated and unused.
         unsqueeze_dim (`int`, *optional*, defaults to 1):
             The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
             sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
@@ -883,12 +882,12 @@ class ChameleonModel(ChameleonPreTrainedModel):
             special_image_mask = input_ids == self.vocabulary_mapping.image_token_id
 
         n_image_tokens = special_image_mask.sum()
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
         n_image_features = image_features.shape[0] * image_features.shape[1]
-        if inputs_embeds[special_image_mask].numel() != image_features.numel():
-            raise ValueError(
-                f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
-            )
+        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        torch_compilable_check(
+            inputs_embeds[special_image_mask].numel() == image_features.numel(),
+            f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {n_image_features}",
+        )
         return special_image_mask
 
     @auto_docstring

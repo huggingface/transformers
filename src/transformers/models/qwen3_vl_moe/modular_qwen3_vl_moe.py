@@ -87,8 +87,6 @@ class Qwen3VLMoeTextConfig(PreTrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether the model's input and output word embeddings should be tied.
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -158,7 +156,6 @@ class Qwen3VLMoeTextConfig(PreTrainedConfig):
         initializer_range: float | None = 0.02,
         rms_norm_eps: float | None = 1e-6,
         use_cache: bool | None = True,
-        tie_word_embeddings: bool | None = False,
         attention_bias: bool | None = False,
         attention_dropout: float | None = 0.0,
         decoder_sparse_step: int | None = 1,
@@ -199,7 +196,6 @@ class Qwen3VLMoeTextConfig(PreTrainedConfig):
         self.mlp_only_layers = [] if mlp_only_layers is None else mlp_only_layers
 
         super().__init__(
-            tie_word_embeddings=tie_word_embeddings,
             ignore_keys_at_rope_validation={"mrope_section", "mrope_interleaved"},
             **kwargs,
         )
@@ -234,7 +230,7 @@ class Qwen3VLMoeConfig(Qwen3VLConfig):
         vision_end_token_id (`int`, *optional*, defaults to 151653):
             The end token index to encode the image prompt.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether to tie the word embeddings.
+            Whether the model's input and output word embeddings should be tied.
 
     ```python
     >>> from transformers import Qwen3VLMoeForConditionalGeneration, Qwen3VLMoeConfig

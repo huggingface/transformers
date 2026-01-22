@@ -167,7 +167,6 @@ class Swin2SRModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     )
 
     test_resize_embeddings = False
-    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = Swin2SRModelTester(self)
@@ -199,24 +198,20 @@ class Swin2SRModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase)
     def test_inputs_embeds(self):
         pass
 
-    @unittest.skip(reason="Swin2SR does not support training yet")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training(self):
         pass
 
-    @unittest.skip(reason="Swin2SR does not support training yet")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     def test_model_get_set_embeddings(self):
