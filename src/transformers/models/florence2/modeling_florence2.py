@@ -499,7 +499,10 @@ class Florence2VisionPreTrainedModel(PreTrainedModel):
     _supports_flex_attn = True
 
     _can_compile_fullgraph = True
-    _can_record_outputs = {"hidden_states": Florence2VisionBlock}
+    _can_record_outputs = {
+        "hidden_states": Florence2VisionBlock,
+        "attentions": [Florence2VisionChannelAttention, Florence2VisionWindowAttention],
+    }
 
 
 @auto_docstring
