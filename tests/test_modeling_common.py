@@ -45,7 +45,7 @@ from transformers import (
     set_seed,
 )
 from transformers.conversion_mapping import get_model_conversion_mapping
-from transformers.core_model_loading import WeightRenaming, reverse_target_pattern
+from transformers.core_model_loading import WeightRenaming, process_target_pattern
 from transformers.integrations import HfDeepSpeedConfig
 from transformers.integrations.deepspeed import (
     is_deepspeed_available,
@@ -95,7 +95,6 @@ from transformers.testing_utils import (
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
-    require_torch_greater_or_equal,
     require_torch_mps,
     require_torch_multi_accelerator,
     require_torch_multi_gpu,
@@ -559,13 +558,13 @@ def _test_eager_matches_batched_and_grouped_inference(self, name, dtype):
     for model_class in self.all_model_classes:
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         set_config_for_less_flaky_test(config)
-        model = model_class(config)
+        model = model_class(config).eval().to(torch_device).to(dtype)
         set_model_for_less_flaky_test(model)
 
-        # Load with dtype
+        # Reload to find any buffer misalignments after saving/loading
         with tempfile.TemporaryDirectory() as tmpdirname:
             model.save_pretrained(tmpdirname)
-            model = model_class.from_pretrained(tmpdirname, dtype=dtype).eval().to(torch_device)
+            model = model_class.from_pretrained(tmpdirname).eval().to(torch_device).to(dtype)
 
         with torch.no_grad():
             inputs_dict = {k: v.to(dtype) if torch.is_floating_point(v) else v for k, v in inputs_dict.items()}
@@ -687,7 +686,7 @@ class ModelTesterMixin:
     test_resize_position_embeddings = False
     test_mismatched_shapes = True
     test_missing_keys = True
-    test_torch_exportable = False
+    test_torch_exportable = True
     # Used in `check_training_gradient_checkpointing` to NOT check all params having gradient (e.g. for some MOE models)
     test_all_params_have_gradient = True
     is_encoder_decoder = False
@@ -838,6 +837,7 @@ class ModelTesterMixin:
 
                 model = model_class.from_pretrained(tmpdirname)
                 model.to(torch_device)
+                model.eval()
                 with torch.no_grad():
                     second = model(**self._prepare_for_class(inputs_dict, model_class))[0]
 
@@ -2687,6 +2687,11 @@ class ModelTesterMixin:
             model.to(0)
             model.eval()
 
+            if model.config._experts_implementation == "grouped_mm":
+                # DataParallel does not respect buffer alignment when replicating the model on
+                # multiple GPUs, which can cause errors in grouped_mm experts implementation.
+                model.set_experts_implementation("eager")
+
             # Wrap model in nn.DataParallel
             model = nn.DataParallel(model)
             torch.cuda.synchronize()  # otherwise the transfer might not be complete
@@ -3955,68 +3960,127 @@ class ModelTesterMixin:
             torch.testing.assert_close(param.grad.detach().cpu(), params[name], rtol=1e-4, atol=1e-4)
 
     @slow
-    @require_torch_greater_or_equal("2.5")
     @pytest.mark.torch_export_test
-    def test_torch_export(self, config=None, inputs_dict=None, tolerance=1e-4):
+    def test_torch_export(self, atol=1e-4, rtol=1e-4):
         """
         Test if model can be exported with torch.export.export()
 
         Args:
-            config (PreTrainedConfig):
-                Config to use for the model, if None, use default config from model_tester
-            inputs_dict (dict):
-                Inputs to use for the model, if None, use default inputs from model_tester
-            tolerance (float):
-                `atol` for torch.allclose(), defined in signature for test overriding
+            atol (`float`, *optional*, defaults to 1e-4): absolute tolerance for output comparison
+            rtol (`float`, *optional*, defaults to 1e-4): relative tolerance for output comparison
         """
+
         if not self.test_torch_exportable:
-            self.skipTest(reason="test_torch_exportable=False for this model.")
+            self.skipTest(reason="Model architecture is not torch exportable")
 
-        def recursively_check(eager_outputs, exported_outputs):
-            is_tested = False
-            if isinstance(eager_outputs, torch.Tensor):
-                torch.testing.assert_close(eager_outputs, exported_outputs, atol=tolerance, rtol=tolerance)
+        with open(inspect.getfile(self.all_model_classes[0]), "r") as f:
+            source_code = f.read()
+            # Skip model if it uses a chunked attention implementation which is not torch exportable
+            if "for q, k, v in zip(*splits)" in source_code:
+                self.skipTest(reason="Model architecture uses chunked attention which is not torch exportable")
+            # Skip MoEs that don't support batched_mm experts implementation
+            if "for expert" in source_code and "use_experts_implementation" not in source_code:
+                self.skipTest(reason="Model architecture uses eager MoE implementation which is not torch exportable")
+            # Skip models that use get_rope_index which is not torch exportable
+            if "get_rope_index" in source_code:
+                self.skipTest(reason="Model architecture uses get_rope_index which is not torch exportable")
+
+        def _is_pure_python_object(obj) -> bool:
+            if isinstance(obj, (int, float, bool, str)) or obj is None:
                 return True
-            elif isinstance(eager_outputs, (tuple, list)):
-                for eager_output, exported_output in zip(eager_outputs, exported_outputs):
-                    is_tested = is_tested or recursively_check(eager_output, exported_output)
-                return is_tested
-            elif isinstance(eager_outputs, dict):
-                for key in eager_outputs:
-                    is_tested = is_tested or recursively_check(eager_outputs[key], exported_outputs[key])
-                return is_tested
-            return is_tested
+            elif isinstance(obj, (list, tuple, set)):
+                return all(_is_pure_python_object(o) for o in obj)
+            elif isinstance(obj, dict):
+                return all(_is_pure_python_object(o) for o in obj.values())
+            else:
+                return False
 
-        default_config, default_inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config = config or default_config
-        inputs_dict = inputs_dict or default_inputs_dict
+        def _get_leaf_tensors(obj) -> dict[str, torch.Tensor]:
+            if _is_pure_python_object(obj):
+                return {}
+            elif isinstance(obj, torch.Tensor):
+                return {"": obj}
+            elif isinstance(obj, (list, tuple, set)):
+                return _get_leaf_tensors(dict(enumerate(obj)))
+            elif isinstance(obj, dict):
+                leaf_tensors = {}
+                for key, value in obj.items():
+                    for sub_key, tensor in _get_leaf_tensors(value).items():
+                        full_key = f"{key}.{sub_key}" if sub_key else str(key)
+                        leaf_tensors[full_key] = tensor
+                return leaf_tensors
+            else:
+                raise ValueError(f"Unexpected object type: {type(obj)}")
+
+        def _prepare_for_export(model, inputs_dict):
+            # we don't test outputing a cache class for now
+            inputs_dict.pop("use_cache", None)
+            # we don't test loss computation for now
+            inputs_dict.pop("return_loss", None)
+
+            # set experts implementation to batched_mm for export
+            if model._can_set_experts_implementation():
+                model.set_experts_implementation("batched_mm")
+
+            for module in model.modules():
+                if hasattr(module, "config"):
+                    # disable cache usage for every submodel
+                    if hasattr(module.config, "use_cache"):
+                        module.config.use_cache = False
+                    # disable returning loss for every submodel
+                    if hasattr(module.config, "return_loss"):
+                        module.config.return_loss = False
+                    # disable reference compile for every submodel (modernbert)
+                    if hasattr(module.config, "reference_compile"):
+                        module.config.reference_compile = False
+                    # disable mamba kernels for every submodel (mamba, jamba)
+                    if hasattr(module.config, "use_mamba_kernels"):
+                        module.config.use_mamba_kernels = False
+                # disable classifier cast for nllb-moe
+                if hasattr(module, "_cast_classifier"):
+                    module._cast_classifier = lambda *args, **kwargs: None
+                # disable mamba mask update for ssms
+                if hasattr(module, "_update_mamba_mask"):
+                    module._update_mamba_mask = lambda attention_mask, *args, **kwargs: attention_mask
+                if hasattr(module, "_update_linear_attn_mask"):
+                    module._update_linear_attn_mask = lambda attention_mask, *args, **kwargs: attention_mask
+
+            return model, inputs_dict
 
         for model_class in self.all_model_classes:
-            if model_class.__name__.endswith("ForPreTraining"):
-                continue
-
             with self.subTest(model_class.__name__):
+                if hasattr(self.model_tester, "prepare_config_and_inputs_for_model_class"):
+                    config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_model_class(model_class)
+                else:
+                    config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+                inputs_dict = self._prepare_for_class(inputs_dict, model_class)
                 model = model_class(config).eval().to(torch_device)
 
-                # Export model
-                exported_model = torch.export.export(
-                    model, args=(), kwargs=inputs_dict, strict=getattr(self, "test_torch_exportable_strictly", True)
-                )
+                # Prepare model and inputs for export
+                model, inputs_dict = _prepare_for_export(model, inputs_dict)
 
-                # Run exported model and eager model
                 with torch.no_grad():
-                    # set seed in case anything is not deterministic in model (e.g. vit_mae noise)
-                    torch.manual_seed(1234)
-                    eager_outputs = model(**inputs_dict)
-                    torch.manual_seed(1234)
-                    exported_outputs = exported_model.module().forward(**inputs_dict)
+                    # Running the eager inference before the export to catch model/inputs comatibility issues, also sometimes after
+                    # the export, the model used for export will return FakeTensors instead of real ones (torch compiler issue).
+                    # This happens on cuda for example with (codegen, clvp, esm, gptj, levit, wav2vec2_bert and wav2vec2_conformer)
+                    set_seed(1234)
+                    eager_outputs = model(**copy.deepcopy(inputs_dict))
+                    eager_outputs = _get_leaf_tensors(eager_outputs)
+                    self.assertTrue(eager_outputs, "Eager outputs is empty.")
 
-                # Check if outputs are close:
-                # is_tested is a boolean flag indicating if we compare any outputs,
-                # e.g. there might be a situation when outputs are empty list, then is_tested will be False.
-                # In case of outputs are different the error will be raised in `recursively_check` function.
-                is_tested = recursively_check(eager_outputs, exported_outputs)
-                self.assertTrue(is_tested, msg=f"No outputs were compared for {model_class.__name__}")
+                try:
+                    exported_program = torch.export.export(model, args=(), kwargs=copy.deepcopy(inputs_dict))
+                except Exception as e:
+                    raise e
+
+                with torch.no_grad():
+                    set_seed(1234)
+                    exported_outputs = exported_program.module()(**copy.deepcopy(inputs_dict))
+                    exported_outputs = _get_leaf_tensors(exported_outputs)
+                    self.assertTrue(exported_outputs, "Exported outputs is empty.")
+
+                # Check outputs closeness:
+                torch.testing.assert_close(exported_outputs, eager_outputs, atol=atol, rtol=rtol)
 
     @staticmethod
     def _prepare_config_headdim(config, requested_dim):
@@ -4460,7 +4524,7 @@ class ModelTesterMixin:
                 len(unused_entries) == 0, f"The following entries of the TP-plan are not valid: {unused_entries}"
             )
 
-    def test_reverse_loading_mapping(self):
+    def test_reverse_loading_mapping(self, check_keys_were_modified=True):
         """Make sure we can load and save correctly the models having any weight renaming mapping or weight conversion
         mapping.
         Note that this test would be better if we could start from the serialized keys, and check that the model
@@ -4469,6 +4533,11 @@ class ModelTesterMixin:
         reverse the conversion and then check that those converted keys match correctly the conversions.
 
         However, all the checks performed here should ensure everything is going as it should.
+
+        Args:
+            check_keys_were_modified (`bool`, *optional*, defaults to `True`):
+                Whether to expect keys being modified or not. In some cases, models do not change keys but
+                their weights, e.g. via transpose, memory alignment, etc.
         """
         config, _ = self.model_tester.prepare_config_and_inputs_for_common()
 
@@ -4499,8 +4568,9 @@ class ModelTesterMixin:
                     # Get all the serialized keys that we just saved according to the reverse mapping
                     serialized_keys = list(state_dict.keys())
 
-                # They should be different, otherwise we did not perform any mapping
-                self.assertNotEqual(sorted(serialized_keys), sorted(model_keys), "No key mapping was performed!")
+                if check_keys_were_modified:
+                    # They should be different, otherwise we did not perform any mapping
+                    self.assertNotEqual(sorted(serialized_keys), sorted(model_keys), "No key mapping was performed!")
 
                 # Check that for each conversion entry, we at least map to one key
                 for conversion in conversions:
@@ -4509,7 +4579,7 @@ class ModelTesterMixin:
                         if isinstance(conversion, WeightRenaming):
                             # We need to revert the target pattern to make it compatible with regex search
                             target_pattern_reversed = conversion.target_patterns[0]
-                            captured_group = reverse_target_pattern(source_pattern)[1]
+                            captured_group = process_target_pattern(source_pattern)[1]
                             if captured_group:
                                 target_pattern_reversed = target_pattern_reversed.replace(r"\1", captured_group)
                             if any(re.search(target_pattern_reversed, k) for k in model.all_tied_weights_keys.keys()):

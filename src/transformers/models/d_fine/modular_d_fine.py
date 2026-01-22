@@ -24,8 +24,8 @@ from ...image_transforms import corners_to_center_format
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
-    is_torchdynamo_compiling,
     logging,
+    torch_compilable_check,
 )
 from ...utils.backbone_utils import (
     verify_backbone_config_arguments,
@@ -558,10 +558,10 @@ class DFineMultiscaleDeformableAttention(nn.Module):
         batch_size, num_queries, _ = hidden_states.shape
         batch_size, sequence_length, _ = encoder_hidden_states.shape
 
-        if not is_torchdynamo_compiling() and (spatial_shapes[:, 0] * spatial_shapes[:, 1]).sum() != sequence_length:
-            raise ValueError(
-                "Make sure to align the spatial shapes with the sequence length of the encoder hidden states"
-            )
+        torch_compilable_check(
+            (spatial_shapes[:, 0] * spatial_shapes[:, 1]).sum() == sequence_length,
+            "Make sure to align the spatial shapes with the sequence length of the encoder hidden states",
+        )
 
         # Reshape for multi-head attention
         value = encoder_hidden_states.reshape(batch_size, sequence_length, self.n_heads, self.d_model // self.n_heads)
