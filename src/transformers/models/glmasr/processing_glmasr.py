@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_glmasr.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 the HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,8 +18,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 import re
-from typing import Optional, Union
 
 import numpy as np
 
@@ -106,9 +105,9 @@ class GlmAsrProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        text: Union[TextInput, list[TextInput]],
-        audio: Optional[AudioInput] = None,
-        output_labels: Optional[bool] = False,
+        text: TextInput | list[TextInput],
+        audio: AudioInput | None = None,
+        output_labels: bool | None = False,
         **kwargs: Unpack[GlmAsrProcessorKwargs],
     ) -> BatchFeature:
         r"""
@@ -213,8 +212,8 @@ class GlmAsrProcessor(ProcessorMixin):
 
     def apply_transcription_request(
         self,
-        audio: Union[str, list[str], AudioInput],
-        prompt: Optional[Union[str, list[str]]] = None,
+        audio: str | list[str] | AudioInput,
+        prompt: str | list[str] | None = None,
         **kwargs: Unpack[GlmAsrProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -237,7 +236,7 @@ class GlmAsrProcessor(ProcessorMixin):
         """
 
         if isinstance(audio, str):
-            audio_items: list[Union[str, np.ndarray]] = [audio]
+            audio_items: list[str | np.ndarray] = [audio]
         elif isinstance(audio, (list, tuple)) and audio and all(isinstance(el, str) for el in audio):
             audio_items = list(audio)
         else:

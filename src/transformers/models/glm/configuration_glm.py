@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The GLM & ZhipuAI team and HuggingFace Inc. team. All rights reserved.
 #
 #
@@ -14,7 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
@@ -105,25 +103,25 @@ class GlmConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 151552,
-        hidden_size: Optional[int] = 4096,
-        intermediate_size: Optional[int] = 13696,
-        num_hidden_layers: Optional[int] = 40,
-        num_attention_heads: Optional[int] = 32,
-        num_key_value_heads: Optional[int] = 2,
-        head_dim: Optional[int] = 128,
-        hidden_act: Optional[str] = "silu",
-        attention_dropout: Optional[float] = 0.0,
-        max_position_embeddings: Optional[int] = 131072,
-        initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[float] = 0.00000015625,
-        use_cache: Optional[bool] = True,
-        tie_word_embeddings: Optional[bool] = False,
-        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        pad_token_id: Optional[int] = 151329,
-        eos_token_id: Optional[list[int]] = [151329, 151336, 151338],
-        bos_token_id: Optional[int] = None,
-        attention_bias: Optional[bool] = True,
+        vocab_size: int | None = 151552,
+        hidden_size: int | None = 4096,
+        intermediate_size: int | None = 13696,
+        num_hidden_layers: int | None = 40,
+        num_attention_heads: int | None = 32,
+        num_key_value_heads: int | None = 2,
+        head_dim: int | None = 128,
+        hidden_act: str | None = "silu",
+        attention_dropout: float | None = 0.0,
+        max_position_embeddings: int | None = 131072,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: float | None = 0.00000015625,
+        use_cache: bool | None = True,
+        tie_word_embeddings: bool | None = False,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        pad_token_id: int | None = 151329,
+        eos_token_id: list[int] | None = [151329, 151336, 151338],
+        bos_token_id: int | None = None,
+        attention_bias: bool | None = True,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -143,13 +141,11 @@ class GlmConfig(PreTrainedConfig):
         self.rope_parameters = rope_parameters
         kwargs.setdefault("partial_rotary_factor", 0.5)  # assign default for BC
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        super().__init__(**kwargs)
 
 
 __all__ = ["GlmConfig"]

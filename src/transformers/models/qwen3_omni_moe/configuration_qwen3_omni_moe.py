@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_qwen3_omni_moe.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 The Qwen team, Alibaba Group and the HuggingFace Inc. team. All rights reserved.
 #
 #
@@ -19,8 +18,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Optional
-
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
@@ -92,23 +89,23 @@ class Qwen3OmniMoeAudioEncoderConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        num_mel_bins: Optional[int] = 128,
-        encoder_layers: Optional[int] = 32,
-        encoder_attention_heads: Optional[int] = 20,
-        encoder_ffn_dim: Optional[int] = 5120,
-        d_model: Optional[int] = 1280,
-        dropout: Optional[int] = 0,
-        attention_dropout: Optional[int] = 0,
-        activation_function: Optional[int] = "gelu",
-        activation_dropout: Optional[int] = 0,
-        scale_embedding: Optional[int] = False,
-        initializer_range: Optional[int] = 0.02,
-        max_source_positions: Optional[int] = 1500,
-        n_window: Optional[int] = 100,
-        output_dim: Optional[int] = 3584,
-        n_window_infer: Optional[int] = 400,
-        conv_chunksize: Optional[int] = 500,
-        downsample_hidden_size: Optional[int] = 480,
+        num_mel_bins: int | None = 128,
+        encoder_layers: int | None = 32,
+        encoder_attention_heads: int | None = 20,
+        encoder_ffn_dim: int | None = 5120,
+        d_model: int | None = 1280,
+        dropout: int | None = 0,
+        attention_dropout: int | None = 0,
+        activation_function: int | None = "gelu",
+        activation_dropout: int | None = 0,
+        scale_embedding: int | None = False,
+        initializer_range: int | None = 0.02,
+        max_source_positions: int | None = 1500,
+        n_window: int | None = 100,
+        output_dim: int | None = 3584,
+        n_window_infer: int | None = 400,
+        conv_chunksize: int | None = 500,
+        downsample_hidden_size: int | None = 480,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -212,8 +209,6 @@ class Qwen3OmniMoeTextConfig(PreTrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether the model's input and output word embeddings should be tied.
         rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
@@ -245,6 +240,12 @@ class Qwen3OmniMoeTextConfig(PreTrainedConfig):
             Indicate which layers use Qwen3OmniMoeTextMLP rather than Qwen3OmniMoeTextSparseMoeBlock
             The list contains layer index, from 0 to num_layers-1 if we have num_layers layers
             If `mlp_only_layers` is empty, `decoder_sparse_step` is used to determine the sparsity.
+        pad_token_id (`int`, *optional*):
+            Padding token id.
+        bos_token_id (`int`, *optional*):
+            Beginning of stream token id.
+        eos_token_id (`int`, *optional*):
+            End of stream token id.
 
     ```python
     >>> from transformers import Qwen3OmniMoeTextModel, Qwen3OmniMoeTextConfig
@@ -284,30 +285,32 @@ class Qwen3OmniMoeTextConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 3584,
-        hidden_size: Optional[int] = 2048,
-        intermediate_size: Optional[int] = 18944,
-        num_hidden_layers: Optional[int] = 28,
-        num_attention_heads: Optional[int] = 28,
-        num_key_value_heads: Optional[int] = 4,
-        hidden_act: Optional[str] = "silu",
-        max_position_embeddings: Optional[int] = 32768,
-        initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[float] = 1e-6,
-        use_cache: Optional[bool] = True,
-        tie_word_embeddings: Optional[bool] = False,
-        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        attention_bias: Optional[bool] = False,
-        sliding_window: Optional[int] = None,
-        attention_dropout: Optional[int] = 0,
-        decoder_sparse_step: Optional[int] = 1,
-        moe_intermediate_size: Optional[int] = 768,
-        num_experts_per_tok: Optional[int] = 8,
-        num_experts: Optional[int] = 128,
-        norm_topk_prob: Optional[bool] = True,
-        output_router_logits: Optional[bool] = False,
-        router_aux_loss_coef: Optional[float] = 0.001,
-        mlp_only_layers: Optional[list[int]] = None,
+        vocab_size: int | None = 3584,
+        hidden_size: int | None = 2048,
+        intermediate_size: int | None = 18944,
+        num_hidden_layers: int | None = 28,
+        num_attention_heads: int | None = 28,
+        num_key_value_heads: int | None = 4,
+        hidden_act: str | None = "silu",
+        max_position_embeddings: int | None = 32768,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: float | None = 1e-6,
+        use_cache: bool | None = True,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        attention_bias: bool | None = False,
+        sliding_window: int | None = None,
+        attention_dropout: int | None = 0,
+        decoder_sparse_step: int | None = 1,
+        moe_intermediate_size: int | None = 768,
+        num_experts_per_tok: int | None = 8,
+        num_experts: int | None = 128,
+        norm_topk_prob: bool | None = True,
+        output_router_logits: bool | None = False,
+        router_aux_loss_coef: float | None = 0.001,
+        mlp_only_layers: list[int] | None = None,
+        pad_token_id: int | None = None,
+        bos_token_id: int | None = None,
+        eos_token_id: int | None = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -336,9 +339,11 @@ class Qwen3OmniMoeTextConfig(PreTrainedConfig):
         self.output_router_logits = output_router_logits
         self.router_aux_loss_coef = router_aux_loss_coef
         self.mlp_only_layers = [] if mlp_only_layers is None else mlp_only_layers
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
 
         super().__init__(
-            tie_word_embeddings=tie_word_embeddings,
             ignore_keys_at_rope_validation={"mrope_section", "interleaved", "mrope_interleaved"},
             **kwargs,
         )
@@ -377,6 +382,8 @@ class Qwen3OmniMoeThinkerConfig(PreTrainedConfig):
             The user token id to encode the user token.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether the model's input and output word embeddings should be tied.
 
     Example:
 
@@ -414,12 +421,14 @@ class Qwen3OmniMoeThinkerConfig(PreTrainedConfig):
         audio_start_token_id=151647,
         user_token_id=872,
         initializer_range=0.02,
+        tie_word_embeddings=False,
         **kwargs,
     ):
         self.user_token_id = user_token_id
         self.position_id_per_seconds = position_id_per_seconds
         self.audio_start_token_id = audio_start_token_id
         self.initializer_range = initializer_range
+        self.tie_word_embeddings = tie_word_embeddings
 
         if isinstance(vision_config, dict):
             vision_config = Qwen3OmniMoeVisionEncoderConfig(**vision_config)
@@ -507,6 +516,12 @@ class Qwen3OmniMoeTalkerCodePredictorConfig(PreTrainedConfig):
             Attention pattern for each layer.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
+        pad_token_id (`int`, *optional*):
+            Padding token id.
+        bos_token_id (`int`, *optional*):
+            Beginning of stream token id.
+        eos_token_id (`int`, *optional*):
+            End of stream token id.
 
     ```python
     >>> from transformers import Qwen3OmniMoeTalkerCodePredictorModel, Qwen3OmniMoeTalkerCodePredictorConfig
@@ -542,34 +557,39 @@ class Qwen3OmniMoeTalkerCodePredictorConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 2048,
-        hidden_size: Optional[int] = 1024,
-        intermediate_size: Optional[int] = 3072,
-        num_hidden_layers: Optional[int] = 5,
-        num_attention_heads: Optional[int] = 16,
-        num_key_value_heads: Optional[int] = 8,
-        head_dim: Optional[int] = 128,
-        hidden_act: Optional[str] = "silu",
-        max_position_embeddings: Optional[int] = 32768,
-        initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[float] = 0.000001,
-        use_cache: Optional[bool] = True,
-        tie_word_embeddings: Optional[bool] = False,
-        rope_parameters: Optional[int] = None,
-        attention_bias: Optional[bool] = False,
-        sliding_window: Optional[int] = None,
-        layer_types: Optional[list[str]] = None,
-        attention_dropout: Optional[int] = 0,
-        num_code_groups: Optional[int] = 32,
+        vocab_size: int | None = 2048,
+        hidden_size: int | None = 1024,
+        intermediate_size: int | None = 3072,
+        num_hidden_layers: int | None = 5,
+        num_attention_heads: int | None = 16,
+        num_key_value_heads: int | None = 8,
+        head_dim: int | None = 128,
+        hidden_act: str | None = "silu",
+        max_position_embeddings: int | None = 32768,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: float | None = 0.000001,
+        use_cache: bool | None = True,
+        tie_word_embeddings: bool | None = False,
+        rope_parameters: int | None = None,
+        attention_bias: bool | None = False,
+        sliding_window: int | None = None,
+        layer_types: list[str] | None = None,
+        attention_dropout: int | None = 0,
+        num_code_groups: int | None = 32,
+        pad_token_id: int | None = None,
+        bos_token_id: int | None = None,
+        eos_token_id: int | None = None,
         **kwargs,
     ):
+        self.sliding_window = sliding_window
+        self.num_code_groups = num_code_groups
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.sliding_window = sliding_window
+        self.sliding_window = sliding_window if self.use_sliding_window else None
 
         # for backward compatibility
         if num_key_value_heads is None:
@@ -594,13 +614,13 @@ class Qwen3OmniMoeTalkerCodePredictorConfig(PreTrainedConfig):
             ]
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
         self.rope_parameters = rope_parameters
 
-        super().__init__(
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
-        self.num_code_groups = num_code_groups
+        super().__init__(**kwargs)
 
 
 class Qwen3OmniMoeTalkerTextConfig(PreTrainedConfig):
@@ -677,6 +697,12 @@ class Qwen3OmniMoeTalkerTextConfig(PreTrainedConfig):
             Indicate which layers use Qwen3OmniMoeTalkerTextMLP rather than Qwen3OmniMoeTalkerTextSparseMoeBlock
             The list contains layer index, from 0 to num_layers-1 if we have num_layers layers
             If `mlp_only_layers` is empty, `decoder_sparse_step` is used to determine the sparsity.
+        pad_token_id (`int`, *optional*):
+            Padding token id.
+        bos_token_id (`int`, *optional*):
+            Beginning of stream token id.
+        eos_token_id (`int`, *optional*):
+            End of stream token id.
 
     ```python
     >>> from transformers import Qwen3OmniMoeTalkerTextModel, Qwen3OmniMoeTalkerTextConfig
@@ -715,30 +741,33 @@ class Qwen3OmniMoeTalkerTextConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 3072,
-        hidden_size: Optional[int] = 1024,
-        intermediate_size: Optional[int] = 2048,
-        num_hidden_layers: Optional[int] = 20,
-        num_attention_heads: Optional[int] = 16,
-        num_key_value_heads: Optional[int] = 2,
-        hidden_act: Optional[str] = "silu",
-        max_position_embeddings: Optional[int] = 32768,
-        initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[float] = 0.000001,
-        use_cache: Optional[int] = True,
-        tie_word_embeddings: Optional[bool] = False,
-        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        attention_bias: Optional[bool] = False,
-        sliding_window: Optional[int] = None,
-        attention_dropout: Optional[int] = 0,
-        decoder_sparse_step: Optional[int] = 1,
-        moe_intermediate_size: Optional[int] = 384,
-        num_experts_per_tok: Optional[int] = 8,
-        num_experts: Optional[int] = 128,
-        norm_topk_prob: Optional[bool] = False,
-        output_router_logits: Optional[bool] = False,
-        router_aux_loss_coef: Optional[float] = 0.001,
-        mlp_only_layers: Optional[list[int]] = None,
+        vocab_size: int | None = 3072,
+        hidden_size: int | None = 1024,
+        intermediate_size: int | None = 2048,
+        num_hidden_layers: int | None = 20,
+        num_attention_heads: int | None = 16,
+        num_key_value_heads: int | None = 2,
+        hidden_act: str | None = "silu",
+        max_position_embeddings: int | None = 32768,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: float | None = 0.000001,
+        use_cache: int | None = True,
+        tie_word_embeddings: bool | None = False,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        attention_bias: bool | None = False,
+        sliding_window: int | None = None,
+        attention_dropout: int | None = 0,
+        decoder_sparse_step: int | None = 1,
+        moe_intermediate_size: int | None = 384,
+        num_experts_per_tok: int | None = 8,
+        num_experts: int | None = 128,
+        norm_topk_prob: bool | None = False,
+        output_router_logits: bool | None = False,
+        router_aux_loss_coef: float | None = 0.001,
+        mlp_only_layers: list[int] | None = None,
+        pad_token_id: int | None = None,
+        bos_token_id: int | None = None,
+        eos_token_id: int | None = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -768,10 +797,11 @@ class Qwen3OmniMoeTalkerTextConfig(PreTrainedConfig):
         self.router_aux_loss_coef = router_aux_loss_coef
         self.mlp_only_layers = [] if mlp_only_layers is None else mlp_only_layers
 
-        super().__init__(
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(**kwargs)
 
 
 class Qwen3OmniMoeTalkerConfig(PreTrainedConfig):
@@ -907,6 +937,7 @@ class Qwen3OmniMoeTalkerConfig(PreTrainedConfig):
         self.audio_start_token_id = audio_start_token_id
         self.vision_start_token_id = vision_start_token_id
         self.speaker_id = speaker_id
+        self.initializer_range = self.text_config.initializer_range
         super().__init__(**kwargs)
 
 
@@ -982,7 +1013,7 @@ class Qwen3OmniMoeCode2WavConfig(PreTrainedConfig):
         codebook_size=2048,
         hidden_size=1024,
         max_position_embeddings=8000,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: RopeParameters | dict[RopeParameters] | None = None,
         num_attention_heads=16,
         num_key_value_heads=16,
         attention_bias=False,
@@ -997,6 +1028,7 @@ class Qwen3OmniMoeCode2WavConfig(PreTrainedConfig):
         upsampling_ratios=(2, 2),
         decoder_dim=1536,
         attention_dropout=0.0,
+        initializer_range=0.02,
         **kwargs,
     ):
         self.codebook_size = codebook_size
@@ -1016,6 +1048,7 @@ class Qwen3OmniMoeCode2WavConfig(PreTrainedConfig):
         self.upsampling_ratios = upsampling_ratios
         self.decoder_dim = decoder_dim
         self.attention_dropout = attention_dropout
+        self.initializer_range = initializer_range
         self.rope_parameters = rope_parameters
 
         super().__init__(**kwargs)
@@ -1104,6 +1137,7 @@ class Qwen3OmniMoeConfig(PreTrainedConfig):
         self.thinker_config = Qwen3OmniMoeThinkerConfig(**thinker_config)
         self.talker_config = Qwen3OmniMoeTalkerConfig(**talker_config)
         self.code2wav_config = Qwen3OmniMoeCode2WavConfig(**code2wav_config)
+        self.initializer_range = self.thinker_config.initializer_range
         self.enable_audio_output = enable_audio_output
         self.im_start_token_id = im_start_token_id
         self.im_end_token_id = im_end_token_id

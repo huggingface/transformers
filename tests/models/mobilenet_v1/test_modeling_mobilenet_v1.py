@@ -152,7 +152,6 @@ class MobileNetV1ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestC
 
     test_resize_embeddings = False
     has_attentions = False
-    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = MobileNetV1ModelTester(self)

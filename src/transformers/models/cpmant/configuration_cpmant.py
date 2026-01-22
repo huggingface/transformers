@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The OpenBMB Team and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -64,6 +63,8 @@ class CpmAntConfig(PreTrainedConfig):
             The type of segment.
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether to use cache.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
     Example:
 
@@ -99,9 +100,11 @@ class CpmAntConfig(PreTrainedConfig):
         prompt_length: int = 32,
         segment_types: int = 32,
         use_cache: bool = True,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         super().__init__(**kwargs)
+        self.tie_word_embeddings = tie_word_embeddings
         self.prompt_types = prompt_types
         self.prompt_length = prompt_length
         self.segment_types = segment_types

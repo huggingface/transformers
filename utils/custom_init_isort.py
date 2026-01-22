@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -28,7 +27,7 @@ python utils/custom_init_isort.py
 
 which will auto-sort the imports (used in `make style`).
 
-For a check only (as used in `make quality`) run:
+For a check only (as used in `make check-repo`) run:
 
 ```bash
 python utils/custom_init_isort.py --check_only
@@ -245,7 +244,7 @@ def sort_imports(file: str, check_only: bool = True):
         code = f.read()
 
     # If the file is not a custom init, there is nothing to do.
-    if "_import_structure" not in code or "define_import_structure" in code:
+    if "_import_structure = {" not in code:
         return
 
     # Blocks of indent level 0

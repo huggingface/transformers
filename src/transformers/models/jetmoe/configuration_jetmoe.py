@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 JetMoe AI and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """JetMoe model configuration"""
-
-from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
@@ -103,26 +100,26 @@ class JetMoeConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 32000,
-        hidden_size: Optional[int] = 2048,
-        num_hidden_layers: Optional[int] = 12,
-        num_key_value_heads: Optional[int] = 16,
-        kv_channels: Optional[int] = 128,
-        intermediate_size: Optional[int] = 5632,
-        max_position_embeddings: Optional[int] = 4096,
-        activation_function: Optional[str] = "silu",
-        num_local_experts: Optional[int] = 8,
-        num_experts_per_tok: Optional[int] = 2,
-        output_router_logits: Optional[bool] = False,
-        aux_loss_coef: Optional[float] = 0.01,
-        use_cache: Optional[bool] = True,
-        bos_token_id: Optional[int] = 1,
-        eos_token_id: Optional[int] = 2,
-        tie_word_embeddings: Optional[bool] = True,
-        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        rms_norm_eps: Optional[int] = 1e-6,
-        initializer_range: Optional[float] = 0.01,
-        attention_dropout: Optional[float] = 0.0,
+        vocab_size: int | None = 32000,
+        hidden_size: int | None = 2048,
+        num_hidden_layers: int | None = 12,
+        num_key_value_heads: int | None = 16,
+        kv_channels: int | None = 128,
+        intermediate_size: int | None = 5632,
+        max_position_embeddings: int | None = 4096,
+        activation_function: str | None = "silu",
+        num_local_experts: int | None = 8,
+        num_experts_per_tok: int | None = 2,
+        output_router_logits: bool | None = False,
+        aux_loss_coef: float | None = 0.01,
+        use_cache: bool | None = True,
+        bos_token_id: int | None = 1,
+        eos_token_id: int | None = 2,
+        tie_word_embeddings: bool | None = True,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        rms_norm_eps: int | None = 1e-6,
+        initializer_range: float | None = 0.01,
+        attention_dropout: float | None = 0.0,
         **kwargs,
     ):
         if num_experts_per_tok > num_local_experts:
@@ -149,9 +146,10 @@ class JetMoeConfig(PreTrainedConfig):
         self.rms_norm_eps = rms_norm_eps
         self.rope_parameters = rope_parameters
 
-        super().__init__(
-            bos_token_id=bos_token_id, eos_token_id=eos_token_id, tie_word_embeddings=tie_word_embeddings, **kwargs
-        )
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(**kwargs)
 
 
 __all__ = ["JetMoeConfig"]

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Meta Inc. and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,7 +18,7 @@ from typing import Optional
 import numpy as np
 import PIL
 import torch
-from torchvision.transforms.v2 import functional as F
+import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...image_utils import ImageInput, PILImageResampling, SizeDict
@@ -75,7 +74,7 @@ class ChameleonImageProcessorFast(BaseImageProcessorFast):
         self,
         image: "torch.Tensor",
         size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"] = None,
+        interpolation: Optional["tvF.InterpolationMode"] = None,
         **kwargs,
     ) -> "torch.Tensor":
         """
@@ -92,14 +91,14 @@ class ChameleonImageProcessorFast(BaseImageProcessorFast):
         Returns:
             `torch.Tensor`: The resized image.
         """
-        interpolation = interpolation if interpolation is not None else F.InterpolationMode.BILINEAR
-        if interpolation == F.InterpolationMode.LANCZOS:
+        interpolation = interpolation if interpolation is not None else tvF.InterpolationMode.BILINEAR
+        if interpolation == tvF.InterpolationMode.LANCZOS:
             logger.warning_once(
                 "You have used fast image processor with LANCZOS resample which not yet supported for torch.Tensor. "
                 "BICUBIC resample will be used as an alternative. Please fall back to slow image processor if you "
                 "want full consistency with the original model."
             )
-            interpolation = F.InterpolationMode.BICUBIC
+            interpolation = tvF.InterpolationMode.BICUBIC
 
         return super().resize(
             image=image,

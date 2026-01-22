@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_segformer.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,7 +21,7 @@
 from typing import Optional, Union
 
 import torch
-from torchvision.transforms.v2 import functional as F
+import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast, group_images_by_shape, reorder_images
@@ -73,7 +72,7 @@ class SegformerImageProcessorFast(BaseImageProcessorFast):
     def preprocess(
         self,
         images: ImageInput,
-        segmentation_maps: Optional[ImageInput] = None,
+        segmentation_maps: ImageInput | None = None,
         **kwargs: Unpack[SegformerImageProcessorKwargs],
     ) -> BatchFeature:
         r"""
@@ -85,10 +84,10 @@ class SegformerImageProcessorFast(BaseImageProcessorFast):
     def _preprocess_image_like_inputs(
         self,
         images: ImageInput,
-        segmentation_maps: Optional[ImageInput],
+        segmentation_maps: ImageInput | None,
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
-        device: Optional[Union[str, "torch.device"]] = None,
+        device: Union[str, "torch.device"] | None = None,
         **kwargs: Unpack[SegformerImageProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -115,7 +114,7 @@ class SegformerImageProcessorFast(BaseImageProcessorFast):
                     "do_normalize": False,
                     "do_rescale": False,
                     # Nearest interpolation is used for segmentation maps instead of BILINEAR.
-                    "interpolation": F.InterpolationMode.NEAREST_EXACT,
+                    "interpolation": tvF.InterpolationMode.NEAREST_EXACT,
                 }
             )
             processed_segmentation_maps = self._preprocess(
@@ -129,16 +128,16 @@ class SegformerImageProcessorFast(BaseImageProcessorFast):
         self,
         images: list["torch.Tensor"],
         do_reduce_labels: bool,
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
         do_resize: bool,
         do_rescale: bool,
         do_normalize: bool,
         size: SizeDict,
         rescale_factor: float,
-        image_mean: Union[float, list[float]],
-        image_std: Union[float, list[float]],
+        image_mean: float | list[float],
+        image_std: float | list[float],
         disable_grouping: bool,
-        return_tensors: Optional[Union[str, TensorType]],
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:  # Return type can be list if return_tensors=None
         if do_reduce_labels:
@@ -171,7 +170,7 @@ class SegformerImageProcessorFast(BaseImageProcessorFast):
 
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
-    def post_process_semantic_segmentation(self, outputs, target_sizes: Optional[list[tuple]] = None):
+    def post_process_semantic_segmentation(self, outputs, target_sizes: list[tuple] | None = None):
         """
         Converts the output of [`SegformerForSemanticSegmentation`] into semantic segmentation maps.
 

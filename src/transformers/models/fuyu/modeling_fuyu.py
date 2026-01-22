@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,8 +13,6 @@
 # limitations under the License.
 """PyTorch Fuyu model."""
 
-from typing import Optional, Union
-
 import torch
 from torch import nn
 
@@ -24,7 +21,7 @@ from ...generation import GenerationMixin
 from ...modeling_outputs import CausalLMOutputWithPast
 from ...modeling_utils import PreTrainedModel
 from ...models.auto.modeling_auto import AutoModel
-from ...utils import auto_docstring, can_return_tuple, logging
+from ...utils import auto_docstring, can_return_tuple, logging, torch_compilable_check
 from .configuration_fuyu import FuyuConfig
 
 
@@ -124,11 +121,7 @@ class FuyuModel(FuyuPreTrainedModel):
             pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
                 The tensors corresponding to the input images.
         """
-        patch_embeddings = [
-            self.vision_embed_tokens(patch.to(self.vision_embed_tokens.weight.dtype)).squeeze(0)
-            for patch in pixel_values
-        ]
-        return patch_embeddings
+        return self.vision_embed_tokens(pixel_values)
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
@@ -146,31 +139,31 @@ class FuyuModel(FuyuPreTrainedModel):
             special_image_mask = input_ids == self.config.image_token_id
 
         n_image_tokens = special_image_mask.sum()
-        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
         n_image_features = image_features.shape[0] * image_features.shape[1]
-        if inputs_embeds[special_image_mask].numel() != image_features.numel():
-            raise ValueError(
-                f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
-            )
+        special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
+        torch_compilable_check(
+            inputs_embeds[special_image_mask].numel() == image_features.numel(),
+            f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {n_image_features}",
+        )
         return special_image_mask
 
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
         # [batch_size, num_total_patches, patch_size_ x patch_size x num_channels ]
-        image_patches: Optional[torch.Tensor] = None,
-        image_patches_indices: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        image_patches: torch.Tensor | None = None,
+        image_patches_indices: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, CausalLMOutputWithPast]:
+    ) -> tuple | CausalLMOutputWithPast:
         r"""
         image_patches (`torch.FloatTensor` of shape `(batch_size, num_total_patches, patch_size_ x patch_size x num_channels)`, *optional*):
             Image patches to be used as continuous embeddings. The patches are flattened and then projected to the
@@ -207,8 +200,7 @@ class FuyuModel(FuyuPreTrainedModel):
             inputs_embeds = self.language_model.get_input_embeddings()(input_ids)
 
         if image_patches is not None:
-            patch_embeddings = self.get_image_features(image_patches)
-            patch_embeddings = torch.cat(patch_embeddings, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
+            patch_embeddings = self.get_image_features(image_patches).to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=patch_embeddings
             )
@@ -258,22 +250,22 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
         # [batch_size, num_total_patches, patch_size_ x patch_size x num_channels ]
-        image_patches: Optional[torch.Tensor] = None,
-        image_patches_indices: Optional[torch.Tensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        logits_to_keep: Optional[int] = 0,
+        image_patches: torch.Tensor | None = None,
+        image_patches_indices: torch.Tensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        labels: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        logits_to_keep: int | None = 0,
         **kwargs,
-    ) -> Union[tuple, CausalLMOutputWithPast]:
+    ) -> tuple | CausalLMOutputWithPast:
         r"""
         image_patches (`torch.FloatTensor` of shape `(batch_size, num_total_patches, patch_size_ x patch_size x num_channels)`, *optional*):
             Image patches to be used as continuous embeddings. The patches are flattened and then projected to the

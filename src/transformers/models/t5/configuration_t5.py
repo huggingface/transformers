@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020, The T5 Authors and HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -97,8 +96,11 @@ class T5Config(PreTrainedConfig):
         pad_token_id=0,
         eos_token_id=1,
         classifier_dropout=0.0,
+        tie_word_embeddings=True,
+        is_decoder=False,
         **kwargs,
     ):
+        self.is_decoder = is_decoder
         self.vocab_size = vocab_size
         self.d_model = d_model
         self.d_kv = d_kv
@@ -116,6 +118,8 @@ class T5Config(PreTrainedConfig):
         self.initializer_factor = initializer_factor
         self.feed_forward_proj = feed_forward_proj
         self.use_cache = use_cache
+        self.pad_token_id = pad_token_id
+        self.eos_token_id = eos_token_id
 
         act_info = self.feed_forward_proj.split("-")
         self.dense_act_fn = act_info[-1]
@@ -137,13 +141,9 @@ class T5Config(PreTrainedConfig):
         # set to `False` in 1.1v and using it as indicator of whether to scale or not
         # But in fact we tie weights always and force it to be `True`
         self.scale_decoder_outputs = kwargs.get("tie_word_embeddings") is not False
-        kwargs["tie_word_embeddings"] = True
-        super().__init__(
-            pad_token_id=pad_token_id,
-            eos_token_id=eos_token_id,
-            is_encoder_decoder=is_encoder_decoder,
-            **kwargs,
-        )
+        self.tie_word_embeddings = True
+
+        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
 
 __all__ = ["T5Config"]

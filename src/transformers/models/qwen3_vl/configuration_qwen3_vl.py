@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_qwen3_vl.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 The Qwen Team and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,8 +17,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Optional
-
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
 
@@ -104,13 +101,11 @@ class Qwen3VLTextConfig(PreTrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether the model's input and output word embeddings should be tied.
         rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
-        attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
+        attention_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
@@ -134,22 +129,21 @@ class Qwen3VLTextConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 151936,
-        hidden_size: Optional[int] = 4096,
-        intermediate_size: Optional[int] = 22016,
-        num_hidden_layers: Optional[int] = 32,
-        num_attention_heads: Optional[int] = 32,
-        num_key_value_heads: Optional[int] = 32,
-        head_dim: Optional[int] = 128,
-        hidden_act: Optional[str] = "silu",
-        max_position_embeddings: Optional[int] = 128000,
-        initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[float] = 1e-6,
-        use_cache: Optional[bool] = True,
-        tie_word_embeddings: Optional[bool] = False,
-        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        attention_bias: Optional[bool] = False,
-        attention_dropout: Optional[float] = 0.0,
+        vocab_size: int | None = 151936,
+        hidden_size: int | None = 4096,
+        intermediate_size: int | None = 22016,
+        num_hidden_layers: int | None = 32,
+        num_attention_heads: int | None = 32,
+        num_key_value_heads: int | None = 32,
+        head_dim: int | None = 128,
+        hidden_act: str | None = "silu",
+        max_position_embeddings: int | None = 128000,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: float | None = 1e-6,
+        use_cache: bool | None = True,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        attention_bias: bool | None = False,
+        attention_dropout: float | None = 0.0,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -174,7 +168,6 @@ class Qwen3VLTextConfig(PreTrainedConfig):
         self.rope_parameters = rope_parameters
 
         super().__init__(
-            tie_word_embeddings=tie_word_embeddings,
             ignore_keys_at_rope_validation={"mrope_section", "mrope_interleaved"},
             **kwargs,
         )
@@ -197,15 +190,15 @@ class Qwen3VLConfig(PreTrainedConfig):
         vision_config (`Union[PreTrainedConfig, dict]`,  *optional*, defaults to `Qwen3VLVisionConfig`):
             The config object or dictionary of the vision backbone.
         image_token_id (`int`, *optional*, defaults to 151655):
-            The image token index to encode the image prompt.
+            The token id used as the placeholder for image inputs.
         video_token_id (`int`, *optional*, defaults to 151656):
-            The video token index to encode the image prompt.
+            The token id used as the placeholder for video inputs.
         vision_start_token_id (`int`, *optional*, defaults to 151652):
-            The start token index to encode the image prompt.
+            The token id that marks the start of a vision segment (image or video).
         vision_end_token_id (`int`, *optional*, defaults to 151653):
-            The end token index to encode the image prompt.
+            The token id that marks the end of a vision segment (image or video).
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether to tie the word embeddings.
+            Whether the model's input and output word embeddings should be tied.
 
     ```python
     >>> from transformers import Qwen3VLForConditionalGeneration, Qwen3VLConfig
@@ -249,7 +242,8 @@ class Qwen3VLConfig(PreTrainedConfig):
         self.video_token_id = video_token_id
         self.vision_start_token_id = vision_start_token_id
         self.vision_end_token_id = vision_end_token_id
-        super().__init__(**kwargs, tie_word_embeddings=tie_word_embeddings)
+        self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(**kwargs)
 
 
 __all__ = ["Qwen3VLConfig", "Qwen3VLTextConfig"]

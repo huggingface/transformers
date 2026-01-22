@@ -176,7 +176,7 @@ class SwinModelTester:
         model.eval()
         result = model(pixel_values)
         self.parent.assertEqual(
-            result.logits.shape, (self.batch_size, self.num_channels, self.image_size, self.image_size)
+            result.reconstruction.shape, (self.batch_size, self.num_channels, self.image_size, self.image_size)
         )
 
         # test greyscale images
@@ -187,7 +187,7 @@ class SwinModelTester:
 
         pixel_values = floats_tensor([self.batch_size, 1, self.image_size, self.image_size])
         result = model(pixel_values)
-        self.parent.assertEqual(result.logits.shape, (self.batch_size, 1, self.image_size, self.image_size))
+        self.parent.assertEqual(result.reconstruction.shape, (self.batch_size, 1, self.image_size, self.image_size))
 
     def create_and_check_for_image_classification(self, config, pixel_values, labels):
         config.num_labels = self.type_sequence_label_size
@@ -237,7 +237,6 @@ class SwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     )
 
     test_resize_embeddings = False
-    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = SwinModelTester(self)
@@ -260,9 +259,6 @@ class SwinModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     @unittest.skip(reason="Got `CUDA error: misaligned address` with PyTorch 2.0.0.")
     def test_multi_gpu_data_parallel_forward(self):
         pass
-
-    def test_training_gradient_checkpointing(self):
-        super().test_training_gradient_checkpointing()
 
     def test_backbone(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -472,7 +468,7 @@ class SwinModelIntegrationTest(unittest.TestCase):
         # verify the logits
         expected_shape = torch.Size((1, 1000))
         self.assertEqual(outputs.logits.shape, expected_shape)
-        expected_slice = torch.tensor([-0.0948, -0.6454, -0.0921]).to(torch_device)
+        expected_slice = torch.tensor([-0.0970, -0.6469, -0.0927]).to(torch_device)
         torch.testing.assert_close(outputs.logits[0, :3], expected_slice, rtol=1e-4, atol=1e-4)
 
     @slow

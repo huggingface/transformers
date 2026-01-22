@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -151,8 +150,6 @@ class VJEPA2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     attention_mask and seq_length.
     """
 
-    test_torch_exportable = True
-
     all_model_classes = (VJEPA2Model, VJEPA2ForVideoClassification) if is_torch_available() else ()
 
     pipeline_model_mapping = {}
@@ -168,24 +165,6 @@ class VJEPA2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="VJEPA2 does not use inputs_embeds")
     def test_inputs_embeds(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
     def test_model_get_set_embeddings(self):

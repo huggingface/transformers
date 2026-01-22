@@ -119,6 +119,7 @@ print(f"Most likely label: {most_likely_label} with probability: {probs[0][most_
 ## CLIPProcessor
 
 [[autodoc]] CLIPProcessor
+    - __call__
 
 ## CLIPModel
 

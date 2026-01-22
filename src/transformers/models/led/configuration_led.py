@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 Iz Beltagy, Matthew E. Peters, Arman Cohan and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """LED model configuration"""
-
-from typing import Union
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
@@ -127,7 +124,8 @@ class LEDConfig(PreTrainedConfig):
         pad_token_id=1,
         bos_token_id=0,
         eos_token_id=2,
-        attention_window: Union[list[int], int] = 512,
+        attention_window: list[int] | int = 512,
+        tie_word_embeddings: bool | None = True,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -152,14 +150,12 @@ class LEDConfig(PreTrainedConfig):
         self.num_hidden_layers = encoder_layers
         self.attention_window = attention_window
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            is_encoder_decoder=is_encoder_decoder,
-            decoder_start_token_id=decoder_start_token_id,
-            **kwargs,
-        )
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.decoder_start_token_id = decoder_start_token_id
+        self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
 
 __all__ = ["LEDConfig"]

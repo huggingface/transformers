@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
-from typing import Optional, Union
 
 import torch
 import torch.nn as nn
@@ -158,8 +155,6 @@ class GotOcr2Config(PreTrainedConfig):
             The image token index to encode the image prompt.
         image_seq_length (`int`, *optional*, defaults to 576):
             Sequence length of one image embedding.
-        pad_token_id (`int`, *optional*, defaults to -1):
-            Padding token id.
 
     ```python
     >>> from transformers import GotOcr2ForConditionalGeneration, GotOcr2Config
@@ -182,16 +177,14 @@ class GotOcr2Config(PreTrainedConfig):
 
     def __init__(
         self,
-        vision_config: Optional[dict] = None,
-        text_config: Optional[dict] = None,
-        image_token_index: Optional[int] = 151859,
-        image_seq_length: Optional[int] = 576,
-        pad_token_id: Optional[int] = -1,
+        vision_config: dict | None = None,
+        text_config: dict | None = None,
+        image_token_index: int | None = 151859,
+        image_seq_length: int | None = 576,
         **kwargs,
     ):
         self.image_token_index = image_token_index
         self.image_seq_length = image_seq_length
-        self.pad_token_id = pad_token_id
 
         if vision_config is None:
             self.vision_config = GotOcr2VisionConfig()
@@ -324,19 +317,19 @@ class GotOcr2Model(LlavaModel):
 
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, GotOcr2ModelOutputWithPast]:
+    ) -> tuple | GotOcr2ModelOutputWithPast:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -384,21 +377,21 @@ class GotOcr2ForConditionalGeneration(LlavaForConditionalGeneration):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, GotOcr2CausalLMOutputWithPast]:
+    ) -> tuple | GotOcr2CausalLMOutputWithPast:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,

@@ -16,7 +16,7 @@ from typing import Optional, Union
 
 import torch
 import torch.nn as nn
-from torchvision.transforms.v2 import functional as F
+import torchvision.transforms.v2.functional as tvF
 
 from ... import initialization as init
 from ...cache_utils import Cache
@@ -120,9 +120,9 @@ class DeepseekVLHybridConfig(DeepseekVLConfig):
 
     def __init__(
         self,
-        text_config: Optional[AutoConfig] = None,
-        vision_config: Optional[AutoConfig] = None,
-        high_res_vision_config: Optional[AutoConfig] = None,
+        text_config: AutoConfig | None = None,
+        vision_config: AutoConfig | None = None,
+        high_res_vision_config: AutoConfig | None = None,
         image_token_id: int = 100015,
         **kwargs,
     ):
@@ -286,16 +286,16 @@ class DeepseekVLHybridModel(DeepseekVLModel):
     @auto_docstring(custom_args=DEEPSEEK_VL_COMMON_CUSTOM_ARGS)
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        high_res_pixel_values: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        high_res_pixel_values: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        cache_position: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
         **kwargs,
     ) -> DeepseekVLHybridBaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -349,17 +349,17 @@ class DeepseekVLHybridForConditionalGeneration(DeepseekVLForConditionalGeneratio
     @auto_docstring(custom_args=DEEPSEEK_VL_COMMON_CUSTOM_ARGS)
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        high_res_pixel_values: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        high_res_pixel_values: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        cache_position: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> DeepseekVLHybridCausalLMOutputWithPast:
         r"""
@@ -457,8 +457,8 @@ class DeepseekVLHybridImageProcessorKwargs(ImagesKwargs, total=False):
     min_size: int
     high_res_size: dict
     high_res_resample: Union["PILImageResampling", int]
-    high_res_image_mean: Union[float, list[float], tuple[float, ...]]
-    high_res_image_std: Union[float, list[float], tuple[float, ...]]
+    high_res_image_mean: float | list[float] | tuple[float, ...]
+    high_res_image_std: float | list[float] | tuple[float, ...]
 
 
 class DeepseekVLHybridImageProcessor(DeepseekVLImageProcessor):
@@ -519,19 +519,19 @@ class DeepseekVLHybridImageProcessor(DeepseekVLImageProcessor):
     def __init__(
         self,
         do_resize: bool = True,
-        size: Optional[dict[str, int]] = None,
-        high_res_size: Optional[dict[str, int]] = None,
+        size: dict[str, int] | None = None,
+        high_res_size: dict[str, int] | None = None,
         min_size: int = 14,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         high_res_resample: PILImageResampling = PILImageResampling.BICUBIC,
         do_rescale: bool = True,
-        rescale_factor: Union[int, float] = 1 / 255,
+        rescale_factor: int | float = 1 / 255,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
-        high_res_image_mean: Optional[Union[float, list[float]]] = None,
-        high_res_image_std: Optional[Union[float, list[float]]] = None,
-        do_convert_rgb: Optional[bool] = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        high_res_image_mean: float | list[float] | None = None,
+        high_res_image_std: float | list[float] | None = None,
+        do_convert_rgb: bool | None = None,
         do_pad: bool = True,
         **kwargs,
     ) -> None:
@@ -569,24 +569,24 @@ class DeepseekVLHybridImageProcessor(DeepseekVLImageProcessor):
     def preprocess(
         self,
         images: ImageInput,
-        do_resize: Optional[bool] = None,
-        size: Optional[dict[str, int]] = None,
-        high_res_size: Optional[dict[str, int]] = None,
-        resample: Optional[PILImageResampling] = None,
-        high_res_resample: Optional[PILImageResampling] = None,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[float] = None,
-        do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
-        high_res_image_mean: Optional[Union[float, list[float]]] = None,
-        high_res_image_std: Optional[Union[float, list[float]]] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
-        do_convert_rgb: Optional[bool] = None,
-        do_pad: Optional[bool] = None,
-        background_color: Optional[tuple[int, int, int]] = None,
+        do_resize: bool | None = None,
+        size: dict[str, int] | None = None,
+        high_res_size: dict[str, int] | None = None,
+        resample: PILImageResampling | None = None,
+        high_res_resample: PILImageResampling | None = None,
+        do_rescale: bool | None = None,
+        rescale_factor: float | None = None,
+        do_normalize: bool | None = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        high_res_image_mean: float | list[float] | None = None,
+        high_res_image_std: float | list[float] | None = None,
+        return_tensors: str | TensorType | None = None,
+        data_format: str | ChannelDimension = ChannelDimension.FIRST,
+        input_data_format: str | ChannelDimension | None = None,
+        do_convert_rgb: bool | None = None,
+        do_pad: bool | None = None,
+        background_color: tuple[int, int, int] | None = None,
     ):
         """
         Preprocess an image or batch of images.
@@ -781,14 +781,14 @@ class DeepseekVLHybridImageProcessorFast(DeepseekVLImageProcessorFast):
 
     def _further_process_kwargs(
         self,
-        size: Optional[SizeDict] = None,
-        high_res_size: Optional[SizeDict] = None,
-        default_to_square: Optional[bool] = None,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
-        high_res_image_mean: Optional[Union[float, list[float]]] = None,
-        high_res_image_std: Optional[Union[float, list[float]]] = None,
-        data_format: Optional[ChannelDimension] = None,
+        size: SizeDict | None = None,
+        high_res_size: SizeDict | None = None,
+        default_to_square: bool | None = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        high_res_image_mean: float | list[float] | None = None,
+        high_res_image_std: float | list[float] | None = None,
+        data_format: ChannelDimension | None = None,
         **kwargs,
     ) -> dict:
         """
@@ -843,17 +843,17 @@ class DeepseekVLHybridImageProcessorFast(DeepseekVLImageProcessorFast):
         size: SizeDict,
         high_res_size: SizeDict,
         min_size: int,
-        interpolation: Optional["F.InterpolationMode"],
-        high_res_interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
+        high_res_interpolation: Optional["tvF.InterpolationMode"],
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        high_res_image_mean: Optional[Union[float, list[float]]],
-        high_res_image_std: Optional[Union[float, list[float]]],
-        disable_grouping: Optional[bool],
-        return_tensors: Optional[Union[str, TensorType]],
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        high_res_image_mean: float | list[float] | None,
+        high_res_image_std: float | list[float] | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
         do_pad: bool = True,
         **kwargs,
     ) -> BatchFeature:
@@ -929,37 +929,18 @@ class DeepseekVLHybridProcessorKwargs(DeepseekVLProcessorKwargs):
 class DeepseekVLHybridProcessor(DeepseekVLProcessor):
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        images: Optional[ImageInput] = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
+        images: ImageInput | None = None,
         **kwargs: Unpack[DeepseekVLHybridProcessorKwargs],
     ) -> BatchFeature:
-        """
-        Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
-        and `kwargs` arguments to LlamaTokenizerFast's [`~LlamaTokenizerFast.__call__`] if `text` is not `None` to encode
-        the text. To prepare the image(s), this method forwards the `images` and `kwargs` arguments to
-        DeepseekVLHybridImageProcessor's [`~DeepseekVLHybridImageProcessor.__call__`] if `images` is not `None`. Please refer to the doctsring
-        of the above two methods for more information.
-
-        Args:
-            text (`str`, `List[str]`, `List[List[str]]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `List[PIL.Image.Image]`, `List[np.ndarray]`, `List[torch.Tensor]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. Both channels-first and channels-last formats are supported.
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
-
+        r"""
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 
             - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
             - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
-            `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
-            `None`).
+                `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
+                `None`).
             - **pixel_values** -- Pixel values to be fed to a model. Returned when `images` is not `None`.
         """
         output_kwargs = self._merge_kwargs(

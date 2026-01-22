@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 the Cohere Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +14,6 @@
 """PyTorch AyaVision model."""
 
 from functools import lru_cache
-from typing import Optional, Union
 
 import numpy as np
 import torch
@@ -118,16 +116,16 @@ class Cohere2VisionModel(AyaVisionModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Union[tuple, Cohere2VisionModelOutputWithPast]:
+    ) -> tuple | Cohere2VisionModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -171,19 +169,19 @@ class Cohere2VisionForConditionalGeneration(AyaVisionForConditionalGeneration):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
-        image_sizes: Optional[torch.Tensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
+        image_sizes: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, Cohere2VisionCausalLMOutputWithPast]:
+    ) -> tuple | Cohere2VisionCausalLMOutputWithPast:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,

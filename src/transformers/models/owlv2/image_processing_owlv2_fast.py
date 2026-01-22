@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_owlv2.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,10 +19,10 @@
 # limitations under the License.
 
 import warnings
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING, Optional
 
 import torch
-from torchvision.transforms.v2 import functional as F
+import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_utils_fast import BaseImageProcessorFast, BatchFeature
 from ...image_transforms import center_to_corners_format, group_images_by_shape, reorder_images
@@ -57,7 +56,7 @@ class Owlv2ImageProcessorFast(BaseImageProcessorFast):
         self,
         outputs: "Owlv2ObjectDetectionOutput",
         threshold: float = 0.1,
-        target_sizes: Optional[Union[TensorType, list[tuple]]] = None,
+        target_sizes: TensorType | list[tuple] | None = None,
     ):
         """
         Converts the raw output of [`Owlv2ForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
@@ -193,13 +192,13 @@ class Owlv2ImageProcessorFast(BaseImageProcessorFast):
         pad_right = size - width
 
         padding = (0, 0, pad_right, pad_bottom)
-        padded_image = F.pad(images, padding, fill=constant_value)
+        padded_image = tvF.pad(images, padding, fill=constant_value)
         return padded_image
 
     def pad(
         self,
         images: list["torch.Tensor"],
-        disable_grouping: Optional[bool],
+        disable_grouping: bool | None,
         constant_value: float = 0.0,
         **kwargs,
     ) -> list["torch.Tensor"]:
@@ -265,14 +264,14 @@ class Owlv2ImageProcessorFast(BaseImageProcessorFast):
             else:
                 kernel_sizes = 2 * torch.ceil(3 * anti_aliasing_sigma).int() + 1
 
-                filtered = F.gaussian_blur(
+                filtered = tvF.gaussian_blur(
                     image, (kernel_sizes[0], kernel_sizes[1]), sigma=anti_aliasing_sigma.tolist()
                 )
 
         else:
             filtered = image
 
-        out = F.resize(filtered, size=(size.height, size.width), antialias=False)
+        out = tvF.resize(filtered, size=(size.height, size.width), antialias=False)
 
         return out
 
@@ -281,15 +280,15 @@ class Owlv2ImageProcessorFast(BaseImageProcessorFast):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
         do_pad: bool,
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        disable_grouping: Optional[bool],
-        return_tensors: Optional[Union[str, TensorType]],
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         # Group images by size for batched resizing

@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -165,8 +164,8 @@ class FastVlmModel(LlavaModel):
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
-        vision_feature_layer: Optional[Union[int, list[int]]] = None,
-        vision_feature_select_strategy: Optional[str] = None,
+        vision_feature_layer: int | list[int] | None = None,
+        vision_feature_select_strategy: str | None = None,
         **kwargs,
     ):
         """

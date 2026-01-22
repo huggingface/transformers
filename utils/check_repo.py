@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,7 +21,7 @@ Utility that performs several consistency checks on the repo. This includes:
 - checking all the auto mapping are properly defined (no typos, importable)
 - checking the list of deprecated models is up to date
 
-Use from the root of the repo with (as used in `make repo-consistency`):
+Use from the root of the repo with (as used in `make check-repo`):
 
 ```bash
 python utils/check_repo.py
@@ -101,6 +100,7 @@ PRIVATE_MODELS = [
     "Phi4MultimodalVisionModel",
     "Glm4vVisionModel",
     "Glm4vMoeVisionModel",
+    "GlmImageVisionModel",
     "EvollaSaProtPreTrainedModel",
     "BltLocalEncoder",  # Building part of bigger (tested) model. Tested implicitly through BLTForCausalLM.
     "BltLocalDecoder",  # Building part of bigger (tested) model. Tested implicitly through BLTForCausalLM.
@@ -126,6 +126,7 @@ IGNORE_NON_TESTED = (
         "ErnieMForInformationExtraction",
         "FastSpeech2ConformerHifiGan",  # Already tested by SpeechT5HifiGan (# Copied from)
         "FastSpeech2ConformerWithHifiGan",  # Built with two smaller (tested) models.
+        "GlmImageVQVAE",  # Building part of bigger (tested) model.
         "GraphormerDecoderHead",  # Building part of bigger (tested) model.
         "JukeboxVQVAE",  # Building part of bigger (tested) model.
         "JukeboxPrior",  # Building part of bigger (tested) model.
@@ -194,6 +195,7 @@ IGNORE_NON_TESTED = (
         "Emu3TextModel",  # Building part of bigger (tested) model
         "Glm4vTextModel",  # Building part of bigger (tested) model
         "Glm4vMoeTextModel",  # Building part of bigger (tested) model
+        "GlmImageTextModel",  # Building part of bigger (tested) model
         "Qwen2VLTextModel",  # Building part of bigger (tested) model
         "Qwen2_5_VLTextModel",  # Building part of bigger (tested) model
         "InternVLVisionModel",  # Building part of bigger (tested) model
@@ -313,6 +315,7 @@ IGNORE_NON_AUTO_CONFIGURED = PRIVATE_MODELS.copy() + [
     "FlavaTextModel",
     "FlavaImageModel",
     "FlavaMultimodalModel",
+    "GlmImageForConditionalGeneration",
     "GPT2DoubleHeadsModel",
     "GPTSw3DoubleHeadsModel",
     "InstructBlipVisionModel",
@@ -972,7 +975,6 @@ def find_all_documented_objects() -> list[str]:
 # One good reason for not being documented is to be deprecated. Put in this list deprecated objects.
 DEPRECATED_OBJECTS = [
     "PretrainedConfig",  # deprecated in favor of PreTrainedConfig
-    "AutoModelWithLMHead",
     "BartPretrainedModel",
     "DataCollator",
     "DataCollatorForSOP",
@@ -989,8 +991,6 @@ DEPRECATED_OBJECTS = [
     "SquadFeatures",
     "SquadV1Processor",
     "SquadV2Processor",
-    "Wav2Vec2ForMaskedLM",
-    "Wav2Vec2Tokenizer",
     "glue_compute_metrics",
     "glue_convert_examples_to_features",
     "glue_output_modes",
@@ -1013,7 +1013,6 @@ UNDOCUMENTED_OBJECTS = [
     "DPRPretrainedReader",  # Like an Encoder.
     "DummyObject",  # Just picked by mistake sometimes.
     "MecabTokenizer",  # Internal, should never have been in the main init.
-    "ModelCard",  # Internal type.
     "SqueezeBertModule",  # Internal building block (should have been called SqueezeBertLayer)
     "TransfoXLCorpus",  # Internal type.
     "WordpieceTokenizer",  # Internal, should never have been in the main init.
@@ -1235,7 +1234,7 @@ def check_models_have_kwargs():
         if model_dir.is_dir() and (modeling_file := list(model_dir.glob("modeling_*.py"))):
             modeling_file = modeling_file[0]
 
-            with open(modeling_file, "r") as f:
+            with open(modeling_file, "r", encoding="utf-8") as f:
                 tree = ast.parse(f.read())
 
             # Map all classes in the file to their base classes
