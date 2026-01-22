@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_higgs_audio_v2.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,6 +17,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 
 from collections.abc import Callable
 from typing import Optional
@@ -600,14 +600,6 @@ class HiggsAudioV2Model(HiggsAudioV2PreTrainedModel):
             special_audio_mask = (input_ids == self.config.audio_token_id) | (
                 input_ids == self.config.audio_delay_token_id
             )
-
-        if audio_input_ids_mask is not None:
-            n_audio_tokens_in_text = special_audio_mask.sum()
-            n_audio_tokens_in_audio = audio_input_ids_mask.sum()
-            if n_audio_tokens_in_text != n_audio_tokens_in_audio:
-                raise ValueError(
-                    f"Number of audio tokens in text and audio do not match: in text: {n_audio_tokens_in_text}, in audio: {n_audio_tokens_in_audio}"
-                )
 
         return special_audio_mask
 

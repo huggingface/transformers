@@ -363,14 +363,6 @@ class HiggsAudioV2Model(LlamaModel):
                 input_ids == self.config.audio_delay_token_id
             )
 
-        if audio_input_ids_mask is not None:
-            n_audio_tokens_in_text = special_audio_mask.sum()
-            n_audio_tokens_in_audio = audio_input_ids_mask.sum()
-            if n_audio_tokens_in_text != n_audio_tokens_in_audio:
-                raise ValueError(
-                    f"Number of audio tokens in text and audio do not match: in text: {n_audio_tokens_in_text}, in audio: {n_audio_tokens_in_audio}"
-                )
-
         return special_audio_mask
 
     @check_model_inputs()
