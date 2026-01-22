@@ -1091,7 +1091,7 @@ class Kosmos2_5TextTransformer(nn.Module):
 
         # Ignore copy
         if image_embeds is not None:
-            inputs_embeds = inputs_embeds.clone() 
+            inputs_embeds = inputs_embeds.clone()
             inputs_embeds[image_embeds_position_mask == 1] = image_embeds.to(inputs_embeds.device).view(
                 -1, image_embeds.shape[-1]
             )
