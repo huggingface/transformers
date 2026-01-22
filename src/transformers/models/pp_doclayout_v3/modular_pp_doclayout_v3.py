@@ -77,6 +77,8 @@ class PPDocLayoutV3Config(PreTrainedConfig):
             The epsilon used by the layer normalization layers.
         batch_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the batch normalization layers.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether the model's input and output word embeddings should be tied.
         backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*):
             The configuration of the backbone model.
         backbone (`str`, *optional*):
@@ -204,6 +206,7 @@ class PPDocLayoutV3Config(PreTrainedConfig):
         initializer_bias_prior_prob=None,
         layer_norm_eps=1e-5,
         batch_norm_eps=1e-5,
+        tie_word_embeddings=True,
         # backbone
         backbone_config=None,
         backbone=None,
@@ -257,6 +260,7 @@ class PPDocLayoutV3Config(PreTrainedConfig):
         self.initializer_bias_prior_prob = initializer_bias_prior_prob
         self.layer_norm_eps = layer_norm_eps
         self.batch_norm_eps = batch_norm_eps
+        self.tie_word_embeddings = tie_word_embeddings
 
         if backbone_config is None and backbone is None:
             logger.info(
