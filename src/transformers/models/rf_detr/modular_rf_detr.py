@@ -212,10 +212,12 @@ class RfDetrConfig(LwDetrConfig):
             Relative weight of the L1 error of the bounding box coordinates in the Hungarian matching cost.
         giou_cost (`float`, *optional*, defaults to 2):
             Relative weight of the generalized IoU loss of the bounding box in the Hungarian matching cost.
+        class_loss_coefficient (`float`, *optional*, defaults to 1):
+            Relative weight of the classification loss in the Hungarian matching cost.
         mask_loss_coefficient (`float`, *optional*, defaults to 1):
-            Relative weight of the Focal loss in the panoptic segmentation loss.
+            Relative weight of the Focal loss in the instance segmentation mask loss.
         dice_loss_coefficient (`float`, *optional*, defaults to 1):
-            Relative weight of the DICE/F-1 loss in the panoptic segmentation loss.
+            Relative weight of the DICE/F-1 loss in the object detection loss.
         bbox_loss_coefficient (`float`, *optional*, defaults to 5):
             Relative weight of the L1 bounding box loss in the object detection loss.
         giou_loss_coefficient (`float`, *optional*, defaults to 2):
@@ -226,8 +228,14 @@ class RfDetrConfig(LwDetrConfig):
             Alpha parameter in the focal loss.
         auxiliary_loss (`bool`, *optional*, defaults to `True`):
             Whether auxiliary decoding losses (loss at each decoder layer) are to be used.
+        mask_point_sample_ratio (`int`, *optional*, defaults to 16):
+            The ratio of points to sample for the mask loss calculation.
         mask_downsample_ratio (`int`, *optional*, defaults to 4):
             The downsample ratio for the segmentation masks compared to the input image resolution.
+        mask_class_loss_coefficient (`float`, *optional*, defaults to 5.0):
+            Relative weight of the Focal loss in the instance segmentation loss.
+        mask_dice_loss_coefficient (`float`, *optional*, defaults to 5.0):
+            Relative weight of the DICE/F-1 loss in the instance segmentation loss.
         segmentation_head_activation_function (`str`, *optional*, defaults to `"gelu"`):
             The non-linear activation function in the segmentation head. Supported values are `"relu"`, `"silu"`, `"gelu"`.
     Examples:
