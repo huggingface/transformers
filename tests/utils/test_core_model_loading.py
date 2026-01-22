@@ -22,7 +22,6 @@ from transformers.conversion_mapping import get_checkpoint_conversion_mapping, r
 from transformers.core_model_loading import (
     Chunk,
     Concatenate,
-    ErnieFuseAndSplitTextVisionExperts,
     MergeModulelist,
     PermuteForRope,
     WeightConverter,
@@ -260,9 +259,14 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             WeightRenaming("mlp.w2.weight", "mlp.down_proj.weight"),
         ]
 
-        load_config = LoadStateDictConfig(weight_mapping=weight_mapping, )
+        load_config = LoadStateDictConfig(
+            weight_mapping=weight_mapping,
+        )
         missing, unexpected, mismatch, _, misc = convert_and_load_state_dict_in_model(
-            model, state_dict, load_config, tp_plan=None,
+            model,
+            state_dict,
+            load_config,
+            tp_plan=None,
         )
 
         self.assertEqual(
@@ -373,9 +377,14 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
         ]
 
         # Use the mapping to load
-        load_config = LoadStateDictConfig(weight_mapping=weight_mapping, )
+        load_config = LoadStateDictConfig(
+            weight_mapping=weight_mapping,
+        )
         missing, unexpected, mismatch, _, misc = convert_and_load_state_dict_in_model(
-            model, state_dict, load_config, tp_plan=None,
+            model,
+            state_dict,
+            load_config,
+            tp_plan=None,
         )
         self.assertTrue(len(missing) == 0)
         self.assertTrue(len(unexpected) == 0)
@@ -390,7 +399,7 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
 
     def test_qkv_chunk_rope_permute_with_fp8_quantization(self):
         if is_triton_available():
-            from transformers.integrations.finegrained_fp8 import Fp8Dequantize
+            pass
         else:
             self.skipTest("Fine-grained FP8 integration tests require Triton to be installed.")
         n_heads = 2
@@ -472,9 +481,12 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
                 operations=[Chunk(dim=0), PermuteForRope()],
             )
         ]
-
+        load_config = LoadStateDictConfig(weight_mapping=weight_mapping, quantizer=quantizer)
         missing, unexpected, mismatch, _, misc = convert_and_load_state_dict_in_model(
-            model, state_dict, weight_mapping, tp_plan=None,
+            model,
+            state_dict,
+            load_config=load_config,
+            tp_plan=None,
         )
         self.assertTrue(len(missing) == 0)
         self.assertTrue(len(unexpected) == 0)
