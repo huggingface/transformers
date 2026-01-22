@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +15,6 @@
 import re
 from itertools import islice
 from pathlib import Path
-from typing import Optional, Union
 
 from ...audio_utils import AudioInput, make_list_of_audio
 from ...feature_extraction_utils import BatchFeature
@@ -128,9 +126,9 @@ class HiggsAudioV2Processor(ProcessorMixin):
 
     def __call__(
         self,
-        text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
-        audio: Optional[AudioInput] = None,
-        output_labels: Optional[bool] = False,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        audio: AudioInput | None = None,
+        output_labels: bool | None = False,
         **kwargs: Unpack[HiggsAudioV2ProcessorKwargs],
     ):
         output_kwargs = self._merge_kwargs(
@@ -325,7 +323,7 @@ class HiggsAudioV2Processor(ProcessorMixin):
     def save_audio(
         self,
         audio: AudioInput,
-        saving_path: Union[str, Path, list[Union[str, Path]]],
+        saving_path: str | Path | list[str | Path],
         **kwargs: Unpack[HiggsAudioV2ProcessorKwargs],
     ):
         # TODO: @eustlb, this should be in AudioProcessor

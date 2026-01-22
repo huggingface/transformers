@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, Union
 
 import torch
 import torch.nn as nn
@@ -22,21 +20,19 @@ from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
-    is_torch_flex_attn_available,
     logging,
 )
 from ...utils.generic import check_model_inputs
 from ..csm.modeling_csm import CsmBackboneModelEmbeddings
 from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import LlamaDecoderLayer, LlamaMLP, LlamaModel, LlamaPreTrainedModel, LlamaRMSNorm
-from ...modeling_utils import PreTrainedModel
 from .generation_higgs_audio_v2 import HiggsAudioV2GenerationMixin
-
 
 
 logger = logging.get_logger(__name__)
@@ -266,13 +262,13 @@ class HiggsAudioV2DecoderLayer(LlamaDecoderLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]],
-        attention_mask: Optional[torch.Tensor] = None,
-        audio_token_mask: Optional[torch.BoolTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        use_cache: Optional[bool] = False,
-        cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None,
+        attention_mask: torch.Tensor | None = None,
+        audio_token_mask: torch.BoolTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        use_cache: bool | None = False,
+        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> torch.Tensor:
         residual = hidden_states
@@ -333,7 +329,9 @@ class HiggsAudioV2PreTrainedModel(LlamaPreTrainedModel, PreTrainedModel):
         PreTrainedModel._init_weights(module)
 
         if isinstance(module, HiggsAudioV2Embeddings):
-            init.copy_(module.audio_tokens_offsets, torch.arange(self.config.num_codebooks) * self.config.codebook_size)
+            init.copy_(
+                module.audio_tokens_offsets, torch.arange(self.config.num_codebooks) * self.config.codebook_size
+            )
 
 
 class HiggsAudioV2Model(LlamaModel):
@@ -379,15 +377,15 @@ class HiggsAudioV2Model(LlamaModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        audio_input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,
-        audio_input_ids_mask: Optional[torch.BoolTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
+        input_ids: torch.LongTensor | None = None,
+        audio_input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.LongTensor | None = None,
+        audio_input_ids_mask: torch.BoolTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        cache_position: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
         r"""
@@ -557,8 +555,8 @@ class HiggsAudioV2ForConditionalGeneration(HiggsAudioV2PreTrainedModel, HiggsAud
     def prepare_inputs_for_generation(
         self,
         input_ids: torch.LongTensor,
-        audio_input_ids: Optional[torch.LongTensor] = None,
-        audio_input_ids_mask: Optional[torch.LongTensor] = None,
+        audio_input_ids: torch.LongTensor | None = None,
+        audio_input_ids_mask: torch.LongTensor | None = None,
         **kwargs,
     ):
         model_inputs = super().prepare_inputs_for_generation(input_ids, **kwargs)
@@ -590,18 +588,18 @@ class HiggsAudioV2ForConditionalGeneration(HiggsAudioV2PreTrainedModel, HiggsAud
     @can_return_tuple
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.BoolTensor] = None,
-        audio_input_ids: Optional[torch.LongTensor] = None,
-        audio_input_ids_mask: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        audio_labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.BoolTensor | None = None,
+        audio_input_ids: torch.LongTensor | None = None,
+        audio_input_ids_mask: torch.LongTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        audio_labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ):
         r"""

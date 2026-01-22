@@ -1,5 +1,4 @@
 # Adapted from https://github.com/huggingface/transformers/blob/main/src/transformers/models/xcodec/convert_xcodec_weights_to_hf.py
-# coding=utf-8
 # Copyright 2025 BosonAI, Descript and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
