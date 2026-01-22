@@ -17,10 +17,13 @@ from enum import Enum
 
 import torch
 
-from ...utils import is_torch_xpu_available
+from ...utils import is_psutil_available, is_torch_xpu_available
 from ...utils.logging import logging
 from ...utils.metrics import traced
 
+
+if is_psutil_available():
+    import psutil
 
 # We centralize the logger here to coordinate between logging and progress bar
 logger = logging.getLogger("ContinuousBatchingLogger")
@@ -49,16 +52,15 @@ def get_device_and_memory_breakdown() -> tuple[torch.device, int, int, int]:
         reserved_memory = 0  # MPS does not track reserved separately
     else:
         device = torch.device("cpu")
-        try:
-            import psutil
-
+        if is_psutil_available():
             total_memory = psutil.virtual_memory().total
             allocated_memory = psutil.Process().memory_info().rss
             reserved_memory = allocated_memory
-        except ImportError:
+        else:
             total_memory = 0
             reserved_memory = 0
             allocated_memory = 0
+
     return device, total_memory, reserved_memory, allocated_memory
 
 
