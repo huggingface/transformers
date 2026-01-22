@@ -6,6 +6,11 @@ export PYTHONPATH = src
 check_dirs := examples tests src utils scripts benchmark benchmark_v2
 exclude_folders :=  ""
 
+# Helper to find all Python files in directories (ty doesn't recursively scan directories)
+define get_py_files
+$(shell find $(1) -name "*.py" -type f 2>/dev/null)
+endef
+
 
 # this runs all linting/formatting scripts, most notably ruff
 style:
@@ -20,6 +25,7 @@ style:
 check-repo:
 	ruff check $(check_dirs) setup.py conftest.py
 	ruff format --check $(check_dirs) setup.py conftest.py
+	ty check $(call get_py_files,src/transformers/utils) --force-exclude --exclude '**/*_pb2*.py'
 	-python utils/custom_init_isort.py --check_only
 	-python utils/sort_auto_mappings.py --check_only
 	-python -c "from transformers import *" || (echo '🚨 import failed, this means you introduced unprotected imports! 🚨'; exit 1)

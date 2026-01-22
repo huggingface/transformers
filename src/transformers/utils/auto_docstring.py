@@ -1456,7 +1456,7 @@ def generate_processor_intro(cls) -> str:
     return intro
 
 
-def get_placeholders_dict(placeholders: list, model_name: str) -> dict:
+def get_placeholders_dict(placeholders: list | set, model_name: str) -> dict:
     """
     Get the dictionary of placeholders for the given model name.
     """

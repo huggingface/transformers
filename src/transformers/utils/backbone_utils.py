@@ -16,7 +16,6 @@
 
 import enum
 import inspect
-from collections.abc import Iterable
 from typing import TYPE_CHECKING, Union
 
 
@@ -30,7 +29,7 @@ class BackboneType(enum.Enum):
 
 
 def verify_out_features_out_indices(
-    out_features: Iterable[str] | None, out_indices: Iterable[int] | None, stage_names: Iterable[str] | None
+    out_features: list[str] | None, out_indices: list[int] | None, stage_names: list[str] | None
 ):
     """
     Verify that out_indices and out_features are valid for the given stage_names.
@@ -154,13 +153,13 @@ class BackboneMixin:
         # These will diagree with the defaults for the transformers models e.g. for resnet50
         # the transformer model has out_features = ['stem', 'stage1', 'stage2', 'stage3', 'stage4']
         # the timm model has out_features = ['act', 'layer1', 'layer2', 'layer3', 'layer4']
-        self.stage_names = [stage["module"] for stage in self._backbone.feature_info.info]
-        self.num_features = [stage["num_chs"] for stage in self._backbone.feature_info.info]
+        self.stage_names = [stage["module"] for stage in self._backbone.feature_info.info]  # type: ignore[attr-defined]
+        self.num_features = [stage["num_chs"] for stage in self._backbone.feature_info.info]  # type: ignore[attr-defined]
 
         # In some timm versions, out_indices reflects the input type of out_indices on the `create_model` call,
         # in later versions >= 1, it is always a tuple
-        out_indices = list(self._backbone.feature_info.out_indices)
-        out_features = self._backbone.feature_info.module_name()
+        out_indices = list(self._backbone.feature_info.out_indices)  # type: ignore[attr-defined]
+        out_features = self._backbone.feature_info.module_name()  # type: ignore[attr-defined]
 
         # We verify the out indices and out features are valid
         verify_out_features_out_indices(
@@ -207,7 +206,9 @@ class BackboneMixin:
         Set the out_features attribute. This will also update the out_indices attribute to match the new out_features.
         """
         self._out_features, self._out_indices = get_aligned_output_features_output_indices(
-            out_features=out_features, out_indices=None, stage_names=self.stage_names
+            out_features=out_features,
+            out_indices=None,
+            stage_names=self.stage_names,
         )
 
     @property
@@ -220,7 +221,9 @@ class BackboneMixin:
         Set the out_indices attribute. This will also update the out_features attribute to match the new out_indices.
         """
         self._out_features, self._out_indices = get_aligned_output_features_output_indices(
-            out_features=None, out_indices=out_indices, stage_names=self.stage_names
+            out_features=None,
+            out_indices=out_indices,
+            stage_names=self.stage_names,
         )
 
     @property
@@ -255,7 +258,7 @@ class BackboneMixin:
         Serializes this instance to a Python dictionary. Override the default `to_dict()` from `PreTrainedConfig` to
         include the `out_features` and `out_indices` attributes.
         """
-        output = super().to_dict()
+        output = super().to_dict()  # type: ignore[misc]
         output["out_features"] = output.pop("_out_features")
         output["out_indices"] = output.pop("_out_indices")
         return output
@@ -276,7 +279,9 @@ class BackboneConfigMixin:
         Set the out_features attribute. This will also update the out_indices attribute to match the new out_features.
         """
         self._out_features, self._out_indices = get_aligned_output_features_output_indices(
-            out_features=out_features, out_indices=None, stage_names=self.stage_names
+            out_features=out_features,
+            out_indices=None,
+            stage_names=self.stage_names,  # type: ignore[attr-defined]
         )
 
     @property
@@ -289,7 +294,9 @@ class BackboneConfigMixin:
         Set the out_indices attribute. This will also update the out_features attribute to match the new out_indices.
         """
         self._out_features, self._out_indices = get_aligned_output_features_output_indices(
-            out_features=None, out_indices=out_indices, stage_names=self.stage_names
+            out_features=None,
+            out_indices=out_indices,
+            stage_names=self.stage_names,  # type: ignore[attr-defined]
         )
 
     def to_dict(self):
@@ -297,7 +304,7 @@ class BackboneConfigMixin:
         Serializes this instance to a Python dictionary. Override the default `to_dict()` from `PreTrainedConfig` to
         include the `out_features` and `out_indices` attributes.
         """
-        output = super().to_dict()
+        output = super().to_dict()  # type: ignore[misc]
         output["out_features"] = output.pop("_out_features")
         output["out_indices"] = output.pop("_out_indices")
         return output

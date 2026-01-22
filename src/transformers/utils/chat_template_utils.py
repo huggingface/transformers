@@ -41,6 +41,10 @@ logger = logging.get_logger(__name__)
 
 if is_jinja_available():
     import jinja2
+    import jinja2.exceptions
+    import jinja2.ext
+    import jinja2.nodes
+    import jinja2.runtime
     from jinja2.ext import Extension
     from jinja2.sandbox import ImmutableSandboxedEnvironment
 else:
@@ -184,7 +188,7 @@ def _convert_type_hints_to_json_schema(func: Callable) -> dict:
     required = []
     for param_name, param in signature.parameters.items():
         if param.annotation == inspect.Parameter.empty:
-            raise TypeHintParsingException(f"Argument {param.name} is missing a type hint in function {func.__name__}")
+            raise TypeHintParsingException(f"Argument {param.name} is missing a type hint in function {func.__name__}")  # type: ignore[attr-defined]
         if param.default == inspect.Parameter.empty:
             required.append(param_name)
 
@@ -342,7 +346,7 @@ def get_json_schema(func: Callable) -> dict:
     doc = inspect.getdoc(func)
     if not doc:
         raise DocstringParsingException(
-            f"Cannot generate JSON schema for {func.__name__} because it has no docstring!"
+            f"Cannot generate JSON schema for {func.__name__} because it has no docstring!"  # type: ignore[attr-defined]
         )
     doc = doc.strip()
     main_doc, param_descriptions, return_doc = parse_google_format_docstring(doc)
@@ -354,7 +358,7 @@ def get_json_schema(func: Callable) -> dict:
     for arg, schema in json_schema["properties"].items():
         if arg not in param_descriptions:
             raise DocstringParsingException(
-                f"Cannot generate JSON schema for {func.__name__} because the docstring has no description for the argument '{arg}'"
+                f"Cannot generate JSON schema for {func.__name__} because the docstring has no description for the argument '{arg}'"  # type: ignore[attr-defined]
             )
         desc = param_descriptions[arg]
         enum_choices = re.search(r"\(choices:\s*(.*?)\)\s*$", desc, flags=re.IGNORECASE)
@@ -363,7 +367,7 @@ def get_json_schema(func: Callable) -> dict:
             desc = enum_choices.string[: enum_choices.start()].strip()
         schema["description"] = desc
 
-    output = {"name": func.__name__, "description": main_doc, "parameters": json_schema}
+    output = {"name": func.__name__, "description": main_doc, "parameters": json_schema}  # type: ignore[attr-defined]
     if return_dict is not None:
         output["return"] = return_dict
     return {"type": "function", "function": output}
@@ -393,6 +397,7 @@ def _compile_jinja_template(chat_template):
         raise ImportError(
             "apply_chat_template requires jinja2 to be installed. Please install it using `pip install jinja2`."
         )
+    assert jinja2 is not None
 
     class AssistantTracker(Extension):
         # This extension is used to track the indices of assistant-generated tokens in the rendered chat
@@ -405,16 +410,17 @@ def _compile_jinja_template(chat_template):
             self._rendered_blocks = None
             self._generation_indices = None
 
-        def parse(self, parser: jinja2.parser.Parser) -> jinja2.nodes.CallBlock:
+        def parse(self, parser: jinja2.parser.Parser) -> jinja2.nodes.CallBlock:  # type: ignore[name-defined]
             lineno = next(parser.stream).lineno
             body = parser.parse_statements(["name:endgeneration"], drop_needle=True)
-            return jinja2.nodes.CallBlock(self.call_method("_generation_support"), [], [], body).set_lineno(lineno)
+            return jinja2.nodes.CallBlock(self.call_method("_generation_support"), [], [], body).set_lineno(lineno)  # type: ignore[attr-defined]
 
         @jinja2.pass_eval_context
         def _generation_support(self, context: jinja2.nodes.EvalContext, caller: jinja2.runtime.Macro) -> str:
             rv = caller()
             if self.is_active():
                 # Only track generation indices if the tracker is active
+                assert self._rendered_blocks is not None and self._generation_indices is not None
                 start_index = len("".join(self._rendered_blocks))
                 end_index = start_index + len(rv)
                 self._generation_indices.append((start_index, end_index))
@@ -442,6 +448,7 @@ def _compile_jinja_template(chat_template):
         )
 
     def raise_exception(message):
+        assert jinja2 is not None
         raise jinja2.exceptions.TemplateError(message)
 
     def tojson(x, ensure_ascii=False, indent=None, separators=None, sort_keys=False):
@@ -472,7 +479,7 @@ def render_jinja_template(
     **kwargs,
 ) -> str:
     if return_assistant_tokens_mask and not re.search(r"\{\%-?\s*generation\s*-?\%\}", chat_template):
-        logger.warning_once(
+        logger.warning_once(  # type: ignore[attr-defined]
             "return_assistant_tokens_mask==True but chat template does not contain `{% generation %}` keyword."
         )
 

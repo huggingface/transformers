@@ -458,7 +458,7 @@ if _is_torch_available:
     def _model_output_unflatten(
         values: Iterable[Any],
         context: "_torch_pytree.Context",
-        output_type=None,
+        output_type: type[ModelOutput] | None = None,
     ) -> ModelOutput:
         return output_type(**dict(zip(context, values)))
 
@@ -892,7 +892,7 @@ def check_model_inputs(func=None, *, tie_last_hidden_states=True):
 
             if use_cache is not None:
                 if getattr(self, "gradient_checkpointing", False) and self.training and use_cache:
-                    logger.warning_once(
+                    logger.warning_once(  # type: ignore[attr-defined]
                         "`use_cache=True` is incompatible with gradient checkpointing. Setting `use_cache=False`."
                     )
                     use_cache = False

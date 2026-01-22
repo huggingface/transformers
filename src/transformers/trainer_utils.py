@@ -25,9 +25,9 @@ import random
 import re
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Sized
 from functools import partial
-from typing import Any, NamedTuple
+from typing import Any, NamedTuple, TypeGuard
 
 import numpy as np
 
@@ -723,7 +723,7 @@ class TrainerMemoryTracker:
             self.update_metrics(stage, metrics)
 
 
-def has_length(dataset):
+def has_length(dataset: Any) -> TypeGuard[Sized]:
     """
     Checks if the dataset implements __len__() and it doesn't raise an error
     """
