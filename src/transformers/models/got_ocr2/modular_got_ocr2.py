@@ -470,6 +470,12 @@ class GotOcr2ForConditionalGeneration(LlavaForConditionalGeneration):
             image_hidden_states=outputs.image_hidden_states,
         )
 
+    @auto_docstring
+    def get_image_features(
+        self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | BaseModelOutputWithPooling:
+        return self.model.get_image_features(pixel_values=pixel_values, **kwargs)
+
 
 __all__ = [
     "GotOcr2VisionConfig",

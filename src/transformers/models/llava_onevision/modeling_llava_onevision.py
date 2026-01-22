@@ -34,7 +34,8 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
+from ...utils import TransformersKwargs, auto_docstring
+from ...utils.generic import check_model_inputs
 from ..auto import AutoModel
 from .configuration_llava_onevision import LlavaOnevisionConfig
 
@@ -352,7 +353,7 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
         feature_lens = torch.tensor(feature_lens, dtype=torch.long, device=image_features[0].device)
         return new_image_features, feature_lens
 
-    @can_return_tuple
+    @check_model_inputs(tie_last_hidden_states=False)
     @auto_docstring(
         custom_intro="Obtains image last hidden states from the vision tower and apply multimodal projection."
     )
@@ -375,18 +376,6 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
         batch_num_images (`torch.LongTensor`, *optional*):
             Number of images in each sample.
         """
-        vision_feature_layer = (
-            vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
-        )
-        vision_feature_select_strategy = (
-            vision_feature_select_strategy
-            if vision_feature_select_strategy is not None
-            else self.config.vision_feature_select_strategy
-        )
-        vision_aspect_ratio = (
-            vision_aspect_ratio if vision_aspect_ratio is not None else self.config.vision_aspect_ratio
-        )
-
         # ! infer image_num_patches from image_sizes
         if batch_num_images is None:
             # treat this as a single-image case for backward compatibility
@@ -480,7 +469,7 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
 
         return special_image_mask, special_video_mask
 
-    @can_return_tuple
+    @check_model_inputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -518,17 +507,6 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        vision_feature_layer = (
-            vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
-        )
-        vision_feature_select_strategy = (
-            vision_feature_select_strategy
-            if vision_feature_select_strategy is not None
-            else self.config.vision_feature_select_strategy
-        )
-        vision_aspect_ratio = (
-            vision_aspect_ratio if vision_aspect_ratio is not None else self.config.vision_aspect_ratio
-        )
 
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
@@ -593,7 +571,7 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
             video_hidden_states=video_features if pixel_values_videos is not None else None,
         )
 
-    @can_return_tuple
+    @check_model_inputs(tie_last_hidden_states=False)
     @auto_docstring(
         custom_intro="Obtains video last hidden states from the vision tower, apply multimodal projection and pooling."
     )
@@ -616,15 +594,6 @@ class LlavaOnevisionModel(LlavaOnevisionPreTrainedModel):
             The feature selection strategy used to select the vision feature from the vision backbone.
             Can be one of `"default"` or `"full"`
         """
-        vision_feature_layer = (
-            vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
-        )
-        vision_feature_select_strategy = (
-            vision_feature_select_strategy
-            if vision_feature_select_strategy is not None
-            else self.config.vision_feature_select_strategy
-        )
-
         batch_size, frames, channels, height, width = pixel_values.shape
         pixel_values = pixel_values.view(batch_size * frames, channels, height, width)
         vision_outputs = self.vision_tower(
@@ -734,7 +703,7 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
             **kwargs,
         )
 
-    @can_return_tuple
+    @check_model_inputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -807,17 +776,6 @@ class LlavaOnevisionForConditionalGeneration(LlavaOnevisionPreTrainedModel, Gene
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
-        vision_feature_layer = (
-            vision_feature_layer if vision_feature_layer is not None else self.config.vision_feature_layer
-        )
-        vision_feature_select_strategy = (
-            vision_feature_select_strategy
-            if vision_feature_select_strategy is not None
-            else self.config.vision_feature_select_strategy
-        )
-        vision_aspect_ratio = (
-            vision_aspect_ratio if vision_aspect_ratio is not None else self.config.vision_aspect_ratio
-        )
 
         outputs = self.model(
             input_ids=input_ids,
