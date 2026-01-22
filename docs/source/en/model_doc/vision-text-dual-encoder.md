@@ -42,6 +42,7 @@ new zero-shot vision tasks such as image classification or retrieval.
 ## VisionTextDualEncoderProcessor
 
 [[autodoc]] VisionTextDualEncoderProcessor
+    - __call__
 
 ## VisionTextDualEncoderModel
 

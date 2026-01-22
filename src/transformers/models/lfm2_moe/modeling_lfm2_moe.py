@@ -17,8 +17,9 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 from collections.abc import Callable
-from typing import Any, Optional, Union
+from typing import Any, Optional
 
 import torch
 import torch.nn.functional as F
@@ -27,7 +28,12 @@ from torch import nn
 from ... import initialization as init
 from ...cache_utils import Cache
 from ...generation import GenerationMixin
-from ...integrations import use_kernel_forward_from_hub, use_kernel_func_from_hub, use_kernelized_func
+from ...integrations import (
+    use_experts_implementation,
+    use_kernel_forward_from_hub,
+    use_kernel_func_from_hub,
+    use_kernelized_func,
+)
 from ...masking_utils import create_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, MoeModelOutputWithPast
@@ -88,9 +94,9 @@ class Lfm2MoeRotaryEmbedding(nn.Module):
 
     @staticmethod
     def compute_default_rope_parameters(
-        config: Optional[Lfm2MoeConfig] = None,
+        config: Lfm2MoeConfig | None = None,
         device: Optional["torch.device"] = None,
-        seq_len: Optional[int] = None,
+        seq_len: int | None = None,
     ) -> tuple["torch.Tensor", float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
@@ -133,7 +139,7 @@ class Lfm2MoeRotaryEmbedding(nn.Module):
 
 
 class Lfm2MoeMLP(nn.Module):
-    def __init__(self, config: Lfm2MoeConfig, intermediate_size: Optional[int] = None):
+    def __init__(self, config: Lfm2MoeConfig, intermediate_size: int | None = None):
         super().__init__()
         self.hidden_size = config.hidden_size
         self.intermediate_size = config.intermediate_size if intermediate_size is None else intermediate_size
@@ -145,6 +151,7 @@ class Lfm2MoeMLP(nn.Module):
         return self.w2(F.silu(self.w1(x)) * self.w3(x))
 
 
+@use_experts_implementation
 class Lfm2MoeExperts(nn.Module):
     """Collection of expert weights stored as 3D tensors."""
 
@@ -155,6 +162,7 @@ class Lfm2MoeExperts(nn.Module):
         self.intermediate_dim = config.moe_intermediate_size
         self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
         self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
+        self.act_fn = F.silu
 
     def forward(
         self,
@@ -175,7 +183,7 @@ class Lfm2MoeExperts(nn.Module):
             top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
             current_state = hidden_states[token_idx]
             gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
-            current_hidden_states = F.silu(gate) * up
+            current_hidden_states = self.act_fn(gate) * up
             current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
             current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
             final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
@@ -239,7 +247,7 @@ class Lfm2MoeHybridConvCache:
         config: Lfm2MoeConfig,
         max_batch_size: int,
         dtype: torch.dtype = torch.float32,
-        device: Union[torch.device, str, None] = None,
+        device: torch.device | str | None = None,
     ):
         self.key_cache = []
         self.value_cache = []
@@ -269,7 +277,7 @@ class Lfm2MoeHybridConvCache:
         key_states: torch.Tensor,
         value_states: torch.Tensor,
         layer_idx: int,
-        cache_kwargs: Optional[dict[str, Any]] = None,
+        cache_kwargs: dict[str, Any] | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Updates the cache with the new `key_states` and `value_states` for the layer `layer_idx`.
@@ -310,7 +318,7 @@ class Lfm2MoeHybridConvCache:
                 device = self.conv_cache[layer_idx].device
                 self.conv_cache[layer_idx] = self.conv_cache[layer_idx].index_select(0, beam_idx.to(device))
 
-    def get_seq_length(self, layer_idx: Optional[int] = 0) -> int:
+    def get_seq_length(self, layer_idx: int | None = 0) -> int:
         """Returns the sequence length of the cached states. A layer index can be optionally passed."""
         # take any layer that contains cache and not empty tensor
         layer_idx = self.first_attention_layer if self.layer_types[layer_idx] != "full_attention" else layer_idx
@@ -361,7 +369,7 @@ def rotate_half(x):
 
 
 @use_kernel_func_from_hub("rotary_pos_emb")
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
     Args:
@@ -369,8 +377,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
         k (`torch.Tensor`): The key tensor.
         cos (`torch.Tensor`): The cosine part of the rotary embedding.
         sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`, *optional*):
-            Deprecated and unused.
         unsqueeze_dim (`int`, *optional*, defaults to 1):
             The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
             sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
@@ -405,7 +411,7 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
+    attention_mask: torch.Tensor | None,
     scaling: float,
     dropout: float = 0.0,
     **kwargs: Unpack[TransformersKwargs],
@@ -449,11 +455,11 @@ class Lfm2MoeAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: Optional[torch.Tensor],
-        past_key_values: Optional[Lfm2MoeHybridConvCache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        attention_mask: torch.Tensor | None,
+        past_key_values: Lfm2MoeHybridConvCache | None = None,
+        cache_position: torch.LongTensor | None = None,
         **kwargs,
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         input_shape = hidden_states.shape[:-1]
         hidden_shape = (*input_shape, -1, self.head_dim)
 
@@ -529,9 +535,9 @@ class Lfm2MoeShortConv(nn.Module):
     def cuda_kernels_forward(
         self,
         x: torch.Tensor,
-        past_key_values: Optional[Lfm2MoeHybridConvCache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
+        past_key_values: Lfm2MoeHybridConvCache | None = None,
+        cache_position: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
     ):
         x = apply_mask_to_padding_states(x, attention_mask)
         BCx = self.in_proj(x).transpose(-1, -2)
@@ -563,9 +569,9 @@ class Lfm2MoeShortConv(nn.Module):
     def slow_forward(
         self,
         x: torch.Tensor,
-        past_key_values: Optional[Lfm2MoeHybridConvCache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
+        past_key_values: Lfm2MoeHybridConvCache | None = None,
+        cache_position: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
     ):
         seqlen = x.shape[1]
 
@@ -601,9 +607,9 @@ class Lfm2MoeShortConv(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        past_key_values: Optional[Lfm2MoeHybridConvCache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
+        past_key_values: Lfm2MoeHybridConvCache | None = None,
+        cache_position: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
     ):
         if is_fast_path_available and "cuda" in hidden_states.device.type and not is_torchdynamo_compiling():
             return self.cuda_kernels_forward(hidden_states, past_key_values, cache_position, attention_mask)
@@ -630,11 +636,11 @@ class Lfm2MoeDecoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Lfm2MoeHybridConvCache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Lfm2MoeHybridConvCache | None = None,
+        cache_position: torch.LongTensor | None = None,
         **kwargs,
     ) -> torch.Tensor:
         residual = hidden_states
@@ -671,7 +677,7 @@ class Lfm2MoePreTrainedModel(PreTrainedModel):
     _supports_flash_attn = True
     _supports_sdpa = True
     _supports_flex_attn = True
-    _can_compile_fullgraph = False
+    _can_compile_fullgraph = False  # uses a non-compilable custom cache class Lfm2MoeHybridConvCache
     _supports_attention_backend = True
     _can_record_outputs = {
         "hidden_states": Lfm2MoeDecoderLayer,
@@ -711,13 +717,13 @@ class Lfm2MoeModel(Lfm2MoePreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Lfm2MoeHybridConvCache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Lfm2MoeHybridConvCache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -795,15 +801,15 @@ class Lfm2MoeForCausalLM(Lfm2MoePreTrainedModel, GenerationMixin):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> CausalLMOutputWithPast:
         r"""

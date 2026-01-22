@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 Google Inc. HuggingFace Inc. team. All rights reserved.
 #
 #
@@ -17,7 +16,7 @@
 
 import math
 from collections.abc import Callable
-from typing import Optional, Union
+from typing import Optional
 
 import torch
 from torch import nn
@@ -32,7 +31,6 @@ from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
 from ...utils.generic import maybe_autocast
-from ...utils.import_utils import is_tracing
 from .configuration_recurrent_gemma import RecurrentGemmaConfig
 
 
@@ -85,9 +83,9 @@ class RecurrentGemmaRotaryEmbedding(nn.Module):
     @staticmethod
     # Ignore copy
     def compute_default_rope_parameters(
-        config: Optional[RecurrentGemmaConfig] = None,
+        config: RecurrentGemmaConfig | None = None,
         device: Optional["torch.device"] = None,
-        seq_len: Optional[int] = None,
+        seq_len: int | None = None,
     ) -> tuple["torch.Tensor", float]:
         """
         Computes the inverse frequencies according to the original RoPE implementation
@@ -140,7 +138,7 @@ def rotate_half(x):
 
 
 # Copied from transformers.models.llama.modeling_llama.apply_rotary_pos_emb
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
     Args:
@@ -148,8 +146,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
         k (`torch.Tensor`): The key tensor.
         cos (`torch.Tensor`): The cosine part of the rotary embedding.
         sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`, *optional*):
-            Deprecated and unused.
         unsqueeze_dim (`int`, *optional*, defaults to 1):
             The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
             sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
@@ -203,11 +199,11 @@ class RecurrentGemmaSdpaAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        position_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        cache_position: torch.LongTensor | None = None,
         use_cache: bool = False,
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         bsz, q_len, _ = hidden_states.size()
 
         query_states = self.q_proj(hidden_states)
@@ -223,7 +219,7 @@ class RecurrentGemmaSdpaAttention(nn.Module):
         # Partial rotary embedding
         query_rot, query_pass = torch.chunk(query_states, int(1 / self.partial_rotary_factor), dim=-1)
         key_rot, key_pass = torch.chunk(key_states, int(1 / self.partial_rotary_factor), dim=-1)
-        query_rot, key_rot = apply_rotary_pos_emb(query_rot, key_rot, cos, sin, position_ids)
+        query_rot, key_rot = apply_rotary_pos_emb(query_rot, key_rot, cos, sin)
         query_states = torch.cat((query_rot, query_pass), dim=-1)
         key_states = torch.cat((key_rot, key_pass), dim=-1)
 
@@ -363,9 +359,7 @@ class RecurrentGemmaRglru(nn.Module):
 
         # Apply gamma normalization to the input. We need to clip the derivatives of
         # `sqrt` in order to prevent NaNs during training in bfloat16. TODO a bit annoying
-        multiplier = 1
-        if not is_tracing(activations):
-            multiplier = SqrtBoundDerivative.apply(1 - a_square)
+        multiplier = SqrtBoundDerivative.apply(1 - a_square)
         multiplier = reset + ~reset * multiplier
         normalized_x = gated_inputs * multiplier.type(activations.dtype)
 
@@ -384,7 +378,7 @@ class RecurrentGemmaRglru(nn.Module):
         hidden_states: torch.Tensor,
         recurrent_gate: torch.Tensor,
         reset: torch.Tensor,
-        recurrent_states: Union[torch.Tensor, None],
+        recurrent_states: torch.Tensor | None,
         acc_dtype: torch.dtype = torch.float32,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """Runs the recurrence of a linear RNN.
@@ -490,6 +484,8 @@ class RecurrentGemmaRecurrentBlock(nn.Module):
                 x_branch = x_branch.unsqueeze(-1)
                 self.conv1d_state = conv_state[:, :, 1:]
         else:
+            self.conv1d_state = None
+            self.rg_lru.recurrent_states = None
             x_branch = self.conv_1d(x_branch)[..., :seq_len]
 
         x_branch = self.rg_lru(x_branch.transpose(1, 2), position_ids)
@@ -538,8 +534,8 @@ class RecurrentGemmaDecoderLayer(GradientCheckpointingLayer):
         activations: torch.Tensor,
         position_ids: torch.Tensor,
         attention_mask: torch.Tensor,
-        cache_position: Optional[torch.Tensor] = None,
-        use_cache: Optional[bool] = None,
+        cache_position: torch.Tensor | None = None,
+        use_cache: bool | None = None,
     ) -> tuple[torch.Tensor, dict[str, torch.Tensor]]:
         raw_activations = activations
         inputs_normalized = self.temporal_pre_norm(raw_activations)  # RMSNorm introduces slight slight differences
@@ -649,16 +645,16 @@ class RecurrentGemmaModel(RecurrentGemmaPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        input_ids: torch.LongTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        cache_position: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple, BaseModelOutputWithNoAttention]:
+    ) -> tuple | BaseModelOutputWithNoAttention:
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
@@ -761,18 +757,18 @@ class RecurrentGemmaForCausalLM(RecurrentGemmaPreTrainedModel, GenerationMixin):
     # Ignore copy
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        use_cache: Optional[bool] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
+        input_ids: torch.LongTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        cache_position: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        use_cache: bool | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
         **kwargs,
-    ) -> Union[tuple, CausalLMOutput]:
+    ) -> tuple | CausalLMOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,

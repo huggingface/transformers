@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2025-06-30 and added to Hugging Face Transformers on TBD.*
+*This model was released on 2025-06-30 and added to Hugging Face Transformers on 2025-12-19.*
 
 <div style="float: right;">
     <div class="flex flex-wrap space-x-1">
@@ -201,6 +201,7 @@ print(output_text)
 ## Ernie4_5_VL_MoeProcessor
 
 [[autodoc]] Ernie4_5_VL_MoeProcessor
+    - __call__
 
 ## Ernie4_5_VL_MoeTextModel
 

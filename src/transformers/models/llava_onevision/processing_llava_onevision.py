@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,7 +17,6 @@ Processor class for LLaVa-Onevision.
 
 import math
 from collections.abc import Iterable
-from typing import Optional, Union
 
 import numpy as np
 
@@ -27,7 +25,7 @@ from ...image_processing_utils import select_best_resolution
 from ...image_utils import ImageInput, get_image_size, to_numpy_array
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import logging
+from ...utils import auto_docstring, logging
 from ...video_utils import VideoInput
 
 
@@ -45,35 +43,8 @@ class LlavaOnevisionProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@auto_docstring
 class LlavaOnevisionProcessor(ProcessorMixin):
-    r"""
-    Constructs a LLaVa-Onevision processor which wraps a LLaVa-Onevision video processor, LLaVa-NeXT image processor and a LLaMa tokenizer into a single processor.
-
-    [`LlavaNextProcessor`] offers all the functionalities of [`LlavaOnevisionVideoProcessor`], [`LlavaOnevisionImageProcessor`] and [`LlamaTokenizerFast`]. See the
-    [`~LlavaOnevisionVideoProcessor.__call__`], [`~LlavaNextProcessor.__call__`] and [`~LlavaNextProcessor.decode`] for more information.
-
-    Args:
-        image_processor ([`LlavaOnevisionImageProcessor`], *optional*):
-            The image processor is a required input.
-        tokenizer ([`LlamaTokenizerFast`], *optional*):
-            The tokenizer is a required input.
-        video_processor ([`LlavaOnevisionVideoProcessor`], *optional*):
-            The video processor is a required input.
-        num_image_tokens (`int`, *optional*):
-            Number of image tokens for one imagethat will be returned by vision tower.
-        vision_feature_select_strategy (`str`, *optional*):
-            The feature selection strategy used to select the vision feature from the vision backbone.
-            Should be same as in model's config
-        chat_template (`str`, *optional*): A Jinja template which will be used to convert lists of messages
-            in a chat into a tokenizable string.
-        image_token (`str`, *optional*, defaults to `"<image>"`):
-            Special token used to denote image location.
-        video_token (`str`, *optional*, defaults to `"<video>"`):
-            Special token used to denote video location.
-        vision_aspect_ratio (`str`, *optional*, defaults to `"anyres_max_9"`):
-            Aspect ratio used when processong image features. The default value is "anyres_max_9".
-    """
-
     def __init__(
         self,
         image_processor=None,
@@ -87,6 +58,19 @@ class LlavaOnevisionProcessor(ProcessorMixin):
         vision_aspect_ratio="anyres_max_9",
         **kwargs,
     ):
+        r"""
+        num_image_tokens (`int`, *optional*):
+            Number of image tokens for one imagethat will be returned by vision tower.
+        vision_feature_select_strategy (`str`, *optional*):
+            The feature selection strategy used to select the vision feature from the vision backbone.
+            Should be same as in model's config
+        image_token (`str`, *optional*, defaults to `"<image>"`):
+            Special token used to denote image location.
+        video_token (`str`, *optional*, defaults to `"<video>"`):
+            Special token used to denote video location.
+        vision_aspect_ratio (`str`, *optional*, defaults to `"anyres_max_9"`):
+            Aspect ratio used when processong image features. The default value is "anyres_max_9".
+        """
         self.num_image_tokens = num_image_tokens
         self.vision_feature_select_strategy = vision_feature_select_strategy
         self.image_token = tokenizer.image_token if hasattr(tokenizer, "image_token") else image_token
@@ -104,31 +88,15 @@ class LlavaOnevisionProcessor(ProcessorMixin):
         self.vision_aspect_ratio = vision_aspect_ratio
         super().__init__(image_processor, tokenizer, video_processor, chat_template=chat_template)
 
+    @auto_docstring
     def __call__(
         self,
-        images: Optional[ImageInput] = None,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        videos: Optional[VideoInput] = None,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
+        videos: VideoInput | None = None,
         **kwargs: Unpack[LlavaOnevisionProcessorKwargs],
     ) -> BatchFeature:
-        """
-        Main method to prepare for the model one or several sequences(s) and image(s). This method forwards the `text`
-        and `kwargs` arguments to LlamaTokenizerFast's [`~LlamaTokenizerFast.__call__`] if `text` is not `None` to encode
-        the text. To prepare the image(s), this method forwards the `images` and `kwargs` arguments to
-        LlavaNextImageProcessor's [`~LlavaNextImageProcessor.__call__`] if `images` is not `None`. Please refer to the docstring
-        of the above two methods for more information.
-
-        Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. Both channels-first and channels-last formats are supported.
-            text (`str`, `list[str]`, `list[list[str]]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            videos (`np.ndarray`, `torch.Tensor`, `list[np.ndarray]`, `list[torch.Tensor]`):
-                The image or batch of videos to be prepared. Each video can be a 4D NumPy array or PyTorch
-
+        r"""
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
 
@@ -198,7 +166,7 @@ class LlavaOnevisionProcessor(ProcessorMixin):
     def _expand_image_tokens(
         self,
         text: list[TextInput],
-        image_sizes: Iterable[Union[list[int], int]],
+        image_sizes: Iterable[list[int] | int],
         height: int,
         width: int,
         special_token: str,

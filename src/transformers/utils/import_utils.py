@@ -553,6 +553,11 @@ def is_torch_flex_attn_available() -> bool:
 
 
 @lru_cache
+def is_grouped_mm_available() -> bool:
+    return is_torch_available() and version.parse(get_torch_version()) >= version.parse("2.9.0")
+
+
+@lru_cache
 def is_kenlm_available() -> bool:
     return _is_package_available("kenlm")
 
@@ -885,14 +890,17 @@ def is_flash_attn_2_available() -> bool:
 
     import torch
 
-    if torch.version.cuda:
-        return version.parse(flash_attn_version) >= version.parse("2.1.0")
-    elif torch.version.hip:
-        # TODO: Bump the requirement to 2.1.0 once released in https://github.com/ROCmSoftwarePlatform/flash-attention
-        return version.parse(flash_attn_version) >= version.parse("2.0.4")
-    elif is_torch_mlu_available():
-        return version.parse(flash_attn_version) >= version.parse("2.3.3")
-    else:
+    try:
+        if torch.version.cuda:
+            return version.parse(flash_attn_version) >= version.parse("2.1.0")
+        elif torch.version.hip:
+            # TODO: Bump the requirement to 2.1.0 once released in https://github.com/ROCmSoftwarePlatform/flash-attention
+            return version.parse(flash_attn_version) >= version.parse("2.0.4")
+        elif is_torch_mlu_available():
+            return version.parse(flash_attn_version) >= version.parse("2.3.3")
+        else:
+            return False
+    except packaging.version.InvalidVersion:
         return False
 
 
@@ -910,7 +918,12 @@ def is_flash_attn_greater_or_equal_2_10() -> bool:
 @lru_cache
 def is_flash_attn_greater_or_equal(library_version: str) -> bool:
     is_available, flash_attn_version = _is_package_available("flash_attn", return_version=True)
-    return is_available and version.parse(flash_attn_version) >= version.parse(library_version)
+    if not is_available:
+        return False
+    try:
+        return version.parse(flash_attn_version) >= version.parse(library_version)
+    except packaging.version.InvalidVersion:
+        return False
 
 
 @lru_cache
@@ -1069,6 +1082,11 @@ def is_pytesseract_available() -> bool:
 @lru_cache
 def is_pytest_available() -> bool:
     return _is_package_available("pytest")
+
+
+@lru_cache
+def is_pytest_order_available() -> bool:
+    return is_pytest_available() and _is_package_available("pytest_order")
 
 
 @lru_cache
@@ -1296,19 +1314,23 @@ def is_torchdynamo_exporting() -> bool:
 
         return torch.compiler.is_exporting()
     except Exception:
-        try:
-            import torch._dynamo as dynamo
-
-            return dynamo.is_exporting()
-        except Exception:
-            return False
+        return False
 
 
-def is_torch_fx_proxy(x):
+def is_torch_fx_proxy(x) -> bool:
     try:
         import torch.fx
 
         return isinstance(x, torch.fx.Proxy)
+    except Exception:
+        return False
+
+
+def is_fake_tensor(x) -> bool:
+    try:
+        import torch
+
+        return isinstance(x, torch._subclasses.FakeTensor)
     except Exception:
         return False
 
@@ -1361,14 +1383,54 @@ def is_cuda_stream_capturing() -> bool:
 
 def is_tracing(tensor=None) -> bool:
     """Checks whether we are tracing a graph with dynamo (compile or export), torch.jit, torch.fx, jax.jit (with torchax) or
-    CUDA stream capturing"""
+    CUDA stream capturing or FakeTensor"""
+
     # Note that `is_torchdynamo_compiling` checks both compiling and exporting (the export check is stricter and
     # only checks export)
     _is_tracing = is_torchdynamo_compiling() or is_jit_tracing() or is_cuda_stream_capturing()
     if tensor is not None:
         _is_tracing |= is_torch_fx_proxy(tensor)
+        _is_tracing |= is_fake_tensor(tensor)
         _is_tracing |= is_jax_jitting(tensor)
+
     return _is_tracing
+
+
+def torch_compilable_check(cond: Any, msg: str | Callable[[], str], error_type: type[Exception] = ValueError) -> None:
+    """
+    Combines the functionalities of `torch._check`, `torch._check_with` and `torch._check_tensor_all_with` to provide a
+    unified way to perform checks that are compatible with TorchDynamo (torch.compile & torch.export).
+
+    The advantage of using `torch._check(cond, msg, error_type)` over `if cond: raise error_type(msg)` is that the former
+    works as a truthfulness hint for TorchDynamo, instead of failing with a data-dependent control flow error during compilation.
+
+    All checks using this method can be disabled in production environments by setting `TRANSFORMERS_DISABLE_TORCH_CHECK=1`.
+
+    Args:
+        cond (`bool`, `torch.Tensor` or `Callable[[], bool | torch.Tensor]`): The condition to check.
+        msg (`str` or `Callable[[], str]`): The error message to display if the condition is not met.
+        error_type (`type[Exception]`, *optional*, defaults to `ValueError`): The type of error to raise if the condition is not met.
+
+    Raises:
+        error_type: If the condition is not met.
+    """
+    if os.getenv("TRANSFORMERS_DISABLE_TORCH_CHECK", "0") == "1":
+        return
+
+    import torch
+
+    if not callable(msg):
+        # torch._check requires msg to be a callable but we want to keep the API simple for users
+        def msg():
+            return msg
+
+    if callable(cond):
+        cond = cond()
+
+    if isinstance(cond, torch.Tensor):
+        torch._check_tensor_all_with(error_type, cond, msg)
+    else:
+        torch._check_with(error_type, cond, msg)
 
 
 @lru_cache

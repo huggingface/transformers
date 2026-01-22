@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The I-BERT Authors (Sehoon Kim, Amir Gholami, Zhewei Yao,
 # Michael Mahoney, Kurt Keutzer - UC Berkeley) and The HuggingFace Inc. team.
 # Copyright (c) 20121, NVIDIA CORPORATION.  All rights reserved.

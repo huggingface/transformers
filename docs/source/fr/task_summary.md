@@ -222,22 +222,6 @@ La réponse à des questions (*Question Answering* ou *QA* en anglais) est une t
 Il existe deux types courants de réponse à des questions :
 
 - **Extractive** : pour une question donnée et un contexte fourni, la réponse est extraite directement du texte du contexte par le modèle.
-- **Abstractive** : pour une question donnée et un contexte, la réponse est générée à partir du contexte. Cette approche utilise le [`Text2TextGenerationPipeline`] plutôt que le [`QuestionAnsweringPipeline`] montré ci-dessous.
-
-
-```py
->>> from transformers import pipeline
-
->>> question_answerer = pipeline(task="question-answering")
->>> preds = question_answerer(
-...     question="What is the name of the repository?",
-...     context="The name of the repository is huggingface/transformers",
-... )
->>> print(
-...     f"score: {round(preds['score'], 4)}, start: {preds['start']}, end: {preds['end']}, answer: {preds['answer']}"
-... )
-score: 0.9327, start: 30, end: 54, answer: huggingface/transformers
-```
 
 ### Résumé de texte - (*Summarization*)
 
@@ -246,17 +230,7 @@ Le résumé de text consiste à créer une version plus courte d'un texte tout e
 Il existe deux types courants de summarization :
 
 - **Extractive** : identifier et extraire les phrases les plus importantes du texte original.
-- **Abstractive** : générer un résumé qui peut inclure des mots nouveaux non présents dans le texte d'origine. Le [`SummarizationPipeline`] utilise l'approche abstractive.
-
-```py
->>> from transformers import pipeline
-
->>> summarizer = pipeline(task="summarization")
->>> summarizer(
-...     "In this work, we presented the Transformer, the first sequence transduction model based entirely on attention, replacing the recurrent layers most commonly used in encoder-decoder architectures with multi-headed self-attention. For translation tasks, the Transformer can be trained significantly faster than architectures based on recurrent or convolutional layers. On both WMT 2014 English-to-German and WMT 2014 English-to-French translation tasks, we achieve a new state of the art. In the former task our best model outperforms even all previously reported ensembles."
-... )
-[{'summary_text': ' The Transformer is the first sequence transduction model based entirely on attention . It replaces the recurrent layers most commonly used in encoder-decoder architectures with multi-headed self-attention . For translation tasks, the Transformer can be trained significantly faster than architectures based on recurrent or convolutional layers .'}]
-```
+- **Abstractive** : générer un résumé qui peut inclure des mots nouveaux non présents dans le texte d'origine. 
 
 ### Traduction
 

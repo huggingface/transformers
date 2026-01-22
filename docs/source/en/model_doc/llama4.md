@@ -416,6 +416,7 @@ model = Llama4ForConditionalGeneration.from_pretrained(
 ## Llama4Processor
 
 [[autodoc]] Llama4Processor
+    - __call__
 
 ## Llama4ImageProcessorFast
 

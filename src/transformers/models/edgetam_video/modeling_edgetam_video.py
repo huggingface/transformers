@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_edgetam_video.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 the HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,7 +22,7 @@ import math
 from collections import OrderedDict
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
-from typing import Any, Optional, Union
+from typing import Any
 
 import numpy as np
 import torch
@@ -42,14 +41,17 @@ from ...modeling_outputs import BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
-from ...utils import ModelOutput, auto_docstring
-from ...utils.generic import TransformersKwargs
+from ...utils import ModelOutput, auto_docstring, logging
+from ...utils.generic import TransformersKwargs, is_flash_attention_requested
 from ..auto import AutoModel
 from .configuration_edgetam_video import (
     EdgeTamVideoConfig,
     EdgeTamVideoMaskDecoderConfig,
     EdgeTamVideoPromptEncoderConfig,
 )
+
+
+logger = logging.get_logger(__name__)
 
 
 class EdgeTamVideoLayerNorm(nn.LayerNorm):
@@ -137,11 +139,11 @@ class EdgeTamVideoVisionEncoderOutput(ModelOutput):
         the self-attention heads.
     """
 
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    fpn_hidden_states: Optional[torch.FloatTensor] = None
-    fpn_position_encoding: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    last_hidden_state: torch.FloatTensor | None = None
+    fpn_hidden_states: torch.FloatTensor | None = None
+    fpn_position_encoding: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 class EdgeTamVideoVisionRotaryEmbedding(nn.Module):
@@ -150,7 +152,7 @@ class EdgeTamVideoVisionRotaryEmbedding(nn.Module):
     Supports 2D (axial) rotary embeddings for spatial dimensions.
     """
 
-    def __init__(self, config: EdgeTamVideoConfig, end_x: Optional[int] = None, end_y: Optional[int] = None):
+    def __init__(self, config: EdgeTamVideoConfig, end_x: int | None = None, end_y: int | None = None):
         super().__init__()
         self.dim = config.memory_attention_hidden_size // (
             config.memory_attention_downsample_rate * config.memory_attention_num_attention_heads
@@ -191,7 +193,7 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
+    attention_mask: torch.Tensor | None,
     scaling: float,
     dropout: float = 0.0,
     **kwargs,
@@ -235,7 +237,7 @@ class EdgeTamVideoAttention(nn.Module):
         query: torch.Tensor,
         key: torch.Tensor,
         value: torch.Tensor,
-        attention_similarity: Optional[torch.Tensor] = None,
+        attention_similarity: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         # Input projections
@@ -249,6 +251,15 @@ class EdgeTamVideoAttention(nn.Module):
         attention_interface: Callable = eager_attention_forward
         if self.config._attn_implementation != "eager":
             attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        if is_flash_attention_requested(self.config) and attention_similarity is not None:
+            # Target guided masks are represented as float masks and are incompatible with Flash Attention
+            # Fallback to SDPA for this call only so the rest of the model can still benefit from FA
+            attention_interface = ALL_ATTENTION_FUNCTIONS["sdpa"]
+            logger.warning_once(
+                "Falling back to SDPA for target-guided attention because "
+                "Flash Attention does not support additive bias masks."
+            )
 
         attn_output, attn_weights = attention_interface(
             self,
@@ -614,7 +625,7 @@ class EdgeTamVideoPositionEmbeddingSine(nn.Module):
     """
 
     def __init__(
-        self, num_pos_feats: int = 64, temperature: int = 10000, normalize: bool = False, scale: Optional[float] = None
+        self, num_pos_feats: int = 64, temperature: int = 10000, normalize: bool = False, scale: float | None = None
     ):
         super().__init__()
         if scale is not None and normalize is False:
@@ -628,9 +639,9 @@ class EdgeTamVideoPositionEmbeddingSine(nn.Module):
     def forward(
         self,
         shape: torch.Size,
-        device: Union[torch.device, str],
+        device: torch.device | str,
         dtype: torch.dtype,
-        mask: Optional[Tensor] = None,
+        mask: Tensor | None = None,
     ) -> Tensor:
         if mask is None:
             mask = torch.zeros((shape[0], shape[2], shape[3]), device=device, dtype=torch.bool)
@@ -808,7 +819,7 @@ class EdgeTamVideoPreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = "video"
     _supports_sdpa = True
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_attention_backend = True
 
     @torch.no_grad()
@@ -843,8 +854,8 @@ class EdgeTamVideoInferenceCache:
 
     def __init__(
         self,
-        inference_device: Union[torch.device, str] = "cpu",
-        inference_state_device: Union[torch.device, str] = "cpu",
+        inference_device: torch.device | str = "cpu",
+        inference_state_device: torch.device | str = "cpu",
         max_vision_features_cache_size: int = 1,
     ):
         self.inference_device = inference_device
@@ -869,7 +880,7 @@ class EdgeTamVideoInferenceCache:
                 cached[key] = value
         self._vision_features[frame_idx] = cached
 
-    def get_vision_features(self, frame_idx: int) -> Optional[dict]:
+    def get_vision_features(self, frame_idx: int) -> dict | None:
         """Get cached vision features, automatically moved to inference device."""
         if frame_idx not in self._vision_features:
             return None
@@ -915,13 +926,13 @@ class EdgeTamVideoInferenceSession:
 
     def __init__(
         self,
-        video: Optional[torch.FloatTensor] = None,
-        video_height: Optional[int] = None,
-        video_width: Optional[int] = None,
-        inference_device: Union[torch.device, str] = "cpu",
-        inference_state_device: Union[torch.device, str] = "cpu",
-        video_storage_device: Union[torch.device, str] = "cpu",
-        dtype: Union[torch.dtype, str] = "float32",
+        video: torch.FloatTensor | None = None,
+        video_height: int | None = None,
+        video_width: int | None = None,
+        inference_device: torch.device | str = "cpu",
+        inference_state_device: torch.device | str = "cpu",
+        video_storage_device: torch.device | str = "cpu",
+        dtype: torch.dtype | str = "float32",
         max_vision_features_cache_size: int = 1,
     ):
         # store as a dictionary to avoid double memory allocation with torch.cat when adding new frames
@@ -961,7 +972,7 @@ class EdgeTamVideoInferenceSession:
         self.obj_with_new_inputs = []
 
     @property
-    def num_frames(self) -> Optional[int]:
+    def num_frames(self) -> int | None:
         return len(self.processed_frames) if self.processed_frames is not None else None
 
     # Object management
@@ -1001,7 +1012,7 @@ class EdgeTamVideoInferenceSession:
         device_inputs = {}
         for key, value in inputs.items():
             if isinstance(value, torch.Tensor):
-                device_inputs[key] = value.to(self.inference_device, non_blocking=True)
+                device_inputs[key] = value.to(self.inference_device, non_blocking=False)
             else:
                 device_inputs[key] = value
         self.point_inputs_per_obj[obj_idx][frame_idx] = device_inputs
@@ -1025,8 +1036,8 @@ class EdgeTamVideoInferenceSession:
         self,
         obj_idx: int,
         frame_idx: int,
-        output_key: Optional[str] = None,
-        output_value: Optional[Union[torch.Tensor, dict]] = None,
+        output_key: str | None = None,
+        output_value: torch.Tensor | dict | None = None,
         is_conditioning_frame: bool = True,
     ):
         """
@@ -1085,7 +1096,7 @@ class EdgeTamVideoInferenceSession:
         return value
 
     # Video frame management
-    def add_new_frame(self, pixel_values: torch.Tensor, frame_idx: Optional[int] = None) -> int:
+    def add_new_frame(self, pixel_values: torch.Tensor, frame_idx: int | None = None) -> int:
         """Add new frame with automatic device placement."""
         pixel_values = pixel_values.to(self.video_storage_device, dtype=self.dtype, non_blocking=True)
         if pixel_values.dim() == 4:
@@ -1168,7 +1179,7 @@ class EdgeTamVideoMemoryAttentionLayer(nn.Module):
         keys: Tensor,
         key_point_embedding: Tensor,
         rope_position_embeddings: tuple[Tensor, Tensor],
-        rope_position_embeddings_k: Optional[tuple[Tensor, Tensor]] = None,
+        rope_position_embeddings_k: tuple[Tensor, Tensor] | None = None,
         num_k_exclude_rope: int = 0,
         rope_k_repeat: int = 0,
     ) -> torch.Tensor:
@@ -1212,8 +1223,8 @@ class EdgeTamVideoMemoryAttention(nn.Module):
         self,
         current_vision_features: torch.Tensor,
         memory: torch.Tensor,
-        current_vision_position_embeddings: Optional[Tensor] = None,
-        memory_posision_embeddings: Optional[Tensor] = None,
+        current_vision_position_embeddings: Tensor | None = None,
+        memory_posision_embeddings: Tensor | None = None,
         num_object_pointer_tokens: int = 0,
         num_spatial_memory_tokens: int = -1,
     ):
@@ -1299,7 +1310,7 @@ class EdgeTamVideoPerceiverAttention(nn.Module):
         query: torch.Tensor,
         key: torch.Tensor,
         value: torch.Tensor,
-        positional_encoding: Optional[torch.Tensor] = None,
+        positional_encoding: torch.Tensor | None = None,
         **kwargs,
     ) -> torch.Tensor:
         # Project queries, keys, and values
@@ -1364,7 +1375,7 @@ class EdgeTamVideoPerceiverEncoderLayer(nn.Module):
         self,
         latents: torch.Tensor,
         input_features: torch.Tensor,
-        positional_encoding: Optional[torch.Tensor] = None,
+        positional_encoding: torch.Tensor | None = None,
     ) -> torch.Tensor:
         # Cross attention with layer norms
         normalized_latents = self.layer_norm_latents(latents)
@@ -1450,8 +1461,8 @@ class EdgeTamVideoPerceiverResampler(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        positional_encoding: Optional[torch.Tensor] = None,
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+        positional_encoding: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         output_latents = []
         output_positional_encodings = []
 
@@ -1476,8 +1487,8 @@ class EdgeTamVideoPerceiverResampler(nn.Module):
     def _forward_1d(
         self,
         hidden_states: torch.Tensor,
-        positional_encoding: Optional[torch.Tensor] = None,
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+        positional_encoding: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor | None]:
         batch_size = hidden_states.shape[0]
 
         latents = self.latents_1d.unsqueeze(0).expand(batch_size, -1, -1)
@@ -1557,16 +1568,16 @@ class EdgeTamVideoImageSegmentationOutput(ModelOutput):
         A tensor representing the object pointer, used for tracking in videos. Only used for EdgeTamVideoModel.
     """
 
-    iou_scores: Optional[torch.FloatTensor] = None
-    pred_masks: Optional[torch.FloatTensor] = None
-    object_score_logits: Optional[torch.FloatTensor] = None
+    iou_scores: torch.FloatTensor | None = None
+    pred_masks: torch.FloatTensor | None = None
+    object_score_logits: torch.FloatTensor | None = None
     image_embeddings: tuple[torch.FloatTensor, ...] = None
-    vision_hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    vision_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
-    mask_decoder_attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    vision_hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    vision_attentions: tuple[torch.FloatTensor, ...] | None = None
+    mask_decoder_attentions: tuple[torch.FloatTensor, ...] | None = None
 
-    high_res_masks: Optional[torch.FloatTensor] = None
-    object_pointer: Optional[torch.FloatTensor] = None
+    high_res_masks: torch.FloatTensor | None = None
+    object_pointer: torch.FloatTensor | None = None
 
 
 @dataclass
@@ -1583,10 +1594,10 @@ class EdgeTamVideoSegmentationOutput(ModelOutput):
         The frame index of the video.
     """
 
-    object_ids: Optional[list[int]] = None
-    pred_masks: Optional[torch.FloatTensor] = None
-    object_score_logits: Optional[torch.FloatTensor] = None
-    frame_idx: Optional[int] = None
+    object_ids: list[int] | None = None
+    pred_masks: torch.FloatTensor | None = None
+    object_score_logits: torch.FloatTensor | None = None
+    frame_idx: int | None = None
 
 
 class EdgeTamVideoMaskEmbedding(nn.Module):
@@ -1670,10 +1681,10 @@ class EdgeTamVideoPromptEncoder(nn.Module):
 
     def forward(
         self,
-        input_points: Optional[tuple[torch.Tensor, torch.Tensor]],
-        input_labels: Optional[torch.Tensor],
-        input_boxes: Optional[torch.Tensor],
-        input_masks: Optional[torch.Tensor],
+        input_points: tuple[torch.Tensor, torch.Tensor] | None,
+        input_labels: torch.Tensor | None,
+        input_boxes: torch.Tensor | None,
+        input_masks: torch.Tensor | None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         """
         Embeds different types of prompts, returning both sparse and dense embeddings.
@@ -1733,7 +1744,7 @@ class EdgeTamVideoTwoWayTransformer(nn.Module):
         attention_similarity: Tensor,
         target_embedding=None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, BaseModelOutput]:
+    ) -> tuple | BaseModelOutput:
         if image_embeddings is None:
             raise ValueError("You have to specify an image_embedding")
 
@@ -1818,8 +1829,8 @@ class EdgeTamVideoMaskDecoder(nn.Module):
         dense_prompt_embeddings: torch.Tensor,
         multimask_output: bool,
         high_resolution_features: list[torch.Tensor],
-        attention_similarity: Optional[torch.Tensor] = None,
-        target_embedding: Optional[torch.Tensor] = None,
+        attention_similarity: torch.Tensor | None = None,
+        target_embedding: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor]:
         """
@@ -2091,10 +2102,10 @@ class EdgeTamVideoModel(EdgeTamVideoPreTrainedModel):
     @torch.no_grad()
     def get_prompt_embeddings(
         self,
-        input_points: Optional[torch.FloatTensor] = None,
-        input_labels: Optional[torch.LongTensor] = None,
-        input_boxes: Optional[torch.FloatTensor] = None,
-        input_masks: Optional[torch.LongTensor] = None,
+        input_points: torch.FloatTensor | None = None,
+        input_labels: torch.LongTensor | None = None,
+        input_boxes: torch.FloatTensor | None = None,
+        input_masks: torch.LongTensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
         r"""
         Returns the prompt embeddings by passing the input points, labels, boxes and masks through the prompt encoder.
@@ -2126,8 +2137,8 @@ class EdgeTamVideoModel(EdgeTamVideoPreTrainedModel):
     def forward(
         self,
         inference_session: EdgeTamVideoInferenceSession,
-        frame_idx: Optional[int] = None,
-        frame: Optional[torch.Tensor] = None,
+        frame_idx: int | None = None,
+        frame: torch.Tensor | None = None,
         reverse: bool = False,
         **kwargs,
     ) -> EdgeTamVideoSegmentationOutput:
@@ -2227,8 +2238,8 @@ class EdgeTamVideoModel(EdgeTamVideoPreTrainedModel):
     ) -> tuple[
         list[torch.Tensor],
         list[torch.Tensor],
-        Optional[tuple[torch.FloatTensor, ...]],
-        Optional[tuple[torch.FloatTensor, ...]],
+        tuple[torch.FloatTensor, ...] | None,
+        tuple[torch.FloatTensor, ...] | None,
     ]:
         r"""
         Extract and preprocess image features using the vision encoder.
@@ -2297,15 +2308,15 @@ class EdgeTamVideoModel(EdgeTamVideoPreTrainedModel):
 
     def _single_frame_forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        input_points: Optional[torch.FloatTensor] = None,
-        input_labels: Optional[torch.LongTensor] = None,
-        input_boxes: Optional[torch.FloatTensor] = None,
-        input_masks: Optional[torch.LongTensor] = None,
-        image_embeddings: Optional[torch.FloatTensor] = None,
+        pixel_values: torch.FloatTensor | None = None,
+        input_points: torch.FloatTensor | None = None,
+        input_labels: torch.LongTensor | None = None,
+        input_boxes: torch.FloatTensor | None = None,
+        input_masks: torch.LongTensor | None = None,
+        image_embeddings: torch.FloatTensor | None = None,
         multimask_output: bool = True,
-        attention_similarity: Optional[torch.FloatTensor] = None,
-        target_embedding: Optional[torch.FloatTensor] = None,
+        attention_similarity: torch.FloatTensor | None = None,
+        target_embedding: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> EdgeTamVideoImageSegmentationOutput:
         """
@@ -2890,7 +2901,7 @@ class EdgeTamVideoModel(EdgeTamVideoPreTrainedModel):
         )
         return conditioned_feature_map
 
-    def _use_multimask(self, is_init_cond_frame: bool, point_inputs: Optional[dict]) -> bool:
+    def _use_multimask(self, is_init_cond_frame: bool, point_inputs: dict | None) -> bool:
         """Whether to use multimask output in the SAM head."""
         num_pts = 0 if point_inputs is None else point_inputs["point_labels"].size(2)
         multimask_output = (
@@ -2907,11 +2918,11 @@ class EdgeTamVideoModel(EdgeTamVideoPreTrainedModel):
         obj_idx: int,
         batch_size: int,
         is_init_cond_frame: bool,
-        point_inputs: Optional[torch.Tensor],
-        mask_inputs: Optional[torch.Tensor],
+        point_inputs: torch.Tensor | None,
+        mask_inputs: torch.Tensor | None,
         reverse: bool,
         run_mem_encoder: bool,
-        prev_sam_mask_logits: Optional[torch.Tensor] = None,
+        prev_sam_mask_logits: torch.Tensor | None = None,
         streaming: bool = False,
     ) -> dict[str, Any]:
         """
@@ -3075,8 +3086,8 @@ class EdgeTamVideoModel(EdgeTamVideoPreTrainedModel):
     def propagate_in_video_iterator(
         self,
         inference_session: EdgeTamVideoInferenceSession,
-        start_frame_idx: Optional[int] = None,
-        max_frame_num_to_track: Optional[int] = None,
+        start_frame_idx: int | None = None,
+        max_frame_num_to_track: int | None = None,
         reverse: bool = False,
         show_progress_bar: bool = False,
     ) -> Iterator[EdgeTamVideoSegmentationOutput]:

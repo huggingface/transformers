@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,7 +18,6 @@ import gc
 import json
 import re
 from pathlib import Path
-from typing import Optional
 
 import torch
 from huggingface_hub import hf_hub_download
@@ -88,7 +86,7 @@ ORIGINAL_TO_CONVERTED_KEY_MAPPING = {
 
 
 # Copied from transformers.models.mllama.convert_mllama_weights_to_hf.convert_old_keys_to_new_keys
-def convert_old_keys_to_new_keys(state_dict_keys: Optional[dict] = None):
+def convert_old_keys_to_new_keys(state_dict_keys: dict | None = None):
     """
     This function should be applied only once, on the concatenated keys to efficiently rename using
     the key mappings.
@@ -126,7 +124,7 @@ def write_model(model_name, pretrained_model_weights_path, pytorch_dump_folder_p
         # load default config
         config = DabDetrConfig()
     # set other attributes
-    if "dab-detr-resnet-50-dc5" == model_name:
+    if model_name == "dab-detr-resnet-50-dc5":
         config.temperature_height = 10
         config.temperature_width = 10
     if "fixxy" in model_name:

@@ -112,7 +112,7 @@ class FineGrainedFP8HfQuantizer(HfQuantizer):
 
     # NOTE: TP is applied before quantization so this is only to add hooks.
     # Quantization is incompatible with DTensors, so we have to anyway have
-    # gathers! But it should be model independant -> figure out where to put
+    # gathers! But it should be model independent -> figure out where to put
     # the gather and that's it.
     def update_tp_plan(self, config):
         if "Qwen3" in config.__class__.__name__:

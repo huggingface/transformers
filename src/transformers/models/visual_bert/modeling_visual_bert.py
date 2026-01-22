@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The UCLA NLP Authors and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +15,6 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -495,11 +493,11 @@ class VisualBertForPreTrainingOutput(ModelOutput):
         before SoftMax).
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    prediction_logits: Optional[torch.FloatTensor] = None
-    seq_relationship_logits: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
+    loss: torch.FloatTensor | None = None
+    prediction_logits: torch.FloatTensor | None = None
+    seq_relationship_logits: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
 
 
 @auto_docstring(
@@ -540,20 +538,20 @@ class VisualBertModel(VisualBertPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        visual_embeds: Optional[torch.FloatTensor] = None,
-        visual_attention_mask: Optional[torch.LongTensor] = None,
-        visual_token_type_ids: Optional[torch.LongTensor] = None,
-        image_text_alignment: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.LongTensor | None = None,
+        token_type_ids: torch.LongTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        visual_embeds: torch.FloatTensor | None = None,
+        visual_attention_mask: torch.LongTensor | None = None,
+        visual_token_type_ids: torch.LongTensor | None = None,
+        image_text_alignment: torch.LongTensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[tuple[torch.Tensor], BaseModelOutputWithPooling]:
+    ) -> tuple[torch.Tensor] | BaseModelOutputWithPooling:
         r"""
         visual_embeds (`torch.FloatTensor` of shape `(batch_size, visual_seq_length, visual_embedding_dim)`, *optional*):
             The embedded representation of the visual inputs, generally derived using using an object detector.
@@ -724,22 +722,22 @@ class VisualBertForPreTraining(VisualBertPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        visual_embeds: Optional[torch.FloatTensor] = None,
-        visual_attention_mask: Optional[torch.LongTensor] = None,
-        visual_token_type_ids: Optional[torch.LongTensor] = None,
-        image_text_alignment: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        labels: Optional[torch.LongTensor] = None,
-        sentence_image_labels: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.LongTensor | None = None,
+        token_type_ids: torch.LongTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        visual_embeds: torch.FloatTensor | None = None,
+        visual_attention_mask: torch.LongTensor | None = None,
+        visual_token_type_ids: torch.LongTensor | None = None,
+        image_text_alignment: torch.LongTensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        labels: torch.LongTensor | None = None,
+        sentence_image_labels: torch.LongTensor | None = None,
         **kwargs,
-    ) -> Union[tuple[torch.Tensor], VisualBertForPreTrainingOutput]:
+    ) -> tuple[torch.Tensor] | VisualBertForPreTrainingOutput:
         r"""
         visual_embeds (`torch.FloatTensor` of shape `(batch_size, visual_seq_length, visual_embedding_dim)`, *optional*):
             The embedded representation of the visual inputs, generally derived using using an object detector.
@@ -868,21 +866,21 @@ class VisualBertForMultipleChoice(VisualBertPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        visual_embeds: Optional[torch.FloatTensor] = None,
-        visual_attention_mask: Optional[torch.LongTensor] = None,
-        visual_token_type_ids: Optional[torch.LongTensor] = None,
-        image_text_alignment: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        labels: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.LongTensor | None = None,
+        token_type_ids: torch.LongTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        visual_embeds: torch.FloatTensor | None = None,
+        visual_attention_mask: torch.LongTensor | None = None,
+        visual_token_type_ids: torch.LongTensor | None = None,
+        image_text_alignment: torch.LongTensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        labels: torch.LongTensor | None = None,
         **kwargs,
-    ) -> Union[tuple[torch.Tensor], MultipleChoiceModelOutput]:
+    ) -> tuple[torch.Tensor] | MultipleChoiceModelOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
@@ -1055,21 +1053,21 @@ class VisualBertForQuestionAnswering(VisualBertPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        visual_embeds: Optional[torch.FloatTensor] = None,
-        visual_attention_mask: Optional[torch.LongTensor] = None,
-        visual_token_type_ids: Optional[torch.LongTensor] = None,
-        image_text_alignment: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        labels: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.LongTensor | None = None,
+        token_type_ids: torch.LongTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        visual_embeds: torch.FloatTensor | None = None,
+        visual_attention_mask: torch.LongTensor | None = None,
+        visual_token_type_ids: torch.LongTensor | None = None,
+        image_text_alignment: torch.LongTensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        labels: torch.LongTensor | None = None,
         **kwargs,
-    ) -> Union[tuple[torch.Tensor], SequenceClassifierOutput]:
+    ) -> tuple[torch.Tensor] | SequenceClassifierOutput:
         r"""
         visual_embeds (`torch.FloatTensor` of shape `(batch_size, visual_seq_length, visual_embedding_dim)`, *optional*):
             The embedded representation of the visual inputs, generally derived using using an object detector.
@@ -1192,21 +1190,21 @@ class VisualBertForVisualReasoning(VisualBertPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        visual_embeds: Optional[torch.FloatTensor] = None,
-        visual_attention_mask: Optional[torch.LongTensor] = None,
-        visual_token_type_ids: Optional[torch.LongTensor] = None,
-        image_text_alignment: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        labels: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.LongTensor | None = None,
+        token_type_ids: torch.LongTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        visual_embeds: torch.FloatTensor | None = None,
+        visual_attention_mask: torch.LongTensor | None = None,
+        visual_token_type_ids: torch.LongTensor | None = None,
+        image_text_alignment: torch.LongTensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        labels: torch.LongTensor | None = None,
         **kwargs,
-    ) -> Union[tuple[torch.Tensor], SequenceClassifierOutput]:
+    ) -> tuple[torch.Tensor] | SequenceClassifierOutput:
         r"""
         visual_embeds (`torch.FloatTensor` of shape `(batch_size, visual_seq_length, visual_embedding_dim)`, *optional*):
             The embedded representation of the visual inputs, generally derived using using an object detector.
@@ -1365,22 +1363,22 @@ class VisualBertForRegionToPhraseAlignment(VisualBertPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        visual_embeds: Optional[torch.FloatTensor] = None,
-        visual_attention_mask: Optional[torch.LongTensor] = None,
-        visual_token_type_ids: Optional[torch.LongTensor] = None,
-        image_text_alignment: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        region_to_phrase_position: Optional[torch.LongTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.LongTensor | None = None,
+        token_type_ids: torch.LongTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        visual_embeds: torch.FloatTensor | None = None,
+        visual_attention_mask: torch.LongTensor | None = None,
+        visual_token_type_ids: torch.LongTensor | None = None,
+        image_text_alignment: torch.LongTensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        region_to_phrase_position: torch.LongTensor | None = None,
+        labels: torch.LongTensor | None = None,
         **kwargs,
-    ) -> Union[tuple[torch.Tensor], SequenceClassifierOutput]:
+    ) -> tuple[torch.Tensor] | SequenceClassifierOutput:
         r"""
         visual_embeds (`torch.FloatTensor` of shape `(batch_size, visual_seq_length, visual_embedding_dim)`, *optional*):
             The embedded representation of the visual inputs, generally derived using using an object detector.
