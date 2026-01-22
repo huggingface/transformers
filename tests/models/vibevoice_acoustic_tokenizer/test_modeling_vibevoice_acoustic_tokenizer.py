@@ -339,5 +339,5 @@ class VibeVoiceAcousticTokenizerIntegrationTest(unittest.TestCase):
         encoder_out_flat = encoder_out.reshape(encoder_out.shape[0], -1)
         encoder_out = encoder_out_flat[..., : expected_encoder.shape[-1]].cpu()
         decoder_out = acoustic_decoder_out[..., : expected_decoder.shape[-1]].cpu()
-        # torch.testing.assert_close(encoder_out, expected_encoder, rtol=1e-6, atol=1e-6)   # 1/400 elements failing
+        torch.testing.assert_close(encoder_out, expected_encoder, rtol=1e-6, atol=1e-6)
         torch.testing.assert_close(decoder_out, expected_decoder, rtol=1e-6, atol=1e-6)
