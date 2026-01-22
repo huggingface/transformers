@@ -31,7 +31,6 @@ from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import PreTrainedModel
 from ...utils import auto_docstring, logging
 from ...utils.generic import maybe_autocast
-from ...utils.import_utils import is_tracing
 from .configuration_recurrent_gemma import RecurrentGemmaConfig
 
 
@@ -220,7 +219,7 @@ class RecurrentGemmaSdpaAttention(nn.Module):
         # Partial rotary embedding
         query_rot, query_pass = torch.chunk(query_states, int(1 / self.partial_rotary_factor), dim=-1)
         key_rot, key_pass = torch.chunk(key_states, int(1 / self.partial_rotary_factor), dim=-1)
-        query_rot, key_rot = apply_rotary_pos_emb(query_rot, key_rot, cos, sin, position_ids)
+        query_rot, key_rot = apply_rotary_pos_emb(query_rot, key_rot, cos, sin)
         query_states = torch.cat((query_rot, query_pass), dim=-1)
         key_states = torch.cat((key_rot, key_pass), dim=-1)
 
@@ -360,9 +359,7 @@ class RecurrentGemmaRglru(nn.Module):
 
         # Apply gamma normalization to the input. We need to clip the derivatives of
         # `sqrt` in order to prevent NaNs during training in bfloat16. TODO a bit annoying
-        multiplier = 1
-        if not is_tracing(activations):
-            multiplier = SqrtBoundDerivative.apply(1 - a_square)
+        multiplier = SqrtBoundDerivative.apply(1 - a_square)
         multiplier = reset + ~reset * multiplier
         normalized_x = gated_inputs * multiplier.type(activations.dtype)
 
