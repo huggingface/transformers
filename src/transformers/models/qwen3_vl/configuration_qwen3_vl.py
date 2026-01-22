@@ -169,10 +169,10 @@ class Qwen3VLTextConfig(PreTrainedConfig):
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.rope_parameters = rope_parameters
+        self.pad_token_id = pad_token_id
 
         super().__init__(
             ignore_keys_at_rope_validation={"mrope_section", "mrope_interleaved"},
-            pad_token_id=pad_token_id,
             **kwargs,
         )
 
