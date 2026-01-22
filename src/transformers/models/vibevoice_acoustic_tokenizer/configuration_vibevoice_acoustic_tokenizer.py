@@ -22,7 +22,12 @@ class VibeVoiceAcousticTokenizerConfig(PretrainedConfig):
     This is the configuration class to store the configuration of a [`VibeVoiceAcousticTokenizerModel`]. It is used to
     instantiate a VibeVoice acoustic tokenizer model according to the specified arguments, defining the model
     architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of the
-    acoustic tokenizer of [microsoft/VibeVoice-1.5B](https://huggingface.co/microsoft/VibeVoice-1.5B).
+    VibeVoice architecture.
+
+    e.g. [microsoft/VibeVoice-1.5B](https://huggingface.co/microsoft/VibeVoice-1.5B)
+
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
 
     Args:
         channels (`int`, *optional*, defaults to 1):
@@ -49,10 +54,8 @@ class VibeVoiceAcousticTokenizerConfig(PretrainedConfig):
             Activation function to use.
         ffn_expansion (`int`, *optional*, defaults to 4):
             Expansion factor for feed-forward networks.
-        vae_std (`float`, *optional*, defaults to 0.5):
+        vae_std (`float`, *optional*, defaults to 0.625):
             Standard deviation used during VAE sampling.
-        vae_scaling_factor (`float`, *optional*, defaults to 0.8):
-            Scaling factor applied to VAE standard deviation. (Hardcoded in original implementation.)
     Example:
 
     ```python
