@@ -21,7 +21,7 @@ from ...utils import logging
 logger = logging.get_logger(__name__)
 
 
-class ChameleonVQVAEConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class ChameleonVQVAEConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ChameleonVQModel`]. It is used to instantiate a
     `ChameleonVQModel` according to the specified arguments, defining the model architecture.
@@ -95,7 +95,7 @@ class ChameleonVQVAEConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         self.initializer_range = initializer_range
 
 
-class ChameleonConfig(PreTrainedConfig):
+class ChameleonConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`ChameleonModel`]. It is used to instantiate a
     chameleon model according to the specified arguments, defining the model architecture. Instantiating a

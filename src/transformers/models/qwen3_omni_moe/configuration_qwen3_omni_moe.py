@@ -454,7 +454,7 @@ class Qwen3OmniMoeThinkerConfig(PreTrainedConfig):
         self.video_token_id = video_token_id
 
 
-class Qwen3OmniMoeTalkerCodePredictorConfig(PreTrainedConfig):
+class Qwen3OmniMoeTalkerCodePredictorConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`Qwen3OmniMoeTalkerCodePredictorModel`]. It is used to instantiate a
     Qwen3OmniMoeTalkerCodePredictor model according to the specified arguments, defining the model architecture. Instantiating a configuration

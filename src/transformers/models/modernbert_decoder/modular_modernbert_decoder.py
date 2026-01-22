@@ -27,7 +27,7 @@ from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
-from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, RopeParameters
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, RopeParameters, RotaryEmbeddingConfigMixin
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
@@ -45,7 +45,7 @@ from ..modernbert.modeling_modernbert import (
 logger = logging.get_logger(__name__)
 
 
-class ModernBertDecoderConfig(PreTrainedConfig):
+class ModernBertDecoderConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`ModernBertDecoderModel`]. It is used to instantiate a ModernBert
     decoder model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
