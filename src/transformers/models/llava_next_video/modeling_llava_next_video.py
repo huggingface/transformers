@@ -34,7 +34,7 @@ from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, logging
+from ...utils import TransformersKwargs, auto_docstring, logging, torch_compilable_check
 from ...utils.generic import check_model_inputs
 from ..auto import AutoModel
 from .configuration_llava_next_video import LlavaNextVideoConfig
@@ -494,18 +494,19 @@ class LlavaNextVideoModel(LlavaNextVideoPreTrainedModel):
 
         n_image_tokens = special_image_mask.sum()
         special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-        if image_features is not None and inputs_embeds[special_image_mask].numel() != image_features.numel():
-            raise ValueError(
-                f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {image_features.shape[0]}"
+        if image_features is not None:
+            torch_compilable_check(
+                inputs_embeds[special_image_mask].numel() == image_features.numel(),
+                f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {image_features.shape[0]}",
             )
 
         n_video_tokens = special_video_mask.sum()
         special_video_mask = special_video_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-        if video_features is not None and inputs_embeds[special_video_mask].numel() != video_features.numel():
-            raise ValueError(
-                f"Videos features and image tokens do not match: tokens: {n_video_tokens}, features {video_features.shape[0]}"
+        if video_features is not None:
+            torch_compilable_check(
+                inputs_embeds[special_video_mask].numel() == video_features.numel(),
+                f"Video features and video tokens do not match, tokens: {n_video_tokens}, features: {video_features.shape[0]}",
             )
-
         return special_image_mask, special_video_mask
 
     @check_model_inputs(tie_last_hidden_states=False)

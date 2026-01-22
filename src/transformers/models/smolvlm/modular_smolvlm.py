@@ -21,7 +21,7 @@ from ...generation import GenerationConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_outputs import BaseModelOutputWithPooling
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
 from ..idefics3.configuration_idefics3 import Idefics3Config, Idefics3VisionConfig
 from ..idefics3.image_processing_idefics3 import Idefics3ImageProcessor
 from ..idefics3.image_processing_idefics3_fast import Idefics3ImageProcessorFast
@@ -173,9 +173,10 @@ class SmolVLMModel(Idefics3Model):
             image_mask = input_ids == self.config.image_token_id
 
         num_image_tokens = image_mask.sum(dim=1)
-        if not torch.all(num_image_tokens % patch_size == 0):
-            raise ValueError("At least one sample has <image> tokens not divisible by patch_size.")
-
+        torch_compilable_check(
+            torch.all(num_image_tokens % patch_size == 0),
+            "At least one sample has <image> tokens not divisible by patch_size.",
+        )
         blocks_per_sample = num_image_tokens // patch_size
 
         offsets = torch.nn.functional.pad(blocks_per_sample.cumsum(dim=0), (1, 0), value=0)
@@ -215,9 +216,8 @@ class SmolVLMModel(Idefics3Model):
         nb_values_per_image = pixel_values.shape[1:].numel()
         real_images_inds = (pixel_values == 0.0).sum(dim=(-1, -2, -3)) != nb_values_per_image
 
-        if not any(real_images_inds):
-            # no images, leave one empty image.
-            real_images_inds[0] = True
+        # If no images, leave one empty image.
+        real_images_inds[0] |= ~torch.any(real_images_inds)
 
         pixel_values = pixel_values[real_images_inds].contiguous()
         # Handle the vision attention mask

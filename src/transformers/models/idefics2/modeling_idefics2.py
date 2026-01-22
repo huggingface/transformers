@@ -29,7 +29,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling, logging
 from ...utils.generic import check_model_inputs, is_flash_attention_requested
 from ..auto import AutoModel
 from .configuration_idefics2 import Idefics2Config, Idefics2PerceiverConfig, Idefics2VisionConfig
@@ -146,29 +146,33 @@ class Idefics2VisionEmbeddings(nn.Module):
             size=(batch_size, max_nb_patches_h * max_nb_patches_w), fill_value=0, device=pixel_values.device
         )
 
-        for batch_idx, p_attn_mask in enumerate(patch_attention_mask):
-            nb_patches_h = p_attn_mask[:, 0].sum()
-            nb_patches_w = p_attn_mask[0].sum()
+        nb_patches_h = patch_attention_mask[:, :, 0].sum(dim=1)  # (batch_size,)
+        nb_patches_w = patch_attention_mask[:, 0, :].sum(dim=1)  # (batch_size,)
 
-            step_h = 1.0 / nb_patches_h
-            step_w = 1.0 / nb_patches_w
+        step_h = 1.0 / nb_patches_h  # (batch_size,)
+        step_w = 1.0 / nb_patches_w  # (batch_size,)
 
-            h_indices = torch.arange(nb_patches_h, device=position_ids.device, dtype=torch.float32)
-            w_indices = torch.arange(nb_patches_w, device=position_ids.device, dtype=torch.float32)
-            fractional_coords_h = h_indices * step_h
-            fractional_coords_w = w_indices * step_w
+        max_patches_h = patch_attention_mask.size(1)
+        max_patches_w = patch_attention_mask.size(2)
+        h_indices = torch.arange(max_patches_h, device=position_ids.device, dtype=torch.float32)
+        w_indices = torch.arange(max_patches_w, device=position_ids.device, dtype=torch.float32)
 
-            fractional_coords_h = torch.clamp(fractional_coords_h, max=(1.0 - 1e-6))
-            fractional_coords_w = torch.clamp(fractional_coords_w, max=(1.0 - 1e-6))
+        fractional_coords_h = h_indices[None, :] * step_h[:, None]
+        fractional_coords_w = w_indices[None, :] * step_w[:, None]
 
-            fractional_coords_h = fractional_coords_h.to(pixel_values.dtype)
-            fractional_coords_w = fractional_coords_w.to(pixel_values.dtype)
+        fractional_coords_h = torch.clamp(fractional_coords_h, max=(1.0 - 1e-6))
+        fractional_coords_w = torch.clamp(fractional_coords_w, max=(1.0 - 1e-6))
 
-            bucket_coords_h = torch.bucketize(fractional_coords_h, boundaries, right=True)
-            bucket_coords_w = torch.bucketize(fractional_coords_w, boundaries, right=True)
+        fractional_coords_h = fractional_coords_h.to(pixel_values.dtype)
+        fractional_coords_w = fractional_coords_w.to(pixel_values.dtype)
 
-            pos_ids = (bucket_coords_h[:, None] * self.num_patches_per_side + bucket_coords_w).flatten()
-            position_ids[batch_idx][p_attn_mask.view(-1)] = pos_ids
+        bucket_coords_h = torch.bucketize(fractional_coords_h, boundaries, right=True)
+        bucket_coords_w = torch.bucketize(fractional_coords_w, boundaries, right=True)
+
+        pos_ids = bucket_coords_h[:, :, None] * self.num_patches_per_side + bucket_coords_w[:, None, :]
+        pos_ids = pos_ids.reshape(batch_size, -1)
+
+        position_ids[patch_attention_mask.view(batch_size, -1)] = pos_ids[patch_attention_mask.view(batch_size, -1)]
 
         embeddings = embeddings + self.position_embedding(position_ids)
         return embeddings
@@ -488,7 +492,7 @@ class Idefics2VisionTransformer(Idefics2PreTrainedModel):
         # The call to `_upad_input` in `_flash_attention_forward` is expensive
         # So when the `patch_attention_mask` is full of 1s (i.e. attending to the whole sequence),
         # avoiding passing the attention_mask, which is equivalent to attending to the full sequence
-        if not torch.any(~patch_attention_mask):
+        if not is_torchdynamo_compiling() and not torch.any(~patch_attention_mask):
             patch_attention_mask = None
         elif not is_flash_attention_requested(self.config):
             patch_attention_mask = _prepare_4d_attention_mask(patch_attention_mask, hidden_states.dtype)

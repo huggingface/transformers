@@ -45,6 +45,7 @@ from ...utils import (
     can_return_tuple,
     is_grouped_mm_available,
     is_torchdynamo_compiling,
+    torch_compilable_check,
 )
 from ...utils.generic import OutputRecorder, check_model_inputs, is_flash_attention_requested, maybe_autocast
 from .configuration_glm4v_moe import Glm4vMoeConfig, Glm4vMoeTextConfig, Glm4vMoeVisionConfig
@@ -1393,18 +1394,19 @@ class Glm4vMoeModel(Glm4vMoePreTrainedModel):
 
         n_image_tokens = special_image_mask.sum()
         special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-        if image_features is not None and inputs_embeds[special_image_mask].numel() != image_features.numel():
-            raise ValueError(
-                f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {image_features.shape[0]}"
+        if image_features is not None:
+            torch_compilable_check(
+                inputs_embeds[special_image_mask].numel() == image_features.numel(),
+                f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {image_features.shape[0]}",
             )
 
         n_video_tokens = special_video_mask.sum()
         special_video_mask = special_video_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-        if video_features is not None and inputs_embeds[special_video_mask].numel() != video_features.numel():
-            raise ValueError(
-                f"Videos features and video tokens do not match: tokens: {n_video_tokens}, features {video_features.shape[0]}"
+        if video_features is not None:
+            torch_compilable_check(
+                inputs_embeds[special_video_mask].numel() == video_features.numel(),
+                f"Video features and video tokens do not match, tokens: {n_video_tokens}, features: {video_features.shape[0]}",
             )
-
         return special_image_mask, special_video_mask
 
     @auto_docstring

@@ -3586,7 +3586,15 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         return init_contexts
 
-    def set_use_kernels(self, use_kernels, kernel_config):
+    def set_use_kernels(self, use_kernels, kernel_config: KernelConfig | None = None):
+        """
+        Set whether or not to use the `kernels` library to kernelize some layers of the model.
+        Args:
+            use_kernels (`bool`):
+                Whether or not to use the `kernels` library to kernelize some layers of the model.
+            kernel_config (`KernelConfig`, *optional*):
+                The kernel configuration to use to kernelize the model. If `None`, the default kernel mapping will be used.
+        """
         if use_kernels:
             if not is_kernels_available():
                 raise ValueError(

@@ -30,7 +30,7 @@ from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPool
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
 from ...utils.generic import check_model_inputs
 from ..auto import AutoModel
 from ..gemma2.configuration_gemma2 import Gemma2Config
@@ -1710,7 +1710,7 @@ class Gemma3nTextAltUp(nn.Module):
         innovation = activated - predictions[self.config.altup_active_idx]  # (batch, num_tokens, hidden_size)
         innovation = innovation.repeat(self.config.altup_num_inputs, 1, 1, 1)  # Repeat on dim0 to match predictions
 
-        if self.config.altup_coef_clip is not None:
+        if self.training and self.config.altup_coef_clip is not None:
             self.correction_coefs.weight.data.clamp_(-self.config.altup_coef_clip, self.config.altup_coef_clip)
 
         # all_coefs adapted from jax.numpy.einsum("...p,pi->...i", ...)
@@ -2287,16 +2287,18 @@ class Gemma3nModel(PaliGemmaModel):
 
         n_image_tokens = special_image_mask.sum()
         special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-        if image_features is not None and inputs_embeds[special_image_mask].numel() != image_features.numel():
-            raise ValueError(
-                f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {image_features.shape[0] * image_features.shape[1]}"
+        if image_features is not None:
+            torch_compilable_check(
+                inputs_embeds[special_image_mask].numel() == image_features.numel(),
+                f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {image_features.shape[0] * image_features.shape[1]}",
             )
 
         n_audio_tokens = special_audio_mask.sum()
         special_audio_mask = special_audio_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-        if audio_features is not None and inputs_embeds[special_audio_mask].numel() != audio_features.numel():
-            raise ValueError(
-                f"Audio features and image tokens do not match: tokens: {n_audio_tokens}, features {audio_features.shape[0] * audio_features.shape[1]}"
+        if audio_features is not None:
+            torch_compilable_check(
+                inputs_embeds[special_audio_mask].numel() == audio_features.numel(),
+                f"Audio features and audio tokens do not match, tokens: {n_audio_tokens}, features: {audio_features.shape[0] * audio_features.shape[1]}",
             )
 
         return special_image_mask, special_audio_mask
