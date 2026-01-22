@@ -361,9 +361,21 @@ def expand_like(arrays, new_seq_length, padding_index=-100):
 
 
 def nested_truncate(tensors, limit):
-    "Truncate `tensors` at `limit` (even if it's a nested list/tuple/dict of tensors)."
+    """Truncate `tensors` at `limit` (even if it's a nested list/tuple/dict of tensors)."""
+
+    # Special case: per-sample nested labels like tuple[list[...], ...]
+    # Truncate at the sample level, not tensor dimensions or tuple structure.
+    if (
+        isinstance(tensors, tuple)
+        and tensors
+        and all(isinstance(x, list) for x in tensors)
+        and all(len(x) == len(tensors[0]) for x in tensors)
+    ):
+        return tuple(x[:limit] for x in tensors)
+
     if isinstance(tensors, (list, tuple)):
         return type(tensors)(nested_truncate(t, limit) for t in tensors)
+
     if isinstance(tensors, Mapping):
         return type(tensors)({k: nested_truncate(t, limit) for k, t in tensors.items()})
 
