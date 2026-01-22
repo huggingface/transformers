@@ -147,6 +147,7 @@ class Idefics2ImageProcessorFast(BaseImageProcessorFast):
         """
         Prepare a nested images structure for processing.
         """
+        images = self.fetch_images(images)
         return make_nested_list_of_images(images, expected_ndims=expected_ndims)
 
     def split_images(

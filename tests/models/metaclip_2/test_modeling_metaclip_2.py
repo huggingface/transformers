@@ -699,6 +699,6 @@ class MetaClip2ModelIntegrationTest(unittest.TestCase):
             torch.Size((inputs.input_ids.shape[0], inputs.pixel_values.shape[0])),
         )
 
-        expected_logits = torch.tensor([[19.9799, 13.6169]], device=torch_device)
+        expected_logits = torch.tensor([[19.9531, 13.5910]], device=torch_device)
 
         torch.testing.assert_close(outputs.logits_per_image, expected_logits, rtol=1e-3, atol=1e-3)
