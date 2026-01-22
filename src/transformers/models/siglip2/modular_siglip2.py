@@ -41,28 +41,6 @@ from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ...utils.generic import check_model_inputs, is_flash_attention_requested
 
 
-def _ensure_lowercase_normalizer(tok):
-    backend = getattr(tok, "_tokenizer", None)
-    if backend is None:
-        return
-
-    current = backend.normalizer
-    if current is None:
-        backend.normalizer = normalizers.Lowercase()
-        return
-
-    if isinstance(current, normalizers.Lowercase):
-        return
-
-    if isinstance(current, normalizers.Sequence):
-        items = list(current.normalizers)
-        if not any(isinstance(n, normalizers.Lowercase) for n in items):
-            backend.normalizer = normalizers.Sequence([normalizers.Lowercase(), *items])
-        return
-
-    backend.normalizer = normalizers.Sequence([normalizers.Lowercase(), current])
-
-
 class Siglip2Tokenizer(GemmaTokenizer):
     """
     Gemma tokenizer + SigLIP2 training default: lowercase normalization.
@@ -99,7 +77,9 @@ class Siglip2Tokenizer(GemmaTokenizer):
             self.init_kwargs["do_lower_case"] = do_lower_case
 
         if do_lower_case:
-            _ensure_lowercase_normalizer(self)
+            backend = getattr(self, "_tokenizer", None)
+            if backend is not None and backend.normalizer is not None:
+                backend.normalizer = normalizers.Sequence([normalizers.Lowercase(), backend.normalizer])
 
 
 class Siglip2TextConfig(SiglipTextConfig):

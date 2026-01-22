@@ -27,28 +27,6 @@ from ...tokenization_utils_tokenizers import TokenizersBackend
 VOCAB_FILES_NAMES = {"tokenizer_file": "tokenizer.json"}
 
 
-def _ensure_lowercase_normalizer(tok):
-    backend = getattr(tok, "_tokenizer", None)
-    if backend is None:
-        return
-
-    current = backend.normalizer
-    if current is None:
-        backend.normalizer = normalizers.Lowercase()
-        return
-
-    if isinstance(current, normalizers.Lowercase):
-        return
-
-    if isinstance(current, normalizers.Sequence):
-        items = list(current.normalizers)
-        if not any(isinstance(n, normalizers.Lowercase) for n in items):
-            backend.normalizer = normalizers.Sequence([normalizers.Lowercase(), *items])
-        return
-
-    backend.normalizer = normalizers.Sequence([normalizers.Lowercase(), current])
-
-
 class Siglip2Tokenizer(TokenizersBackend):
     """
     Gemma tokenizer + SigLIP2 training default: lowercase normalization.
@@ -113,7 +91,9 @@ class Siglip2Tokenizer(TokenizersBackend):
             self.init_kwargs["do_lower_case"] = do_lower_case
 
         if do_lower_case:
-            _ensure_lowercase_normalizer(self)
+            backend = getattr(self, "_tokenizer", None)
+            if backend is not None and backend.normalizer is not None:
+                backend.normalizer = normalizers.Sequence([normalizers.Lowercase(), backend.normalizer])
 
     def _unk_id(self) -> int:
         # Align with historical Siglip2 convention: pad, eos, bos, unk
