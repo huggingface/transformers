@@ -518,9 +518,6 @@ class PeftAdapterMixin:
             conversion_errors=load_info.conversion_errors,
         )
 
-        if peft_config.inference_mode:
-            self.eval()
-
     def enable_peft_hotswap(
         self, target_rank: int = 128, check_compiled: Literal["error", "warn", "ignore"] = "error"
     ) -> None:
