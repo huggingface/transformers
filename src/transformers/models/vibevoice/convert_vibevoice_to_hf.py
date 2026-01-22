@@ -1,5 +1,5 @@
 # coding=utf-8
-# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -25,7 +25,6 @@ from safetensors.torch import load_file
 from transformers import (
     Qwen2TokenizerFast,
     VibeVoiceAcousticTokenizerConfig,
-    VibeVoiceAcousticTokenizerModel,
     VibeVoiceConfig,
     VibeVoiceAcousticTokenizerFeatureExtractor,
     VibeVoiceForConditionalGeneration,
@@ -146,7 +145,7 @@ def update_state_dict_for_hf_model(state_dict):
 
 
 def convert_checkpoint(
-    checkpoint, output_dir, config_path, push_to_hub, bfloat16, processor_config=None, push_tokenizer=False
+    checkpoint, output_dir, config_path, push_to_hub, bfloat16, processor_config=None
 ):
     if bfloat16:
         dtype = torch.bfloat16
@@ -324,28 +323,9 @@ def convert_checkpoint(
     print("\n=== Creating semantic tokenizer ===")
     semantic_config = VibeVoiceSemanticTokenizerConfig(**model_config["semantic_tokenizer_config"])
 
-    # 6) Create and save acoustic tokenizer
+    # 6) Create acoustic tokenizer config
     print("\n=== Creating acoustic tokenizer ===")
     acoustic_config = VibeVoiceAcousticTokenizerConfig(**model_config["acoustic_tokenizer_config"])
-    acoustic_model = VibeVoiceAcousticTokenizerModel(acoustic_config).to(dtype)
-    # -- filter for acoustic tokenizer weights
-    prefix = "model.acoustic_tokenizer"
-    acoustic_state_dict = {
-        k[len(prefix) + 1 :]: v  # +1 to remove the dot after the prefix
-        for k, v in updated_state_dict.items()
-        if k.startswith(prefix)
-    }
-    # -- load into HF model
-    missing, unexpected = acoustic_model.load_state_dict(acoustic_state_dict, strict=False)
-    if len(unexpected) != 0:
-        raise ValueError(f"Unexpected keys: {unexpected}")
-    if len(missing) != 0:
-        raise ValueError(f"missing keys found: {missing}")
-    if push_to_hub is not None and push_tokenizer:
-        hub_repo = push_to_hub.split("/")[0] + "/VibeVoice-AcousticTokenizer"
-        print(f"------ Pushing to hub as {hub_repo} ------")
-        feature_extractor.push_to_hub(hub_repo)
-        acoustic_model.push_to_hub(hub_repo)
 
     # 7) Create VibeVoice processor
     # -- load processor config
@@ -482,9 +462,8 @@ def convert_checkpoint(
 
 
 """
-Conversion script to convert original VibeVoice model into three HF checkpoints for:
-- VibeVoiceForConditionalGeneration
-- VibeVoiceAcousticTokenizerModel
+Conversion script to convert original VibeVoice model into a checkpoint for `VibeVoiceForConditionalGeneration`
+
 
 # 1.5 Model: https://huggingface.co/microsoft/VibeVoice-1.5B
 
@@ -501,11 +480,9 @@ python src/transformers/models/vibevoice/convert_vibevoice_to_hf.py \
     --output_dir /raid/eric/vibevoice/hf_vibevoice \
     --config_path /raid/eric/vibevoice/config.json \
     --processor_config /raid/eric/vibevoice/preprocessor_config.json \
-    --push_to_hub bezzam/VibeVoice-1.5B --push_tokenizer
+    --push_to_hub bezzam/VibeVoice-1.5B
 ```
-Models will be pushed to:
-- bezzam/VibeVoice-1.5B
-- bezzam/VibeVoice-AcousticTokenizer
+Models will be pushed to: bezzam/VibeVoice-1.5B
 
 
 # 7B Model: https://huggingface.co/aoi-ot/VibeVoice-Large
@@ -525,8 +502,7 @@ python src/transformers/models/vibevoice/convert_vibevoice_to_hf.py \
     --processor_config /raid/eric/vibevoice_7b/preprocessor_config.json \
     --push_to_hub bezzam/VibeVoice-7B
 ```
-Models will be pushed to:
-- bezzam/VibeVoice-7B
+Models will be pushed to: bezzam/VibeVoice-7B
 
 """
 if __name__ == "__main__":
@@ -545,7 +521,6 @@ if __name__ == "__main__":
     parser.add_argument(
         "--float32", action="store_true", help="Whether to use float32 precision. Default is bfloat16."
     )
-    parser.add_argument("--push_tokenizer", action="store_true", help="Whether to push the acoustic tokenizer to the hub.")
 
     args = parser.parse_args()
     convert_checkpoint(
@@ -555,5 +530,4 @@ if __name__ == "__main__":
         args.push_to_hub,
         bfloat16=not args.float32,
         processor_config=args.processor_config,
-        push_tokenizer=args.push_tokenizer,
     )
