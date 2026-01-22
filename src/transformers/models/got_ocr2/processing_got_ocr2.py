@@ -13,8 +13,6 @@
 # limitations under the License.
 
 
-from typing import Optional, Union
-
 import numpy as np
 
 from ...image_processing_utils import BatchFeature
@@ -37,7 +35,7 @@ class GotOcr2TextKwargs(TextKwargs, total=False):
         structured and formatted text output rather than raw OCR results.
     """
 
-    format: Optional[bool]
+    format: bool | None
 
 
 class GotOcr2ImagesKwargs(ImagesKwargs, total=False):
@@ -70,8 +68,8 @@ class GotOcr2ImagesKwargs(ImagesKwargs, total=False):
     crop_to_patches: bool
     min_patches: int
     max_patches: int
-    box: Optional[Union[list, tuple[float, float], tuple[float, float, float, float]]]
-    color: Optional[str]
+    box: list | tuple[float, float] | tuple[float, float, float, float] | None
+    color: str | None
     num_image_tokens: int
     multi_page: bool
 
@@ -94,7 +92,7 @@ class GotOcr2ProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
-def preprocess_box_annotation(box: Union[list, tuple], image_size: tuple[int, int]) -> list:
+def preprocess_box_annotation(box: list | tuple, image_size: tuple[int, int]) -> list:
     """
     Convert box annotation to the format [x1, y1, x2, y2] in the range [0, 1000].
     """
@@ -149,8 +147,8 @@ class GotOcr2Processor(ProcessorMixin):
     @auto_docstring
     def __call__(
         self,
-        images: Optional[ImageInput] = None,
-        text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         **kwargs: Unpack[GotOcr2ProcessorKwargs],
     ) -> BatchFeature:
         r"""

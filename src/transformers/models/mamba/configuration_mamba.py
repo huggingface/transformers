@@ -153,7 +153,7 @@ class MambaConfig(PreTrainedConfig):
         self.use_cache = use_cache
         self.use_mambapy = use_mambapy
 
-        super().__init__(bos_token_id=bos_token_id, eos_token_id=eos_token_id, pad_token_id=pad_token_id, **kwargs)
+        super().__init__(**kwargs)
 
 
 __all__ = ["MambaConfig"]

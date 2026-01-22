@@ -17,7 +17,7 @@ Processor class for Idefics3.
 
 import re
 from itertools import accumulate
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING, Union
 
 import numpy as np
 
@@ -103,7 +103,7 @@ class Idefics3ProcessorKwargs(ProcessingKwargs, total=False):
 @auto_docstring
 class Idefics3Processor(ProcessorMixin):
     def __init__(
-        self, image_processor, tokenizer=None, image_seq_len: int = 169, chat_template: Optional[str] = None, **kwargs
+        self, image_processor, tokenizer=None, image_seq_len: int = 169, chat_template: str | None = None, **kwargs
     ):
         r"""
         image_seq_len (`int`, *optional*, defaults to 169):
@@ -154,9 +154,9 @@ class Idefics3Processor(ProcessorMixin):
     @auto_docstring
     def __call__(
         self,
-        images: Union[ImageInput, list[ImageInput], list[list[ImageInput]]] = None,
+        images: ImageInput | list[ImageInput] | list[list[ImageInput]] = None,
         text: Union[TextInput, "PreTokenizedInput", list[TextInput], list["PreTokenizedInput"]] = None,
-        image_seq_len: Optional[int] = None,
+        image_seq_len: int | None = None,
         **kwargs: Unpack[Idefics3ProcessorKwargs],
     ) -> BatchEncoding:
         r"""

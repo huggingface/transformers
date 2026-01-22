@@ -14,7 +14,6 @@
 """Fast Image processor class for Kosmos2_5."""
 
 import math
-from typing import Optional, Union
 
 import torch
 
@@ -204,8 +203,8 @@ class Kosmos2_5ImageProcessorFast(BaseImageProcessorFast):
         do_normalize: bool,
         max_patches: int,
         patch_size: dict[str, int],
-        disable_grouping: Optional[bool],
-        return_tensors: Optional[Union[str, TensorType]],
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         # Q: should we have this?

@@ -16,7 +16,6 @@ Processor class for SAMHQ.
 """
 
 from copy import deepcopy
-from typing import Optional, Union
 
 import numpy as np
 
@@ -29,7 +28,7 @@ from ...utils import auto_docstring, is_torch_available
 if is_torch_available():
     import torch
 
-NestedList = list[Union[Optional[float | int], "NestedList"]]
+NestedList = list[float | int | None | list[float | int | None]]
 
 
 class SamHQImagesKwargs(ImagesKwargs, total=False):
@@ -61,11 +60,11 @@ class SamHQImagesKwargs(ImagesKwargs, total=False):
         batching masks of different sizes to ensure consistent dimensions.
     """
 
-    segmentation_maps: Optional[ImageInput]
-    input_points: Optional[NestedList]
-    input_labels: Optional[NestedList]
-    input_boxes: Optional[NestedList]
-    point_pad_value: Optional[int]
+    segmentation_maps: ImageInput | None
+    input_points: NestedList | None
+    input_labels: NestedList | None
+    input_boxes: NestedList | None
+    point_pad_value: int | None
     mask_size: dict[str, int]
     mask_pad_size: dict[str, int]
 
@@ -93,7 +92,7 @@ class SamHQProcessor(ProcessorMixin):
     @auto_docstring
     def __call__(
         self,
-        images: Optional[ImageInput] = None,
+        images: ImageInput | None = None,
         **kwargs: Unpack[SamHQProcessorKwargs],
     ) -> BatchEncoding:
         output_kwargs = self._merge_kwargs(

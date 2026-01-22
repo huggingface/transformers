@@ -15,8 +15,6 @@
 Processor class for UDOP.
 """
 
-from typing import Optional, Union
-
 from transformers import logging
 
 from ...image_processing_utils import BatchFeature
@@ -30,8 +28,8 @@ logger = logging.get_logger(__name__)
 
 
 class UdopTextKwargs(TextKwargs, total=False):
-    word_labels: Optional[Union[list[int], list[list[int]]]]
-    boxes: Optional[Union[list[list[int]], list[list[list[int]]]]]
+    word_labels: list[int] | list[list[int]] | None
+    boxes: list[list[int]] | list[list[list[int]]] | None
 
 
 class UdopProcessorKwargs(ProcessingKwargs, total=False):
@@ -74,8 +72,8 @@ class UdopProcessor(ProcessorMixin):
     @auto_docstring
     def __call__(
         self,
-        images: Optional[ImageInput] = None,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         **kwargs: Unpack[UdopProcessorKwargs],
     ) -> BatchFeature:
         # verify input

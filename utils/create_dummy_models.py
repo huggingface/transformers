@@ -173,7 +173,6 @@ def get_architectures_from_config_class(config_class, arch_mappings, models_to_s
     """
     # A model architecture could appear in several mappings. For example, `BartForConditionalGeneration` is in
     #   - MODEL_FOR_PRETRAINING_MAPPING_NAMES
-    #   - MODEL_WITH_LM_HEAD_MAPPING_NAMES
     #   - MODEL_FOR_MASKED_LM_MAPPING_NAMES
     #   - MODEL_FOR_SEQ_TO_SEQ_CAUSAL_LM_MAPPING_NAMES
     # We avoid the duplication.

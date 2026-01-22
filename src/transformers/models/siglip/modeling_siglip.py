@@ -38,7 +38,7 @@ from ...utils import (
     filter_out_non_signature_kwargs,
     torch_int,
 )
-from ...utils.generic import check_model_inputs
+from ...utils.generic import check_model_inputs, is_flash_attention_requested
 from .configuration_siglip import SiglipConfig, SiglipTextConfig, SiglipVisionConfig
 
 
@@ -538,7 +538,7 @@ class SiglipTextTransformer(SiglipPreTrainedModel):
 
         # note: SigLIP's text model does not use a causal mask, unlike the original CLIP model.
         # expand attention_mask
-        uses_flash_attention = "flash" in self.config._attn_implementation
+        uses_flash_attention = is_flash_attention_requested(self.config)
         if uses_flash_attention:
             attention_mask = None
         elif attention_mask is not None and not uses_flash_attention:

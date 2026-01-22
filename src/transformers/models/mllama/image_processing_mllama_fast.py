@@ -14,8 +14,8 @@
 from typing import Optional, Union
 
 import torch
+import torchvision.transforms.v2.functional as tvF
 from PIL import Image
-from torchvision.transforms.v2 import functional as F
 
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
@@ -214,6 +214,7 @@ class MllamaImageProcessorFast(BaseImageProcessorFast):
     do_pad = True
     max_image_tiles = 4
     valid_kwargs = MllamaImageProcessorKwargs
+    model_input_names = ["pixel_values", "num_tiles", "aspect_ratio_ids", "aspect_ratio_mask"]
 
     def __init__(self, **kwargs: Unpack[MllamaImageProcessorKwargs]):
         super().__init__(**kwargs)
@@ -273,7 +274,7 @@ class MllamaImageProcessorFast(BaseImageProcessorFast):
         padded_width = num_tiles_width * size.width
         pad_size = (0, 0, padded_width - image_width, padded_height - image_height)
 
-        image = F.pad(
+        image = tvF.pad(
             image,
             pad_size,
             fill=0,
@@ -286,7 +287,7 @@ class MllamaImageProcessorFast(BaseImageProcessorFast):
         image: "torch.Tensor",
         size: SizeDict,
         max_image_tiles: int,
-        interpolation: "F.InterpolationMode" = None,
+        interpolation: "tvF.InterpolationMode" = None,
         antialias: bool = True,
     ) -> Union["torch.Tensor", tuple[int, int]]:
         """
@@ -332,7 +333,7 @@ class MllamaImageProcessorFast(BaseImageProcessorFast):
             tile_size=tile_size,
         )
 
-        image = F.resize(image, (new_height, new_width), interpolation=interpolation, antialias=antialias)
+        image = tvF.resize(image, (new_height, new_width), interpolation=interpolation, antialias=antialias)
 
         return image, (num_tiles_height, num_tiles_width)
 
@@ -340,15 +341,15 @@ class MllamaImageProcessorFast(BaseImageProcessorFast):
         self,
         images: list["torch.Tensor"],
         size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        max_image_tiles: Optional[int],
-        return_tensors: Optional[Union[str, TensorType]],
-        disable_grouping: Optional[bool],
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        max_image_tiles: int | None,
+        return_tensors: str | TensorType | None,
+        disable_grouping: bool | None,
         **kwargs,
     ) -> BatchFeature:
         # Group images by size for batched resizing

@@ -13,10 +13,10 @@
 # limitations under the License.
 """Fast Image processor class for ViTMatte."""
 
-from typing import Optional, Union
+from typing import Union
 
 import torch
-from torchvision.transforms.v2 import functional as F
+import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
@@ -47,10 +47,10 @@ logger = logging.get_logger(__name__)
 @auto_docstring
 class VitMatteImageProcessorFast(BaseImageProcessorFast):
     do_rescale: bool = True
-    rescale_factor: Union[int, float] = 1 / 255
+    rescale_factor: int | float = 1 / 255
     do_normalize: bool = True
-    image_mean: Optional[Union[float, list[float]]] = IMAGENET_STANDARD_MEAN
-    image_std: Optional[Union[float, list[float]]] = IMAGENET_STANDARD_STD
+    image_mean: float | list[float] | None = IMAGENET_STANDARD_MEAN
+    image_std: float | list[float] | None = IMAGENET_STANDARD_STD
     do_pad: bool = True
     size_divisor: int = 32
     valid_kwargs = VitMatteImageProcessorKwargs
@@ -81,7 +81,7 @@ class VitMatteImageProcessorFast(BaseImageProcessorFast):
 
         if pad_width + pad_height > 0:
             padding = (0, 0, pad_width, pad_height)
-            images = F.pad(images, padding)
+            images = tvF.pad(images, padding)
 
         return images
 
@@ -104,7 +104,7 @@ class VitMatteImageProcessorFast(BaseImageProcessorFast):
         trimaps: ImageInput,
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
-        device: Optional[Union[str, "torch.device"]] = None,
+        device: Union[str, "torch.device"] | None = None,
         **kwargs: Unpack[VitMatteImageProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -122,15 +122,15 @@ class VitMatteImageProcessorFast(BaseImageProcessorFast):
         self,
         images: list["torch.Tensor"],
         trimaps: list["torch.Tensor"],
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[float] = None,
-        do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
-        do_pad: Optional[bool] = None,
-        size_divisor: Optional[int] = None,
-        disable_grouping: Optional[bool] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        do_rescale: bool | None = None,
+        rescale_factor: float | None = None,
+        do_normalize: bool | None = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        do_pad: bool | None = None,
+        size_divisor: int | None = None,
+        disable_grouping: bool | None = None,
+        return_tensors: str | TensorType | None = None,
     ) -> BatchFeature:
         grouped_images, grouped_images_index = group_images_by_shape(images, disable_grouping=disable_grouping)
         grouped_trimaps, grouped_trimaps_index = group_images_by_shape(trimaps, disable_grouping=disable_grouping)
