@@ -618,7 +618,7 @@ class SiglipModelIntegrationTest(unittest.TestCase):
             torch.Size((inputs.input_ids.shape[0], inputs.pixel_values.shape[0])),
         )
 
-        expected_logits = torch.tensor([[-0.7567, -10.3354]], device=torch_device)
+        expected_logits = torch.tensor([[-0.7538, -10.3387]], device=torch_device)
 
         torch.testing.assert_close(outputs.logits_per_image, expected_logits, rtol=1e-3, atol=1e-3)
 

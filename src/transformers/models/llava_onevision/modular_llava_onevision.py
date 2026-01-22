@@ -16,8 +16,8 @@ import math
 from typing import Optional
 
 import torch
+import torchvision.transforms.v2.functional as tvF
 from torch import nn
-from torchvision.transforms.v2 import functional as F
 
 from transformers.models.llava_next.image_processing_llava_next_fast import LlavaNextImageProcessorFast
 from transformers.models.llava_next_video.modeling_llava_next_video import (
@@ -112,7 +112,7 @@ class LlavaOnevisionImageProcessorFast(LlavaNextImageProcessorFast):
         paste_y_left = (max_dim - height) // 2
         paste_x_right = max_dim - width - paste_x_left
         paste_y_right = max_dim - height - paste_y_left
-        padded_images = F.pad(
+        padded_images = tvF.pad(
             images, padding=[paste_x_left, paste_y_left, paste_x_right, paste_y_right], fill=background_color
         )
 
@@ -122,6 +122,7 @@ class LlavaOnevisionImageProcessorFast(LlavaNextImageProcessorFast):
     def preprocess(self, images: ImageInput, **kwargs: Unpack[LlavaOnevisionImageProcessorKwargs]) -> BatchFeature:
         if isinstance(images, (tuple, list)) and isinstance(images[0], (tuple, list)):
             # if the first element is a list, we assume that all elements are lists
+            images = [x for x in images if x]  # handle text-only case
             batch_num_images = [len(x) for x in images]
         elif isinstance(images, (tuple, list)):
             # treat this as a single-image case for backward compatibility
@@ -137,7 +138,7 @@ class LlavaOnevisionImageProcessorFast(LlavaNextImageProcessorFast):
         do_resize: bool,
         size: SizeDict,
         image_grid_pinpoints: list[list[int]],
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
