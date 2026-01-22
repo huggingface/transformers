@@ -34,7 +34,7 @@ To see all architectures and checkpoints compatible with this task, we recommend
 Before you begin, make sure you have all the necessary libraries installed:
 
 ```bash
-pip install transformers datasets soundfile peft accelerate
+pip install transformers datasets torchcodec soundfile peft accelerate
 ```
 
 We encourage you to login to your Hugging Face account so you can upload and share your model with the community. When prompted, enter your token to login:
