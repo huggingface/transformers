@@ -97,7 +97,7 @@ class VLMModelTester:
         pad_token_id=0,
         bos_token_id=1,
         eos_token_id=2,
-        image_token_index=3,
+        image_token_id=3,
         is_decoder=False,
         scope=None,
         expert_interval=1,
@@ -172,7 +172,7 @@ class VLMModelTester:
         self.projection_dim = projection_dim
         self.projector_hidden_act = projector_hidden_act
         self.ignore_index = ignore_index
-        self.image_token_index = image_token_index
+        self.image_token_id = image_token_id
         self.vision_feature_select_strategy = vision_feature_select_strategy
         self.vision_feature_layer = vision_feature_layer
         self._base_num_image_tokens = num_image_tokens
