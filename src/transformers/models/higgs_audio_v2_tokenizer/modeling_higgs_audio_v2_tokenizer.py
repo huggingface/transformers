@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_higgs_audio_v2_tokenizer.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 Boson AI and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -495,13 +494,8 @@ class HiggsAudioV2TokenizerModel(HiggsAudioV2TokenizerPreTrainedModel):
         stacked = torch.stack([h.to(input_values.device) for h in hidden_states], dim=1)
         semantic_features = stacked.mean(dim=1)
 
-        semantic_downsample_factor = int(
-            self.config.hop_length
-            / (self.config.sample_rate / self.config.semantic_sample_rate)
-            / self.config.downsample_factor
-        )
-        if semantic_downsample_factor > 1:
-            semantic_features = semantic_features[:, ::semantic_downsample_factor, :]
+        if self.config.semantic_downsample_factor > 1:
+            semantic_features = semantic_features[:, :: self.config.semantic_downsample_factor, :]
 
         return semantic_features
 

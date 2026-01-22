@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_higgs_audio_v2_tokenizer.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 Boson AI and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -191,6 +190,10 @@ class HiggsAudioV2TokenizerConfig(PreTrainedConfig):
     @property
     def num_quantizers(self) -> int:
         return int(1000 * self.target_bandwidths[-1] // (self.frame_rate * self.codebook_nbits))
+
+    @property
+    def semantic_downsample_factor(self):
+        return int(self.hop_length / (self.sample_rate / self.semantic_sample_rate) / self.downsample_factor)
 
 
 __all__ = ["HiggsAudioV2TokenizerConfig"]
