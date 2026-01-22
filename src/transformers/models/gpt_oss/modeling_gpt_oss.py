@@ -165,12 +165,14 @@ class GptOssTopKRouter(nn.Module):
         return router_logits, router_scores, router_indices
 
 
+from megablocks.cpu_moe_cpp import MegaBlocksMoeMLP as CPUMegaBlocksMoeMLP
 @use_kernel_forward_from_hub("MegaBlocksMoeMLP")
 class GptOssMLP(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.router = GptOssTopKRouter(config)
         self.experts = GptOssExperts(config)
+        self.__class__ = CPUMegaBlocksMoeMLP
 
     def forward(self, hidden_states):
         _, router_scores, router_indices = self.router(hidden_states)
