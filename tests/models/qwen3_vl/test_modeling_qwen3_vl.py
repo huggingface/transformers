@@ -192,6 +192,34 @@ class Qwen3VLModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCas
     def test_config(self):
         self.config_tester.run_common_tests()
 
+    def test_nested_text_config_missing_pad_token_id(self):
+        """
+        Mirrors the from_pretrained failure when loading a Qwen3VLModel:
+        a text_config dict loaded from config.json may omit pad_token_id, but should still
+        results in a Qwen3VLTextConfig with pad_token_id=None and allow Qwen3VLModel init.
+        """
+        config = self.model_tester.get_config()  # Qwen3VLConfig
+
+        # remove pad_token_id from config.json like dict
+        text_cfg_dict = (
+            config.text_config.to_dict() if hasattr(config.text_config, "to_dict") else dict(config.text_config)
+        )
+        text_cfg_dict.pop("pad_token_id", None)
+
+        # nested-config normalization: build a Qwen3VLTextConfig from that dict
+        config.text_config = Qwen3VLTextConfig(**text_cfg_dict)
+
+        for model_class in self.all_model_classes:
+            model = model_class(config).to(torch_device)
+
+            language_model = getattr(model, "language_model", None)
+            if language_model is None and hasattr(model, "model"):
+                language_model = getattr(model.model, "language_model", None)
+
+            self.assertIsNotNone(language_model)
+            self.assertTrue(hasattr(language_model.config, "pad_token_id"))
+            self.assertIsNone(language_model.config.pad_token_id)
+
     def test_mismatching_num_image_tokens(self):
         """
         Tests that VLMs through an error with explicit message saying what is wrong
@@ -400,9 +428,10 @@ class Qwen3VLTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     def test_init_without_pad_token_id(self):
         """
-        Regression test for: AttributeError: 'Qwen3VLTextConfig' object has no attribute 'pad_token_id'
+        Regression test for 'Qwen3VLTextConfig' object has no attribute 'pad_token_id'
         """
-        config = self.model_tester.get_config()  # pad_token_id intentionally omitted -> should be None
+        # pad_token_id intentionally omitted, should be None
+        config = self.model_tester.get_config()
         model = Qwen3VLTextModel(config).to(torch_device)
 
         self.assertTrue(hasattr(model.config, "pad_token_id"))
