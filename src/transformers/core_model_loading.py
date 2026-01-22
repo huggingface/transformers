@@ -26,7 +26,7 @@ from contextlib import contextmanager
 from copy import deepcopy
 from dataclasses import dataclass, field
 from itertools import chain
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Tuple
 
 import torch
 
@@ -686,10 +686,12 @@ class WeightConverter(WeightTransform):
 GLOBAL_WORKERS = min(4, os.cpu_count() or 4)
 
 
-def _materialize_copy(fetch: Callable[torch.Tensor], device=None, dtype=None) -> torch.Tensor:
-    handle = fetch()
-    return torch.from_dlpack(handle)
+def _materialize_copy(fetch: Tuple[torch.Tensor, Callable[int]], device=None, dtype=None) -> torch.Tensor:
+    dst, fetch = fetch
+    if fetch() <= 0:
+        raise RuntimeError("Failed to fetch tensor")
 
+    return dst
 
 def spawn_materialize(
     thread_pool: ThreadPoolExecutor | None, tensor: torch.Tensor, device=None, dtype=None
