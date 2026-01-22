@@ -22,7 +22,7 @@ from ..auto.configuration_auto import AutoConfig
 logger = logging.get_logger(__name__)
 
 
-class MoshiDepthConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
+class MoshiDepthConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`MoshiDepthDecoder`]. It is used to instantiate a
     Moshi depth decoder model according to the specified arguments, defining the Moshi depth decoder config.
@@ -159,7 +159,7 @@ class MoshiDepthConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
         super().__init__(**kwargs)
 
 
-class MoshiConfig(PreTrainedConfig):
+class MoshiConfig(PreTrainedConfig, RotaryEmbeddingConfigMixin):
     r"""
     This is the configuration class to store the configuration of a [`MoshiModel`]. It is used to instantiate a
     Moshi model according to the specified arguments, defining the audio encoder, Moshi depth decoder and Moshi decoder
