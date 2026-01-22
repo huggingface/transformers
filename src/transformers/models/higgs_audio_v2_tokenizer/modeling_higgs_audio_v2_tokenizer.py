@@ -122,7 +122,7 @@ class HiggsAudioV2TokenizerDecoderOutput(ModelOutput):
     audio_values: torch.FloatTensor | None = None
 
 
-class ResidualUnit(nn.Module):
+class HiggsAudioV2TokenizerResidualUnit(nn.Module):
     """Residual block for SemanticEncoder and SemanticDecoder used in HiggsAudioV2Tokenizer."""
 
     def __init__(self, config: HiggsAudioV2TokenizerConfig, in_channels: int, out_channels: int, dilation: int):
@@ -153,7 +153,10 @@ class SemanticEncoderBlock(nn.Module):
     def __init__(self, config: HiggsAudioV2TokenizerConfig, in_channels: int, out_channels: int, stride: int):
         super().__init__()
         self.res_units = nn.ModuleList(
-            [ResidualUnit(config, in_channels, in_channels, dilation) for dilation in config.block_dilations]
+            [
+                HiggsAudioV2TokenizerResidualUnit(config, in_channels, in_channels, dilation)
+                for dilation in config.block_dilations
+            ]
         )
 
         # special case: stride=1, do not use kernel=2
@@ -219,7 +222,10 @@ class SemanticDecoderBlock(nn.Module):
             )
 
         self.res_units = nn.ModuleList(
-            [ResidualUnit(config, out_channels, out_channels, dilation) for dilation in config.block_dilations]
+            [
+                HiggsAudioV2TokenizerResidualUnit(config, out_channels, out_channels, dilation)
+                for dilation in config.block_dilations
+            ]
         )
 
     def forward(self, hidden_state: torch.Tensor) -> torch.Tensor:
