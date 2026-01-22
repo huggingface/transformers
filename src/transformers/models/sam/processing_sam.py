@@ -61,9 +61,9 @@ class SamImagesKwargs(ImagesKwargs, total=False):
     """
 
     segmentation_maps: ImageInput | None
-    input_points: NestedList | None
-    input_labels: NestedList | None
-    input_boxes: NestedList | None
+    input_points: NestedList | torch.Tensor | None
+    input_labels: NestedList | torch.Tensor | None
+    input_boxes: NestedList | torch.Tensor | None
     point_pad_value: int | None
     mask_size: dict[str, int]
     mask_pad_size: dict[str, int]

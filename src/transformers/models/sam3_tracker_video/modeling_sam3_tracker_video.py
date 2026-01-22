@@ -1591,6 +1591,7 @@ def get_1d_sine_pe(pos_inds, dim, temperature=10000):
 class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
     input_modalities = ("video", "text")
     _can_record_outputs = {"mask_decoder_attentions": OutputRecorder(Sam3TrackerVideoTwoWayAttentionBlock, index=2)}
+    _tied_weights_keys = {}
     _keys_to_ignore_on_load_unexpected = [r"^detector_model."]
     _checkpoint_conversion_mapping = {
         r"tracker_model.(.+)": r"\1",  # the regex allows to remove the prefix, and add it back in revert mode

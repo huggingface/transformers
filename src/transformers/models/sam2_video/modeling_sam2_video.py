@@ -1582,6 +1582,7 @@ def get_1d_sine_pe(pos_inds, dim, temperature=10000):
 class Sam2VideoModel(Sam2VideoPreTrainedModel):
     input_modalities = ("video", "text")
     _can_record_outputs = {"mask_decoder_attentions": OutputRecorder(Sam2VideoTwoWayAttentionBlock, index=2)}
+    _tied_weights_keys = {}
     _keys_to_ignore_on_load_unexpected = []
 
     def __init__(self, config: Sam2VideoConfig):

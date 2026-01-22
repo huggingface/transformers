@@ -926,6 +926,7 @@ class EdgeTamMaskDecoder(nn.Module):
 class EdgeTamModel(EdgeTamPreTrainedModel):
     input_modalities = ("image", "text")
     _can_record_outputs = {"mask_decoder_attentions": OutputRecorder(EdgeTamTwoWayAttentionBlock, index=2)}
+    _tied_weights_keys = {}
     _keys_to_ignore_on_load_unexpected = [
         r"^memory_.*",
         r"^mask_downsample.*",
