@@ -13,8 +13,6 @@
 # limitations under the License.
 "FP-Quant integration file"
 
-from typing import Optional
-
 import torch
 
 from ..utils import (
@@ -39,8 +37,8 @@ class FpQuantQuantize(ConversionOps):
     def convert(
         self,
         input_dict: torch.Tensor,
-        model: Optional[torch.nn.Module] = None,
-        missing_keys: Optional[list[str]] = None,
+        model: torch.nn.Module | None = None,
+        missing_keys: list[str] | None = None,
         **kwargs,
     ) -> dict[str, torch.Tensor]:
         target_key, value = tuple(input_dict.items())[0]
@@ -76,9 +74,9 @@ class FpQuantDeserialize(ConversionOps):
     def convert(
         self,
         input_dict: torch.Tensor,
-        model: Optional[torch.nn.Module] = None,
+        model: torch.nn.Module | None = None,
         full_layer_name: str | None = None,
-        missing_keys: Optional[list[str]] = None,
+        missing_keys: list[str] | None = None,
         **kwargs,
     ) -> dict[str, torch.Tensor]:
         target_key, value = tuple(input_dict.items())[0]

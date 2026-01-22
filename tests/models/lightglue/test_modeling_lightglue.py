@@ -161,20 +161,20 @@ class LightGlueModelTest(ModelTesterMixin, unittest.TestCase):
     def test_feed_forward_chunking(self):
         pass
 
-    @unittest.skip(reason="LightGlueForKeypointMatching is not trainable")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training(self):
         pass
 
-    @unittest.skip(reason="LightGlueForKeypointMatching is not trainable")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(reason="LightGlueForKeypointMatching is not trainable")
-    def test_training_gradient_checkpointing_use_reentrant(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="LightGlueForKeypointMatching is not trainable")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     @unittest.skip(reason="LightGlue does not output any loss term in the forward pass")
@@ -497,63 +497,25 @@ class LightGlueModelIntegrationTest(unittest.TestCase):
         predicted_matches_values1 = outputs.matches[1, 0, 10:30]
         predicted_matching_scores_values1 = outputs.matching_scores[1, 0, 10:30]
 
-        expected_number_of_matches0 = 144
+        expected_number_of_matches0 = 143
         expected_matches_values0 = torch.tensor(
-            [-1, -1, 17, -1, -1, 13, -1, -1, -1, -1, -1, -1, 5, -1, -1, 19, -1, 10, -1, 11], dtype=torch.int64
+            [-1, -1, -1, -1, 17, 13, -1, -1, -1, -1, -1, -1, 5, -1, -1, 19, -1, 10, -1, 11], dtype=torch.int64
         ).to(torch_device)
+        # fmt: off
         expected_matching_scores_values0 = torch.tensor(
-            [
-                0.0699,
-                0.0302,
-                0.3356,
-                0.0820,
-                0,
-                0.2266,
-                0,
-                0,
-                0.0241,
-                0,
-                0,
-                0,
-                0.1674,
-                0,
-                0,
-                0.8114,
-                0,
-                0.8120,
-                0,
-                0.2936,
-            ]
+            [0.0696, 0.0283, 0.0000, 0.0863, 0.2834, 0.2308, 0.0000, 0.0000, 0.0189, 0.0000, 0.0000, 0.0000, 0.1792, 0.0000, 0.0000, 0.8197, 0.0000, 0.8194, 0.0000, 0.3058]
         ).to(torch_device)
+        # fmt: on
 
         expected_number_of_matches1 = 862
         expected_matches_values1 = torch.tensor(
             [10, 11, -1, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, -1, 26, -1, 28, 29], dtype=torch.int64
         ).to(torch_device)
+        # fmt: off
         expected_matching_scores_values1 = torch.tensor(
-            [
-                0.4772,
-                0.3781,
-                0.0631,
-                0.9559,
-                0.8746,
-                0.9271,
-                0.4882,
-                0.5406,
-                0.9439,
-                0.1526,
-                0.5028,
-                0.4107,
-                0.5591,
-                0.9130,
-                0.7572,
-                0.0302,
-                0.4532,
-                0.0893,
-                0.9490,
-                0.4880,
-            ]
+            [0.4744, 0.3749, 0.0628, 0.9572, 0.8744, 0.9277, 0.4843, 0.5365, 0.9441, 0.1519, 0.5004, 0.4058, 0.5569, 0.9113, 0.7525, 0.0301, 0.4510, 0.0892, 0.9483, 0.4815]
         ).to(torch_device)
+        # fmt: on
 
         # expected_early_stopping_layer = 2
         # predicted_early_stopping_layer = torch.max(outputs.prune[1]).item()

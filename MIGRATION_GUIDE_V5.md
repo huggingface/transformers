@@ -197,7 +197,7 @@ This tokenizer will behave as a Llama-like tokenizer, with an updated vocabulary
 
 **Simplified file loading:** Support is added for passing`vocab` and `merges` as file paths directly to tokenizer initialization. The tokenizer will automatically detect the format (SentencePiece `.model`, Tekken `tekken.json`, or plain vocab/merges files) for loading. For BPE tokenizers, if a vocab is provided but no merges, merges will be automatically generated (excluding special tokens).
 
-Note: Loading from file paths with `vocab="<path_to_a_file>"`'s primary goal is to allow you to do some quick testing, but for `BPE` models for example we don't check wether you properly passed the merges or not. 
+Note: Loading from file paths with `vocab="<path_to_a_file>"`'s primary goal is to allow you to do some quick testing, but for `BPE` models for example we don't check whether you properly passed the merges or not. 
 
 #### 2. Simplified decoding API
 
@@ -478,6 +478,12 @@ model_4bit = AutoModelForCausalLM.from_pretrained(
 ```
 
 
+### Auto-classes
+
+- `AutoModelWithLMHead` is removed in favor of `AutoModelForCausalLM` for causal language models, `AutoModelForMaskedLM` for masked language models and `AutoModelForSeq2SeqLM` for encoder-decoder models
+- `AutoModelForVision2Seq` is removed in favor of `AutoModelForImageTextToText`
+
+
 ## Configuration
 
 - Methods to init a nested config such as `from_xxx_config` are deleted. Configs can be init from the `__init__` method in the same way. See [#41314](https://github.com/huggingface/transformers/pull/41314).
@@ -524,7 +530,7 @@ Linked PRs:
 - Old, deprecated output type aliases were removed (e.g. `GreedySearchEncoderDecoderOutput`). We now only have 4 output classes built from the following matrix: decoder-only vs encoder-decoder, uses beams vs doesn't use beams (https://github.com/huggingface/transformers/pull/40998)
 - Removed deprecated classes regarding decoding methods that were moved to the Hub due to low usage (constraints and beam scores) (https://github.com/huggingface/transformers/pull/41223)
 - If `generate` doesn't receive any KV Cache argument, the default cache class used is now defined by the model (as opposed to always being `DynamicCache`) (https://github.com/huggingface/transformers/pull/41505)
-- Generation parameters are no longer accessible via model's config. If generation paramaters are serialized in `config.json` for any old model, it will be loaded back into model's generation config. Users are expected to access or modify generation parameters only with `model.generation_config.do_sample = True`. 
+- Generation parameters are no longer accessible via model's config. If generation parameters are serialized in `config.json` for any old model, it will be loaded back into model's generation config. Users are expected to access or modify generation parameters only with `model.generation_config.do_sample = True`. 
 
 ## Trainer
 
@@ -570,7 +576,53 @@ Linked PRs:
 
 - `use_cache` in the model config will be set to `False`. You can still change the cache value through `TrainingArguments` `usel_cache` argument if needed. 
 
-## Pipeline
+## Pipelines
+
+`Text2TextGenerationPipeline`, as well as the related `SummarizationPipeline` and `TranslationPipeline`, were deprecated and will now be removed.
+`pipeline` classes are intended as a high-level beginner-friendly API, but for almost all text-to-text tasks a modern chat model 
+and `TextGenerationPipeline` will provide much higher quality output. As a result, we felt it was misleading for beginners to offer the older pipelines.
+
+If you were using these pipelines before, try using `TextGenerationPipeline` with a chat model instead. For example, for summarization:
+
+```python
+import torch
+from transformers import pipeline
+
+# Any other chat model will also work - if you're low on memory you can use a smaller one
+summarizer = pipeline("text-generation", model="Qwen/Qwen3-4B-Instruct-2507")  
+message_history = [
+    {
+        "role": "user",
+        "content": "Summarize the following text:\n\n[TEXT_TO_SUMMARIZE]"
+    }
+]
+print(summarizer(message_history)[0]["generated_text"][-1]["content"])
+```
+
+Similarly, the `image-to-text` pipeline has been removed. This pipeline was used for early image captioning models, but these
+no longer offer competitive performance. Instead, for image captioning tasks we recommend using a modern vision-language chat model
+via the `image-text-to-text` pipeline. For example:
+
+```python
+import torch
+from transformers import pipeline
+
+# Any other VLM will also work - if you're low on memory you can use a smaller one
+captioner = pipeline("image-text-to-text", model="Qwen/Qwen3-VL-4B-Instruct")
+message_history = [
+    {
+        "role": "user",
+        "content": [
+            {
+                "type": "image",
+                "image": "[IMAGE_URL_HERE]",
+            },
+            {"type": "text", "text": "Describe this image."},
+        ],
+    }
+]
+print(captioner(message_history)[0]["generated_text"][-1]["content"])
+```
 
 - Image text to text pipelines will no longer accept images as a separate argument along with conversation chats. Image data has to be embedded in the chat's "content" field. See [#42359](https://github.com/huggingface/transformers/pull/42359)
 

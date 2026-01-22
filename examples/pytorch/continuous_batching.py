@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,10 +14,10 @@
 import argparse
 import contextlib
 import json
+import logging
 import os
 import time
 from itertools import cycle
-from typing import Optional
 
 import datasets
 import torch
@@ -89,8 +88,8 @@ def batch_generate(
     generation_config: GenerationConfig,
     tokenizer: AutoTokenizer,
     displayed_samples: int = 0,  # -1: no display, 0: display stats, >0: display inputs and some outputs
-    output_file: Optional[str] = None,
-    expected_outputs: Optional[list[str]] = None,
+    output_file: str | None = None,
+    expected_outputs: list[str] | None = None,
 ) -> tuple[float, float]:
     # Actual batch generation
     if displayed_samples >= 0:
@@ -263,6 +262,7 @@ if __name__ == "__main__":
         tokenizer_kwargs["max_length"] = args.input_length
         tokenizer_kwargs["truncation"] = True
         tokenizer_kwargs["padding"] = True
+        tokenizer.pad_token_id = tokenizer.eos_token_id
 
     batched_inputs = []
     for item, prefix in zip(dataset, cycle(possible_prefixes)):
@@ -325,14 +325,15 @@ if __name__ == "__main__":
             f"runs/cb/{args.num_blocks}_{args.max_batch_tokens}_{attn}_{args.matmul_precision}_{args.samples}.json"
         )
 
-    # Run warmup batch generation # TODO: understand why warmup incurs a large overhead during cache creation
-    batch_generate(
-        model,
-        batched_inputs[: min(5, args.samples)],
-        generation_cfg,
-        tokenizer,
-        displayed_samples=-1,
-    )
+    # Run warmup batch generation if log level is above DEBUG # TODO: understand why warmup incurs a large overhead during cache creation
+    if logger.level > logging.DEBUG:
+        batch_generate(
+            model,
+            batched_inputs[: min(5, args.samples)],
+            generation_cfg,
+            tokenizer,
+            displayed_samples=-1,
+        )
 
     if args.profile is not None:
         cm = profile(activities=[ProfilerActivity.CPU, ProfilerActivity.CUDA], record_shapes=True)

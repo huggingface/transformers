@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,7 +21,6 @@ Notebook to get the original logits: https://colab.research.google.com/drive/1QD
 import argparse
 import os
 import re
-from typing import Optional
 
 import requests
 import torch
@@ -161,7 +159,7 @@ def get_config(model_name):
     return config
 
 
-def convert_old_keys_to_new_keys(state_dict_keys: Optional[dict] = None):
+def convert_old_keys_to_new_keys(state_dict_keys: dict | None = None):
     """
     This function should be applied only once, on the concatenated keys to efficiently rename using
     the key mappings.

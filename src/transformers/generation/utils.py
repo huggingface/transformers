@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The Google AI Language Team Authors, Facebook AI Research authors and The HuggingFace Inc. team.
 # Copyright (c) 2020, NVIDIA CORPORATION.  All rights reserved.
 #
@@ -21,7 +20,7 @@ import warnings
 from collections.abc import Callable
 from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Optional, Union
+from typing import TYPE_CHECKING, Any, Optional
 
 import torch
 import torch.distributed as dist
@@ -54,6 +53,7 @@ from ..utils import (
     is_torchdynamo_exporting,
     logging,
 )
+from ..utils.generic import is_flash_attention_requested
 from .candidate_generator import (
     AssistantVocabTranslatorCache,
     AssistedCandidateGenerator,
@@ -332,9 +332,9 @@ class GenerateBeamEncoderDecoderOutput(ModelOutput):
 
 
 # Typing shortcuts
-GenerateNonBeamOutput = Union[GenerateDecoderOnlyOutput, GenerateEncoderDecoderOutput]
-GenerateBeamOutput = Union[GenerateBeamDecoderOnlyOutput, GenerateBeamEncoderDecoderOutput]
-GenerateOutput = Union[GenerateNonBeamOutput, GenerateBeamOutput]
+GenerateNonBeamOutput = GenerateDecoderOnlyOutput | GenerateEncoderDecoderOutput
+GenerateBeamOutput = GenerateBeamDecoderOnlyOutput | GenerateBeamEncoderDecoderOutput
+GenerateOutput = GenerateNonBeamOutput | GenerateBeamOutput
 
 
 class GenerationMixin(ContinuousMixin):
@@ -1773,9 +1773,9 @@ class GenerationMixin(ContinuousMixin):
         """
         # parameterization priority:
         # user-defined kwargs or `generation_config` > `self.generation_config` > global default values
-        # TODO: (raushan) doesn't make sense to allow kwargs and `generation_config`. Should be mutually exclusive!
         # TODO (joao): per-model generation config classes.
 
+        generation_config_provided = generation_config is not None
         if generation_config is None:
             # Users may modify `model.config` to control generation. This is a legacy behavior and is not supported anymore
             if len(self.config._get_generation_parameters()) > 0:
@@ -1792,25 +1792,14 @@ class GenerationMixin(ContinuousMixin):
         generation_config = copy.deepcopy(generation_config)
 
         # First set values from the loaded `self.generation_config`, then set default values (BC)
-        # Do not update any values that aren't `None`, i.e. if set by users explicitly and passed
-        # to `generate()`. Thus the `defaults_only=True` is used
+        #
+        # Only update values that are `None`, i.e. these values were not explicitly set by users to `generate()`,
+        # or values that are not present in the current config, i.e. custom entries that were set via `**kwargs`.
+        # Thus we use the specific kwargs `defaults_only=True` (`None` values only) and `allow_custom_entries=True`
+        # (custom entries are carried over).
         global_defaults = self.generation_config._get_default_generation_params()
-        generation_config.update(**self.generation_config.to_dict(), defaults_only=True)
+        generation_config.update(**self.generation_config.to_dict(), defaults_only=True, allow_custom_entries=True)
         generation_config.update(**global_defaults, defaults_only=True)
-
-        # Due to some values being boolean and not `None`, we need additional logic to overwrite
-        # them explicitly (`defaults_only=False`) on the condition that it's only a previous
-        # default value
-        default_generation_config = GenerationConfig()
-        generation_config.update(
-            **{
-                k: v
-                for k, v in self.generation_config.to_dict().items()
-                if isinstance(v, bool)
-                and hasattr(default_generation_config, k)
-                and getattr(generation_config, k, None) == getattr(default_generation_config, k)
-            }
-        )
 
         # Finally, if there are any kwargs, update config with it -> highest priority at the end
         model_kwargs = generation_config.update(**kwargs)
@@ -1821,6 +1810,16 @@ class GenerationMixin(ContinuousMixin):
         # (if we're inside this branch, then it is because we're using default values from the Hub)
         if generation_config.cache_implementation == "hybrid":
             generation_config.cache_implementation = None
+
+        # It doesn't make sense to allow kwargs and `generation_config`, that should be mutually exclusive
+        if generation_config_provided and set(kwargs.keys()) - set(model_kwargs.keys()):
+            generation_kwargs = set(kwargs.keys()) - set(model_kwargs.keys())
+            logger.warning_once(
+                f"Passing `generation_config` together with generation-related "
+                f"arguments=({generation_kwargs}) is deprecated and will be removed in future versions. "
+                "Please pass either a `generation_config` object OR all generation "
+                "parameters explicitly, but not both.",
+            )
 
         # Finally keep output_xxx args in `model_kwargs` so it can be passed to `forward`
         output_attentions = generation_config.output_attentions
@@ -1914,6 +1913,7 @@ class GenerationMixin(ContinuousMixin):
         # NOTE: remove xlnet/reformer when the models are deprecated, non-standard model architecture/cache name
         return not cls._is_stateful and all(
             special_model_name not in cls.__name__.lower()
+            or "minimaxm2" in cls.__name__.lower()  # name clash between minimax and minimax m2
             for special_model_name in [
                 "reformer",
                 "minimax",
@@ -2183,13 +2183,13 @@ class GenerationMixin(ContinuousMixin):
             # Finally: if we can compile, disable tokenizers parallelism
             os.environ["TOKENIZERS_PARALLELISM"] = "0"
 
-            # If we use FA2 and a static cache, we cannot compile with fullgraph
-            if self.config._attn_implementation == "flash_attention_2":
+            # If we use FA and a static cache, we cannot compile with fullgraph
+            if is_flash_attention_requested(self.config):
                 # only raise warning if the user passed an explicit compile-config
                 if generation_config.compile_config is not None and generation_config.compile_config.fullgraph:
                     logger.warning_once(
-                        "When using Flash Attention 2 and a static cache, you cannot use the option `CompileConfig(fullgraph=True)` as "
-                        "FA2 introduces graph breaks. We overrode the option with `fullgraph=False`."
+                        "When using Flash Attention and a static cache, you cannot use the option `CompileConfig(fullgraph=True)` as "
+                        "FA introduces graph breaks. We overrode the option with `fullgraph=False`."
                     )
                     generation_config.compile_config.fullgraph = False
 
@@ -2429,7 +2429,7 @@ class GenerationMixin(ContinuousMixin):
                 raise NotImplementedError(
                     f"assistant_model is not supported for continuous batching. Got {assistant_model = }"
                 )
-            if streamer is not None:  # TODO: actualy this could be supported
+            if streamer is not None:  # TODO: actually this could be supported
                 raise NotImplementedError(f"streaming is not supported for continuous batching. Got {streamer = }")
             if negative_prompt_ids is not None:
                 raise NotImplementedError(
@@ -2485,9 +2485,11 @@ class GenerationMixin(ContinuousMixin):
         generation_config, model_kwargs = self._prepare_generation_config(generation_config, **kwargs)
 
         generation_mode = generation_config.get_generation_mode(assistant_model)
+        deprecated_mode_repo = self._get_deprecated_gen_repo(generation_mode, trust_remote_code, custom_generate)
+
         if isinstance(custom_generate, Callable):
             decoding_method = custom_generate
-        else:
+        elif deprecated_mode_repo is None:
             # type() required to access the unbound class-level method
             decoding_method = getattr(type(self), GENERATION_MODES_MAPPING[generation_mode])
 
@@ -2498,7 +2500,7 @@ class GenerationMixin(ContinuousMixin):
         # NOTE: This must come after initializing generation_config, since we need it to determine if this is a deprecated mode.
         # It must also be before any preparation steps, since Hub repos expect to be loaded before preparation steps.
         # TODO joao, manuel: remove this in v4.62.0
-        if deprecated_mode_repo := self._get_deprecated_gen_repo(generation_mode, trust_remote_code, custom_generate):
+        if deprecated_mode_repo is not None:
             return GenerationMixin.generate(
                 self,
                 inputs=inputs,
@@ -3875,7 +3877,6 @@ class GenerationMixin(ContinuousMixin):
                 model_kwargs["cache_position"] = torch.arange(
                     past_length, current_length, dtype=torch.long, device=input_chunk.device
                 )
-                model_kwargs["position_ids"] = model_kwargs["cache_position"].unsqueeze(0)
                 model_inputs = self.prepare_inputs_for_generation(input_chunk, **model_kwargs)
 
                 outputs = model_forward(**model_inputs, return_dict=True)

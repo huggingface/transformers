@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,7 +18,7 @@ from collections.abc import Callable, Iterable, Mapping
 from contextlib import redirect_stdout
 from dataclasses import dataclass, fields
 from io import BytesIO
-from typing import NewType, Optional, Union
+from typing import NewType, Union
 from urllib.parse import urlparse
 
 import httpx
@@ -45,7 +44,6 @@ from .utils import (
 
 if is_vision_available():
     import PIL.Image
-    import PIL.ImageOps
 
     if is_torchvision_available():
         from torchvision import io as torchvision_io
@@ -80,12 +78,12 @@ VideoInput = Union[
 @dataclass
 class VideoMetadata(Mapping):
     total_num_frames: int
-    fps: Optional[float] = None
-    width: Optional[int] = None
-    height: Optional[int] = None
-    duration: Optional[float] = None
-    video_backend: Optional[str] = None
-    frames_indices: Optional[list[int]] = None
+    fps: float | None = None
+    width: int | None = None
+    height: int | None = None
+    duration: float | None = None
+    video_backend: str | None = None
+    frames_indices: list[int] | None = None
 
     def __iter__(self):
         return (f.name for f in fields(self))
@@ -119,9 +117,7 @@ class VideoMetadata(Mapping):
                 setattr(self, key, value)
 
 
-VideoMetadataType = Union[
-    VideoMetadata, dict, list[Union[dict, VideoMetadata]], list[list[Union[dict, VideoMetadata]]]
-]
+VideoMetadataType = VideoMetadata | dict | list[dict | VideoMetadata] | list[list[dict | VideoMetadata]]
 
 
 def is_valid_video_frame(frame):
@@ -259,7 +255,7 @@ def make_batched_metadata(videos: VideoInput, video_metadata: VideoMetadataType)
     return video_metadata
 
 
-def get_video_size(video: np.ndarray, channel_dim: Optional[ChannelDimension] = None) -> tuple[int, int]:
+def get_video_size(video: np.ndarray, channel_dim: ChannelDimension | None = None) -> tuple[int, int]:
     """
     Returns the (height, width) dimensions of the video.
 
@@ -283,7 +279,7 @@ def get_video_size(video: np.ndarray, channel_dim: Optional[ChannelDimension] = 
         raise ValueError(f"Unsupported data format: {channel_dim}")
 
 
-def get_uniform_frame_indices(total_num_frames: int, num_frames: Optional[int] = None):
+def get_uniform_frame_indices(total_num_frames: int, num_frames: int | None = None):
     """
     Creates a numpy array for uniform sampling of `num_frame` frames from `total_num_frames`
     when loading a video.
@@ -632,10 +628,10 @@ VIDEO_DECODERS = {
 
 def load_video(
     video: VideoInput,
-    num_frames: Optional[int] = None,
-    fps: Optional[Union[int, float]] = None,
+    num_frames: int | None = None,
+    fps: int | float | None = None,
     backend: str = "pyav",
-    sample_indices_fn: Optional[Callable] = None,
+    sample_indices_fn: Callable | None = None,
     **kwargs,
 ) -> np.ndarray:
     """
@@ -731,7 +727,7 @@ def load_video(
 
 def convert_to_rgb(
     video: np.ndarray,
-    input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    input_data_format: str | ChannelDimension | None = None,
 ) -> np.ndarray:
     """
     Convert video to RGB by blending the transparency layer if it's in RGBA format, otherwise simply returns it.
@@ -770,11 +766,11 @@ def convert_to_rgb(
 
 def pad(
     video: np.ndarray,
-    padding: Union[int, tuple[int, int], Iterable[tuple[int, int]]],
+    padding: int | tuple[int, int] | Iterable[tuple[int, int]],
     mode: PaddingMode = PaddingMode.CONSTANT,
-    constant_values: Union[float, Iterable[float]] = 0.0,
-    data_format: Optional[Union[str, ChannelDimension]] = None,
-    input_data_format: Optional[Union[str, ChannelDimension]] = None,
+    constant_values: float | Iterable[float] = 0.0,
+    data_format: str | ChannelDimension | None = None,
+    input_data_format: str | ChannelDimension | None = None,
 ) -> np.ndarray:
     """
     Pads the `video` with the specified (height, width) `padding` and `mode`.

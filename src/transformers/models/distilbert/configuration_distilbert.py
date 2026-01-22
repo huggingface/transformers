@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2019-present, the HuggingFace Inc. team, The Google AI Language Team and Facebook, Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -101,6 +100,9 @@ class DistilBertConfig(PreTrainedConfig):
         qa_dropout=0.1,
         seq_classif_dropout=0.2,
         pad_token_id=0,
+        eos_token_id=None,
+        bos_token_id=None,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -116,7 +118,11 @@ class DistilBertConfig(PreTrainedConfig):
         self.initializer_range = initializer_range
         self.qa_dropout = qa_dropout
         self.seq_classif_dropout = seq_classif_dropout
-        super().__init__(**kwargs, pad_token_id=pad_token_id)
+        self.pad_token_id = pad_token_id
+        self.eos_token_id = eos_token_id
+        self.bos_token_id = bos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(**kwargs)
 
 
 __all__ = ["DistilBertConfig"]

@@ -184,10 +184,6 @@ class ClvpEncoderTest(ModelTesterMixin, unittest.TestCase):
         pass
 
     @unittest.skip(reason="ClvpEncoder does not output loss")
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(reason="ClvpEncoder does not output loss")
     def test_gradient_checkpointing_enable_disable(self):
         pass
 

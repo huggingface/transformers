@@ -272,6 +272,7 @@ Tips:
 ## MusicgenProcessor
 
 [[autodoc]] MusicgenProcessor
+    - __call__
 
 ## MusicgenModel
 

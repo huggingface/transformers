@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 Meta and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +14,6 @@
 """Tokenization classes for ESM."""
 
 import os
-from typing import Optional
 
 from ...tokenization_python import PreTrainedTokenizer
 from ...utils import logging
@@ -89,7 +87,7 @@ class EsmTokenizer(PreTrainedTokenizer):
         return self._id_to_token.get(index, self.unk_token)
 
     def build_inputs_with_special_tokens(
-        self, token_ids_0: list[int], token_ids_1: Optional[list[int]] = None
+        self, token_ids_0: list[int], token_ids_1: list[int] | None = None
     ) -> list[int]:
         cls = [self.cls_token_id]
         sep = [self.eos_token_id]  # No sep token in ESM vocabulary
@@ -103,7 +101,7 @@ class EsmTokenizer(PreTrainedTokenizer):
         return cls + token_ids_0 + sep + token_ids_1 + sep  # Multiple inputs always have an EOS token
 
     def get_special_tokens_mask(
-        self, token_ids_0: list, token_ids_1: Optional[list] = None, already_has_special_tokens: bool = False
+        self, token_ids_0: list, token_ids_1: list | None = None, already_has_special_tokens: bool = False
     ) -> list[int]:
         """
         Retrieves sequence ids from a token list that has no special tokens added. This method is called when adding

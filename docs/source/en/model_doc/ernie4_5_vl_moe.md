@@ -201,6 +201,7 @@ print(output_text)
 ## Ernie4_5_VL_MoeProcessor
 
 [[autodoc]] Ernie4_5_VL_MoeProcessor
+    - __call__
 
 ## Ernie4_5_VL_MoeTextModel
 
