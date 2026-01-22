@@ -382,40 +382,33 @@ class VibeVoiceAcousticTokenizerDecoder(nn.Module):
     def __init__(self, config):
         super().__init__()
 
-        layer_idx = 0
-        self.stem = VibeVoiceAcousticTokenizerDecoderStem(config, layer_idx=layer_idx)
-        layer_idx += self.stem.num_layers
-
+        self.stem = VibeVoiceAcousticTokenizerDecoderStem(config)
         self.conv_layers = nn.ModuleList(
-            VibeVoiceAcousticTokenizerDecoderLayer(config, stage_idx)
-            for stage_idx in range(len(config.upsampling_ratios))
+            [VibeVoiceAcousticTokenizerDecoderLayer(config, stage_idx) for stage_idx in range(len(config.upsampling_ratios))]
         )
-        layer_idx += sum(layer.num_layers for layer in self.conv_layers)
-
         self.head = VibeVoiceAcousticTokenizerCausalConv1d(
             in_channels=config.n_filters,
             out_channels=config.channels,
             kernel_size=config.kernel_size,
             bias=config.bias,
-            layer_idx=layer_idx,
+            layer_idx=sum(depth + 1 for depth in config.depths),
         )
 
         # Parameters for cache creation
-        self.num_conv_layers = layer_idx + 1
-        self.per_conv_layer_padding_mode = ["constant"] * self.num_conv_layers
         self.per_conv_layer_padding = [self.stem.conv.causal_padding]
         self.per_conv_layer_in_channels = [self.stem.conv.conv.in_channels]
-        for block in self.stem.stage:
-            self.per_conv_layer_padding.append(block.mixer.causal_padding)
-            self.per_conv_layer_in_channels.append(block.mixer.conv.in_channels)
+        self.per_conv_layer_padding.extend([block.mixer.causal_padding for block in self.stem.stage])
+        self.per_conv_layer_in_channels.extend([block.mixer.conv.in_channels for block in self.stem.stage])
+    
         for layer in self.conv_layers:
             self.per_conv_layer_padding.append(layer.convtr.causal_padding)
             self.per_conv_layer_in_channels.append(layer.convtr.convtr.in_channels)
-            for block in layer.stage:
-                self.per_conv_layer_padding.append(block.mixer.causal_padding)
-                self.per_conv_layer_in_channels.append(block.mixer.conv.in_channels)
+            self.per_conv_layer_padding.extend([block.mixer.causal_padding for block in layer.stage])
+            self.per_conv_layer_in_channels.extend([block.mixer.conv.in_channels for block in layer.stage])
+
         self.per_conv_layer_padding.append(self.head.causal_padding)
         self.per_conv_layer_in_channels.append(self.head.conv.in_channels)
+        self.per_conv_layer_padding_mode = ["constant" for _ in self.per_conv_layer_padding]
 
     def forward(self, hidden_states, padding_cache=None):
         hidden_states = self.stem(hidden_states, padding_cache=padding_cache)
