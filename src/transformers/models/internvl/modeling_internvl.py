@@ -35,13 +35,7 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import (
-    ModelOutput,
-    TransformersKwargs,
-    auto_docstring,
-    torch_compilable_check,
-    torch_int,
-)
+from ...utils import ModelOutput, TransformersKwargs, auto_docstring, torch_compilable_check, torch_int
 from ...utils.generic import check_model_inputs
 from ..auto import AutoModel
 from .configuration_internvl import InternVLConfig, InternVLVisionConfig
