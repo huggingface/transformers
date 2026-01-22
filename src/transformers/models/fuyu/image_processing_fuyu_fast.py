@@ -40,7 +40,7 @@ from .image_processing_fuyu import FuyuBatchFeature, FuyuImagesKwargs, make_list
 
 
 if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as F
+    import torchvision.transforms.v2.functional as tvF
 
 
 logger = logging.get_logger(__name__)
@@ -50,6 +50,7 @@ logger = logging.get_logger(__name__)
 class FuyuImageProcessorFast(BaseImageProcessorFast):
     do_resize = True
     size = {"height": 1080, "width": 1920}
+    patch_size = {"height": 30, "width": 30}
     resample = PILImageResampling.BILINEAR
     do_pad = True
     padding_value = 1.0
@@ -80,7 +81,7 @@ class FuyuImageProcessorFast(BaseImageProcessorFast):
         self,
         image: torch.Tensor,
         size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"] = None,
+        interpolation: Optional["tvF.InterpolationMode"] = None,
         antialias: bool = True,
         **kwargs,
     ) -> torch.Tensor:
@@ -97,7 +98,7 @@ class FuyuImageProcessorFast(BaseImageProcessorFast):
             antialias (`bool`, *optional*, defaults to `True`):
                 Whether to apply antialiasing when resizing.
         """
-        interpolation = interpolation if interpolation is not None else F.InterpolationMode.BILINEAR
+        interpolation = interpolation if interpolation is not None else tvF.InterpolationMode.BILINEAR
         image_height, image_width = image.shape[-2:]
         target_height, target_width = size.height, size.width
         # Only resize if image is larger than target
@@ -120,7 +121,7 @@ class FuyuImageProcessorFast(BaseImageProcessorFast):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,

@@ -643,14 +643,7 @@ class LlavaForConditionalGenerationIntegrationTest(unittest.TestCase):
         output = processor.batch_decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)[0]
 
         # fmt: off
-        EXPECTED_GENERATION = """
-Describe the images.
-The first image shows a black dog sitting on a wooden surface. The dog has a glossy coat and is looking directly at the camera with a calm expression. The wooden background appears to be made of weathered wooden planks, giving the image a rustic feel.
-
-The second image depicts a scenic mountain landscape. The mountains are rugged and covered with patches of green vegetation. The sky is clear, and the scene conveys a sense of tranquility and natural beauty. The mountains extend into the
-"""
-        # Remove the first and last empty character.
-        EXPECTED_GENERATION = EXPECTED_GENERATION[1:-1]
+        EXPECTED_GENERATION = "Describe the images.\nThe image depicts a black dog sitting on a wooden surface. The dog has a glossy black coat and is looking directly at the camera with a calm and attentive expression. The wooden background consists of horizontal wooden planks, giving the image a rustic and warm feel. The lighting is soft, highlighting the dog's features and creating a cozy atmosphere. The overall composition is simple and focuses on the dog as the main subject."
         # fmt: on
         # check that both inputs are handled correctly and generate the same output
         self.assertEqual(output, EXPECTED_GENERATION)
@@ -718,13 +711,13 @@ The second image depicts a scenic mountain landscape. The mountains are rugged a
         EXPECTED_GENERATIONS = Expectations(
             {
                 (None, None): [
-                                'What breed is the dog?The dog in the image is a black Labrador Retriever.',
-                                'What is shown in this image?The image depicts a narrow, winding dirt path surrounded by lush greenery. The path is flanked by grass and shrubs on both sides. On the left side, there are tall trees and dense foliage, while on the right side, there'
-                            ],
+                    "What breed is the dog?The dog in the image is a black Labrador Retriever.",
+                    "What is shown in this image?The image depicts a narrow, winding dirt path surrounded by lush greenery. The path is bordered by grass and shrubs on both sides. On the left side, there are tall trees and dense foliage, while on the right side, there"
+                ],
                 ("rocm", (9, 5)): [
-                                'What breed is the dog?The dog in the image is a black Labrador Retriever.',
-                                'What is shown in this image?A dirt path stretches into the distance, flanked by grassy areas on either side. The path appears to be well-trodden and leads towards a wooded area with tall trees. The sky is clear and blue, suggesting a bright and sunny day'
-                            ],
+                    'What breed is the dog?The dog in the image is a black Labrador Retriever.',
+                    'What is shown in this image?A dirt path stretches into the distance, flanked by grassy areas on either side. The path appears to be well-trodden and leads towards a wooded area with tall trees. The sky is clear and blue, suggesting a bright and sunny day'
+                ],
             }
         )  # fmt: skip
 
