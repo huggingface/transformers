@@ -168,7 +168,6 @@ class Qwen3VLTextConfig(PreTrainedConfig):
         self.attention_dropout = attention_dropout
         self.rope_parameters = rope_parameters
 
-        # Passing standard token ids through PreTrainedConfig so they're serialized/deserialized properly.
         super().__init__(
             ignore_keys_at_rope_validation={"mrope_section", "mrope_interleaved"},
             pad_token_id=pad_token_id,
