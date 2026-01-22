@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025, The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,9 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import os
 from dataclasses import dataclass
-from typing import Any, Optional, Union
+from typing import Any, Optional
 
 import torch
 import torch.nn as nn
@@ -190,7 +188,7 @@ class HiggsAudioV2GenerationOutput(GenerateDecoderOnlyOutput):
             The generated discrete audio codes.
     """
 
-    audio_sequences: Optional[list[torch.LongTensor]] = None
+    audio_sequences: list[torch.LongTensor] | None = None
 
 
 class HiggsAudioV2GenerationMixin(GenerationMixin):
@@ -214,11 +212,9 @@ class HiggsAudioV2GenerationMixin(GenerationMixin):
         return logits_processor
 
     def _prepare_generation_config(
-        self, generation_config: Optional[GenerationConfig], **kwargs: Any
+        self, generation_config: GenerationConfig | None, **kwargs: Any
     ) -> tuple[GenerationConfig, dict]:
-        generation_config, model_kwargs = super()._prepare_generation_config(
-            generation_config, **kwargs
-        )
+        generation_config, model_kwargs = super()._prepare_generation_config(generation_config, **kwargs)
         original_get_generation_mode = generation_config.get_generation_mode
 
         def patched_get_generation_mode(assistant_model=None):
@@ -243,7 +239,7 @@ class HiggsAudioV2GenerationMixin(GenerationMixin):
         synced_gpus: bool = False,
         streamer: Optional["BaseStreamer"] = None,
         **model_kwargs,
-    ) -> Union[GenerateNonBeamOutput, torch.LongTensor]:
+    ) -> GenerateNonBeamOutput | torch.LongTensor:
         output_attentions = generation_config.output_attentions
         output_hidden_states = generation_config.output_hidden_states
         output_scores = generation_config.output_scores
@@ -262,40 +258,28 @@ class HiggsAudioV2GenerationMixin(GenerationMixin):
         batch_size, cur_len = input_ids.shape[:2]
         this_peer_finished = False
         unfinished_sequences = torch.ones(batch_size, dtype=torch.long, device=input_ids.device)
-        model_kwargs = self._get_initial_cache_position(cur_len, input_ids.device, model_kwargs)
 
-        model_forward = self.__call__
-        compile_forward = self._valid_auto_compile_criteria(model_kwargs, generation_config)
-        if compile_forward:
-            os.environ["TOKENIZERS_PARALLELISM"] = "0"
-            # If we use FA2 and a static cache, we cannot compile with fullgraph
-            if self.config._attn_implementation == "flash_attention_2":
-                # only raise warning if the user passed an explicit compile-config
-                if generation_config.compile_config is not None and generation_config.compile_config.fullgraph:
-                    logger.warning_once(
-                        "When using Flash Attention 2 and a static cache, you cannot use the option `CompileConfig(fullgraph=True)` as "
-                        "FA2 introduces graph breaks. We overrode the option with `fullgraph=False`."
-                    )
-                    generation_config.compile_config.fullgraph = False
-            model_forward = self.get_compiled_call(generation_config.compile_config)
+        model_forward = (
+            self.get_compiled_call(generation_config.compile_config)
+            if self._valid_auto_compile_criteria(model_kwargs, generation_config)
+            else self.__call__
+        )
 
-        if generation_config.prefill_chunk_size is not None:
-            model_kwargs = self._prefill_chunking(input_ids, generation_config, **model_kwargs)
-            is_prefill = False
+        # Assisted generation completes the prefill stage in candidate generator so that
+        # we don't have several `prefill` calls in one generation loop. Skip `_prefill` for assistants
+        if not generation_config.is_assistant:
+            outputs = self._prefill(input_ids, generation_config, model_kwargs)
+            prefill_consumed = False
         else:
-            is_prefill = True
+            model_kwargs = self._get_initial_cache_position(input_ids.shape[1], input_ids.device, model_kwargs)
+            prefill_consumed = True
 
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
-            # prepare model inputs
-            model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
-
-            if is_prefill:
-                outputs = self(**model_inputs, return_dict=True)
-                is_prefill = False
-            else:
-                outputs = model_forward(**model_inputs, return_dict=True)
-
-            # synced_gpus: don't waste resources running the code we don't need; kwargs must be updated before skipping
+            if prefill_consumed:
+                model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
+                with self._optimize_model_for_decode():
+                    outputs = model_forward(**model_inputs, return_dict=True)
+            prefill_consumed = True
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs,
                 model_kwargs,
