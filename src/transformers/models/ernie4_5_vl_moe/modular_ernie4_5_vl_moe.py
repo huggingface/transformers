@@ -90,20 +90,6 @@ from ..qwen2_vl.modeling_qwen2_vl import Qwen2VisionTransformerPretrainedModel, 
 
 logger = logging.get_logger(__name__)
 
-ERNIE4_5_VL_MOE_VIDEO_COMMON_CUSTOM_ARGS = r"""
-    pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-        The tensors corresponding to the input videos.
-    video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-        The temporal, height and width of feature shape of each video in LLM.
-"""
-
-ERNIE4_5_VL_MOE_IMAGE_COMMON_CUSTOM_ARGS = r"""
-    pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-        The tensors corresponding to the input images.
-    image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-        The temporal, height and width of feature shape of each image in LLM.
-"""
-
 
 class Ernie4_5_VL_MoeVisionConfig(Qwen2VLVisionConfig):
     r"""
@@ -1283,7 +1269,7 @@ class Ernie4_5_VL_MoeModel(Qwen2_5_VLModel):
             return position_ids, mrope_position_deltas
 
     @can_return_tuple
-    @auto_docstring(custom_args=ERNIE4_5_VL_MOE_VIDEO_COMMON_CUSTOM_ARGS)
+    @auto_docstring
     def get_video_features(
         self,
         pixel_values_videos: torch.FloatTensor,
@@ -1302,7 +1288,7 @@ class Ernie4_5_VL_MoeModel(Qwen2_5_VLModel):
         return video_outputs
 
     @can_return_tuple
-    @auto_docstring(custom_args=ERNIE4_5_VL_MOE_IMAGE_COMMON_CUSTOM_ARGS)
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
@@ -1411,11 +1397,11 @@ class Ernie4_5_VL_MoeForConditionalGeneration(Glm4vForConditionalGeneration, Gen
         self.num_experts = config.text_config.moe_num_experts
         self.num_experts_per_tok = config.text_config.moe_k
 
-    @auto_docstring(custom_args=ERNIE4_5_VL_MOE_VIDEO_COMMON_CUSTOM_ARGS)
+    @auto_docstring
     def get_video_features(self, **super_kwargs):
         return super().get_video_features(**super_kwargs)
 
-    @auto_docstring(custom_args=ERNIE4_5_VL_MOE_IMAGE_COMMON_CUSTOM_ARGS)
+    @auto_docstring
     def get_image_features(self, **super_kwargs):
         return super().get_image_features(**super_kwargs)
 
