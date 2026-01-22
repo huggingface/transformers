@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Image processor class for ViTMatte."""
-
-from typing import Optional, Union
 
 import numpy as np
 
@@ -35,7 +32,6 @@ from ...image_utils import (
 )
 from ...processing_utils import ImagesKwargs
 from ...utils import TensorType, filter_out_non_signature_kwargs, logging
-from ...utils.deprecation import deprecate_kwarg
 
 
 logger = logging.get_logger(__name__)
@@ -78,10 +74,10 @@ class VitMatteImageProcessor(BaseImageProcessor):
     def __init__(
         self,
         do_rescale: bool = True,
-        rescale_factor: Union[int, float] = 1 / 255,
+        rescale_factor: int | float = 1 / 255,
         do_normalize: bool = True,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
         do_pad: bool = True,
         size_divisor: int = 32,
         **kwargs,
@@ -96,26 +92,12 @@ class VitMatteImageProcessor(BaseImageProcessor):
         size_divisibility = kwargs.get("size_divisibility")
         self.size_divisor = size_divisibility if size_divisibility is not None else size_divisor
 
-    @property
-    def size_divisibility(self):
-        logger.warning(
-            "`self.size_divisibility` attribute is deprecated and will be removed in v5. Use `self.size_divisor` instead"
-        )
-        return self.size_divisor
-
-    @size_divisibility.setter
-    def size_divisibility(self, value):
-        logger.warning(
-            "`self.size_divisibility` attribute is deprecated and will be removed in v5. Use `self.size_divisor` instead"
-        )
-        self.size_divisor = value
-
     def pad_image(
         self,
         image: np.ndarray,
         size_divisor: int = 32,
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        data_format: str | ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
     ) -> np.ndarray:
         """
         Args:
@@ -152,21 +134,20 @@ class VitMatteImageProcessor(BaseImageProcessor):
         return image
 
     @filter_out_non_signature_kwargs()
-    @deprecate_kwarg("size_divisibility", version="v5", new_name="size_divisor")
     def preprocess(
         self,
         images: ImageInput,
         trimaps: ImageInput,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[float] = None,
-        do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
-        do_pad: Optional[bool] = None,
-        size_divisor: Optional[int] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        do_rescale: bool | None = None,
+        rescale_factor: float | None = None,
+        do_normalize: bool | None = None,
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        do_pad: bool | None = None,
+        size_divisor: int | None = None,
+        return_tensors: str | TensorType | None = None,
+        data_format: str | ChannelDimension = ChannelDimension.FIRST,
+        input_data_format: str | ChannelDimension | None = None,
     ):
         """
         Preprocess an image or batch of images.

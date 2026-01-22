@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_colqwen2.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -20,12 +19,12 @@
 # limitations under the License.
 
 from dataclasses import dataclass
-from typing import Optional
 
 from torch import nn
 
 from transformers import AutoModelForImageTextToText
 
+from ... import initialization as init
 from ...cache_utils import Cache
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, can_return_tuple, is_torch_available
@@ -40,12 +39,13 @@ if is_torch_available():
 class ColQwen2PreTrainedModel(PreTrainedModel):
     config: ColQwen2Config
     base_model_prefix = "model"
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     _no_split_modules = []
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_flex_attn = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         std = (
             self.config.initializer_range
@@ -54,13 +54,14 @@ class ColQwen2PreTrainedModel(PreTrainedModel):
         )
 
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
+            init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
-                module.bias.data.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+            init.normal_(module.weight, mean=0.0, std=std)
+            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
+            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
+                init.zeros_(module.weight[module.padding_idx])
 
 
 @dataclass
@@ -82,11 +83,11 @@ class ColQwen2ForRetrievalOutput(ModelOutput):
         `past_key_values` input) to speed up sequential decoding.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    embeddings: Optional[torch.Tensor] = None
-    past_key_values: Optional[Cache] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
+    loss: torch.FloatTensor | None = None
+    embeddings: torch.Tensor | None = None
+    past_key_values: Cache | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
 
 
 @auto_docstring(
@@ -118,7 +119,6 @@ class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
             self.config.vlm_config.text_config.hidden_size,
             self.embedding_dim,
         )
-        self._tied_weights_keys = [f"vlm.{k}" for k in (self.vlm._tied_weights_keys or [])]
 
         self.post_init()
 
@@ -126,19 +126,20 @@ class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        labels: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        pixel_values: Optional[torch.Tensor] = None,
-        image_grid_thw: Optional[torch.LongTensor] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        labels: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        pixel_values: torch.Tensor | None = None,
+        image_grid_thw: torch.LongTensor | None = None,
+        cache_position: torch.LongTensor | None = None,
+        **kwargs,
     ) -> ColQwen2ForRetrievalOutput:
         r"""
         image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
@@ -147,11 +148,10 @@ class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
         # Handle the custom "pixel_values" input obtained with `ColQwen2Processor` through unpadding
         if pixel_values is not None and image_grid_thw is not None:
             # NOTE: image_grid_thw: (batch_size, 3) where image_grid_thw[i] = (num_patches_h, num_patches_w, temporal_patch_size)
-            offsets = image_grid_thw[:, 1] * image_grid_thw[:, 2]  # (num_patches_h, num_patches_w)
-            pixel_values = torch.cat(
-                [pixel_sequence[:offset] for pixel_sequence, offset in zip(pixel_values, offsets)],
-                dim=0,
-            )  # (num_patches_h * num_patches_w, pixel_values)
+            offsets = image_grid_thw[:, 1] * image_grid_thw[:, 2]  # (batch_size,)
+            arange = torch.arange(pixel_values.shape[1], device=offsets.device)  # (max_len,)
+            mask = arange.unsqueeze(0) < offsets.unsqueeze(1)  # (batch_size, max_len)
+            pixel_values = pixel_values[mask]  # (total_valid_patches, channels, height, width)
 
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
 
@@ -169,11 +169,10 @@ class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
 
         # Custom data preparation to fix an issue with the gradient flow when training with multiple GPUs.
         if inputs_embeds is None:
-            inputs_embeds = self.vlm.language_model.embed_tokens(input_ids)
+            inputs_embeds = self.vlm.get_input_embeddings()(input_ids)
 
             if pixel_values is not None:
-                pixel_values = pixel_values.type(self.vlm.visual.get_dtype())
-                image_embeds = self.vlm.visual(pixel_values, grid_thw=image_grid_thw)
+                image_embeds = self.vlm.model.visual(pixel_values, grid_thw=image_grid_thw)
                 image_mask = (
                     (input_ids == self.config.vlm_config.image_token_id).unsqueeze(-1).expand_as(inputs_embeds)
                 )
@@ -223,13 +222,10 @@ class ColQwen2ForRetrieval(ColQwen2PreTrainedModel):
     def set_output_embeddings(self, new_embeddings):
         self.vlm.set_output_embeddings(new_embeddings)
 
-    def tie_weights(self):
-        return self.vlm.tie_weights()
-
     def resize_token_embeddings(
         self,
-        new_num_tokens: Optional[int] = None,
-        pad_to_multiple_of: Optional[int] = None,
+        new_num_tokens: int | None = None,
+        pad_to_multiple_of: int | None = None,
         mean_resizing: bool = True,
     ) -> nn.Embedding:
         model_embeds = self.vlm.resize_token_embeddings(

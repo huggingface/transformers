@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 Meta AI and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -101,8 +100,14 @@ class MusicgenDecoderConfig(PreTrainedConfig):
         bos_token_id=2048,
         eos_token_id=None,
         tie_word_embeddings=False,
+        is_decoder=False,
+        add_cross_attention=False,
+        cross_attention_hidden_size=None,
         **kwargs,
     ):
+        self.is_decoder = is_decoder
+        self.add_cross_attention = add_cross_attention
+        self.cross_attention_hidden_size = cross_attention_hidden_size
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -123,13 +128,11 @@ class MusicgenDecoderConfig(PreTrainedConfig):
             raise ValueError(f"Expected 1 (mono) or 2 (stereo) audio channels, got {audio_channels} channels.")
         self.audio_channels = audio_channels
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        super().__init__(**kwargs)
 
 
 class MusicgenConfig(PreTrainedConfig):
@@ -212,6 +215,7 @@ class MusicgenConfig(PreTrainedConfig):
         self.audio_encoder = audio_encoder
         self.decoder = decoder
         self.initializer_factor = self.decoder.initializer_factor
+        self.tie_encoder_decoder = kwargs.get("tie_encoder_decoder", False)
 
         kwargs["is_encoder_decoder"] = True
         super().__init__(**kwargs)

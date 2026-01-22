@@ -18,9 +18,13 @@ rendered properly in your Markdown viewer.
 
 [[open-in-colab]]
 
-Video-text-to-text models, also known as video language models or vision language models with video input, are language models that take a video input. These models can tackle various tasks, from video question answering to video captioning.
+Video-text-to-text, also known as video language models are models that can process video and output text. These models can tackle various tasks, from video question answering to video captioning.
 
-These models have nearly the same architecture as [image-text-to-text](../image_text_to_text) models except for some changes to accept video data, since video data is essentially image frames with temporal dependencies. Some image-text-to-text models take in multiple images, but this alone is inadequate for a model to accept videos. Moreover, video-text-to-text models are often trained with all vision modalities. Each example might have videos, multiple videos, images and multiple images. Some of these models can also take interleaved inputs. For example, you can refer to a specific video inside a string of text by adding a video token in text like "What is happening in this video? `<video>`".
+These models have nearly the same architecture as [image-text-to-text](../image_text_to_text) models except for some changes to accept video data, since video data is essentially image frames with temporal dependencies. Some image-text-to-text models take in multiple images, but this alone is inadequate for a model to accept videos.
+
+Moreover, video-text-to-text models are often trained with all vision modalities. Each example might have videos, multiple videos, images and multiple images. Some of these models can also take interleaved inputs. For example, you can refer to a specific video inside a string of text by adding a video token in text like "What is happening in this video? `<video>`".
+
+Note that these models process videos with no audio. [Any-to-any](../any-to-any) models on the other hand can process videos with audio in them.
 
 In this guide, we provide a brief overview of video LMs and show how to use them with Transformers for inference.
 
@@ -30,81 +34,27 @@ To begin with, there are multiple types of video LMs:
 - chat fine-tuned models for conversation
 - instruction fine-tuned models
 
-This guide focuses on inference with an instruction-tuned model, [llava-hf/llava-interleave-qwen-7b-hf](https://huggingface.co/llava-hf/llava-interleave-qwen-7b-hf) which can take in interleaved data. Alternatively, you can try [llava-interleave-qwen-0.5b-hf](https://huggingface.co/llava-hf/llava-interleave-qwen-0.5b-hf) if your hardware doesn't allow running a 7B model.
+This guide focuses on inference with an instruction-tuned model, [llava-hf/llava-onevision-qwen2-0.5b-ov-hf](https://huggingface.co/llava-hf/llava-interleave-qwen-7b-hf) which can take in interleaved data. Alternatively, you can try [llava-interleave-qwen-0.5b-hf](https://huggingface.co/llava-hf/llava-interleave-qwen-0.5b-hf) if your hardware doesn't allow running a 7B model.
 
 Let's begin installing the dependencies.
 
 ```bash
-pip install -q transformers accelerate flash_attn 
+pip install -q transformers accelerate flash_attn torchcodec
 ```
 
 Let's initialize the model and the processor.
 
 ```python
-from transformers import LlavaProcessor, LlavaForConditionalGeneration
+from transformers import AutoProcessor, LlavaForConditionalGeneration
 import torch
-model_id = "llava-hf/llava-interleave-qwen-0.5b-hf"
+model_id = "llava-hf/llava-onevision-qwen2-0.5b-ov-hf"
 
-processor = LlavaProcessor.from_pretrained(model_id)
+processor = AutoProcessor.from_pretrained(model_id, device="cuda")
 
 model = LlavaForConditionalGeneration.from_pretrained(model_id, device_map="auto", dtype=torch.float16)
 ```
 
-Some models directly consume the `<video>` token, and others accept `<image>` tokens equal to the number of sampled frames. This model handles videos in the latter fashion. We will write a simple utility to handle image tokens, and another utility to get a video from a url and sample frames from it.
-
-```python
-import uuid
-import requests
-import cv2
-from PIL import Image
-
-def replace_video_with_images(text, frames):
-  return text.replace("<video>", "<image>" * frames)
-
-def sample_frames(url, num_frames):
-
-    response = requests.get(url)
-    path_id = str(uuid.uuid4())
-
-    path = f"./{path_id}.mp4" 
-
-    with open(path, "wb") as f:
-      f.write(response.content)
-
-    video = cv2.VideoCapture(path)
-    total_frames = int(video.get(cv2.CAP_PROP_FRAME_COUNT))
-    interval = total_frames // num_frames
-    frames = []
-    for i in range(total_frames):
-        ret, frame = video.read()
-        pil_img = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-        if not ret:
-            continue
-        if i % interval == 0:
-            frames.append(pil_img)
-    video.release()
-    return frames[:num_frames]
-```
-
-Let's get our inputs. We will sample frames and concatenate them.
-
-```python
-video_1 = "https://huggingface.co/spaces/merve/llava-interleave/resolve/main/cats_1.mp4"
-video_2 = "https://huggingface.co/spaces/merve/llava-interleave/resolve/main/cats_2.mp4"
-
-video_1 = sample_frames(video_1, 6)
-video_2 = sample_frames(video_2, 6)
-
-videos = video_1 + video_2
-
-videos
-
-# [<PIL.Image.Image image mode=RGB size=1920x1080>,
-# <PIL.Image.Image image mode=RGB size=1920x1080>,
-# <PIL.Image.Image image mode=RGB size=1920x1080>, ...]
-```
-
-Both videos have cats.
+We will infer with two videos, both have cats.
 
 <div class="container">
   <div class="video-container">
@@ -120,28 +70,96 @@ Both videos have cats.
   </div>
 </div>
 
-Now we can preprocess the inputs.
+Videos are series of image frames. Depending on the hardware limitations, downsampling is required. If the number of downsampled frames are too little, predictions will be low quality.
 
-This model has a prompt template that looks like following. First, we'll put all the sampled frames into one list. Since we have eight frames in each video, we will insert 12 `<image>` tokens to our prompt. Add `assistant` at the end of the prompt to trigger the model to give answers. Then we can preprocess.
+Video-text-to-text models have processors with video processor abstracted in them. You can pass video inference related arguments to [`~ProcessorMixin.apply_chat_template`] function.
 
-```python
-user_prompt = "Are these two cats in these two videos doing the same thing?"
-toks = "<image>" * 12
-prompt = "<|im_start|>user"+ toks + f"\n{user_prompt}<|im_end|><|im_start|>assistant"
-inputs = processor(text=prompt, images=videos, return_tensors="pt").to(model.device, model.dtype)
-```
+> [!WARNING]
+> You can learn more about video processors [here](../main_classes/video_processor).
 
-We can now call [`~GenerationMixin.generate`] for inference. The model outputs the question in our input and answer, so we only take the text after the prompt and `assistant` part from the model output.
+We can define our chat history, passing in video with a URL like below.
 
 ```python
-output = model.generate(**inputs, max_new_tokens=100, do_sample=False)
-print(processor.decode(output[0][2:], skip_special_tokens=True)[len(user_prompt)+10:])
-
-# The first cat is shown in a relaxed state, with its eyes closed and a content expression, while the second cat is shown in a more active state, with its mouth open wide, possibly in a yawn or a vocalization.
-
-
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "video", "video": "https://huggingface.co/spaces/merve/llava-interleave/resolve/main/cats_1.mp4"},
+            {"type": "text", "text": "Describe what is happening in this video."},
+        ],
+    }
+]
 ```
 
-And voila!
+You can preprocess the videos by passing in messages, setting `do_sample_frames` to True and passing in `num_frames`. Here we sample 10 frames.
 
-To learn more about chat templates and token streaming for video-text-to-text models, refer to the [image-text-to-text](../tasks/image_text_to_text) task guide because these models work similarly.
+```python
+inputs = processor.apply_chat_template(
+    messages,
+    tokenize=True,
+    add_generation_prompt=True,
+    return_dict=True,
+    return_tensors="pt",
+    num_frames=10,
+    do_sample_frames=True
+)
+inputs.to(model.device)
+```
+
+The inputs contain `input_ids` for tokenized text, `pixel_values_videos` for 10 frames and `attention_mask` for which tokens .
+
+We can now infer with our preprocessed inputs and decode them.
+
+```python
+generated_ids = model.generate(**inputs, max_new_tokens=128)
+input_length = len(inputs["input_ids"][0])
+output_text = processor.batch_decode(
+    generated_ids[:, input_length:], skip_special_tokens=True, clean_up_tokenization_spaces=False
+)
+output_text = processor.batch_decode(
+    generated_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False
+)
+print(output_text[0])
+
+#"The video features a fluffy, long-haired cat with a mix of brown and white fur, lying on a beige carpeted floor. The cat's eyes are wide open, and its whiskers are prominently visible. The cat appears to be in a relaxed state, with its head slightly"
+```
+
+You can also interleave multiple videos with text directly in chat template like below.
+
+```python
+messages = [
+    {
+        "role": "user",
+        "content": [
+            {"type": "text", "text": "Here's a video."},
+            {"type": "video", "video": "https://huggingface.co/spaces/merve/llava-interleave/resolve/main/cats_1.mp4"},
+            {"type": "text", "text": "Here's another video."},
+            {"type": "video", "video": "https://huggingface.co/spaces/merve/llava-interleave/resolve/main/cats_2.mp4"},
+            {"type": "text", "text": "Describe similarities in these videos."},
+        ],
+    }
+]
+```
+
+The inference remains the same as the previous example.
+
+```python
+inputs = processor.apply_chat_template(
+    messages,
+    tokenize=True,
+    add_generation_prompt=True,
+    return_dict=True,
+    return_tensors="pt",
+    num_frames=100,
+    do_sample_frames=True
+)
+inputs.to(model.device)
+
+generated_ids = model.generate(**inputs, max_new_tokens=50)
+input_length = len(inputs["input_ids"][0])
+output_text = processor.batch_decode(
+    generated_ids[:, input_length:], skip_special_tokens=True, clean_up_tokenization_spaces=False
+)
+print(output_text)
+#['Both videos feature a cat with a similar appearance, characterized by a fluffy white coat with black markings, a pink nose, and a pink tongue. The cat\'s eyes are wide open, and it appears to be in a state of alertness or excitement. ']
+```

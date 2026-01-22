@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 Google LLC., LongT5 Authors and HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,12 +15,13 @@
 
 import copy
 import math
-from typing import Any, Optional, Union
+from typing import Any, Union
 
 import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
@@ -42,6 +42,7 @@ from ...utils import (
     is_torchdynamo_compiling,
     logging,
 )
+from ...utils.generic import is_flash_attention_requested
 from .configuration_longt5 import LongT5Config
 
 
@@ -322,7 +323,7 @@ class LongT5Attention(nn.Module):
         self,
         config: LongT5Config,
         has_relative_attention_bias=False,
-        layer_idx: Optional[int] = None,
+        layer_idx: int | None = None,
     ):
         super().__init__()
         self.is_decoder = config.is_decoder
@@ -934,7 +935,7 @@ class LongT5TransientGlobalAttention(nn.Module):
 
 # Copied from transformers.models.t5.modeling_t5.T5LayerSelfAttention with T5->LongT5
 class LongT5LayerSelfAttention(nn.Module):
-    def __init__(self, config, has_relative_attention_bias=False, layer_idx: Optional[int] = None):
+    def __init__(self, config, has_relative_attention_bias=False, layer_idx: int | None = None):
         super().__init__()
         self.SelfAttention = LongT5Attention(
             config, has_relative_attention_bias=has_relative_attention_bias, layer_idx=layer_idx
@@ -970,7 +971,7 @@ class LongT5LayerSelfAttention(nn.Module):
 class LongT5LayerLocalSelfAttention(nn.Module):
     """Local self attention used in encoder"""
 
-    def __init__(self, config, has_relative_attention_bias=False, layer_idx: Optional[int] = None):
+    def __init__(self, config, has_relative_attention_bias=False, layer_idx: int | None = None):
         super().__init__()
         self.LocalSelfAttention = LongT5LocalAttention(config, has_relative_attention_bias=has_relative_attention_bias)
         self.layer_norm = LongT5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
@@ -999,7 +1000,7 @@ class LongT5LayerLocalSelfAttention(nn.Module):
 class LongT5LayerTransientGlobalSelfAttention(nn.Module):
     """Transient-Global self attention used in encoder"""
 
-    def __init__(self, config, has_relative_attention_bias=False, layer_idx: Optional[int] = None):
+    def __init__(self, config, has_relative_attention_bias=False, layer_idx: int | None = None):
         super().__init__()
         self.TransientGlobalSelfAttention = LongT5TransientGlobalAttention(
             config, has_relative_attention_bias=has_relative_attention_bias
@@ -1029,7 +1030,7 @@ class LongT5LayerTransientGlobalSelfAttention(nn.Module):
 
 # Copied from transformers.models.t5.modeling_t5.T5LayerCrossAttention with T5->LongT5
 class LongT5LayerCrossAttention(nn.Module):
-    def __init__(self, config, layer_idx: Optional[int] = None):
+    def __init__(self, config, layer_idx: int | None = None):
         super().__init__()
         self.EncDecAttention = LongT5Attention(config, has_relative_attention_bias=False, layer_idx=layer_idx)
         self.layer_norm = LongT5LayerNorm(config.d_model, eps=config.layer_norm_epsilon)
@@ -1065,7 +1066,7 @@ class LongT5LayerCrossAttention(nn.Module):
 
 
 class LongT5Block(GradientCheckpointingLayer):
-    def __init__(self, config, has_relative_attention_bias=False, layer_idx: Optional[int] = None):
+    def __init__(self, config, has_relative_attention_bias=False, layer_idx: int | None = None):
         super().__init__()
         self.is_decoder = config.is_decoder
         if config.is_decoder:
@@ -1176,74 +1177,46 @@ class LongT5PreTrainedModel(PreTrainedModel):
         }
         return dummy_inputs
 
-    def _try_load_missing_tied_module(self, key):
-        module = self
-        key = key.removesuffix(".weight")
-        for sub_key in key.split("."):
-            if not hasattr(module, sub_key):
-                return
-            module = getattr(module, sub_key)
-
-        self._tie_embedding_weights(module, self.shared)
-
-    @classmethod
-    def from_pretrained(self, *args, **kwargs):
-        requested_loading_info = kwargs.get("output_loading_info", False)
-        kwargs["output_loading_info"] = True
-        model, loading_info = super().from_pretrained(*args, **kwargs)
-        missing_keys = loading_info.get("missing_keys", [])
-
-        if hasattr(model, "shared") and hasattr(model, "_tied_weights_keys"):
-            for missing_key in missing_keys:
-                logger.warning(
-                    f"Recovering a missing tied weight {missing_key} from a legacy LongT5 checkpoint. "
-                    f"Consider saving {missing_key} in your checkpoint or updating the config (tie_word_embeddings=true)."
-                )
-                model._try_load_missing_tied_module(missing_key)
-
-        if requested_loading_info:
-            return model, loading_info
-        return model
-
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         factor = self.config.initializer_factor  # Used for testing weights initialization
         if isinstance(module, LongT5LayerNorm):
-            module.weight.data.fill_(factor * 1.0)
+            init.constant_(module.weight, factor * 1.0)
         elif isinstance(module, (LongT5Model, LongT5ForConditionalGeneration, LongT5EncoderModel)):
-            module.shared.weight.data.normal_(mean=0.0, std=factor * 1.0)
+            init.normal_(module.shared.weight, mean=0.0, std=factor * 1.0)
             if hasattr(module, "lm_head") and not self.config.tie_word_embeddings:
-                module.lm_head.weight.data.normal_(mean=0.0, std=factor * 1.0)
+                init.normal_(module.lm_head.weight, mean=0.0, std=factor * 1.0)
         elif isinstance(module, LongT5DenseActDense):
-            module.wi.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
+            init.normal_(module.wi.weight, mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
             if hasattr(module.wi, "bias") and module.wi.bias is not None:
-                module.wi.bias.data.zero_()
-            module.wo.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
+                init.zeros_(module.wi.bias)
+            init.normal_(module.wo.weight, mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
             if hasattr(module.wo, "bias") and module.wo.bias is not None:
-                module.wo.bias.data.zero_()
+                init.zeros_(module.wo.bias)
         elif isinstance(module, LongT5DenseGatedActDense):
-            module.wi_0.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
+            init.normal_(module.wi_0.weight, mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
             if hasattr(module.wi_0, "bias") and module.wi_0.bias is not None:
-                module.wi_0.bias.data.zero_()
-            module.wi_1.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
+                init.zeros_(module.wi_0.bias)
+            init.normal_(module.wi_1.weight, mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
             if hasattr(module.wi_1, "bias") and module.wi_1.bias is not None:
-                module.wi_1.bias.data.zero_()
-            module.wo.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
+                init.zeros_(module.wi_1.bias)
+            init.normal_(module.wo.weight, mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
             if hasattr(module.wo, "bias") and module.wo.bias is not None:
-                module.wo.bias.data.zero_()
+                init.zeros_(module.wo.bias)
         elif isinstance(module, (LongT5Attention, LongT5LocalAttention, LongT5TransientGlobalAttention)):
             d_model = self.config.d_model
             key_value_proj_dim = self.config.d_kv
             n_heads = self.config.num_heads
-            module.q.weight.data.normal_(mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5))
-            module.k.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
-            module.v.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
-            module.o.weight.data.normal_(mean=0.0, std=factor * ((n_heads * key_value_proj_dim) ** -0.5))
+            init.normal_(module.q.weight, mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5))
+            init.normal_(module.k.weight, mean=0.0, std=factor * (d_model**-0.5))
+            init.normal_(module.v.weight, mean=0.0, std=factor * (d_model**-0.5))
+            init.normal_(module.o.weight, mean=0.0, std=factor * ((n_heads * key_value_proj_dim) ** -0.5))
             if module.has_relative_attention_bias:
-                module.relative_attention_bias.weight.data.normal_(mean=0.0, std=factor * ((d_model) ** -0.5))
+                init.normal_(module.relative_attention_bias.weight, mean=0.0, std=factor * ((d_model) ** -0.5))
                 if isinstance(module, LongT5TransientGlobalAttention):
-                    module.global_relative_attention_bias.weight.data.normal_(
-                        mean=0.0, std=factor * ((d_model) ** -0.5)
+                    init.normal_(
+                        module.global_relative_attention_bias.weight, mean=0.0, std=factor * ((d_model) ** -0.5)
                     )
 
     # Copied from transformers.models.t5.modeling_t5.T5PreTrainedModel._shift_right with T5->LongT5
@@ -1270,12 +1243,10 @@ class LongT5PreTrainedModel(PreTrainedModel):
 
 
 class LongT5Stack(LongT5PreTrainedModel):
-    def __init__(self, config, embed_tokens=None):
+    def __init__(self, config):
         super().__init__(config)
 
         self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model)
-        if embed_tokens is not None:
-            self.embed_tokens.weight = embed_tokens.weight
         self.is_decoder = config.is_decoder
 
         self.local_radius = config.local_radius
@@ -1312,6 +1283,7 @@ class LongT5Stack(LongT5PreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
         cache_position=None,
+        **kwargs,
     ):
         use_cache = use_cache if use_cache is not None else self.config.use_cache
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
@@ -1477,7 +1449,7 @@ class LongT5Stack(LongT5PreTrainedModel):
         past_key_values: Cache,
         output_attentions: bool = False,
     ):
-        if self.config._attn_implementation == "flash_attention_2":
+        if is_flash_attention_requested(self.config):
             if attention_mask is not None and (attention_mask == 0.0).any():
                 return attention_mask
             return None
@@ -1599,7 +1571,10 @@ class LongT5Model(LongT5PreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [
         r"decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight",
     ]
-    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
+    _tied_weights_keys = {
+        "encoder.embed_tokens.weight": "shared.weight",
+        "decoder.embed_tokens.weight": "shared.weight",
+    }
 
     def __init__(self, config: LongT5Config):
         super().__init__(config)
@@ -1608,14 +1583,12 @@ class LongT5Model(LongT5PreTrainedModel):
         encoder_config = copy.deepcopy(config)
         encoder_config.is_decoder = False
         encoder_config.use_cache = False
-        encoder_config.tie_encoder_decoder = False
-        self.encoder = LongT5Stack(encoder_config, self.shared)
+        self.encoder = LongT5Stack(encoder_config)
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
-        decoder_config.tie_encoder_decoder = False
         decoder_config.num_layers = config.num_decoder_layers
-        self.decoder = LongT5Stack(decoder_config, self.shared)
+        self.decoder = LongT5Stack(decoder_config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1628,31 +1601,24 @@ class LongT5Model(LongT5PreTrainedModel):
         self.encoder.set_input_embeddings(new_embeddings)
         self.decoder.set_input_embeddings(new_embeddings)
 
-    def _tie_weights(self):
-        if self.config.tie_word_embeddings:
-            self._tie_embedding_weights(self.encoder.embed_tokens, self.shared)
-            self._tie_embedding_weights(self.decoder.embed_tokens, self.shared)
-
-    def get_encoder(self):
-        return self.encoder
-
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.BoolTensor] = None,
-        encoder_outputs: Optional[tuple[tuple[torch.FloatTensor]]] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        decoder_inputs_embeds: Optional[torch.Tensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-    ) -> Union[tuple[torch.FloatTensor], Seq2SeqModelOutput]:
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.FloatTensor | None = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.BoolTensor | None = None,
+        encoder_outputs: tuple[tuple[torch.FloatTensor]] | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        decoder_inputs_embeds: torch.Tensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
+        **kwargs,
+    ) -> tuple[torch.FloatTensor] | Seq2SeqModelOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. LongT5 is a model with relative position embeddings so
@@ -1763,7 +1729,11 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel, GenerationMixin):
     _keys_to_ignore_on_load_unexpected = [
         r"decoder.block.0.layer.1.EncDecAttention.relative_attention_bias.weight",
     ]
-    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
+    _tied_weights_keys = {
+        "encoder.embed_tokens.weight": "shared.weight",
+        "decoder.embed_tokens.weight": "shared.weight",
+        "lm_head.weight": "shared.weight",
+    }
 
     def __init__(self, config: LongT5Config):
         super().__init__(config)
@@ -1774,14 +1744,12 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel, GenerationMixin):
         encoder_config = copy.deepcopy(config)
         encoder_config.is_decoder = False
         encoder_config.use_cache = False
-        encoder_config.tie_encoder_decoder = False
-        self.encoder = LongT5Stack(encoder_config, self.shared)
+        self.encoder = LongT5Stack(encoder_config)
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
-        decoder_config.tie_encoder_decoder = False
         decoder_config.num_layers = config.num_decoder_layers
-        self.decoder = LongT5Stack(decoder_config, self.shared)
+        self.decoder = LongT5Stack(decoder_config)
 
         self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
 
@@ -1796,32 +1764,25 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel, GenerationMixin):
         self.encoder.set_input_embeddings(new_embeddings)
         self.decoder.set_input_embeddings(new_embeddings)
 
-    def _tie_weights(self):
-        if self.config.tie_word_embeddings:
-            self._tie_embedding_weights(self.encoder.embed_tokens, self.shared)
-            self._tie_embedding_weights(self.decoder.embed_tokens, self.shared)
-
-    def get_encoder(self):
-        return self.encoder
-
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.BoolTensor] = None,
-        encoder_outputs: Optional[tuple[tuple[torch.Tensor]]] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-    ) -> Union[tuple[torch.FloatTensor], Seq2SeqLMOutput]:
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.FloatTensor | None = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.BoolTensor | None = None,
+        encoder_outputs: tuple[tuple[torch.Tensor]] | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
+        **kwargs,
+    ) -> tuple[torch.FloatTensor] | Seq2SeqLMOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. LongT5 is a model with relative position embeddings so
@@ -1952,7 +1913,9 @@ class LongT5ForConditionalGeneration(LongT5PreTrainedModel, GenerationMixin):
 
 @auto_docstring
 class LongT5EncoderModel(LongT5PreTrainedModel):
-    _tied_weights_keys = ["encoder.embed_tokens.weight"]
+    _tied_weights_keys = {
+        "encoder.embed_tokens.weight": "shared.weight",
+    }
     _keys_to_ignore_on_load_unexpected = [r"decoder"]
 
     def __init__(self, config: LongT5Config):
@@ -1961,8 +1924,7 @@ class LongT5EncoderModel(LongT5PreTrainedModel):
 
         encoder_config = copy.deepcopy(config)
         encoder_config.use_cache = False
-        encoder_config.tie_encoder_decoder = False
-        self.encoder = LongT5Stack(encoder_config, self.shared)
+        self.encoder = LongT5Stack(encoder_config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1974,23 +1936,17 @@ class LongT5EncoderModel(LongT5PreTrainedModel):
         self.shared = new_embeddings
         self.encoder.set_input_embeddings(new_embeddings)
 
-    def _tie_weights(self):
-        if self.config.tie_word_embeddings:
-            self._tie_embedding_weights(self.encoder.embed_tokens, self.shared)
-
-    def get_encoder(self):
-        return self.encoder
-
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple[torch.FloatTensor], BaseModelOutput]:
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.FloatTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple[torch.FloatTensor] | BaseModelOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
             Indices of input sequence tokens in the vocabulary. LongT5 is a model with relative position embeddings so

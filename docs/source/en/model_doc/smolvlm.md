@@ -159,7 +159,7 @@ conversation3 = [
 
 conversations = [conversation1, conversation2, conversation3]
 inputs = processor.apply_chat_template(
-    conversation,
+    conversations,
     add_generation_prompt=True,
     tokenize=True,
     return_dict=True,

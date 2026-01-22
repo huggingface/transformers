@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,26 +16,11 @@ Image/Text processor class for GIT
 """
 
 from ...processing_utils import ProcessorMixin
+from ...utils import auto_docstring
 
 
+@auto_docstring
 class GitProcessor(ProcessorMixin):
-    r"""
-    Constructs a GIT processor which wraps a CLIP image processor and a BERT tokenizer into a single processor.
-
-    [`GitProcessor`] offers all the functionalities of [`CLIPImageProcessor`] and [`BertTokenizerFast`]. See the
-    [`~GitProcessor.__call__`] and [`~GitProcessor.decode`] for more information.
-
-    Args:
-        image_processor ([`AutoImageProcessor`]):
-            The image processor is a required input.
-        tokenizer ([`AutoTokenizer`]):
-            The tokenizer is a required input.
-    """
-
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "AutoImageProcessor"
-    tokenizer_class = "AutoTokenizer"
-
     def __init__(self, image_processor, tokenizer):
         super().__init__(image_processor, tokenizer)
 

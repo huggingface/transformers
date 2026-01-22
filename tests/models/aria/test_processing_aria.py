@@ -12,15 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import shutil
-import tempfile
 import unittest
 
 import numpy as np
 
 from transformers import AriaProcessor
 from transformers.image_utils import load_image
-from transformers.models.auto.processing_auto import AutoProcessor
 from transformers.testing_utils import require_torch, require_vision
 
 from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
@@ -29,13 +26,17 @@ from ...test_processing_common import ProcessorTesterMixin, url_to_local_path
 @require_torch
 @require_vision
 class AriaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
+    # NOTE: setUpClass, tearDownClass, and getter methods have been removed.
+    # They are now automatically handled by ProcessorTesterMixin.
+    # This test only needs: processor_class = YourProcessor
+    # Optionally: model_id = "some/model" to load from specific pretrained model
+    # Optionally: prepare_processor_dict() for custom processor kwargs.
+
     processor_class = AriaProcessor
+    model_id = "m-ric/Aria_hf_2"
 
     @classmethod
-    def setUpClass(cls):
-        cls.tmpdirname = tempfile.mkdtemp()
-        processor = AriaProcessor.from_pretrained("m-ric/Aria_hf_2", size_conversion={490: 2, 980: 2})
-        processor.save_pretrained(cls.tmpdirname)
+    def _setup_test_attributes(cls, processor):
         cls.image1 = load_image(
             url_to_local_path(
                 "https://cdn.britannica.com/61/93061-050-99147DCE/Statue-of-Liberty-Island-New-York-Bay.jpg"
@@ -72,23 +73,6 @@ class AriaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
             "size_conversion": {490: 2, 980: 2},
         }  # fmt: skip
 
-    def get_tokenizer(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).tokenizer
-
-    def get_image_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs).image_processor
-
-    def get_processor(self, **kwargs):
-        return AutoProcessor.from_pretrained(self.tmpdirname, **kwargs)
-
-    @classmethod
-    def tearDownClass(cls):
-        cls.image1.close()
-        cls.image2.close()
-        cls.image3.close()
-        shutil.rmtree(cls.tmpdirname, ignore_errors=True)
-
-    # Copied from tests.models.llava.test_processing_llava.LlavaProcessorTest.test_get_num_vision_tokens
     def test_get_num_vision_tokens(self):
         "Tests general functionality of the helper used internally in vLLM"
 
@@ -128,9 +112,11 @@ class AriaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         inputs = processor(text=text, images=self.image1)
 
         # fmt: off
-        tokenized_sentence = processor.tokenizer(text_str, add_special_tokens=False)
+        # The processor expands <|img|> to <|img|><|img|> (image_seq_len=2) before tokenization
+        # So we need to tokenize the full expanded string to match what the processor does
+        expanded_text = self.image_token * self.image_seq_len + text_str
 
-        expected_input_ids = [[self.image_token_id] * self.image_seq_len + tokenized_sentence["input_ids"]]
+        expected_input_ids = [processor.tokenizer(expanded_text, add_special_tokens=False)["input_ids"]]
         # self.assertEqual(len(inputs["input_ids"]), len(expected_input_ids))
 
         self.assertEqual(inputs["input_ids"], expected_input_ids)
@@ -163,7 +149,7 @@ class AriaProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         # Pad the first input to match the second input
         pad_len = len(expected_input_ids_2) - len(expected_input_ids_1)
 
-        expected_attention_mask = [[0] * pad_len + [1] * len(expected_input_ids_1), [1] * (len(expected_input_ids_2))]
+        expected_attention_mask = [ [1] * len(expected_input_ids_1) + [0] * pad_len, [1] * (len(expected_input_ids_2))]
 
         self.assertEqual(
             inputs["attention_mask"],
@@ -279,7 +265,7 @@ And who is that?<|im_end|>
             tokenize=True,
             return_dict=True,
             max_image_size=980,
-            return_tensors="np",
+            return_tensors="pt",
         )
         self.assertListEqual(list(out_dict[self.images_input_name].shape), [1, 3, 980, 980])
 

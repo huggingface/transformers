@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -37,7 +36,7 @@ class DabDetrConfig(PreTrainedConfig):
         use_timm_backbone (`bool`, *optional*, defaults to `True`):
             Whether or not to use the `timm` library for the backbone. If set to `False`, will use the [`AutoBackbone`]
             API.
-        backbone_config (`PreTrainedConfig` or `dict`, *optional*):
+        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `ResNetConfig()`):
             The configuration of the backbone model. Only used in case `use_timm_backbone` is set to `False` in which
             case it will default to `ResNetConfig()`.
         backbone (`str`, *optional*, defaults to `"resnet50"`):
@@ -118,6 +117,8 @@ class DabDetrConfig(PreTrainedConfig):
         initializer_bias_prior_prob (`float`, *optional*):
             The prior probability used by the bias initializer to initialize biases for `enc_score_head` and `class_embed`.
             If `None`, `prior_prob` computed as `prior_prob = 1 / (num_labels + 1)` while initializing model weights.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
 
     Examples:
@@ -182,6 +183,7 @@ class DabDetrConfig(PreTrainedConfig):
         normalize_before=False,
         sine_position_embedding_scale=None,
         initializer_bias_prior_prob=None,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         if query_dim != 4:
@@ -255,6 +257,8 @@ class DabDetrConfig(PreTrainedConfig):
         self.temperature_height = temperature_height
         self.sine_position_embedding_scale = sine_position_embedding_scale
         self.initializer_bias_prior_prob = initializer_bias_prior_prob
+        self.tie_word_embeddings = tie_word_embeddings
+
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
 

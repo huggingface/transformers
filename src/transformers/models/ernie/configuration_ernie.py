@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The Google AI Language Team Authors and The HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
@@ -24,7 +23,7 @@ logger = logging.get_logger(__name__)
 
 class ErnieConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`ErnieModel`] or a [`TFErnieModel`]. It is used to
+    This is the configuration class to store the configuration of a [`ErnieModel`]. It is used to
     instantiate a ERNIE model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the ERNIE
     [nghuyong/ernie-3.0-base-zh](https://huggingface.co/nghuyong/ernie-3.0-base-zh) architecture.
@@ -36,7 +35,7 @@ class ErnieConfig(PreTrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 30522):
             Vocabulary size of the ERNIE model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`ErnieModel`] or [`TFErnieModel`].
+            `inputs_ids` passed when calling [`ErnieModel`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimensionality of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):
@@ -56,7 +55,7 @@ class ErnieConfig(PreTrainedConfig):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         type_vocab_size (`int`, *optional*, defaults to 2):
-            The vocabulary size of the `token_type_ids` passed when calling [`ErnieModel`] or [`TFErnieModel`].
+            The vocabulary size of the `token_type_ids` passed when calling [`ErnieModel`].
         task_type_vocab_size (`int`, *optional*, defaults to 3):
             The vocabulary size of the `task_type_ids` for ERNIE2.0/ERNIE3.0 model
         use_task_id (`bool`, *optional*, defaults to `False`):
@@ -72,6 +71,17 @@ class ErnieConfig(PreTrainedConfig):
             relevant if `config.is_decoder=True`.
         classifier_dropout (`float`, *optional*):
             The dropout ratio for the classification head.
+        is_decoder (`bool`, *optional*, defaults to `False`):
+            Whether to only use the decoder in an encoder-decoder architecture, otherwise it has no effect on
+            decoder-only or encoder-only architectures.
+        add_cross_attention (`bool`, *optional*, defaults to `False`):
+            Whether cross-attention layers should be added to the model.
+        bos_token_id (`int`, *optional*):
+            Beginning of stream token id.
+        eos_token_id (`int`, *optional*):
+            End of stream token id.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
     Examples:
 
@@ -109,10 +119,21 @@ class ErnieConfig(PreTrainedConfig):
         pad_token_id=0,
         use_cache=True,
         classifier_dropout=None,
+        is_decoder=False,
+        add_cross_attention=False,
+        bos_token_id=None,
+        eos_token_id=None,
+        tie_word_embeddings=True,
         **kwargs,
     ):
-        super().__init__(pad_token_id=pad_token_id, **kwargs)
+        super().__init__(**kwargs)
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
 
+        self.is_decoder = is_decoder
+        self.add_cross_attention = add_cross_attention
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers

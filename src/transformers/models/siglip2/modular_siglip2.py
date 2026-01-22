@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -37,6 +35,7 @@ from transformers.models.siglip.modeling_siglip import (
 
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...utils import auto_docstring, filter_out_non_signature_kwargs
+from ...utils.generic import check_model_inputs, is_flash_attention_requested
 
 
 class Siglip2TextConfig(SiglipTextConfig):
@@ -230,6 +229,10 @@ class Siglip2VisionEmbeddings(nn.Module):
         return embeddings
 
 
+class Siglip2PreTrainedModel(SiglipPreTrainedModel):
+    pass
+
+
 class Siglip2VisionTransformer(SiglipVisionTransformer):
     def __init__(self, config: Siglip2VisionConfig):
         super().__init__(config)
@@ -240,8 +243,9 @@ class Siglip2VisionTransformer(SiglipVisionTransformer):
         pixel_values: torch.FloatTensor,
         attention_mask: torch.Tensor,
         spatial_shapes: torch.LongTensor,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        **kwargs,
     ) -> BaseModelOutputWithPooling:
         r"""
         spatial_shapes (`torch.LongTensor` of shape `(batch_size, 2)`):
@@ -254,7 +258,7 @@ class Siglip2VisionTransformer(SiglipVisionTransformer):
 
         hidden_states = self.embeddings(pixel_values, spatial_shapes)
 
-        if attention_mask is not None and self.config._attn_implementation != "flash_attention_2":
+        if attention_mask is not None and not is_flash_attention_requested(self.config):
             # [batch_size, seq_len] -> [batch_size, 1, tgt_seq_len, src_seq_len]
             encoder_attention_mask = _prepare_4d_attention_mask(attention_mask, hidden_states.dtype)
         else:
@@ -280,10 +284,6 @@ class Siglip2VisionTransformer(SiglipVisionTransformer):
         )
 
 
-class Siglip2PreTrainedModel(SiglipPreTrainedModel):
-    pass
-
-
 class Siglip2TextModel(SiglipTextModel):
     pass
 
@@ -293,7 +293,7 @@ class Siglip2MultiheadAttentionPoolingHead(SiglipMultiheadAttentionPoolingHead):
         super().__init__(config)
         self.num_heads = config.num_attention_heads
 
-    def forward(self, hidden_state: torch.Tensor, attention_mask: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward(self, hidden_state: torch.Tensor, attention_mask: torch.Tensor | None = None) -> torch.Tensor:
         batch_size = hidden_state.shape[0]
         probe = self.probe.repeat(batch_size, 1, 1)
 
@@ -314,13 +314,16 @@ class Siglip2MultiheadAttentionPoolingHead(SiglipMultiheadAttentionPoolingHead):
 
 class Siglip2VisionModel(SiglipVisionModel):
     # Update: add `spatial_shapes` and `pixel_attention_mask`
+    @check_model_inputs(tie_last_hidden_states=False)
+    @auto_docstring
     def forward(
         self,
         pixel_values: torch.FloatTensor,
         pixel_attention_mask: torch.Tensor,
         spatial_shapes: torch.LongTensor,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        **kwargs,
     ) -> BaseModelOutputWithPooling:
         r"""
         pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):
@@ -362,9 +365,9 @@ class Siglip2Model(SiglipModel):
     @auto_docstring
     def get_image_features(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        pixel_attention_mask: Optional[torch.Tensor] = None,
-        spatial_shapes: Optional[torch.LongTensor] = None,
+        pixel_values: torch.FloatTensor | None = None,
+        pixel_attention_mask: torch.Tensor | None = None,
+        spatial_shapes: torch.LongTensor | None = None,
     ) -> torch.FloatTensor:
         r"""
         pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):
@@ -407,15 +410,16 @@ class Siglip2Model(SiglipModel):
     # Update: add `spatial_shapes` and `pixel_attention_mask`
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        pixel_attention_mask: Optional[torch.Tensor] = None,
-        spatial_shapes: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        return_loss: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        pixel_attention_mask: torch.Tensor | None = None,
+        spatial_shapes: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        return_loss: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        **kwargs,
     ) -> Siglip2Output:
         r"""
         pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):
@@ -513,12 +517,13 @@ class Siglip2ForImageClassification(SiglipForImageClassification):
     # Update: add `spatial_shapes` and `pixel_attention_mask`
     def forward(
         self,
-        pixel_values: Optional[torch.Tensor] = None,
-        pixel_attention_mask: Optional[torch.Tensor] = None,
-        spatial_shapes: Optional[torch.LongTensor] = None,
-        labels: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
+        pixel_values: torch.Tensor | None = None,
+        pixel_attention_mask: torch.Tensor | None = None,
+        spatial_shapes: torch.LongTensor | None = None,
+        labels: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        **kwargs,
     ) -> ImageClassifierOutput:
         r"""
         pixel_attention_mask (`torch.Tensor` of shape `(batch_size, image_size, image_size)`, *optional*):

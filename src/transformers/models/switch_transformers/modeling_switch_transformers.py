@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_switch_transformers.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2022 SwitchTransformers Authors and HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,12 +20,13 @@
 
 import copy
 import math
-from typing import Optional, Union
+from typing import Union
 
 import torch
 import torch.nn as nn
 from torch.nn import CrossEntropyLoss
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
@@ -47,7 +47,7 @@ from ...utils import (
     is_torchdynamo_compiling,
     logging,
 )
-from ...utils.generic import OutputRecorder, can_return_tuple, check_model_inputs
+from ...utils.generic import OutputRecorder, can_return_tuple, check_model_inputs, is_flash_attention_requested
 from .configuration_switch_transformers import SwitchTransformersConfig
 
 
@@ -110,7 +110,7 @@ class SwitchTransformersTop1Router(nn.Module):
         router_logits, expert_index = torch.max(router_probs, dim=-1, keepdim=True)
         expert_index = torch.nn.functional.one_hot(expert_index, num_classes=self.num_experts)
         token_priority = torch.cumsum(expert_index, dim=-2)
-        # mask if the token routed to to the expert will overflow
+        # mask if the token routed to the expert will overflow
         expert_capacity_mask = token_priority <= self.expert_capacity
         expert_index = expert_index * expert_capacity_mask
         router_probs = torch.max(router_probs, dim=-1).values.unsqueeze(-1)
@@ -238,7 +238,7 @@ class SwitchTransformersAttention(nn.Module):
         self,
         config: SwitchTransformersConfig,
         has_relative_attention_bias=False,
-        layer_idx: Optional[int] = None,
+        layer_idx: int | None = None,
     ):
         super().__init__()
         self.is_decoder = config.is_decoder
@@ -438,7 +438,7 @@ class SwitchTransformersAttention(nn.Module):
 
 
 class SwitchTransformersLayerSelfAttention(nn.Module):
-    def __init__(self, config, has_relative_attention_bias=False, layer_idx: Optional[int] = None):
+    def __init__(self, config, has_relative_attention_bias=False, layer_idx: int | None = None):
         super().__init__()
         self.SelfAttention = SwitchTransformersAttention(
             config, has_relative_attention_bias=has_relative_attention_bias, layer_idx=layer_idx
@@ -472,7 +472,7 @@ class SwitchTransformersLayerSelfAttention(nn.Module):
 
 
 class SwitchTransformersLayerCrossAttention(nn.Module):
-    def __init__(self, config, layer_idx: Optional[int] = None):
+    def __init__(self, config, layer_idx: int | None = None):
         super().__init__()
         self.EncDecAttention = SwitchTransformersAttention(
             config, has_relative_attention_bias=False, layer_idx=layer_idx
@@ -510,7 +510,7 @@ class SwitchTransformersLayerCrossAttention(nn.Module):
 
 
 class SwitchTransformersBlock(GradientCheckpointingLayer):
-    def __init__(self, config, has_relative_attention_bias=False, is_sparse=False, layer_idx: Optional[int] = None):
+    def __init__(self, config, has_relative_attention_bias=False, is_sparse=False, layer_idx: int | None = None):
         super().__init__()
         self.is_decoder = config.is_decoder
         self.is_sparse = is_sparse
@@ -583,47 +583,47 @@ class SwitchTransformersPreTrainedModel(PreTrainedModel):
     config: SwitchTransformersConfig
     base_model_prefix = "switch_transformers"
     supports_gradient_checkpointing = True
-
     _can_compile_fullgraph = False
     _no_split_modules = ["SwitchTransformersBlock"]
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
         factor = self.config.initializer_factor  # Used for testing weights initialization
         if isinstance(module, SwitchTransformersLayerNorm):
-            module.weight.data.fill_(factor * 1.0)
+            init.constant_(module.weight, factor * 1.0)
         elif isinstance(
             module,
             (SwitchTransformersModel, SwitchTransformersForConditionalGeneration, SwitchTransformersEncoderModel),
         ):
-            module.shared.weight.data.normal_(mean=0.0, std=factor * 1.0)
+            init.normal_(module.shared.weight, mean=0.0, std=factor * 1.0)
             if hasattr(module, "lm_head") and not self.config.tie_word_embeddings:
-                module.lm_head.weight.data.normal_(mean=0.0, std=factor * 1.0)
+                init.normal_(module.lm_head.weight, mean=0.0, std=factor * 1.0)
         elif isinstance(module, SwitchTransformersDenseActDense):
-            module.wi.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
+            init.normal_(module.wi.weight, mean=0.0, std=factor * ((self.config.d_model) ** -0.5))
             if hasattr(module.wi, "bias") and module.wi.bias is not None:
-                module.wi.bias.data.zero_()
-            module.wo.weight.data.normal_(mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
+                init.zeros_(module.wi.bias)
+            init.normal_(module.wo.weight, mean=0.0, std=factor * ((self.config.d_ff) ** -0.5))
             if hasattr(module.wo, "bias") and module.wo.bias is not None:
-                module.wo.bias.data.zero_()
+                init.zeros_(module.wo.bias)
         elif isinstance(module, SwitchTransformersAttention):
             d_model = self.config.d_model
             key_value_proj_dim = self.config.d_kv
             n_heads = self.config.num_heads
-            module.q.weight.data.normal_(mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5))
-            module.k.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
-            module.v.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
-            module.o.weight.data.normal_(mean=0.0, std=factor * ((n_heads * key_value_proj_dim) ** -0.5))
+            init.normal_(module.q.weight, mean=0.0, std=factor * ((d_model * key_value_proj_dim) ** -0.5))
+            init.normal_(module.k.weight, mean=0.0, std=factor * (d_model**-0.5))
+            init.normal_(module.v.weight, mean=0.0, std=factor * (d_model**-0.5))
+            init.normal_(module.o.weight, mean=0.0, std=factor * ((n_heads * key_value_proj_dim) ** -0.5))
             if module.has_relative_attention_bias:
-                module.relative_attention_bias.weight.data.normal_(mean=0.0, std=factor * ((d_model) ** -0.5))
+                init.normal_(module.relative_attention_bias.weight, mean=0.0, std=factor * ((d_model) ** -0.5))
         elif isinstance(module, SwitchTransformersSparseMLP):
             d_model = self.config.d_model
             key_value_proj_dim = self.config.d_kv
             n_heads = self.config.num_heads
-            module.router.classifier.weight.data.normal_(mean=0.0, std=factor * 1)
+            init.normal_(module.router.classifier.weight, mean=0.0, std=factor * 1)
             for idx in range(self.config.num_experts):
-                module.experts[f"expert_{idx}"].wi.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
-                module.experts[f"expert_{idx}"].wo.weight.data.normal_(mean=0.0, std=factor * (d_model**-0.5))
+                init.normal_(module.experts[f"expert_{idx}"].wi.weight, mean=0.0, std=factor * (d_model**-0.5))
+                init.normal_(module.experts[f"expert_{idx}"].wo.weight, mean=0.0, std=factor * (d_model**-0.5))
 
     def _shift_right(self, input_ids):
         decoder_start_token_id = self.config.decoder_start_token_id
@@ -655,11 +655,9 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
         "router_logits": SwitchTransformersTop1Router,
     }
 
-    def __init__(self, config, embed_tokens=None):
+    def __init__(self, config):
         super().__init__(config)
         self.embed_tokens = nn.Embedding(config.vocab_size, config.d_model)
-        if embed_tokens is not None:
-            self.embed_tokens.weight = embed_tokens.weight
 
         self.is_decoder = config.is_decoder
 
@@ -681,7 +679,7 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
 
         self.gradient_checkpointing = False
 
-    @check_model_inputs()
+    @check_model_inputs
     def forward(
         self,
         input_ids=None,
@@ -792,7 +790,7 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
         past_key_values: Cache,
         output_attentions: bool = False,
     ):
-        if self.config._attn_implementation == "flash_attention_2":
+        if is_flash_attention_requested(self.config):
             if attention_mask is not None and (attention_mask == 0.0).any():
                 return attention_mask
             return None
@@ -910,7 +908,11 @@ class SwitchTransformersStack(SwitchTransformersPreTrainedModel):
 
 @auto_docstring
 class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
-    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
+    _tied_weights_keys = {
+        "encoder.embed_tokens.weight": "shared.weight",
+        "decoder.embed_tokens.weight": "shared.weight",
+    }
+    _input_embed_layer = "shared"
 
     def __init__(self, config: SwitchTransformersConfig):
         super().__init__(config)
@@ -919,48 +921,35 @@ class SwitchTransformersModel(SwitchTransformersPreTrainedModel):
         encoder_config = copy.deepcopy(config)
         encoder_config.is_decoder = False
         encoder_config.use_cache = False
-        encoder_config.tie_encoder_decoder = False
-        self.encoder = SwitchTransformersStack(encoder_config, self.shared)
+        self.encoder = SwitchTransformersStack(encoder_config)
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
-        decoder_config.tie_encoder_decoder = False
-        self.decoder = SwitchTransformersStack(decoder_config, self.shared)
+        self.decoder = SwitchTransformersStack(decoder_config)
 
         # Initialize weights and apply final processing
         self.post_init()
-
-    def get_input_embeddings(self):
-        return self.shared
 
     def set_input_embeddings(self, new_embeddings):
         self.shared = new_embeddings
         self.encoder.set_input_embeddings(new_embeddings)
         self.decoder.set_input_embeddings(new_embeddings)
 
-    def _tie_weights(self):
-        if self.config.tie_word_embeddings:
-            self._tie_embedding_weights(self.encoder.embed_tokens, self.shared)
-            self._tie_embedding_weights(self.decoder.embed_tokens, self.shared)
-
-    def get_encoder(self):
-        return self.encoder
-
     @auto_docstring
     @can_return_tuple
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.BoolTensor] = None,
-        encoder_outputs: Optional[tuple[tuple[torch.FloatTensor]]] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.Tensor] = None,
-        decoder_inputs_embeds: Optional[torch.Tensor] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.FloatTensor | None = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.BoolTensor | None = None,
+        encoder_outputs: tuple[tuple[torch.FloatTensor]] | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.Tensor | None = None,
+        decoder_inputs_embeds: torch.Tensor | None = None,
+        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple[torch.FloatTensor], Seq2SeqMoEModelOutput]:
+    ) -> tuple[torch.FloatTensor] | Seq2SeqMoEModelOutput:
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
                 input_ids=input_ids, attention_mask=attention_mask, inputs_embeds=inputs_embeds, **kwargs
@@ -1063,7 +1052,11 @@ def load_balancing_loss_func(router_probs: torch.Tensor, expert_indices: torch.T
     """
 )
 class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight", "lm_head.weight"]
+    _tied_weights_keys = {
+        "encoder.embed_tokens.weight": "shared.weight",
+        "decoder.embed_tokens.weight": "shared.weight",
+        "lm_head.weight": "shared.weight",
+    }
 
     def __init__(self, config: SwitchTransformersConfig):
         super().__init__(config)
@@ -1074,14 +1067,12 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
         encoder_config = copy.deepcopy(config)
         encoder_config.is_decoder = False
         encoder_config.use_cache = False
-        encoder_config.tie_encoder_decoder = False
-        self.encoder = SwitchTransformersStack(encoder_config, self.shared)
+        self.encoder = SwitchTransformersStack(encoder_config)
 
         decoder_config = copy.deepcopy(config)
         decoder_config.is_decoder = True
-        decoder_config.tie_encoder_decoder = False
         decoder_config.num_layers = config.num_decoder_layers
-        self.decoder = SwitchTransformersStack(decoder_config, self.shared)
+        self.decoder = SwitchTransformersStack(decoder_config)
 
         self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
 
@@ -1097,31 +1088,23 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
         self.encoder.set_input_embeddings(new_embeddings)
         self.decoder.set_input_embeddings(new_embeddings)
 
-    def _tie_weights(self):
-        if self.config.tie_word_embeddings:
-            self._tie_embedding_weights(self.encoder.embed_tokens, self.shared)
-            self._tie_embedding_weights(self.decoder.embed_tokens, self.shared)
-
-    def get_encoder(self):
-        return self.encoder
-
     @auto_docstring
     @can_return_tuple
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.BoolTensor] = None,
-        encoder_outputs: Optional[tuple[tuple[torch.Tensor]]] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        output_router_logits: Optional[bool] = False,
-        cache_position: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.FloatTensor | None = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.BoolTensor | None = None,
+        encoder_outputs: tuple[tuple[torch.Tensor]] | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        output_router_logits: bool | None = False,
+        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple[torch.FloatTensor], Seq2SeqMoEOutput]:
+    ) -> tuple[torch.FloatTensor] | Seq2SeqMoEOutput:
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
                 input_ids=input_ids, attention_mask=attention_mask, inputs_embeds=inputs_embeds, **kwargs
@@ -1224,7 +1207,9 @@ class SwitchTransformersForConditionalGeneration(SwitchTransformersPreTrainedMod
 
 
 class SwitchTransformersEncoderModel(SwitchTransformersPreTrainedModel):
-    _tied_weights_keys = ["encoder.embed_tokens.weight"]
+    _tied_weights_keys = {
+        "encoder.embed_tokens.weight": "shared.weight",
+    }
     _can_record_outputs = {
         "hidden_states": SwitchTransformersBlock,
         "attentions": OutputRecorder(SwitchTransformersAttention, index=-1, layer_name="layer.0"),
@@ -1238,7 +1223,7 @@ class SwitchTransformersEncoderModel(SwitchTransformersPreTrainedModel):
         encoder_config = copy.deepcopy(config)
         encoder_config.use_cache = False
         encoder_config.is_encoder_decoder = False
-        self.encoder = SwitchTransformersStack(encoder_config, self.shared)
+        self.encoder = SwitchTransformersStack(encoder_config)
         self.post_init()
 
     def get_input_embeddings(self):
@@ -1248,23 +1233,16 @@ class SwitchTransformersEncoderModel(SwitchTransformersPreTrainedModel):
         self.shared = new_embeddings
         self.encoder.set_input_embeddings(new_embeddings)
 
-    def _tie_weights(self):
-        if self.config.tie_word_embeddings:
-            self._tie_embedding_weights(self.encoder.embed_tokens, self.shared)
-
-    def get_encoder(self):
-        return self.encoder
-
     @auto_docstring
-    @check_model_inputs()
+    @check_model_inputs
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.FloatTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple[torch.FloatTensor], MoEModelOutput]:
+    ) -> tuple[torch.FloatTensor] | MoEModelOutput:
         use_cache = False
         encoder_outputs = self.encoder(
             input_ids=input_ids,

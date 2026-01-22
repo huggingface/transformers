@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -249,6 +248,7 @@ class SamVisionConfig(PreTrainedConfig):
         self.global_attn_indexes = global_attn_indexes
         self.num_pos_feats = num_pos_feats
         self.mlp_dim = int(hidden_size * mlp_ratio) if mlp_dim is None else mlp_dim
+        self.scale = self.hidden_size // 2
 
 
 class SamConfig(PreTrainedConfig):

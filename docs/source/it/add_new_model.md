@@ -32,7 +32,7 @@ sarai l'artefice di un importante contributo open-source a 🤗 Transformers. Du
 - ottenere più comprensione delle best practices in open-source
 - capire i principi di design di una della librerie NLP più popolari
 - capire come efficientemente testare complessi modelli NLP
-- capire come integrare utilit Python come `black`, `ruff`, `make fix-copies` in una libreria per garantire sempre di avere un codice leggibile e pulito
+- capire come integrare utilit Python come `black`, `ruff`, `make fix-repo` in una libreria per garantire sempre di avere un codice leggibile e pulito
 
 Siamo anche contenti se vuoi aggiungere un modello che non può essere trovato nella cartella “calls-for-model-addition”.
 Le seguenti sezioni spiegano in dettaglio come aggiungere un nuovo modello. Può anche essere molto utile controllare modelli
@@ -726,7 +726,7 @@ make style
 E che il codice passi i quality check:
 
 ```bash
-make quality
+make check-repo
 ```
 
 A volte capita che manchino delle informazioninella docstring o alcuni nomi sbagliati, questo farà fallire i tests sopra.
@@ -746,11 +746,9 @@ Il metodo `push_to_hub`, presente in tutti i modelli `transformers`, é una mani
 
 ```python
 brand_new_bert.push_to_hub(
-    repo_path_or_name="brand_new_bert",
+    repo_id="brand_new_bert"
     # Uncomment the following line to push to an organization
-    # organization="<ORGANIZATION>",
-    commit_message="Add model",
-    use_temp_dir=True,
+    # repo_id="<ORGANIZATION>/brand_new_bert"
 )
 ```
 

@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_smollm3.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,10 +18,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional
-
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 
 
 class SmolLM3Config(PreTrainedConfig):
@@ -72,7 +69,7 @@ class SmolLM3Config(PreTrainedConfig):
         eos_token_id (`int`, *optional*, defaults to 128001):
             The id of the end of sentence token.
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         use_sliding_window (`bool`, *optional*, defaults to `False`):
@@ -108,6 +105,7 @@ class SmolLM3Config(PreTrainedConfig):
 
     model_type = "smollm3"
     keys_to_ignore_at_inference = ["past_key_values"]
+    default_theta = 2000000.0
 
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
@@ -126,37 +124,36 @@ class SmolLM3Config(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 128256,
-        hidden_size: Optional[int] = 2048,
-        intermediate_size: Optional[int] = 11008,
-        num_hidden_layers: Optional[int] = 36,
-        num_attention_heads: Optional[int] = 16,
-        num_key_value_heads: Optional[int] = 4,
-        hidden_act: Optional[str] = "silu",
-        max_position_embeddings: Optional[int] = 32768,
-        initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[int] = 1e-6,
-        use_cache: Optional[bool] = True,
-        pad_token_id: Optional[int] = 128004,
-        bos_token_id: Optional[int] = 128000,
-        eos_token_id: Optional[int] = 128001,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
-        use_sliding_window: Optional[bool] = False,
-        sliding_window: Optional[int] = None,
-        no_rope_layers: Optional[int] = None,
-        no_rope_layer_interval: Optional[int] = 4,
-        layer_types: Optional[int] = None,
-        attention_bias: Optional[bool] = False,
-        attention_dropout: Optional[float] = 0.0,
-        mlp_bias: Optional[bool] = False,
+        vocab_size: int | None = 128256,
+        hidden_size: int | None = 2048,
+        intermediate_size: int | None = 11008,
+        num_hidden_layers: int | None = 36,
+        num_attention_heads: int | None = 16,
+        num_key_value_heads: int | None = 4,
+        hidden_act: str | None = "silu",
+        max_position_embeddings: int | None = 32768,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: int | None = 1e-6,
+        use_cache: bool | None = True,
+        pad_token_id: int | None = 128004,
+        bos_token_id: int | None = 128000,
+        eos_token_id: int | None = 128001,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        use_sliding_window: bool | None = False,
+        sliding_window: int | None = None,
+        no_rope_layers: int | None = None,
+        no_rope_layer_interval: int | None = 4,
+        layer_types: int | None = None,
+        attention_bias: bool | None = False,
+        attention_dropout: float | None = 0.0,
+        mlp_bias: bool | None = False,
+        tie_word_embeddings: bool | None = True,
         **kwargs,
     ):
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            **kwargs,
-        )
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.mlp_bias = mlp_bias
@@ -201,10 +198,8 @@ class SmolLM3Config(PreTrainedConfig):
         self.layer_types = layer_types
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = getattr(self, "rope_theta", 2000000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
+        self.rope_parameters = rope_parameters
+        super().__init__(**kwargs)
 
 
 __all__ = ["SmolLM3Config"]

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The Meta AI Authors and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,14 +13,19 @@
 # limitations under the License.
 """PyTorch SAM 2 model."""
 
-from typing import Optional, Union
-
 import torch
-import torch.nn as nn
-import torch.utils.checkpoint
 
-from transformers.models.sam2.configuration_sam2 import Sam2Config, Sam2MaskDecoderConfig, Sam2PromptEncoderConfig
-from transformers.models.sam2.modeling_sam2 import (
+from ... import initialization as init
+from ...configuration_utils import PreTrainedConfig
+from ...modeling_utils import PreTrainedModel
+from ...processing_utils import Unpack
+from ...utils import (
+    auto_docstring,
+)
+from ...utils.generic import TransformersKwargs, check_model_inputs
+from ..auto import CONFIG_MAPPING, AutoConfig
+from ..sam2.configuration_sam2 import Sam2Config, Sam2MaskDecoderConfig, Sam2PromptEncoderConfig
+from ..sam2.modeling_sam2 import (
     Sam2Attention,
     Sam2FeedForward,
     Sam2LayerNorm,
@@ -31,19 +35,11 @@ from transformers.models.sam2.modeling_sam2 import (
     Sam2VisionEncoderOutput,
     Sam2VisionModel,
 )
-from transformers.utils.generic import TransformersKwargs, check_model_inputs
-
-from ...configuration_utils import PreTrainedConfig
-from ...processing_utils import Unpack
-from ...utils import (
-    auto_docstring,
-)
-from ..auto import CONFIG_MAPPING, AutoConfig
 
 
 # fix this in modular
 if True:
-    from transformers.models.timm_wrapper.modeling_timm_wrapper import TimmWrapperModel
+    from ..timm_wrapper.modeling_timm_wrapper import TimmWrapperModel
 
 
 class EdgeTamVisionConfig(PreTrainedConfig):
@@ -57,7 +53,7 @@ class EdgeTamVisionConfig(PreTrainedConfig):
     documentation from [`PreTrainedConfig`] for more information.
 
     Args:
-        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*):
+        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `timm/repvit_m1.dist_in1k`):
             Configuration for the vision backbone. This is used to instantiate the backbone using
             `AutoModel.from_config`.
         backbone_channel_list (`List[int]`, *optional*, defaults to `[384, 192, 96, 48]`):
@@ -174,22 +170,14 @@ class EdgeTamFeedForward(Sam2FeedForward):
 
 @auto_docstring
 class EdgeTamPreTrainedModel(Sam2PreTrainedModel):
+    @torch.no_grad()
     def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, (nn.LayerNorm, EdgeTamLayerNorm)):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
+        PreTrainedModel._init_weights(self, module)
         if isinstance(module, EdgeTamModel):
             if module.no_memory_embedding is not None:
-                module.no_memory_embedding.data.zero_()
+                init.zeros_(module.no_memory_embedding)
+        elif hasattr(module, "positional_embedding"):
+            init.normal_(module.positional_embedding, std=module.scale)
 
 
 @auto_docstring(
@@ -205,12 +193,12 @@ class EdgeTamVisionModel(Sam2VisionModel):
     def get_input_embeddings(self):
         raise NotImplementedError("Can't get input embeddings from timm wrapper model")
 
-    @check_model_inputs()
+    @check_model_inputs
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
+        pixel_values: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, EdgeTamVisionEncoderOutput]:
+    ) -> tuple | EdgeTamVisionEncoderOutput:
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 

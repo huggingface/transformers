@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 MiniMaxAI and HuggingFace Inc. teams. All rights reserved.
 #
 #
@@ -15,12 +14,11 @@
 # limitations under the License.
 """PyTorch MiniMax model."""
 
-from typing import Optional
-
 import torch
 import torch.nn.functional as F
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
@@ -28,7 +26,7 @@ from ...masking_utils import create_causal_mask, create_sliding_window_causal_ma
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import MoeModelOutputWithPast
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
 from ...utils.generic import OutputRecorder, check_model_inputs
@@ -44,6 +42,7 @@ from ..mixtral.modeling_mixtral import (
     MixtralPreTrainedModel,
     MixtralRMSNorm,
     MixtralSparseMoeBlock,
+    MixtralTopKRouter,
 )
 
 
@@ -120,7 +119,7 @@ class MiniMaxConfig(PreTrainedConfig):
         router_jitter_noise (`float`, *optional*, defaults to 0.0):
             Amount of noise to add to the router.
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         layer_types (`list`, *optional*):
@@ -156,15 +155,16 @@ class MiniMaxConfig(PreTrainedConfig):
 
     model_type = "minimax"
     keys_to_ignore_at_inference = ["past_key_values"]
+    default_theta = 1000000.0
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.block_sparse_moe.gate": "colwise_rep",  # we need to replicate here to correctly route experts
-        "layers.*.block_sparse_moe.experts.*.w1": "colwise",
-        "layers.*.block_sparse_moe.experts.*.w2": "rowwise",
-        "layers.*.block_sparse_moe.experts.*.w3": "colwise",
+        "layers.*.mlp.gate": "colwise_rep",  # we need to replicate here to correctly route experts
+        "layers.*.mlp.experts.gate_up_proj": "local_rowwise",
+        "layers.*.mlp.experts.down_proj": "local_rowwise",
+        "layers.*.mlp.experts": "gather",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
@@ -177,38 +177,38 @@ class MiniMaxConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 32000,
-        hidden_size: Optional[int] = 4096,
-        intermediate_size: Optional[int] = 14336,
-        num_hidden_layers: Optional[int] = 32,
-        num_attention_heads: Optional[int] = 32,
-        num_key_value_heads: Optional[int] = 8,
-        head_dim: Optional[int] = None,
-        hidden_act: Optional[str] = "silu",
-        max_position_embeddings: Optional[int] = 4096 * 32,
-        initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[int] = 1e-5,
-        use_cache: Optional[bool] = True,
-        pad_token_id: Optional[int] = None,
-        bos_token_id: Optional[int] = 1,
-        eos_token_id: Optional[int] = 2,
-        tie_word_embeddings: Optional[bool] = False,
-        sliding_window: Optional[int] = None,
-        attention_dropout: Optional[float] = 0.0,
-        num_experts_per_tok: Optional[int] = 2,
-        num_local_experts: Optional[int] = 8,
-        output_router_logits: Optional[bool] = False,
-        router_aux_loss_coef: Optional[float] = 0.001,
-        router_jitter_noise: Optional[float] = 0.0,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
-        layer_types: Optional[list[str]] = None,
-        block_size: Optional[int] = 256,
-        full_attn_alpha_factor: Optional[int] = 1,
-        full_attn_beta_factor: Optional[int] = 1,
-        linear_attn_alpha_factor: Optional[int] = 1,
-        linear_attn_beta_factor: Optional[int] = 1,
-        mlp_alpha_factor: Optional[int] = 1,
-        mlp_beta_factor: Optional[int] = 1,
+        vocab_size: int | None = 32000,
+        hidden_size: int | None = 4096,
+        intermediate_size: int | None = 14336,
+        num_hidden_layers: int | None = 32,
+        num_attention_heads: int | None = 32,
+        num_key_value_heads: int | None = 8,
+        head_dim: int | None = None,
+        hidden_act: str | None = "silu",
+        max_position_embeddings: int | None = 4096 * 32,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: int | None = 1e-5,
+        use_cache: bool | None = True,
+        pad_token_id: int | None = None,
+        bos_token_id: int | None = 1,
+        eos_token_id: int | None = 2,
+        tie_word_embeddings: bool | None = False,
+        sliding_window: int | None = None,
+        attention_dropout: float | None = 0.0,
+        num_experts_per_tok: int | None = 2,
+        num_local_experts: int | None = 8,
+        output_router_logits: bool | None = False,
+        router_aux_loss_coef: float | None = 0.001,
+        router_jitter_noise: float | None = 0.0,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        layer_types: list[str] | None = None,
+        block_size: int | None = 256,
+        full_attn_alpha_factor: int | None = 1,
+        full_attn_beta_factor: int | None = 1,
+        linear_attn_alpha_factor: int | None = 1,
+        linear_attn_beta_factor: int | None = 1,
+        mlp_alpha_factor: int | None = 1,
+        mlp_beta_factor: int | None = 1,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -236,6 +236,10 @@ class MiniMaxConfig(PreTrainedConfig):
         self.output_router_logits = output_router_logits
         self.router_aux_loss_coef = router_aux_loss_coef
         self.router_jitter_noise = router_jitter_noise
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
 
         self.layer_types = layer_types
         self.block_size = block_size
@@ -245,9 +249,6 @@ class MiniMaxConfig(PreTrainedConfig):
         self.linear_attn_beta_factor = linear_attn_beta_factor
         self.mlp_alpha_factor = mlp_alpha_factor
         self.mlp_beta_factor = mlp_beta_factor
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
 
         if self.layer_types is None:
             self.layer_types = [
@@ -255,17 +256,8 @@ class MiniMaxConfig(PreTrainedConfig):
             ]
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = getattr(self, "rope_theta", 1000000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.rope_parameters = rope_parameters
+        super().__init__(**kwargs)
 
 
 class MiniMaxRMSNorm(MixtralRMSNorm):
@@ -361,11 +353,11 @@ class MiniMaxLightningAttention(nn.Module):
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: Optional[torch.Tensor],
-        past_key_values: Optional[Cache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        attention_mask: torch.Tensor | None,
+        past_key_values: Cache | None = None,
+        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         batch_size, seq_len, hidden_size = hidden_states.shape
         num_blocks = (seq_len + self.block_size - 1) // self.block_size
 
@@ -464,6 +456,10 @@ class MiniMaxAttention(MixtralAttention):
     pass
 
 
+class MiniMaxTopKRouter(MixtralTopKRouter):
+    pass
+
+
 class MiniMaxSparseMoeBlock(MixtralSparseMoeBlock):
     pass
 
@@ -476,7 +472,8 @@ class MiniMaxDecoderLayer(MixtralDecoderLayer, GradientCheckpointingLayer):
         self.layer_type = config.layer_types[layer_idx] if hasattr(config, "layer_types") else None
         self.mlp_alpha_factor = config.mlp_alpha_factor
         self.mlp_beta_factor = config.mlp_beta_factor
-
+        del self.mlp
+        self.mlp = MiniMaxSparseMoeBlock(config)
         if self.layer_type == "linear_attention":
             self.self_attn = MiniMaxLightningAttention(config, layer_idx)
             self.attn_alpha_factor = config.linear_attn_alpha_factor
@@ -489,14 +486,14 @@ class MiniMaxDecoderLayer(MixtralDecoderLayer, GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        use_cache: Optional[bool] = False,
-        cache_position: Optional[torch.LongTensor] = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        use_cache: bool | None = False,
+        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
+    ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
         hidden_states = self.input_layernorm(hidden_states)
         residual = hidden_states
         hidden_states, _ = self.self_attn(
@@ -512,32 +509,42 @@ class MiniMaxDecoderLayer(MixtralDecoderLayer, GradientCheckpointingLayer):
         hidden_states = residual * self.attn_alpha_factor + hidden_states * self.attn_beta_factor
         hidden_states = self.post_attention_layernorm(hidden_states)
         residual = hidden_states
-        hidden_states = self.block_sparse_moe(hidden_states)
+        hidden_states = self.mlp(hidden_states)
         hidden_states = residual * self.mlp_alpha_factor + hidden_states * self.mlp_beta_factor
 
         return hidden_states
 
 
 class MiniMaxPreTrainedModel(MixtralPreTrainedModel):
-    _can_compile_fullgraph = False
+    _can_compile_fullgraph = False  # uses a non-compilable custom cache class MiniMaxCache
     _can_record_outputs = {
-        "router_logits": OutputRecorder(nn.Linear, layer_name="block_sparse_moe.gate", index=0),
+        "router_logits": OutputRecorder(MiniMaxTopKRouter, layer_name="mlp.gate", index=0),
         "hidden_states": MiniMaxDecoderLayer,
         "attentions": [MiniMaxAttention, MiniMaxLightningAttention],
     }
 
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, MiniMaxLightningAttention):
+            slope_rate = module.get_slope_rate()
+            query_decay, key_decay, diagonal_decay = module.decay_factors(slope_rate)
+            init.copy_(module.slope_rate, slope_rate)
+            init.copy_(module.query_decay, query_decay)
+            init.copy_(module.key_decay, key_decay)
+            init.copy_(module.diagonal_decay, diagonal_decay)
+
 
 class MiniMaxModel(MixtralModel):
-    @check_model_inputs()
+    @check_model_inputs
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[MiniMaxCache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: MiniMaxCache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):

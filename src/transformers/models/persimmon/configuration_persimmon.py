@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 Adept AI and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,10 +13,8 @@
 # limitations under the License.
 """Persimmon model configuration"""
 
-from typing import Optional
-
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
@@ -61,7 +58,7 @@ class PersimmonConfig(PreTrainedConfig):
         tie_word_embeddings(`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         qk_layernorm (`bool`, *optional*, default to `True`):
@@ -70,8 +67,6 @@ class PersimmonConfig(PreTrainedConfig):
             The dropout ratio after applying the MLP to the hidden states.
         attention_dropout (`float`, *optional*, default to 0.0):
             The dropout ratio after computing the attention scores.
-        partial_rotary_factor (`float`, *optional*, default to 0.5):
-            Percentage of the query and keys which will have rotary embedding.
 
         Example:
 
@@ -87,25 +82,24 @@ class PersimmonConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 262144,
-        hidden_size: Optional[int] = 4096,
-        intermediate_size: Optional[int] = 16384,
-        num_hidden_layers: Optional[int] = 36,
-        num_attention_heads: Optional[int] = 64,
-        hidden_act: Optional[str] = "relu2",
-        max_position_embeddings: Optional[int] = 16384,
-        initializer_range: Optional[float] = 0.02,
-        layer_norm_eps: Optional[int] = 1e-5,
-        use_cache: Optional[bool] = True,
-        tie_word_embeddings: Optional[bool] = False,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
-        qk_layernorm: Optional[bool] = True,
-        hidden_dropout: Optional[float] = 0.0,
-        attention_dropout: Optional[float] = 0.0,
-        partial_rotary_factor: Optional[float] = 0.5,
-        pad_token_id: Optional[int] = None,
-        bos_token_id: Optional[int] = 1,
-        eos_token_id: Optional[int] = 2,
+        vocab_size: int | None = 262144,
+        hidden_size: int | None = 4096,
+        intermediate_size: int | None = 16384,
+        num_hidden_layers: int | None = 36,
+        num_attention_heads: int | None = 64,
+        hidden_act: str | None = "relu2",
+        max_position_embeddings: int | None = 16384,
+        initializer_range: float | None = 0.02,
+        layer_norm_eps: int | None = 1e-5,
+        use_cache: bool | None = True,
+        tie_word_embeddings: bool | None = False,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        qk_layernorm: bool | None = True,
+        hidden_dropout: float | None = 0.0,
+        attention_dropout: float | None = 0.0,
+        pad_token_id: int | None = None,
+        bos_token_id: int | None = 1,
+        eos_token_id: int | None = 2,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -121,23 +115,14 @@ class PersimmonConfig(PreTrainedConfig):
         self.qk_layernorm = qk_layernorm
         self.hidden_dropout = hidden_dropout
         self.attention_dropout = attention_dropout
-        self.partial_rotary_factor = partial_rotary_factor
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
+        self.rope_parameters = rope_parameters
+        kwargs.setdefault("partial_rotary_factor", 0.5)  # assign default for BC
 
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 25000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
-
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        super().__init__(**kwargs)
 
 
 __all__ = ["PersimmonConfig"]

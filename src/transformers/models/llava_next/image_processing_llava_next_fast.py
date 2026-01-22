@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,10 +13,10 @@
 # limitations under the License.
 """Fast Image processor class for LLaVa-NeXT."""
 
-from typing import Optional, Union
+from typing import Optional
 
 import torch
-from torchvision.transforms.v2 import functional as F
+import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_utils import BatchFeature, get_patch_output_size, select_best_resolution
 from ...image_processing_utils_fast import (
@@ -47,6 +46,7 @@ from .image_processing_llava_next import LlavaNextImageProcessorKwargs
 class LlavaNextImageProcessorFast(BaseImageProcessorFast):
     # To be checked against the slow image processor
     # None values left after checking can be removed
+    model_input_names = ["pixel_values", "image_sizes"]
     resample = PILImageResampling.BICUBIC
     image_mean = OPENAI_CLIP_MEAN
     image_std = OPENAI_CLIP_STD
@@ -73,7 +73,7 @@ class LlavaNextImageProcessorFast(BaseImageProcessorFast):
         self,
         image: "torch.Tensor",
         target_resolution: tuple,
-        interpolation: "F.InterpolationMode",
+        interpolation: "tvF.InterpolationMode",
         input_data_format: ChannelDimension,
     ) -> "torch.Tensor":
         """
@@ -119,7 +119,7 @@ class LlavaNextImageProcessorFast(BaseImageProcessorFast):
         new_resolution = get_patch_output_size(image, target_resolution, input_data_format)
         padding = self._get_padding_size(new_resolution, target_resolution)
 
-        padded_image = F.pad(image, padding=padding)
+        padded_image = tvF.pad(image, padding=padding)
 
         return padded_image
 
@@ -129,7 +129,7 @@ class LlavaNextImageProcessorFast(BaseImageProcessorFast):
         grid_pinpoints,
         size: tuple,
         patch_size: int,
-        interpolation: "F.InterpolationMode",
+        interpolation: "tvF.InterpolationMode",
     ) -> list["torch.Tensor"]:
         """
         Process an image with variable resolutions by dividing it into patches.
@@ -161,7 +161,7 @@ class LlavaNextImageProcessorFast(BaseImageProcessorFast):
         )
         padded_image = self._pad_for_patching(resized_image, best_resolution, input_data_format=ChannelDimension.FIRST)
         patches = divide_to_patches(padded_image, patch_size=patch_size)
-        resized_original_image = F.resize(image, size=size, interpolation=interpolation)
+        resized_original_image = tvF.resize(image, size=size, interpolation=interpolation)
 
         image_patches = [resized_original_image] + patches
 
@@ -195,17 +195,17 @@ class LlavaNextImageProcessorFast(BaseImageProcessorFast):
         do_resize: bool,
         size: SizeDict,
         image_grid_pinpoints: list[list[int]],
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
         do_pad: bool,
-        disable_grouping: Optional[bool],
-        return_tensors: Optional[Union[str, TensorType]],
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         processed_images = []
@@ -253,15 +253,12 @@ class LlavaNextImageProcessorFast(BaseImageProcessorFast):
                 )
                 processed_image_patches_grouped[shape] = stacked_image_patches
             processed_image_patches = reorder_images(processed_image_patches_grouped, grouped_image_patches_index)
-            processed_image_patches = (
-                torch.stack(processed_image_patches, dim=0) if return_tensors else processed_image_patches
-            )
+            processed_image_patches = torch.stack(processed_image_patches, dim=0)
             processed_images.append(processed_image_patches)
             image_sizes.append(get_image_size(image, ChannelDimension.FIRST))
 
         if do_pad:
             processed_images = self._pad_for_batching(processed_images)
-        processed_images = torch.stack(processed_images, dim=0) if return_tensors else processed_images
         return BatchFeature(
             data={"pixel_values": processed_images, "image_sizes": image_sizes}, tensor_type=return_tensors
         )

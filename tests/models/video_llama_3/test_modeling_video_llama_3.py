@@ -36,10 +36,11 @@ from transformers import (
     is_torch_available,
 )
 from transformers.testing_utils import (
+    Expectations,
     backend_empty_cache,
     require_flash_attn,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     set_config_for_less_flaky_test,
     set_model_for_less_flaky_test,
     slow,
@@ -75,7 +76,7 @@ def _test_encoder_eager_matches_sdpa_inference(
 ):
     """
     This test is written as a regular function to be able to overload it easily with different tolerances.
-    Otherwise, `paramterezie.expand` prevents it as it removes the original function from the namespace.
+    Otherwise, `parameterize.expand` prevents it as it removes the original function from the namespace.
     """
     if not self.has_attentions:
         self.skipTest(reason="Model architecture does not support attentions")
@@ -350,7 +351,6 @@ class VideoLlama3VisionModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (VideoLlama3VisionModel,) if is_torch_available() else ()
     additional_model_inputs = ["grid_thw", "merge_sizes"]
     test_resize_embeddings = False
-    test_head_masking = False
     test_cpu_offload = False
     test_disk_offload_safetensors = False
     test_disk_offload_bin = False
@@ -652,8 +652,6 @@ class VideoLlama3ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Tes
         else ()
     )
     pipeline_model_mapping = {"image-text-to-text": VideoLlama3ForConditionalGeneration}
-    test_pruning = False
-    test_head_masking = False
     _is_composite = True
 
     def setUp(self):
@@ -831,7 +829,14 @@ class VideoLlama3IntegrationTest(unittest.TestCase):
         torch.testing.assert_close(expected_pixel_slice, inputs.pixel_values[:6, :3], atol=1e-4, rtol=1e-4)
 
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False, repetition_penalty=None)
-        EXPECTED_DECODED_TEXT = "user\n\nDescribe the image.\nassistant\nThe image captures a vibrant nighttime scene on a bustling city street. A woman in a striking red dress"
+        # fmt: off
+        EXPECTED_DECODED_TEXT = Expectations(
+            {
+                ("cuda", None): "user\n\nDescribe the image.\nassistant\nThe image captures a vibrant nighttime scene on a bustling city street. A woman in a striking red dress",
+                ("xpu", None): "user\n\nDescribe the image.\nassistant\nThe image captures a vibrant night scene in a bustling Japanese city. A woman in a striking red dress",
+            }
+        ).get_expectation()
+        # fmt: on
 
         self.assertEqual(
             self.processor.decode(output[0], skip_special_tokens=True),
@@ -874,11 +879,21 @@ class VideoLlama3IntegrationTest(unittest.TestCase):
 
         # it should not matter whether two images are the same size or not
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False, repetition_penalty=None)
+        # fmt: off
+        EXPECTED_DECODED_TEXT = Expectations(
+            {
+                ("cuda", None): [
+                    "user\n\nDescribe the image.\nassistant\nThe image captures a vibrant nighttime scene on a bustling city street. A woman in a striking red dress",
+                    "user\nWhat is relativity?\nassistant\nRelativity is a scientific theory that describes the relationship between space and time. It was first proposed by",
+                ],
+                ("xpu", None): [
+                    "user\n\nDescribe the image.\nassistant\nThe image captures a vibrant night scene in a bustling Japanese city. A woman in a striking red dress",
+                    "user\nWhat is relativity?\nassistant\nRelativity is a scientific theory that describes the relationship between space and time. It was first proposed by",
+                ],
+            }
+        ).get_expectation()
+        # fmt: on
 
-        EXPECTED_DECODED_TEXT = [
-            "user\n\nDescribe the image.\nassistant\nThe image captures a vibrant nighttime scene on a bustling city street. A woman in a striking red dress",
-            "user\nWhat is relativity?\nassistant\nRelativity is a scientific theory that describes the relationship between space and time. It was first proposed by",
-        ]  # fmt: skip
         self.assertEqual(
             self.processor.batch_decode(output, skip_special_tokens=True),
             EXPECTED_DECODED_TEXT,
@@ -907,7 +922,7 @@ class VideoLlama3IntegrationTest(unittest.TestCase):
         self.assertEqual(DECODED_TEXT, EXPECTED_DECODED_TEXT)
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @pytest.mark.flash_attn_test
     def test_small_model_integration_test_batch_flashatt2(self):
         model = VideoLlama3ForConditionalGeneration.from_pretrained(
@@ -924,17 +939,26 @@ class VideoLlama3IntegrationTest(unittest.TestCase):
         # it should not matter whether two images are the same size or not
         output = model.generate(**inputs, max_new_tokens=20, do_sample=False, repetition_penalty=None)
 
-        EXPECTED_DECODED_TEXT = [
-            'user\n\nDescribe the image.\nassistant\nThe image captures a vibrant nighttime scene on a bustling city street. A woman in a striking red dress',
-            'user\n\nDescribe the image.\nassistant\nThe image captures a vibrant nighttime scene on a bustling city street. A woman in a striking red dress',
-        ]  # fmt: skip
-        self.assertEqual(
-            self.processor.batch_decode(output, skip_special_tokens=True),
-            EXPECTED_DECODED_TEXT,
+        # fmt: off
+        EXPECTED_DECODED_TEXTS = Expectations(
+            {
+                (None, None): ['user\n\nDescribe the image.\nassistant\nThe image captures a vibrant nighttime scene on a bustling city street. A woman in a striking red dress',
+                               'user\n\nDescribe the image.\nassistant\nThe image captures a vibrant nighttime scene on a bustling city street. A woman in a striking red dress',
+                              ],
+                ("xpu", 3): ['user\n\nDescribe the image.\nassistant\nThe image captures a vibrant nighttime scene on a bustling city street. A woman in a striking red dress',
+                             'user\n\nDescribe the image.\nassistant\nThe image depicts a vibrant nighttime scene on a bustling city street. A woman in a striking red dress',
+                            ],
+            }
         )
+        # fmt: on
+        EXPECTED_DECODED_TEXT = EXPECTED_DECODED_TEXTS.get_expectation()
+
+        DECODED_TEXT = self.processor.batch_decode(output, skip_special_tokens=True)
+
+        self.assertEqual(DECODED_TEXT, EXPECTED_DECODED_TEXT)
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @pytest.mark.flash_attn_test
     def test_small_model_integration_test_batch_wo_image_flashatt2(self):
         model = VideoLlama3ForConditionalGeneration.from_pretrained(

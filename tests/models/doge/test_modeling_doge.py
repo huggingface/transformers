@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,7 +17,6 @@ import unittest
 
 from transformers import AutoTokenizer, DogeConfig, is_torch_available, set_seed
 from transformers.testing_utils import (
-    require_read_token,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -337,6 +335,23 @@ class DogeModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
     def test_save_load_fast_init_from_base(self):
         pass
 
+    def test_tp_plan_matches_params(self):
+        """Need to overwrite as the plan contains keys that are valid but depend on some configs flags and cannot
+        be valid all at the same time"""
+        config, _ = self.model_tester.prepare_config_and_inputs_for_common()
+        # They are valid but not always used, depending on config.is_moe flag (the modules are not the same in both cases)
+        problematic_keys = {
+            "layers.*.mlp.router_gate": "colwise_rep",
+            "layers.*.mlp.down_embed": "rowwise_rep",
+            "layers.*.mlp.up_embed": "rowwise_rep",
+        }
+        if not config.is_moe:
+            for key in problematic_keys:
+                config.base_model_tp_plan.pop(key)
+        super().test_tp_plan_matches_params()
+        # Put them back in class attribute
+        config.base_model_tp_plan.update(problematic_keys)
+
 
 @require_torch_accelerator
 class DogeIntegrationTest(unittest.TestCase):
@@ -351,7 +366,6 @@ class DogeIntegrationTest(unittest.TestCase):
             cls.cuda_compute_capability_major_version = torch.cuda.get_device_capability()[0]
 
     @slow
-    @require_read_token
     def test_Doge_20M_hard(self):
         """
         An integration test for Doge-20M. It tests against a long output to ensure the subtle numerical differences

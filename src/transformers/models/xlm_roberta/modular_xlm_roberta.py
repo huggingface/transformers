@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2019 Facebook AI Research and the HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
@@ -14,8 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """PyTorch XLM-RoBERTa model."""
-
-from typing import Optional, Union
 
 import torch
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
@@ -60,29 +57,33 @@ class XLMRobertaModel(RobertaModel):
     """
 )
 class XLMRobertaForCausalLM(RobertaForCausalLM):
+    _tied_weights_keys = {
+        "lm_head.decoder.weight": "roberta.embeddings.word_embeddings.weight",
+        "lm_head.decoder.bias": "lm_head.bias",
+    }
+
     def __init__(self, config):
         super().__init__(config)
         del self.xlm_roberta
-
         self.roberta = XLMRobertaModel(config, add_pooling_layer=False)
 
     @can_return_tuple
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None,
-        use_cache: Optional[bool] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.FloatTensor | None = None,
+        token_type_ids: torch.LongTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        encoder_hidden_states: torch.FloatTensor | None = None,
+        encoder_attention_mask: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        past_key_values: tuple[tuple[torch.FloatTensor]] | None = None,
+        use_cache: bool | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple[torch.Tensor], CausalLMOutputWithCrossAttentions]:
+    ) -> tuple[torch.Tensor] | CausalLMOutputWithCrossAttentions:
         r"""
         token_type_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,1]`:
@@ -152,6 +153,11 @@ class XLMRobertaForCausalLM(RobertaForCausalLM):
 
 @auto_docstring
 class XLMRobertaForMaskedLM(RobertaForMaskedLM):
+    _tied_weights_keys = {
+        "lm_head.decoder.weight": "roberta.embeddings.word_embeddings.weight",
+        "lm_head.decoder.bias": "lm_head.bias",
+    }
+
     def __init__(self, config):
         super().__init__(config)
         del self.xlm_roberta
@@ -162,16 +168,16 @@ class XLMRobertaForMaskedLM(RobertaForMaskedLM):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.FloatTensor | None = None,
+        token_type_ids: torch.LongTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        encoder_hidden_states: torch.FloatTensor | None = None,
+        encoder_attention_mask: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple[torch.Tensor], MaskedLMOutput]:
+    ) -> tuple[torch.Tensor] | MaskedLMOutput:
         r"""
         token_type_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,1]`:
@@ -233,14 +239,14 @@ class XLMRobertaForSequenceClassification(RobertaForSequenceClassification):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.FloatTensor | None = None,
+        token_type_ids: torch.LongTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple[torch.Tensor], SequenceClassifierOutput]:
+    ) -> tuple[torch.Tensor] | SequenceClassifierOutput:
         r"""
         token_type_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,1]`:
@@ -313,14 +319,14 @@ class XLMRobertaForMultipleChoice(RobertaForMultipleChoice):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        token_type_ids: torch.LongTensor | None = None,
+        attention_mask: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple[torch.Tensor], MultipleChoiceModelOutput]:
+    ) -> tuple[torch.Tensor] | MultipleChoiceModelOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.
@@ -406,14 +412,14 @@ class XLMRobertaForTokenClassification(RobertaForTokenClassification):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.FloatTensor | None = None,
+        token_type_ids: torch.LongTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple[torch.Tensor], TokenClassifierOutput]:
+    ) -> tuple[torch.Tensor] | TokenClassifierOutput:
         r"""
         token_type_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,1]`:
@@ -469,15 +475,15 @@ class XLMRobertaForQuestionAnswering(RobertaForQuestionAnswering):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.FloatTensor] = None,
-        token_type_ids: Optional[torch.LongTensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        start_positions: Optional[torch.LongTensor] = None,
-        end_positions: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.FloatTensor | None = None,
+        token_type_ids: torch.LongTensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        start_positions: torch.LongTensor | None = None,
+        end_positions: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple[torch.Tensor], QuestionAnsweringModelOutput]:
+    ) -> tuple[torch.Tensor] | QuestionAnsweringModelOutput:
         r"""
         token_type_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Segment token indices to indicate first and second portions of the inputs. Indices are selected in `[0,1]`:

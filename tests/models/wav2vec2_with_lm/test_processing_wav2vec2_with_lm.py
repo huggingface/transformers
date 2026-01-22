@@ -71,7 +71,6 @@ class Wav2Vec2ProcessorWithLMTest(unittest.TestCase):
 
         # load decoder from hub
         self.decoder_name = "hf-internal-testing/ngram-beam-search-decoder"
-
         feature_extractor = Wav2Vec2FeatureExtractor(**feature_extractor_map)
         processor = Wav2Vec2ProcessorWithLM(
             tokenizer=self.get_tokenizer(), feature_extractor=feature_extractor, decoder=self.get_decoder()

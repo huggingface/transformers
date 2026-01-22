@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 University of Sydney and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -21,11 +20,11 @@ This code is the same as the original Vision Transformer (ViT) with 2 modificati
 
 import collections.abc
 from collections.abc import Callable
-from typing import Optional, Union
 
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutput
@@ -102,8 +101,8 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
-    scaling: Optional[float] = None,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
     dropout: float = 0.0,
     **kwargs: Unpack[TransformersKwargs],
 ):
@@ -288,7 +287,7 @@ class VitPoseBackboneLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        dataset_index: Optional[torch.Tensor] = None,
+        dataset_index: torch.Tensor | None = None,
     ) -> torch.Tensor:
         # Validate dataset_index when using multiple experts
         if self.num_experts > 1 and dataset_index is None:
@@ -328,8 +327,8 @@ class VitPoseBackboneEncoder(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        dataset_index: Optional[torch.Tensor] = None,
-        output_hidden_states: Optional[bool] = None,
+        dataset_index: torch.Tensor | None = None,
+        output_hidden_states: bool | None = None,
     ) -> BaseModelOutput:
         all_hidden_states = [hidden_states] if output_hidden_states else None
         for i, layer_module in enumerate(self.layer):
@@ -348,7 +347,7 @@ class VitPoseBackbonePreTrainedModel(PreTrainedModel):
     config: VitPoseBackboneConfig
     base_model_prefix = "vit"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = True
     _no_split_modules = ["VitPoseBackboneEmbeddings", "VitPoseBackboneLayer"]
     _supports_sdpa = True
@@ -357,25 +356,18 @@ class VitPoseBackbonePreTrainedModel(PreTrainedModel):
         "attentions": VitPoseBackboneSelfAttention,
     }
 
-    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm, VitPoseBackboneEmbeddings]):
+    @torch.no_grad()
+    def _init_weights(self, module: nn.Linear | nn.Conv2d | nn.LayerNorm | VitPoseBackboneEmbeddings):
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
-            # `trunc_normal_cpu` not implemented in `half` issues
-            module.weight.data = nn.init.trunc_normal_(
-                module.weight.data.to(torch.float32), mean=0.0, std=self.config.initializer_range
-            ).to(module.weight.dtype)
+            init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.data.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
         elif isinstance(module, VitPoseBackboneEmbeddings):
-            module.position_embeddings.data = nn.init.trunc_normal_(
-                module.position_embeddings.data.to(torch.float32),
-                mean=0.0,
-                std=self.config.initializer_range,
-            ).to(module.position_embeddings.dtype)
+            init.trunc_normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
 
 
 @auto_docstring(
@@ -402,8 +394,8 @@ class VitPoseBackbone(VitPoseBackbonePreTrainedModel, BackboneMixin):
     def forward(
         self,
         pixel_values: torch.Tensor,
-        dataset_index: Optional[torch.Tensor] = None,
-        output_hidden_states: Optional[bool] = None,
+        dataset_index: torch.Tensor | None = None,
+        output_hidden_states: bool | None = None,
         **kwargs,
     ):
         r"""

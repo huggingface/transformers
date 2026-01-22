@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -254,7 +253,7 @@ if __name__ == "__main__":
         "--push_to_hub",
         default="musicgen-melody",
         type=str,
-        help="Where to upload the converted model on the 🤗 hub.",
+        help="Where to upload the converted model on the Hugging Face hub.",
     )
     parser.add_argument(
         "--device", default="cpu", type=str, help="Torch device to run the conversion, either cpu or cuda."

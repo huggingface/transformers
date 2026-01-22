@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,6 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from __future__ import annotations
+
 import collections
 import copy
 import csv
@@ -26,16 +27,15 @@ from abc import ABC, abstractmethod
 from collections import UserDict
 from contextlib import contextmanager
 from os.path import abspath, exists
-from typing import TYPE_CHECKING, Any, Optional, Union
+from typing import TYPE_CHECKING, Any, Union
 
 from ..dynamic_module_utils import custom_object_save
 from ..feature_extraction_utils import PreTrainedFeatureExtractor
 from ..generation import GenerationConfig
 from ..image_processing_utils import BaseImageProcessor
-from ..modelcard import ModelCard
 from ..models.auto import AutoConfig, AutoTokenizer
 from ..processing_utils import ProcessorMixin
-from ..tokenization_utils import PreTrainedTokenizer
+from ..tokenization_python import PreTrainedTokenizer
 from ..utils import (
     ModelOutput,
     PushToHubMixin,
@@ -51,6 +51,7 @@ from ..utils import (
     is_torch_xpu_available,
     logging,
 )
+from ..utils.chat_template_utils import Chat, is_valid_message
 
 
 GenericTensor = Union[list["GenericTensor"], "torch.Tensor"]
@@ -60,6 +61,7 @@ if is_torch_available() or TYPE_CHECKING:
     from torch.utils.data import DataLoader, Dataset
 
     from ..modeling_utils import PreTrainedModel
+    from .pt_utils import KeyDataset
 else:
     Dataset = None
 
@@ -177,8 +179,8 @@ def pad_collate_fn(tokenizer, feature_extractor):
 def load_model(
     model,
     config: AutoConfig,
-    model_classes: Optional[tuple[type, ...]] = None,
-    task: Optional[str] = None,
+    model_classes: tuple[type, ...] | None = None,
+    task: str | None = None,
     **model_kwargs,
 ):
     """
@@ -270,7 +272,7 @@ def load_model(
     return model
 
 
-def get_default_model_and_revision(targeted_task: dict, task_options: Optional[Any]) -> tuple[str, str]:
+def get_default_model_and_revision(targeted_task: dict, task_options: Any | None) -> tuple[str, str]:
     """
     Select a default model to use for a given task.
 
@@ -304,10 +306,10 @@ def get_default_model_and_revision(targeted_task: dict, task_options: Optional[A
 
 
 def load_assistant_model(
-    model: "PreTrainedModel",
-    assistant_model: Optional[Union[str, "PreTrainedModel"]],
-    assistant_tokenizer: Optional[PreTrainedTokenizer],
-) -> tuple[Optional["PreTrainedModel"], Optional[PreTrainedTokenizer]]:
+    model: PreTrainedModel,
+    assistant_model: str | PreTrainedModel | None,
+    assistant_tokenizer: PreTrainedTokenizer | None,
+) -> tuple[PreTrainedModel | None, PreTrainedTokenizer | None]:
     """
     Prepares the assistant model and the assistant tokenizer for a pipeline whose model that can call `generate`.
 
@@ -404,9 +406,9 @@ class PipelineDataFormat:
 
     def __init__(
         self,
-        output_path: Optional[str],
-        input_path: Optional[str],
-        column: Optional[str],
+        output_path: str | None,
+        input_path: str | None,
+        column: str | None,
         overwrite: bool = False,
     ):
         self.output_path = output_path
@@ -430,7 +432,7 @@ class PipelineDataFormat:
         raise NotImplementedError()
 
     @abstractmethod
-    def save(self, data: Union[dict, list[dict]]):
+    def save(self, data: dict | list[dict]):
         """
         Save the provided data object with the representation for the current [`~pipelines.PipelineDataFormat`].
 
@@ -439,7 +441,7 @@ class PipelineDataFormat:
         """
         raise NotImplementedError()
 
-    def save_binary(self, data: Union[dict, list[dict]]) -> str:
+    def save_binary(self, data: dict | list[dict]) -> str:
         """
         Save the provided data object as a pickle-formatted binary data on the disk.
 
@@ -460,11 +462,11 @@ class PipelineDataFormat:
     @staticmethod
     def from_str(
         format: str,
-        output_path: Optional[str],
-        input_path: Optional[str],
-        column: Optional[str],
+        output_path: str | None,
+        input_path: str | None,
+        column: str | None,
         overwrite=False,
-    ) -> "PipelineDataFormat":
+    ) -> PipelineDataFormat:
         """
         Creates an instance of the right subclass of [`~pipelines.PipelineDataFormat`] depending on `format`.
 
@@ -507,9 +509,9 @@ class CsvPipelineDataFormat(PipelineDataFormat):
 
     def __init__(
         self,
-        output_path: Optional[str],
-        input_path: Optional[str],
-        column: Optional[str],
+        output_path: str | None,
+        input_path: str | None,
+        column: str | None,
         overwrite=False,
     ):
         super().__init__(output_path, input_path, column, overwrite=overwrite)
@@ -551,9 +553,9 @@ class JsonPipelineDataFormat(PipelineDataFormat):
 
     def __init__(
         self,
-        output_path: Optional[str],
-        input_path: Optional[str],
-        column: Optional[str],
+        output_path: str | None,
+        input_path: str | None,
+        column: str | None,
         overwrite=False,
     ):
         super().__init__(output_path, input_path, column, overwrite=overwrite)
@@ -617,7 +619,7 @@ class PipedPipelineDataFormat(PipelineDataFormat):
         """
         print(data)
 
-    def save_binary(self, data: Union[dict, list[dict]]) -> str:
+    def save_binary(self, data: dict | list[dict]) -> str:
         if self.output_path is None:
             raise KeyError(
                 "When using piped input on pipeline outputting large object requires an output file path. "
@@ -675,8 +677,6 @@ def build_pipeline_init_args(
             [`ProcessorMixin`]. Processor is a composite object that might contain `tokenizer`, `feature_extractor`, and
             `image_processor`."""
     docstring += r"""
-        modelcard (`str` or [`ModelCard`], *optional*):
-            Model card attributed to the model for this pipeline.
         task (`str`, defaults to `""`):
             A task-identifier for the pipeline.
         num_workers (`int`, *optional*, defaults to 8):
@@ -775,14 +775,13 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
 
     def __init__(
         self,
-        model: "PreTrainedModel",
-        tokenizer: Optional[PreTrainedTokenizer] = None,
-        feature_extractor: Optional[PreTrainedFeatureExtractor] = None,
-        image_processor: Optional[BaseImageProcessor] = None,
-        processor: Optional[ProcessorMixin] = None,
-        modelcard: Optional[ModelCard] = None,
+        model: PreTrainedModel,
+        tokenizer: PreTrainedTokenizer | None = None,
+        feature_extractor: PreTrainedFeatureExtractor | None = None,
+        image_processor: BaseImageProcessor | None = None,
+        processor: ProcessorMixin | None = None,
         task: str = "",
-        device: Optional[Union[int, "torch.device"]] = None,
+        device: int | torch.device | None = None,
         binary_output: bool = False,
         **kwargs,
     ):
@@ -795,7 +794,6 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         self.feature_extractor = feature_extractor
         self.image_processor = image_processor
         self.processor = processor
-        self.modelcard = modelcard
 
         # `accelerate` device map
         hf_device_map = getattr(self.model, "hf_device_map", None)
@@ -882,7 +880,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
                 # NOTE: _prepare_generation_config creates a deep copy of the generation config before updating it,
                 # and returns all kwargs that were not used to update the generation config
                 prepared_generation_config, kwargs = self.model._prepare_generation_config(
-                    generation_config=default_pipeline_generation_config, use_model_defaults=True, **kwargs
+                    generation_config=default_pipeline_generation_config, **kwargs
                 )
                 self.generation_config = prepared_generation_config
                 # if the `max_new_tokens` is set to the pipeline default, but `max_length` is set to a non-default
@@ -903,7 +901,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
             # Update the generation config with task specific params if they exist.
             # NOTE: 1. `prefix` is pipeline-specific and doesn't exist in the generation config.
             #       2. `task_specific_params` is a legacy feature and should be removed in a future version.
-            task_specific_params = self.model.config.task_specific_params
+            task_specific_params = getattr(self.model.config, "task_specific_params", None)
             if task_specific_params is not None and task in task_specific_params:
                 this_task_params = task_specific_params.get(task)
                 if "prefix" in this_task_params:
@@ -937,20 +935,24 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
                 # then we should keep working
                 self.image_processor = self.feature_extractor
 
-    def save_pretrained(
-        self,
-        save_directory: Union[str, os.PathLike],
-        safe_serialization: bool = True,
-        **kwargs: Any,
-    ):
+    def __repr__(self):
+        pipe_information = {
+            "model": self.model.__class__.__name__,
+            "dtype": str(self.dtype).split(".")[-1],
+            "device": self.device.type,
+            "input_modalities": self.model.input_modalities,
+        }
+        if self.model.can_generate():
+            pipe_information["output_modalities"] = self.model.output_modalities
+        return f"{self.__class__.__name__}: {pipe_information}"
+
+    def save_pretrained(self, save_directory: str | os.PathLike, **kwargs: Any):
         """
         Save the pipeline's model and tokenizer.
 
         Args:
             save_directory (`str` or `os.PathLike`):
                 A path to the directory where to saved. It will be created if it doesn't exist.
-            safe_serialization (`str`):
-                Whether to save the model using `safetensors` or PyTorch serialization.
             kwargs (`dict[str, Any]`, *optional*):
                 Additional key word arguments passed along to the [`~utils.PushToHubMixin.push_to_hub`] method.
         """
@@ -979,7 +981,6 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
             # Save the pipeline custom code
             custom_object_save(self, save_directory)
 
-        kwargs["safe_serialization"] = safe_serialization
         self.model.save_pretrained(save_directory, **kwargs)
 
         if self.tokenizer is not None:
@@ -1007,14 +1008,14 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         return self(X)
 
     @property
-    def dtype(self) -> Optional["torch.dtype"]:
+    def dtype(self) -> torch.dtype | None:
         """
         Dtype of the model (if it's Pytorch model), `None` otherwise.
         """
         return getattr(self.model, "dtype", None)
 
     @property
-    def torch_dtype(self) -> Optional["torch.dtype"]:
+    def torch_dtype(self) -> torch.dtype | None:
         """
         Torch dtype of the model (if it's Pytorch model), `None` otherwise.
         """
@@ -1085,7 +1086,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         else:
             return inputs
 
-    def check_model_type(self, supported_models: Union[list[str], dict]):
+    def check_model_type(self, supported_models: list[str] | dict):
         """
         Check if the model class is in supported by the pipeline.
 
@@ -1201,6 +1202,18 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
     def __call__(self, inputs, *args, num_workers=None, batch_size=None, **kwargs):
         if args:
             logger.warning(f"Ignoring args : {args}")
+
+        # Detect if inputs are a chat-style input(s) and cast as `Chat` or list of `Chat`
+        container_types = (list, tuple, types.GeneratorType)
+        if is_torch_available():
+            container_types = (*container_types, KeyDataset)
+        if isinstance(inputs, container_types):
+            if isinstance(inputs, types.GeneratorType):
+                inputs = list(inputs)
+            if is_valid_message(inputs[0]):
+                inputs = Chat(inputs)
+            elif isinstance(inputs[0], (list, tuple)) and all(chat and is_valid_message(chat[0]) for chat in inputs):
+                inputs = [Chat(chat) for chat in inputs]
 
         if num_workers is None:
             if self._num_workers is None:
@@ -1348,9 +1361,9 @@ class PipelineRegistry:
         self,
         task: str,
         pipeline_class: type,
-        pt_model: Optional[Union[type, tuple[type]]] = None,
-        default: Optional[dict] = None,
-        type: Optional[str] = None,
+        pt_model: type | tuple[type] | None = None,
+        default: dict | None = None,
+        type: str | None = None,
     ) -> None:
         if task in self.supported_tasks:
             logger.warning(f"{task} is already registered. Overwriting pipeline for task {task}...")

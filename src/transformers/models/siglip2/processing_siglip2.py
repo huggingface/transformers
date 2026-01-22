@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,6 +16,7 @@ Image/Text processor class for SigLIP2.
 """
 
 from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...utils import auto_docstring
 
 
 class Siglip2ProcessorKwargs(ProcessingKwargs, total=False):
@@ -33,24 +33,8 @@ class Siglip2ProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@auto_docstring
 class Siglip2Processor(ProcessorMixin):
-    r"""
-    Constructs a Siglip2 processor which wraps a Siglip2 image processor and a Gemma tokenizer into a single processor.
-
-    [`Siglip2Processor`] offers all the functionalities of [`Siglip2ImageProcessor`] and [`GemmaTokenizerFast`]. See the
-    [`~Siglip2Processor.__call__`] and [`~Siglip2Processor.decode`] for more information.
-
-    Args:
-        image_processor ([`Siglip2ImageProcessor`]):
-            The image processor is a required input.
-        tokenizer ([`GemmaTokenizerFast`]):
-            The tokenizer is a required input.
-    """
-
-    attributes = ["image_processor", "tokenizer"]
-
-    image_processor_class = "AutoImageProcessor"
-    tokenizer_class = "AutoTokenizer"
     valid_processor_kwargs = Siglip2ProcessorKwargs
 
     def __init__(self, image_processor, tokenizer):

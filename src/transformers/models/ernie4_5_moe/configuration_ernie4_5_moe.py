@@ -13,10 +13,8 @@
 # limitations under the License.
 """Ernie 4.5 MoE model configuration"""
 
-from typing import Optional
-
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
@@ -72,7 +70,7 @@ class Ernie4_5_MoeConfig(PreTrainedConfig):
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether the model's input and output word embeddings should be tied.
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         use_bias (`bool`, *optional*, defaults to `False`):
@@ -115,6 +113,7 @@ class Ernie4_5_MoeConfig(PreTrainedConfig):
     model_type = "ernie4_5_moe"
     keys_to_ignore_at_inference = ["past_key_values"]
     attribute_map = {"num_experts": "moe_num_experts", "num_experts_per_tok": "moe_k"}
+    default_theta = 500000.0
 
     # Default tensor parallel plan for base model `Ernie4_5_MoE`
     base_model_tp_plan = {
@@ -122,21 +121,15 @@ class Ernie4_5_MoeConfig(PreTrainedConfig):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        # sequence parallel is pretty slow
-        # "norm.weight": "sequence_parallel",
-        # "layers.*.input_layernorm.weight": "sequence_parallel",
-        # "layers.*.post_attention_layernorm.weight": "sequence_parallel",
-        "layers.*.mlp.shared_experts.gate_proj": "local_colwise",
-        "layers.*.mlp.shared_experts.up_proj": "local_colwise",
-        "layers.*.mlp.shared_experts.down_proj": "local_rowwise",
-        "layers.*.mlp.experts.*.gate_proj": "local_colwise",
-        "layers.*.mlp.experts.*.up_proj": "local_colwise",
-        "layers.*.mlp.experts.*.down_proj": "local_rowwise",
-        "layers.*.mlp.experts": "local",
-        "layers.*.mlp.gate_proj": "local_colwise",
-        "layers.*.mlp.up_proj": "local_colwise",
-        "layers.*.mlp.down_proj": "local_rowwise",
-        "layers.*.mlp": "gather",
+        "layers.*.mlp.experts.gate_up_proj": "local_rowwise",
+        "layers.*.mlp.experts.down_proj": "local_rowwise",
+        "layers.*.mlp.experts": "gather",
+        "layers.*.mlp.shared_experts.gate_proj": "colwise",
+        "layers.*.mlp.shared_experts.up_proj": "colwise",
+        "layers.*.mlp.shared_experts.down_proj": "rowwise",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
@@ -146,33 +139,33 @@ class Ernie4_5_MoeConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 103424,
-        pad_token_id: Optional[int] = 0,
-        bos_token_id: Optional[int] = 1,
-        eos_token_id: Optional[int] = 2,
-        hidden_size: Optional[int] = 2560,
-        intermediate_size: Optional[int] = 12288,
-        num_hidden_layers: Optional[int] = 28,
-        num_attention_heads: Optional[int] = 20,
-        num_key_value_heads: Optional[int] = 4,
-        hidden_act: Optional[str] = "silu",
-        max_position_embeddings: Optional[int] = 131072,
-        initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[int] = 1e-5,
-        use_cache: Optional[bool] = True,
-        tie_word_embeddings: Optional[bool] = True,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
-        use_bias: Optional[int] = False,
-        moe_intermediate_size: Optional[int] = 1536,
-        moe_k: Optional[int] = 6,
-        moe_num_experts: Optional[int] = 64,
-        moe_num_shared_experts: Optional[int] = 2,
-        moe_layer_start_index: Optional[int] = 1,
-        moe_layer_end_index: Optional[int] = -1,
-        moe_layer_interval: Optional[int] = 1,
-        moe_norm_min: Optional[int] = 1e-12,
-        output_router_logits: Optional[bool] = False,
-        router_aux_loss_coef: Optional[float] = 0.001,
+        vocab_size: int | None = 103424,
+        pad_token_id: int | None = 0,
+        bos_token_id: int | None = 1,
+        eos_token_id: int | None = 2,
+        hidden_size: int | None = 2560,
+        intermediate_size: int | None = 12288,
+        num_hidden_layers: int | None = 28,
+        num_attention_heads: int | None = 20,
+        num_key_value_heads: int | None = 4,
+        hidden_act: str | None = "silu",
+        max_position_embeddings: int | None = 131072,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: int | None = 1e-5,
+        use_cache: bool | None = True,
+        tie_word_embeddings: bool | None = True,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        use_bias: int | None = False,
+        moe_intermediate_size: int | None = 1536,
+        moe_k: int | None = 6,
+        moe_num_experts: int | None = 64,
+        moe_num_shared_experts: int | None = 2,
+        moe_layer_start_index: int | None = 1,
+        moe_layer_end_index: int | None = -1,
+        moe_layer_interval: int | None = 1,
+        moe_norm_min: int | None = 1e-12,
+        output_router_logits: bool | None = False,
+        router_aux_loss_coef: float | None = 0.001,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -187,14 +180,6 @@ class Ernie4_5_MoeConfig(PreTrainedConfig):
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
         self.use_bias = use_bias
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
-
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 500000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
 
         # MoE arguments
         self.moe_intermediate_size = moe_intermediate_size
@@ -207,14 +192,13 @@ class Ernie4_5_MoeConfig(PreTrainedConfig):
         self.moe_norm_min = moe_norm_min
         self.output_router_logits = output_router_logits
         self.router_aux_loss_coef = router_aux_loss_coef
+        self.rope_parameters = rope_parameters
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        super().__init__(**kwargs)
 
 
 __all__ = ["Ernie4_5_MoeConfig"]

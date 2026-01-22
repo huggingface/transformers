@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright Microsoft Research and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -39,7 +38,7 @@ class LayoutLMv2Config(PreTrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 30522):
             Vocabulary size of the LayoutLMv2 model. Defines the number of different tokens that can be represented by
-            the `inputs_ids` passed when calling [`LayoutLMv2Model`] or [`TFLayoutLMv2Model`].
+            the `inputs_ids` passed when calling [`LayoutLMv2Model`].
         hidden_size (`int`, *optional*, defaults to 768):
             Dimension of the encoder layers and the pooler layer.
         num_hidden_layers (`int`, *optional*, defaults to 12):
@@ -59,12 +58,13 @@ class LayoutLMv2Config(PreTrainedConfig):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         type_vocab_size (`int`, *optional*, defaults to 2):
-            The vocabulary size of the `token_type_ids` passed when calling [`LayoutLMv2Model`] or
-            [`TFLayoutLMv2Model`].
+            The vocabulary size of the `token_type_ids` passed when calling [`LayoutLMv2Model`].
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-12):
             The epsilon used by the layer normalization layers.
+        pad_token_id (`int`, *optional*, defaults to 0):
+            Padding token id.
         max_2d_position_embeddings (`int`, *optional*, defaults to 1024):
             The maximum value that the 2D position embedding might ever be used with. Typically set this to something
             large just in case (e.g., 1024).
@@ -78,7 +78,9 @@ class LayoutLMv2Config(PreTrainedConfig):
             The maximum number of relative 2D positions in the self-attention mechanism.
         rel_2d_pos_bins (`int`, *optional*, defaults to 64):
             The number of 2D relative position bins in the self-attention mechanism.
-        image_feature_pool_shape (`list[int]`, *optional*, defaults to [7, 7, 256]):
+        convert_sync_batchnorm (`bool`, *optional*, defaults to `True`):
+            Whether or not to convert batch normalization layers to synchronized batch normalization layers.
+        image_feature_pool_shape (`list[int]`, *optional*, defaults to `[7, 7, 256]`):
             The shape of the average-pooled feature map.
         coordinate_size (`int`, *optional*, defaults to 128):
             Dimension of the coordinate embeddings.
@@ -94,6 +96,7 @@ class LayoutLMv2Config(PreTrainedConfig):
             Dictionary containing the configuration arguments of the Detectron2 visual backbone. Refer to [this
             file](https://github.com/microsoft/unilm/blob/master/layoutlmft/layoutlmft/models/layoutlmv2/detectron2_config.py)
             for details regarding default values.
+
 
     Example:
 
@@ -143,22 +146,20 @@ class LayoutLMv2Config(PreTrainedConfig):
         detectron2_config_args=None,
         **kwargs,
     ):
-        super().__init__(
-            vocab_size=vocab_size,
-            hidden_size=hidden_size,
-            num_hidden_layers=num_hidden_layers,
-            num_attention_heads=num_attention_heads,
-            intermediate_size=intermediate_size,
-            hidden_act=hidden_act,
-            hidden_dropout_prob=hidden_dropout_prob,
-            attention_probs_dropout_prob=attention_probs_dropout_prob,
-            max_position_embeddings=max_position_embeddings,
-            type_vocab_size=type_vocab_size,
-            initializer_range=initializer_range,
-            layer_norm_eps=layer_norm_eps,
-            pad_token_id=pad_token_id,
-            **kwargs,
-        )
+        super().__init__(**kwargs)
+        self.vocab_size = vocab_size
+        self.hidden_size = hidden_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.intermediate_size = intermediate_size
+        self.hidden_act = hidden_act
+        self.hidden_dropout_prob = hidden_dropout_prob
+        self.attention_probs_dropout_prob = attention_probs_dropout_prob
+        self.max_position_embeddings = max_position_embeddings
+        self.type_vocab_size = type_vocab_size
+        self.initializer_range = initializer_range
+        self.layer_norm_eps = layer_norm_eps
+        self.pad_token_id = pad_token_id
         self.max_2d_position_embeddings = max_2d_position_embeddings
         self.max_rel_pos = max_rel_pos
         self.rel_pos_bins = rel_pos_bins

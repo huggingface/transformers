@@ -26,10 +26,8 @@ from transformers.testing_utils import (
     cleanup,
     require_bitsandbytes,
     require_flash_attn,
-    require_read_token,
     require_torch,
     require_torch_accelerator,
-    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -324,10 +322,9 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
             )  # missing "factor"
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @require_bitsandbytes
     @pytest.mark.flash_attn_test
-    @require_read_token
     @slow
     def test_flash_attn_2_generate_padding_right(self):
         """
@@ -364,7 +361,7 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         self.assertListEqual(output_native, output_fa_2)
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @slow
     @pytest.mark.flash_attn_test
     def test_use_flash_attention_2_true(self):
@@ -379,7 +376,7 @@ class DiffLlamaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
                 new_model = DiffLlamaForCausalLM.from_pretrained(
                     tmp_dir, attn_implementation="flash_attention_2", dtype=torch.float16
-                ).to("cuda")
+                ).to(torch_device)
 
                 self.assertTrue(new_model.config._attn_implementation == "flash_attention_2")
 
@@ -458,7 +455,6 @@ class DiffLlamaIntegrationTest(unittest.TestCase):
 
     @slow
     @require_torch_accelerator
-    @require_read_token
     @pytest.mark.torch_compile_test
     def test_compile_static_cache(self):
         # `torch==2.2` will throw an error on this test (as in other compilation tests), but torch==2.1.2 and torch>2.2

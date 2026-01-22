@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Google Inc. HuggingFace Inc. team. All rights reserved.
 #
 #
@@ -25,7 +24,7 @@ python src/transformers/models/gemma3/convert_gemma3_weights.py \
 """
 
 from collections.abc import Iterator, Sequence
-from typing import Any, Optional
+from typing import Any
 
 import accelerate
 import numpy as np
@@ -191,7 +190,10 @@ _VARIANTS = {
             num_hidden_layers=34,
             num_key_value_heads=4,
             sliding_window=1024,
-            rope_parameters={"rope_type": "linear", "factor": 8.0},  # used for global RoPE only
+            rope_parameters={
+                "full_attention": {"rope_type": "linear", "factor": 8.0},
+                "sliding_attention": {"rope_type": "default"},
+            },
             rope_theta=1_000_000,
             rope_local_base_freq=10_000,
             attn_logit_softcapping=None,
@@ -209,7 +211,10 @@ _VARIANTS = {
             num_hidden_layers=48,
             num_key_value_heads=8,
             sliding_window=1024,
-            rope_parameters={"rope_type": "linear", "factor": 8.0},  # used for global RoPE only
+            rope_parameters={
+                "full_attention": {"rope_type": "linear", "factor": 8.0},
+                "sliding_attention": {"rope_type": "default"},
+            },
             rope_theta=1_000_000,
             rope_local_base_freq=10_000,
             attn_logit_softcapping=None,
@@ -227,7 +232,10 @@ _VARIANTS = {
             num_key_value_heads=16,
             head_dim=128,
             sliding_window=1024,
-            rope_parameters={"rope_type": "linear", "factor": 8.0},  # used for global RoPE only
+            rope_parameters={
+                "full_attention": {"rope_type": "linear", "factor": 8.0},
+                "sliding_attention": {"rope_type": "default"},
+            },
             rope_theta=1_000_000,
             rope_local_base_freq=10_000,
             attn_logit_softcapping=None,
@@ -314,7 +322,7 @@ _VISION_DTYPE = flags.DEFINE_enum(
 )
 
 
-def get_chat_template() -> Optional[str]:
+def get_chat_template() -> str | None:
     if not _INCLUDE_CHAT_TEMPLATE.value:
         return None
 
@@ -530,7 +538,7 @@ def convert_transformer_weights(
 
 def convert(
     checkpoint_path: str, config: Gemma3Config, variant: str
-) -> tuple[dict[str, torch.Tensor], Optional[Sequence[np.ndarray]]]:
+) -> tuple[dict[str, torch.Tensor], Sequence[np.ndarray] | None]:
     """Loads Orbax checkpoint from `input_path` and converts it to HF tree."""
     checkpointer = obc.PyTreeCheckpointer()
     ckpt = checkpointer.restore(checkpoint_path)
@@ -624,7 +632,7 @@ def main(*args):
         variant,
         type(model).__name__,
     )
-    model.save_pretrained(output_path, safe_serialization=True)
+    model.save_pretrained(output_path)
     logging.info(
         "Saved Gemma 3 (%s) to SafeTensors in %s using %s",
         variant,

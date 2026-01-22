@@ -34,7 +34,6 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_torch,
     require_torch_accelerator,
-    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -291,6 +290,7 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
     # Need to use `0.8` instead of `0.9` for `test_cpu_offload`
     # This is because we are hitting edge cases with the causal_mask buffer
     model_split_percents = [0.5, 0.7, 0.8]
+    test_torch_exportable = False  # uses custom kernels by default, not compatible with torch.export
 
     def _check_past_key_values_for_generate(self, batch_size, past_key_values, seq_length, config):
         self.assertIsInstance(past_key_values, HybridMambaAttentionDynamicCache)
@@ -444,7 +444,7 @@ class BambaModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixi
         pass
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @mark.flash_attn_test
     @slow
     @unittest.skip(

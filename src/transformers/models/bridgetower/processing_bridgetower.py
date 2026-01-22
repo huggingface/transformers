@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The Intel Labs Team Authors, The Microsoft Research Team Authors and HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,6 +16,7 @@ Processor class for BridgeTower.
 """
 
 from ...processing_utils import ProcessingKwargs, ProcessorMixin
+from ...utils import auto_docstring
 
 
 class BridgeTowerProcessorKwargs(ProcessingKwargs, total=False):
@@ -38,25 +38,8 @@ class BridgeTowerProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@auto_docstring
 class BridgeTowerProcessor(ProcessorMixin):
-    r"""
-    Constructs a BridgeTower processor which wraps a Roberta tokenizer and BridgeTower image processor into a single
-    processor.
-
-    [`BridgeTowerProcessor`] offers all the functionalities of [`BridgeTowerImageProcessor`] and
-    [`RobertaTokenizerFast`]. See the docstring of [`~BridgeTowerProcessor.__call__`] and
-    [`~BridgeTowerProcessor.decode`] for more information.
-
-    Args:
-        image_processor (`BridgeTowerImageProcessor`):
-            An instance of [`BridgeTowerImageProcessor`]. The image processor is a required input.
-        tokenizer (`RobertaTokenizerFast`):
-            An instance of ['RobertaTokenizerFast`]. The tokenizer is a required input.
-    """
-
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "BridgeTowerImageProcessor"
-    tokenizer_class = ("RobertaTokenizer", "RobertaTokenizerFast")
     valid_processor_kwargs = BridgeTowerProcessorKwargs
 
     def __init__(self, image_processor, tokenizer):

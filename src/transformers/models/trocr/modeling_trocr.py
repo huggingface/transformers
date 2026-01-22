@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The Fairseq Authors and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +14,6 @@
 """PyTorch TrOCR decoder model (based on RoBERTa)."""
 
 import math
-from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -51,7 +49,7 @@ class TrOCRLearnedPositionalEmbedding(nn.Embedding):
         super().__init__(num_embeddings + self.offset, embedding_dim)
 
     def forward(
-        self, input_ids: torch.Tensor, past_key_values_length: int = 0, position_ids: Optional[torch.Tensor] = None
+        self, input_ids: torch.Tensor, past_key_values_length: int = 0, position_ids: torch.Tensor | None = None
     ):
         """`input_ids' shape is expected to be [bsz x seqlen]."""
 
@@ -72,7 +70,7 @@ class TrOCRScaledWordEmbedding(nn.Embedding):
     This module overrides nn.Embeddings' forward by multiplying with embeddings scale.
     """
 
-    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, embed_scale: Optional[float] = 1.0):
+    def __init__(self, num_embeddings: int, embedding_dim: int, padding_idx: int, embed_scale: float | None = 1.0):
         super().__init__(num_embeddings, embedding_dim, padding_idx)
         self.embed_scale = embed_scale
 
@@ -83,16 +81,15 @@ class TrOCRScaledWordEmbedding(nn.Embedding):
 class TrOCRSinusoidalPositionalEmbedding(nn.Module):
     """This module produces sinusoidal positional embeddings of any length."""
 
-    def __init__(self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None):
+    def __init__(self, num_positions: int, embedding_dim: int, padding_idx: int | None = None):
         super().__init__()
         self.offset = 2
         self.embedding_dim = embedding_dim
         self.padding_idx = padding_idx
         self.weights = self.get_embedding(num_positions, embedding_dim, padding_idx)
-        self.register_buffer("_float_tensor", torch.FloatTensor(1))
 
     @staticmethod
-    def get_embedding(num_embeddings: int, embedding_dim: int, padding_idx: Optional[int] = None):
+    def get_embedding(num_embeddings: int, embedding_dim: int, padding_idx: int | None = None):
         """
         Build sinusoidal embeddings. This matches the implementation in tensor2tensor, but differs slightly from the
         description in Section 3.5 of "Attention Is All You Need".
@@ -123,14 +120,13 @@ class TrOCRSinusoidalPositionalEmbedding(nn.Module):
         if self.weights is None or max_pos > self.weights.size(0):
             # recompute/expand embeddings if needed
             self.weights = self.get_embedding(max_pos, self.embedding_dim, self.padding_idx)
-        self.weights = self.weights.to(self._float_tensor)
 
         x = self.weights.index_select(0, position_ids.view(-1)).view(bsz, seq_len, -1).detach()
 
         return x
 
     def create_position_ids_from_input_ids(
-        self, input_ids: torch.Tensor, padding_idx: int, past_key_values_length: Optional[int] = 0
+        self, input_ids: torch.Tensor, padding_idx: int, past_key_values_length: int | None = 0
     ):
         """
         Replace non-padding symbols with their position numbers. Position numbers begin at padding_idx+1. Padding
@@ -150,13 +146,13 @@ class TrOCRAttention(nn.Module):
         config,
         embed_dim: int,
         num_heads: int,
-        kdim: Optional[int] = None,
-        vdim: Optional[int] = None,
-        dropout: Optional[float] = 0.0,
-        is_decoder: Optional[bool] = False,
-        bias: Optional[bool] = True,
-        is_cross_attention: Optional[bool] = False,
-        layer_idx: Optional[bool] = None,
+        kdim: int | None = None,
+        vdim: int | None = None,
+        dropout: float | None = 0.0,
+        is_decoder: bool | None = False,
+        bias: bool | None = True,
+        is_cross_attention: bool | None = False,
+        layer_idx: bool | None = None,
     ):
         super().__init__()
         self.embed_dim = embed_dim
@@ -183,12 +179,12 @@ class TrOCRAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        key_value_states: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Cache] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = False,
-        cache_position: Optional[torch.Tensor] = None,
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+        key_value_states: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        attention_mask: torch.Tensor | None = None,
+        output_attentions: bool | None = False,
+        cache_position: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         """Input shape: Batch x Time x Channel"""
 
         # if key_value_states are provided this layer is used as a cross-attention layer
@@ -326,13 +322,13 @@ class TrOCRDecoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Cache] = None,
-        output_attentions: Optional[bool] = False,
-        use_cache: Optional[bool] = True,
-        cache_position: Optional[torch.Tensor] = None,
+        attention_mask: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        output_attentions: bool | None = False,
+        use_cache: bool | None = True,
+        cache_position: torch.Tensor | None = None,
     ):
         """
         Args:
@@ -406,17 +402,6 @@ class TrOCRPreTrainedModel(PreTrainedModel):
     supports_gradient_checkpointing = True
     _no_split_modules = ["TrOCRDecoderLayer"]
 
-    def _init_weights(self, module):
-        std = self.config.init_std
-        if isinstance(module, (nn.Linear, nn.Conv1d)):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-
 
 class TrOCRDecoder(TrOCRPreTrainedModel):
     """
@@ -470,6 +455,7 @@ class TrOCRDecoder(TrOCRPreTrainedModel):
         output_hidden_states=None,
         return_dict=None,
         cache_position=None,
+        **kwargs,
     ):
         r"""
         Args:
@@ -646,6 +632,7 @@ class TrOCRDecoderWrapper(TrOCRPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.decoder = TrOCRDecoder(config)
+        self.post_init()
 
     def forward(self, *args, **kwargs):
         return self.decoder(*args, **kwargs)
@@ -657,7 +644,7 @@ class TrOCRDecoderWrapper(TrOCRPreTrainedModel):
     """
 )
 class TrOCRForCausalLM(TrOCRPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["output_projection.weight"]
+    _tied_weights_keys = {"output_projection.weight": "model.decoder.embed_tokens.weight"}
 
     def __init__(self, config):
         config.is_decoder = True
@@ -682,28 +669,23 @@ class TrOCRForCausalLM(TrOCRPreTrainedModel, GenerationMixin):
     def set_output_embeddings(self, new_embeddings):
         self.output_projection = new_embeddings
 
-    def set_decoder(self, decoder):
-        self.model.decoder = decoder
-
-    def get_decoder(self):
-        return self.model.decoder
-
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.Tensor] = None,
-    ) -> Union[tuple, CausalLMOutputWithCrossAttentions]:
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        encoder_hidden_states: torch.FloatTensor | None = None,
+        encoder_attention_mask: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        cache_position: torch.Tensor | None = None,
+        **kwargs,
+    ) -> tuple | CausalLMOutputWithCrossAttentions:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,

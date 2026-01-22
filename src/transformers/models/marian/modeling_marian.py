@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The Marian Team Authors and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,16 +13,15 @@
 # limitations under the License.
 """PyTorch MarianMTModel model, ported from the Marian C++ repo."""
 
-import copy
 import math
 from collections.abc import Callable
-from typing import Optional, Union
 
 import numpy as np
 import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache, EncoderDecoderCache
 from ...generation import GenerationMixin
@@ -71,10 +69,10 @@ def shift_tokens_right(input_ids: torch.Tensor, pad_token_id: int, decoder_start
 class MarianSinusoidalPositionalEmbedding(nn.Embedding):
     """This module produces sinusoidal positional embeddings of any length."""
 
-    def __init__(self, num_positions: int, embedding_dim: int, padding_idx: Optional[int] = None) -> None:
-        super().__init__(num_positions, embedding_dim)
+    def __init__(self, num_positions: int, embedding_dim: int, padding_idx: int | None = None) -> None:
+        super().__init__(num_positions, embedding_dim, _freeze=True)
 
-    def _init_weight(self):
+    def create_weight(self):
         """
         Identical to the XLM create_sinusoidal_embeddings except features are not interleaved. The cos features are in
         the 2nd half of the vector. [dim // 2:]
@@ -87,11 +85,11 @@ class MarianSinusoidalPositionalEmbedding(nn.Embedding):
         sentinel = dim // 2 if dim % 2 == 0 else (dim // 2) + 1
         out[:, 0:sentinel] = torch.FloatTensor(np.sin(position_enc[:, 0::2]))
         out[:, sentinel:] = torch.FloatTensor(np.cos(position_enc[:, 1::2]))
-        self.weight = nn.Parameter(out, requires_grad=False)
+        return out
 
     @torch.no_grad()
     def forward(
-        self, input_ids_shape: torch.Size, past_key_values_length: int = 0, position_ids: Optional[torch.Tensor] = None
+        self, input_ids_shape: torch.Size, past_key_values_length: int = 0, position_ids: torch.Tensor | None = None
     ) -> torch.Tensor:
         """`input_ids_shape` is expected to be [bsz x seqlen]."""
         if position_ids is None:
@@ -108,8 +106,8 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
-    scaling: Optional[float] = None,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
     dropout: float = 0.0,
     **kwargs: Unpack[TransformersKwargs],
 ):
@@ -144,8 +142,8 @@ class MarianAttention(nn.Module):
         is_decoder: bool = False,
         bias: bool = True,
         is_causal: bool = False,
-        config: Optional[MarianConfig] = None,
-        layer_idx: Optional[int] = None,
+        config: MarianConfig | None = None,
+        layer_idx: int | None = None,
     ):
         super().__init__()
         self.embed_dim = embed_dim
@@ -178,15 +176,15 @@ class MarianAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        key_value_states: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Cache] = None,
-        attention_mask: Optional[torch.Tensor] = None,
+        key_value_states: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        attention_mask: torch.Tensor | None = None,
         output_attentions: bool = False,
-        cache_position: Optional[torch.Tensor] = None,
+        cache_position: torch.Tensor | None = None,
         # TODO: we need a refactor so that the different attention modules can get their specific kwargs
         # ATM, we have mixed things encoder, decoder, and encoder-decoder attn
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         """Input shape: Batch x Time x Channel"""
 
         # if key_value_states are provided this layer is used as a cross-attention layer
@@ -260,7 +258,7 @@ class MarianAttention(nn.Module):
 
 # Copied from transformers.models.bart.modeling_bart.BartEncoderLayer with Bart->Marian, BART->MARIAN
 class MarianEncoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: MarianConfig, layer_idx: Optional[int] = None):
+    def __init__(self, config: MarianConfig, layer_idx: int | None = None):
         super().__init__()
         self.embed_dim = config.d_model
 
@@ -283,8 +281,8 @@ class MarianEncoderLayer(GradientCheckpointingLayer):
         self,
         hidden_states: torch.FloatTensor,
         attention_mask: torch.FloatTensor,
-        output_attentions: Optional[bool] = False,
-    ) -> tuple[torch.FloatTensor, Optional[torch.FloatTensor]]:
+        output_attentions: bool | None = False,
+    ) -> tuple[torch.FloatTensor, torch.FloatTensor | None]:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -328,7 +326,7 @@ class MarianEncoderLayer(GradientCheckpointingLayer):
 
 # Copied from transformers.models.bart.modeling_bart.BartDecoderLayer with Bart->Marian, BART->MARIAN
 class MarianDecoderLayer(GradientCheckpointingLayer):
-    def __init__(self, config: MarianConfig, layer_idx: Optional[int] = None):
+    def __init__(self, config: MarianConfig, layer_idx: int | None = None):
         super().__init__()
         self.embed_dim = config.d_model
 
@@ -362,14 +360,14 @@ class MarianDecoderLayer(GradientCheckpointingLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.Tensor] = None,
-        encoder_attention_mask: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Cache] = None,
-        output_attentions: Optional[bool] = False,
-        use_cache: Optional[bool] = True,
-        cache_position: Optional[torch.Tensor] = None,
-    ) -> tuple[torch.FloatTensor, Optional[tuple[torch.FloatTensor, torch.FloatTensor]]]:
+        attention_mask: torch.Tensor | None = None,
+        encoder_hidden_states: torch.Tensor | None = None,
+        encoder_attention_mask: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        output_attentions: bool | None = False,
+        use_cache: bool | None = True,
+        cache_position: torch.Tensor | None = None,
+    ) -> tuple[torch.FloatTensor, tuple[torch.FloatTensor, torch.FloatTensor] | None]:
         """
         Args:
             hidden_states (`torch.FloatTensor`): input to the layer of shape `(batch, seq_len, embed_dim)`
@@ -446,21 +444,13 @@ class MarianPreTrainedModel(PreTrainedModel):
 
     _can_compile_fullgraph = True
 
-    def _init_weights(self, module: Union[nn.Linear, nn.Embedding, MarianSinusoidalPositionalEmbedding]):
-        std = self.config.init_std
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, MarianSinusoidalPositionalEmbedding):
-            module._init_weight()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.weight.data.fill_(1.0)
-            module.bias.data.zero_()
+    @torch.no_grad()
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, MarianSinusoidalPositionalEmbedding):
+            init.copy_(module.weight, module.create_weight())
+        elif isinstance(module, MarianMTModel):
+            init.zeros_(module.final_logits_bias)
 
     @property
     def dummy_inputs(self):
@@ -484,7 +474,7 @@ class MarianEncoder(MarianPreTrainedModel):
         embed_tokens (nn.Embedding): output embedding
     """
 
-    def __init__(self, config: MarianConfig, embed_tokens: Optional[nn.Embedding] = None):
+    def __init__(self, config: MarianConfig):
         super().__init__(config)
 
         self.dropout = config.dropout
@@ -495,10 +485,7 @@ class MarianEncoder(MarianPreTrainedModel):
         self.max_source_positions = config.max_position_embeddings
         self.embed_scale = math.sqrt(embed_dim) if config.scale_embedding else 1.0
 
-        if embed_tokens is not None:
-            self.embed_tokens = embed_tokens
-        else:
-            self.embed_tokens = nn.Embedding(config.vocab_size, embed_dim, self.padding_idx)
+        self.embed_tokens = nn.Embedding(config.vocab_size, embed_dim, self.padding_idx)
 
         self.embed_positions = MarianSinusoidalPositionalEmbedding(
             config.max_position_embeddings, embed_dim, self.padding_idx
@@ -511,13 +498,14 @@ class MarianEncoder(MarianPreTrainedModel):
 
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple[torch.Tensor], BaseModelOutput]:
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.LongTensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple[torch.Tensor] | BaseModelOutput:
         r"""
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -626,7 +614,7 @@ class MarianDecoder(MarianPreTrainedModel):
         embed_tokens (nn.Embedding): output embedding
     """
 
-    def __init__(self, config: MarianConfig, embed_tokens: Optional[nn.Embedding] = None):
+    def __init__(self, config: MarianConfig):
         super().__init__(config)
         self.dropout = config.dropout
         self.layerdrop = config.decoder_layerdrop
@@ -634,10 +622,7 @@ class MarianDecoder(MarianPreTrainedModel):
         self.max_target_positions = config.max_position_embeddings
         self.embed_scale = math.sqrt(config.d_model) if config.scale_embedding else 1.0
 
-        if embed_tokens is not None:
-            self.embed_tokens = embed_tokens
-        else:
-            self.embed_tokens = nn.Embedding(config.decoder_vocab_size, config.d_model, self.padding_idx)
+        self.embed_tokens = nn.Embedding(config.decoder_vocab_size, config.d_model, self.padding_idx)
 
         self.embed_positions = MarianSinusoidalPositionalEmbedding(
             config.max_position_embeddings, config.d_model, self.padding_idx
@@ -650,18 +635,19 @@ class MarianDecoder(MarianPreTrainedModel):
 
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.Tensor] = None,
-    ) -> Union[tuple[torch.Tensor], BaseModelOutputWithPastAndCrossAttentions]:
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        encoder_hidden_states: torch.FloatTensor | None = None,
+        encoder_attention_mask: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        cache_position: torch.Tensor | None = None,
+        **kwargs,
+    ) -> tuple[torch.Tensor] | BaseModelOutputWithPastAndCrossAttentions:
         r"""
         Args:
             input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`):
@@ -846,7 +832,10 @@ class MarianDecoder(MarianPreTrainedModel):
 
 @auto_docstring
 class MarianModel(MarianPreTrainedModel):
-    _tied_weights_keys = ["encoder.embed_tokens.weight", "decoder.embed_tokens.weight"]
+    _keys_to_ignore_on_load_missing = [
+        "model.encoder.embed_positions.weight",
+        "model.decoder.embed_positions.weight",
+    ]
 
     def __init__(self, config: MarianConfig):
         super().__init__(config)
@@ -854,18 +843,17 @@ class MarianModel(MarianPreTrainedModel):
         padding_idx, vocab_size = config.pad_token_id, config.vocab_size
 
         # We always use self.shared for token embeddings to ensure compatibility with all marian models
-        self.shared = nn.Embedding(vocab_size, config.d_model, padding_idx)
         if self.config.share_encoder_decoder_embeddings:
-            encoder_embed_tokens = decoder_embed_tokens = self.shared
+            self.shared = nn.Embedding(vocab_size, config.d_model, padding_idx)
+            self._tied_weights_keys = {
+                "decoder.embed_tokens.weight": "shared.weight",
+                "encoder.embed_tokens.weight": "shared.weight",
+            }
         else:
-            # Since the embeddings are not shared, deepcopy the embeddings here for encoder
-            # and decoder to make sure they are not tied.
-            encoder_embed_tokens = copy.deepcopy(self.shared)
-            decoder_embed_tokens = copy.deepcopy(self.shared)
-            self.shared = None
+            self._tied_weights_keys = None
 
-        self.encoder = MarianEncoder(config, encoder_embed_tokens)
-        self.decoder = MarianDecoder(config, decoder_embed_tokens)
+        self.encoder = MarianEncoder(config)
+        self.decoder = MarianDecoder(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -899,9 +887,6 @@ class MarianModel(MarianPreTrainedModel):
             )
         self.decoder.embed_tokens = value
 
-    def get_encoder(self):
-        return self.encoder
-
     def resize_decoder_token_embeddings(self, new_num_tokens: int) -> nn.Embedding:
         if self.config.share_encoder_decoder_embeddings:
             raise ValueError(
@@ -929,19 +914,20 @@ class MarianModel(MarianPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[Union[tuple[torch.Tensor], BaseModelOutput]] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.Tensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.Tensor | None = None,
+        encoder_outputs: tuple[torch.Tensor] | BaseModelOutput | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        cache_position: torch.Tensor | None = None,
+        **kwargs,
     ) -> Seq2SeqModelOutput:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
@@ -983,9 +969,9 @@ class MarianModel(MarianPreTrainedModel):
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
         )
-        use_cache = use_cache if use_cache is not None else self.config.use_cache
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
 
+        # If encoder_outputs are not given, pass the inputs to the encoder
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
                 input_ids=input_ids,
@@ -1042,15 +1028,21 @@ class MarianMTModel(MarianPreTrainedModel, GenerationMixin):
     base_model_prefix = "model"
     _keys_to_ignore_on_load_missing = [
         "final_logits_bias",
-        "encoder.embed_positions.weight",
-        "decoder.embed_positions.weight",
+        "model.encoder.embed_positions.weight",
+        "model.decoder.embed_positions.weight",
     ]
     _keys_to_ignore_on_save = ["model.encoder.embed_positions.weight", "model.decoder.embed_positions.weight"]
-    _tied_weights_keys = ["model.encoder.embed_tokens.weight", "model.decoder.embed_tokens.weight", "lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.decoder.embed_tokens.weight"}
 
     def __init__(self, config: MarianConfig):
         super().__init__(config)
         self.model = MarianModel(config)
+        if self.config.share_encoder_decoder_embeddings:
+            self._tied_weights_keys = {
+                "lm_head.weight": "model.shared.weight",
+                "model.decoder.embed_tokens.weight": "model.shared.weight",
+                "model.encoder.embed_tokens.weight": "model.shared.weight",
+            }
 
         target_vocab_size = config.vocab_size if config.share_encoder_decoder_embeddings else config.decoder_vocab_size
         self.register_buffer("final_logits_bias", torch.zeros((1, target_vocab_size)))
@@ -1059,14 +1051,8 @@ class MarianMTModel(MarianPreTrainedModel, GenerationMixin):
         # Initialize weights and apply final processing
         self.post_init()
 
-    def get_encoder(self):
-        return self.model.get_encoder()
-
-    def get_decoder(self):
-        return self.model.get_decoder()
-
     def resize_token_embeddings(
-        self, new_num_tokens: int, pad_to_multiple_of: Optional[int] = None, mean_resizing: bool = True
+        self, new_num_tokens: int, pad_to_multiple_of: int | None = None, mean_resizing: bool = True
     ) -> nn.Embedding:
         new_embeddings = super().resize_token_embeddings(new_num_tokens, pad_to_multiple_of, mean_resizing)
         if self.config.share_encoder_decoder_embeddings:
@@ -1140,48 +1126,24 @@ class MarianMTModel(MarianPreTrainedModel, GenerationMixin):
     def set_output_embeddings(self, new_embeddings: nn.Embedding):
         self.lm_head = new_embeddings
 
-    def tie_weights(self):
-        """
-        Tie the weights between the input embeddings and the output embeddings.
-        """
-        output_embeddings = self.get_output_embeddings()
-        if output_embeddings is not None and getattr(self.config, "tie_word_embeddings", True):
-            # if embeddings are shared this will return shared embeddings otherwise decoder embed_tokens
-            word_embeddings = self.get_decoder().get_input_embeddings()
-            self._tie_embedding_weights(output_embeddings, word_embeddings)
-
-        if getattr(self.config, "is_encoder_decoder", False) and getattr(self.config, "tie_encoder_decoder", False):
-            if hasattr(self, self.base_model_prefix):
-                self = getattr(self, self.base_model_prefix)
-            tied_weights = self._tie_encoder_decoder_weights(
-                self.encoder, self.decoder, self.base_model_prefix, "encoder"
-            )
-            # Setting a dynamic variable instead of `_tied_weights_keys` because it's a class
-            # attributed not an instance member, therefore modifying it will modify the entire class
-            # Leading to issues on subsequent calls by different tests or subsequent calls.
-            self._dynamic_tied_weights_keys = tied_weights
-
-        for module in self.modules():
-            if hasattr(module, "_tie_weights"):
-                module._tie_weights()
-
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        decoder_input_ids: Optional[torch.LongTensor] = None,
-        decoder_attention_mask: Optional[torch.Tensor] = None,
-        encoder_outputs: Optional[Union[tuple[torch.Tensor], BaseModelOutput]] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        decoder_inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.Tensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        decoder_input_ids: torch.LongTensor | None = None,
+        decoder_attention_mask: torch.Tensor | None = None,
+        encoder_outputs: tuple[torch.Tensor] | BaseModelOutput | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        decoder_inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        cache_position: torch.Tensor | None = None,
+        **kwargs,
     ) -> Seq2SeqLMOutput:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
@@ -1286,6 +1248,7 @@ class MarianDecoderWrapper(MarianPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.decoder = MarianDecoder(config)
+        self.post_init()
 
     def forward(self, *args, **kwargs):
         return self.decoder(*args, **kwargs)
@@ -1293,7 +1256,9 @@ class MarianDecoderWrapper(MarianPreTrainedModel):
 
 # Copied from transformers.models.bart.modeling_bart.BartForCausalLM with Bart->Marian, facebook/bart-base->Helsinki-NLP/opus-mt-fr-en
 class MarianForCausalLM(MarianPreTrainedModel, GenerationMixin):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {
+        "lm_head.weight": "model.decoder.embed_tokens.weight",
+    }
 
     def __init__(self, config):
         config.is_decoder = True
@@ -1312,29 +1277,24 @@ class MarianForCausalLM(MarianPreTrainedModel, GenerationMixin):
     def set_input_embeddings(self, value):
         self.model.decoder.embed_tokens = value
 
-    def set_decoder(self, decoder):
-        self.model.decoder = decoder
-
-    def get_decoder(self):
-        return self.model.decoder
-
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        encoder_hidden_states: Optional[torch.FloatTensor] = None,
-        encoder_attention_mask: Optional[torch.FloatTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
-    ) -> Union[tuple, CausalLMOutputWithCrossAttentions]:
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        encoder_hidden_states: torch.FloatTensor | None = None,
+        encoder_attention_mask: torch.FloatTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
+        **kwargs,
+    ) -> tuple | CausalLMOutputWithCrossAttentions:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
@@ -1347,7 +1307,7 @@ class MarianForCausalLM(MarianPreTrainedModel, GenerationMixin):
         >>> from transformers import AutoTokenizer, MarianForCausalLM
 
         >>> tokenizer = AutoTokenizer.from_pretrained("Helsinki-NLP/opus-mt-fr-en")
-        >>> model = MarianForCausalLM.from_pretrained("Helsinki-NLP/opus-mt-fr-en", add_cross_attention=False)
+        >>> model = MarianForCausalLM.from_pretrained("Helsinki-NLP/opus-mt-fr-en")
         >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)

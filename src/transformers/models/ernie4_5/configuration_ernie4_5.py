@@ -13,10 +13,8 @@
 # limitations under the License.
 """Ernie 4.5 model configuration"""
 
-from typing import Optional
-
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 
 
 class Ernie4_5Config(PreTrainedConfig):
@@ -69,7 +67,7 @@ class Ernie4_5Config(PreTrainedConfig):
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to tie weight embeddings
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         use_bias (`bool`, *optional*, defaults to `False`):
@@ -92,6 +90,7 @@ class Ernie4_5Config(PreTrainedConfig):
 
     model_type = "ernie4_5"
     keys_to_ignore_at_inference = ["past_key_values"]
+    default_theta = 500000.0
     # Default tensor parallel plan for base model `Ernie4_5Model`
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
@@ -110,24 +109,24 @@ class Ernie4_5Config(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 103424,
-        hidden_size: Optional[int] = 1024,
-        intermediate_size: Optional[int] = 3072,
-        num_hidden_layers: Optional[int] = 18,
-        num_attention_heads: Optional[int] = 16,
-        num_key_value_heads: Optional[int] = 2,
-        hidden_act: Optional[str] = "silu",
-        max_position_embeddings: Optional[int] = 131072,
-        initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[int] = 1e-05,
-        use_cache: Optional[int] = True,
-        pad_token_id: Optional[int] = 0,
-        bos_token_id: Optional[int] = 1,
-        eos_token_id: Optional[int] = 2,
-        tie_word_embeddings: Optional[bool] = True,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
-        use_bias: Optional[bool] = False,
-        head_dim: Optional[int] = 128,
+        vocab_size: int | None = 103424,
+        hidden_size: int | None = 1024,
+        intermediate_size: int | None = 3072,
+        num_hidden_layers: int | None = 18,
+        num_attention_heads: int | None = 16,
+        num_key_value_heads: int | None = 2,
+        hidden_act: str | None = "silu",
+        max_position_embeddings: int | None = 131072,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: int | None = 1e-05,
+        use_cache: int | None = True,
+        pad_token_id: int | None = 0,
+        bos_token_id: int | None = 1,
+        eos_token_id: int | None = 2,
+        tie_word_embeddings: bool | None = True,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        use_bias: bool | None = False,
+        head_dim: int | None = 128,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -148,22 +147,13 @@ class Ernie4_5Config(PreTrainedConfig):
         self.use_cache = use_cache
         self.use_bias = use_bias
         self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
+        self.rope_parameters = rope_parameters
 
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 500000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
-
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        super().__init__(**kwargs)
 
 
 __all__ = ["Ernie4_5Config"]

@@ -23,7 +23,7 @@ import os
 import warnings
 from collections.abc import Sequence
 from io import BytesIO
-from typing import TYPE_CHECKING, Any, Optional, Union
+from typing import TYPE_CHECKING, Any, Union
 
 import httpx
 import numpy as np
@@ -57,7 +57,7 @@ if is_torchcodec_available():
 AudioInput = Union[np.ndarray, "torch.Tensor", Sequence[np.ndarray], Sequence["torch.Tensor"]]
 
 
-def load_audio(audio: Union[str, np.ndarray], sampling_rate=16000, timeout=None) -> np.ndarray:
+def load_audio(audio: str | np.ndarray, sampling_rate=16000, timeout=None) -> np.ndarray:
     """
     Loads `audio` to an np.ndarray object.
 
@@ -77,7 +77,7 @@ def load_audio(audio: Union[str, np.ndarray], sampling_rate=16000, timeout=None)
         # Try to load with `torchcodec` but do not enforce users to install it. If not found
         # fallback to `librosa`. If using an audio-only model, most probably `torchcodec` won't be
         # needed. Do not raise any errors if not installed or versions do not match
-        if is_torchcodec_available() and TORCHCODEC_VERSION >= version.parse("0.3.0"):
+        if is_torchcodec_available() and version.parse("0.3.0") <= TORCHCODEC_VERSION:
             audio = load_audio_torchcodec(audio, sampling_rate=sampling_rate)
         else:
             audio = load_audio_librosa(audio, sampling_rate=sampling_rate, timeout=timeout)
@@ -88,7 +88,7 @@ def load_audio(audio: Union[str, np.ndarray], sampling_rate=16000, timeout=None)
     return audio
 
 
-def load_audio_torchcodec(audio: Union[str, np.ndarray], sampling_rate=16000) -> np.ndarray:
+def load_audio_torchcodec(audio: str | np.ndarray, sampling_rate=16000) -> np.ndarray:
     """
     Loads `audio` to an np.ndarray object using `torchcodec`.
 
@@ -112,7 +112,7 @@ def load_audio_torchcodec(audio: Union[str, np.ndarray], sampling_rate=16000) ->
     return audio
 
 
-def load_audio_librosa(audio: Union[str, np.ndarray], sampling_rate=16000, timeout=None) -> np.ndarray:
+def load_audio_librosa(audio: str | np.ndarray, sampling_rate=16000, timeout=None) -> np.ndarray:
     """
     Loads `audio` to an np.ndarray object using `librosa`.
 
@@ -143,10 +143,10 @@ def load_audio_librosa(audio: Union[str, np.ndarray], sampling_rate=16000, timeo
 def load_audio_as(
     audio: str,
     return_format: str,
-    timeout: Optional[int] = None,
+    timeout: int | None = None,
     force_mono: bool = False,
-    sampling_rate: Optional[int] = None,
-) -> Union[str, dict[str, Any], io.BytesIO, None]:
+    sampling_rate: int | None = None,
+) -> str | dict[str, Any] | io.BytesIO | None:
     """
     Load audio from either a local file path or URL and return in specified format.
 
@@ -166,7 +166,6 @@ def load_audio_as(
             - `dict`: Dictionary with 'data' (base64 encoded audio data) and 'format' keys (if return_format="dict")
             - `io.BytesIO`: BytesIO object containing audio data (if return_format="buffer")
     """
-    # TODO: @eustlb, we actually don't need librosa but soxr is installed with librosa
     requires_backends(load_audio_as, ["librosa"])
 
     if return_format not in ["base64", "dict", "buffer"]:
@@ -219,6 +218,18 @@ def load_audio_as(
         raise ValueError(f"Error loading audio: {e}")
 
 
+def conv1d_output_length(module: "torch.nn.Conv1d", input_length: int) -> int:
+    """
+    Computes the output length of a 1D convolution layer according to torch's documentation:
+    https://docs.pytorch.org/docs/stable/generated/torch.nn.Conv1d.html
+    """
+    return int(
+        (input_length + 2 * module.padding[0] - module.dilation[0] * (module.kernel_size[0] - 1) - 1)
+        / module.stride[0]
+        + 1
+    )
+
+
 def is_valid_audio(audio):
     return is_numpy_array(audio) or is_torch_tensor(audio)
 
@@ -228,7 +239,7 @@ def is_valid_list_of_audio(audio):
 
 
 def make_list_of_audio(
-    audio: Union[list[AudioInput], AudioInput],
+    audio: list[AudioInput] | AudioInput,
 ) -> AudioInput:
     """
     Ensure that the output is a list of audio.
@@ -249,7 +260,7 @@ def make_list_of_audio(
     raise ValueError("Invalid input type. Must be a single audio or a list of audio")
 
 
-def hertz_to_mel(freq: Union[float, np.ndarray], mel_scale: str = "htk") -> Union[float, np.ndarray]:
+def hertz_to_mel(freq: float | np.ndarray, mel_scale: str = "htk") -> float | np.ndarray:
     """
     Convert frequency from hertz to mels.
 
@@ -285,7 +296,7 @@ def hertz_to_mel(freq: Union[float, np.ndarray], mel_scale: str = "htk") -> Unio
     return mels
 
 
-def mel_to_hertz(mels: Union[float, np.ndarray], mel_scale: str = "htk") -> Union[float, np.ndarray]:
+def mel_to_hertz(mels: float | np.ndarray, mel_scale: str = "htk") -> float | np.ndarray:
     """
     Convert frequency from mels to hertz.
 
@@ -321,7 +332,7 @@ def mel_to_hertz(mels: Union[float, np.ndarray], mel_scale: str = "htk") -> Unio
     return freq
 
 
-def hertz_to_octave(freq: Union[float, np.ndarray], tuning: float = 0.0, bins_per_octave: int = 12):
+def hertz_to_octave(freq: float | np.ndarray, tuning: float = 0.0, bins_per_octave: int = 12):
     """
     Convert frequency from hertz to fractional octave numbers.
     Adapted from *librosa*.
@@ -369,8 +380,8 @@ def chroma_filter_bank(
     num_chroma: int,
     sampling_rate: int,
     tuning: float = 0.0,
-    power: Optional[float] = 2.0,
-    weighting_parameters: Optional[tuple[float, float]] = (5.0, 2.0),
+    power: float | None = 2.0,
+    weighting_parameters: tuple[float, float] | None = (5.0, 2.0),
     start_at_c_chroma: bool = True,
 ):
     """
@@ -445,7 +456,7 @@ def mel_filter_bank(
     min_frequency: float,
     max_frequency: float,
     sampling_rate: int,
-    norm: Optional[str] = None,
+    norm: str | None = None,
     mel_scale: str = "htk",
     triangularize_in_mel_space: bool = False,
 ) -> np.ndarray:
@@ -550,7 +561,7 @@ def window_function(
     window_length: int,
     name: str = "hann",
     periodic: bool = True,
-    frame_length: Optional[int] = None,
+    frame_length: int | None = None,
     center: bool = True,
 ) -> np.ndarray:
     """
@@ -615,19 +626,19 @@ def spectrogram(
     window: np.ndarray,
     frame_length: int,
     hop_length: int,
-    fft_length: Optional[int] = None,
-    power: Optional[float] = 1.0,
+    fft_length: int | None = None,
+    power: float | None = 1.0,
     center: bool = True,
     pad_mode: str = "reflect",
     onesided: bool = True,
     dither: float = 0.0,
-    preemphasis: Optional[float] = None,
-    mel_filters: Optional[np.ndarray] = None,
+    preemphasis: float | None = None,
+    mel_filters: np.ndarray | None = None,
     mel_floor: float = 1e-10,
-    log_mel: Optional[str] = None,
+    log_mel: str | None = None,
     reference: float = 1.0,
     min_value: float = 1e-10,
-    db_range: Optional[float] = None,
+    db_range: float | None = None,
     remove_dc_offset: bool = False,
     dtype: np.dtype = np.float32,
 ) -> np.ndarray:
@@ -826,19 +837,19 @@ def spectrogram_batch(
     window: np.ndarray,
     frame_length: int,
     hop_length: int,
-    fft_length: Optional[int] = None,
-    power: Optional[float] = 1.0,
+    fft_length: int | None = None,
+    power: float | None = 1.0,
     center: bool = True,
     pad_mode: str = "reflect",
     onesided: bool = True,
     dither: float = 0.0,
-    preemphasis: Optional[float] = None,
-    mel_filters: Optional[np.ndarray] = None,
+    preemphasis: float | None = None,
+    mel_filters: np.ndarray | None = None,
     mel_floor: float = 1e-10,
-    log_mel: Optional[str] = None,
+    log_mel: str | None = None,
     reference: float = 1.0,
     min_value: float = 1e-10,
-    db_range: Optional[float] = None,
+    db_range: float | None = None,
     remove_dc_offset: bool = False,
     dtype: np.dtype = np.float32,
 ) -> list[np.ndarray]:
@@ -1036,7 +1047,7 @@ def power_to_db(
     spectrogram: np.ndarray,
     reference: float = 1.0,
     min_value: float = 1e-10,
-    db_range: Optional[float] = None,
+    db_range: float | None = None,
 ) -> np.ndarray:
     """
     Converts a power spectrogram to the decibel scale. This computes `10 * log10(spectrogram / reference)`, using basic
@@ -1087,7 +1098,7 @@ def power_to_db_batch(
     spectrogram: np.ndarray,
     reference: float = 1.0,
     min_value: float = 1e-10,
-    db_range: Optional[float] = None,
+    db_range: float | None = None,
 ) -> np.ndarray:
     """
     Converts a batch of power spectrograms to the decibel scale. This computes `10 * log10(spectrogram / reference)`,
@@ -1136,7 +1147,7 @@ def amplitude_to_db(
     spectrogram: np.ndarray,
     reference: float = 1.0,
     min_value: float = 1e-5,
-    db_range: Optional[float] = None,
+    db_range: float | None = None,
 ) -> np.ndarray:
     """
     Converts an amplitude spectrogram to the decibel scale. This computes `20 * log10(spectrogram / reference)`, using
@@ -1182,7 +1193,7 @@ def amplitude_to_db(
 
 
 def amplitude_to_db_batch(
-    spectrogram: np.ndarray, reference: float = 1.0, min_value: float = 1e-5, db_range: Optional[float] = None
+    spectrogram: np.ndarray, reference: float = 1.0, min_value: float = 1e-5, db_range: float | None = None
 ) -> np.ndarray:
     """
     Converts a batch of amplitude spectrograms to the decibel scale. This computes `20 * log10(spectrogram / reference)`,

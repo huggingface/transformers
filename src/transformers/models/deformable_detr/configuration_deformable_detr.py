@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 SenseTime and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -37,7 +36,7 @@ class DeformableDetrConfig(PreTrainedConfig):
         use_timm_backbone (`bool`, *optional*, defaults to `True`):
             Whether or not to use the `timm` library for the backbone. If set to `False`, will use the [`AutoBackbone`]
             API.
-        backbone_config (`PreTrainedConfig` or `dict`, *optional*):
+        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `ResNetConfig()`):
             The configuration of the backbone model. Only used in case `use_timm_backbone` is set to `False` in which
             case it will default to `ResNetConfig()`.
         num_channels (`int`, *optional*, defaults to 3):
@@ -269,6 +268,7 @@ class DeformableDetrConfig(PreTrainedConfig):
         self.eos_coefficient = eos_coefficient
         self.focal_alpha = focal_alpha
         self.disable_custom_kernels = disable_custom_kernels
+
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
 

@@ -11,6 +11,7 @@ class CustomModel(PreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.linear = torch.nn.Linear(config.hidden_size, config.hidden_size)
+        self.post_init()
 
     def forward(self, x):
         return self.linear(x)

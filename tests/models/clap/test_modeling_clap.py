@@ -242,22 +242,6 @@ class ClapAudioModelTest(ModelTesterMixin, unittest.TestCase):
     def test_training(self):
         pass
 
-    @unittest.skip(reason="ClapAudioModel does not output any loss term in the forward pass")
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
     @slow
     def test_model_from_pretrained(self):
         model_name = "laion/clap-htsat-fused"
@@ -394,22 +378,6 @@ class ClapTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="ClapTextModel does not output any loss term in the forward pass")
     def test_training(self):
-        pass
-
-    @unittest.skip(reason="ClapTextModel does not output any loss term in the forward pass")
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
     @unittest.skip(reason="ClapTextModel does not use inputs_embeds")
@@ -562,7 +530,7 @@ class ClapModelIntegrationTest(unittest.TestCase):
         processor = ClapProcessor.from_pretrained(model_id)
 
         for padding in self.paddings:
-            inputs = processor(audios=audio_sample["audio"]["array"], return_tensors="pt", padding=padding).to(
+            inputs = processor(audio=audio_sample["audio"]["array"], return_tensors="pt", padding=padding).to(
                 torch_device
             )
 
@@ -590,7 +558,7 @@ class ClapModelIntegrationTest(unittest.TestCase):
 
         for padding in self.paddings:
             inputs = processor(
-                audios=audio_sample["audio"]["array"], return_tensors="pt", padding=padding, truncation="fusion"
+                audio=audio_sample["audio"]["array"], return_tensors="pt", padding=padding, truncation="fusion"
             ).to(torch_device)
 
             audio_embed = model.get_audio_features(**inputs)
@@ -616,7 +584,7 @@ class ClapModelIntegrationTest(unittest.TestCase):
         processor = ClapProcessor.from_pretrained(model_id)
 
         for padding in self.paddings:
-            inputs = processor(audios=audio_samples, return_tensors="pt", padding=padding, truncation="fusion").to(
+            inputs = processor(audio=audio_samples, return_tensors="pt", padding=padding, truncation="fusion").to(
                 torch_device
             )
 
@@ -643,7 +611,7 @@ class ClapModelIntegrationTest(unittest.TestCase):
         processor = ClapProcessor.from_pretrained(model_id)
 
         for padding in self.paddings:
-            inputs = processor(audios=audio_samples, return_tensors="pt", padding=padding).to(torch_device)
+            inputs = processor(audio=audio_samples, return_tensors="pt", padding=padding).to(torch_device)
 
             audio_embed = model.get_audio_features(**inputs)
             expected_mean = EXPECTED_MEANS_FUSED[padding]

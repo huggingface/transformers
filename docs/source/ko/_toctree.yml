@@ -1193,8 +1193,6 @@
     - sections:
       - local: in_translation
         title: Decision Transformer
-      - local: model_doc/trajectory_transformer
-        title: Trajectory Transformer
       title: 강화학습 모델
     - sections:
       - local: model_doc/autoformer
@@ -1210,10 +1208,6 @@
       - local: in_translation
         title: TimesFM
       title: 시게열 모델
-    - sections:
-      - local: model_doc/graphormer
-        title: Graphormer
-      title: 그래프 모델
     title: 모델
   - sections:
     - local: internal/modeling_utils

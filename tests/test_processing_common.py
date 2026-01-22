@@ -17,6 +17,7 @@ import inspect
 import json
 import os
 import random
+import shutil
 import sys
 import tempfile
 from pathlib import Path
@@ -25,8 +26,10 @@ import numpy as np
 from huggingface_hub import hf_hub_download
 from parameterized import parameterized
 
-from transformers.models.auto.processing_auto import processor_class_from_name
-from transformers.processing_utils import Unpack
+from transformers.processing_utils import (
+    MODALITY_TO_AUTOPROCESSOR_MAPPING,
+    Unpack,
+)
 from transformers.testing_utils import (
     check_json_file_has_correct_format,
     require_av,
@@ -37,8 +40,9 @@ from transformers.testing_utils import (
 from transformers.utils import is_torch_available, is_vision_available
 
 
-sys.path.append(".")
-from utils.fetch_hub_objects_for_ci import url_to_local_path
+parent_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+sys.path.append(os.path.join(parent_dir, "utils"))
+from fetch_hub_objects_for_ci import url_to_local_path  # noqa: E402
 
 
 global_rng = random.Random()
@@ -63,7 +67,6 @@ MODALITY_INPUT_DATA = {
         "https://huggingface.co/datasets/raushan-testing-hf/audio-test/resolve/main/f2641_0_throatclearing.wav",
     ],
 }
-
 
 for modality, urls in MODALITY_INPUT_DATA.items():
     MODALITY_INPUT_DATA[modality] = [url_to_local_path(url) for url in urls]
@@ -95,27 +98,240 @@ def floats_list(shape, scale=1.0, rng=None, name=None):
 @require_vision
 class ProcessorTesterMixin:
     processor_class = None
+    model_id = (
+        None  # Optional: set this to load from a specific pretrained model instead of creating generic components
+    )
     text_input_name = "input_ids"
     images_input_name = "pixel_values"
     videos_input_name = "pixel_values_videos"
     audio_input_name = "input_features"
 
+    @classmethod
+    def setUpClass(cls):
+        """
+        Automatically set up the processor test by creating and saving all required components.
+        Individual test classes only need to set processor_class and optionally:
+        - model_id: to load components from a specific pretrained model
+        - prepare_processor_dict(): to provide custom kwargs for processor initialization
+        """
+        if cls.processor_class is None:
+            raise ValueError(
+                f"{cls.__name__} must define 'processor_class' attribute. Example: processor_class = MyProcessor"
+            )
+
+        cls.tmpdirname = tempfile.mkdtemp()
+
+        # If model_id is specified, load components from that model
+        if cls.model_id is not None:
+            processor = cls._setup_from_pretrained(cls.model_id)
+        else:
+            # Otherwise, create generic components
+            processor = cls._setup_from_components()
+
+        # setup test attributes
+        cls._setup_test_attributes(processor)
+        processor.save_pretrained(cls.tmpdirname)
+
+    @classmethod
+    def _setup_test_attributes(cls, processor):
+        # to override in the child class to define class attributes
+        # such as image_token, video_token, audio_token, etc.
+        pass
+
+    @classmethod
+    def _setup_from_pretrained(cls, model_id, **kwargs):
+        """Load all components from a pretrained model."""
+
+        # check if there are any custom components to setup
+        custom_components = {}
+        for attribute in cls.processor_class.get_attributes():
+            if hasattr(cls, f"_setup_{attribute}"):
+                custom_method = getattr(cls, f"_setup_{attribute}")
+                custom_components[attribute] = custom_method()
+        # if there is one custom component, we need to add all the other ones (with from_pretrained)
+        if custom_components:
+            for attribute in cls.processor_class.get_attributes():
+                if attribute not in custom_components:
+                    component_class = cls._get_component_class_from_processor(attribute)
+                    custom_components[attribute] = component_class.from_pretrained(model_id)
+
+        kwargs.update(cls.prepare_processor_dict())
+        processor = cls.processor_class.from_pretrained(model_id, **custom_components, **kwargs)
+        return processor
+
+    @classmethod
+    def _setup_from_components(cls):
+        """Create all required components for the processor and save the complete processor."""
+        # Get all required attributes for this processor
+        attributes = cls.processor_class.get_attributes()
+
+        # Create each component (but don't save them individually)
+        components = {}
+        for attribute in attributes:
+            components[attribute] = cls._setup_component(attribute)
+
+        processor_kwargs = cls.prepare_processor_dict()
+        processor = cls.processor_class(**components, **processor_kwargs)
+        return processor
+
+    @classmethod
+    def _setup_component(cls, attribute):
+        """
+        Create and return a component.
+
+        This method first checks for a custom setup method (_setup_{attribute}).
+        If not found, it tries to get the component class from the processor's Auto mappings
+        and instantiate it without arguments.
+        If that fails, it raises an error telling the user to override the setup method.
+
+        Individual test classes should override _setup_{attribute}() for custom component setup.
+        Custom methods should return the created component.
+
+        Returns:
+            The created component instance.
+        """
+        # Check if there's a custom setup method for this specific attribute
+        custom_method = getattr(cls, f"_setup_{attribute}", None)
+        if custom_method is not None:
+            return custom_method()
+
+        # Get the component class from processor's Auto mappings
+        component_class = cls._get_component_class_from_processor(attribute)
+
+        # Get the base class name for the component to provide helpful error messages
+        component_type = attribute.replace("_", " ")
+
+        # Try to instantiate the component without arguments
+        try:
+            component = component_class()
+        except Exception as e:
+            raise TypeError(
+                f"Failed to instantiate {component_type} ({component_class}) without arguments.\n"
+                f"Error: {e}\n\n"
+                f"To fix this, override the setup method in your test class:\n\n"
+                f"    @classmethod\n"
+                f"    def _setup_{attribute}(cls):\n"
+                f"        # Create your custom {component_type}\n"
+                f"        from transformers import {component_class}\n"
+                f"        component = {component_class}(...)\n"
+                f"        return component\n"
+            ) from e
+
+        return component
+
+    @classmethod
+    def _get_component_class_from_processor(cls, attribute, use_fast: bool = True):
+        """
+        Get the component class for a given attribute from the processor's Auto mappings.
+
+        This extracts the model type from the test file name and uses that to look up
+        the config class, which is then used to find the appropriate component class.
+        """
+        import inspect
+        import re
+
+        from transformers.models.auto.configuration_auto import (
+            CONFIG_MAPPING,
+            CONFIG_MAPPING_NAMES,
+            SPECIAL_MODEL_TYPE_TO_MODULE_NAME,
+        )
+
+        # Extract model_type from the test file name
+        # Test files are named like test_processing_align.py or test_processor_align.py
+        test_file = inspect.getfile(cls)
+        match = re.search(r"test_process(?:ing|or)_(\w+)\.py$", test_file)
+        if not match:
+            raise ValueError(
+                f"Could not extract model type from test file name: {test_file}. "
+                f"Please override _setup_{attribute}() in your test class."
+            )
+
+        model_type = match.group(1)
+        if model_type not in CONFIG_MAPPING_NAMES:
+            # check if the model type is a special model type
+            for special_model_type, special_module_name in SPECIAL_MODEL_TYPE_TO_MODULE_NAME.items():
+                if model_type == special_module_name:
+                    model_type = special_model_type
+                    break
+
+        # Get the config class for this model type
+        if model_type not in CONFIG_MAPPING_NAMES:
+            raise ValueError(
+                f"Model type '{model_type}' not found in CONFIG_MAPPING_NAMES. "
+                f"Please override _setup_{attribute}() in your test class."
+            )
+
+        config_class = CONFIG_MAPPING[model_type]
+
+        # Now get the component class from the appropriate Auto mapping
+        if attribute in MODALITY_TO_AUTOPROCESSOR_MAPPING:
+            mapping_name = attribute
+        elif "tokenizer" in attribute:
+            mapping_name = "tokenizer"
+        else:
+            raise ValueError(
+                f"Unknown attribute type: '{attribute}'. "
+                f"Please override _setup_{attribute}() in your test class to provide custom setup."
+            )
+
+        # Get the appropriate Auto mapping for this component type
+        if mapping_name == "tokenizer":
+            from transformers.models.auto.tokenization_auto import TOKENIZER_MAPPING
+            from transformers.utils import is_tokenizers_available
+
+            component_class = TOKENIZER_MAPPING.get(config_class, None)
+            if component_class is None and is_tokenizers_available():
+                from transformers.tokenization_utils_tokenizers import TokenizersBackend
+
+                component_class = TokenizersBackend
+        elif mapping_name == "image_processor":
+            from transformers.models.auto.image_processing_auto import IMAGE_PROCESSOR_MAPPING
+
+            component_class = IMAGE_PROCESSOR_MAPPING.get(config_class, None)
+        elif mapping_name == "feature_extractor":
+            from transformers.models.auto.feature_extraction_auto import FEATURE_EXTRACTOR_MAPPING
+
+            component_class = FEATURE_EXTRACTOR_MAPPING.get(config_class, None)
+        elif mapping_name == "video_processor":
+            from transformers.models.auto.video_processing_auto import VIDEO_PROCESSOR_MAPPING
+
+            component_class = VIDEO_PROCESSOR_MAPPING.get(config_class, None)
+        else:
+            raise ValueError(f"Unknown mapping for attribute: {attribute}")
+
+        if component_class is None:
+            raise ValueError(
+                f"Could not find {mapping_name} class for config {config_class.__name__}. "
+                f"Please override _setup_{attribute}() in your test class."
+            )
+
+        # Handle tuple case (some mappings return tuples of classes)
+        if isinstance(component_class, tuple):
+            if use_fast:
+                component_class = component_class[-1] if component_class[-1] is not None else component_class[0]
+            else:
+                component_class = component_class[0] if component_class[0] is not None else component_class[1]
+
+        return component_class
+
+    @classmethod
+    def tearDownClass(cls):
+        """Clean up the temporary directory."""
+        if hasattr(cls, "tmpdirname"):
+            shutil.rmtree(cls.tmpdirname, ignore_errors=True)
+
     @staticmethod
     def prepare_processor_dict():
+        """Override this method to provide custom kwargs for processor initialization."""
         return {}
 
     def get_component(self, attribute, **kwargs):
-        assert attribute in self.processor_class.attributes
-        component_class_name = getattr(self.processor_class, f"{attribute}_class")
-        if isinstance(component_class_name, tuple):
-            if attribute == "image_processor":
-                # TODO: @yoni, change logic in v4.52 (when use_fast set to True by default)
-                component_class_name = component_class_name[0]
-            else:
-                component_class_name = component_class_name[-1]
-
-        component_class = processor_class_from_name(component_class_name)
-        component = component_class.from_pretrained(self.tmpdirname, **kwargs)  # noqa
+        if attribute not in MODALITY_TO_AUTOPROCESSOR_MAPPING and "tokenizer" in attribute:
+            auto_processor_class = MODALITY_TO_AUTOPROCESSOR_MAPPING["tokenizer"]
+            component = auto_processor_class.from_pretrained(self.tmpdirname, subfolder=attribute, **kwargs)  # noqa
+        else:
+            auto_processor_class = MODALITY_TO_AUTOPROCESSOR_MAPPING[attribute]
+            component = auto_processor_class.from_pretrained(self.tmpdirname, **kwargs)  # noqa
         if "tokenizer" in attribute and not component.pad_token:
             component.pad_token = "[TEST_PAD]"
             if component.pad_token_id is None:
@@ -123,17 +339,16 @@ class ProcessorTesterMixin:
 
         return component
 
-    def prepare_components(self):
+    def prepare_components(self, **kwargs):
         components = {}
-        for attribute in self.processor_class.attributes:
+        for attribute in self.processor_class.get_attributes():
             component = self.get_component(attribute)
             components[attribute] = component
 
         return components
 
     def get_processor(self):
-        components = self.prepare_components()
-        processor = self.processor_class(**components, **self.prepare_processor_dict())
+        processor = self.processor_class.from_pretrained(self.tmpdirname)
         return processor
 
     def prepare_text_inputs(self, batch_size: int | None = None, modalities: str | list | None = None):
@@ -158,12 +373,14 @@ class ProcessorTesterMixin:
         ] * (batch_size - 2)
 
     @require_vision
-    def prepare_image_inputs(self, batch_size: int | None = None):
+    def prepare_image_inputs(self, batch_size: int | None = None, nested: bool = False):
         """This function prepares a list of PIL images for testing"""
         if batch_size is None:
             return prepare_image_inputs()[0]
         if batch_size < 1:
             raise ValueError("batch_size must be greater than 0")
+        if nested:
+            return [prepare_image_inputs()] * batch_size
         return prepare_image_inputs() * batch_size
 
     @require_vision
@@ -210,12 +427,20 @@ class ProcessorTesterMixin:
 
                 self.assertEqual(processor_second.to_dict(), processor_first.to_dict())
 
-                for attribute in processor_first.attributes:
+                for attribute in processor_first.get_attributes():
                     attribute_first = getattr(processor_first, attribute)
                     attribute_second = getattr(processor_second, attribute)
 
                     # tokenizer repr contains model-path from where we loaded
                     if "tokenizer" not in attribute:
+                        # We don't store/load `_processor_class` for subprocessors.
+                        # The `_processor_class` is saved once per config, at general level
+                        self.assertFalse(hasattr(attribute_second, "_processor_class"))
+                        self.assertFalse(hasattr(attribute_first, "_processor_class"))
+
+                        self.assertFalse(hasattr(attribute_second, "processor_class"))
+                        self.assertFalse(hasattr(attribute_first, "processor_class"))
+
                         self.assertEqual(repr(attribute_first), repr(attribute_second))
 
     def test_processor_from_and_save_pretrained_as_nested_dict(self):
@@ -230,22 +455,70 @@ class ProcessorTesterMixin:
             self.assertEqual(processor_second.to_dict(), processor_first.to_dict())
 
             # Try to load each attribute separately from saved directory
-            for attribute in processor_first.attributes:
-                attribute_class_name = getattr(processor_first, f"{attribute}_class")
-                if isinstance(attribute_class_name, tuple):
-                    if attribute == "image_processor":
-                        # TODO: @yoni, change logic in v4.52 (when use_fast set to True by default)
-                        attribute_class_name = attribute_class_name[0]
-                    else:
-                        attribute_class_name = attribute_class_name[-1]
-
-                attribute_class = processor_class_from_name(attribute_class_name)
-                attribute_reloaded = attribute_class.from_pretrained(tmpdirname)
+            for attribute in processor_first.get_attributes():
+                if attribute not in MODALITY_TO_AUTOPROCESSOR_MAPPING and "tokenizer" in attribute:
+                    auto_processor_class = MODALITY_TO_AUTOPROCESSOR_MAPPING["tokenizer"]
+                    attribute_reloaded = auto_processor_class.from_pretrained(tmpdirname, subfolder=attribute)
+                else:
+                    auto_processor_class = MODALITY_TO_AUTOPROCESSOR_MAPPING[attribute]
+                    attribute_reloaded = auto_processor_class.from_pretrained(tmpdirname)
                 attribute_first = getattr(processor_first, attribute)
 
                 # tokenizer repr contains model-path from where we loaded
                 if "tokenizer" not in attribute:
                     self.assertEqual(repr(attribute_first), repr(attribute_reloaded))
+
+    def test_save_load_pretrained_additional_features(self):
+        """
+        Tests that additional kwargs passed to from_pretrained are correctly applied to components.
+        """
+        attributes = self.processor_class.get_attributes()
+
+        if not any(
+            attr in ["tokenizer", "image_processor", "feature_extractor", "video_processor"] for attr in attributes
+        ):
+            self.skipTest("Processor has no tokenizer or image_processor to test additional features")
+        additional_kwargs = {}
+
+        has_tokenizer = "tokenizer" in attributes
+        if has_tokenizer:
+            additional_kwargs["cls_token"] = "(CLS)"
+            additional_kwargs["sep_token"] = "(SEP)"
+
+        has_image_processor = "image_processor" in attributes
+        if has_image_processor:
+            additional_kwargs["do_normalize"] = False
+        has_video_processor = "video_processor" in attributes
+        if has_video_processor:
+            additional_kwargs["do_normalize"] = False
+
+        processor_second = self.processor_class.from_pretrained(self.tmpdirname, **additional_kwargs)
+        if has_tokenizer:
+            self.assertEqual(processor_second.tokenizer.cls_token, "(CLS)")
+            self.assertEqual(processor_second.tokenizer.sep_token, "(SEP)")
+        if has_image_processor:
+            self.assertEqual(processor_second.image_processor.do_normalize, False)
+        if has_video_processor:
+            self.assertEqual(processor_second.video_processor.do_normalize, False)
+
+    def test_processor_from_pretrained_vs_from_components(self):
+        """
+        Tests that loading a processor fully with from_pretrained produces the same result as
+        loading each component individually with from_pretrained and building the processor from them.
+        """
+        # Load processor fully with from_pretrained
+        processor_full = self.get_processor()
+
+        # Load each component individually with from_pretrained
+        components = {}
+        for attribute in self.processor_class.get_attributes():
+            components[attribute] = self.get_component(attribute)
+
+        # Build processor from components + prepare_processor_dict() kwargs
+        processor_kwargs = self.prepare_processor_dict()
+        processor_from_components = self.processor_class(**components, **processor_kwargs)
+
+        self.assertEqual(processor_from_components.to_dict(), processor_full.to_dict())
 
     def test_model_input_names(self):
         processor = self.get_processor()
@@ -263,6 +536,217 @@ class ProcessorTesterMixin:
         inputs = processor(**inputs_dict, return_tensors="pt")
 
         self.assertSetEqual(set(inputs.keys()), set(processor.model_input_names))
+
+    def test_image_processor_defaults(self):
+        """
+        Tests that image processor is called correctly when passing images to the processor.
+        This test verifies that processor(images=X) produces the same output as image_processor(X).
+        """
+        # Skip if processor doesn't have image_processor
+        if "image_processor" not in self.processor_class.get_attributes():
+            self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+
+        image_processor = self.get_component("image_processor")
+
+        # Get all required components for processor
+        components = {}
+        for attribute in self.processor_class.get_attributes():
+            components[attribute] = self.get_component(attribute)
+
+        processor = self.processor_class(**components)
+
+        image_input = self.prepare_image_inputs()
+
+        input_image_proc = image_processor(image_input, return_tensors="pt")
+        try:
+            input_processor = processor(images=image_input, return_tensors="pt")
+        except Exception:
+            # The processor does not accept image only input, so we can skip this test
+            self.skipTest("Processor does not accept image-only input.")
+
+        # Verify outputs match
+        for key in input_image_proc:
+            torch.testing.assert_close(input_image_proc[key], input_processor[key])
+
+    def test_tokenizer_defaults(self):
+        """
+        Tests that tokenizer is called correctly when passing text to the processor.
+        This test verifies that processor(text=X) produces the same output as tokenizer(X).
+        """
+        # Skip if processor doesn't have tokenizer
+        if "tokenizer" not in self.processor_class.get_attributes():
+            self.skipTest(f"tokenizer attribute not present in {self.processor_class}")
+
+        # Get all required components for processor
+        components = {}
+        for attribute in self.processor_class.get_attributes():
+            components[attribute] = self.get_component(attribute)
+
+        processor = self.processor_class(**components)
+        tokenizer = components["tokenizer"]
+
+        input_str = ["lower newer"]
+
+        # Process with both tokenizer and processor (disable padding to ensure same output)
+        try:
+            encoded_processor = processor(text=input_str, padding=False, return_tensors="pt")
+        except Exception:
+            # The processor does not accept text only input, so we can skip this test
+            self.skipTest("Processor does not accept text-only input.")
+        encoded_tok = tokenizer(input_str, padding=False, return_tensors="pt")
+
+        # Verify outputs match (handle processors that might not return token_type_ids)
+        for key in encoded_tok:
+            if key in encoded_processor:
+                self.assertListEqual(encoded_tok[key].tolist(), encoded_processor[key].tolist())
+
+    def test_feature_extractor_defaults(self):
+        """
+        Tests that feature extractor is called correctly when passing audio to the processor.
+        This test verifies that processor(audio=X) produces the same output as feature_extractor(X).
+        """
+        # Skip if processor doesn't have feature_extractor
+        if (
+            "feature_extractor" not in self.processor_class.get_attributes()
+            and "audio_processor" not in self.processor_class.get_attributes()
+        ):
+            self.skipTest(f"feature_extractor or audio_processor attribute not present in {self.processor_class}")
+
+        if "feature_extractor" in self.processor_class.get_attributes():
+            feature_extractor = self.get_component("feature_extractor")
+        else:
+            feature_extractor = self.get_component("audio_processor")
+
+        # Get all required components for processor
+        components = {}
+        for attribute in self.processor_class.get_attributes():
+            components[attribute] = self.get_component(attribute)
+
+        processor = self.processor_class(**components)
+
+        audio_input = self.prepare_audio_inputs()
+
+        # Process with both feature_extractor and processor
+        input_feat_extract = feature_extractor(audio_input, return_tensors="pt")
+        try:
+            input_processor = processor(audio=audio_input, return_tensors="pt")
+        except Exception:
+            # The processor does not accept audio only input, so we can skip this test
+            self.skipTest("Processor does not accept audio-only input.")
+
+        # Verify outputs match
+        for key in input_feat_extract:
+            torch.testing.assert_close(input_feat_extract[key], input_processor[key])
+
+    def test_video_processor_defaults(self):
+        """
+        Tests that video processor is called correctly when passing videos to the processor.
+        This test verifies that processor(videos=X) produces the same output as video_processor(X).
+        """
+        # Skip if processor doesn't have video_processor
+        if "video_processor" not in self.processor_class.get_attributes():
+            self.skipTest(f"video_processor attribute not present in {self.processor_class}")
+
+        video_processor = self.get_component("video_processor")
+
+        # Get all required components for processor
+        components = {}
+        for attribute in self.processor_class.get_attributes():
+            components[attribute] = self.get_component(attribute)
+
+        processor = self.processor_class(**components)
+
+        video_input = self.prepare_video_inputs()
+
+        # Process with both video_processor and processor
+        input_video_proc = video_processor(video_input, return_tensors="pt")
+        try:
+            input_processor = processor(videos=video_input, return_tensors="pt")
+        except Exception:
+            # The processor does not accept video only input, so we can skip this test
+            self.skipTest("Processor does not accept video-only input.")
+
+        # Verify outputs match
+        for key in input_video_proc:
+            torch.testing.assert_close(input_video_proc[key], input_processor[key])
+
+    def test_tokenizer_decode_defaults(self):
+        """
+        Tests that processor.batch_decode() correctly forwards to tokenizer.batch_decode().
+        """
+        # Skip if processor doesn't have tokenizer
+        if "tokenizer" not in self.processor_class.get_attributes():
+            self.skipTest(f"tokenizer attribute not present in {self.processor_class}")
+
+        # Get all required components for processor
+        components = {}
+        for attribute in self.processor_class.get_attributes():
+            components[attribute] = self.get_component(attribute)
+
+        processor = self.processor_class(**components)
+        tokenizer = components["tokenizer"]
+
+        predicted_ids = [[1, 4, 5, 8, 1, 0, 8], [3, 4, 3, 1, 1, 8, 9]]
+
+        # Test batch_decode
+        decoded_processor = processor.batch_decode(predicted_ids)
+        decoded_tok = tokenizer.batch_decode(predicted_ids)
+
+        self.assertListEqual(decoded_tok, decoded_processor)
+
+    def test_processor_with_multiple_inputs(self):
+        """
+        Tests that processor correctly handles multiple modality inputs together.
+        Verifies that the output contains expected keys and raises error when no input is provided.
+        """
+        # Skip if processor doesn't have multiple attributes (not multimodal)
+        attributes = self.processor_class.get_attributes()
+        if len(attributes) <= 1:
+            self.skipTest(f"Processor only has {len(attributes)} attribute(s), test requires multimodal processor")
+
+        processor = self.get_processor()
+
+        # Map attributes to input parameter names, prepare methods, and output key names
+        attr_to_input_param = {
+            "tokenizer": ("text", "prepare_text_inputs", "text_input_name"),
+            "image_processor": ("images", "prepare_image_inputs", "images_input_name"),
+            "video_processor": ("videos", "prepare_video_inputs", "videos_input_name"),
+            "feature_extractor": ("audio", "prepare_audio_inputs", "audio_input_name"),
+        }
+
+        # Prepare inputs dynamically based on processor attributes
+        processor_inputs = {}
+        expected_output_keys = []
+
+        for attr in attributes:
+            if attr in attr_to_input_param:
+                param_name, prepare_method_name, output_key_attr = attr_to_input_param[attr]
+                # Call the prepare method
+                prepare_method = getattr(self, prepare_method_name)
+                if param_name == "text":
+                    modalities = []
+                    if "image_processor" in attributes:
+                        modalities.append("image")
+                    if "video_processor" in attributes:
+                        modalities.append("video")
+                    if "audio_processor" in attributes or "feature_extractor" in attributes:
+                        modalities.append("audio")
+                    processor_inputs[param_name] = prepare_method(modalities=modalities)
+                else:
+                    processor_inputs[param_name] = prepare_method()
+                # Track expected output keys
+                expected_output_keys.append(getattr(self, output_key_attr))
+
+        # Test combined processing
+        inputs = processor(**processor_inputs, return_tensors="pt")
+
+        # Verify output contains all expected keys
+        for key in expected_output_keys:
+            self.assertIn(key, inputs)
+
+        # Test that it raises error when no input is passed
+        with self.assertRaises((TypeError, ValueError)):
+            processor()
 
     def test_processor_text_has_no_visual(self):
         """
@@ -367,8 +851,10 @@ class ProcessorTesterMixin:
             self.skipTest(f"{self.processor_class} doesn't have typed kwargs.")
 
     def test_tokenizer_defaults_preserved_by_kwargs(self):
-        if "image_processor" not in self.processor_class.attributes:
+        if "image_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+        if "tokenizer" not in self.processor_class.get_attributes():
+            self.skipTest(f"tokenizer attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
         processor_components["tokenizer"] = self.get_component("tokenizer", max_length=117, padding="max_length")
         processor_kwargs = self.prepare_processor_dict()
@@ -386,8 +872,10 @@ class ProcessorTesterMixin:
         We then check that the mean of the pixel_values is less than or equal to 0 after processing.
         Since the original pixel_values are in [0, 255], this is a good indicator that the rescale_factor is indeed applied.
         """
-        if "image_processor" not in self.processor_class.attributes:
+        if "image_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+        if "tokenizer" not in self.processor_class.get_attributes():
+            self.skipTest(f"tokenizer attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
         processor_components["image_processor"] = self.get_component(
             "image_processor", do_rescale=True, rescale_factor=-1.0
@@ -405,8 +893,10 @@ class ProcessorTesterMixin:
         self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
 
     def test_kwargs_overrides_default_tokenizer_kwargs(self):
-        if "image_processor" not in self.processor_class.attributes:
+        if "image_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+        if "tokenizer" not in self.processor_class.get_attributes():
+            self.skipTest(f"tokenizer attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
         processor_components["tokenizer"] = self.get_component("tokenizer", padding="longest")
         processor_kwargs = self.prepare_processor_dict()
@@ -421,8 +911,10 @@ class ProcessorTesterMixin:
         self.assertEqual(inputs[self.text_input_name].shape[-1], 112)
 
     def test_kwargs_overrides_default_image_processor_kwargs(self):
-        if "image_processor" not in self.processor_class.attributes:
+        if "image_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
+        if "tokenizer" not in self.processor_class.get_attributes():
+            self.skipTest(f"tokenizer attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
         processor_components["image_processor"] = self.get_component(
             "image_processor", do_rescale=True, rescale_factor=1
@@ -442,7 +934,7 @@ class ProcessorTesterMixin:
         self.assertLessEqual(inputs[self.images_input_name][0][0].mean(), 0)
 
     def test_unstructured_kwargs(self):
-        if "image_processor" not in self.processor_class.attributes:
+        if "image_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
         processor_kwargs = self.prepare_processor_dict()
@@ -465,7 +957,7 @@ class ProcessorTesterMixin:
         self.assertEqual(inputs[self.text_input_name].shape[-1], 76)
 
     def test_unstructured_kwargs_batched(self):
-        if "image_processor" not in self.processor_class.attributes:
+        if "image_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
         processor_kwargs = self.prepare_processor_dict()
@@ -491,7 +983,7 @@ class ProcessorTesterMixin:
         )
 
     def test_doubly_passed_kwargs(self):
-        if "image_processor" not in self.processor_class.attributes:
+        if "image_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
         processor_kwargs = self.prepare_processor_dict()
@@ -510,7 +1002,7 @@ class ProcessorTesterMixin:
             )
 
     def test_args_overlap_kwargs(self):
-        if "image_processor" not in self.processor_class.attributes:
+        if "image_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         processor_first = self.get_processor()
         image_processor = processor_first.image_processor
@@ -522,7 +1014,7 @@ class ProcessorTesterMixin:
             self.assertTrue(processor_second.image_processor.is_override)
 
     def test_structured_kwargs_nested(self):
-        if "image_processor" not in self.processor_class.attributes:
+        if "image_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
         processor_kwargs = self.prepare_processor_dict()
@@ -546,7 +1038,7 @@ class ProcessorTesterMixin:
         self.assertEqual(inputs[self.text_input_name].shape[-1], 76)
 
     def test_structured_kwargs_nested_from_dict(self):
-        if "image_processor" not in self.processor_class.attributes:
+        if "image_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
         processor_kwargs = self.prepare_processor_dict()
@@ -569,14 +1061,15 @@ class ProcessorTesterMixin:
     # text + audio kwargs testing
     @require_torch
     def test_tokenizer_defaults_preserved_by_kwargs_audio(self):
-        if "feature_extractor" not in self.processor_class.attributes:
+        if "feature_extractor" not in self.processor_class.get_attributes():
             self.skipTest(f"feature_extractor attribute not present in {self.processor_class}")
-
-        feature_extractor = self.get_component("feature_extractor")
-        tokenizer = self.get_component("tokenizer", max_length=300, padding="max_length")
+        if "tokenizer" not in self.processor_class.get_attributes():
+            self.skipTest(f"tokenizer attribute not present in {self.processor_class}")
+        processor_components = self.prepare_components()
+        processor_components["tokenizer"] = self.get_component("tokenizer", max_length=300, padding="max_length")
         processor_kwargs = self.prepare_processor_dict()
 
-        processor = self.processor_class(tokenizer=tokenizer, feature_extractor=feature_extractor, **processor_kwargs)
+        processor = self.processor_class(**processor_components, **processor_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
 
         input_str = self.prepare_text_inputs(batch_size=3, modalities="audio")
@@ -586,14 +1079,15 @@ class ProcessorTesterMixin:
 
     @require_torch
     def test_kwargs_overrides_default_tokenizer_kwargs_audio(self):
-        if "feature_extractor" not in self.processor_class.attributes:
+        if "feature_extractor" not in self.processor_class.get_attributes():
             self.skipTest(f"feature_extractor attribute not present in {self.processor_class}")
-
-        feature_extractor = self.get_component("feature_extractor")
-        tokenizer = self.get_component("tokenizer", max_length=117)
+        if "tokenizer" not in self.processor_class.get_attributes():
+            self.skipTest(f"tokenizer attribute not present in {self.processor_class}")
+        processor_components = self.prepare_components()
+        processor_components["tokenizer"] = self.get_component("tokenizer", max_length=117)
         processor_kwargs = self.prepare_processor_dict()
 
-        processor = self.processor_class(tokenizer=tokenizer, feature_extractor=feature_extractor, **processor_kwargs)
+        processor = self.processor_class(**processor_components, **processor_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
 
         input_str = self.prepare_text_inputs(batch_size=3, modalities="audio")
@@ -604,14 +1098,12 @@ class ProcessorTesterMixin:
 
     @require_torch
     def test_unstructured_kwargs_audio(self):
-        if "feature_extractor" not in self.processor_class.attributes:
+        if "feature_extractor" not in self.processor_class.get_attributes():
             self.skipTest(f"feature_extractor attribute not present in {self.processor_class}")
-
-        feature_extractor = self.get_component("feature_extractor")
-        tokenizer = self.get_component("tokenizer")
+        processor_components = self.prepare_components()
         processor_kwargs = self.prepare_processor_dict()
 
-        processor = self.processor_class(tokenizer=tokenizer, feature_extractor=feature_extractor, **processor_kwargs)
+        processor = self.processor_class(**processor_components, **processor_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
 
         input_str = self.prepare_text_inputs(batch_size=3, modalities="audio")
@@ -622,14 +1114,12 @@ class ProcessorTesterMixin:
 
     @require_torch
     def test_doubly_passed_kwargs_audio(self):
-        if "feature_extractor" not in self.processor_class.attributes:
+        if "feature_extractor" not in self.processor_class.get_attributes():
             self.skipTest(f"feature_extractor attribute not present in {self.processor_class}")
-
-        feature_extractor = self.get_component("feature_extractor")
-        tokenizer = self.get_component("tokenizer")
+        processor_components = self.prepare_components()
         processor_kwargs = self.prepare_processor_dict()
 
-        processor = self.processor_class(tokenizer=tokenizer, feature_extractor=feature_extractor, **processor_kwargs)
+        processor = self.processor_class(**processor_components, **processor_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
 
         input_str = self.prepare_text_inputs(batch_size=3, modalities="audio")
@@ -645,14 +1135,15 @@ class ProcessorTesterMixin:
     @require_torch
     @require_vision
     def test_structured_kwargs_audio_nested(self):
-        if "feature_extractor" not in self.processor_class.attributes:
+        if "feature_extractor" not in self.processor_class.get_attributes():
             self.skipTest(f"feature_extractor attribute not present in {self.processor_class}")
-
-        feature_extractor = self.get_component("feature_extractor")
-        tokenizer = self.get_component("tokenizer", max_length=117)
+        if "tokenizer" not in self.processor_class.get_attributes():
+            self.skipTest(f"tokenizer attribute not present in {self.processor_class}")
+        processor_components = self.prepare_components()
+        processor_components["tokenizer"] = self.get_component("tokenizer", max_length=117)
         processor_kwargs = self.prepare_processor_dict()
 
-        processor = self.processor_class(tokenizer=tokenizer, feature_extractor=feature_extractor, **processor_kwargs)
+        processor = self.processor_class(**processor_components, **processor_kwargs)
         self.skip_processor_without_typed_kwargs(processor)
 
         input_str = self.prepare_text_inputs(batch_size=3, modalities="audio")
@@ -669,8 +1160,10 @@ class ProcessorTesterMixin:
         self.assertEqual(len(inputs[self.text_input_name][0]), 76)
 
     def test_tokenizer_defaults_preserved_by_kwargs_video(self):
-        if "video_processor" not in self.processor_class.attributes:
+        if "video_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"video_processor attribute not present in {self.processor_class}")
+        if "tokenizer" not in self.processor_class.get_attributes():
+            self.skipTest(f"tokenizer attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
         processor_components["tokenizer"] = self.get_component("tokenizer", max_length=167, padding="max_length")
         processor_kwargs = self.prepare_processor_dict()
@@ -688,8 +1181,10 @@ class ProcessorTesterMixin:
         We then check that the mean of the pixel_values is less than or equal to 0 after processing.
         Since the original pixel_values are in [0, 255], this is a good indicator that the rescale_factor is indeed applied.
         """
-        if "video_processor" not in self.processor_class.attributes:
+        if "video_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"video_processor attribute not present in {self.processor_class}")
+        if "tokenizer" not in self.processor_class.get_attributes():
+            self.skipTest(f"tokenizer attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
         processor_components["video_processor"] = self.get_component(
             "video_processor", do_rescale=True, rescale_factor=-1.0
@@ -707,8 +1202,10 @@ class ProcessorTesterMixin:
         self.assertLessEqual(inputs[self.videos_input_name][0].mean(), 0)
 
     def test_kwargs_overrides_default_tokenizer_kwargs_video(self):
-        if "video_processor" not in self.processor_class.attributes:
+        if "video_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"video_processor attribute not present in {self.processor_class}")
+        if "tokenizer" not in self.processor_class.get_attributes():
+            self.skipTest(f"tokenizer attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
         processor_components["tokenizer"] = self.get_component("tokenizer", padding="longest")
         processor_kwargs = self.prepare_processor_dict()
@@ -728,8 +1225,10 @@ class ProcessorTesterMixin:
         self.assertEqual(inputs[self.text_input_name].shape[-1], 162)
 
     def test_kwargs_overrides_default_video_processor_kwargs(self):
-        if "video_processor" not in self.processor_class.attributes:
+        if "video_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"video_processor attribute not present in {self.processor_class}")
+        if "tokenizer" not in self.processor_class.get_attributes():
+            self.skipTest(f"tokenizer attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
         processor_components["video_processor"] = self.get_component(
             "video_processor", do_rescale=True, rescale_factor=1
@@ -754,7 +1253,7 @@ class ProcessorTesterMixin:
         self.assertLessEqual(inputs[self.videos_input_name][0].mean(), 0)
 
     def test_unstructured_kwargs_video(self):
-        if "video_processor" not in self.processor_class.attributes:
+        if "video_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"video_processor attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
         processor_kwargs = self.prepare_processor_dict()
@@ -778,7 +1277,7 @@ class ProcessorTesterMixin:
         self.assertEqual(inputs[self.text_input_name].shape[-1], 176)
 
     def test_unstructured_kwargs_batched_video(self):
-        if "video_processor" not in self.processor_class.attributes:
+        if "video_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"video_processor attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
         processor_kwargs = self.prepare_processor_dict()
@@ -805,7 +1304,7 @@ class ProcessorTesterMixin:
         )
 
     def test_doubly_passed_kwargs_video(self):
-        if "video_processor" not in self.processor_class.attributes:
+        if "video_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"video_processor attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
         processor_kwargs = self.prepare_processor_dict()
@@ -825,7 +1324,7 @@ class ProcessorTesterMixin:
             )
 
     def test_structured_kwargs_nested_video(self):
-        if "video_processor" not in self.processor_class.attributes:
+        if "video_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"video_processor attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
         processor_kwargs = self.prepare_processor_dict()
@@ -849,7 +1348,7 @@ class ProcessorTesterMixin:
         self.assertEqual(inputs[self.text_input_name].shape[-1], 176)
 
     def test_structured_kwargs_nested_from_dict_video(self):
-        if "video_processor" not in self.processor_class.attributes:
+        if "video_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"video_processor attribute not present in {self.processor_class}")
         processor_components = self.prepare_components()
         processor_kwargs = self.prepare_processor_dict()
@@ -872,7 +1371,7 @@ class ProcessorTesterMixin:
     # TODO: the same test, but for audio + text processors that have strong overlap in kwargs
     # TODO (molbap) use the same structure of attribute kwargs for other tests to avoid duplication
     def test_overlapping_text_image_kwargs_handling(self):
-        if "image_processor" not in self.processor_class.attributes:
+        if "image_processor" not in self.processor_class.get_attributes():
             self.skipTest(f"image_processor attribute not present in {self.processor_class}")
 
         processor_components = self.prepare_components()
@@ -897,7 +1396,7 @@ class ProcessorTesterMixin:
         Checks that `padding`, or any other overlap arg between audio extractor and tokenizer
         is be passed to only text and ignored for audio for BC purposes
         """
-        if "feature_extractor" not in self.processor_class.attributes:
+        if "feature_extractor" not in self.processor_class.get_attributes():
             self.skipTest(f"feature_extractor attribute not present in {self.processor_class}")
 
         processor_components = self.prepare_components()
@@ -911,31 +1410,6 @@ class ProcessorTesterMixin:
 
         # padding = True should not raise an error and will if the audio processor popped its value to None
         _ = processor(text=input_str, audio=raw_speech, padding=True, return_tensors="pt")
-
-    def test_prepare_and_validate_optional_call_args(self):
-        processor = self.get_processor()
-        optional_call_args_name = getattr(processor, "optional_call_args", [])
-        num_optional_call_args = len(optional_call_args_name)
-        if num_optional_call_args == 0:
-            self.skipTest("No optional call args")
-        # test all optional call args are given
-        optional_call_args = processor.prepare_and_validate_optional_call_args(
-            *(f"optional_{i}" for i in range(num_optional_call_args))
-        )
-        self.assertEqual(
-            optional_call_args, {arg_name: f"optional_{i}" for i, arg_name in enumerate(optional_call_args_name)}
-        )
-        # test only one optional call arg is given
-        optional_call_args = processor.prepare_and_validate_optional_call_args("optional_1")
-        self.assertEqual(optional_call_args, {optional_call_args_name[0]: "optional_1"})
-        # test no optional call arg is given
-        optional_call_args = processor.prepare_and_validate_optional_call_args()
-        self.assertEqual(optional_call_args, {})
-        # test too many optional call args are given
-        with self.assertRaises(ValueError):
-            processor.prepare_and_validate_optional_call_args(
-                *(f"optional_{i}" for i in range(num_optional_call_args + 1))
-            )
 
     def test_chat_template_save_loading(self):
         processor = self.processor_class.from_pretrained(self.tmpdirname)
@@ -990,7 +1464,7 @@ class ProcessorTesterMixin:
         if processor.chat_template is None:
             self.skipTest("Processor has no chat template")
 
-        if processor_name not in self.processor_class.attributes:
+        if processor_name not in self.processor_class.get_attributes():
             self.skipTest(f"{processor_name} attribute not present in {self.processor_class}")
 
         # some models have only Fast image processor
@@ -1251,7 +1725,7 @@ class ProcessorTesterMixin:
         ):
             self.skipTest(f"{self.processor_class} does not support video inputs")
 
-        if "feature_extractor" not in self.processor_class.attributes:
+        if "feature_extractor" not in self.processor_class.get_attributes():
             self.skipTest(f"feature_extractor attribute not present in {self.processor_class}")
 
         video_file_path = hf_hub_download(
@@ -1285,7 +1759,7 @@ class ProcessorTesterMixin:
             add_generation_prompt=True,
             tokenize=True,
             return_dict=True,
-            return_tensors="np",
+            return_tensors="pt",
             load_audio_from_video=True,
         )
         self.assertTrue(self.audio_input_name in out_dict)

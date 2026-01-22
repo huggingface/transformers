@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 Meta AI and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,11 +15,11 @@
 
 import collections.abc
 import math
-from typing import Optional, Union
 
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BackboneOutput, BaseModelOutput
@@ -281,7 +280,7 @@ def drop_path(input: torch.Tensor, drop_prob: float = 0.0, training: bool = Fals
 class VitDetDropPath(nn.Module):
     """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
-    def __init__(self, drop_prob: Optional[float] = None) -> None:
+    def __init__(self, drop_prob: float | None = None) -> None:
         super().__init__()
         self.drop_prob = drop_prob
 
@@ -476,7 +475,7 @@ class VitDetLayer(GradientCheckpointingLayer):
         self,
         hidden_states: torch.Tensor,
         output_attentions: bool = False,
-    ) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
+    ) -> tuple[torch.Tensor, torch.Tensor] | tuple[torch.Tensor]:
         hidden_states = hidden_states.permute(0, 2, 3, 1)
 
         shortcut = hidden_states
@@ -543,7 +542,7 @@ class VitDetEncoder(nn.Module):
         output_attentions: bool = False,
         output_hidden_states: bool = False,
         return_dict: bool = True,
-    ) -> Union[tuple, BaseModelOutput]:
+    ) -> tuple | BaseModelOutput:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
@@ -570,71 +569,41 @@ class VitDetEncoder(nn.Module):
         )
 
 
-def caffe2_msra_fill(module: nn.Module) -> None:
-    """
-    Initialize `module.weight` using the "MSRAFill" implemented in Caffe2. Also initializes `module.bias` to 0.
-
-    Source: https://detectron2.readthedocs.io/en/latest/_modules/fvcore/nn/weight_init.html.
-
-    Args:
-        module (torch.nn.Module): module to initialize.
-    """
-    nn.init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
-    if module.bias is not None:
-        nn.init.constant_(module.bias, 0)
-
-
 @auto_docstring
 class VitDetPreTrainedModel(PreTrainedModel):
     config: VitDetConfig
     base_model_prefix = "vitdet"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = True
     _no_split_modules = []
 
-    def _init_weights(self, module: Union[nn.Linear, nn.Conv2d, nn.LayerNorm]) -> None:
+    @torch.no_grad()
+    def _init_weights(self, module: nn.Linear | nn.Conv2d | nn.LayerNorm) -> None:
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Conv2d)):
-            # Upcast the input in `fp32` and cast it back to desired `dtype` to avoid
-            # `trunc_normal_cpu` not implemented in `half` issues
-            module.weight.data = nn.init.trunc_normal_(
-                module.weight.data.to(torch.float32), mean=0.0, std=self.config.initializer_range
-            ).to(module.weight.dtype)
+            init.trunc_normal_(module.weight, mean=0.0, std=self.config.initializer_range)
             if module.bias is not None:
-                module.bias.data.zero_()
+                init.zeros_(module.bias)
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
         elif isinstance(module, VitDetEmbeddings):
-            module.position_embeddings.data = nn.init.trunc_normal_(
-                module.position_embeddings.data.to(torch.float32),
-                mean=0.0,
-                std=self.config.initializer_range,
-            ).to(module.position_embeddings.dtype)
-
+            init.trunc_normal_(module.position_embeddings, mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, VitDetAttention) and self.config.use_relative_position_embeddings:
-            module.rel_pos_h.data = nn.init.trunc_normal_(
-                module.rel_pos_h.data.to(torch.float32),
-                mean=0.0,
-                std=self.config.initializer_range,
-            )
-            module.rel_pos_w.data = nn.init.trunc_normal_(
-                module.rel_pos_w.data.to(torch.float32),
-                mean=0.0,
-                std=self.config.initializer_range,
-            )
-
+            init.trunc_normal_(module.rel_pos_h, mean=0.0, std=self.config.initializer_range)
+            init.trunc_normal_(module.rel_pos_w, mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, VitDetResBottleneckBlock):
             for layer in [module.conv1, module.conv2, module.conv3]:
-                caffe2_msra_fill(layer)
+                init.kaiming_normal_(layer.weight, mode="fan_out", nonlinearity="relu")
+                if layer.bias is not None:
+                    init.constant_(layer.bias, 0)
             for layer in [module.norm1, module.norm2]:
-                layer.weight.data.fill_(1.0)
-                layer.bias.data.zero_()
+                init.ones_(layer.weight)
+                init.zeros_(layer.bias)
             # zero init last norm layer.
-            module.norm3.weight.data.zero_()
-            module.norm3.bias.data.zero_()
+            init.zeros_(module.norm3.weight)
+            init.zeros_(module.norm3.bias)
 
 
 @auto_docstring
@@ -655,11 +624,12 @@ class VitDetModel(VitDetPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.Tensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, BaseModelOutput]:
+        pixel_values: torch.Tensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple | BaseModelOutput:
         r"""
         Examples:
 
@@ -732,9 +702,10 @@ class VitDetBackbone(VitDetPreTrainedModel, BackboneMixin):
     def forward(
         self,
         pixel_values: torch.Tensor,
-        output_hidden_states: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_hidden_states: bool | None = None,
+        output_attentions: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
     ) -> BackboneOutput:
         r"""
         Examples:

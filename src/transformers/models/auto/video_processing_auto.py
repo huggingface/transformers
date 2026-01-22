@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,15 +14,23 @@
 """AutoVideoProcessor class."""
 
 import importlib
-import json
 import os
 from collections import OrderedDict
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING
 
 # Build the list of all video processors
 from ...configuration_utils import PreTrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
-from ...utils import CONFIG_NAME, VIDEO_PROCESSOR_NAME, cached_file, is_torchvision_available, logging
+from ...utils import (
+    CONFIG_NAME,
+    IMAGE_PROCESSOR_NAME,
+    PROCESSOR_NAME,
+    VIDEO_PROCESSOR_NAME,
+    cached_file,
+    is_torchvision_available,
+    logging,
+    safe_load_json_file,
+)
 from ...utils.import_utils import requires
 from ...video_processing_utils import BaseVideoProcessor
 from .auto_factory import _LazyAutoMapping
@@ -41,16 +48,20 @@ logger = logging.get_logger(__name__)
 if TYPE_CHECKING:
     # This significantly improves completion suggestion performance when
     # the transformers package is used with Microsoft's Pylance language server.
-    VIDEO_PROCESSOR_MAPPING_NAMES: OrderedDict[str, tuple[Optional[str], Optional[str]]] = OrderedDict()
+    VIDEO_PROCESSOR_MAPPING_NAMES: OrderedDict[str, tuple[str | None, str | None]] = OrderedDict()
 else:
     VIDEO_PROCESSOR_MAPPING_NAMES = OrderedDict(
         [
+            ("ernie4_5_vl_moe", "Ernie4_5_VL_MoeVideoProcessor"),
+            ("glm46v", "Glm46VVideoProcessor"),
             ("glm4v", "Glm4vVideoProcessor"),
             ("instructblip", "InstructBlipVideoVideoProcessor"),
             ("instructblipvideo", "InstructBlipVideoVideoProcessor"),
             ("internvl", "InternVLVideoProcessor"),
             ("llava_next_video", "LlavaNextVideoVideoProcessor"),
             ("llava_onevision", "LlavaOnevisionVideoProcessor"),
+            ("pe_audio_video", "PeVideoVideoProcessor"),
+            ("pe_video", "PeVideoVideoProcessor"),
             ("perception_lm", "PerceptionLMVideoProcessor"),
             ("qwen2_5_omni", "Qwen2VLVideoProcessor"),
             ("qwen2_5_vl", "Qwen2VLVideoProcessor"),
@@ -59,7 +70,9 @@ else:
             ("qwen3_vl", "Qwen3VLVideoProcessor"),
             ("qwen3_vl_moe", "Qwen3VLVideoProcessor"),
             ("sam2_video", "Sam2VideoVideoProcessor"),
+            ("sam3_video", "Sam3VideoVideoProcessor"),
             ("smolvlm", "SmolVLMVideoProcessor"),
+            ("video_llama_3", "VideoLlama3VideoProcessor"),
             ("video_llava", "VideoLlavaVideoProcessor"),
             ("videomae", "VideoMAEVideoProcessor"),
             ("vjepa2", "VJEPA2VideoProcessor"),
@@ -103,12 +116,12 @@ def video_processor_class_from_name(class_name: str):
 
 
 def get_video_processor_config(
-    pretrained_model_name_or_path: Union[str, os.PathLike],
-    cache_dir: Optional[Union[str, os.PathLike]] = None,
+    pretrained_model_name_or_path: str | os.PathLike,
+    cache_dir: str | os.PathLike | None = None,
     force_download: bool = False,
-    proxies: Optional[dict[str, str]] = None,
-    token: Optional[Union[bool, str]] = None,
-    revision: Optional[str] = None,
+    proxies: dict[str, str] | None = None,
+    token: bool | str | None = None,
+    revision: str | None = None,
     local_files_only: bool = False,
     **kwargs,
 ):
@@ -122,7 +135,7 @@ def get_video_processor_config(
             - a string, the *model id* of a pretrained model configuration hosted inside a model repo on
               huggingface.co.
             - a path to a *directory* containing a configuration file saved using the
-              [`~PreTrainedTokenizer.save_pretrained`] method, e.g., `./my_model_directory/`.
+              [`~BaseVideoProcessor.save_pretrained`] method, e.g., `./my_model_directory/`.
 
         cache_dir (`str` or `os.PathLike`, *optional*):
             Path to a directory in which a downloaded pretrained model configuration should be cached if the standard
@@ -167,24 +180,59 @@ def get_video_processor_config(
     video_processor.save_pretrained("video-processor-test")
     video_processor = get_video_processor_config("video-processor-test")
     ```"""
-    resolved_config_file = cached_file(
+    # Load with a priority given to the nested processor config, if available in repo
+    resolved_processor_file = cached_file(
         pretrained_model_name_or_path,
-        VIDEO_PROCESSOR_NAME,
+        filename=PROCESSOR_NAME,
         cache_dir=cache_dir,
         force_download=force_download,
         proxies=proxies,
         token=token,
         revision=revision,
         local_files_only=local_files_only,
+        _raise_exceptions_for_gated_repo=False,
+        _raise_exceptions_for_missing_entries=False,
     )
-    if resolved_config_file is None:
-        logger.info(
-            "Could not locate the video processor configuration file, will try to use the model config instead."
+    resolved_video_processor_files = [
+        resolved_file
+        for filename in [VIDEO_PROCESSOR_NAME, IMAGE_PROCESSOR_NAME]
+        if (
+            resolved_file := cached_file(
+                pretrained_model_name_or_path,
+                filename=filename,
+                cache_dir=cache_dir,
+                force_download=force_download,
+                proxies=proxies,
+                token=token,
+                revision=revision,
+                local_files_only=local_files_only,
+                _raise_exceptions_for_gated_repo=False,
+                _raise_exceptions_for_missing_entries=False,
+                _raise_exceptions_for_connection_errors=False,
+            )
         )
+        is not None
+    ]
+    resolved_video_processor_file = resolved_video_processor_files[0] if resolved_video_processor_files else None
+
+    # An empty list if none of the possible files is found in the repo
+    if not resolved_video_processor_file and not resolved_processor_file:
+        logger.info("Could not locate the video processor configuration file.")
         return {}
 
-    with open(resolved_config_file, encoding="utf-8") as reader:
-        return json.load(reader)
+    # Load video_processor dict. Priority goes as (nested config if found -> video processor config -> image processor config)
+    # We are downloading both configs because almost all models have a `processor_config.json` but
+    # not all of these are nested. We need to check if it was saved recebtly as nested or if it is legacy style
+    video_processor_dict = {}
+    if resolved_processor_file is not None:
+        processor_dict = safe_load_json_file(resolved_processor_file)
+        if "video_processor" in processor_dict:
+            video_processor_dict = processor_dict["video_processor"]
+
+    if resolved_video_processor_file is not None and video_processor_dict is None:
+        video_processor_dict = safe_load_json_file(resolved_video_processor_file)
+
+    return video_processor_dict
 
 
 @requires(backends=("vision", "torchvision"))
@@ -291,7 +339,7 @@ class AutoVideoProcessor:
 
                 # Some models have different image processors, e.g. InternVL uses GotOCRImageProcessor
                 # We cannot use GotOCRVideoProcessor when falling back for BC and should try to infer from config later on
-                if video_processor_class_inferred in VIDEO_PROCESSOR_MAPPING_NAMES.values():
+                if video_processor_class_from_name(video_processor_class_inferred) is not None:
                     video_processor_class = video_processor_class_inferred
             if "AutoImageProcessor" in config_dict.get("auto_map", {}):
                 image_processor_auto_map = config_dict["auto_map"]["AutoImageProcessor"]
@@ -313,18 +361,23 @@ class AutoVideoProcessor:
 
         has_remote_code = video_processor_auto_map is not None
         has_local_code = video_processor_class is not None or type(config) in VIDEO_PROCESSOR_MAPPING
-        trust_remote_code = resolve_trust_remote_code(
-            trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code
-        )
+        if has_remote_code:
+            if "--" in video_processor_auto_map:
+                upstream_repo = video_processor_auto_map.split("--")[0]
+            else:
+                upstream_repo = None
+            trust_remote_code = resolve_trust_remote_code(
+                trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code, upstream_repo
+            )
 
         if has_remote_code and trust_remote_code:
             class_ref = video_processor_auto_map
             video_processor_class = get_class_from_dynamic_module(class_ref, pretrained_model_name_or_path, **kwargs)
             _ = kwargs.pop("code_revision", None)
             video_processor_class.register_for_auto_class()
-            return video_processor_class.from_dict(config_dict, **kwargs)
+            return video_processor_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
         elif video_processor_class is not None:
-            return video_processor_class.from_dict(config_dict, **kwargs)
+            return video_processor_class.from_pretrained(pretrained_model_name_or_path, *inputs, **kwargs)
         # Last try: we use the VIDEO_PROCESSOR_MAPPING.
         elif type(config) in VIDEO_PROCESSOR_MAPPING:
             video_processor_class = VIDEO_PROCESSOR_MAPPING[type(config)]

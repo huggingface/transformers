@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright (C) 2025 THL A29 Limited, a Tencent company and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,20 +14,16 @@
 """PyTorch HunYuanMoEV1 model."""
 
 from collections.abc import Callable
-from typing import Optional
 
 import torch
 import torch.nn.functional as F
 from torch import nn
 
-from transformers.cache_utils import Cache
-from transformers.utils import (
-    logging,
-)
-
-from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
+from ... import initialization as init
+from ...cache_utils import Cache
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs
+from ...utils import TransformersKwargs, is_grouped_mm_available, logging
 from ..hunyuan_v1_dense.modeling_hunyuan_v1_dense import HunYuanDenseV1RotaryEmbedding
 from ..llama.modeling_llama import (
     LlamaAttention,
@@ -71,9 +66,9 @@ class HunYuanMoEV1Attention(LlamaAttention):
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: Optional[torch.Tensor],
-        past_key_values: Optional[Cache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        attention_mask: torch.Tensor | None,
+        past_key_values: Cache | None = None,
+        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -114,7 +109,7 @@ class HunYuanMoEV1Attention(LlamaAttention):
 
 
 class HunYuanMoEV1Gate(nn.Module):
-    def __init__(self, config: HunYuanMoEV1Config, layer_idx: Optional[int] = None):
+    def __init__(self, config: HunYuanMoEV1Config, layer_idx: int | None = None):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -135,7 +130,7 @@ class HunYuanMoEV1Experts(MixtralExperts):
 
 
 class HunYuanMoEV1Moe(nn.Module):
-    def __init__(self, config: HunYuanMoEV1Config, layer_idx: Optional[int] = None):
+    def __init__(self, config: HunYuanMoEV1Config, layer_idx: int | None = None):
         super().__init__()
         self.config = config
         self.layer_idx = layer_idx
@@ -149,6 +144,11 @@ class HunYuanMoEV1Moe(nn.Module):
         routing_weights = F.softmax(hidden_states, dim=1, dtype=torch.float)
         routing_weights, selected_experts = torch.topk(routing_weights, self.top_k, dim=-1)
         routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
+        routing_weights = torch.zeros_like(hidden_states, dtype=torch.float32).scatter_(
+            1, selected_experts, routing_weights
+        )
+        return selected_experts, routing_weights.to(hidden_states.dtype)
+
         return selected_experts, routing_weights.to(hidden_states.dtype)
 
     def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
@@ -175,18 +175,16 @@ class HunYuanMoEV1DecoderLayer(LlamaDecoderLayer):
 
 
 class HunYuanMoEV1PreTrainedModel(LlamaPreTrainedModel):
-    _can_compile_fullgraph = False
+    _can_compile_fullgraph = (
+        is_grouped_mm_available()
+    )  # https://huggingface.co/docs/transformers/experts_interface#torchcompile
 
+    @torch.no_grad()
     def _init_weights(self, module):
-        std = self.config.initializer_range
-        if isinstance(module, nn.Linear):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.Embedding):
-            module.weight.data.normal_(mean=0.0, std=std)
-            if module.padding_idx is not None:
-                module.weight.data[module.padding_idx].zero_()
+        PreTrainedModel._init_weights(self, module)
+        if isinstance(module, HunYuanMoEV1Experts):
+            init.normal_(module.gate_up_proj, mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.down_proj, mean=0.0, std=self.config.initializer_range)
 
 
 class HunYuanMoEV1RotaryEmbedding(HunYuanDenseV1RotaryEmbedding):

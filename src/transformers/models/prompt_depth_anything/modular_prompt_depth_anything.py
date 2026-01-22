@@ -10,7 +10,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Optional, Union
 
 import torch
 import torch.nn as nn
@@ -162,7 +161,7 @@ class PromptDepthAnythingPreTrainedModel(PreTrainedModel):
     config: PromptDepthAnythingConfig
     base_model_prefix = "prompt_depth_anything"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = True
 
 
@@ -196,9 +195,9 @@ class PromptDepthAnythingNeck(DepthAnythingNeck):
     def forward(
         self,
         hidden_states: list[torch.Tensor],
-        patch_height: Optional[int] = None,
-        patch_width: Optional[int] = None,
-        prompt_depth: Optional[torch.Tensor] = None,
+        patch_height: int | None = None,
+        patch_width: int | None = None,
+        prompt_depth: torch.Tensor | None = None,
     ) -> list[torch.Tensor]:
         """
         Args:
@@ -231,12 +230,13 @@ class PromptDepthAnythingForDepthEstimation(DepthAnythingForDepthEstimation):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        prompt_depth: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple[torch.Tensor], DepthEstimatorOutput]:
+        prompt_depth: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple[torch.Tensor] | DepthEstimatorOutput:
         r"""
         prompt_depth (`torch.FloatTensor` of shape `(batch_size, 1, height, width)`, *optional*):
             Prompt depth is the sparse or low-resolution depth obtained from multi-view geometry or a

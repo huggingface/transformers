@@ -18,10 +18,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional
-
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 
 
 class MoonshineConfig(PreTrainedConfig):
@@ -84,11 +82,9 @@ class MoonshineConfig(PreTrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models).
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
-        partial_rotary_factor (`float`, *optional*, defaults to 0.9):
-            Percentage of the query and keys which will have rotary embedding.
         is_encoder_decoder (`bool`, *optional*, defaults to `True`):
             Whether the model is used as an encoder/decoder or not.
         attention_bias (`bool`, *optional*, defaults to `False`):
@@ -99,6 +95,10 @@ class MoonshineConfig(PreTrainedConfig):
             Denotes beginning of sequences token id.
         eos_token_id (`int`, *optional*, defaults to 2):
             Denotes end of sequences token id.
+        pad_token_id (`int`, *optional*):
+            Padding token id.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
     Example:
 
@@ -125,29 +125,30 @@ class MoonshineConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 32768,
-        hidden_size: Optional[int] = 288,
-        intermediate_size: Optional[int] = 1152,
-        encoder_num_hidden_layers: Optional[int] = 6,
-        decoder_num_hidden_layers: Optional[int] = 6,
-        encoder_num_attention_heads: Optional[int] = 8,
-        decoder_num_attention_heads: Optional[int] = 8,
-        encoder_num_key_value_heads: Optional[int] = None,
-        decoder_num_key_value_heads: Optional[int] = None,
-        pad_head_dim_to_multiple_of: Optional[int] = None,
-        encoder_hidden_act: Optional[str] = "gelu",
-        decoder_hidden_act: Optional[str] = "silu",
-        max_position_embeddings: Optional[int] = 512,
-        initializer_range: Optional[float] = 0.02,
-        decoder_start_token_id: Optional[int] = 1,
-        use_cache: Optional[bool] = True,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
-        partial_rotary_factor: Optional[float] = 0.9,
-        is_encoder_decoder: Optional[bool] = True,
-        attention_bias: Optional[bool] = False,
-        attention_dropout: Optional[float] = 0.0,
-        bos_token_id: Optional[int] = 1,
-        eos_token_id: Optional[int] = 2,
+        vocab_size: int | None = 32768,
+        hidden_size: int | None = 288,
+        intermediate_size: int | None = 1152,
+        encoder_num_hidden_layers: int | None = 6,
+        decoder_num_hidden_layers: int | None = 6,
+        encoder_num_attention_heads: int | None = 8,
+        decoder_num_attention_heads: int | None = 8,
+        encoder_num_key_value_heads: int | None = None,
+        decoder_num_key_value_heads: int | None = None,
+        pad_head_dim_to_multiple_of: int | None = None,
+        encoder_hidden_act: str | None = "gelu",
+        decoder_hidden_act: str | None = "silu",
+        max_position_embeddings: int | None = 512,
+        initializer_range: float | None = 0.02,
+        decoder_start_token_id: int | None = 1,
+        use_cache: bool | None = True,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        is_encoder_decoder: bool | None = True,
+        attention_bias: bool | None = False,
+        attention_dropout: float | None = 0.0,
+        bos_token_id: int | None = 1,
+        eos_token_id: int | None = 2,
+        pad_token_id: int | None = None,
+        tie_word_embeddings: bool | None = True,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -174,25 +175,18 @@ class MoonshineConfig(PreTrainedConfig):
         self.initializer_range = initializer_range
         self.decoder_start_token_id = decoder_start_token_id
         self.use_cache = use_cache
-        self.partial_rotary_factor = partial_rotary_factor
         self.is_encoder_decoder = is_encoder_decoder
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.pad_token_id = pad_token_id
+        self.decoder_start_token_id = decoder_start_token_id
+        self.tie_word_embeddings = tie_word_embeddings
+        self.rope_parameters = rope_parameters
+        kwargs.setdefault("partial_rotary_factor", 0.9)  # assign default for BC
 
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 10000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
-        super().__init__(
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            is_encoder_decoder=is_encoder_decoder,
-            decoder_start_token_id=decoder_start_token_id,
-            **kwargs,
-        )
+        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
 
 __all__ = ["MoonshineConfig"]

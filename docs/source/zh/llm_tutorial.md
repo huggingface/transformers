@@ -261,7 +261,7 @@ LLMs是[仅解码器](https://huggingface.co/learn/nlp-course/chapter1/6?fw=pt)�
 ### 延迟、吞吐量和内存利用率
 
 1. [指南](llm_tutorial_optimization),如何优化LLMs以提高速度和内存利用；
-2. [指南](main_classes/quantization), 关于`quantization`，如bitsandbytes和autogptq的指南，教您如何大幅降低内存需求。
+2. [指南](main_classes/quantization), 关于`quantization`，如bitsandbytes和GPT-QModel的指南，教您如何大幅降低内存需求。
 
 ### 相关库
 

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 Multimedia Computing Group, Nanjing University and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,7 +17,6 @@ import collections.abc
 from collections.abc import Callable
 from copy import deepcopy
 from dataclasses import dataclass
-from typing import Optional
 
 import numpy as np
 import torch
@@ -51,9 +49,9 @@ class VideoMAEDecoderOutput(ModelOutput):
         Pixel reconstruction logits.
     """
 
-    logits: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
+    logits: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
 
 
 @dataclass
@@ -70,10 +68,10 @@ class VideoMAEForPreTrainingOutput(ModelOutput):
         Pixel reconstruction logits.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    logits: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
+    loss: torch.FloatTensor | None = None
+    logits: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
 
 
 # sin-cos position encoding
@@ -184,8 +182,8 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
-    scaling: Optional[float] = None,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
     dropout: float = 0.0,
     **kwargs: Unpack[TransformersKwargs],
 ):
@@ -235,7 +233,7 @@ class VideoMAESelfAttention(nn.Module):
             self.q_bias = None
             self.v_bias = None
 
-    def forward(self, hidden_states: Optional[torch.Tensor] = None) -> tuple[torch.Tensor, torch.Tensor]:
+    def forward(self, hidden_states: torch.Tensor | None = None) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size, seq_length, _ = hidden_states.shape
 
         k_bias = torch.zeros_like(self.v_bias, requires_grad=False) if self.q_bias is not None else None
@@ -392,16 +390,6 @@ class VideoMAEPreTrainedModel(PreTrainedModel):
         "attentions": VideoMAESelfAttention,
     }
 
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv3d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
-
 
 @auto_docstring
 class VideoMAEModel(VideoMAEPreTrainedModel):
@@ -428,7 +416,7 @@ class VideoMAEModel(VideoMAEPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        bool_masked_pos: Optional[torch.BoolTensor] = None,
+        bool_masked_pos: torch.BoolTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutput:
         r"""
@@ -502,8 +490,7 @@ class VideoMAEDecoder(nn.Module):
         for layer_module in self.decoder_layers:
             hidden_states = layer_module(hidden_states)
 
-        if return_token_num > 0:
-            hidden_states = hidden_states[:, -return_token_num:]
+        hidden_states = hidden_states[:, -return_token_num:]
 
         # predictor projection
         hidden_states = self.norm(hidden_states)
@@ -704,8 +691,8 @@ class VideoMAEForVideoClassification(VideoMAEPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.Tensor] = None,
-        labels: Optional[torch.Tensor] = None,
+        pixel_values: torch.Tensor | None = None,
+        labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> ImageClassifierOutput:
         r"""

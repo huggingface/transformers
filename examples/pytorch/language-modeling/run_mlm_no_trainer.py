@@ -130,7 +130,7 @@ def parse_args():
     parser.add_argument(
         "--use_slow_tokenizer",
         action="store_true",
-        help="If passed, will use a slow tokenizer (not backed by the 🤗 Tokenizers library).",
+        help="If passed, will use a slow tokenizer (not backed by the Hugging Face Tokenizers library).",
     )
     parser.add_argument(
         "--per_device_train_batch_size",

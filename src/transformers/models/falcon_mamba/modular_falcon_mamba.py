@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 Tri Dao, Albert Gu, Technological Innovation Institute and HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,17 +13,12 @@
 # limitations under the License.
 """PyTorch FALCONMAMBA model."""
 
-from typing import Optional
-
 import torch
 from torch import nn
 
-from ...integrations.hub_kernels import lazy_load_kernel
+from ... import initialization as init
 from ...utils import auto_docstring, logging
-from ...utils.import_utils import (
-    is_mamba_ssm_available,
-    is_mambapy_available,
-)
+from ...utils.import_utils import is_mambapy_available, is_torchdynamo_compiling
 from ..mamba.configuration_mamba import MambaConfig
 from ..mamba.modeling_mamba import (
     MambaBlock,
@@ -46,13 +40,13 @@ if is_mambapy_available():
 else:
     pscan = None
 
-if is_mamba_ssm_available():
-    from mamba_ssm.ops.selective_scan_interface import selective_scan_fn
-    from mamba_ssm.ops.triton.selective_state_update import selective_state_update
-
-    from ...kernels.falcon_mamba import mamba_inner_fn
-else:
-    selective_state_update, selective_scan_fn, mamba_inner_fn = None, None, None
+selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, falcon_mamba_inner_fn = (
+    None,
+    None,
+    None,
+    None,
+    None,
+)
 
 
 class FalconMambaConfig(MambaConfig):
@@ -254,14 +248,8 @@ def rms_forward(hidden_states, variance_epsilon=1e-6):
 
 class FalconMambaMixer(MambaMixer):
     def warn_slow_implementation(self):
-        causal_conv1d = lazy_load_kernel("causal-conv1d")
-        causal_conv1d_update, causal_conv1d_fn = (
-            (causal_conv1d.causal_conv1d_update, causal_conv1d.causal_conv1d_fn)
-            if causal_conv1d is not None
-            else (None, None)
-        )
         is_fast_path_available = all(
-            (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)
+            (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, falcon_mamba_inner_fn)
         )
         if not is_fast_path_available:
             if self.use_falcon_mambapy:
@@ -284,6 +272,7 @@ class FalconMambaMixer(MambaMixer):
 
     def __init__(self, config: FalconMambaConfig, layer_idx: int):
         super().__init__(config, layer_idx)
+
         # Triton expects to pass RMS weights even if they are non learnable, thus we need to create these weights here
         self.register_buffer(
             "b_c_rms", torch.nn.Parameter(torch.ones(self.ssm_state_size), requires_grad=False), persistent=False
@@ -296,15 +285,14 @@ class FalconMambaMixer(MambaMixer):
     def cuda_kernels_forward(
         self,
         hidden_states: torch.Tensor,
-        cache_params: Optional[FalconMambaCache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,
+        cache_params: FalconMambaCache | None = None,
+        cache_position: torch.LongTensor | None = None,
+        attention_mask: torch.LongTensor | None = None,
     ):
         # 1. Gated MLP's linear projection
         projected_states = self.in_proj(hidden_states).transpose(1, 2)
-
         if self.training and cache_params is None:  # Doesn't support outputting the states -> used for training
-            contextualized_states = mamba_inner_fn(
+            contextualized_states = falcon_mamba_inner_fn(
                 projected_states,
                 self.conv1d.weight,
                 self.conv1d.bias if self.use_conv_bias else None,
@@ -325,12 +313,6 @@ class FalconMambaMixer(MambaMixer):
             )
 
         else:
-            causal_conv1d = lazy_load_kernel("causal-conv1d")
-            causal_conv1d_update, causal_conv1d_fn = (
-                (causal_conv1d.causal_conv1d_update, causal_conv1d.causal_conv1d_fn)
-                if causal_conv1d is not None
-                else (None, None)
-            )
             hidden_states, gate = projected_states.chunk(2, dim=1)
 
             if attention_mask is not None:
@@ -373,7 +355,7 @@ class FalconMambaMixer(MambaMixer):
 
             # In case the model has been quantized, we need a hack to properly call the `nn.Linear` module
             # at the price of a small overhead.
-            if hasattr(self.config, "_pre_quantization_dtype"):
+            if hasattr(self.config, "_is_quantized"):
                 discrete_time_step = (self.dt_proj(time_step) - self.dt_proj.bias).transpose(1, 2)
             else:
                 discrete_time_step = self.dt_proj.weight @ time_step.transpose(1, 2)
@@ -417,9 +399,9 @@ class FalconMambaMixer(MambaMixer):
     def slow_forward(
         self,
         input_states,
-        cache_params: Optional[FalconMambaCache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,
+        cache_params: FalconMambaCache | None = None,
+        cache_position: torch.LongTensor | None = None,
+        attention_mask: torch.LongTensor | None = None,
     ):
         batch_size, seq_len, _ = input_states.shape
         dtype = input_states.dtype
@@ -520,20 +502,14 @@ class FalconMambaMixer(MambaMixer):
     def forward(
         self,
         hidden_states,
-        cache_params: Optional[FalconMambaCache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,
+        cache_params: FalconMambaCache | None = None,
+        cache_position: torch.LongTensor | None = None,
+        attention_mask: torch.LongTensor | None = None,
     ):
-        causal_conv1d = lazy_load_kernel("causal-conv1d")
-        causal_conv1d_update, causal_conv1d_fn = (
-            (causal_conv1d.causal_conv1d_update, causal_conv1d.causal_conv1d_fn)
-            if causal_conv1d is not None
-            else (None, None)
-        )
         is_fast_path_available = all(
-            (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, mamba_inner_fn)
+            (selective_state_update, selective_scan_fn, causal_conv1d_fn, causal_conv1d_update, falcon_mamba_inner_fn)
         )
-        if is_fast_path_available and "cuda" in self.x_proj.weight.device.type and not torch._dynamo.is_compiling():
+        if is_fast_path_available and "cuda" in self.x_proj.weight.device.type and not is_torchdynamo_compiling():
             return self.cuda_kernels_forward(hidden_states, cache_params, cache_position, attention_mask)
         return self.slow_forward(hidden_states, cache_params, cache_position, attention_mask)
 
@@ -551,7 +527,11 @@ class FalconMambaBlock(MambaBlock):
 
 @auto_docstring
 class FalconMambaPreTrainedModel(MambaPreTrainedModel):
-    pass
+    def _init_weights(self, module):
+        super()._init_weights(module)
+        if isinstance(module, FalconMambaMixer):
+            init.ones_(module.b_c_rms)
+            init.ones_(module.dt_rms)
 
 
 class FalconMambaOutput(MambaOutput):

@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_qwen2_5_omni.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 The Qwen team, Alibaba Group and the HuggingFace Inc. team. All rights reserved.
 #
 #
@@ -19,10 +18,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Optional
-
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
@@ -262,7 +259,7 @@ class Qwen2_5OmniTextConfig(PreTrainedConfig):
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -291,6 +288,7 @@ class Qwen2_5OmniTextConfig(PreTrainedConfig):
 
     model_type = "qwen2_5_omni_text"
     keys_to_ignore_at_inference = ["past_key_values"]
+    default_theta = 1000000.0
 
     # Default tensor parallel plan for base model `Qwen25OmniText`
     base_model_tp_plan = {
@@ -310,30 +308,28 @@ class Qwen2_5OmniTextConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 152064,
-        hidden_size: Optional[int] = 3584,
-        intermediate_size: Optional[int] = 18944,
-        num_hidden_layers: Optional[int] = 28,
-        num_attention_heads: Optional[int] = 28,
-        num_key_value_heads: Optional[int] = 4,
-        hidden_act: Optional[str] = "silu",
-        max_position_embeddings: Optional[int] = 32768,
-        initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[int] = 1e-6,
-        use_cache: Optional[bool] = True,
-        tie_word_embeddings: Optional[bool] = False,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
-        use_sliding_window: Optional[bool] = False,
-        sliding_window: Optional[int] = 32768,
-        max_window_layers: Optional[int] = 28,
-        layer_types: Optional[list[str]] = None,
-        attention_dropout: Optional[float] = 0.0,
+        vocab_size: int | None = 152064,
+        hidden_size: int | None = 3584,
+        intermediate_size: int | None = 18944,
+        num_hidden_layers: int | None = 28,
+        num_attention_heads: int | None = 28,
+        num_key_value_heads: int | None = 4,
+        hidden_act: str | None = "silu",
+        max_position_embeddings: int | None = 32768,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: int | None = 1e-6,
+        use_cache: bool | None = True,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        use_sliding_window: bool | None = False,
+        sliding_window: int | None = 32768,
+        max_window_layers: int | None = 28,
+        layer_types: list[str] | None = None,
+        attention_dropout: float | None = 0.0,
+        pad_token_id: int | None = None,
+        bos_token_id: int | None = None,
+        eos_token_id: int | None = None,
         **kwargs,
     ):
-        super().__init__(
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -343,6 +339,9 @@ class Qwen2_5OmniTextConfig(PreTrainedConfig):
         self.use_sliding_window = use_sliding_window
         self.sliding_window = sliding_window if self.use_sliding_window else None
         self.max_window_layers = max_window_layers
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
 
         # for backward compatibility
         if num_key_value_heads is None:
@@ -354,9 +353,6 @@ class Qwen2_5OmniTextConfig(PreTrainedConfig):
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
         self.attention_dropout = attention_dropout
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
 
         self.layer_types = layer_types
         if self.layer_types is None:
@@ -368,10 +364,11 @@ class Qwen2_5OmniTextConfig(PreTrainedConfig):
             ]
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = getattr(self, "rope_theta", 1000000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self, ignore_keys={"mrope_section"})
+        self.rope_parameters = rope_parameters
+        super().__init__(
+            ignore_keys_at_rope_validation={"mrope_section"},
+            **kwargs,
+        )
 
 
 class Qwen2_5OmniThinkerConfig(PreTrainedConfig):
@@ -410,6 +407,8 @@ class Qwen2_5OmniThinkerConfig(PreTrainedConfig):
             The user token index to encode the user token.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether the model's input and output word embeddings should be tied.
 
     Example:
 
@@ -461,6 +460,7 @@ class Qwen2_5OmniThinkerConfig(PreTrainedConfig):
         audio_end_token_id=151648,
         user_token_id=872,
         initializer_range=0.02,
+        tie_word_embeddings=False,
         **kwargs,
     ):
         self.audio_token_index = audio_token_index
@@ -472,6 +472,7 @@ class Qwen2_5OmniThinkerConfig(PreTrainedConfig):
         self.audio_start_token_id = audio_start_token_id
         self.audio_end_token_id = audio_end_token_id
         self.initializer_range = initializer_range
+        self.tie_word_embeddings = tie_word_embeddings
 
         if isinstance(vision_config, dict):
             vision_config = Qwen2_5OmniVisionEncoderConfig(**vision_config)
@@ -573,7 +574,7 @@ class Qwen2_5OmniTalkerConfig(PreTrainedConfig):
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         position_id_per_seconds (`int`, *optional*, defaults to 25):
@@ -613,6 +614,7 @@ class Qwen2_5OmniTalkerConfig(PreTrainedConfig):
     ```"""
 
     model_type = "qwen2_5_omni_talker"
+    default_theta = 1000000.0
     attribute_map = {
         "image_token_id": "image_token_index",
         "video_token_id": "video_token_index",
@@ -650,7 +652,7 @@ class Qwen2_5OmniTalkerConfig(PreTrainedConfig):
         sliding_window=32768,
         max_window_layers=28,
         attention_dropout=0.0,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
         position_id_per_seconds=25,
         seconds_per_chunk=2,
         audio_start_token_id=151647,
@@ -697,9 +699,6 @@ class Qwen2_5OmniTalkerConfig(PreTrainedConfig):
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
         self.attention_dropout = attention_dropout
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
         self.position_id_per_seconds = position_id_per_seconds  # zf
         self.seconds_per_chunk = seconds_per_chunk  # zf
         self.audio_start_token_id = audio_start_token_id  # zf
@@ -707,6 +706,7 @@ class Qwen2_5OmniTalkerConfig(PreTrainedConfig):
 
         self.initializer_range = initializer_range
         self.spatial_merge_size = spatial_merge_size
+        self.tie_word_embeddings = tie_word_embeddings
 
         self.layer_types = layer_types
         if self.layer_types is None:
@@ -718,12 +718,8 @@ class Qwen2_5OmniTalkerConfig(PreTrainedConfig):
             ]
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 1000000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
-
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+        self.rope_parameters = rope_parameters
+        super().__init__(ignore_keys_at_rope_validation={"mrope_section"}, **kwargs)
 
 
 class Qwen2_5OmniDiTConfig(PreTrainedConfig):
@@ -781,7 +777,7 @@ class Qwen2_5OmniDiTConfig(PreTrainedConfig):
         ff_mult=2,
         emb_dim=512,
         head_dim=64,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
         max_position_embeddings=32768,
         block_size=24,
         look_ahead_layers=[10],
@@ -822,14 +818,8 @@ class Qwen2_5OmniDiTConfig(PreTrainedConfig):
         self.enc_attention_channels = enc_attention_channels
         self.enc_res2net_scale = enc_res2net_scale
         self.enc_se_channels = enc_se_channels
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
+        self.rope_parameters = rope_parameters
 
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 10000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
         super().__init__(**kwargs)
 
 

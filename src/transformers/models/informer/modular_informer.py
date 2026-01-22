@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 Amazon and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,12 +13,11 @@
 # limitations under the License.
 """PyTorch Informer model."""
 
-from typing import Optional, Union
-
 import numpy as np
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...cache_utils import Cache, EncoderDecoderCache
 from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
 from ...modeling_layers import GradientCheckpointingLayer
@@ -83,13 +81,14 @@ class InformerPreTrainedModel(PreTrainedModel):
     config: InformerConfig
     base_model_prefix = "model"
     main_input_name = "past_values"
-    input_modalities = "time"
+    input_modalities = ("time",)
     supports_gradient_checkpointing = True
 
+    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         super()._init_weights(module)
         if isinstance(module, InformerSinusoidalPositionalEmbedding):
-            module._init_weight()
+            init.copy_(module.weight, module.create_weight())
 
 
 class InformerAttention(BartAttention):
@@ -109,7 +108,7 @@ class InformerProbSparseAttention(nn.Module):
         is_decoder: bool = False,
         sampling_factor: int = 5,
         bias: bool = True,
-        layer_idx: Optional[int] = None,
+        layer_idx: int | None = None,
     ):
         super().__init__()
         self.factor = sampling_factor
@@ -138,12 +137,12 @@ class InformerProbSparseAttention(nn.Module):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        key_value_states: Optional[torch.Tensor] = None,
-        past_key_values: Optional[Cache] = None,
-        attention_mask: Optional[torch.Tensor] = None,
+        key_value_states: torch.Tensor | None = None,
+        past_key_values: Cache | None = None,
+        attention_mask: torch.Tensor | None = None,
         output_attentions: bool = False,
-        cache_position: Optional[torch.Tensor] = None,
-    ) -> tuple[torch.Tensor, Optional[torch.Tensor], Optional[tuple[torch.Tensor]]]:
+        cache_position: torch.Tensor | None = None,
+    ) -> tuple[torch.Tensor, torch.Tensor | None, tuple[torch.Tensor] | None]:
         """Input shape: Batch x Time x Channel"""
 
         # if key_value_states are provided this layer is used as a cross-attention layer
@@ -353,7 +352,7 @@ class InformerEncoderLayer(TimeSeriesTransformerEncoderLayer):
 
 
 class InformerDecoderLayer(TimeSeriesTransformerDecoderLayer):
-    def __init__(self, config: InformerConfig, layer_idx: Optional[int] = None):
+    def __init__(self, config: InformerConfig, layer_idx: int | None = None):
         super().__init__(config)
 
         del self.self_attn
@@ -408,12 +407,13 @@ class InformerEncoder(TimeSeriesTransformerEncoder):
 
     def forward(
         self,
-        attention_mask: Optional[torch.Tensor] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ) -> Union[tuple, BaseModelOutput]:
+        attention_mask: torch.Tensor | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        **kwargs,
+    ) -> tuple | BaseModelOutput:
         r"""
         Args:
             attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):

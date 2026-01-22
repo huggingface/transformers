@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,12 +15,11 @@
 
 import math
 from pathlib import Path
-from typing import Optional, Union
 
 from ...audio_utils import AudioInput, make_list_of_audio
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import AudioKwargs, ProcessingKwargs, ProcessorMixin, Unpack
-from ...utils import is_soundfile_available, is_torch_available
+from ...utils import auto_docstring, is_soundfile_available, is_torch_available
 
 
 if is_torch_available():
@@ -32,6 +30,26 @@ if is_soundfile_available():
 
 
 class DiaAudioKwargs(AudioKwargs, total=False):
+    """
+    bos_token_id (`int`, *optional*, defaults to `1026`):
+        The token ID used as the beginning-of-sequence token for audio codebooks. This token is prepended to each
+        audio sequence during encoding.
+    eos_token_id (`int`, *optional*, defaults to `1024`):
+        The token ID used as the end-of-sequence token for audio codebooks. This token is appended to audio sequences
+        during training (when `generation=False`) to mark the end of the audio.
+    pad_token_id (`int`, *optional*, defaults to `1025`):
+        The token ID used for padding audio codebook sequences. This token is used to fill positions in the delay
+        pattern where no valid audio token exists.
+    delay_pattern (`list[int]`, *optional*, defaults to `[0, 8, 9, 10, 11, 12, 13, 14, 15]`):
+        A list of delay values (in frames) for each codebook channel. The delay pattern creates temporal offsets
+        between different codebook channels, allowing the model to capture dependencies across channels. Each value
+        represents the number of frames to delay that specific channel.
+    generation (`bool`, *optional*, defaults to `True`):
+        Whether the processor is being used for generation (text-to-speech) or training. When `True`, the processor
+        prepares inputs for generation mode where audio is generated from text. When `False`, it prepares inputs for
+        training where both text and audio are provided.
+    """
+
     bos_token_id: int
     eos_token_id: int
     pad_token_id: int
@@ -61,41 +79,31 @@ class DiaProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@auto_docstring
 class DiaProcessor(ProcessorMixin):
-    r"""
-    Constructs a Dia processor which wraps a [`DiaFeatureExtractor`], [`DiaTokenizer`], and a [`DacModel`] into
-    a single processor. It inherits, the audio feature extraction, tokenizer, and audio encode/decode functio-
-    nalities. See [`~DiaProcessor.__call__`], [`~DiaProcessor.encode`], and [`~DiaProcessor.decode`] for more
-    information.
-
-    Args:
-        feature_extractor (`DiaFeatureExtractor`):
-            An instance of [`DiaFeatureExtractor`]. The feature extractor is a required input.
-        tokenizer (`DiaTokenizer`):
-            An instance of [`DiaTokenizer`]. The tokenizer is a required input.
-        audio_tokenizer (`DacModel`):
-            An instance of [`DacModel`] used to encode/decode audio into/from codebooks. It is is a required input.
-    """
-
-    feature_extractor_class = "DiaFeatureExtractor"
-    tokenizer_class = "DiaTokenizer"
     audio_tokenizer_class = "DacModel"
 
     def __init__(self, feature_extractor, tokenizer, audio_tokenizer):
+        r"""
+        audio_tokenizer (`DacModel`):
+            An instance of [`DacModel`] used to encode/decode audio into/from codebooks. It is is a required input.
+        """
         super().__init__(feature_extractor, tokenizer, audio_tokenizer=audio_tokenizer)
 
+    @auto_docstring
     def __call__(
         self,
-        text: Union[str, list[str]],
-        audio: Optional[AudioInput] = None,
-        output_labels: Optional[bool] = False,
+        text: str | list[str],
+        audio: AudioInput | None = None,
+        output_labels: bool | None = False,
         **kwargs: Unpack[DiaProcessorKwargs],
     ):
-        """
-        Main method to prepare text(s) and audio to be fed as input to the model. The `audio` argument is
-        forwarded to the DiaFeatureExtractor's [`~DiaFeatureExtractor.__call__`] and subsequently to the
-        DacModel's [`~DacModel.encode`]. The `text` argument to [`~DiaTokenizer.__call__`]. Please refer
-        to the docstring of the above methods for more information.
+        r"""
+        output_labels (`bool`, *optional*, defaults to `False`):
+            Whether to return labels for training. When `True`, the processor generates labels from the decoder input
+            sequence by shifting it by one position. Labels use special values: `-100` for tokens to ignore in loss
+            computation (padding and BOS tokens), and `-101` for audio frames used only for the backbone model (when
+            `depth_decoder_labels_ratio < 1.0`). Cannot be used together with `generation=True`.
         """
         if not is_torch_available():
             raise ValueError(
@@ -258,7 +266,7 @@ class DiaProcessor(ProcessorMixin):
     def batch_decode(
         self,
         decoder_input_ids: "torch.Tensor",
-        audio_prompt_len: Optional[int] = None,
+        audio_prompt_len: int | None = None,
         **kwargs: Unpack[DiaProcessorKwargs],
     ) -> list["torch.Tensor"]:
         """
@@ -329,7 +337,7 @@ class DiaProcessor(ProcessorMixin):
     def decode(
         self,
         decoder_input_ids: "torch.Tensor",
-        audio_prompt_len: Optional[int] = None,
+        audio_prompt_len: int | None = None,
         **kwargs: Unpack[DiaProcessorKwargs],
     ) -> "torch.Tensor":
         """
@@ -367,7 +375,7 @@ class DiaProcessor(ProcessorMixin):
     def save_audio(
         self,
         audio: AudioInput,
-        saving_path: Union[str, Path, list[Union[str, Path]]],
+        saving_path: str | Path | list[str | Path],
         **kwargs: Unpack[DiaProcessorKwargs],
     ):
         # TODO: @eustlb, this should be in AudioProcessor

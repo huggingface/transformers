@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -168,7 +167,6 @@ class SamHQVisionModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (SamHQVisionModel,) if is_torch_available() else ()
 
     test_resize_embeddings = False
-    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = SamHQVisionModelTester(self)
@@ -234,24 +232,20 @@ class SamHQVisionModelTest(ModelTesterMixin, unittest.TestCase):
                 list(expected_attention_shape),
             )
 
-    @unittest.skip(reason="SamVisionModel does not support training")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training(self):
         pass
 
-    @unittest.skip(reason="SamVisionModel does not support training")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     @unittest.skip(reason="SamVisionModel does not support training")
@@ -662,24 +656,20 @@ class SamHQModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 list(expected_mask_decoder_attention_shape),
             )
 
-    @unittest.skip(reason="SamHQModel does not support training")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training(self):
         pass
 
-    @unittest.skip(reason="SamHQModel does not support training")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     @unittest.skip(reason="SamHQModel does not support training")
@@ -801,6 +791,7 @@ class SamHQModelIntegrationTest(unittest.TestCase):
             {
                 (None, None): [-13.1695, -14.6201, -14.8989],
                 ("cuda", 8): [-7.6769, -9.6935, -9.8773],
+                ("xpu", None): [-7.6769, -9.6935, -9.8773],
             }
         )
         EXPECTED_MASKS = torch.tensor(expectations.get_expectation()).to(torch_device)

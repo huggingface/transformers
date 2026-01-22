@@ -17,7 +17,6 @@ import unittest
 
 from transformers import is_torch_available
 from transformers.testing_utils import (
-    require_read_token,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -126,7 +125,6 @@ class Lfm2ModelTest(CausalLMModelTest, unittest.TestCase):
 
 
 @require_torch_accelerator
-@require_read_token
 @slow
 class Lfm2IntegrationTest(unittest.TestCase):
     pass

@@ -11,7 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-"""Testing suite for the PyTorch GLM-4.1V model."""
+"""Testing suite for the PyTorch GLM-4.5V model."""
 
 import copy
 import unittest
@@ -27,7 +27,7 @@ from transformers.testing_utils import (
     cleanup,
     require_flash_attn,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     run_first,
     slow,
     torch_device,
@@ -294,7 +294,9 @@ class Glm4vMoeModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
 @require_torch
 @slow
 class Glm4vMoeIntegrationTest(unittest.TestCase):
-    model = None
+    @classmethod
+    def setUpClass(cls):
+        cls.model = None
 
     @classmethod
     def get_model(cls):
@@ -432,7 +434,7 @@ class Glm4vMoeIntegrationTest(unittest.TestCase):
 
     @run_first
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     def test_small_model_integration_test_batch_flashatt2(self):
         model = Glm4vMoeForConditionalGeneration.from_pretrained(
             "zai-org/GLM-4.5V",

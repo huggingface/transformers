@@ -231,7 +231,7 @@ class PegasusXModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
-            self.assertEqual(info["missing_keys"], [])
+            self.assertEqual(info["missing_keys"], set())
 
     def test_decoder_model_past_with_large_inputs(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -626,7 +626,7 @@ class PegasusXModelIntegrationTests(unittest.TestCase):
         ]
 
         # The below article tests that we don't add any hypotheses outside of the top n_beams
-        dct = tok.batch_encode_plus(
+        dct = tok(
             batch_input,
             max_length=512,
             padding="max_length",
@@ -642,13 +642,11 @@ class PegasusXModelIntegrationTests(unittest.TestCase):
         )
 
         EXPECTED = [
-            "we investigate the performance of a new pretrained model for long input summarization. <n> the model is a"
+            "we investigate the performance of a new pretrained model for long input summarization . <n> the model is a"
             " superposition of two well -"
         ]
 
-        generated = tok.batch_decode(
-            hypotheses_batch.tolist(), clean_up_tokenization_spaces=True, skip_special_tokens=True
-        )
+        generated = tok.decode(hypotheses_batch.tolist(), skip_special_tokens=True)
         assert generated == EXPECTED
 
 

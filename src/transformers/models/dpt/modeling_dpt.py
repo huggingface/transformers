@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 Intel Labs, OpenMMLab and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -22,12 +21,12 @@ https://github.com/open-mmlab/mmsegmentation/blob/master/mmseg/models/decode_hea
 import collections.abc
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Optional
 
 import torch
 from torch import nn
 from torch.nn import CrossEntropyLoss
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, DepthEstimatorOutput, SemanticSegmenterOutput
@@ -57,8 +56,8 @@ class BaseModelOutputWithIntermediateActivations(ModelOutput):
         Intermediate activations that can be used to compute hidden states of the model at various layers.
     """
 
-    last_hidden_states: Optional[torch.FloatTensor] = None
-    intermediate_activations: Optional[tuple[torch.FloatTensor, ...]] = None
+    last_hidden_states: torch.FloatTensor | None = None
+    intermediate_activations: tuple[torch.FloatTensor, ...] | None = None
 
 
 @dataclass
@@ -79,11 +78,11 @@ class BaseModelOutputWithPoolingAndIntermediateActivations(ModelOutput):
         Intermediate activations that can be used to compute hidden states of the model at various layers.
     """
 
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    pooler_output: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
-    intermediate_activations: Optional[tuple[torch.FloatTensor, ...]] = None
+    last_hidden_state: torch.FloatTensor | None = None
+    pooler_output: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
+    intermediate_activations: tuple[torch.FloatTensor, ...] | None = None
 
 
 class DPTViTHybridEmbeddings(nn.Module):
@@ -93,7 +92,7 @@ class DPTViTHybridEmbeddings(nn.Module):
     Transformer.
     """
 
-    def __init__(self, config: DPTConfig, feature_size: Optional[tuple[int, int]] = None):
+    def __init__(self, config: DPTConfig, feature_size: tuple[int, int] | None = None):
         super().__init__()
         image_size, patch_size = config.image_size, config.patch_size
         num_channels, hidden_size = config.num_channels, config.hidden_size
@@ -274,8 +273,8 @@ def eager_attention_forward(
     query: torch.Tensor,
     key: torch.Tensor,
     value: torch.Tensor,
-    attention_mask: Optional[torch.Tensor],
-    scaling: Optional[float] = None,
+    attention_mask: torch.Tensor | None,
+    scaling: float | None = None,
     dropout: float = 0.0,
     **kwargs: Unpack[TransformersKwargs],
 ):
@@ -700,7 +699,7 @@ class DPTFeatureFusionLayer(nn.Module):
         self.residual_layer1 = DPTPreActResidualLayer(config)
         self.residual_layer2 = DPTPreActResidualLayer(config)
 
-    def forward(self, hidden_state: torch.Tensor, residual: Optional[torch.Tensor] = None) -> torch.Tensor:
+    def forward(self, hidden_state: torch.Tensor, residual: torch.Tensor | None = None) -> torch.Tensor:
         if residual is not None:
             if hidden_state.shape != residual.shape:
                 residual = nn.functional.interpolate(
@@ -722,7 +721,7 @@ class DPTPreTrainedModel(PreTrainedModel):
     config: DPTConfig
     base_model_prefix = "dpt"
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = True
     _supports_sdpa = True
     _supports_flash_attn = True
@@ -732,18 +731,13 @@ class DPTPreTrainedModel(PreTrainedModel):
         "attentions": DPTSelfAttention,
     }
 
+    @torch.no_grad()
     def _init_weights(self, module):
         """Initialize the weights"""
-        if isinstance(module, (nn.Linear, nn.Conv2d, nn.ConvTranspose2d)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                module.bias.data.zero_()
-        elif isinstance(module, (nn.LayerNorm, nn.BatchNorm2d)):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+        super()._init_weights(module)
         if isinstance(module, (DPTViTEmbeddings, DPTViTHybridEmbeddings)):
-            module.cls_token.data.zero_()
-            module.position_embeddings.data.zero_()
+            init.zeros_(module.cls_token)
+            init.zeros_(module.position_embeddings)
 
 
 @auto_docstring
@@ -780,7 +774,7 @@ class DPTModel(DPTPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        output_hidden_states: Optional[bool] = None,
+        output_hidden_states: bool | None = None,
         **kwargs,
     ) -> BaseModelOutputWithPoolingAndIntermediateActivations:
         if output_hidden_states is None:
@@ -853,8 +847,8 @@ class DPTNeck(nn.Module):
     def forward(
         self,
         hidden_states: list[torch.Tensor],
-        patch_height: Optional[int] = None,
-        patch_width: Optional[int] = None,
+        patch_height: int | None = None,
+        patch_width: int | None = None,
     ) -> list[torch.Tensor]:
         """
         Args:
@@ -948,8 +942,8 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        labels: Optional[torch.LongTensor] = None,
-        output_hidden_states: Optional[bool] = None,
+        labels: torch.LongTensor | None = None,
+        output_hidden_states: bool | None = None,
         **kwargs,
     ) -> DepthEstimatorOutput:
         r"""
@@ -1096,9 +1090,9 @@ class DPTForSemanticSegmentation(DPTPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        output_hidden_states: Optional[bool] = None,
+        pixel_values: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        output_hidden_states: bool | None = None,
         **kwargs,
     ) -> SemanticSegmenterOutput:
         r"""

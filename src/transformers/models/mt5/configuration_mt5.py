@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020, The T5 Authors and HuggingFace Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,7 +22,7 @@ logger = logging.get_logger(__name__)
 
 class MT5Config(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`MT5Model`] or a [`TFMT5Model`]. It is used to
+    This is the configuration class to store the configuration of a [`MT5Model`]. It is used to
     instantiate a mT5 model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the mT5
     [google/mt5-small](https://huggingface.co/google/mt5-small) architecture.
@@ -34,7 +33,7 @@ class MT5Config(PreTrainedConfig):
     Arguments:
         vocab_size (`int`, *optional*, defaults to 250112):
             Vocabulary size of the T5 model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`T5Model`] or [`TFT5Model`].
+            `inputs_ids` passed when calling [`T5Model`].
         d_model (`int`, *optional*, defaults to 512):
             Size of the encoder layers and the pooler layer.
         d_kv (`int`, *optional*, defaults to 64):
@@ -95,12 +94,15 @@ class MT5Config(PreTrainedConfig):
         use_cache=True,
         tokenizer_class="T5Tokenizer",
         tie_word_embeddings=False,
+        bos_token_id=None,
         pad_token_id=0,
         eos_token_id=1,
         decoder_start_token_id=0,
         classifier_dropout=0.0,
+        is_decoder=False,
         **kwargs,
     ):
+        self.is_decoder = is_decoder
         self.vocab_size = vocab_size
         self.d_model = d_model
         self.d_kv = d_kv
@@ -118,7 +120,6 @@ class MT5Config(PreTrainedConfig):
         self.initializer_factor = initializer_factor
         self.feed_forward_proj = feed_forward_proj
         self.use_cache = use_cache
-
         act_info = self.feed_forward_proj.split("-")
         self.dense_act_fn = act_info[-1]
         self.is_gated_act = act_info[0] == "gated"
@@ -134,13 +135,15 @@ class MT5Config(PreTrainedConfig):
         if feed_forward_proj == "gated-gelu":
             self.dense_act_fn = "gelu_new"
 
+        # Force because official weights have False serialized, but we have to tie always
+        self.tie_word_embeddings = True
+        self.tokenizer_class = tokenizer_class
+        self.bos_token_id = bos_token_id
+        self.pad_token_id = pad_token_id
+        self.eos_token_id = eos_token_id
+        self.decoder_start_token_id = decoder_start_token_id
         super().__init__(
             is_encoder_decoder=is_encoder_decoder,
-            tokenizer_class=tokenizer_class,
-            tie_word_embeddings=tie_word_embeddings,
-            pad_token_id=pad_token_id,
-            eos_token_id=eos_token_id,
-            decoder_start_token_id=decoder_start_token_id,
             **kwargs,
         )
 

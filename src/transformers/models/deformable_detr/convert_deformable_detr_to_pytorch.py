@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -198,7 +197,7 @@ def convert_deformable_detr_checkpoint(
         model_name += "-with-box-refine" if with_box_refine else ""
         model_name += "-two-stage" if two_stage else ""
         print("Pushing model to hub...")
-        model.push_to_hub(repo_path_or_name=model_name, organization="nielsr", commit_message="Add model")
+        model.push_to_hub(repo_id=f"nielsr/{model_name}")
 
 
 if __name__ == "__main__":
@@ -222,7 +221,9 @@ if __name__ == "__main__":
         help="Path to the folder to output PyTorch model.",
     )
     parser.add_argument(
-        "--push_to_hub", action="store_true", help="Whether or not to push the converted model to the 🤗 hub."
+        "--push_to_hub",
+        action="store_true",
+        help="Whether or not to push the converted model to the Hugging Face hub.",
     )
     args = parser.parse_args()
     convert_deformable_detr_checkpoint(

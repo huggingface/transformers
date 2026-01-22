@@ -21,7 +21,6 @@ from parameterized import parameterized
 from transformers import AutoTokenizer, is_torch_available
 from transformers.testing_utils import (
     cleanup,
-    require_read_token,
     require_torch,
     require_torch_accelerator,
     require_torch_bf16,
@@ -221,18 +220,25 @@ class BltModelTest(CausalLMModelTest, unittest.TestCase):
             self, name, torch_dtype, padding_side, use_attention_mask, output_attentions, enable_kernels, atols=atols
         )
 
+    @require_torch_accelerator
+    @slow
+    def test_sdpa_can_dispatch_on_flash(self):
+        self.skipTest("BLT always has an attention_mask input")
+
 
 @require_torch_accelerator
 class BltIntegrationTest(unittest.TestCase):
+    def setup(self):
+        cleanup(torch_device, gc_collect=True)
+
     def tearDown(self):
         # TODO (joao): automatic compilation, i.e. compilation when `cache_implementation="static"` is used, leaves
         # some memory allocated in the cache, which means some object is not being released properly. This causes some
         # unoptimal memory usage, e.g. after certain tests a 7B model in FP16 no longer fits in a 24GB GPU.
         # Investigate the root cause.
-        cleanup(torch_device, gc_collect=False)
+        cleanup(torch_device, gc_collect=True)
 
     @slow
-    @require_read_token
     def test_model(self):
         NUM_TOKENS_TO_GENERATE = 200
         EXPECTED_TEXT = "my name is alex and i am a student at the university of michigan. i am a senior majoring in computer science and minoring in mathematics. i am also a member of the michigan math club and the michigan computer s"
@@ -253,7 +259,6 @@ class BltIntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_TEXT)
 
     @slow
-    @require_read_token
     def test_model_logits(self):
         EXPECTED_OUTPUT = torch.tensor(
             [
@@ -334,12 +339,11 @@ class BltIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(EXPECTED_OUTPUT, output[0, :2, :30], rtol=1e-4, atol=1e-4)
 
     @slow
-    @require_read_token
     @require_torch_bf16
     def test_model_bf16(self):
         """Test Blt model with bfloat16 precision."""
         NUM_TOKENS_TO_GENERATE = 200
-        EXPECTED_TEXT = "my name is alex and i am a student at the university of michigan. i am a senior majoring in computer science and minoring in mathematics. i am also a member of the michigan math club and the michigan computer s"
+        EXPECTED_TEXT = "my name is alex and i am a student at the university of michigan in the college of arts and sciences. i am a senior majoring in computer science and minoring in mathematics. i am also a member of the michigan m"
 
         prompt = "my name is"
 
@@ -359,7 +363,6 @@ class BltIntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_TEXT)
 
     @slow
-    @require_read_token
     @require_torch_bf16
     def test_model_logits_bf16(self):
         """Test Blt model logits with bfloat16 precision."""
@@ -445,7 +448,6 @@ class BltIntegrationTest(unittest.TestCase):
         torch.testing.assert_close(EXPECTED_OUTPUT, output[0, :2, :30], rtol=1e-3, atol=1e-3)
 
     @slow
-    @require_read_token
     def test_model_eager(self):
         """Test Blt model with bfloat16 precision using eager attention implementation."""
         NUM_TOKENS_TO_GENERATE = 200
@@ -467,12 +469,11 @@ class BltIntegrationTest(unittest.TestCase):
         self.assertEqual(output_text, EXPECTED_TEXT)
 
     @slow
-    @require_read_token
     @require_torch_bf16
     def test_model_bf16_static_cache(self):
         """Test Blt model with bfloat16 precision and static cache."""
         NUM_TOKENS_TO_GENERATE = 200
-        EXPECTED_TEXT = "my name is alex and i am a student at the university of michigan. i am a senior majoring in computer science and minoring in mathematics. i am also a member of the michigan math club and the michigan computer s"
+        EXPECTED_TEXT = "my name is alex and i am a student at the university of michigan in the college of arts and sciences. i am a senior majoring in computer science and minoring in mathematics. i am also a member of the michigan m"
 
         prompt = "my name is"
 

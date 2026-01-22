@@ -23,6 +23,7 @@ from transformers import (
     is_torch_available,
 )
 from transformers.testing_utils import (
+    Expectations,
     cleanup,
     require_torch,
     slow,
@@ -32,6 +33,7 @@ from transformers.testing_utils import (
 from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
 from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...test_pipeline_mixin import PipelineTesterMixin
 
 
 if is_torch_available():
@@ -128,14 +130,16 @@ class VoxtralModelTester:
 
 
 @require_torch
-class VoxtralForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class VoxtralForConditionalGenerationModelTest(
+    ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase
+):
     """
     Model tester for `VoxtralForConditionalGeneration`.
     """
 
     all_model_classes = (VoxtralForConditionalGeneration,) if is_torch_available() else ()
     pipeline_model_mapping = (
-        {"text-to-speech": VoxtralForConditionalGeneration, "audio-text-to-text": VoxtralForConditionalGeneration}
+        {"text-to-speech": VoxtralForConditionalGeneration, "any-to-any": VoxtralForConditionalGeneration}
         if is_torch_available()
         else {}
     )
@@ -186,6 +190,10 @@ class VoxtralForConditionalGenerationModelTest(ModelTesterMixin, GenerationTeste
         reason="Voxtral need lots of steps to prepare audio/mask correctly to get pad-free inputs. Cf llava (reference multimodal model)"
     )
     def test_flash_attention_3_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
+        pass
+
+    @unittest.skip(reason="Voxtral has no separate base model without a head.")
+    def test_model_base_model_prefix(self):
         pass
 
     def test_sdpa_can_dispatch_composite_models(self):
@@ -297,9 +305,15 @@ class VoxtralForConditionalGenerationIntegrationTest(unittest.TestCase):
         outputs = model.generate(**inputs, do_sample=False, max_new_tokens=500)
         decoded_outputs = self.processor.batch_decode(outputs, skip_special_tokens=True)
 
-        EXPECTED_OUTPUT = [
-            "What can you tell me about this audio?This audio is a farewell address by President Barack Obama, delivered in Chicago. In the speech, he reflects on his eight years in office, highlighting the resilience, hope, and unity of the American people. He acknowledges the diverse perspectives and conversations he had with the public, which kept him honest and inspired. The president also emphasizes the importance of self-government and civic engagement, encouraging Americans to participate in their democracy actively. He expresses optimism about the country's future and looks forward to continuing his work as a citizen. The audio concludes with a heartfelt thank you and a blessing for the United States."
-        ]
+        # fmt: off
+        EXPECTED_OUTPUTS = Expectations(
+            {
+                (None, None): ["What can you tell me about this audio?This audio is a farewell address by President Barack Obama, delivered in Chicago. In the speech, he reflects on his eight years in office, highlighting the resilience, hope, and unity of the American people. He acknowledges the diverse perspectives and conversations he had with the public, which kept him honest and inspired. The president also emphasizes the importance of self-government and civic engagement, encouraging Americans to participate in their democracy actively. He expresses optimism about the country's future and looks forward to continuing his work as a citizen. The audio concludes with a heartfelt thank you and a blessing for the United States."],
+                ("xpu", None): ["What can you tell me about this audio?This audio is a farewell address by President Barack Obama, delivered in Chicago. In the speech, he reflects on his eight years in office, highlighting the resilience, hope, and unity of the American people. He emphasizes the importance of self-government and active citizenship, encouraging listeners to engage in their communities and participate in democracy. The president expresses his optimism about the country's future and his commitment to continuing to serve as a citizen. He concludes the speech with a heartfelt thank you and a blessing for the United States."],
+            }
+        )
+        # fmt: on
+        EXPECTED_OUTPUT = EXPECTED_OUTPUTS.get_expectation()
         self.assertEqual(decoded_outputs, EXPECTED_OUTPUT)
 
     @slow

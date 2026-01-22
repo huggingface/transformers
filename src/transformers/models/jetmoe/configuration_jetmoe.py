@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 JetMoe AI and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,10 +13,8 @@
 # limitations under the License.
 """JetMoe model configuration"""
 
-from typing import Optional
-
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
@@ -74,7 +71,7 @@ class JetMoeConfig(PreTrainedConfig):
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether the model's input and output word embeddings should be tied.
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         rms_norm_eps (`float`, *optional*, defaults to 1e-06):
@@ -103,26 +100,26 @@ class JetMoeConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 32000,
-        hidden_size: Optional[int] = 2048,
-        num_hidden_layers: Optional[int] = 12,
-        num_key_value_heads: Optional[int] = 16,
-        kv_channels: Optional[int] = 128,
-        intermediate_size: Optional[int] = 5632,
-        max_position_embeddings: Optional[int] = 4096,
-        activation_function: Optional[str] = "silu",
-        num_local_experts: Optional[int] = 8,
-        num_experts_per_tok: Optional[int] = 2,
-        output_router_logits: Optional[bool] = False,
-        aux_loss_coef: Optional[float] = 0.01,
-        use_cache: Optional[bool] = True,
-        bos_token_id: Optional[int] = 1,
-        eos_token_id: Optional[int] = 2,
-        tie_word_embeddings: Optional[bool] = True,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
-        rms_norm_eps: Optional[int] = 1e-6,
-        initializer_range: Optional[float] = 0.01,
-        attention_dropout: Optional[float] = 0.0,
+        vocab_size: int | None = 32000,
+        hidden_size: int | None = 2048,
+        num_hidden_layers: int | None = 12,
+        num_key_value_heads: int | None = 16,
+        kv_channels: int | None = 128,
+        intermediate_size: int | None = 5632,
+        max_position_embeddings: int | None = 4096,
+        activation_function: str | None = "silu",
+        num_local_experts: int | None = 8,
+        num_experts_per_tok: int | None = 2,
+        output_router_logits: bool | None = False,
+        aux_loss_coef: float | None = 0.01,
+        use_cache: bool | None = True,
+        bos_token_id: int | None = 1,
+        eos_token_id: int | None = 2,
+        tie_word_embeddings: bool | None = True,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        rms_norm_eps: int | None = 1e-6,
+        initializer_range: float | None = 0.01,
+        attention_dropout: float | None = 0.0,
         **kwargs,
     ):
         if num_experts_per_tok > num_local_experts:
@@ -147,18 +144,12 @@ class JetMoeConfig(PreTrainedConfig):
         self.bos_token_id = bos_token_id
         self.eos_token_id = eos_token_id
         self.rms_norm_eps = rms_norm_eps
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
+        self.rope_parameters = rope_parameters
 
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 10000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
-
-        super().__init__(
-            bos_token_id=bos_token_id, eos_token_id=eos_token_id, tie_word_embeddings=tie_word_embeddings, **kwargs
-        )
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(**kwargs)
 
 
 __all__ = ["JetMoeConfig"]

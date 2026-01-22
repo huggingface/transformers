@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_doge.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 Jingze Shi and the HuggingFace Inc. team. All rights reserved.
 #
 # The Doge family of small language models is trained by SmallDoge Team.
@@ -20,10 +19,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Optional
-
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 
 
 class DogeConfig(PreTrainedConfig):
@@ -59,7 +56,7 @@ class DogeConfig(PreTrainedConfig):
         max_position_embeddings (`int`, *optional*, defaults to 2048):
             The maximum sequence length that this model might ever be used with.
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         num_attention_heads (`int`, *optional*, defaults to 8):
@@ -94,6 +91,12 @@ class DogeConfig(PreTrainedConfig):
             allow the model to output the auxiliary loss, including load balancing loss and router z-loss.
         router_aux_loss_coef (`float`, *optional*, defaults to 0.001):
             The aux loss factor for the total loss.
+        pad_token_id (`int`, *optional*):
+            Padding token id.
+        bos_token_id (`int`, *optional*):
+            Beginning of stream token id.
+        eos_token_id (`int`, *optional*):
+            End of stream token id.
 
     ```python
     >>> from transformers import DogeConfig, DogeModel
@@ -117,11 +120,6 @@ class DogeConfig(PreTrainedConfig):
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.dt_proj": "rowwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.input_layernorm.weight": "sequence_parallel",
-        "layers.*.input_residual.weight": "sequence_parallel",
-        "layers.*.post_attention_layernorm.weight": "sequence_parallel",
-        "layers.*.post_attention_residual.weight": "sequence_parallel",
-        "norm.weight": "sequence_parallel",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
@@ -137,31 +135,34 @@ class DogeConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 32768,
-        hidden_size: Optional[int] = 1024,
-        intermediate_size: Optional[int] = 2048,
-        num_hidden_layers: Optional[int] = 32,
-        hidden_dropout: Optional[float] = 0.0,
-        hidden_act: Optional[str] = "silu",
-        initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[int] = 1e-06,
-        use_cache: Optional[bool] = True,
-        tie_word_embeddings: Optional[bool] = False,
-        max_position_embeddings: Optional[int] = 2048,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
-        num_attention_heads: Optional[int] = 8,
-        num_key_value_heads: Optional[int] = None,
-        attention_bias: Optional[bool] = False,
-        attention_dropout: Optional[float] = 0.0,
-        mlp_bias: Optional[bool] = False,
-        sliding_window: Optional[int] = None,
-        keep_window_size: Optional[int] = 2048,
-        is_moe: Optional[bool] = False,
-        num_experts: Optional[int] = 16384,
-        num_experts_per_tok: Optional[int] = 64,
-        norm_topk_prob: Optional[bool] = False,
-        output_router_logits: Optional[bool] = False,
-        router_aux_loss_coef: Optional[float] = 0.001,
+        vocab_size: int | None = 32768,
+        hidden_size: int | None = 1024,
+        intermediate_size: int | None = 2048,
+        num_hidden_layers: int | None = 32,
+        hidden_dropout: float | None = 0.0,
+        hidden_act: str | None = "silu",
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: int | None = 1e-06,
+        use_cache: bool | None = True,
+        tie_word_embeddings: bool | None = False,
+        max_position_embeddings: int | None = 2048,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        num_attention_heads: int | None = 8,
+        num_key_value_heads: int | None = None,
+        attention_bias: bool | None = False,
+        attention_dropout: float | None = 0.0,
+        mlp_bias: bool | None = False,
+        sliding_window: int | None = None,
+        keep_window_size: int | None = 2048,
+        is_moe: bool | None = False,
+        num_experts: int | None = 16384,
+        num_experts_per_tok: int | None = 64,
+        norm_topk_prob: bool | None = False,
+        output_router_logits: bool | None = False,
+        router_aux_loss_coef: float | None = 0.001,
+        pad_token_id: int | None = None,
+        bos_token_id: int | None = None,
+        eos_token_id: int | None = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -189,23 +190,17 @@ class DogeConfig(PreTrainedConfig):
         self.norm_topk_prob = norm_topk_prob
         self.output_router_logits = output_router_logits
         self.router_aux_loss_coef = router_aux_loss_coef
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
-
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 10000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.rope_parameters = rope_parameters
 
         # for backward compatibility
         if num_key_value_heads is None:
             self.num_key_value_heads = num_attention_heads
 
-        super().__init__(
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        super().__init__(**kwargs)
 
 
 __all__ = ["DogeConfig"]

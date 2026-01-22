@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The Qwen team, Alibaba Group and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,10 +13,8 @@
 # limitations under the License.
 """Qwen3MoE model configuration"""
 
-from typing import Optional
-
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
@@ -68,7 +65,7 @@ class Qwen3MoeConfig(PreTrainedConfig):
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether the model's input and output word embeddings should be tied.
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
@@ -98,6 +95,12 @@ class Qwen3MoeConfig(PreTrainedConfig):
             Indicate which layers use Qwen3MoeMLP rather than Qwen3MoeSparseMoeBlock
             The list contains layer index, from 0 to num_layers-1 if we have num_layers layers
             If `mlp_only_layers` is empty, `decoder_sparse_step` is used to determine the sparsity.
+        pad_token_id (`int`, *optional*):
+            Padding token id.
+        bos_token_id (`int`, *optional*):
+            Beginning of stream token id.
+        eos_token_id (`int`, *optional*):
+            End of stream token id.
 
     ```python
     >>> from transformers import Qwen3MoeModel, Qwen3MoeConfig
@@ -121,9 +124,9 @@ class Qwen3MoeConfig(PreTrainedConfig):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.experts.*.gate_proj": "colwise",
-        "layers.*.mlp.experts.*.up_proj": "colwise",
-        "layers.*.mlp.experts.*.down_proj": "rowwise",
+        "layers.*.mlp.experts.gate_up_proj": "local_rowwise",
+        "layers.*.mlp.experts.down_proj": "local_rowwise",
+        "layers.*.mlp.experts": "gather",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
@@ -136,31 +139,34 @@ class Qwen3MoeConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 151936,
-        hidden_size: Optional[int] = 2048,
-        intermediate_size: Optional[int] = 6144,
-        num_hidden_layers: Optional[int] = 24,
-        num_attention_heads: Optional[int] = 32,
-        num_key_value_heads: Optional[int] = 4,
-        hidden_act: Optional[str] = "silu",
-        max_position_embeddings: Optional[int] = 32768,
-        initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[int] = 1e-6,
-        use_cache: Optional[bool] = True,
-        tie_word_embeddings: Optional[bool] = False,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
-        attention_bias: Optional[bool] = False,
-        use_sliding_window: Optional[bool] = False,
-        sliding_window: Optional[int] = 4096,
-        attention_dropout: Optional[float] = 0.0,
-        decoder_sparse_step: Optional[int] = 1,
-        moe_intermediate_size: Optional[int] = 768,
-        num_experts_per_tok: Optional[int] = 8,
-        num_experts: Optional[int] = 128,
-        norm_topk_prob: Optional[bool] = False,
-        output_router_logits: Optional[bool] = False,
-        router_aux_loss_coef: Optional[float] = 0.001,
-        mlp_only_layers: Optional[bool] = None,
+        vocab_size: int | None = 151936,
+        hidden_size: int | None = 2048,
+        intermediate_size: int | None = 6144,
+        num_hidden_layers: int | None = 24,
+        num_attention_heads: int | None = 32,
+        num_key_value_heads: int | None = 4,
+        hidden_act: str | None = "silu",
+        max_position_embeddings: int | None = 32768,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: int | None = 1e-6,
+        use_cache: bool | None = True,
+        tie_word_embeddings: bool | None = False,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        attention_bias: bool | None = False,
+        use_sliding_window: bool | None = False,
+        sliding_window: int | None = 4096,
+        attention_dropout: float | None = 0.0,
+        decoder_sparse_step: int | None = 1,
+        moe_intermediate_size: int | None = 768,
+        num_experts_per_tok: int | None = 8,
+        num_experts: int | None = 128,
+        norm_topk_prob: bool | None = False,
+        output_router_logits: bool | None = False,
+        router_aux_loss_coef: float | None = 0.001,
+        mlp_only_layers: bool | None = None,
+        pad_token_id: int | None = None,
+        bos_token_id: int | None = None,
+        eos_token_id: int | None = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -179,14 +185,7 @@ class Qwen3MoeConfig(PreTrainedConfig):
         self.use_cache = use_cache
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
-
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 10000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
+        self.rope_parameters = rope_parameters
 
         # MoE arguments
         self.decoder_sparse_step = decoder_sparse_step
@@ -198,10 +197,11 @@ class Qwen3MoeConfig(PreTrainedConfig):
         self.router_aux_loss_coef = router_aux_loss_coef
         self.mlp_only_layers = [] if mlp_only_layers is None else mlp_only_layers
 
-        super().__init__(
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(**kwargs)
 
 
 __all__ = ["Qwen3MoeConfig"]

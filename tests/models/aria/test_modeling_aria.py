@@ -15,6 +15,7 @@
 
 import unittest
 
+import pytest
 import requests
 
 from transformers import (
@@ -197,23 +198,23 @@ class AriaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMi
         self.model_tester = AriaVisionText2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=AriaConfig, has_text_modality=False)
 
-    @unittest.skip(
+    @pytest.mark.xfail(
         reason="This architecture seems to not compute gradients for the last vision-layernorm because the model uses hidden states pre-norm"
     )
     def test_training_gradient_checkpointing(self):
-        pass
+        super().test_training_gradient_checkpointing()
 
-    @unittest.skip(
-        reason="This architecture seems to not compute gradients for the last vision-layernorm because the model uses hidden states pre-norm"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
+    @pytest.mark.xfail(
         reason="This architecture seems to not compute gradients for the last vision-layernorm because the model uses hidden states pre-norm"
     )
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
+        super().test_training_gradient_checkpointing_use_reentrant_false()
+
+    @pytest.mark.xfail(
+        reason="This architecture seems to not compute gradients for the last vision-layernorm because the model uses hidden states pre-norm"
+    )
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        super().test_training_gradient_checkpointing_use_reentrant_true()
 
 
 SKIP = False
@@ -226,6 +227,7 @@ if hasattr(torch_accelerator_module, "get_device_properties"):
 
 @unittest.skipIf(SKIP, reason="A10 doesn't have enough GPU memory for this tests")
 @require_torch
+@slow
 class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.processor = AutoProcessor.from_pretrained("rhymes-ai/Aria")
@@ -234,7 +236,6 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
-    @slow
     @require_torch_large_accelerator
     @require_bitsandbytes
     def test_small_model_integration_test(self):
@@ -272,7 +273,6 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
         ).get_expectation()
         self.assertEqual(decoded_output, expected_output)
 
-    @slow
     @require_torch_large_accelerator
     @require_bitsandbytes
     def test_small_model_integration_test_llama_single(self):
@@ -304,7 +304,6 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
             f"Expected: {repr(EXPECTED_DECODED_TEXT)}\nActual: {repr(decoded_output)}",
         )
 
-    @slow
     @require_torch_large_accelerator
     @require_bitsandbytes
     def test_small_model_integration_test_llama_batched(self):
@@ -346,7 +345,6 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
         decoded_output = processor.batch_decode(output, skip_special_tokens=True)
         self.assertEqual(decoded_output, EXPECTED_DECODED_TEXT)
 
-    @slow
     @require_torch_large_accelerator
     @require_bitsandbytes
     def test_small_model_integration_test_batch(self):
@@ -383,7 +381,6 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
         decoded_output = self.processor.batch_decode(output, skip_special_tokens=True)
         self.assertEqual(decoded_output, EXPECTED_DECODED_TEXT)
 
-    @slow
     @require_torch_large_accelerator
     @require_bitsandbytes
     def test_small_model_integration_test_llama_batched_regression(self):
@@ -417,7 +414,6 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
         decoded_output = processor.batch_decode(output, skip_special_tokens=True)
         self.assertEqual(decoded_output, EXPECTED_DECODED_TEXT)
 
-    @slow
     @require_torch_large_accelerator
     @require_vision
     @require_bitsandbytes
@@ -510,7 +506,6 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
         self.assertEqual(slow_tokenizer.tokenize(prompt), EXPECTED_OUTPUT)
         self.assertEqual(fast_tokenizer.tokenize(prompt), EXPECTED_OUTPUT)
 
-    @slow
     @require_torch_large_accelerator
     @require_bitsandbytes
     def test_generation_no_images(self):
@@ -520,7 +515,6 @@ class AriaForConditionalGenerationIntegrationTest(unittest.TestCase):
             quantization_config=BitsAndBytesConfig(load_in_4bit=True, llm_int8_skip_modules=["multihead_attn"]),
         )
         processor = AutoProcessor.from_pretrained(model_id)
-        assert model.device.type == "cuda", "This test is only supported on CUDA"  # TODO: remove this
         # Prepare inputs with no images
         inputs = processor(text="Hello, I am", return_tensors="pt").to(torch_device)
 

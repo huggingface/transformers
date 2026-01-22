@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 the HuggingFace Inc. team and the Swiss AI Initiative. All rights reserved.
 #
 #
@@ -14,17 +13,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from collections.abc import Callable
-from typing import Optional
 
 import torch
 from torch import nn
 
+from ...activations import ACT2CLS
 from ...cache_utils import Cache
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...configuration_utils import PreTrainedConfig
+from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, logging
-from ..llama.configuration_llama import LlamaConfig
 from ..llama.modeling_llama import (
     LlamaAttention,
     LlamaDecoderLayer,
@@ -43,7 +42,7 @@ from ..nemotron.modeling_nemotron import NemotronMLP
 logger = logging.get_logger(__name__)
 
 
-class ApertusConfig(LlamaConfig):
+class ApertusConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`ApertusModel`]. It is used to instantiate a Apertus
     model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
@@ -94,7 +93,7 @@ class ApertusConfig(LlamaConfig):
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         attention_bias (`bool`, *optional*, defaults to `False`):
@@ -116,34 +115,40 @@ class ApertusConfig(LlamaConfig):
     ```"""
 
     model_type = "apertus"
+    keys_to_ignore_at_inference = ["past_key_values"]
+    default_theta = 12000000.0
     base_model_tp_plan = {
-        "layers.*.self_attn.q_proj": "colwise_rep",  # we need to replicate here due to the added norm on q and k
-        "layers.*.self_attn.k_proj": "colwise_rep",  # we need to replicate here due to the added norm on q and k
-        "layers.*.self_attn.v_proj": "colwise_rep",  # we need to replicate here due to the added norm on q and k
-        "layers.*.self_attn.o_proj": "rowwise_rep",  # we need to replicate here due to the added norm on q and k
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
-        "layers.*.mlp.gate_proj": "colwise",
+    }
+    base_model_pp_plan = {
+        "embed_tokens": (["input_ids"], ["inputs_embeds"]),
+        "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
+        "norm": (["hidden_states"], ["hidden_states"]),
     }
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 131072,
-        hidden_size: Optional[int] = 4096,
-        intermediate_size: Optional[int] = 14336,
-        num_hidden_layers: Optional[int] = 32,
-        num_attention_heads: Optional[int] = 32,
-        num_key_value_heads: Optional[int] = None,
-        hidden_act: Optional[str] = "xielu",
-        max_position_embeddings: Optional[int] = 65536,
-        initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[float] = 1e-5,
-        use_cache: Optional[bool] = True,
-        pad_token_id: Optional[int] = 3,
-        bos_token_id: Optional[int] = 1,
-        eos_token_id: Optional[int] = 2,
-        tie_word_embeddings: Optional[bool] = False,
-        rope_parameters: Optional[RopeParameters] = {
+        vocab_size: int | None = 131072,
+        hidden_size: int | None = 4096,
+        intermediate_size: int | None = 14336,
+        num_hidden_layers: int | None = 32,
+        num_attention_heads: int | None = 32,
+        num_key_value_heads: int | None = None,
+        hidden_act: str | None = "xielu",
+        max_position_embeddings: int | None = 65536,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: float | None = 1e-5,
+        use_cache: bool | None = True,
+        pad_token_id: int | None = 3,
+        bos_token_id: int | None = 1,
+        eos_token_id: int | None = 2,
+        tie_word_embeddings: bool | None = False,
+        rope_parameters: RopeParameters | None = {
             "rope_type": "llama3",
             "rope_theta": 12000000.0,
             "factor": 8.0,
@@ -151,46 +156,44 @@ class ApertusConfig(LlamaConfig):
             "low_freq_factor": 1.0,
             "high_freq_factor": 4.0,
         },
-        attention_bias: Optional[bool] = False,
-        attention_dropout: Optional[float] = 0.0,
+        attention_bias: bool | None = False,
+        attention_dropout: float | None = 0.0,
         **kwargs,
     ):
-        super().__init__(
-            vocab_size=vocab_size,
-            hidden_size=hidden_size,
-            intermediate_size=intermediate_size,
-            num_hidden_layers=num_hidden_layers,
-            num_attention_heads=num_attention_heads,
-            num_key_value_heads=num_key_value_heads,
-            hidden_act=hidden_act,
-            max_position_embeddings=max_position_embeddings,
-            initializer_range=initializer_range,
-            rms_norm_eps=rms_norm_eps,
-            use_cache=use_cache,
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            rope_parameters=rope_parameters,
-            attention_bias=attention_bias,
-            attention_dropout=attention_dropout,
-            **kwargs,
-        )
-        del self.pretraining_tp
-        del self.mlp_bias
-        del self.head_dim
+        self.vocab_size = vocab_size
+        self.max_position_embeddings = max_position_embeddings
+        self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
 
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 12000000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
+        # for backward compatibility
+        if num_key_value_heads is None:
+            num_key_value_heads = num_attention_heads
+
+        self.num_key_value_heads = num_key_value_heads
+        self.hidden_act = hidden_act
+        self.initializer_range = initializer_range
+        self.rms_norm_eps = rms_norm_eps
+        self.use_cache = use_cache
+        self.attention_bias = attention_bias
+        self.attention_dropout = attention_dropout
+        self.rope_parameters = rope_parameters
+
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        super().__init__(**kwargs)
 
 
 class ApertusMLP(NemotronMLP):
     def __init__(self, config):
-        super().__init__()
+        super().__init__(config)
         self.up_proj = nn.Linear(self.hidden_size, self.intermediate_size, bias=False)
         self.down_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=False)
+        if config.hidden_act == "xielu":
+            self.act_fn = ACT2CLS["xielu"](dtype=config.dtype)
 
 
 class ApertusRMSNorm(LlamaRMSNorm):
@@ -202,7 +205,7 @@ class ApertusRotaryEmbedding(LlamaRotaryEmbedding):
 
 
 class ApertusAttention(LlamaAttention):
-    def __init__(self, config: ApertusConfig, layer_idx: Optional[int] = None):
+    def __init__(self, config: ApertusConfig, layer_idx: int | None = None):
         super().__init__(config, layer_idx)
         self.q_norm = ApertusRMSNorm(self.head_dim, config.rms_norm_eps)
         self.k_norm = ApertusRMSNorm(self.head_dim, config.rms_norm_eps)
@@ -211,9 +214,9 @@ class ApertusAttention(LlamaAttention):
         self,
         hidden_states: torch.Tensor,
         position_embeddings: tuple[torch.Tensor, torch.Tensor],
-        attention_mask: Optional[torch.Tensor],
-        past_key_values: Optional[Cache] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        attention_mask: torch.Tensor | None,
+        past_key_values: Cache | None = None,
+        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor, torch.Tensor]:
         input_shape = hidden_states.shape[:-1]
@@ -264,12 +267,12 @@ class ApertusDecoderLayer(LlamaDecoderLayer):
     def forward(
         self,
         hidden_states: torch.Tensor,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        use_cache: Optional[bool] = False,
-        cache_position: Optional[torch.LongTensor] = None,
-        position_embeddings: Optional[tuple[torch.Tensor, torch.Tensor]] = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        use_cache: bool | None = False,
+        cache_position: torch.LongTensor | None = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple[torch.Tensor]:
         residual = hidden_states

@@ -22,7 +22,7 @@ Hugging Face Transformers 라이브러리는 커뮤니티 기여자들 덕분에
 - 오픈 소스의 모범 사례에 대한 통찰력을 얻습니다.
 - 가장 인기 있는 딥러닝 라이브러리의 설계 원칙을 이해합니다.
 - 대규모 모델을 효율적으로 테스트하는 방법을 배웁니다.
-- `black`, `ruff`, `make fix-copies`와 같은 Python 유틸리티를 통합하여 깔끔하고 가독성 있는 코드를 작성하는 방법을 배웁니다.
+- `black`, `ruff`, `make fix-repo`와 같은 Python 유틸리티를 통합하여 깔끔하고 가독성 있는 코드를 작성하는 방법을 배웁니다.
 
 Hugging Face 팀은 항상 도움을 줄 준비가 되어 있으므로 혼자가 아니라는 점을 기억하세요. 🤗 ❤️
 
@@ -348,16 +348,16 @@ model = BrandNewBertModel(BrandNewBertConfig())
 def _init_weights(self, module):
     """Initialize the weights"""
     if isinstance(module, nn.Linear):
-        module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+        module.weight.normal_(mean=0.0, std=self.config.initializer_range)
         if module.bias is not None:
-            module.bias.data.zero_()
+            module.bias.zero_()
     elif isinstance(module, nn.Embedding):
-        module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+        module.weight.normal_(mean=0.0, std=self.config.initializer_range)
         if module.padding_idx is not None:
             module.weight.data[module.padding_idx].zero_()
     elif isinstance(module, nn.LayerNorm):
-        module.bias.data.zero_()
-        module.weight.data.fill_(1.0)
+        module.bias.zero_()
+        module.weight.fill_(1.0)
 ```
 
 몇 가지 모듈에 대해 특별한 초기화가 필요한 경우 사용자 정의 방식을 사용할 수도 있습니다. 예를 들어, `Wav2Vec2ForPreTraining`에서 마지막 두 개의 선형 레이어는 일반적인 PyTorch `nn.Linear`의 초기화를 가져야 하지만, 다른 모든 레이어는 위와 같은 초기화를 사용해야 합니다. 이는 다음과 같이 코드화됩니다:
@@ -371,9 +371,9 @@ def _init_weights(self, module):
         module.project_hid._is_hf_initialized = True
         module.project_q._is_hf_initialized = True
     elif isinstance(module, nn.Linear):
-        module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+        module.weight.normal_(mean=0.0, std=self.config.initializer_range)
         if module.bias is not None:
-            module.bias.data.zero_()
+            module.bias.zero_()
 ```
 
 `_is_hf_initialized` 플래그는 서브모듈을 한 번만 초기화하도록 내부적으로 사용됩니다. `module.project_q` 및 `module.project_hid`에 대해 `True`로 설정함으로써, 우리가 수행한 사용자 정의 초기화가 이후에 덮어쓰이지 않도록 합니다. 즉, `_init_weights` 함수가 이들에게 적용되지 않습니다.
@@ -592,7 +592,7 @@ make style
 🤗 Transformers에는 여전히 실패할 수 있는 몇 가지 매우 엄격한 디자인 테스트가 있습니다. 이는 독스트링에 누락된 정보나 잘못된 명명 때문에 종종 발생합니다. 여기서 막히면 Hugging Face 팀이 도움을 줄 것입니다.
 
 ```bash
-make quality
+make check-repo
 ```
 
 마지막으로, 코드가 정확히 작동하는 것을 확인한 후에는 항상 코드를 리팩토링하는 것이 좋은 생각입니다. 모든 테스트가 통과된 지금은 추가한 코드를 다시 검토하고 리팩토링하는 좋은 시기입니다.

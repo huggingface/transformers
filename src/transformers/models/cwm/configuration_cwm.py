@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_cwm.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,17 +18,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import rope_config_validation, standardize_rope_params
 
 
 class CwmConfig(PreTrainedConfig):
     """
     Configuration for Code World Model (CWM).
     This is an inherited Llama3-compatible configuration with layer-interleaved
-    sliding-window attention. Configures a `CwmModel`. Designed to yield a configuartion mirroring the model in the
+    sliding-window attention. Configures a `CwmModel`. Designed to yield a configuration mirroring the model in the
     [facebook/cwm](https://huggingface.co/facebook/cwm) architecture by default. Other models include:
     - [facebook/cwm-sft](https://huggingface.co/facebook/cwm-sft)
     - [facebook/cwm-pretrain](https://huggingface.co/facebook/cwm-pretrain)
@@ -80,7 +77,7 @@ class CwmConfig(PreTrainedConfig):
         mlp_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in up_proj, down_proj and gate_proj layers in the MLP layers.
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         sliding_window (`int`, *optional*, defaults to 8192):
@@ -107,6 +104,7 @@ class CwmConfig(PreTrainedConfig):
         "layers": (["hidden_states", "attention_mask"], ["hidden_states"]),
         "norm": (["hidden_states"], ["hidden_states"]),
     }
+    default_theta = 1_000_000.0
 
     def __init__(
         self,
@@ -122,17 +120,17 @@ class CwmConfig(PreTrainedConfig):
         initializer_range: float = 0.02,
         rms_norm_eps: float = 1e-5,
         use_cache: bool = True,
-        pad_token_id: Optional[int] = None,
+        pad_token_id: int | None = None,
         eos_token_id=[128001, 128008, 128009],
         bos_token_id: int = 128000,
         tie_word_embeddings: bool = False,
         attention_dropout: float = 0.0,
         pretraining_tp: int = 1,
         mlp_bias: bool = False,
-        rope_parameters: Optional[dict] = None,
+        rope_parameters: dict | None = None,
         # CWM interleaved sliding window fields
         sliding_window: int = 8192,
-        layer_types: Optional[list[str]] = None,  # ["full_attention"|"sliding_attention"] per layer
+        layer_types: list[str] | None = None,  # ["full_attention"|"sliding_attention"] per layer
         **kwargs,
     ):
         if rope_parameters is None:
@@ -177,22 +175,13 @@ class CwmConfig(PreTrainedConfig):
         self.attention_dropout = attention_dropout
         self.mlp_bias = mlp_bias
         self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
+        self.rope_parameters = rope_parameters
 
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 1_000_000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
-
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        super().__init__(**kwargs)
 
 
 __all__ = ["CwmConfig"]

@@ -196,24 +196,6 @@ class FuyuModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
             with self.assertRaises(ValueError):
                 _ = model(input_ids=input_ids, image_patches=image_patches)
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
     @parameterized.expand([("random",), ("same",)])
     @pytest.mark.generate
     @unittest.skip("Fuyu doesn't support assisted generation due to the need to crop/extend image patches indices")
@@ -258,6 +240,10 @@ class FuyuModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
     @unittest.skip("Persimmon backbone applies key/query norm which doesn't work with packing")
     def test_sdpa_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip(reason="Fuyu has no separate base model without a head.")
+    def test_model_base_model_prefix(self):
         pass
 
 

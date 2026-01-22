@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """FastSpeech2Conformer model configuration"""
-
-from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
@@ -147,6 +144,8 @@ class FastSpeech2ConformerConfig(PreTrainedConfig):
             Speaker embedding dimension. If set to > 0, assume that speaker_embedding will be provided as the input.
         is_encoder_decoder (`bool`, *optional*, defaults to `True`):
             Specifies whether the model is an encoder-decoder.
+        convolution_bias (`bool`, *optional*, defaults to `True`):
+            Specifies whether to use bias in convolutions of the conformer's convolution module.
 
     Example:
 
@@ -224,6 +223,7 @@ class FastSpeech2ConformerConfig(PreTrainedConfig):
         num_languages=None,
         speaker_embed_dim=None,
         is_encoder_decoder=True,
+        convolution_bias=True,
         **kwargs,
     ):
         if positionwise_conv_kernel_size % 2 == 0:
@@ -317,7 +317,7 @@ class FastSpeech2ConformerConfig(PreTrainedConfig):
         self.num_languages = num_languages
         self.speaker_embed_dim = speaker_embed_dim
         self.duration_predictor_dropout_rate = duration_predictor_dropout_rate
-        self.is_encoder_decoder = is_encoder_decoder
+        self.convolution_bias = convolution_bias
 
         super().__init__(
             is_encoder_decoder=is_encoder_decoder,
@@ -459,8 +459,8 @@ class FastSpeech2ConformerWithHifiGanConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        model_config: Optional[dict] = None,
-        vocoder_config: Optional[dict] = None,
+        model_config: dict | None = None,
+        vocoder_config: dict | None = None,
         **kwargs,
     ):
         if model_config is None:

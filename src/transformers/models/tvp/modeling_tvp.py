@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The Intel AIA Team Authors, and HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License=, Version 2.0 (the "License");
@@ -16,11 +15,11 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional
 
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
@@ -47,10 +46,10 @@ class TvpVideoGroundingOutput(ModelOutput):
         sequence_length)`.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    logits: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    loss: torch.FloatTensor | None = None
+    logits: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 class TvpLoss(nn.Module):
@@ -354,7 +353,7 @@ class TvpAttention(nn.Module):
         self,
         hidden_states,
         attention_mask=None,
-        output_attentions: Optional[bool] = None,
+        output_attentions: bool | None = None,
     ):
         batch_size, sequence_length = hidden_states.shape[:2]
         mixed_query_layer = self.query(hidden_states)
@@ -432,7 +431,7 @@ class TvpEncodeLayer(GradientCheckpointingLayer):
         self,
         hidden_states,
         attention_mask=None,
-        output_attentions: Optional[bool] = None,
+        output_attentions: bool | None = None,
     ):
         self_attention_outputs = self.attention(
             hidden_states,
@@ -458,10 +457,10 @@ class TvpEncoder(nn.Module):
         self,
         hidden_states,
         attention_mask=None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-    ):
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+    ) -> tuple | BaseModelOutput:
         return_dict = return_dict if return_dict is not None else self.config.return_dict
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
@@ -519,33 +518,34 @@ class TvpPooler(nn.Module):
 class TvpPreTrainedModel(PreTrainedModel):
     config: TvpConfig
     base_model_prefix = "model"
-    input_modalities = ["video", "text"]
+    input_modalities = ("video", "text")
     supports_gradient_checkpointing = True
 
+    @torch.no_grad()
     def _init_weights(self, module: nn.Module):
         """Initialize the weights"""
         if isinstance(module, (nn.Linear, nn.Embedding)):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
         elif isinstance(module, nn.LayerNorm):
-            module.bias.data.zero_()
-            module.weight.data.fill_(1.0)
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
         elif isinstance(module, nn.Conv2d):
-            nn.init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
+            init.kaiming_normal_(module.weight, mode="fan_out", nonlinearity="relu")
             if module.bias is not None:
-                nn.init.constant_(module.bias, 0)
+                init.constant_(module.bias, 0)
         elif isinstance(module, TvpModel):
-            nn.init.normal_(module.text_prompt)
+            init.normal_(module.text_prompt)
 
         if isinstance(module, nn.Linear) and module.bias is not None:
-            module.bias.data.zero_()
+            init.zeros_(module.bias)
         if hasattr(module, "pad_up"):
-            nn.init.normal_(module.pad_up)
+            init.normal_(module.pad_up)
         if hasattr(module, "pad_down"):
-            nn.init.normal_(module.pad_down)
+            init.normal_(module.pad_down)
         if hasattr(module, "pad_left"):
-            nn.init.normal_(module.pad_left)
+            init.normal_(module.pad_left)
         if hasattr(module, "pad_right"):
-            nn.init.normal_(module.pad_right)
+            init.normal_(module.pad_right)
 
 
 class TvpFrameDownPadPrompter(nn.Module):
@@ -712,14 +712,15 @@ class TvpModel(TvpPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        attention_mask: torch.LongTensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         interpolate_pos_encoding: bool = False,
-    ):
+        **kwargs,
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
         Examples:
         ```python
@@ -812,15 +813,16 @@ class TvpForVideoGrounding(TvpPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.LongTensor] = None,
-        labels: Optional[tuple[torch.Tensor]] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        attention_mask: torch.LongTensor | None = None,
+        labels: tuple[torch.Tensor] | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         interpolate_pos_encoding: bool = False,
-    ):
+        **kwargs,
+    ) -> tuple | TvpVideoGroundingOutput:
         r"""
         labels (`torch.FloatTensor` of shape `(batch_size, 3)`, *optional*):
             The labels contains duration, start time, and end time of the video corresponding to the text.

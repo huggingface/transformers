@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,22 +15,21 @@
 Processor class for UDOP.
 """
 
-from typing import Optional, Union
-
 from transformers import logging
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, TextKwargs, Unpack
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...utils import auto_docstring
 
 
 logger = logging.get_logger(__name__)
 
 
 class UdopTextKwargs(TextKwargs, total=False):
-    word_labels: Optional[Union[list[int], list[list[int]]]]
-    boxes: Optional[Union[list[list[int]], list[list[list[int]]]]]
+    word_labels: list[int] | list[list[int]] | None
+    boxes: list[list[int]] | list[list[list[int]]] | None
 
 
 class UdopProcessorKwargs(ProcessingKwargs, total=False):
@@ -51,6 +49,7 @@ class UdopProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@auto_docstring
 class UdopProcessor(ProcessorMixin):
     r"""
     Constructs a UDOP processor which combines a LayoutLMv3 image processor and a UDOP tokenizer into a single processor.
@@ -58,47 +57,25 @@ class UdopProcessor(ProcessorMixin):
     [`UdopProcessor`] offers all the functionalities you need to prepare data for the model.
 
     It first uses [`LayoutLMv3ImageProcessor`] to resize, rescale and normalize document images, and optionally applies OCR
-    to get words and normalized bounding boxes. These are then provided to [`UdopTokenizer`] or [`UdopTokenizerFast`],
+    to get words and normalized bounding boxes. These are then provided to [`UdopTokenizer`],
     which turns the words and bounding boxes into token-level `input_ids`, `attention_mask`, `token_type_ids`, `bbox`.
     Optionally, one can provide integer `word_labels`, which are turned into token-level `labels` for token
     classification tasks (such as FUNSD, CORD).
 
     Additionally, it also supports passing `text_target` and `text_pair_target` to the tokenizer, which can be used to
     prepare labels for language modeling tasks.
-
-    Args:
-        image_processor (`LayoutLMv3ImageProcessor`):
-            An instance of [`LayoutLMv3ImageProcessor`]. The image processor is a required input.
-        tokenizer (`UdopTokenizer` or `UdopTokenizerFast`):
-            An instance of [`UdopTokenizer`] or [`UdopTokenizerFast`]. The tokenizer is a required input.
     """
-
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "LayoutLMv3ImageProcessor"
-    tokenizer_class = ("UdopTokenizer", "UdopTokenizerFast")
 
     def __init__(self, image_processor, tokenizer):
         super().__init__(image_processor, tokenizer)
 
+    @auto_docstring
     def __call__(
         self,
-        images: Optional[ImageInput] = None,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         **kwargs: Unpack[UdopProcessorKwargs],
     ) -> BatchFeature:
-        """
-        This method first forwards the `images` argument to [`~UdopImageProcessor.__call__`]. In case
-        [`UdopImageProcessor`] was initialized with `apply_ocr` set to `True`, it passes the obtained words and
-        bounding boxes along with the additional arguments to [`~UdopTokenizer.__call__`] and returns the output,
-        together with the prepared `pixel_values`. In case [`UdopImageProcessor`] was initialized with `apply_ocr` set
-        to `False`, it passes the words (`text`/``text_pair`) and `boxes` specified by the user along with the
-        additional arguments to [`~UdopTokenizer.__call__`] and returns the output, together with the prepared
-        `pixel_values`.
-
-        Alternatively, one can pass `text_target` and `text_pair_target` to prepare the targets of UDOP.
-
-        Please refer to the docstring of the above two methods for more information.
-        """
         # verify input
         output_kwargs = self._merge_kwargs(
             UdopProcessorKwargs,

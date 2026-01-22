@@ -15,7 +15,6 @@
 
 import copy
 import inspect
-import os
 import random
 import re
 import tempfile
@@ -31,7 +30,6 @@ from transformers import WhisperConfig
 from transformers.testing_utils import (
     Expectations,
     is_flaky,
-    require_read_token,
     require_torch,
     require_torch_accelerator,
     require_torch_fp16,
@@ -422,7 +420,7 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
-            self.assertEqual(info["missing_keys"], [])
+            self.assertEqual(info["missing_keys"], set())
 
     def test_model_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -508,25 +506,20 @@ class WhisperModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMi
         self.assertEqual(output.beam_indices.shape[0], input_features.shape[0] * 3)
         self.assertEqual(output.sequences_scores.shape[0], input_features.shape[0] * 3)
 
-    # training is not supported yet
-    @unittest.skip(reason="Training is not supported yet")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training(self):
         pass
 
-    @unittest.skip(reason="Training is not supported yet")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     @parameterized.expand([("offloaded",)])
@@ -1486,22 +1479,17 @@ class WhisperModelIntegrationTests(unittest.TestCase):
         transcript = processor.batch_decode(generated_ids, skip_special_tokens=True)
         self.assertListEqual(transcript, EXPECTED_TRANSCRIPT)
 
-    @require_read_token
     @slow
     def test_large_batched_generation_multilingual(self):
         processor = WhisperProcessor.from_pretrained("openai/whisper-large")
         model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-large")
         model.to(torch_device)
 
-        token = os.getenv("HF_HUB_READ_TOKEN", None)
-        if token is None:
-            token = True
         ds = load_dataset(
             "hf-internal-testing/fixtures_common_voice",
             "ja",
             split="test",
             streaming=True,
-            token=token,
         )
         ds = ds.cast_column("audio", datasets.Audio(sampling_rate=16_000))
 

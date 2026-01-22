@@ -26,14 +26,11 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
-from transformers.utils import is_accelerate_available, is_torch_available
+from transformers.utils import is_torch_available
 
 
 if is_torch_available():
     import torch
-
-if is_accelerate_available():
-    from accelerate import init_empty_weights
 
 
 @require_torch_gpu
@@ -63,7 +60,7 @@ class HiggsConfigTest(unittest.TestCase):
 @require_torch_gpu
 @require_flute_hadamard
 @require_accelerate
-# @require_read_token
+#
 class HiggsTest(unittest.TestCase):
     model_name = "unsloth/Llama-3.2-1B"
 
@@ -102,7 +99,7 @@ class HiggsTest(unittest.TestCase):
         config = AutoConfig.from_pretrained(model_id, revision="cb32f77e905cccbca1d970436fb0f5e6b58ee3c5")
         quantization_config = HiggsConfig()
 
-        with init_empty_weights():
+        with torch.device("meta"):
             model = OPTForCausalLM(config)
 
         nb_linears = 0
@@ -118,7 +115,7 @@ class HiggsTest(unittest.TestCase):
 
         self.assertEqual(nb_linears - 1, nb_higgs_linear)
 
-        with init_empty_weights():
+        with torch.device("meta"):
             model = OPTForCausalLM(config)
         quantization_config = HiggsConfig(modules_to_not_convert=["fc1"])
         model, _ = replace_with_higgs_linear(model, quantization_config=quantization_config)

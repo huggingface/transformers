@@ -22,9 +22,9 @@ from functools import cached_property
 from transformers import (
     MarkupLMProcessor,
     MarkupLMTokenizer,
-    PreTrainedTokenizer,
     PreTrainedTokenizerBase,
     PreTrainedTokenizerFast,
+    PythonBackend,
 )
 from transformers.models.markuplm.tokenization_markuplm import VOCAB_FILES_NAMES
 from transformers.testing_utils import require_bs4, require_tokenizers, require_torch, slow
@@ -68,7 +68,7 @@ class MarkupLMProcessorTest(unittest.TestCase):
         processor = MarkupLMProcessor(tokenizer=self.get_tokenizer(), feature_extractor=feature_extractor)
         processor.save_pretrained(self.tmpdirname)
 
-    def get_tokenizer(self, **kwargs) -> PreTrainedTokenizer:
+    def get_tokenizer(self, **kwargs) -> PythonBackend:
         return self.tokenizer_class.from_pretrained(self.tmpdirname, **kwargs)
 
     def get_rust_tokenizer(self, **kwargs) -> PreTrainedTokenizerFast:

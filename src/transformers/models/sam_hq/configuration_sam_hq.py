@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_sam_hq.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 Google Inc. HuggingFace Inc. team. All rights reserved.
 #
 #
@@ -188,6 +187,7 @@ class SamHQVisionConfig(PreTrainedConfig):
         self.global_attn_indexes = global_attn_indexes
         self.num_pos_feats = num_pos_feats
         self.mlp_dim = int(hidden_size * mlp_ratio) if mlp_dim is None else mlp_dim
+        self.scale = self.hidden_size // 2
 
 
 class SamHQMaskDecoderConfig(PreTrainedConfig):

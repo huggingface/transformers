@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,23 +12,20 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, Union
 
 import torch
+from torch import Tensor, nn
 
+from ... import initialization as init
 from ...modeling_outputs import BackboneOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import is_timm_available, is_torch_available, requires_backends
+from ...utils import is_timm_available, requires_backends
 from ...utils.backbone_utils import BackboneMixin
 from .configuration_timm_backbone import TimmBackboneConfig
 
 
 if is_timm_available():
     import timm
-
-
-if is_torch_available():
-    from torch import Tensor
 
 
 class TimmBackbone(PreTrainedModel, BackboneMixin):
@@ -39,7 +35,7 @@ class TimmBackbone(PreTrainedModel, BackboneMixin):
     """
 
     main_input_name = "pixel_values"
-    input_modalities = "image"
+    input_modalities = ("image",)
     supports_gradient_checkpointing = False
     config: TimmBackboneConfig
 
@@ -84,10 +80,11 @@ class TimmBackbone(PreTrainedModel, BackboneMixin):
         self._all_layers = {layer["module"]: str(i) for i, layer in enumerate(self._backbone.feature_info.info)}
         super()._init_backbone(config)
 
+        self.post_init()
+
     @classmethod
     def from_pretrained(cls, pretrained_model_name_or_path, *model_args, **kwargs):
         requires_backends(cls, ["vision", "timm"])
-        from ...models.timm_backbone import TimmBackboneConfig
 
         config = kwargs.pop("config", TimmBackboneConfig())
 
@@ -114,19 +111,25 @@ class TimmBackbone(PreTrainedModel, BackboneMixin):
     def unfreeze_batch_norm_2d(self):
         timm.utils.model.unfreeze_batch_norm_2d(self._backbone)
 
+    @torch.no_grad()
     def _init_weights(self, module):
-        """
-        Empty init weights function to ensure compatibility of the class in the library.
-        """
+        """We need to at least re-init the non-persistent buffers if the model was initialized on meta device (we
+        assume weights and persistent buffers will be part of checkpoint as we have no way to control timm inits)"""
+        if hasattr(module, "init_non_persistent_buffers"):
+            module.init_non_persistent_buffers()
+        elif isinstance(module, nn.BatchNorm2d) and getattr(module, "running_mean", None) is not None:
+            init.zeros_(module.running_mean)
+            init.ones_(module.running_var)
+            init.zeros_(module.num_batches_tracked)
 
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[BackboneOutput, tuple[Tensor, ...]]:
+    ) -> BackboneOutput | tuple[Tensor, ...]:
         return_dict = return_dict if return_dict is not None else self.config.use_return_dict
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states

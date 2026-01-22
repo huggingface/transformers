@@ -16,6 +16,7 @@
 import unittest
 
 import numpy as np
+import pytest
 import requests
 from huggingface_hub import hf_hub_download
 from parameterized import parameterized
@@ -193,7 +194,12 @@ class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, Generati
         else ()
     )
     pipeline_model_mapping = (
-        {"image-text-to-text": LlavaOnevisionForConditionalGeneration} if is_torch_available() else {}
+        {
+            "image-text-to-text": LlavaOnevisionForConditionalGeneration,
+            "any-to-any": LlavaOnevisionForConditionalGeneration,
+        }
+        if is_torch_available()
+        else {}
     )
 
     # MP works but offload doesn't work when the MultiheadAttention is offloaded
@@ -263,23 +269,17 @@ class LlavaOnevisionForConditionalGenerationModelTest(ModelTesterMixin, Generati
             assert base_model.multi_modal_projector.linear_1.in_features == expected_features
             model(**input_dict)
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, SiglipVisionModel does not support standalone training"
-    )
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing(self):
-        pass
+        super().test_training_gradient_checkpointing()
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, SiglipVisionModel does not support standalone training"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, SiglipVisionModel does not support standalone training"
-    )
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
+        super().test_training_gradient_checkpointing_use_reentrant_false()
+
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        super().test_training_gradient_checkpointing_use_reentrant_true()
 
     @unittest.skip(
         "VLMs need lots of steps to prepare images/mask correctly to get pad-free inputs. Can be tested as part of LLM test"

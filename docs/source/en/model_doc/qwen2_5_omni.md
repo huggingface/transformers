@@ -136,7 +136,7 @@ inputs = processor.apply_chat_template(
     tokenize=True,
     return_dict=True,
     return_tensors="pt",
-    video_fps=1,
+    fps=1,
 
     # kwargs to be passed to `Qwen2-5-OmniProcessor`
     padding=True,
@@ -245,7 +245,7 @@ inputs = processor.apply_chat_template(
     tokenize=True,
     return_dict=True,
     return_tensors="pt",
-    video_fps=1,
+    fps=1,
 
     # kwargs to be passed to `Qwen2-5-OmniProcessor`
     padding=True,
@@ -349,6 +349,7 @@ model = Qwen2_5OmniForConditionalGeneration.from_pretrained(
 ## Qwen2_5OmniProcessor
 
 [[autodoc]] Qwen2_5OmniProcessor
+    - __call__
 
 ## Qwen2_5OmniForConditionalGeneration
 

@@ -133,7 +133,7 @@ class MusicgenProcessorTest(unittest.TestCase):
         predicted_ids = [[1, 4, 5, 8, 1, 0, 8], [3, 4, 3, 1, 1, 8, 9]]
 
         decoded_processor = processor.batch_decode(sequences=predicted_ids)
-        decoded_tok = tokenizer.batch_decode(predicted_ids)
+        decoded_tok = tokenizer.decode(predicted_ids)
 
         self.assertListEqual(decoded_tok, decoded_processor)
 

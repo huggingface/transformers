@@ -20,15 +20,12 @@ import os
 import re
 import sys
 import tempfile
-import warnings
 from concurrent import futures
 from pathlib import Path
 from typing import TypedDict
-from urllib.parse import urlparse
 from uuid import uuid4
 
 import httpx
-import huggingface_hub
 from huggingface_hub import (
     _CACHED_NO_EXIST,
     CommitOperationAdd,
@@ -40,11 +37,12 @@ from huggingface_hub import (
     create_repo,
     hf_hub_download,
     hf_hub_url,
+    is_offline_mode,
     list_repo_tree,
     snapshot_download,
     try_to_load_from_cache,
 )
-from huggingface_hub.file_download import REGEX_COMMIT_HASH, http_get
+from huggingface_hub.file_download import REGEX_COMMIT_HASH
 from huggingface_hub.utils import (
     EntryNotFoundError,
     GatedRepoError,
@@ -59,7 +57,6 @@ from huggingface_hub.utils import (
 )
 
 from . import __version__, logging
-from .generic import working_or_temp_dir
 from .import_utils import (
     ENV_VARS_TRUE_VALUES,
     get_torch_version,
@@ -87,58 +84,16 @@ class DownloadKwargs(TypedDict, total=False):
     commit_hash: str | None
 
 
-_is_offline_mode = huggingface_hub.constants.HF_HUB_OFFLINE
-
-
-def is_offline_mode():
-    return _is_offline_mode
-
-
-torch_cache_home = os.getenv("TORCH_HOME", os.path.join(os.getenv("XDG_CACHE_HOME", "~/.cache"), "torch"))
-default_cache_path = constants.default_cache_path
-
-# Determine default cache directory. Lots of legacy environment variables to ensure backward compatibility.
+# Determine default cache directory.
 # The best way to set the cache path is with the environment variable HF_HOME. For more details, check out this
 # documentation page: https://huggingface.co/docs/huggingface_hub/package_reference/environment_variables.
-#
-# In code, use `HF_HUB_CACHE` as the default cache path. This variable is set by the library and is guaranteed
-# to be set to the right value.
-#
-# TODO: clean this for v5?
-PYTORCH_PRETRAINED_BERT_CACHE = os.getenv("PYTORCH_PRETRAINED_BERT_CACHE", constants.HF_HUB_CACHE)
-PYTORCH_TRANSFORMERS_CACHE = os.getenv("PYTORCH_TRANSFORMERS_CACHE", PYTORCH_PRETRAINED_BERT_CACHE)
-TRANSFORMERS_CACHE = os.getenv("TRANSFORMERS_CACHE", PYTORCH_TRANSFORMERS_CACHE)
 
 HF_MODULES_CACHE = os.getenv("HF_MODULES_CACHE", os.path.join(constants.HF_HOME, "modules"))
 TRANSFORMERS_DYNAMIC_MODULE_NAME = "transformers_modules"
 SESSION_ID = uuid4().hex
 
-# Add deprecation warning for old environment variables.
-for key in ("PYTORCH_PRETRAINED_BERT_CACHE", "PYTORCH_TRANSFORMERS_CACHE", "TRANSFORMERS_CACHE"):
-    if os.getenv(key) is not None:
-        warnings.warn(
-            f"Using `{key}` is deprecated and will be removed in v5 of Transformers. Use `HF_HOME` instead.",
-            FutureWarning,
-        )
-
-
 S3_BUCKET_PREFIX = "https://s3.amazonaws.com/models.huggingface.co/bert"
 CLOUDFRONT_DISTRIB_PREFIX = "https://cdn.huggingface.co"
-
-_staging_mode = os.environ.get("HUGGINGFACE_CO_STAGING", "NO").upper() in ENV_VARS_TRUE_VALUES
-_default_endpoint = "https://hub-ci.huggingface.co" if _staging_mode else "https://huggingface.co"
-
-HUGGINGFACE_CO_RESOLVE_ENDPOINT = _default_endpoint
-if os.environ.get("HUGGINGFACE_CO_RESOLVE_ENDPOINT", None) is not None:
-    warnings.warn(
-        "Using the environment variable `HUGGINGFACE_CO_RESOLVE_ENDPOINT` is deprecated and will be removed in "
-        "Transformers v5. Use `HF_ENDPOINT` instead.",
-        FutureWarning,
-    )
-    HUGGINGFACE_CO_RESOLVE_ENDPOINT = os.environ.get("HUGGINGFACE_CO_RESOLVE_ENDPOINT", None)
-HUGGINGFACE_CO_RESOLVE_ENDPOINT = os.environ.get("HF_ENDPOINT", HUGGINGFACE_CO_RESOLVE_ENDPOINT)
-HUGGINGFACE_CO_PREFIX = HUGGINGFACE_CO_RESOLVE_ENDPOINT + "/{model_id}/resolve/{revision}/{filename}"
-HUGGINGFACE_CO_EXAMPLES_TELEMETRY = HUGGINGFACE_CO_RESOLVE_ENDPOINT + "/api/telemetry/examples"
 
 
 def _get_cache_file_to_return(
@@ -200,11 +155,6 @@ def list_repo_templates(
     if not templates_dir.is_dir():
         return []
     return [entry.stem for entry in templates_dir.iterdir() if entry.is_file() and entry.name.endswith(".jinja")]
-
-
-def is_remote_url(url_or_filename):
-    parsed = urlparse(url_or_filename)
-    return parsed.scheme in ("http", "https")
 
 
 def define_sagemaker_information():
@@ -436,7 +386,7 @@ def cached_files(
         return existing_files if existing_files else None
 
     if cache_dir is None:
-        cache_dir = TRANSFORMERS_CACHE
+        cache_dir = constants.HF_HUB_CACHE
     if isinstance(cache_dir, Path):
         cache_dir = str(cache_dir)
 
@@ -514,6 +464,8 @@ def cached_files(
                 "Check cache directory permissions. Common causes: 1) another user is downloading the same model (please wait); "
                 "2) a previous download was canceled and the lock file needs manual removal."
             ) from e
+        elif isinstance(e, ValueError):
+            raise OSError(f"{e}") from e
 
         # Now we try to recover if we can find all files correctly in the cache
         resolved_files = [
@@ -539,7 +491,7 @@ def cached_files(
             # even when `local_files_only` is True, in which case raising for connections errors only would not make sense)
             elif _raise_exceptions_for_missing_entries:
                 raise OSError(
-                    f"We couldn't connect to '{HUGGINGFACE_CO_RESOLVE_ENDPOINT}' to load the files, and couldn't find them in the"
+                    f"We couldn't connect to '{constants.ENDPOINT}' to load the files, and couldn't find them in the"
                     f" cached files.\nCheck your internet connection or see how to run the library in offline mode at"
                     " 'https://huggingface.co/docs/transformers/installation#offline-mode'."
                 ) from e
@@ -579,33 +531,6 @@ def cached_files(
     resolved_files = None if len(resolved_files) == 0 else resolved_files
 
     return resolved_files
-
-
-def download_url(url, proxies=None):
-    """
-    Downloads a given url in a temporary file. This function is not safe to use in multiple processes. Its only use is
-    for deprecated behavior allowing to download config/models with a single url instead of using the Hub.
-
-    Args:
-        url (`str`): The url of the file to download.
-        proxies (`dict[str, str]`, *optional*):
-            A dictionary of proxy servers to use by protocol or endpoint, e.g., `{'http': 'foo.bar:3128',
-            'http://hostname': 'foo.bar:4012'}.` The proxies are used on each request.
-
-    Returns:
-        `str`: The location of the temporary file where the url was downloaded.
-    """
-    warnings.warn(
-        f"Using `from_pretrained` with the url of a file (here {url}) is deprecated and won't be possible anymore in"
-        " v5 of Transformers. You should host your file on the Hub (hf.co) instead and use the repository ID. Note"
-        " that this is not compatible with the caching system (your file will be downloaded at each execution) or"
-        " multiple processes (each process will download the file in a different temporary file).",
-        FutureWarning,
-    )
-    tmp_fd, tmp_file = tempfile.mkstemp()
-    with os.fdopen(tmp_fd, "wb") as f:
-        http_get(url, f, proxies=proxies)
-    return tmp_file
 
 
 def has_file(
@@ -698,41 +623,6 @@ class PushToHubMixin:
     A Mixin containing the functionality to push a model or tokenizer to the hub.
     """
 
-    def _create_repo(
-        self,
-        repo_id: str,
-        private: bool | None = None,
-        token: bool | str | None = None,
-        repo_url: str | None = None,
-        organization: str | None = None,
-    ) -> str:
-        """
-        Create the repo if needed, cleans up repo_id with deprecated kwargs `repo_url` and `organization`, retrieves
-        the token.
-        """
-        if repo_url is not None:
-            warnings.warn(
-                "The `repo_url` argument is deprecated and will be removed in v5 of Transformers. Use `repo_id` "
-                "instead."
-            )
-            if repo_id is not None:
-                raise ValueError(
-                    "`repo_id` and `repo_url` are both specified. Please set only the argument `repo_id`."
-                )
-            repo_id = repo_url.replace(f"{HUGGINGFACE_CO_RESOLVE_ENDPOINT}/", "")
-        if organization is not None:
-            warnings.warn(
-                "The `organization` argument is deprecated and will be removed in v5 of Transformers. Set your "
-                "organization directly in the `repo_id` passed instead (`repo_id={organization}/{model_id}`)."
-            )
-            if not repo_id.startswith(organization):
-                if "/" in repo_id:
-                    repo_id = repo_id.split("/")[-1]
-                repo_id = f"{organization}/{repo_id}"
-
-        url = create_repo(repo_id=repo_id, token=token, private=private, exist_ok=True)
-        return url.repo_id
-
     def _get_files_timestamps(self, working_dir: str | os.PathLike):
         """
         Returns the list of files with their last modification timestamp.
@@ -821,17 +711,18 @@ class PushToHubMixin:
     def push_to_hub(
         self,
         repo_id: str,
-        use_temp_dir: bool | None = None,
+        *,
+        # Commit details
         commit_message: str | None = None,
+        commit_description: str | None = None,
+        # Repo / upload details
         private: bool | None = None,
         token: bool | str | None = None,
-        max_shard_size: int | str | None = "5GB",
-        create_pr: bool = False,
-        safe_serialization: bool = True,
         revision: str | None = None,
-        commit_description: str | None = None,
+        create_pr: bool = False,
+        # Serialization details
+        max_shard_size: int | str | None = "50GB",
         tags: list[str] | None = None,
-        **deprecated_kwargs,
     ) -> str:
         """
         Upload the {object_files} to the 🤗 Model Hub.
@@ -840,30 +731,23 @@ class PushToHubMixin:
             repo_id (`str`):
                 The name of the repository you want to push your {object} to. It should contain your organization name
                 when pushing to a given organization.
-            use_temp_dir (`bool`, *optional*):
-                Whether or not to use a temporary directory to store the files saved before they are pushed to the Hub.
-                Will default to `True` if there is no directory named like `repo_id`, `False` otherwise.
             commit_message (`str`, *optional*):
                 Message to commit while pushing. Will default to `"Upload {object}"`.
+            commit_description (`str`, *optional*):
+                The description of the commit that will be created
             private (`bool`, *optional*):
                 Whether to make the repo private. If `None` (default), the repo will be public unless the organization's default is private. This value is ignored if the repo already exists.
             token (`bool` or `str`, *optional*):
-                The token to use as HTTP bearer authorization for remote files. If `True`, will use the token generated
-                when running `hf auth login` (stored in `~/.huggingface`). Will default to `True` if `repo_url`
-                is not specified.
-            max_shard_size (`int` or `str`, *optional*, defaults to `"5GB"`):
-                Only applicable for models. The maximum size for a checkpoint before being sharded. Checkpoints shard
-                will then be each of size lower than this size. If expressed as a string, needs to be digits followed
-                by a unit (like `"5MB"`). We default it to `"5GB"` so that users can easily load models on free-tier
-                Google Colab instances without any CPU OOM issues.
-            create_pr (`bool`, *optional*, defaults to `False`):
-                Whether or not to create a PR with the uploaded files or directly commit.
-            safe_serialization (`bool`, *optional*, defaults to `True`):
-                Whether or not to convert the model weights in safetensors format for safer serialization.
+                The token to use as HTTP bearer authorization for remote files. If `True` (default), will use the token generated
+                when running `hf auth login` (stored in `~/.huggingface`).
             revision (`str`, *optional*):
                 Branch to push the uploaded files to.
-            commit_description (`str`, *optional*):
-                The description of the commit that will be created
+            create_pr (`bool`, *optional*, defaults to `False`):
+                Whether or not to create a PR with the uploaded files or directly commit.
+            max_shard_size (`int` or `str`, *optional*, defaults to `"50GB"`):
+                Only applicable for models. The maximum size for a checkpoint before being sharded. Checkpoints shard
+                will then be each of size lower than this size. If expressed as a string, needs to be digits followed
+                by a unit (like `"5MB"`).
             tags (`list[str]`, *optional*):
                 List of tags to push on the Hub.
 
@@ -881,65 +765,24 @@ class PushToHubMixin:
         {object}.push_to_hub("huggingface/my-finetuned-bert")
         ```
         """
-        ignore_metadata_errors = deprecated_kwargs.pop("ignore_metadata_errors", False)
-        repo_path_or_name = deprecated_kwargs.pop("repo_path_or_name", None)
-        if repo_path_or_name is not None:
-            # Should use `repo_id` instead of `repo_path_or_name`. When using `repo_path_or_name`, we try to infer
-            # repo_id from the folder path, if it exists.
-            warnings.warn(
-                "The `repo_path_or_name` argument is deprecated and will be removed in v5 of Transformers. Use "
-                "`repo_id` instead.",
-                FutureWarning,
-            )
-            if repo_id is not None:
-                raise ValueError(
-                    "`repo_id` and `repo_path_or_name` are both specified. Please set only the argument `repo_id`."
-                )
-            if os.path.isdir(repo_path_or_name):
-                # repo_path: infer repo_id from the path
-                repo_id = repo_path_or_name.split(os.path.sep)[-1]
-                working_dir = repo_id
-            else:
-                # repo_name: use it as repo_id
-                repo_id = repo_path_or_name
-                working_dir = repo_id.split("/")[-1]
-        else:
-            # Repo_id is passed correctly: infer working_dir from it
-            working_dir = repo_id.split("/")[-1]
+        # Create repo if it doesn't exist yet
+        repo_id = create_repo(repo_id, private=private, token=token, exist_ok=True).repo_id
 
-        # Deprecation warning will be sent after for repo_url and organization
-        repo_url = deprecated_kwargs.pop("repo_url", None)
-        organization = deprecated_kwargs.pop("organization", None)
+        # Load model card or create a new one + eventually tag it
+        model_card = create_and_tag_model_card(repo_id, tags, token=token)
 
-        repo_id = self._create_repo(
-            repo_id, private=private, token=token, repo_url=repo_url, organization=organization
-        )
-
-        # Create a new empty model card and eventually tag it
-        model_card = create_and_tag_model_card(
-            repo_id, tags, token=token, ignore_metadata_errors=ignore_metadata_errors
-        )
-
-        if use_temp_dir is None:
-            use_temp_dir = not os.path.isdir(working_dir)
-
-        with working_or_temp_dir(working_dir=working_dir, use_temp_dir=use_temp_dir) as work_dir:
-            files_timestamps = self._get_files_timestamps(work_dir)
-
+        with tempfile.TemporaryDirectory() as tmp_dir:
             # Save all files.
-            self.save_pretrained(
-                work_dir,
-                max_shard_size=max_shard_size,
-                safe_serialization=safe_serialization,
-            )
+            self.save_pretrained(tmp_dir, max_shard_size=max_shard_size)
 
-            # Update model card if needed:
-            model_card.save(os.path.join(work_dir, "README.md"))
+            # Update model card
+            model_card.save(os.path.join(tmp_dir, "README.md"))
 
+            # Upload
             return self._upload_modified_files(
-                work_dir,
+                tmp_dir,
                 repo_id,
-                files_timestamps,
+                files_timestamps={},
                 commit_message=commit_message,
                 token=token,
                 create_pr=create_pr,
@@ -1040,12 +883,7 @@ def get_checkpoint_shard_files(
     return cached_filenames, sharded_metadata
 
 
-def create_and_tag_model_card(
-    repo_id: str,
-    tags: list[str] | None = None,
-    token: str | None = None,
-    ignore_metadata_errors: bool = False,
-):
+def create_and_tag_model_card(repo_id: str, tags: list[str] | None = None, token: str | None = None) -> ModelCard:
     """
     Creates or loads an existing model card and tags it.
 
@@ -1056,13 +894,10 @@ def create_and_tag_model_card(
             The list of tags to add in the model card
         token (`str`, *optional*):
             Authentication token, obtained with `huggingface_hub.HfApi.login` method. Will default to the stored token.
-        ignore_metadata_errors (`bool`, *optional*, defaults to `False`):
-            If True, errors while parsing the metadata section will be ignored. Some information might be lost during
-            the process. Use it at your own risk.
     """
     try:
         # Check if the model card is present on the remote repo
-        model_card = ModelCard.load(repo_id, token=token, ignore_metadata_errors=ignore_metadata_errors)
+        model_card = ModelCard.load(repo_id, token=token)
     except EntryNotFoundError:
         # Otherwise create a simple model card from template
         model_description = "This is the model card of a 🤗 transformers model that has been pushed on the Hub. This model card has been automatically generated."

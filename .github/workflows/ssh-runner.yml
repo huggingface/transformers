@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       runner_type:
-        description: 'Type of runner to test (a10 or t4)'
+        description: 'Type of runner to test (a10)'
         required: true
       docker_image:
         description: 'Name of the Docker image'
@@ -14,7 +14,7 @@ on:
         required: true
 
 env:
-  HF_HUB_READ_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
+  HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
   HF_HOME: /mnt/cache
   TRANSFORMERS_IS_CI: yes
   OMP_NUM_THREADS: 8
@@ -36,14 +36,10 @@ jobs:
           NUM_GPUS: ${{ github.event.inputs.num_gpus }}
           RUNNER_TYPE: ${{ github.event.inputs.runner_type }}
         run: |
-          if [[ "$NUM_GPUS" == "single" && "$RUNNER_TYPE" == "t4" ]]; then
-            echo "RUNNER=aws-g4dn-4xlarge-cache" >> $GITHUB_ENV
-          elif [[ "$NUM_GPUS" == "multi" && "$RUNNER_TYPE" == "t4" ]]; then
-            echo "RUNNER=aws-g4dn-12xlarge-cache" >> $GITHUB_ENV
-          elif [[ "$NUM_GPUS" == "single" && "$RUNNER_TYPE" == "a10" ]]; then
-            echo "RUNNER=aws-g5-4xlarge-cache" >> $GITHUB_ENV
+          if [[ "$NUM_GPUS" == "single" && "$RUNNER_TYPE" == "a10" ]]; then
+            echo "RUNNER=aws-g5-4xlarge-cache-ssh" >> $GITHUB_ENV
           elif [[ "$NUM_GPUS" == "multi" && "$RUNNER_TYPE" == "a10" ]]; then
-            echo "RUNNER=aws-g5-12xlarge-cache" >> $GITHUB_ENV
+            echo "RUNNER=aws-g5-12xlarge-cache-ssh" >> $GITHUB_ENV
           else
             echo "RUNNER=" >> $GITHUB_ENV
           fi
@@ -51,8 +47,8 @@ jobs:
       - name: Set runner to use
         id: set_runner
         run: |
-          echo ${{ env.RUNNER }}
-          echo "RUNNER=${{ env.RUNNER }}" >> $GITHUB_OUTPUT
+          echo "$RUNNER"
+          echo "RUNNER=$RUNNER" >> $GITHUB_OUTPUT
 
   ssh_runner:
     name: "SSH"
@@ -61,13 +57,13 @@ jobs:
       group: ${{ needs.get_runner.outputs.RUNNER }}
     container:
       image: ${{ github.event.inputs.docker_image }}
-      options: --gpus all --privileged --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
-
     steps:
       - name: Update clone
         working-directory: /transformers
+        env:
+          commit_sha: ${{ github.sha }}
         run: |
-          git fetch && git checkout ${{ github.sha }}
+          git fetch && git checkout "$commit_sha"
 
       - name: Cleanup
         working-directory: /transformers
@@ -84,6 +80,38 @@ jobs:
         run: |
           nvidia-smi
 
+      - name: Create python alias
+        run: |
+          ln -sf $(which python3) /usr/local/bin/python
+          ln -sf $(which pip3) /usr/local/bin/pip
+          echo "✅ python -> python3 symlink created"
+
+      - name: Install psutil for memory monitor
+        run: |
+          pip install psutil --break-system-packages
+
+      - name: Download memory monitor script
+        working-directory: /transformers
+        run: |
+          apt-get update && apt-get install -y curl
+          curl -o memory_monitor.py https://raw.githubusercontent.com/huggingface/transformers/refs/heads/utility_scripts/utils/memory_monitor.py
+
+      - name: Start memory monitor
+        working-directory: /transformers
+        continue-on-error: true  # Don't fail workflow if monitor has issues
+        run: |
+          python3 memory_monitor.py --threshold 90 --interval 1 > memory_monitor.log 2>&1 &
+          echo $! > memory_monitor.pid
+          echo "Memory monitor started with PID $(cat memory_monitor.pid)"
+          # Give it a moment to start
+          sleep 2
+          # Verify it's running
+          ps aux | grep memory_monitor | grep -v grep || echo "Warning: memory monitor may not be running"
+
+      - name: Install utilities
+        run: |
+          apt-get install -y nano
+
       - name: Store Slack infos
         #because the SSH can be enabled dynamically if the workflow failed, so we need to store slack infos to be able to retrieve them during the waitforssh step
         shell: bash
@@ -96,17 +124,50 @@ jobs:
           echo "$github_actor"
           echo "github_actor=$github_actor" >> $GITHUB_ENV
 
+      - name: Setup automatic environment for SSH login
+        run: |
+          # Create shared environment setup
+          cat > /root/.env_setup << 'EOF'
+          # Auto-setup (non-sensitive vars)
+          export HF_HOME=/mnt/cache
+          export TRANSFORMERS_IS_CI=yes
+          export OMP_NUM_THREADS=8
+          export MKL_NUM_THREADS=8
+          export RUN_SLOW=yes
+          export TF_FORCE_GPU_ALLOW_GROWTH=true
+          export CUDA_VISIBLE_DEVICES=0,1
+          
+          cd /transformers 2>/dev/null || true
+          
+          # Remind user to set token if needed
+          if [ -z "$HF_TOKEN" ]; then
+              echo "⚠️  HF_TOKEN not set. Set it with:"
+              echo "    export HF_TOKEN=hf_xxxxx"
+          else
+              echo "✅ HF_TOKEN is set"
+          fi
+          
+          echo "📁 Working directory: $(pwd)"
+          EOF
+          
+          # Source from both .bash_profile and .bashrc
+          echo 'source /root/.env_setup' >> /root/.bash_profile
+          echo 'source /root/.env_setup' >> /root/.bashrc
+
       - name: Store Slack infos
         #because the SSH can be enabled dynamically if the workflow failed, so we need to store slack infos to be able to retrieve them during the waitforssh step
         shell: bash
+        env:
+          user_slack_id: ${{ secrets[format('{0}_{1}', env.github_actor, 'SLACK_ID')] }}
+          default_slack_channel: ${{ secrets.SLACK_CIFEEDBACK_CHANNEL }}
         run: |
-          echo "${{ env.github_actor }}"
-          if [ "${{ secrets[format('{0}_{1}', env.github_actor, 'SLACK_ID')] }}" != "" ]; then
-            echo "SLACKCHANNEL=${{ secrets[format('{0}_{1}', env.github_actor, 'SLACK_ID')] }}" >> $GITHUB_ENV
+          echo "$github_actor"
+          if [ "$user_slack_id" != "" ]; then
+            echo "SLACKCHANNEL=$user_slack_id" >> $GITHUB_ENV
           else
-            echo "SLACKCHANNEL=${{ secrets.SLACK_CIFEEDBACK_CHANNEL }}" >> $GITHUB_ENV
+            echo "SLACKCHANNEL=$default_slack_channel" >> $GITHUB_ENV
           fi
-
+        
       - name: Tailscale # In order to be able to SSH when a test fails
         uses: huggingface/tailscale-action@main
         with:

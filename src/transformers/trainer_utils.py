@@ -27,7 +27,7 @@ import threading
 import time
 from collections.abc import Callable
 from functools import partial
-from typing import Any, NamedTuple, Optional, Union
+from typing import Any, NamedTuple
 
 import numpy as np
 
@@ -159,10 +159,10 @@ class EvalPrediction:
 
     def __init__(
         self,
-        predictions: Union[np.ndarray, tuple[np.ndarray]],
-        label_ids: Union[np.ndarray, tuple[np.ndarray]],
-        inputs: Optional[Union[np.ndarray, tuple[np.ndarray]]] = None,
-        losses: Optional[Union[np.ndarray, tuple[np.ndarray]]] = None,
+        predictions: np.ndarray | tuple[np.ndarray],
+        label_ids: np.ndarray | tuple[np.ndarray],
+        inputs: np.ndarray | tuple[np.ndarray] | None = None,
+        losses: np.ndarray | tuple[np.ndarray] | None = None,
     ):
         self.predictions = predictions
         self.label_ids = label_ids
@@ -184,16 +184,16 @@ class EvalPrediction:
 
 
 class EvalLoopOutput(NamedTuple):
-    predictions: Union[np.ndarray, tuple[np.ndarray]]
-    label_ids: Optional[Union[np.ndarray, tuple[np.ndarray]]]
-    metrics: Optional[dict[str, float]]
-    num_samples: Optional[int]
+    predictions: np.ndarray | tuple[np.ndarray]
+    label_ids: np.ndarray | tuple[np.ndarray] | None
+    metrics: dict[str, float] | None
+    num_samples: int | None
 
 
 class PredictionOutput(NamedTuple):
-    predictions: Union[np.ndarray, tuple[np.ndarray]]
-    label_ids: Optional[Union[np.ndarray, tuple[np.ndarray]]]
-    metrics: Optional[dict[str, float]]
+    predictions: np.ndarray | tuple[np.ndarray]
+    label_ids: np.ndarray | tuple[np.ndarray] | None
+    metrics: dict[str, float] | None
 
 
 class TrainOutput(NamedTuple):
@@ -255,9 +255,9 @@ class BestRun(NamedTuple):
     """
 
     run_id: str
-    objective: Union[float, list[float]]
+    objective: float | list[float]
     hyperparameters: dict[str, Any]
-    run_summary: Optional[Any] = None
+    run_summary: Any | None = None
 
 
 def default_compute_objective(metrics: dict[str, float]) -> float:
@@ -763,7 +763,7 @@ def number_of_arguments(func):
 
 
 def find_executable_batch_size(
-    function: Optional[Callable] = None, starting_batch_size: int = 128, auto_find_batch_size: bool = False
+    function: Callable | None = None, starting_batch_size: int = 128, auto_find_batch_size: bool = False
 ):
     """
     Args:
@@ -811,8 +811,8 @@ class RemoveColumnsCollator:
         data_collator,
         signature_columns,
         logger=None,
-        model_name: Optional[str] = None,
-        description: Optional[str] = None,
+        model_name: str | None = None,
+        description: str | None = None,
     ):
         self.data_collator = data_collator
         self.signature_columns = signature_columns
@@ -924,7 +924,7 @@ def load_sharded_checkpoint(model, folder, strict=True, prefer_safe=True):
     shard_files = list(set(index["weight_map"].values()))
 
     # If strict=True, error before loading any of the state dicts.
-    # TODO: Here, update the weigth map with the config.dynamic_weight_conversion
+    # TODO: Here, update the weight map with the config.dynamic_weight_conversion
     loaded_keys = index["weight_map"].keys()
     model_keys = model.state_dict().keys()
     missing_keys = [key for key in model_keys if key not in loaded_keys]

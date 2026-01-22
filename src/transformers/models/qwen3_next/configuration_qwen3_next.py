@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The Qwen team, Alibaba Group and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,10 +13,8 @@
 # limitations under the License.
 """Qwen3-Next model configuration"""
 
-from typing import Optional
-
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
@@ -68,11 +65,9 @@ class Qwen3NextConfig(PreTrainedConfig):
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether the model's input and output word embeddings should be tied.
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
-        partial_rotary_factor (`float`, *optional*, defaults to 0.25):
-            Percentage of the query and keys which will have rotary embedding.
         attention_bias (`bool`, *optional*, defaults to `False`):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
@@ -112,6 +107,12 @@ class Qwen3NextConfig(PreTrainedConfig):
             If `mlp_only_layers` is empty, `decoder_sparse_step` is used to determine the sparsity.
         layer_types (`list[str]`, *optional*):
             Types of each layer (attention or linear).
+        pad_token_id (`int`, *optional*):
+            Padding token id.
+        bos_token_id (`int`, *optional*):
+            Beginning of stream token id.
+        eos_token_id (`int`, *optional*):
+            End of stream token id.
 
     ```python
     >>> from transformers import Qwen3NextModel, Qwen3NextConfig
@@ -135,12 +136,12 @@ class Qwen3NextConfig(PreTrainedConfig):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.experts.*.gate_proj": "colwise",
-        "layers.*.mlp.experts.*.up_proj": "colwise",
-        "layers.*.mlp.experts.*.down_proj": "rowwise",
-        "layers.*.mlp.shared_experts.gate_proj": "colwise",
-        "layers.*.mlp.shared_experts.up_proj": "colwise",
-        "layers.*.mlp.shared_experts.down_proj": "rowwise",
+        "layers.*.mlp.experts.gate_up_proj": "local_rowwise",
+        "layers.*.mlp.experts.down_proj": "local_rowwise",
+        "layers.*.mlp.experts": "gather",
+        "layers.*.mlp.shared_expert.gate_proj": "colwise",
+        "layers.*.mlp.shared_expert.up_proj": "colwise",
+        "layers.*.mlp.shared_expert.down_proj": "rowwise",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
@@ -153,41 +154,46 @@ class Qwen3NextConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 151936,
-        hidden_size: Optional[int] = 2048,
-        intermediate_size: Optional[int] = 5632,
-        num_hidden_layers: Optional[int] = 48,
-        num_attention_heads: Optional[int] = 16,
-        num_key_value_heads: Optional[int] = 2,
-        hidden_act: Optional[str] = "silu",
-        max_position_embeddings: Optional[int] = 32768,
-        initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[float] = 1e-6,
-        use_cache: Optional[bool] = True,
-        tie_word_embeddings: Optional[bool] = False,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
-        partial_rotary_factor: Optional[float] = 0.25,
-        attention_bias: Optional[bool] = False,
-        attention_dropout: Optional[float] = 0.0,
-        head_dim: Optional[int] = 256,
-        linear_conv_kernel_dim: Optional[int] = 4,
-        linear_key_head_dim: Optional[int] = 128,
-        linear_value_head_dim: Optional[int] = 128,
-        linear_num_key_heads: Optional[int] = 16,
-        linear_num_value_heads: Optional[int] = 32,
-        decoder_sparse_step: Optional[int] = 1,
-        moe_intermediate_size: Optional[int] = 512,
-        shared_expert_intermediate_size: Optional[int] = 512,
-        num_experts_per_tok: Optional[int] = 10,
-        num_experts: Optional[int] = 512,
-        norm_topk_prob: Optional[bool] = True,
-        output_router_logits: Optional[bool] = False,
-        router_aux_loss_coef: Optional[float] = 0.001,
-        mlp_only_layers: Optional[list[int]] = [],
-        layer_types: Optional[list[str]] = None,
+        vocab_size: int | None = 151936,
+        hidden_size: int | None = 2048,
+        intermediate_size: int | None = 5632,
+        num_hidden_layers: int | None = 48,
+        num_attention_heads: int | None = 16,
+        num_key_value_heads: int | None = 2,
+        hidden_act: str | None = "silu",
+        max_position_embeddings: int | None = 32768,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: float | None = 1e-6,
+        use_cache: bool | None = True,
+        tie_word_embeddings: bool | None = False,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        attention_bias: bool | None = False,
+        attention_dropout: float | None = 0.0,
+        head_dim: int | None = 256,
+        linear_conv_kernel_dim: int | None = 4,
+        linear_key_head_dim: int | None = 128,
+        linear_value_head_dim: int | None = 128,
+        linear_num_key_heads: int | None = 16,
+        linear_num_value_heads: int | None = 32,
+        decoder_sparse_step: int | None = 1,
+        moe_intermediate_size: int | None = 512,
+        shared_expert_intermediate_size: int | None = 512,
+        num_experts_per_tok: int | None = 10,
+        num_experts: int | None = 512,
+        norm_topk_prob: bool | None = True,
+        output_router_logits: bool | None = False,
+        router_aux_loss_coef: float | None = 0.001,
+        mlp_only_layers: list[int] | None = [],
+        layer_types: list[str] | None = None,
+        pad_token_id: int | None = None,
+        bos_token_id: int | None = None,
+        eos_token_id: int | None = None,
         **kwargs,
     ):
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -199,13 +205,11 @@ class Qwen3NextConfig(PreTrainedConfig):
         self.initializer_range = initializer_range
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
-        self.partial_rotary_factor = partial_rotary_factor
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.head_dim = head_dim
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
+        self.rope_parameters = rope_parameters
+        kwargs.setdefault("partial_rotary_factor", 0.25)  # assign default for BC
 
         self.layer_types = layer_types
         if self.layer_types is None:
@@ -215,11 +219,6 @@ class Qwen3NextConfig(PreTrainedConfig):
                 for i in range(self.num_hidden_layers)
             ]
         layer_type_validation(self.layer_types, self.num_hidden_layers)
-
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = getattr(self, "rope_theta", 10000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
 
         # linear attention part
         self.linear_conv_kernel_dim = linear_conv_kernel_dim
@@ -238,6 +237,7 @@ class Qwen3NextConfig(PreTrainedConfig):
         self.output_router_logits = output_router_logits
         self.router_aux_loss_coef = router_aux_loss_coef
         self.mlp_only_layers = mlp_only_layers
+        super().__init__(**kwargs)
 
 
 __all__ = ["Qwen3NextConfig"]

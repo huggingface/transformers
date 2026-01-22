@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The Rhymes-AI Teams Authors and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,12 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from collections.abc import Iterable
-from typing import Optional, Union
 
 import numpy as np
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...activations import ACT2FN
 from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig
@@ -39,7 +38,7 @@ from ...image_utils import (
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import ImagesKwargs, MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
-from ...tokenization_utils import PreTokenizedInput, TextInput
+from ...tokenization_python import PreTokenizedInput, TextInput
 from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoTokenizer
 from ..llama.configuration_llama import LlamaConfig
@@ -148,7 +147,7 @@ class AriaTextConfig(LlamaConfig):
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         attention_bias (`bool`, *optional*, defaults to `False`):
@@ -169,6 +168,15 @@ class AriaTextConfig(LlamaConfig):
 
     model_type = "aria_text"
     base_config_key = "text_config"
+    base_model_tp_plan = {
+        "layers.*.self_attn.q_proj": "colwise",
+        "layers.*.self_attn.k_proj": "colwise",
+        "layers.*.self_attn.v_proj": "colwise",
+        "layers.*.self_attn.o_proj": "rowwise",
+        "layers.*.mlp.shared_experts.gate_proj": "colwise",
+        "layers.*.mlp.shared_experts.up_proj": "colwise",
+        "layers.*.mlp.shared_experts.down_proj": "rowwise",
+    }
 
     def __init__(
         self,
@@ -209,18 +217,8 @@ class AriaConfig(PreTrainedConfig):
             Index used to represent image tokens.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated normal initializer for initializing all weight matrices.
-
-    Attributes:
-        model_type (`str`):
-            Type of the model, set to `"aria"`.
-        image_token_index (`int`):
-            Index used to represent image tokens.
-        projector_patch_to_query_dict (`dict`):
-            Mapping of patch sizes to query dimensions.
-        vision_config (`AriaVisionConfig`):
-            Configuration for the vision component.
-        text_config (`AriaTextConfig`):
-            Configuration for the text component.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether to tie weight embeddings
     """
 
     model_type = "aria"
@@ -234,9 +232,10 @@ class AriaConfig(PreTrainedConfig):
         vision_config=None,
         vision_feature_layer: int = -1,
         text_config: AriaTextConfig = None,
-        projector_patch_to_query_dict: Optional[dict] = None,
-        image_token_index: int = 9,
-        initializer_range: float = 0.02,
+        projector_patch_to_query_dict: dict | None = None,
+        image_token_index: int | None = 9,
+        initializer_range: float | None = 0.02,
+        tie_word_embeddings: bool | None = False,
         **kwargs,
     ):
         self.image_token_index = image_token_index
@@ -266,6 +265,7 @@ class AriaConfig(PreTrainedConfig):
             text_config = AriaTextConfig()
 
         self.text_config = text_config
+        self.tie_word_embeddings = tie_word_embeddings
 
         super().__init__(**kwargs)
 
@@ -385,7 +385,7 @@ class AriaProjector(nn.Module):
         self.layer_norm = nn.LayerNorm(self.in_features)
         self.feed_forward = AriaProjectorMLP(self.in_features, self.hidden_features, self.output_dim)
 
-    def forward(self, key_value_states: torch.Tensor, attn_mask: Optional[torch.Tensor] = None):
+    def forward(self, key_value_states: torch.Tensor, attn_mask: torch.Tensor | None = None):
         """
         Forward pass of the Projector module.
 
@@ -455,16 +455,16 @@ class AriaImageProcessor(BaseImageProcessor):
 
     def __init__(
         self,
-        image_mean: Optional[list[float]] = None,
-        image_std: Optional[list[float]] = None,
+        image_mean: list[float] | None = None,
+        image_std: list[float] | None = None,
         max_image_size: int = 980,
         min_image_size: int = 336,
-        split_resolutions: Optional[list[tuple[int, int]]] = None,
-        split_image: Optional[bool] = False,
-        do_convert_rgb: Optional[bool] = True,
+        split_resolutions: list[tuple[int, int]] | None = None,
+        split_image: bool | None = False,
+        do_convert_rgb: bool | None = True,
         do_rescale: bool = True,
-        rescale_factor: Union[int, float] = 1 / 255,
-        do_normalize: Optional[bool] = True,
+        rescale_factor: int | float = 1 / 255,
+        do_normalize: bool | None = True,
         resample: PILImageResampling = PILImageResampling.BICUBIC,
         **kwargs,
     ):
@@ -491,20 +491,20 @@ class AriaImageProcessor(BaseImageProcessor):
 
     def preprocess(
         self,
-        images: Union[ImageInput, list[ImageInput]],
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
-        max_image_size: Optional[int] = None,
-        min_image_size: Optional[int] = None,
-        split_image: Optional[bool] = None,
-        do_convert_rgb: Optional[bool] = None,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[float] = None,
-        do_normalize: Optional[bool] = None,
-        resample: Optional[PILImageResampling] = None,
-        return_tensors: Optional[Union[str, TensorType]] = "pt",
-        data_format: Optional[ChannelDimension] = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        images: ImageInput | list[ImageInput],
+        image_mean: float | list[float] | None = None,
+        image_std: float | list[float] | None = None,
+        max_image_size: int | None = None,
+        min_image_size: int | None = None,
+        split_image: bool | None = None,
+        do_convert_rgb: bool | None = None,
+        do_rescale: bool | None = None,
+        rescale_factor: float | None = None,
+        do_normalize: bool | None = None,
+        resample: PILImageResampling | None = None,
+        return_tensors: str | TensorType | None = "pt",
+        data_format: ChannelDimension | None = ChannelDimension.FIRST,
+        input_data_format: str | ChannelDimension | None = None,
     ):
         """
         Process a list of images.
@@ -734,11 +734,11 @@ class AriaImageProcessor(BaseImageProcessor):
     def pad(
         self,
         image: np.ndarray,
-        padding: Union[int, tuple[int, int], Iterable[tuple[int, int]]],
+        padding: int | tuple[int, int] | Iterable[tuple[int, int]],
         mode: PaddingMode = PaddingMode.CONSTANT,
-        constant_values: Union[float, Iterable[float]] = 0.0,
-        data_format: Optional[Union[str, ChannelDimension]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        constant_values: float | Iterable[float] = 0.0,
+        data_format: str | ChannelDimension | None = None,
+        input_data_format: str | ChannelDimension | None = None,
     ) -> np.ndarray:
         """
         Pads the `image` with the specified `padding` and `mode`. Padding can be in the (`height`, `width`)
@@ -870,6 +870,21 @@ class AriaImageProcessor(BaseImageProcessor):
 
 
 class AriaImagesKwargs(ImagesKwargs, total=False):
+    """
+    split_image (`bool`, *optional*, defaults to `False`):
+        Whether to split large images into multiple crops. When enabled, images exceeding the maximum size are
+        divided into overlapping crops that are processed separately and then combined. This allows processing
+        of very high-resolution images that exceed the model's input size limits.
+    max_image_size (`int`, *optional*, defaults to `980`):
+        Maximum image size (in pixels) for a single image crop. Images larger than this will be split into
+        multiple crops when `split_image=True`, or resized if splitting is disabled. This parameter controls
+        the maximum resolution of individual image patches processed by the model.
+    min_image_size (`int`, *optional*):
+        Minimum image size (in pixels) for a single image crop. Images smaller than this will be upscaled to
+        meet the minimum requirement. If not specified, images are processed at their original size (subject
+        to the maximum size constraint).
+    """
+
     split_image: bool
     max_image_size: int
     min_image_size: int
@@ -891,32 +906,19 @@ class AriaProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@auto_docstring
 class AriaProcessor(ProcessorMixin):
-    """
-    AriaProcessor is a processor for the Aria model which wraps the Aria image preprocessor and the LLama slow tokenizer.
-
-    Args:
-        image_processor (`AriaImageProcessor`, *optional*):
-            The AriaImageProcessor to use for image preprocessing.
-        tokenizer (`PreTrainedTokenizerBase`, *optional*):
-            An instance of [`PreTrainedTokenizerBase`]. This should correspond with the model's text model. The tokenizer is a required input.
-        chat_template (`str`, *optional*):
-            A Jinja template which will be used to convert lists of messages in a chat into a tokenizable string.
-        size_conversion (`Dict`, *optional*):
-            A dictionary indicating size conversions for images.
-    """
-
-    attributes = ["image_processor", "tokenizer"]
-    image_processor_class = "AriaImageProcessor"
-    tokenizer_class = "AutoTokenizer"
-
     def __init__(
         self,
         image_processor=None,
-        tokenizer: Union[AutoTokenizer, str] = None,
-        chat_template: Optional[str] = None,
-        size_conversion: Optional[dict[Union[float, int], int]] = None,
+        tokenizer: AutoTokenizer | str = None,
+        chat_template: str | None = None,
+        size_conversion: dict[float | int, int] | None = None,
     ):
+        r"""
+        size_conversion (`Dict`, *optional*):
+            A dictionary indicating size conversions for images.
+        """
         if size_conversion is None:
             size_conversion = {490: 128, 980: 256}
         self.size_conversion = {int(k): v for k, v in size_conversion.items()}
@@ -928,25 +930,14 @@ class AriaProcessor(ProcessorMixin):
 
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
 
+    @auto_docstring
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]],
-        images: Optional[ImageInput] = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput],
+        images: ImageInput | None = None,
         **kwargs: Unpack[AriaProcessorKwargs],
     ) -> BatchFeature:
-        """
-        Main method to prepare for the model one or several sequences(s) and image(s).
-
-        Args:
-            text (`TextInput`, `PreTokenizedInput`, `list[TextInput]`, `list[PreTokenizedInput]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            images (`ImageInput`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. Both channels-first and channels-last formats are supported.
-
-
+        r"""
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
             - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
@@ -1178,7 +1169,7 @@ class AriaTextDecoderLayer(LlamaDecoderLayer):
 class AriaTextPreTrainedModel(PreTrainedModel):
     config: AriaTextConfig
     base_model_prefix = "model"
-    input_modalities = ["image", "text"]
+    input_modalities = ("image", "text")
     _no_split_modules = ["AriaTextDecoderLayer", "AriaGroupedExpertsGemm"]
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"
@@ -1191,22 +1182,24 @@ class AriaTextPreTrainedModel(PreTrainedModel):
         "attentions": AriaTextAttention,
     }
 
+    @torch.no_grad()
     def _init_weights(self, module):
         super()._init_weights(module)
         if isinstance(module, AriaGroupedExpertsGemm):
-            module.weight.data.normal_(mean=0.0, std=self.config.initializer_range)
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
 
 
 class AriaPreTrainedModel(LlamaPreTrainedModel):
     config: AriaConfig
-    base_model_prefix = ""
+    base_model_prefix = "model"
     _can_compile_fullgraph = False  # MoE models don't work with torch.compile (dynamic slicing)
     _supports_attention_backend = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
         if isinstance(module, AriaProjector):
-            nn.init.trunc_normal_(module.query, std=self.config.initializer_range)
+            init.trunc_normal_(module.query, std=self.config.initializer_range)
 
 
 class AriaTextModel(LlamaModel):
@@ -1220,7 +1213,7 @@ class AriaTextModel(LlamaModel):
 
 
 class AriaTextForCausalLM(AriaTextPreTrainedModel, LlamaForCausalLM):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys = {"lm_head.weight": "model.embed_tokens.weight"}
 
     def __init__(self, config: AriaTextConfig):
         super().__init__(config)
@@ -1268,7 +1261,7 @@ class AriaModel(LlavaModel):
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
-        pixel_mask: Optional[torch.FloatTensor] = None,
+        pixel_mask: torch.FloatTensor | None = None,
         vision_feature_layer: int = -1,
     ):
         """
@@ -1304,17 +1297,17 @@ class AriaModel(LlavaModel):
 
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        pixel_mask: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        pixel_mask: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Union[tuple, AriaModelOutputWithPast]:
+    ) -> tuple | AriaModelOutputWithPast:
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
@@ -1359,10 +1352,12 @@ class AriaModel(LlavaModel):
     """
 )
 class AriaForConditionalGeneration(LlavaForConditionalGeneration):
+    _tied_weights_keys = {"lm_head.weight": "model.language_model.embed_tokens.weight"}
+
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
-        pixel_mask: Optional[torch.FloatTensor] = None,
+        pixel_mask: torch.FloatTensor | None = None,
         vision_feature_layer: int = -1,
     ):
         return self.model.get_image_features(
@@ -1375,19 +1370,19 @@ class AriaForConditionalGeneration(LlavaForConditionalGeneration):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        pixel_mask: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
-        cache_position: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        pixel_mask: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
+        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> Union[tuple, AriaCausalLMOutputWithPast]:
+    ) -> tuple | AriaCausalLMOutputWithPast:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,
@@ -1490,6 +1485,7 @@ class AriaForConditionalGeneration(LlavaForConditionalGeneration):
         attention_mask=None,
         cache_position=None,
         logits_to_keep=None,
+        is_first_iteration=False,
         **kwargs,
     ):
         model_inputs = super().prepare_inputs_for_generation(
@@ -1499,12 +1495,15 @@ class AriaForConditionalGeneration(LlavaForConditionalGeneration):
             attention_mask=attention_mask,
             cache_position=cache_position,
             logits_to_keep=logits_to_keep,
+            is_first_iteration=is_first_iteration,
             **kwargs,
         )
 
-        if cache_position[0] == 0:
-            # If we're in cached decoding stage, pixel values should be None because input ids do not contain special image token anymore
-            # Otherwise we need pixel values to be passed to model
+        if is_first_iteration or not kwargs.get("use_cache", True):
+            # Pixel values are used only in the first iteration if available
+            # In subsquent iterations, they are already merged with text and cached
+            # NOTE: first iteration doesn't have to be prefill, it can be the first
+            # iteration with a question and cached system prompt (continue generate from cache)
             model_inputs["pixel_values"] = pixel_values
             model_inputs["pixel_mask"] = pixel_mask
 

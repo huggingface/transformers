@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_sam2_video.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 The Meta AI Authors and The HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,7 +18,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 from copy import deepcopy
-from typing import Optional, Union
+from typing import Union
 
 import numpy as np
 import torch
@@ -27,81 +26,60 @@ import torch
 from ...image_utils import ImageInput
 from ...processing_utils import ProcessorMixin
 from ...tokenization_utils_base import BatchEncoding
-from ...utils import TensorType
+from ...utils import TensorType, auto_docstring
 from ...utils.import_utils import requires
 from ...video_utils import VideoInput
 from .modeling_sam2_video import Sam2VideoInferenceSession
 
 
 @requires(backends=("torch",))
+@auto_docstring
 class Sam2VideoProcessor(ProcessorMixin):
-    r"""
-    Constructs a SAM2 processor which wraps a SAM2 image processor and an 2D points & Bounding boxes processor into a
-    single processor.
-
-    [`Sam2VideoProcessor`] offers all the functionalities of [`Sam2ImageProcessorFast`] and [`Sam2VideoProcessor`]. See the docstring of
-    [`~Sam2ImageProcessorFast.__call__`] and [`~Sam2VideoProcessor.__call__`] for more information.
-
-    Args:
-        image_processor (`Sam2ImageProcessorFast`):
-            An instance of [`Sam2ImageProcessorFast`].
-        video_processor (`Sam2VideoVideoProcessor`):
-            An instance of [`Sam2VideoVideoProcessor`].
-        target_size (`int`, *optional*):
-            The target size (target_size, target_size) to which the image will be resized.
-        point_pad_value (`int`, *optional*, defaults to -10):
-            The value used for padding input points.
-    """
-
-    attributes = ["image_processor", "video_processor"]
-    image_processor_class = "Sam2ImageProcessorFast"
-    video_processor_class = "Sam2VideoVideoProcessor"
-
     def __init__(
-        self, image_processor, video_processor, target_size: Optional[int] = None, point_pad_value: int = -10, **kwargs
+        self, image_processor, video_processor, target_size: int | None = None, point_pad_value: int = -10, **kwargs
     ):
+        r"""
+        target_size (`int`, *optional*):
+            The target size (in pixels) for normalizing input points and bounding boxes. If not provided, defaults
+            to the image processor's size configuration. All input coordinates (points and boxes) are normalized
+            to this size before being passed to the model. This ensures consistent coordinate representation
+            regardless of the original image dimensions.
+        point_pad_value (`int`, *optional*, defaults to -10):
+            The value used for padding input points when batching sequences of different lengths. This value is
+            used to mark padded positions and is preserved during coordinate normalization.
+        """
         super().__init__(image_processor, video_processor, **kwargs)
         self.point_pad_value = point_pad_value
         self.target_size = target_size if target_size is not None else self.image_processor.size["height"]
 
+    @auto_docstring
     def __call__(
         self,
-        images: Optional[ImageInput] = None,
-        segmentation_maps: Optional[ImageInput] = None,
-        input_points: Optional[Union[list[list[list[list[float]]]], torch.Tensor]] = None,
-        input_labels: Optional[Union[list[list[list[int]]], torch.Tensor]] = None,
-        input_boxes: Optional[Union[list[list[list[float]]], torch.Tensor]] = None,
-        original_sizes: Optional[Union[list[list[float]], torch.Tensor]] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        images: ImageInput | None = None,
+        segmentation_maps: ImageInput | None = None,
+        input_points: list[list[list[list[float]]]] | torch.Tensor | None = None,
+        input_labels: list[list[list[int]]] | torch.Tensor | None = None,
+        input_boxes: list[list[list[float]]] | torch.Tensor | None = None,
+        original_sizes: list[list[float]] | torch.Tensor | None = None,
+        return_tensors: str | TensorType | None = None,
         **kwargs,
     ) -> BatchEncoding:
         r"""
-        This method uses [`Sam2VideoImageProcessorFast.__call__`] method to prepare image(s) for the model. It also prepares 2D
-        points and bounding boxes for the model if they are provided.
-
-        Args:
-            images (`ImageInput`, *optional*):
-                The image(s) to process.
-            segmentation_maps (`ImageInput`, *optional*):
-                The segmentation maps to process.
-            input_points (`list[list[list[list[float]]]]`, `torch.Tensor`, *optional*):
-                The points to add to the frame.
-            input_labels (`list[list[list[int]]]`, `torch.Tensor`, *optional*):
-                The labels for the points.
-            input_boxes (`list[list[list[float]]]`, `torch.Tensor`, *optional*):
-                The bounding boxes to add to the frame.
-            original_sizes (`list[list[float]]`, `torch.Tensor`, *optional*):
-                The original sizes of the images.
-            return_tensors (`str` or `TensorType`, *optional*):
-                The type of tensors to return.
-            **kwargs:
-                Additional keyword arguments to pass to the image processor.
+        segmentation_maps (`ImageInput`, *optional*):
+            The segmentation maps to process.
+        input_points (`list[list[list[list[float]]]]`, `torch.Tensor`, *optional*):
+            The points to add to the frame.
+        input_labels (`list[list[list[int]]]`, `torch.Tensor`, *optional*):
+            The labels for the points.
+        input_boxes (`list[list[list[float]]]`, `torch.Tensor`, *optional*):
+            The bounding boxes to add to the frame.
+        original_sizes (`list[list[float]]`, `torch.Tensor`, *optional*):
+            The original sizes of the images.
 
         Returns:
             A [`BatchEncoding`] with the following fields:
             - `pixel_values` (`torch.Tensor`): The processed image(s).
             - `original_sizes` (`list[list[float]]`): The original sizes of the images.
-            - `reshaped_input_sizes` (`torch.Tensor`): The reshaped input sizes of the images.
             - `labels` (`torch.Tensor`): The processed segmentation maps (if provided).
             - `input_points` (`torch.Tensor`): The processed points.
             - `input_labels` (`torch.Tensor`): The processed labels.
@@ -397,11 +375,11 @@ class Sam2VideoProcessor(ProcessorMixin):
 
     def _validate_single_input(
         self,
-        data: Union[torch.Tensor, np.ndarray, list],
+        data: torch.Tensor | np.ndarray | list,
         expected_depth: int,
         input_name: str,
         expected_format: str,
-        expected_coord_size: Optional[int] = None,
+        expected_coord_size: int | None = None,
     ) -> list:
         """
                 Validate a single input by ensuring proper nesting and raising an error if the input is not valid.
@@ -526,13 +504,18 @@ class Sam2VideoProcessor(ProcessorMixin):
             **kwargs,
         )
 
+    @property
+    def model_input_names(self):
+        image_processor_input_names = self.image_processor.model_input_names
+        return list(image_processor_input_names + ["original_sizes"])
+
     def init_video_session(
         self,
-        video: Optional[VideoInput] = None,
+        video: VideoInput | None = None,
         inference_device: Union[str, "torch.device"] = "cpu",
-        inference_state_device: Optional[Union[str, "torch.device"]] = None,
-        processing_device: Optional[Union[str, "torch.device"]] = None,
-        video_storage_device: Optional[Union[str, "torch.device"]] = None,
+        inference_state_device: Union[str, "torch.device"] | None = None,
+        processing_device: Union[str, "torch.device"] | None = None,
+        video_storage_device: Union[str, "torch.device"] | None = None,
         max_vision_features_cache_size: int = 1,
         dtype: torch.dtype = torch.float32,
     ):
@@ -583,12 +566,12 @@ class Sam2VideoProcessor(ProcessorMixin):
         self,
         inference_session: Sam2VideoInferenceSession,
         frame_idx: int,
-        obj_ids: Union[list[int], int],
-        input_points: Optional[Union[list[list[list[list[float]]]], torch.Tensor]] = None,
-        input_labels: Optional[Union[list[list[list[int]]], torch.Tensor]] = None,
-        input_boxes: Optional[Union[list[list[list[float]]], torch.Tensor]] = None,
-        input_masks: Optional[Union[np.ndarray, torch.Tensor, list[np.ndarray], list[torch.Tensor]]] = None,
-        original_size: Optional[tuple[int, int]] = None,
+        obj_ids: list[int] | int,
+        input_points: list[list[list[list[float]]]] | torch.Tensor | None = None,
+        input_labels: list[list[list[int]]] | torch.Tensor | None = None,
+        input_boxes: list[list[list[float]]] | torch.Tensor | None = None,
+        input_masks: np.ndarray | torch.Tensor | list[np.ndarray] | list[torch.Tensor] | None = None,
+        original_size: tuple[int, int] | None = None,
         clear_old_inputs: bool = True,
     ) -> Sam2VideoInferenceSession:
         """
@@ -646,10 +629,10 @@ class Sam2VideoProcessor(ProcessorMixin):
         inference_session: Sam2VideoInferenceSession,
         frame_idx: int,
         obj_ids: list[int],
-        input_points: Optional[Union[list[list[list[list[float]]]], torch.Tensor]] = None,
-        input_labels: Optional[Union[list[list[list[int]]], torch.Tensor]] = None,
-        input_boxes: Optional[Union[list[list[list[float]]], torch.Tensor]] = None,
-        original_size: Optional[tuple[int, int]] = None,
+        input_points: list[list[list[list[float]]]] | torch.Tensor | None = None,
+        input_labels: list[list[list[int]]] | torch.Tensor | None = None,
+        input_boxes: list[list[list[float]]] | torch.Tensor | None = None,
+        original_size: tuple[int, int] | None = None,
         clear_old_inputs: bool = True,
     ) -> Sam2VideoInferenceSession:
         """
@@ -755,7 +738,7 @@ class Sam2VideoProcessor(ProcessorMixin):
         inference_session: Sam2VideoInferenceSession,
         frame_idx: int,
         obj_ids: list[int],
-        input_masks: Union[np.ndarray, torch.Tensor, list[np.ndarray], list[torch.Tensor]],
+        input_masks: np.ndarray | torch.Tensor | list[np.ndarray] | list[torch.Tensor],
     ):
         """
         Add new mask to a frame and add them to the inference session.

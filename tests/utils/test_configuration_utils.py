@@ -38,49 +38,10 @@ config_common_kwargs = {
     "output_hidden_states": True,
     "output_attentions": True,
     "dtype": "float16",
-    "tie_word_embeddings": False,
-    "is_decoder": True,
-    "cross_attention_hidden_size": 128,
-    "add_cross_attention": True,
-    "tie_encoder_decoder": True,
-    "max_length": 50,
-    "min_length": 3,
-    "do_sample": True,
-    "early_stopping": True,
-    "num_beams": 3,
-    "num_beam_groups": 3,
-    "diversity_penalty": 0.5,
-    "temperature": 2.0,
-    "top_k": 10,
-    "top_p": 0.7,
-    "typical_p": 0.2,
-    "repetition_penalty": 0.8,
-    "length_penalty": 0.8,
-    "no_repeat_ngram_size": 5,
-    "encoder_no_repeat_ngram_size": 5,
-    "bad_words_ids": [1, 2, 3],
-    "num_return_sequences": 3,
     "chunk_size_feed_forward": 5,
-    "output_scores": True,
-    "return_dict_in_generate": True,
-    "forced_bos_token_id": 2,
-    "forced_eos_token_id": 3,
-    "remove_invalid_values": True,
     "architectures": ["BertModel"],
-    "finetuning_task": "translation",
     "id2label": {0: "label"},
     "label2id": {"label": "0"},
-    "tokenizer_class": "BertTokenizerFast",
-    "prefix": "prefix",
-    "bos_token_id": 6,
-    "pad_token_id": 7,
-    "eos_token_id": 8,
-    "sep_token_id": 9,
-    "decoder_start_token_id": 10,
-    "exponential_decay_length_penalty": (5, 1.01),
-    "suppress_tokens": [0, 1],
-    "begin_suppress_tokens": 2,
-    "task_specific_params": {"translation": "some_params"},
     "problem_type": "regression",
 }
 
@@ -188,6 +149,7 @@ class ConfigTestUtils(unittest.TestCase):
                 "_name_or_path",
                 "_commit_hash",
                 "_attn_implementation_internal",
+                "_experts_implementation_internal",
                 "transformers_version",
             ],
         )
@@ -275,20 +237,20 @@ class ConfigTestUtils(unittest.TestCase):
         old_configuration = old_transformers.models.auto.AutoConfig.from_pretrained(repo)
         self.assertEqual(old_configuration.hidden_size, 768)
 
-    def test_saving_config_with_custom_generation_kwargs_raises_warning(self):
-        config = BertConfig(min_length=3)  # `min_length = 3` is a non-default generation kwarg
-        with tempfile.TemporaryDirectory() as tmp_dir:
-            with self.assertWarns(UserWarning) as cm:
-                config.save_pretrained(tmp_dir)
-            self.assertIn("min_length", str(cm.warning))
-
-    def test_get_non_default_generation_parameters(self):
+    def test_saving_config_with_custom_generation_kwargs_raises_error(self):
         config = BertConfig()
-        self.assertFalse(len(config._get_non_default_generation_parameters()) > 0)
-        config = BertConfig(min_length=3)
-        self.assertTrue(len(config._get_non_default_generation_parameters()) > 0)
-        config = BertConfig(min_length=0)  # `min_length = 0` is a default generation kwarg
-        self.assertFalse(len(config._get_non_default_generation_parameters()) > 0)
+        config.min_length = 3  # `min_length = 3` is a non-default generation kwarg
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            with self.assertRaises(ValueError):
+                config.save_pretrained(tmp_dir)
+
+    def test_get_generation_parameters(self):
+        config = BertConfig()
+        self.assertFalse(len(config._get_generation_parameters()) > 0)
+        config.min_length = 3
+        self.assertTrue(len(config._get_generation_parameters()) > 0)
+        config.min_length = 0
+        self.assertTrue(len(config._get_generation_parameters()) > 0)
 
     def test_loading_config_do_not_raise_future_warnings(self):
         """Regression test for https://github.com/huggingface/transformers/issues/31002."""
@@ -354,3 +316,44 @@ class ConfigTestUtils(unittest.TestCase):
 
             config = PreTrainedConfig.from_pretrained(tmpdirname, torch_dtype="float32")
             self.assertEqual(config.dtype, "float32")
+
+    def test_unserializable_json_is_encoded(self):
+        class NewConfig(PreTrainedConfig):
+            def __init__(
+                self,
+                inf_positive: float = float("inf"),
+                inf_negative: float = float("-inf"),
+                nan: float = float("nan"),
+                **kwargs,
+            ):
+                self.inf_positive = inf_positive
+                self.inf_negative = inf_negative
+                self.nan = nan
+
+                super().__init__(**kwargs)
+
+        new_config = NewConfig()
+
+        # All floats should remain as floats when being accessed in the config
+        self.assertIsInstance(new_config.inf_positive, float)
+        self.assertIsInstance(new_config.inf_negative, float)
+        self.assertIsInstance(new_config.nan, float)
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            new_config.save_pretrained(tmpdirname)
+            config_file = Path(tmpdirname) / "config.json"
+            config_contents = json.loads(config_file.read_text())
+            new_config_instance = NewConfig.from_pretrained(tmpdirname)
+
+        # In the serialized JSON file, the non-JSON compatible floats should be updated
+        self.assertDictEqual(config_contents["inf_positive"], {"__float__": "Infinity"})
+        self.assertDictEqual(config_contents["inf_negative"], {"__float__": "-Infinity"})
+        self.assertDictEqual(config_contents["nan"], {"__float__": "NaN"})
+
+        with tempfile.TemporaryDirectory() as tmpdirname:
+            new_config.save_pretrained(tmpdirname)
+
+        # When reloading the config, it should have correct float values
+        self.assertIsInstance(new_config_instance.inf_positive, float)
+        self.assertIsInstance(new_config_instance.inf_negative, float)
+        self.assertIsInstance(new_config_instance.nan, float)

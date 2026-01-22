@@ -19,9 +19,10 @@ import re
 import string
 import time
 from collections.abc import AsyncIterator
-from typing import Annotated, Optional
+from typing import Annotated, Any
+from urllib.parse import urljoin, urlparse
 
-import click
+import httpx
 import typer
 import yaml
 from huggingface_hub import AsyncInferenceClient, ChatCompletionStreamOutput
@@ -44,6 +45,7 @@ if is_rich_available():
     from rich.live import Live
     from rich.markdown import Markdown
 
+DEFAULT_HTTP_ENDPOINT = {"hostname": "localhost", "port": 8000}
 ALLOWED_KEY_CHARS = set(string.ascii_letters + string.whitespace)
 ALLOWED_VALUE_CHARS = set(
     string.ascii_letters + string.digits + string.whitespace + r".!\"#$%&'()*+,\-/:<=>?@[]^_`{|}~"
@@ -103,12 +105,14 @@ class RichInterface:
         self.model_id = model_id
         self.user_id = user_id
 
-    async def stream_output(self, stream: AsyncIterator[ChatCompletionStreamOutput]) -> tuple[str, int]:
+    async def stream_output(self, stream: AsyncIterator[ChatCompletionStreamOutput]) -> tuple[str, str | Any | None]:
         self._console.print(f"[bold blue]<{self.model_id}>:")
         with Live(console=self._console, refresh_per_second=4) as live:
             text = ""
+            finish_reason: str | None = None
             async for token in await stream:
                 outputs = token.choices[0].delta.content
+                finish_reason = getattr(token.choices[0], "finish_reason", finish_reason)
 
                 if not outputs:
                     continue
@@ -147,7 +151,7 @@ class RichInterface:
 
         self._console.print()
 
-        return text
+        return text, finish_reason
 
     def input(self) -> str:
         """Gets user input from the console."""
@@ -169,6 +173,18 @@ class RichInterface:
         self._console.print(f"[bold {color}]{text}")
         self._console.print()
 
+    def confirm(self, message: str, default: bool = False) -> bool:
+        """Displays a yes/no prompt to the user, returning True for confirmation."""
+        default_hint = "Y/n" if default else "y/N"
+        response = self._console.input(f"[bold yellow]{message} ({default_hint}): ")
+        self._console.print()
+
+        response = response.strip().lower()
+        if not response:
+            return default
+
+        return response in {"y", "yes"}
+
     def print_help(self, minimal: bool = False):
         """Prints the help message to the console."""
         self._console.print(Markdown(HELP_STRING_MINIMAL if minimal else HELP_STRING))
@@ -181,29 +197,6 @@ class RichInterface:
         self._console.print()
 
 
-class ChatCommand(typer.core.TyperCommand):
-    """Custom Click command to override missing parameter error message.
-
-    Transformers v5 introduced a breaking change in the `transformers chat` command: the `model_id` parameter
-    is now required, and the command can no longer starts a server. This class overrides the default error message
-    to provide a more helpful message to users who may be used to the old behavior.
-    """
-
-    def parse_args(self, ctx, args):
-        try:
-            return super().parse_args(ctx, args)
-        except click.MissingParameter as e:
-            if e.param and e.param.name == "model_id":
-                typer.echo("Error: Missing argument 'MODEL_ID'.\n")
-                typer.echo(
-                    "Launching a server directly from the `transformers chat` command is no longer supported. "
-                    "Please use `transformers serve` to launch a server. "
-                    "Use --help for more information.",
-                )
-                ctx.exit(1)
-            raise
-
-
 class Chat:
     """Chat with a model from the command line."""
 
@@ -211,10 +204,12 @@ class Chat:
     # TODO: refactor into a proper module with helpers + 1 main method
     def __init__(
         self,
-        base_url: Annotated[str, typer.Argument(help="Base url to connect to (e.g. http://localhost:8000/v1).")],
         model_id: Annotated[str, typer.Argument(help="ID of the model to use (e.g. 'HuggingFaceTB/SmolLM3-3B').")],
+        base_url: Annotated[
+            str | None, typer.Argument(help="Base url to connect to (e.g. http://localhost:8000/v1).")
+        ] = f"http://{DEFAULT_HTTP_ENDPOINT['hostname']}:{DEFAULT_HTTP_ENDPOINT['port']}",
         generate_flags: Annotated[
-            Optional[list[str]],
+            list[str] | None,
             typer.Argument(
                 help=(
                     "Flags to pass to `generate`, using a space as a separator between flags. Accepts booleans, numbers, "
@@ -227,15 +222,15 @@ class Chat:
         ] = None,
         # General settings
         user: Annotated[
-            Optional[str],
+            str | None,
             typer.Option(help="Username to display in chat interface. Defaults to the current user's name."),
         ] = None,
-        system_prompt: Annotated[Optional[str], typer.Option(help="System prompt.")] = None,
+        system_prompt: Annotated[str | None, typer.Option(help="System prompt.")] = None,
         save_folder: Annotated[str, typer.Option(help="Folder to save chat history.")] = "./chat_history/",
-        examples_path: Annotated[Optional[str], typer.Option(help="Path to a yaml file with examples.")] = None,
+        examples_path: Annotated[str | None, typer.Option(help="Path to a yaml file with examples.")] = None,
         # Generation settings
         generation_config: Annotated[
-            Optional[str],
+            str | None,
             typer.Option(
                 help="Path to a local generation config file or to a HuggingFace repo containing a `generation_config.json` file. Other generation settings passed as CLI arguments will be applied on top of this generation config."
             ),
@@ -243,6 +238,11 @@ class Chat:
     ) -> None:
         """Chat with a model from the command line."""
         self.base_url = base_url
+
+        parsed = urlparse(self.base_url)
+        if parsed.hostname == DEFAULT_HTTP_ENDPOINT["hostname"] and parsed.port == DEFAULT_HTTP_ENDPOINT["port"]:
+            self.check_health(self.base_url)
+
         self.model_id = model_id
         self.system_prompt = system_prompt
         self.save_folder = save_folder
@@ -272,8 +272,23 @@ class Chat:
         # Run chat session
         asyncio.run(self._inner_run())
 
-    # -----------------------------------------------------------------------------------------------------------------
-    # User commands
+    @staticmethod
+    def check_health(url):
+        health_url = urljoin(url + "/", "health")
+        try:
+            output = httpx.get(health_url)
+            if output.status_code != 200:
+                raise ValueError(
+                    f"The server running on {url} returned status code {output.status_code} on health check (/health)."
+                )
+        except httpx.ConnectError:
+            raise ValueError(
+                f"No server currently running on {url}. To run a local server, please run `transformers serve` in a"
+                f"separate shell. Find more information here: https://huggingface.co/docs/transformers/serving"
+            )
+
+        return True
+
     def handle_non_exit_user_commands(
         self,
         user_input: str,
@@ -348,9 +363,6 @@ class Chat:
 
         return chat, valid_command, config
 
-    # -----------------------------------------------------------------------------------------------------------------
-    # Main logic
-
     async def _inner_run(self):
         interface = RichInterface(model_id=self.model_id, user_id=self.user)
         interface.clear()
@@ -362,9 +374,15 @@ class Chat:
         config = self.config
 
         async with AsyncInferenceClient(base_url=self.base_url) as client:
+            pending_user_input: str | None = None
             while True:
                 try:
-                    user_input = interface.input()
+                    if pending_user_input is not None:
+                        user_input = pending_user_input
+                        pending_user_input = None
+                        interface.print_user_message(user_input)
+                    else:
+                        user_input = interface.input()
 
                     # User commands
                     if user_input == "!exit":
@@ -448,14 +466,20 @@ class Chat:
                         },
                     )
 
-                    model_output = await interface.stream_output(stream)
+                    model_output, finish_reason = await interface.stream_output(stream)
 
                     chat.append({"role": "assistant", "content": model_output})
+
+                    if finish_reason == "length":
+                        interface.print_color("Generation stopped after reaching the token limit.", "yellow")
+                        if interface.confirm("Continue generating?"):
+                            pending_user_input = "Please continue. Do not repeat text.”"
+                            continue
                 except KeyboardInterrupt:
                     break
 
 
-def load_generation_config(generation_config: Optional[str]) -> GenerationConfig:
+def load_generation_config(generation_config: str | None) -> GenerationConfig:
     if generation_config is None:
         return GenerationConfig()
 
@@ -467,7 +491,7 @@ def load_generation_config(generation_config: Optional[str]) -> GenerationConfig
         return GenerationConfig.from_pretrained(generation_config)
 
 
-def parse_generate_flags(generate_flags: Optional[list[str]]) -> dict:
+def parse_generate_flags(generate_flags: list[str] | None) -> dict:
     """Parses the generate flags from the user input into a dictionary of `generate` kwargs."""
     if generate_flags is None or len(generate_flags) == 0:
         return {}
@@ -521,7 +545,7 @@ def parse_generate_flags(generate_flags: Optional[list[str]]) -> dict:
     return processed_generate_flags
 
 
-def new_chat_history(system_prompt: Optional[str] = None) -> list[dict]:
+def new_chat_history(system_prompt: str | None = None) -> list[dict]:
     """Returns a new chat conversation."""
     return [{"role": "system", "content": system_prompt}] if system_prompt else []
 

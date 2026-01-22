@@ -175,3 +175,4 @@ tags
 
 # Cursor IDE files
 .cursor/
+test-results/

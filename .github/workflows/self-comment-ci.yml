@@ -19,66 +19,38 @@ env:
   RUN_SLOW: yes
   # For gated repositories, we still need to agree to share information on the Hub repo. page in order to get access.
   # This token is created under the bot `hf-transformers-bot`.
-  HF_HUB_READ_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
+  HF_TOKEN: ${{ secrets.HF_HUB_READ_TOKEN }}
   TF_FORCE_GPU_ALLOW_GROWTH: true
   CUDA_VISIBLE_DEVICES: 0,1
 
+
 jobs:
   get-pr-number:
-    runs-on: ubuntu-22.04
     name: Get PR number
-    # For security: only allow team members to run
-    if: ${{ github.event.issue.state == 'open' && contains(fromJSON('["ydshieh", "ArthurZucker", "zucchini-nlp", "molbap", "gante", "LysandreJik", "Cyrilvallez", "Rocketknight1", "SunMarc", "eustlb", "MekkCyber", "vasqu", "ivarflakstad", "stevhliu", "ebezzam", "remi-or", "itazap"]'), github.actor) && (startsWith(github.event.comment.body, 'run-slow') || startsWith(github.event.comment.body, 'run slow') || startsWith(github.event.comment.body, 'run_slow')) }}
-    outputs:
-      PR_NUMBER: ${{ steps.set_pr_number.outputs.PR_NUMBER }}
-    steps:
-      - name: Get PR number
-        shell: bash
-        run: |
-          if [[ "${{ github.event.issue.number }}" != "" && "${{ github.event.issue.pull_request }}" != "" ]]; then
-            echo "PR_NUMBER=${{ github.event.issue.number }}" >> $GITHUB_ENV
-          else
-            echo "PR_NUMBER=" >> $GITHUB_ENV
-          fi
+    if: ${{ github.event.issue.state == 'open' && contains(fromJSON('["ydshieh", "ArthurZucker", "zucchini-nlp", "molbap", "gante", "LysandreJik", "Cyrilvallez", "Rocketknight1", "SunMarc", "eustlb", "MekkCyber", "vasqu", "ivarflakstad", "stevhliu", "ebezzam", "remi-or", "itazap", "3outeille", "IlyasMoutawwakil", "tarekziade"]'), github.actor) && (startsWith(github.event.comment.body, 'run-slow') || startsWith(github.event.comment.body, 'run slow') || startsWith(github.event.comment.body, 'run_slow')) }}
+    uses: ./.github/workflows/get-pr-number.yml
 
-      - name: Check PR number
-        shell: bash
-        run: |
-          echo "${{ env.PR_NUMBER }}"
-
-      - name: Set PR number
-        id: set_pr_number
-        run: echo "PR_NUMBER=${{ env.PR_NUMBER }}" >> "$GITHUB_OUTPUT"
-
-  get-sha:
-    runs-on: ubuntu-22.04
+  get-pr-info:
+    name: Get PR commit SHA
     needs: get-pr-number
     if: ${{ needs.get-pr-number.outputs.PR_NUMBER != ''}}
-    outputs:
-      PR_HEAD_SHA: ${{ steps.get_sha.outputs.PR_HEAD_SHA }}
-      PR_MERGE_SHA: ${{ steps.get_sha.outputs.PR_MERGE_SHA }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: "0"
-          ref: "refs/pull/${{needs.get-pr-number.outputs.PR_NUMBER}}/merge"
+    uses: ./.github/workflows/get-pr-info.yml
+    with:
+      pr_number: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
 
-      - name: Get SHA (and verify timestamps against the issue comment date)
-        id: get_sha
+  check-timestamps:
+    name: Check timestamps (security check)
+    runs-on: ubuntu-22.04
+    needs: get-pr-info
+    outputs:
+      PR_HEAD_SHA: ${{ needs.get-pr-info.outputs.PR_HEAD_SHA }}
+      PR_MERGE_SHA: ${{ needs.get-pr-info.outputs.PR_MERGE_COMMIT_SHA }}
+    steps:
+      - name: Verify `merge_commit` timestamp is older than the issue comment timestamp
         env:
-          PR_NUMBER: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
           COMMENT_DATE: ${{ github.event.comment.created_at }}
+          PR_MERGE_COMMIT_TIMESTAMP: ${{ needs.get-pr-info.outputs.PR_MERGE_COMMIT_TIMESTAMP }}
         run: |
-            git fetch origin refs/pull/$PR_NUMBER/head:refs/remotes/pull/$PR_NUMBER/head
-            git checkout refs/remotes/pull/$PR_NUMBER/head
-            echo "PR_HEAD_SHA: $(git log -1 --format=%H)"
-            echo "PR_HEAD_SHA=$(git log -1 --format=%H)" >> "$GITHUB_OUTPUT"
-            git fetch origin refs/pull/$PR_NUMBER/merge:refs/remotes/pull/$PR_NUMBER/merge
-            git checkout refs/remotes/pull/$PR_NUMBER/merge
-            echo "PR_MERGE_SHA: $(git log -1 --format=%H)"
-            echo "PR_MERGE_SHA=$(git log -1 --format=%H)" >> "$GITHUB_OUTPUT"
-            PR_MERGE_COMMIT_TIMESTAMP=$(git log -1 --date=unix --format=%cd)
-            echo "PR_MERGE_COMMIT_TIMESTAMP: $PR_MERGE_COMMIT_TIMESTAMP"
             COMMENT_TIMESTAMP=$(date -d "${COMMENT_DATE}" +"%s")
             echo "COMMENT_DATE: $COMMENT_DATE"
             echo "COMMENT_TIMESTAMP: $COMMENT_TIMESTAMP"
@@ -87,13 +59,10 @@ jobs:
               exit -1;
             fi
 
-  # use a python script to handle this complex logic
-  # case 1: `run-slow` (auto. infer with limited number of models, but in particular, new model)
-  # case 2: `run-slow model_1, model_2`
+  # use a python script to handle this complex logic.
   get-tests:
     runs-on: ubuntu-22.04
-    needs: [get-pr-number, get-sha]
-    if: ${{ needs.get-pr-number.outputs.PR_NUMBER != ''}}
+    needs: [get-pr-number, check-timestamps]
     outputs:
       models: ${{ steps.models_to_run.outputs.models }}
       quantizations: ${{ steps.models_to_run.outputs.quantizations }}
@@ -101,11 +70,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: "0"
-          ref: "refs/pull/${{needs.get-pr-number.outputs.PR_NUMBER}}/merge"
+          ref: "refs/pull/${{ needs.get-pr-number.outputs.PR_NUMBER }}/merge"
 
       - name: Verify merge commit SHA
         env:
-          VERIFIED_PR_MERGE_SHA: ${{ needs.get-sha.outputs.PR_MERGE_SHA }}
+          VERIFIED_PR_MERGE_SHA: ${{ needs.check-timestamps.outputs.PR_MERGE_SHA }}
         run: |
             PR_MERGE_SHA=$(git log -1 --format=%H)
             if [ $PR_MERGE_SHA != $VERIFIED_PR_MERGE_SHA ]; then
@@ -126,11 +95,33 @@ jobs:
       - name: Show models to test
         id: models_to_run
         run: |
-          echo "${{ env.models }}"
-          echo "models=${{ env.models }}" >> $GITHUB_ENV
-          echo "models=${{ env.models }}" >> $GITHUB_OUTPUT
-          echo "${{ env.quantizations }}"
-          echo "quantizations=${{ env.quantizations }}" >> $GITHUB_OUTPUT
+          echo "$models"
+          echo "models=$models" >> $GITHUB_OUTPUT
+          echo "$quantizations"
+          echo "quantizations=$quantizations" >> $GITHUB_OUTPUT
+
+  # Report back if we are not able to get the tests (for example, security check is failing)
+  report_error_earlier:
+    name: Report error earlier
+    if: ${{ always() && needs.get-pr-info.result == 'success' && needs.get-tests.result != 'success' }}
+    needs: [get-pr-number, get-pr-info, get-tests]
+    permissions:
+      pull-requests: write
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Reply to the comment
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          github_repository: ${{ github.repository }}
+          pr_number: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
+        run: |
+          gh api \
+            --method POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "repos/${github_repository}/issues/${pr_number}/comments" \
+            -f body="💔 This comment contains \`run-slow\`, but unknown error occurred and [the workflow run]($GITHUB_RUN_URL) aborted!"
 
   reply_to_comment:
     name: Reply to the comment
@@ -143,20 +134,20 @@ jobs:
       - name: Reply to the comment
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          MODELS: ${{ needs.get-tests.outputs.models }}
-          BODY: "\n\nmodels: ${{ needs.get-tests.outputs.models }}\nquantizations: ${{ needs.get-tests.outputs.quantizations }}"
+          BODY: '\n\nmodels: ${{ needs.get-tests.outputs.models }}\nquantizations: ${{ needs.get-tests.outputs.quantizations }}'
+          github_repository: ${{ github.repository }}
+          pr_number: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
         run: |
           gh api \
             --method POST \
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
-            repos/${{ github.repository }}/issues/${{ needs.get-pr-number.outputs.PR_NUMBER }}/comments \
-            -f "body=This comment contains run-slow, running the specified jobs: ${{ env.BODY }} ..."
+            "repos/${github_repository}/issues/${pr_number}/comments" \
+            -f body="This comment contains \`run-slow\`, running the specified jobs: $(echo -e "$BODY")"
 
   create_run:
     name: Create run
-    if: ${{ needs.get-tests.outputs.models != '[]' || needs.get-tests.outputs.quantizations != '[]' }}
-    needs: [get-sha, get-tests, reply_to_comment]
+    needs: [check-timestamps, reply_to_comment]
     permissions:
       statuses: write
     runs-on: ubuntu-22.04
@@ -168,248 +159,196 @@ jobs:
           # Create a commit status (pending) for a run of this workflow. The status has to be updated later in `update_run_status`.
           # See https://docs.github.com/en/rest/commits/statuses?apiVersion=2022-11-28#create-a-commit-status
           GITHUB_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          github_repository: ${{ github.repository }}
+          pr_head_sha: ${{ needs.check-timestamps.outputs.PR_HEAD_SHA }}
         run: |
           gh api \
             --method POST \
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
-            repos/${{ github.repository }}/statuses/${{ needs.get-sha.outputs.PR_HEAD_SHA }} \
+            "repos/${github_repository}/statuses/${pr_head_sha}" \
             -f "target_url=$GITHUB_RUN_URL" -f "state=pending" -f "description=Slow CI job" -f "context=pytest/custom-tests"
 
-  run_models_gpu:
-    name: Run all tests for the model
+  model-ci:
+    name: Model CI
     if: ${{ needs.get-tests.outputs.models != '[]' }}
-    needs: [get-pr-number, get-sha, get-tests, create_run]
-    strategy:
-      fail-fast: false
-      matrix:
-        folders: ${{ fromJson(needs.get-tests.outputs.models) }}
-        machine_type: [aws-g5-4xlarge-cache, aws-g5-12xlarge-cache]
-    runs-on:
-       group: '${{ matrix.machine_type }}'
-    container:
-      image: huggingface/transformers-all-latest-gpu
-      options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
-    steps:
-      - name: Echo input and matrix info
-        shell: bash
-        run: |
-          echo "${{ matrix.folders }}"
+    uses: ./.github/workflows/self-scheduled.yml
+    needs: [get-pr-number, check-timestamps, get-tests, create_run]
+    with:
+      job: run_models_gpu
+      slack_report_channel: "#transformers-ci-pr"
+      docker: huggingface/transformers-all-latest-gpu
+      ci_event: PR Comment CI
+      report_repo_id: hf-internal-testing/transformers_pr_ci
+      commit_sha: ${{ needs.check-timestamps.outputs.PR_MERGE_SHA }}
+      subdirs: ${{ needs.get-tests.outputs.models }}
+      pr_number: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
+    secrets: inherit
 
-      - name: Echo folder ${{ matrix.folders }}
-        shell: bash
-        # For folders like `models/bert`, set an env. var. (`matrix_folders`) to `models_bert`, which will be used to
-        # set the artifact folder names (because the character `/` is not allowed).
-        run: |
-          echo "${{ matrix.folders }}"
-          matrix_folders=${{ matrix.folders }}
-          matrix_folders=${matrix_folders/'models/'/'models_'}
-          echo "$matrix_folders"
-          echo "matrix_folders=$matrix_folders" >> $GITHUB_ENV
-
-      - name: Checkout to PR merge commit
-        working-directory: /transformers
-        run: |
-          git fetch origin refs/pull/${{ needs.get-pr-number.outputs.PR_NUMBER }}/merge:refs/remotes/pull/${{ needs.get-pr-number.outputs.PR_NUMBER }}/merge
-          git checkout refs/remotes/pull/${{ needs.get-pr-number.outputs.PR_NUMBER }}/merge
-          git log -1 --format=%H
-
-      - name: Verify merge commit SHA
-        env:
-          VERIFIED_PR_MERGE_SHA: ${{ needs.get-sha.outputs.PR_MERGE_SHA }}
-        working-directory: /transformers
-        run: |
-          PR_MERGE_SHA=$(git log -1 --format=%H)
-          if [ $PR_MERGE_SHA != $VERIFIED_PR_MERGE_SHA ]; then
-            echo "The merged commit SHA is not the same as the verified one! Security issue detected, abort the workflow!";
-            exit -1;
-          fi
-
-      - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
-        working-directory: /transformers
-        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
-
-      - name: NVIDIA-SMI
-        run: |
-          nvidia-smi
-
-      - name: Set `machine_type` for report and artifact names
-        working-directory: /transformers
-        shell: bash
-        run: |
-          echo "${{ matrix.machine_type }}"
-          if [ "${{ matrix.machine_type }}" = "aws-g5-4xlarge-cache" ]; then
-            machine_type=single-gpu
-          elif [ "${{ matrix.machine_type }}" = "aws-g5-12xlarge-cache" ]; then
-            machine_type=multi-gpu
-          else
-            machine_type=${{ matrix.machine_type }}
-          fi
-          echo "$machine_type"
-          echo "machine_type=$machine_type" >> $GITHUB_ENV
-
-      - name: Environment
-        working-directory: /transformers
-        run: |
-          python3 utils/print_env.py
-
-      - name: Show installed libraries and their versions
-        working-directory: /transformers
-        run: pip freeze
-
-      - name: Run all tests on GPU
-        working-directory: /transformers
-        run: |
-          export CUDA_VISIBLE_DEVICES="$(python3 utils/set_cuda_devices_for_ci.py --test_folder ${{ matrix.folders }})"
-          echo $CUDA_VISIBLE_DEVICES
-          python3 -m pytest -v -rsfE --make-reports=${{ env.machine_type }}_run_models_gpu_${{ matrix.folders }}_test_reports tests/${{ matrix.folders }}
-
-      - name: Failure short reports
-        if: ${{ failure() }}
-        continue-on-error: true
-        run: cat /transformers/reports/${{ env.machine_type }}_run_models_gpu_${{ matrix.folders }}_test_reports/failures_short.txt
-
-      - name: Make sure report directory exists
-        shell: bash
-        run: |
-          mkdir -p /transformers/reports/${{ env.machine_type }}_run_models_gpu_${{ matrix.folders }}_test_reports
-          echo "hello" > /transformers/reports/${{ env.machine_type }}_run_models_gpu_${{ matrix.folders }}_test_reports/hello.txt
-          echo "${{ env.machine_type }}_run_models_gpu_${{ matrix.folders }}_test_reports"
-
-      - name: "Test suite reports artifacts: ${{ env.machine_type }}_run_models_gpu_${{ env.matrix_folders }}_test_reports"
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.machine_type }}_run_models_gpu_${{ env.matrix_folders }}_test_reports
-          path: /transformers/reports/${{ env.machine_type }}_run_models_gpu_${{ matrix.folders }}_test_reports
-
-  run_quantization_torch_gpu:
-    name: Run all tests for a quantization
+  quantization-ci:
+    name: Quantization CI
     if: ${{ needs.get-tests.outputs.quantizations != '[]' }}
-    needs: [get-pr-number, get-sha, get-tests, create_run]
-    strategy:
-      fail-fast: false
-      matrix:
-        folders: ${{ fromJson(needs.get-tests.outputs.quantizations) }}
-        machine_type: [aws-g5-4xlarge-cache, aws-g5-12xlarge-cache]
-    runs-on:
-      group: '${{ matrix.machine_type }}'
-    container:
-      image: huggingface/transformers-quantization-latest-gpu
-      options: --gpus all --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
-    steps:
-      - name: Echo folder ${{ matrix.folders }}
-        shell: bash
-        run: |
-          echo "${{ matrix.folders }}"
-          matrix_folders=${{ matrix.folders }}
-          matrix_folders=${matrix_folders/'quantization/'/'quantization_'}
-          echo "$matrix_folders"
-          echo "matrix_folders=$matrix_folders" >> $GITHUB_ENV
+    uses: ./.github/workflows/self-scheduled.yml
+    needs: [get-pr-number, check-timestamps, get-tests, create_run]
+    with:
+      job: run_quantization_torch_gpu
+      slack_report_channel: "#transformers-ci-pr"
+      docker: huggingface/transformers-quantization-latest-gpu
+      ci_event: PR Comment CI
+      report_repo_id: hf-internal-testing/transformers_pr_ci
+      commit_sha: ${{ needs.check-timestamps.outputs.PR_MERGE_SHA }}
+      subdirs: ${{ needs.get-tests.outputs.quantizations }}
+      pr_number: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
+    secrets: inherit
 
-      - name: Checkout to PR merge commit
-        working-directory: /transformers
-        run: |
-          git fetch origin refs/pull/${{ needs.get-pr-number.outputs.PR_NUMBER }}/merge:refs/remotes/pull/${{ needs.get-pr-number.outputs.PR_NUMBER }}/merge
-          git checkout refs/remotes/pull/${{ needs.get-pr-number.outputs.PR_NUMBER }}/merge
-          git log -1 --format=%H
-
-      - name: Verify merge commit SHA
-        env:
-          VERIFIED_PR_MERGE_SHA: ${{ needs.get-sha.outputs.PR_MERGE_SHA }}
-        working-directory: /transformers
-        run: |
-          PR_MERGE_SHA=$(git log -1 --format=%H)
-          if [ $PR_MERGE_SHA != $VERIFIED_PR_MERGE_SHA ]; then
-            echo "The merged commit SHA is not the same as the verified one! Security issue detected, abort the workflow!";
-            exit -1;
-          fi
-
-      - name: Reinstall transformers in edit mode (remove the one installed during docker image build)
-        working-directory: /transformers
-        run: python3 -m pip uninstall -y transformers && python3 -m pip install -e .
-      - name: NVIDIA-SMI
-        run: |
-          nvidia-smi
-
-      - name: Set `machine_type` for report and artifact names
-        working-directory: /transformers
-        shell: bash
-        run: |
-          echo "${{ matrix.machine_type }}"
-          if [ "${{ matrix.machine_type }}" = "aws-g5-4xlarge-cache" ]; then
-            machine_type=single-gpu
-          elif [ "${{ matrix.machine_type }}" = "aws-g5-12xlarge-cache" ]; then
-            machine_type=multi-gpu
-          else
-            machine_type=${{ matrix.machine_type }}
-          fi
-          echo "$machine_type"
-          echo "machine_type=$machine_type" >> $GITHUB_ENV
-
-      - name: Environment
-        working-directory: /transformers
-        run: |
-          python3 utils/print_env.py
-
-      - name: Show installed libraries and their versions
-        working-directory: /transformers
-        run: pip freeze
-
-      - name: Run quantization tests on GPU
-        working-directory: /transformers
-        run: |
-          python3 -m pytest -v --make-reports=${{ env.machine_type }}_run_quantization_torch_gpu_${{ matrix.folders }}_test_reports tests/${{ matrix.folders }}
-
-      - name: Failure short reports
-        if: ${{ failure() }}
-        continue-on-error: true
-        run: cat /transformers/reports/${{ env.machine_type }}_run_quantization_torch_gpu_${{ matrix.folders }}_test_reports/failures_short.txt
-
-      - name: Make sure report directory exists
-        shell: bash
-        run: |
-          mkdir -p /transformers/reports/${{ env.machine_type }}_run_quantization_gpu_${{ matrix.folders }}_test_reports
-          echo "hello" > /transformers/reports/${{ env.machine_type }}_run_quantization_gpu_${{ matrix.folders }}_test_reports/hello.txt
-          echo "${{ env.machine_type }}_run_quantization_gpu_${{ matrix.folders }}_test_reports"
-
-      - name: "Test suite reports artifacts: ${{ env.machine_type }}_run_quantization_torch_gpu_${{ env.matrix_folders }}_test_reports"
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v4
-        with:
-          name: ${{ env.machine_type }}_run_quantization_torch_gpu_${{ env.matrix_folders }}_test_reports
-          path: /transformers/reports/${{ env.machine_type }}_run_quantization_torch_gpu_${{ matrix.folders }}_test_reports
-
-  update_run_status:
-    name: Update Check Run Status
-    needs: [get-sha, create_run, run_models_gpu, run_quantization_torch_gpu]
+  report:
+    name: Check & Report
+    needs: [get-pr-number, check-timestamps, create_run, model-ci, quantization-ci]
     permissions:
+      pull-requests: write
       statuses: write
     if: ${{ always() && needs.create_run.result == 'success' }}
     runs-on: ubuntu-22.04
-    env:
-      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      GITHUB_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
-      STATUS_OK: ${{ contains(fromJSON('["skipped", "success"]'), needs.run_models_gpu.result) && contains(fromJSON('["skipped", "success"]'), needs.run_quantization_torch_gpu.result) }}
     steps:
-      - name: Get `run_models_gpu` job status
+      - name: Show reports from jobs
+        env:
+          MODEL_REPORT: ${{ needs.model-ci.outputs.report }}
+          QUANT_REPORT: ${{ needs.quantization-ci.outputs.report }}
         run: |
-          echo "${{ needs.run_models_gpu.result }}"
-          echo "${{ needs.run_quantization_torch_gpu.result }}"
-          echo $STATUS_OK
-          if [ "$STATUS_OK" = "true" ]; then
-            echo "STATUS=success" >> $GITHUB_ENV
-          else
-            echo "STATUS=failure" >> $GITHUB_ENV
-          fi
+          echo "$MODEL_REPORT"
+          echo "$QUANT_REPORT"
 
-      - name: Update PR commit statuses
+      - name: Process and filter reports
+        env:
+          MODEL_REPORT: ${{ needs.model-ci.outputs.report }}
+          QUANT_REPORT: ${{ needs.quantization-ci.outputs.report }}
         run: |
-          echo "${{ needs.run_models_gpu.result }}"
-          echo "${{ env.STATUS }}"
+          # Preprocess with Python
+          python3 << 'PYTHON_SCRIPT'
+          import json
+          import os
+          
+          def filter_and_format_report(data):
+            """
+            Filter out entries where commit is `None` (failing tests who status is not certain) and format as text
+            """
+            lines = []
+            
+            for model, model_result in data.items():
+                model_lines = []
+                for device, failures in model_result.items():
+                    
+                    # Filter out None commits and extract just the test names
+                    test_names = [
+                        failure['test'] 
+                        for failure in failures 
+                        if isinstance(failure, dict) and failure.get('commit') is not None
+                    ]
+
+                    # Add tests to model lines
+                    for idx, test_name in enumerate(test_names):
+                        if idx == 0:
+                            job_link = failures[idx]['job_link']
+                            model_lines.append(f"- [{model}]({job_link}):")
+          
+                        model_lines.append(f"    {test_name}")
+
+                # Only add model section if it has tests
+                if len(model_lines) > 0:
+                    lines.extend(model_lines)
+                    lines.append("")  # Empty line between models
+            
+            return "\n".join(lines).strip()
+          
+          # Load and filter reports
+          model_report_str = os.environ.get('MODEL_REPORT', '{}')
+          quant_report_str = os.environ.get('QUANT_REPORT', '{}')
+          
+          model_report = json.loads(model_report_str) if model_report_str else {}
+          quant_report = json.loads(quant_report_str) if quant_report_str else {}
+          
+          formatted_model = filter_and_format_report(model_report)
+          formatted_quant = filter_and_format_report(quant_report)
+          
+          # Write to files
+          with open('model_ci.txt', 'w') as f:
+              f.write(formatted_model)
+              if formatted_model:
+                  f.write('\n')
+          
+          with open('quantization_ci.txt', 'w') as f:
+              f.write(formatted_quant)
+              if formatted_quant:
+                  f.write('\n')
+          PYTHON_SCRIPT
+
+      - name: Post results as PR comment
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          github_repository: ${{ github.repository }}
+          pr_number: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
+          model_ci_result: ${{ needs.model-ci.result }}
+          quantization_ci_result: ${{ needs.quantization-ci.result }}
+        run: |
+          {
+            echo '## CI Results'
+            echo "[Workflow Run ⚙️]($GITHUB_RUN_URL)"
+            echo ''
+
+            # Check if both jobs were skipped or cancelled
+            if [[ "$model_ci_result" == "skipped" || "$model_ci_result" == "cancelled" ]] && \
+               [[ "$quantization_ci_result" == "skipped" || "$quantization_ci_result" == "cancelled" ]]; then
+              echo '⚠️ No test being reported (jobs are skipped or cancelled)!'
+              echo "STATUS=error" >> $GITHUB_ENV
+
+            # Check if either file has content
+            elif [ -s model_ci.txt ] || [ -s quantization_ci.txt ]; then
+              echo "STATUS=failure" >> $GITHUB_ENV
+
+              # Check if model_ci.txt has content
+              if [ -s model_ci.txt ]; then
+                echo '### Model CI Report'
+                echo ''
+                echo '#### ❌ Failed tests'
+                echo ''
+                cat model_ci.txt
+                echo ''
+              fi
+              
+              # Check if quantization_ci.txt has content
+              if [ -s quantization_ci.txt ]; then
+                echo '### Quantization CI Report'
+                echo ''
+                echo '#### ❌ Failed tests'
+                echo ''
+                cat quantization_ci.txt
+                echo ''
+              fi
+            else
+              echo "STATUS=success" >> $GITHUB_ENV
+              echo '✅ No failing test specific to this PR 🎉 !'
+            fi
+          } > comment_body.txt
+
           gh api \
             --method POST \
             -H "Accept: application/vnd.github+json" \
             -H "X-GitHub-Api-Version: 2022-11-28" \
-            repos/${{ github.repository }}/statuses/${{ needs.get-sha.outputs.PR_HEAD_SHA }} \
-            -f "target_url=$GITHUB_RUN_URL" -f "state=${{ env.STATUS }}" -f "description=Slow CI job" -f "context=pytest/custom-tests"
+            "repos/${github_repository}/issues/${pr_number}/comments" \
+            -F body=@comment_body.txt
+
+      - name: Update PR commit statuses
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_RUN_URL: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          github_repository: ${{ github.repository }}
+          pr_head_sha: ${{ needs.check-timestamps.outputs.PR_HEAD_SHA }}
+        # The env. variable `STATUS` used here is set in the previous step
+        run: |
+          gh api \
+            --method POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "repos/${github_repository}/statuses/${pr_head_sha}" \
+            -f "target_url=$GITHUB_RUN_URL" -f "state=$STATUS" -f "description=Slow CI job" -f "context=pytest/custom-tests"

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,8 +14,6 @@
 """
 Feature extractor class for Wav2Vec2
 """
-
-from typing import Optional, Union
 
 import numpy as np
 
@@ -101,14 +98,14 @@ class Wav2Vec2FeatureExtractor(SequenceFeatureExtractor):
 
     def __call__(
         self,
-        raw_speech: Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]],
-        padding: Union[bool, str, PaddingStrategy] = False,
-        max_length: Optional[int] = None,
+        raw_speech: np.ndarray | list[float] | list[np.ndarray] | list[list[float]],
+        padding: bool | str | PaddingStrategy = False,
+        max_length: int | None = None,
         truncation: bool = False,
-        pad_to_multiple_of: Optional[int] = None,
-        return_attention_mask: Optional[bool] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        sampling_rate: Optional[int] = None,
+        pad_to_multiple_of: int | None = None,
+        return_attention_mask: bool | None = None,
+        return_tensors: str | TensorType | None = None,
+        sampling_rate: int | None = None,
         **kwargs,
     ) -> BatchFeature:
         """

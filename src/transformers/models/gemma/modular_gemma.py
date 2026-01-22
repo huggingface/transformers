@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 Google Inc. HuggingFace Inc. team. All rights reserved.
 #
 #
@@ -13,20 +12,19 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import TYPE_CHECKING, Any, Optional
+from typing import TYPE_CHECKING
 
-import sentencepiece as spm
 import torch
 from torch import nn
 
+from ... import initialization as init
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig
 from ...masking_utils import create_causal_mask
 from ...modeling_outputs import BaseModelOutputWithPast
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
-from ...tokenization_utils import AddedToken, PreTrainedTokenizer
 from ...utils import TransformersKwargs, logging
 from ..llama.modeling_llama import (
     LlamaAttention,
@@ -38,11 +36,10 @@ from ..llama.modeling_llama import (
     LlamaPreTrainedModel,
     LlamaRotaryEmbedding,
 )
-from ..llama.tokenization_llama import LlamaTokenizer
 
 
 if TYPE_CHECKING:
-    from ...tokenization_utils_base import TextInput
+    pass
 
 VOCAB_FILES_NAMES = {"vocab_file": "tokenizer.model"}
 
@@ -103,7 +100,7 @@ class GemmaConfig(PreTrainedConfig):
         tie_word_embeddings (`bool`, *optional*, defaults to `True`):
             Whether to tie weight embeddings
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
@@ -142,26 +139,26 @@ class GemmaConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 256000,
-        hidden_size: Optional[int] = 3072,
-        intermediate_size: Optional[int] = 24576,
-        num_hidden_layers: Optional[int] = 28,
-        num_attention_heads: Optional[int] = 16,
-        num_key_value_heads: Optional[int] = 16,
-        head_dim: Optional[int] = 256,
-        hidden_act: Optional[str] = "gelu_pytorch_tanh",
-        max_position_embeddings: Optional[int] = 8192,
-        initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[int] = 1e-6,
-        use_cache: Optional[bool] = True,
-        pad_token_id: Optional[int] = 0,
-        eos_token_id: Optional[int] = 1,
-        bos_token_id: Optional[int] = 2,
-        tie_word_embeddings: Optional[bool] = True,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
-        attention_bias: Optional[bool] = False,
-        attention_dropout: Optional[float] = 0.0,
-        use_bidirectional_attention: Optional[bool] = None,
+        vocab_size: int | None = 256000,
+        hidden_size: int | None = 3072,
+        intermediate_size: int | None = 24576,
+        num_hidden_layers: int | None = 28,
+        num_attention_heads: int | None = 16,
+        num_key_value_heads: int | None = 16,
+        head_dim: int | None = 256,
+        hidden_act: str | None = "gelu_pytorch_tanh",
+        max_position_embeddings: int | None = 8192,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: int | None = 1e-6,
+        use_cache: bool | None = True,
+        pad_token_id: int | None = 0,
+        eos_token_id: int | None = 1,
+        bos_token_id: int | None = 2,
+        tie_word_embeddings: bool | None = True,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        attention_bias: bool | None = False,
+        attention_dropout: float | None = 0.0,
+        use_bidirectional_attention: bool | None = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -179,178 +176,13 @@ class GemmaConfig(PreTrainedConfig):
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.use_bidirectional_attention = use_bidirectional_attention
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
+        self.rope_parameters = rope_parameters
 
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 10000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
-
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
-
-
-class GemmaTokenizer(LlamaTokenizer, PreTrainedTokenizer):
-    """
-    Construct a Gemma tokenizer. Based on byte-level Byte-Pair-Encoding. The default padding token is unset as there is
-    no padding token in the original model.
-
-    Args:
-        vocab_file (`str`):
-            Path to the vocabulary file.
-        unk_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"<unk>"`):
-            The unknown token. A token that is not in the vocabulary cannot be converted to an ID and is set to be this
-            token instead.
-        bos_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"<bos>"`):
-            The beginning of sequence token that was used during pretraining. Can be used a sequence classifier token.
-        eos_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"<eos>"`):
-            The end of sequence token.
-        pad_token (`str` or `tokenizers.AddedToken`, *optional*, defaults to `"<pad>"`):
-            A special token used to make arrays of tokens the same size for batching purpose. Will then be ignored by
-            attention mechanisms or loss computation.
-        sp_model_kwargs (`dict[str, Any]`, `Optional`, *optional*):
-            Will be passed to the `SentencePieceProcessor.__init__()` method. The [Python wrapper for
-            SentencePiece](https://github.com/google/sentencepiece/tree/master/python) can be used, among other things,
-            to set:
-
-            - `enable_sampling`: Enable subword regularization.
-            - `nbest_size`: Sampling parameters for unigram. Invalid for BPE-Dropout.
-
-              - `nbest_size = {0,1}`: No sampling is performed.
-              - `nbest_size > 1`: samples from the nbest_size results.
-              - `nbest_size < 0`: assuming that nbest_size is infinite and samples from the all hypothesis (lattice)
-                using forward-filtering-and-backward-sampling algorithm.
-
-            - `alpha`: Smoothing parameter for unigram sampling, and dropout probability of merge operations for
-              BPE-dropout.
-
-        add_bos_token (`bool`, *optional*, defaults to `True`):
-            Whether or not to add an `bos_token` at the start of sequences.
-        add_eos_token (`bool`, *optional*, defaults to `False`):
-            Whether or not to add an `eos_token` at the end of sequences.
-        clean_up_tokenization_spaces (`bool`, *optional*, defaults to `False`):
-            Whether or not to cleanup spaces after decoding, cleanup consists in removing potential artifacts like
-            extra spaces.
-        use_default_system_prompt (`bool`, *optional*, defaults to `False`):
-            Whether or not the default system prompt for Gemma should be used.
-        spaces_between_special_tokens (`bool`, *optional*, defaults to `False`):
-            Whether or not to add spaces between special tokens.
-    """
-
-    def __init__(
-        self,
-        vocab_file,
-        unk_token="<unk>",
-        bos_token="<bos>",
-        eos_token="<eos>",
-        pad_token="<pad>",
-        sp_model_kwargs: Optional[dict[str, Any]] = None,
-        add_bos_token=True,
-        add_eos_token=False,
-        clean_up_tokenization_spaces=False,
-        use_default_system_prompt=False,
-        spaces_between_special_tokens=False,
-        **kwargs,
-    ):
-        self.sp_model_kwargs = {} if sp_model_kwargs is None else sp_model_kwargs
-        bos_token = AddedToken(bos_token, normalized=False, special=True) if isinstance(bos_token, str) else bos_token
-        eos_token = AddedToken(eos_token, normalized=False, special=True) if isinstance(eos_token, str) else eos_token
-        unk_token = AddedToken(unk_token, normalized=False, special=True) if isinstance(unk_token, str) else unk_token
-        pad_token = AddedToken(pad_token, normalized=False, special=True) if isinstance(pad_token, str) else pad_token
-
-        self.vocab_file = vocab_file
-        self.add_bos_token = add_bos_token
-        self.add_eos_token = add_eos_token
-        self.use_default_system_prompt = use_default_system_prompt
-        self.sp_model = spm.SentencePieceProcessor(**self.sp_model_kwargs)
-        self.sp_model.Load(vocab_file)
-
-        PreTrainedTokenizer.__init__(
-            self,
-            bos_token=bos_token,
-            eos_token=eos_token,
-            unk_token=unk_token,
-            pad_token=pad_token,
-            add_bos_token=add_bos_token,
-            add_eos_token=add_eos_token,
-            sp_model_kwargs=sp_model_kwargs,
-            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
-            use_default_system_prompt=use_default_system_prompt,
-            spaces_between_special_tokens=spaces_between_special_tokens,
-            **kwargs,
-        )
-
-    def get_spm_processor(self):
-        raise AttributeError("Not needed for Gemma")
-
-    def unk_token_length(self):
-        raise AttributeError("Not needed for Gemma")
-
-    def tokenize(self, text: "TextInput", **kwargs) -> list[str]:
-        """
-        Args:
-            text: TextInput
-        Simply calls PreTrainedTokenizer's method
-        """
-        return PreTrainedTokenizer.tokenize(self, text, **kwargs)
-
-    def _tokenize(self, text, **kwargs):
-        """
-        Args:
-            text: TextInput
-        Returns a tokenized string. The Gemma tokenizer never adds a prefix space.
-        """
-        return self.sp_model.encode(text, out_type=str)
-
-    def _decode(
-        self,
-        token_ids: list[int],
-        skip_special_tokens: bool = False,
-        spaces_between_special_tokens: bool = False,
-        **kwargs,
-    ) -> str:
-        sub_texts = []
-        current_sub_text = []
-        for ids in token_ids:
-            if skip_special_tokens and ids in self.all_special_ids:
-                continue
-            if ids in self._added_tokens_decoder:
-                if current_sub_text:
-                    sub_texts.append(self.sp_model.decode(current_sub_text))
-                sub_texts.append(self._added_tokens_decoder[ids].content)
-                current_sub_text = []
-            else:
-                current_sub_text.append(ids)
-        if current_sub_text:
-            sub_texts.append(self.sp_model.decode(current_sub_text))
-
-        if spaces_between_special_tokens:
-            sub_texts = " ".join(sub_texts)
-        else:
-            sub_texts = "".join(sub_texts)
-
-        return sub_texts.replace(SPIECE_UNDERLINE, " ")
-
-    def convert_tokens_to_string(self, tokens):
-        """Converts a sequence of tokens (string) in a single string."""
-        current_sub_tokens = []
-        out_string = ""
-        for token in tokens:
-            # make sure that special tokens are not decoded using sentencepiece model
-            if token in self._added_tokens_encoder:
-                out_string += self.sp_model.decode(current_sub_tokens) + token
-                current_sub_tokens = []
-            else:
-                current_sub_tokens.append(token)
-        out_string += self.sp_model.decode(current_sub_tokens)
-        return out_string
+        super().__init__(**kwargs)
 
 
 class GemmaRMSNorm(nn.Module):
@@ -394,24 +226,24 @@ class GemmaAttention(LlamaAttention):
 
 
 class GemmaPreTrainedModel(LlamaPreTrainedModel):
+    @torch.no_grad()
     def _init_weights(self, module):
         PreTrainedModel._init_weights(self, module)
-
         # We initialize with 0s to be 1 centered as the RMSNorm here does (1 + weight)
         if "RMSNorm" in module.__class__.__name__:
-            module.weight.data.zero_()
+            init.zeros_(module.weight)
 
 
 class GemmaModel(LlamaModel):
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> BaseModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
@@ -432,16 +264,14 @@ class GemmaModel(LlamaModel):
         if position_ids is None:
             position_ids = cache_position.unsqueeze(0)
 
-        # It may already have been prepared by e.g. `generate`
-        if not isinstance(causal_mask_mapping := attention_mask, dict):
-            causal_mask_mapping = create_causal_mask(
-                config=self.config,
-                input_embeds=inputs_embeds,
-                attention_mask=attention_mask,
-                cache_position=cache_position,
-                past_key_values=past_key_values,
-                position_ids=position_ids,
-            )
+        causal_mask = create_causal_mask(
+            config=self.config,
+            input_embeds=inputs_embeds,
+            attention_mask=attention_mask,
+            cache_position=cache_position,
+            past_key_values=past_key_values,
+            position_ids=position_ids,
+        )
 
         # embed positions
         hidden_states = inputs_embeds
@@ -456,7 +286,7 @@ class GemmaModel(LlamaModel):
         for decoder_layer in self.layers[: self.config.num_hidden_layers]:
             hidden_states = decoder_layer(
                 hidden_states,
-                attention_mask=causal_mask_mapping,
+                attention_mask=causal_mask,
                 position_ids=position_ids,
                 past_key_values=past_key_values,
                 use_cache=use_cache,
@@ -503,7 +333,6 @@ class GemmaForTokenClassification(LlamaForTokenClassification):
 
 __all__ = [
     "GemmaConfig",
-    "GemmaTokenizer",
     "GemmaModel",
     "GemmaForCausalLM",
     "GemmaForSequenceClassification",

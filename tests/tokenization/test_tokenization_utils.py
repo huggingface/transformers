@@ -25,10 +25,9 @@ from transformers import (
     AutoTokenizer,
     BatchEncoding,
     BertTokenizer,
-    BertTokenizerFast,
-    LlamaTokenizerFast,
-    PreTrainedTokenizer,
+    LlamaTokenizer,
     PreTrainedTokenizerFast,
+    PythonBackend,
     TensorType,
     TokenSpan,
     is_tokenizers_available,
@@ -45,18 +44,22 @@ from transformers.testing_utils import (
 
 if is_tokenizers_available():
     import tokenizers
-    from tokenizers import Tokenizer
+    from tokenizers import AddedToken, Tokenizer
     from tokenizers.models import WordPiece
 
 
 class TokenizerUtilsTest(unittest.TestCase):
     def check_tokenizer_from_pretrained(self, tokenizer_class):
+        # max_model_input_sizes is a legacy attribute that may not exist on all tokenizers
+        if not hasattr(tokenizer_class, "max_model_input_sizes"):
+            return
+
         s3_models = list(tokenizer_class.max_model_input_sizes.keys())
         for model_name in s3_models[:1]:
             tokenizer = tokenizer_class.from_pretrained(model_name)
             self.assertIsNotNone(tokenizer)
             self.assertIsInstance(tokenizer, tokenizer_class)
-            self.assertIsInstance(tokenizer, PreTrainedTokenizer)
+            self.assertIsInstance(tokenizer, PythonBackend)
 
             for special_tok in tokenizer.all_special_tokens:
                 self.assertIsInstance(special_tok, str)
@@ -72,19 +75,8 @@ class TokenizerUtilsTest(unittest.TestCase):
         self.assertEqual(TensorType("np"), TensorType.NUMPY)
 
     @require_tokenizers
-    def test_batch_encoding_is_fast(self):
-        tokenizer_p = BertTokenizer.from_pretrained("google-bert/bert-base-cased")
-        tokenizer_r = BertTokenizerFast.from_pretrained("google-bert/bert-base-cased")
-
-        with self.subTest("Python Tokenizer"):
-            self.assertFalse(tokenizer_p("Small example to_encode").is_fast)
-
-        with self.subTest("Rust Tokenizer"):
-            self.assertTrue(tokenizer_r("Small example to_encode").is_fast)
-
-    @require_tokenizers
     def test_batch_encoding_word_to_tokens(self):
-        tokenizer_r = BertTokenizerFast.from_pretrained("google-bert/bert-base-cased")
+        tokenizer_r = BertTokenizer.from_pretrained("google-bert/bert-base-cased")
         encoded = tokenizer_r(["Test", "\xad", "test"], is_split_into_words=True)
 
         self.assertEqual(encoded.word_to_tokens(0), TokenSpan(start=1, end=2))
@@ -135,7 +127,7 @@ class TokenizerUtilsTest(unittest.TestCase):
 
     @require_tokenizers
     def test_decoding_single_token(self):
-        for tokenizer_class in [BertTokenizer, BertTokenizerFast]:
+        for tokenizer_class in [BertTokenizer, BertTokenizer]:
             with self.subTest(f"{tokenizer_class}"):
                 tokenizer = tokenizer_class.from_pretrained("google-bert/bert-base-cased")
 
@@ -161,7 +153,7 @@ class TokenizerUtilsTest(unittest.TestCase):
                 self.assertEqual(decoded_list, "##：")
 
     def test_extra_special_tokens_multimodal(self):
-        special_tokens_list = [
+        attribute_special_tokens_list = [
             "bos_token",
             "eos_token",
             "unk_token",
@@ -169,21 +161,21 @@ class TokenizerUtilsTest(unittest.TestCase):
             "pad_token",
             "cls_token",
             "mask_token",
-            "additional_special_tokens",
         ]
-        llama_tokenizer = LlamaTokenizerFast.from_pretrained("huggyllama/llama-7b")
+        llama_tokenizer = LlamaTokenizer.from_pretrained("huggyllama/llama-7b")
         llama_tokenizer.extra_special_tokens = {
             "boi_token": "<image_start>",
             "eoi_token": "<image_end>",
             "image_token": "<image>",
         }
-        self.assertListEqual(llama_tokenizer.SPECIAL_TOKENS_ATTRIBUTES, special_tokens_list)
+        multimodal_special_tokens_list = attribute_special_tokens_list + ["boi_token", "eoi_token", "image_token"]
+        self.assertListEqual(llama_tokenizer.SPECIAL_TOKENS_ATTRIBUTES, multimodal_special_tokens_list)
         with tempfile.TemporaryDirectory() as tmpdirname:
             llama_tokenizer.save_pretrained(tmpdirname)
 
             # load back and check we have extra special tokens set
-            loaded_tokenizer = LlamaTokenizerFast.from_pretrained(tmpdirname)
-            multimodal_special_tokens_list = special_tokens_list + ["boi_token", "eoi_token", "image_token"]
+            loaded_tokenizer = LlamaTokenizer.from_pretrained(tmpdirname)
+            multimodal_special_tokens_list = attribute_special_tokens_list + ["boi_token", "eoi_token", "image_token"]
             self.assertListEqual(loaded_tokenizer.SPECIAL_TOKENS_ATTRIBUTES, multimodal_special_tokens_list)
 
             # We set an image_token_id before, so we can get an "image_token" as str that matches the id
@@ -193,7 +185,7 @@ class TokenizerUtilsTest(unittest.TestCase):
         # save one more time and make sure the image token can get loaded back
         with tempfile.TemporaryDirectory() as tmpdirname:
             loaded_tokenizer.save_pretrained(tmpdirname)
-            loaded_tokenizer_with_extra_tokens = LlamaTokenizerFast.from_pretrained(tmpdirname)
+            loaded_tokenizer_with_extra_tokens = LlamaTokenizer.from_pretrained(tmpdirname)
             self.assertTrue(loaded_tokenizer_with_extra_tokens.image_token == "<image>")
 
         # test that we can also indicate extra tokens during load time
@@ -202,15 +194,13 @@ class TokenizerUtilsTest(unittest.TestCase):
             "eoi_token": "<image_end>",
             "image_token": "<image>",
         }
-        tokenizer = LlamaTokenizerFast.from_pretrained(
-            "huggyllama/llama-7b", extra_special_tokens=extra_special_tokens
-        )
+        tokenizer = LlamaTokenizer.from_pretrained("huggyllama/llama-7b", extra_special_tokens=extra_special_tokens)
         self.assertTrue(tokenizer.image_token == "<image>")
         self.assertTrue(tokenizer.image_token_id == loaded_tokenizer.convert_tokens_to_ids("<image>"))
 
     @require_tokenizers
     def test_decoding_skip_special_tokens(self):
-        for tokenizer_class in [BertTokenizer, BertTokenizerFast]:
+        for tokenizer_class in [BertTokenizer, BertTokenizer]:
             with self.subTest(f"{tokenizer_class}"):
                 tokenizer = tokenizer_class.from_pretrained("google-bert/bert-base-cased")
                 tokenizer.add_tokens(["ஐ"], special_tokens=True)
@@ -273,7 +263,7 @@ class TokenizerUtilsTest(unittest.TestCase):
             PreTrainedTokenizerFast(tokenizer_file=os.path.join(tmpdirname, "tokenizer.json"))
 
     def test_len_tokenizer(self):
-        for tokenizer_class in [BertTokenizer, BertTokenizerFast]:
+        for tokenizer_class in [BertTokenizer, BertTokenizer]:
             with self.subTest(f"{tokenizer_class}"):
                 tokenizer = tokenizer_class.from_pretrained("bert-base-uncased")
                 added_tokens_size = len(tokenizer.added_tokens_decoder)
@@ -323,7 +313,7 @@ class TokenizerUtilsTest(unittest.TestCase):
         ]
 
         # First, test the default case, where we encode the whole conversation at once
-        whole_conversation_tokens = tokenizer.apply_chat_template(conversation, tokenize=True)
+        whole_conversation_tokens = tokenizer.apply_chat_template(conversation, tokenize=True, return_dict=False)
 
         # Now, test the message-by-message encoding
         tokens = []
@@ -340,3 +330,23 @@ class TokenizerUtilsTest(unittest.TestCase):
         ]
         with self.assertRaises(ValueError):
             tokenizer.encode_message_with_chat_template(conversation[0], add_generation_prompt=True)
+
+    @require_tokenizers
+    def test_special_tokens_overwrite(self):
+        text_with_nonspecial_tokens = "there are 2 cats"  # '2' is originally special
+
+        tokenizer = LlamaTokenizer.from_pretrained("hf-internal-testing/Ernie4_5_Tokenizer")
+        # Overwrite special tokens 0-9 to non-special
+        tokenizer.add_tokens([AddedToken(f"{i}", normalized=False, special=False) for i in range(10)])
+        self.assertTrue(
+            tokenizer.decode(tokenizer.encode(text_with_nonspecial_tokens), skip_special_tokens=True)
+            == text_with_nonspecial_tokens
+        )
+
+        # Checking if this carries over even after saving and relaoding
+        tokenizer.save_pretrained("/tmp/ernie_tokenizer")
+        new_tokenizer = AutoTokenizer.from_pretrained("/tmp/ernie_tokenizer")
+        self.assertTrue(
+            new_tokenizer.decode(new_tokenizer.encode(text_with_nonspecial_tokens), skip_special_tokens=True)
+            == text_with_nonspecial_tokens
+        )

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,8 +17,8 @@ from typing import Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...processing_utils import ProcessorMixin
-from ...tokenization_utils import PreTokenizedInput, TextInput
-from ...utils import is_torch_available, logging
+from ...tokenization_python import PreTokenizedInput, TextInput
+from ...utils import auto_docstring, is_torch_available, logging
 from ...utils.import_utils import requires_backends
 
 
@@ -29,11 +28,8 @@ if is_torch_available():
 logger = logging.get_logger(__name__)
 
 
+@auto_docstring
 class GraniteSpeechProcessor(ProcessorMixin):
-    attributes = ["audio_processor", "tokenizer"]
-    audio_processor_class = "GraniteSpeechFeatureExtractor"
-    tokenizer_class = "AutoTokenizer"
-
     def __init__(
         self,
         audio_processor,
@@ -41,12 +37,19 @@ class GraniteSpeechProcessor(ProcessorMixin):
         audio_token="<|audio|>",
         chat_template=None,
     ):
+        r"""
+        audio_token (`str`, *optional*, defaults to `"<|audio|>"`):
+            The special token used to represent audio in the text sequence. This token serves as a placeholder
+            that will be replaced with multiple audio tokens based on the actual audio length. The number of
+            audio tokens inserted depends on the audio feature dimensions extracted by the audio processor.
+        """
         self.audio_token = tokenizer.audio_token if hasattr(tokenizer, "audio_token") else audio_token
         super().__init__(audio_processor, tokenizer, chat_template=chat_template)
 
+    @auto_docstring
     def __call__(
         self,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]],
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput],
         audio: Union["torch.Tensor", list["torch.Tensor"]] = None,
         device: str = "cpu",
         **kwargs,
@@ -91,7 +94,7 @@ class GraniteSpeechProcessor(ProcessorMixin):
         text_inputs = self.tokenizer(prompt_strings, **kwargs)
         return BatchFeature(data={**text_inputs, **audio_inputs})
 
-    def _get_validated_text(self, text: Union[str, list]) -> list[str]:
+    def _get_validated_text(self, text: str | list) -> list[str]:
         if isinstance(text, str):
             return [text]
         elif isinstance(text, list) and isinstance(text[0], str):

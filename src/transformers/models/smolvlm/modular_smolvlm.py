@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 the HuggingFace Inc. team. All rights reserved.
 # Written by Orr Zohar
 #
@@ -13,7 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Optional, Union
 
 import torch
 from torch import nn
@@ -22,7 +20,7 @@ from ...cache_utils import Cache, DynamicCache
 from ...generation import GenerationConfig
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...processing_utils import Unpack
-from ...utils import auto_docstring, can_return_tuple, logging
+from ...utils import auto_docstring, can_return_tuple, logging, torch_compilable_check
 from ..idefics3.configuration_idefics3 import Idefics3Config, Idefics3VisionConfig
 from ..idefics3.image_processing_idefics3 import Idefics3ImageProcessor
 from ..idefics3.image_processing_idefics3_fast import Idefics3ImageProcessorFast
@@ -174,9 +172,10 @@ class SmolVLMModel(Idefics3Model):
             image_mask = input_ids == self.config.image_token_id
 
         num_image_tokens = image_mask.sum(dim=1)
-        if not torch.all(num_image_tokens % patch_size == 0):
-            raise ValueError("At least one sample has <image> tokens not divisible by patch_size.")
-
+        torch_compilable_check(
+            torch.all(num_image_tokens % patch_size == 0),
+            "At least one sample has <image> tokens not divisible by patch_size.",
+        )
         blocks_per_sample = num_image_tokens // patch_size
 
         offsets = torch.nn.functional.pad(blocks_per_sample.cumsum(dim=0), (1, 0), value=0)
@@ -193,7 +192,7 @@ class SmolVLMModel(Idefics3Model):
         return merged_embeds
 
     def get_image_features(
-        self, pixel_values: torch.FloatTensor, pixel_attention_mask: Optional[torch.LongTensor] = None
+        self, pixel_values: torch.FloatTensor, pixel_attention_mask: torch.LongTensor | None = None
     ):
         """
         Encodes images into continuous embeddings that can be forwarded to the language model.
@@ -212,9 +211,8 @@ class SmolVLMModel(Idefics3Model):
         nb_values_per_image = pixel_values.shape[1:].numel()
         real_images_inds = (pixel_values == 0.0).sum(dim=(-1, -2, -3)) != nb_values_per_image
 
-        if not any(real_images_inds):
-            # no images, leave one empty image.
-            real_images_inds[0] = True
+        # If no images, leave one empty image.
+        real_images_inds[0] |= ~torch.any(real_images_inds)
 
         pixel_values = pixel_values[real_images_inds].contiguous()
         # Handle the vision attention mask
@@ -255,21 +253,21 @@ class SmolVLMModel(Idefics3Model):
     )
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        pixel_attention_mask: Optional[torch.BoolTensor] = None,
-        image_hidden_states: Optional[torch.FloatTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        pixel_attention_mask: torch.BoolTensor | None = None,
+        image_hidden_states: torch.FloatTensor | None = None,
+        use_cache: bool | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> Union[tuple, SmolVLMBaseModelOutputWithPast]:
+    ) -> tuple | SmolVLMBaseModelOutputWithPast:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -338,6 +336,8 @@ class SmolVLMModel(Idefics3Model):
 
 
 class SmolVLMForConditionalGeneration(Idefics3ForConditionalGeneration):
+    _tied_weights_keys = {"lm_head.weight": "model.text_model.embed_tokens.weight"}
+
     def __init__(self, config):
         super().__init__(config)
         self.model = SmolVLMModel(config)

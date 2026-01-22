@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The Qwen team, Alibaba Group and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,10 +13,7 @@
 # limitations under the License.
 """PyTorch Qwen3 model."""
 
-from typing import Optional, Union
-
 import torch
-import torch.nn.functional as F
 from torch import nn
 
 from ...cache_utils import Cache
@@ -32,13 +28,12 @@ from ..llama.modeling_llama import (
     LlamaRMSNorm,
 )
 from ..mixtral.modeling_mixtral import (
-    MixtralExperts,
     MixtralForCausalLM,
     MixtralModel,
     MixtralPreTrainedModel,
     load_balancing_loss_func,
 )
-from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeDecoderLayer, Qwen2MoeMLP
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeDecoderLayer, Qwen2MoeExperts, Qwen2MoeMLP, Qwen2MoeTopKRouter
 from ..qwen3.modeling_qwen3 import Qwen3Attention
 from .configuration_qwen3_moe import Qwen3MoeConfig
 
@@ -57,35 +52,24 @@ class Qwen3MoeMLP(Qwen2MoeMLP):
     pass
 
 
-class Qwen3MoeExperts(MixtralExperts, nn.ModuleList):
-    def __init__(self, config: Qwen3MoeConfig):
-        nn.ModuleList.__init__(self)
-        self.num_experts = config.num_experts
-        for _ in range(self.num_experts):
-            self.append(Qwen3MoeMLP(config, intermediate_size=config.moe_intermediate_size))
+class Qwen3MoeExperts(Qwen2MoeExperts):
+    pass
+
+
+class Qwen3MoeTopKRouter(Qwen2MoeTopKRouter):
+    pass
 
 
 class Qwen3MoeSparseMoeBlock(nn.Module):
     def __init__(self, config: Qwen3MoeConfig):
         super().__init__()
-        self.gate = nn.Linear(config.hidden_size, config.num_experts, bias=False)
         self.experts = Qwen3MoeExperts(config)
-        self.num_experts_per_tok = config.num_experts_per_tok
-        self.norm_topk_prob = config.norm_topk_prob
-
-    def route_tokens_to_experts(self, hidden_states, router_logits):
-        routing_weights = F.softmax(router_logits, dim=-1, dtype=torch.float)
-        routing_weights, selected_experts = torch.topk(routing_weights, self.num_experts_per_tok, dim=-1)
-        if self.norm_topk_prob:
-            routing_weights /= routing_weights.sum(dim=-1, keepdim=True)
-        routing_weights = routing_weights.to(router_logits.dtype)
-        return selected_experts, routing_weights
+        self.gate = Qwen3MoeTopKRouter(config)
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         batch_size, sequence_length, hidden_dim = hidden_states.shape
         hidden_states_reshaped = hidden_states.view(-1, hidden_dim)
-        router_logits = self.gate(hidden_states_reshaped)
-        selected_experts, routing_weights = self.route_tokens_to_experts(hidden_states_reshaped, router_logits)
+        _, routing_weights, selected_experts = self.gate(hidden_states_reshaped)
         final_hidden_states = self.experts(hidden_states_reshaped, selected_experts, routing_weights)
         return final_hidden_states.reshape(batch_size, sequence_length, hidden_dim)
 
@@ -100,7 +84,7 @@ class Qwen3MoeDecoderLayer(Qwen2MoeDecoderLayer):
 
 class Qwen3MoePreTrainedModel(MixtralPreTrainedModel):
     _can_record_outputs = {
-        "router_logits": OutputRecorder(nn.Linear, layer_name="mlp.gate", index=0),
+        "router_logits": OutputRecorder(Qwen3MoeTopKRouter, layer_name="mlp.gate", index=0),
         "hidden_states": Qwen3MoeDecoderLayer,
         "attentions": Qwen3MoeAttention,
     }
@@ -118,16 +102,16 @@ class Qwen3MoeForCausalLM(MixtralForCausalLM):
 
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
-        position_ids: Optional[torch.LongTensor] = None,
-        past_key_values: Optional[Cache] = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        use_cache: Optional[bool] = None,
-        output_router_logits: Optional[bool] = None,
-        cache_position: Optional[torch.LongTensor] = None,
-        logits_to_keep: Union[int, torch.Tensor] = 0,
+        input_ids: torch.LongTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
+        position_ids: torch.LongTensor | None = None,
+        past_key_values: Cache | None = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        use_cache: bool | None = None,
+        output_router_logits: bool | None = None,
+        cache_position: torch.LongTensor | None = None,
+        logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
     ) -> MoeCausalLMOutputWithPast:
         r"""

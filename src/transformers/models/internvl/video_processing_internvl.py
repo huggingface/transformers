@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,10 +13,10 @@
 # limitations under the License.
 """Fast Video processor class for InternVL."""
 
-from typing import Optional, Union
+from typing import Optional
 
 import torch
-from torchvision.transforms.v2 import functional as F
+import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_utils import BatchFeature
 from ...image_utils import OPENAI_CLIP_MEAN, OPENAI_CLIP_STD, PILImageResampling, SizeDict
@@ -28,7 +27,7 @@ from ...video_utils import VideoMetadata, group_videos_by_shape, reorder_videos
 
 
 class InternVLVideoProcessorInitKwargs(VideosKwargs, total=False):
-    initial_shift: Union[bool, float, int]
+    initial_shift: bool | float | int
 
 
 class InternVLVideoProcessor(BaseVideoProcessor):
@@ -50,9 +49,9 @@ class InternVLVideoProcessor(BaseVideoProcessor):
     def sample_frames(
         self,
         metadata: VideoMetadata,
-        num_frames: Optional[int] = None,
-        fps: Optional[Union[int, float]] = None,
-        initial_shift: Optional[Union[bool, float, int]] = None,
+        num_frames: int | None = None,
+        fps: int | float | None = None,
+        initial_shift: bool | float | int | None = None,
         **kwargs,
     ):
         """
@@ -104,15 +103,15 @@ class InternVLVideoProcessor(BaseVideoProcessor):
         do_convert_rgb: bool,
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
         do_center_crop: bool,
         crop_size: SizeDict,
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        return_tensors: str | TensorType | None = None,
         **kwargs,
     ) -> BatchFeature:
         # Group videos by size for batched resizing
@@ -140,7 +139,6 @@ class InternVLVideoProcessor(BaseVideoProcessor):
             processed_videos_grouped[shape] = stacked_videos
 
         processed_videos = reorder_videos(processed_videos_grouped, grouped_videos_index)
-        processed_videos = torch.stack(processed_videos, dim=0) if return_tensors else processed_videos
 
         return BatchFeature(data={"pixel_values_videos": processed_videos}, tensor_type=return_tensors)
 

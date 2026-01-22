@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 bzantium and the HuggingFace Inc. team. All rights reserved.
 #
 # This code is based on the DeepSeekV3 implementations from the DeepSeek AI team. (https://huggingface.co/deepseek-ai/DeepSeek-V3)
@@ -16,10 +15,8 @@
 # limitations under the License.
 """DeepSeekV3 model configuration"""
 
-from typing import Optional
-
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 
 
 DEEPSEEK_PRETRAINED_CONFIG_ARCHIVE_MAP = {}
@@ -109,7 +106,7 @@ class DeepseekV3Config(PreTrainedConfig):
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         rope_interleave (`bool`, *optional*, defaults to `True`):
@@ -131,19 +128,16 @@ class DeepseekV3Config(PreTrainedConfig):
 
     model_type = "deepseek_v3"
     keys_to_ignore_at_inference = ["past_key_values"]
-    base_model_tp_plan = {  # TODO: only replicate attention layers when > first_k_dense_replace
-        "layers.*.mlp.experts.*.gate_proj": "local_colwise",
-        "layers.*.mlp.experts.*.up_proj": "local_colwise",
-        "layers.*.mlp.experts.*.down_proj": "local_rowwise",
-        "layers.*.mlp.experts.*": "local",  # each expert is wrapped in a module list
-        "layers.*.mlp.shared_experts.gate_proj": "local_colwise",
-        "layers.*.mlp.shared_experts.up_proj": "local_colwise",
-        "layers.*.mlp.shared_experts.down_proj": "local_rowwise",
-        "layers.*.mlp.shared_experts": "local",
-        "layers.*.mlp.gate_proj": "local_colwise",
-        "layers.*.mlp.up_proj": "local_colwise",
-        "layers.*.mlp.down_proj": "local_rowwise",
-        "layers.*.mlp": "gather",  # This is the only moment where results are gathered
+    base_model_tp_plan = {
+        "layers.*.mlp.experts.gate_up_proj": "local_rowwise",
+        "layers.*.mlp.experts.down_proj": "local_rowwise",
+        "layers.*.mlp.experts": "gather",
+        "layers.*.mlp.shared_experts.gate_proj": "colwise",
+        "layers.*.mlp.shared_experts.up_proj": "colwise",
+        "layers.*.mlp.shared_experts.down_proj": "rowwise",
+        "layers.*.mlp.gate_proj": "colwise",
+        "layers.*.mlp.up_proj": "colwise",
+        "layers.*.mlp.down_proj": "rowwise",
     }
     base_model_pp_plan = {
         "embed_tokens": (["input_ids"], ["inputs_embeds"]),
@@ -156,40 +150,40 @@ class DeepseekV3Config(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 129280,
-        hidden_size: Optional[int] = 7168,
-        intermediate_size: Optional[int] = 18432,
-        moe_intermediate_size: Optional[int] = 2048,
-        num_hidden_layers: Optional[int] = 61,
-        num_attention_heads: Optional[int] = 128,
-        num_key_value_heads: Optional[int] = 128,
-        n_shared_experts: Optional[int] = 1,
-        n_routed_experts: Optional[int] = 256,
-        routed_scaling_factor: Optional[float] = 2.5,
-        kv_lora_rank: Optional[int] = 512,
-        q_lora_rank: Optional[int] = 1536,
-        qk_rope_head_dim: Optional[int] = 64,
-        v_head_dim: Optional[int] = 128,
-        qk_nope_head_dim: Optional[int] = 128,
-        n_group: Optional[int] = 8,
-        topk_group: Optional[int] = 4,
-        num_experts_per_tok: Optional[int] = 8,
-        first_k_dense_replace: Optional[int] = 3,
-        norm_topk_prob: Optional[bool] = True,
-        hidden_act: Optional[str] = "silu",
-        max_position_embeddings: Optional[int] = 4096,
-        initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[int] = 1e-6,
-        use_cache: Optional[bool] = True,
-        pad_token_id: Optional[int] = None,
-        bos_token_id: Optional[int] = 0,
-        eos_token_id: Optional[int] = 1,
-        pretraining_tp: Optional[int] = 1,
-        tie_word_embeddings: Optional[bool] = False,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
-        rope_interleave: Optional[bool] = True,
-        attention_bias: Optional[bool] = False,
-        attention_dropout: Optional[float] = 0.0,
+        vocab_size: int | None = 129280,
+        hidden_size: int | None = 7168,
+        intermediate_size: int | None = 18432,
+        moe_intermediate_size: int | None = 2048,
+        num_hidden_layers: int | None = 61,
+        num_attention_heads: int | None = 128,
+        num_key_value_heads: int | None = 128,
+        n_shared_experts: int | None = 1,
+        n_routed_experts: int | None = 256,
+        routed_scaling_factor: float | None = 2.5,
+        kv_lora_rank: int | None = 512,
+        q_lora_rank: int | None = 1536,
+        qk_rope_head_dim: int | None = 64,
+        v_head_dim: int | None = 128,
+        qk_nope_head_dim: int | None = 128,
+        n_group: int | None = 8,
+        topk_group: int | None = 4,
+        num_experts_per_tok: int | None = 8,
+        first_k_dense_replace: int | None = 3,
+        norm_topk_prob: bool | None = True,
+        hidden_act: str | None = "silu",
+        max_position_embeddings: int | None = 4096,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: int | None = 1e-6,
+        use_cache: bool | None = True,
+        pad_token_id: int | None = None,
+        bos_token_id: int | None = 0,
+        eos_token_id: int | None = 1,
+        pretraining_tp: int | None = 1,
+        tie_word_embeddings: bool | None = False,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        rope_interleave: bool | None = True,
+        attention_bias: bool | None = False,
+        attention_dropout: float | None = 0.0,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -228,27 +222,29 @@ class DeepseekV3Config(PreTrainedConfig):
         self.use_cache = use_cache
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
+        self.rope_parameters = rope_parameters
+
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        super().__init__(**kwargs)
+
+    def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation: set | None = None, **kwargs):
         rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
+        self.rope_parameters = rope_scaling or self.rope_parameters
+        self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else {}
 
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 10000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
+        # Standardize and validate the correctness of rotary position embeddings parameters
+        self.rope_parameters.setdefault("rope_theta", kwargs.pop("rope_theta", self.default_theta))
+        self.standardize_rope_params()
+        self.validate_rope(ignore_keys=ignore_keys_at_rope_validation)
 
+        # Convert to float because RoPE fn expect a float. Models on the hub were saved as int
         for key in ["beta_fast", "beta_slow", "factor"]:
             if key in self.rope_parameters:
                 self.rope_parameters[key] = float(self.rope_parameters[key])
-
-        rope_config_validation(self)
-
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        return kwargs
 
 
 __all__ = ["DeepseekV3Config"]

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,17 +11,16 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from collections import deque
 from math import floor, gcd, sqrt
-from typing import Optional
 
 import torch
 
 from ...configuration_utils import PreTrainedConfig
 from ...generation.configuration_utils import GenerationConfig
+from ...utils.generic import is_flash_attention_requested
 from ...utils.metrics import attach_tracer, traced
-from .cache_manager import CacheAllocator, FullAttentionCacheAllocator, SlidingAttentionCacheAllocator
-from .requests import get_device_and_memory_breakdown, logger
+from .cache_manager import BlockManager, CacheAllocator, FullAttentionCacheAllocator, SlidingAttentionCacheAllocator
+from .requests import RequestState, get_device_and_memory_breakdown, logger
 
 
 def group_layers_by_attn_type(config: PreTrainedConfig) -> tuple[list[list[int]], list[str]]:
@@ -32,7 +30,7 @@ def group_layers_by_attn_type(config: PreTrainedConfig) -> tuple[list[list[int]]
         - All groups have the same number of layers
 
     For a model with the following layer types: ["sliding", "full", "full", "sliding", "full", "full", "full", "full"]
-    We would get two groups: [0, 3] and [1, 2], [4,5], [6,7].
+    We would get four groups: [0, 3], [1, 2], [4,5] and [6,7].
     """
     # If the config has no layer_type attribute, it means all layers are the same attention type
     layer_types = getattr(config, "layer_types", None)
@@ -116,16 +114,17 @@ class PagedAttentionCache:
     for the sliding-attention group, although it is not needed.
     """
 
-    # TODO: this init is quite long, maybe a refactor is in order
     def __init__(
         self,
         config: PreTrainedConfig,
         generation_config: GenerationConfig,
         device: torch.device,
         dtype: torch.dtype = torch.float16,
-        tp_size: Optional[int] = None,
+        tp_size: int | None = None,
+        allow_block_sharing: bool = True,
     ) -> None:
-        """Initialize a paged attention cache for efficient memory usage.
+        """Initialize a paged attention cache for efficient memory usage. Also turns in prefix sharing if the model has
+        only full attention layers.
 
         Args:
             config: Model configuration
@@ -133,6 +132,8 @@ class PagedAttentionCache:
             device: Device for the cache tensors
             dtype: Data type of the cache
             tp_size: Tensor parallelism size
+            allow_block_sharing: A flag to allow block sharing. If the model has some full attention layers, then prefix
+                sharing is enabled as well.
         """
         self.config = config
         self.dtype = dtype
@@ -172,11 +173,13 @@ class PagedAttentionCache:
         # Infer number of blocks and max batch tokens
         page_size = self.head_dim * self.num_key_value_heads
 
-        if "flash" in self.config._attn_implementation:
-            num_attention_masks = 1  # only used to compute the default meme args
-        else:
+        if is_flash_attention_requested(self.config):
+            num_attention_masks = 0  # only used to compute the default memory footprint args
+        elif "sliding_attention" in group_types:
             # TODO: when we generalize to allow for block-attn, we can use `num_attention_masks=sum(set(group_types))`
-            num_attention_masks = 2 if "sliding_attention" in group_types else 1
+            num_attention_masks = 2
+        else:
+            num_attention_masks = 1
 
         memory_handler = PagedAttentionMemoryHandler(
             block_size=self.block_size,
@@ -189,7 +192,9 @@ class PagedAttentionCache:
         num_blocks, max_batch_tokens = memory_handler.infer_num_blocks_and_max_batch_tokens(
             num_blocks=getattr(generation_config, "num_blocks", None),
             max_batch_tokens=getattr(generation_config, "max_batch_tokens", None),
-            max_memory_percent=getattr(generation_config, "max_memory", 0.9),
+            max_memory_percent=getattr(
+                generation_config, "max_memory", 0.8
+            ),  # FIXME: it seems we overcommit memory, was changed from 0.9 which caused OOMs in our benchmarking CI
             cache_dtype=self.dtype,
         )
 
@@ -205,7 +210,7 @@ class PagedAttentionCache:
         self.key_cache: list[torch.Tensor] = []
         self.value_cache: list[torch.Tensor] = []
         # We add two extra tokens to the cache to handle padding and generally discard unwanted tokens
-        self.cache_shape = (num_blocks * self.block_size + 2, self.num_key_value_heads, self.head_dim)
+        self.cache_shape = ((num_blocks + 2) * self.block_size, self.num_key_value_heads, self.head_dim)
         for _ in range(group_size):
             new_layer_key_cache = torch.empty(self.cache_shape, dtype=self.dtype, device=self.device)
             new_layer_value_cache = torch.empty(self.cache_shape, dtype=self.dtype, device=self.device)
@@ -216,27 +221,62 @@ class PagedAttentionCache:
         logger.info(f"{self.cache_shape = } {self.key_cache[0].shape = } {self.key_cache[0].numel() = }")
 
         # Block management data structures
-        self._free_blocks = deque(range(num_blocks))
+        self.allow_block_sharing = allow_block_sharing
         self.group_cache_managers: list[CacheAllocator] = []
+        self.num_full_attention_groups = 0
+        self.num_sliding_attention_groups = 0
+        self.max_sliding_window_blocks_per_request = 0
+
         for i, group_type in enumerate(group_types):
             if group_type == "full_attention":
-                cm = FullAttentionCacheAllocator(i, self.block_size)
+                cm = FullAttentionCacheAllocator(i, self.block_size, allow_block_sharing=allow_block_sharing)
+                self.num_full_attention_groups += 1
             elif group_type == "sliding_attention":
                 cm = SlidingAttentionCacheAllocator(i, self.block_size, config.sliding_window)
+                self.num_sliding_attention_groups += 1
+                self.max_sliding_window_blocks_per_request = cm._max_blocks_per_request
             else:
                 raise ValueError(f"Invalid group type: {group_type}")
             self.group_cache_managers.append(cm)
 
+        # We only use prefix sharing if the whole model has only full attention layers and block sharing is allowed
+        self.use_prefix_sharing = allow_block_sharing and group_types == ["full_attention"]
+        self._block_manager = BlockManager(num_blocks, self.block_size)
+        self.blocks_to_complete: dict[str, int] = {}
+        self._total_prefix_length: int = 0  # a counter to measure the impact of prefix sharing, also used in tests
+
+    def will_allocation_be_successful(self, num_requested_blocks: int, allocated_blocks: int) -> bool:
+        """Returns a boolean indicating if the allocation of (num_requested_blocks) blocks will be successful. The
+        number of newly allocated blocks needed is predicted by the following rules:
+        - for full attention groups: since there is no sliding window for full attention layers, one requested block is
+            always equivalent to one newly allocated block for EACH full attention group
+        - for sliding window groups: because of the sliding window, the number of blocks allocated to a request is
+            capped. Using the number of already (allocated_blocks) we can compute the number of new blocks to actually
+            allocate to the request, which can be lower than the number of requested blocks. That number is the same for
+            all sliding window groups, as only one sliding window size is supported.
+        """
+        # This is not in a branch, because it is very rare to have zero full attention layer
+        needed_blocks = num_requested_blocks * self.num_full_attention_groups
+        # Only take this branch if the model has sliding window attention layers
+        if self.num_sliding_attention_groups:
+            blocks_left = max(self.max_sliding_window_blocks_per_request - allocated_blocks, 0)
+            needed_blocks += min(blocks_left, num_requested_blocks) * self.num_sliding_attention_groups
+        return needed_blocks <= self.get_num_free_blocks()
+
     @traced
-    def allocate_blocks(self, n_blocks: int, request_id: str) -> int:
+    def allocate_blocks(self, n_blocks: int, request_id: str, allocated_blocks: int) -> int | None:
         """Allocate cache blocks across all layer groups for a given request. Actual allocation is done by the cache
         managers, and this method only returns the maximum number of blocks actually allocated across all managers."""
+        # First check allocation will be successful before starting, to avoid partial allocations
+        if not self.will_allocation_be_successful(n_blocks, allocated_blocks):
+            return None
+        # Allocate blocks across all cache managers
         max_allocated = 0
         for cm in self.group_cache_managers:
-            allocated = cm.allocate_blocks(n_blocks, request_id, self._free_blocks)
-            if allocated is None:
-                return None
-            max_allocated = max(max_allocated, allocated)
+            num_allocated_blocks = cm.allocate_blocks(n_blocks, request_id, self._block_manager)
+            if num_allocated_blocks is None:
+                raise ValueError(f"Failed to allocate {n_blocks} blocks for request {request_id}")
+            max_allocated = max(max_allocated, num_allocated_blocks)
         return max_allocated
 
     @traced
@@ -244,11 +284,11 @@ class PagedAttentionCache:
         """Free all allocated cache blocks for a given request across all layer groups. Actual deallocation is done
         by the cache managers."""
         for cm in self.group_cache_managers:
-            cm.free_blocks(request_id, self._free_blocks)
+            cm.free_blocks(request_id, self._block_manager)
 
     def get_num_free_blocks(self) -> int:
         """Get the current number of unallocated blocks available for new requests."""
-        return len(self._free_blocks)
+        return self._block_manager.num_free_blocks
 
     @traced
     def extend_read_indices(
@@ -335,6 +375,71 @@ class PagedAttentionCache:
         # Return the new KV values
         return key_states_with_cache, value_states_with_cache
 
+    def search_prefix_match(self, request_id: str, prompt_ids: list[int]) -> int:
+        """Searches for a prefix match in the cache for the given (prompts_ids). If one is found, we reference the
+        matching blocks in the (request_id), increase the reference count of the blocks and return the number of blocks
+        that match. If no prefix match is found, we return 0."""
+        current_hash = None
+        allocated_blocks = []
+        for b in range(len(prompt_ids) // self.block_size):
+            tokens = prompt_ids[b * self.block_size : (b + 1) * self.block_size]
+            # Prefix sharing is only supported when there is only one full attention layer group, so group_id=0.
+            current_hash = self._block_manager.compute_hash(current_hash, tokens, group_id=0)
+            block_id = self._block_manager._hash_to_id.get(current_hash)
+            if block_id is not None:
+                allocated_blocks.append(block_id)
+                self._block_manager.increase_ref_count(block_id)
+            else:
+                break
+        # If we found a matching prefix, we reference the blocks in the request
+        if allocated_blocks:
+            logger.debug(f"Found prefix match for request {request_id} with {len(allocated_blocks)} blocks")
+            cm = self.group_cache_managers[0]
+            cm.block_table[request_id] = allocated_blocks
+
+        prefix_length = len(allocated_blocks) * self.block_size
+        self._total_prefix_length += prefix_length
+        return prefix_length
+
+    def mark_shareable_blocks_as_complete(self, state: RequestState) -> None:
+        """Marks the blocks allocated to a request (state) as complete if they are shareable and they have been computed
+        in the forward pass. A complete block is a block where the KV cache has been fully computed: if the block has
+        enough space to hold the cache for N tokens, the block is marked as complete when the cache data is present for
+        the N tokens. If block sharing is off, this is a no-op."""
+        num_complete_blocks = 0 if not self.allow_block_sharing else self.blocks_to_complete.pop(state.request_id)
+        if num_complete_blocks == 0:
+            return None
+        for cm in self.group_cache_managers:
+            if cm.uses_block_sharing:
+                self._block_manager.mark_shareable_blocks_as_complete(
+                    num_complete_blocks=num_complete_blocks,
+                    allocated_blocks=cm.block_table[state.request_id],
+                    prompt_ids=(state.initial_tokens + state.generated_tokens),
+                )
+
+    def copy_cache(self, source_blocks: list[int], forked_blocks: list[int]) -> None:
+        """Copy the cache from the source blocks to the forked blocks."""
+        source_blocks = torch.tensor(source_blocks, device=self.device, dtype=torch.int32)
+        forked_blocks = torch.tensor(forked_blocks, device=self.device, dtype=torch.int32)
+        for key_cache, value_cache in zip(self.key_cache, self.value_cache):
+            key_cache = key_cache.view(-1, self.block_size, self.num_key_value_heads, self.head_dim)
+            value_cache = value_cache.view(-1, self.block_size, self.num_key_value_heads, self.head_dim)
+            key_cache[forked_blocks] = key_cache[source_blocks]
+            value_cache[forked_blocks] = value_cache[source_blocks]
+        # FIXME: consolidate the cache into a single tensor of shape (group_size, 2, *self.k_or_v_cache_shape)
+        # This will allow for  better .update and a single copy instead of one per cache tensor
+
+    def fork_request(self, source_request_id: str, destination_request_ids: list[str]) -> tuple[list[int], list[int]]:
+        """Fork the cache of a request (state) into the one of a list of requests with the given (dst_request_ids)."""
+        # These lists will be the accumulators for the source and destination blocks for the cache copy
+        source_blocks, destination_blocks = [], []
+        # Main fork loop
+        for cm in self.group_cache_managers:
+            src_blocks, dst_blocks = cm.fork_blocks(source_request_id, destination_request_ids, self._block_manager)
+            source_blocks.extend(src_blocks)
+            destination_blocks.extend(dst_blocks)
+        return source_blocks, destination_blocks
+
 
 # TODO: rework computation with the groups and their sizes
 class PagedAttentionMemoryHandler:
@@ -412,9 +517,9 @@ class PagedAttentionMemoryHandler:
 
     def infer_num_blocks_and_max_batch_tokens(
         self,
-        num_blocks: Optional[int] = None,
-        max_batch_tokens: Optional[int] = None,
-        max_memory_percent: float = 0.9,
+        num_blocks: int | None = None,
+        max_batch_tokens: int | None = None,
+        max_memory_percent: float = 0.8,  # FIXME: it seems we overcommit memory, was changed from 0.9 which caused OOMs in our benchmarking CI
         cache_dtype: torch.dtype = torch.float16,
     ) -> tuple[int, int]:
         """Determine optimal number of blocks and maximum number of tokens per batch based on available memory and
@@ -454,7 +559,7 @@ class PagedAttentionMemoryHandler:
 
     def compute_num_blocks_and_max_batch_tokens(
         self,
-        max_memory_percent: float = 0.9,
+        max_memory_percent: float,
         cache_dtype: torch.dtype = torch.float16,
         m: float = 0.01,
     ) -> tuple[int, int]:
@@ -469,6 +574,8 @@ class PagedAttentionMemoryHandler:
             2N * (layer_group_size * page_size * cache_dtype + 2 * num_group),
             m * N * (peak_activation_per_token * activation_dtype + 28 + 4 * num_group),
         ])
+
+        If num_attention_masks is 0, the equation simplifies to a 1st degree polynomial.
         """
         cache_memory = self.get_available_memory(max_memory_percent)
         logger.info(f"Cache memory: {cache_memory}")
@@ -480,11 +587,16 @@ class PagedAttentionMemoryHandler:
         c = -cache_memory
         logger.debug(f"Coefficients of 2nd degree polynomial: {a = }, {b = }, {c = }")
 
-        # Compute discriminant and greatest solution
-        discriminant = b**2 - 4 * a * c
-        if discriminant < 0:
-            raise ValueError(f"Discriminant is negative: {discriminant = }")
-        greatest_solution = (-b + sqrt(discriminant)) / (2 * a)
+        # If num_attention_masks is 0, the equation simplifies to a 1st degree polynomial
+        if self.num_attention_masks == 0:
+            greatest_solution = -c / b
+        # Otherwise, we solve the quadratic equation
+        else:
+            discriminant = b**2 - 4 * a * c
+            if discriminant < 0:
+                raise ValueError(f"Discriminant is negative: {discriminant = }")
+            greatest_solution = (-b + sqrt(discriminant)) / (2 * a)
+
         if greatest_solution < 0:
             raise ValueError(f"Greatest solution is negative: {greatest_solution = }")
 
@@ -503,7 +615,7 @@ class PagedAttentionMemoryHandler:
     def compute_max_batch_tokens(
         self,
         num_blocks: int,
-        max_memory_percent: float = 0.9,
+        max_memory_percent: float,
         cache_dtype: torch.dtype = torch.float16,
     ) -> int:
         """Calculate maximum batch tokens M given a fixed number of cache blocks. The formula for M is given by:
@@ -531,7 +643,7 @@ class PagedAttentionMemoryHandler:
     def compute_num_blocks(
         self,
         max_batch_tokens: int,
-        max_memory_percent: float = 0.9,
+        max_memory_percent: float,
         cache_dtype: torch.dtype = torch.float16,
     ) -> int:
         """Calculate number of cache blocks N given a fixed maximum token per token M. The formula for N is given by:
@@ -558,8 +670,8 @@ class PagedAttentionMemoryHandler:
 
     def compute_memory_footprint(
         self,
-        num_blocks: Optional[int] = None,
-        max_batch_tokens: Optional[int] = None,
+        num_blocks: int | None = None,
+        max_batch_tokens: int | None = None,
         cache_dtype: torch.dtype = torch.float16,
     ) -> tuple[int, int, int]:
         """Calculate the memory footprint breakdown for a given number of blocks and maximum batch tokens. The memory

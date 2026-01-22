@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_d_fine.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 Baidu Inc and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -47,7 +46,7 @@ class DFineConfig(PreTrainedConfig):
             The epsilon used by the layer normalization layers.
         batch_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the batch normalization layers.
-        backbone_config (`Dict`, *optional*, defaults to `RTDetrResNetConfig()`):
+        backbone_config (`Union[dict, "PreTrainedConfig"]`, *optional*, defaults to `HGNetV2Config()`):
             The configuration of the backbone model.
         backbone (`str`, *optional*):
             Name of backbone to use when `backbone_config` is `None`. If `use_pretrained_backbone` is `True`, this
@@ -191,6 +190,8 @@ class DFineConfig(PreTrainedConfig):
             The method to use for the decoder: `"default"` or `"discrete"`.
         up (`float`, *optional*, defaults to 0.5):
             Controls the upper bounds of the Weighting Function.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
     """
 
     model_type = "d_fine"
@@ -275,6 +276,7 @@ class DFineConfig(PreTrainedConfig):
         decoder_offset_scale=0.5,
         decoder_method="default",
         up=0.5,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         self.initializer_range = initializer_range
@@ -288,8 +290,7 @@ class DFineConfig(PreTrainedConfig):
             )
             backbone_model_type = "hgnet_v2"
             config_class = CONFIG_MAPPING[backbone_model_type]
-            # this will map it to RTDetrResNetConfig
-            # note: we can instead create HGNetV2Config
+            # this will map it to HGNetV2Config
             # and we would need to create HGNetV2Backbone
             backbone_config = config_class(
                 num_channels=3,
@@ -383,6 +384,7 @@ class DFineConfig(PreTrainedConfig):
         self.lqe_hidden_dim = lqe_hidden_dim
         self.lqe_layers = lqe_layers
         self.up = up
+        self.tie_word_embeddings = tie_word_embeddings
 
         if isinstance(self.decoder_n_points, list):
             if len(self.decoder_n_points) != self.num_feature_levels:
@@ -395,6 +397,7 @@ class DFineConfig(PreTrainedConfig):
             raise ValueError(
                 f"Embedded dimension {self.d_model} must be divisible by decoder_attention_heads {self.decoder_attention_heads}"
             )
+
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
 

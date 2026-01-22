@@ -175,6 +175,7 @@ visualizer("<img> What is in this image?")
 ## PaliGemmaProcessor
 
 [[autodoc]] PaliGemmaProcessor
+    - __call__
 
 ## PaliGemmaModel
 

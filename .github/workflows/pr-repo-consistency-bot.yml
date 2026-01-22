@@ -1,0 +1,314 @@
+name: PR Repo. Consistency Bot
+
+on:
+  issue_comment:
+    types:
+      - created
+    branches-ignore:
+      - main
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.issue.number }}-${{ startsWith(github.event.comment.body, '@bot /repo') }}
+  cancel-in-progress: true
+permissions: read-all
+
+
+jobs:
+  get-pr-number:
+    name: Get PR number
+    if: ${{ github.event.issue.state == 'open' && contains(fromJSON('["ydshieh", "ArthurZucker", "zucchini-nlp", "molbap", "gante", "LysandreJik", "Cyrilvallez", "Rocketknight1", "SunMarc", "eustlb", "MekkCyber", "vasqu", "ivarflakstad", "stevhliu", "ebezzam", "remi-or", "itazap", "3outeille", "IlyasMoutawwakil", "tarekziade"]'), github.actor) && startsWith(github.event.comment.body, '@bot /repo') }}
+    uses: ./.github/workflows/get-pr-number.yml
+
+  get-pr-info:
+    name: Get PR commit SHA
+    needs: get-pr-number
+    if: ${{ needs.get-pr-number.outputs.PR_NUMBER != ''}}
+    uses: ./.github/workflows/get-pr-info.yml
+    with:
+      pr_number: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
+
+  check-timestamps:
+    name: Check timestamps (security check)
+    runs-on: ubuntu-22.04
+    needs: get-pr-info
+    outputs:
+      VERIFIED_PR_HEAD_SHA: ${{ needs.get-pr-info.outputs.PR_HEAD_SHA }}
+    steps:
+      - name: Verify `merge_commit` timestamp is older than the issue comment timestamp
+        env:
+          COMMENT_DATE: ${{ github.event.comment.created_at }}
+          PR_MERGE_COMMIT_TIMESTAMP: ${{ needs.get-pr-info.outputs.PR_MERGE_COMMIT_TIMESTAMP }}
+        run: |
+            COMMENT_TIMESTAMP=$(date -d "${COMMENT_DATE}" +"%s")
+            echo "COMMENT_DATE: $COMMENT_DATE"
+            echo "COMMENT_TIMESTAMP: $COMMENT_TIMESTAMP"
+            if [ $COMMENT_TIMESTAMP -le $PR_MERGE_COMMIT_TIMESTAMP ]; then
+              echo "Last commit on the pull request is newer than the issue comment triggering this run! Abort!";
+              exit -1;
+            fi
+
+  init_comment_with_url:
+    name: Init Comment on PR
+    runs-on: ubuntu-22.04
+    needs: [get-pr-number, check-timestamps]
+    outputs:
+       comment_id: ${{ steps.init_comment.outputs.comment_id }}
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Delete existing bot comment if it exists
+        env:
+          PR_NUMBER: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const PR_NUMBER = parseInt(process.env.PR_NUMBER, 10);
+            
+            // Get all comments on the PR
+            const { data: comments } = await github.rest.issues.listComments({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: PR_NUMBER
+            });
+            
+            // Find existing bot comments that start with "Repo. Consistency"
+            const existingComments = comments.filter(comment => 
+              comment.user.login === 'github-actions[bot]' && 
+              comment.body.startsWith('Repo. Consistency')
+            );
+
+            if (existingComments.length > 0) {
+              // Get the most recent comment
+              const mostRecentComment = existingComments
+                .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))[0];
+              
+              console.log(`Deleting most recent comment #${mostRecentComment.id}`);
+              await github.rest.issues.deleteComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                comment_id: mostRecentComment.id
+              });
+            }
+
+      - name: Comment on PR with workflow run link
+        id: init_comment
+        env:
+          PR_NUMBER: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
+        uses: actions/github-script@v6
+        with:
+          script: |
+            const PR_NUMBER = parseInt(process.env.PR_NUMBER, 10);
+            const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`
+
+            const { data: botComment } = await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: PR_NUMBER,
+              body: `Repo. Consistency fix is beginning .... [View the workflow run here](${runUrl}).`
+            });
+            core.setOutput('comment_id', botComment.id);
+
+  run-repo-consistency-checks:
+    runs-on: ubuntu-22.04
+    needs: [get-pr-info, check-timestamps, init_comment_with_url]
+    outputs:
+      changes_detected: ${{ steps.run_checks.outputs.changes_detected }}
+    steps:
+      # Checkout the trusted base repository (main branch) - this is safe
+      - name: Checkout base repository
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies from trusted main branch
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[quality]"
+          pip install --no-cache-dir --upgrade 'torch' 'torchaudio' 'torchvision' --index-url https://download.pytorch.org/whl/cpu
+
+      - name: Fetch and checkout PR code manually
+        env:
+          PR_HEAD_REPO_FULL_NAME: ${{ needs.get-pr-info.outputs.PR_HEAD_REPO_FULL_NAME }}
+          PR_HEAD_SHA: ${{ needs.check-timestamps.outputs.VERIFIED_PR_HEAD_SHA }}
+        run: |
+          # Create separate directory for PR code
+          mkdir -p pr-repo
+          cd pr-repo
+          
+          # Initialize git and fetch only the specific commit
+          git init
+          git remote add pr-origin https://github.com/${PR_HEAD_REPO_FULL_NAME}.git
+          git fetch --depth=1 pr-origin ${PR_HEAD_SHA}
+          git checkout ${PR_HEAD_SHA}
+
+      - name: Run checks with trusted script
+        id: run_checks
+        run: |
+          # Copy trusted script to PR directory
+          cp utils/check_copies.py pr-repo/utils/check_copies.py
+          
+          # Run the trusted script in PR directory
+          cd pr-repo
+          python utils/check_copies.py --fix_and_overwrite
+          
+          # Check if there are changes
+          if [ -n "$(git status --porcelain)" ]; then
+            echo "changes_detected=true" >> $GITHUB_OUTPUT
+          else
+            echo "changes_detected=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Save modified files
+        if: steps.run_checks.outputs.changes_detected == 'true'
+        run: |
+          cd pr-repo
+          mkdir -p ../artifact-staging
+          git diff --name-only > ../artifact-staging/modified-files.txt
+          # Copy each modified file
+          while IFS= read -r file; do
+            mkdir -p "../artifact-staging/pr-repo/$(dirname "$file")"
+            cp "$file" "../artifact-staging/pr-repo/$file"
+          done < ../artifact-staging/modified-files.txt
+
+      - name: Upload modified files
+        if: steps.run_checks.outputs.changes_detected == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: modified-files
+          path: artifact-staging/
+
+  commit-and-comment:
+    runs-on: ubuntu-22.04
+    needs: [get-pr-number, get-pr-info, check-timestamps, init_comment_with_url, run-repo-consistency-checks]
+    if: always()
+    permissions:
+      pull-requests: write
+    steps:
+      - name: Download modified files
+        if: needs.run-repo-consistency-checks.outputs.changes_detected == 'true'
+        uses: actions/download-artifact@v4
+        with:
+          name: modified-files
+
+      - name: Push changes via GitHub API (no checkout)
+        if: needs.run-repo-consistency-checks.outputs.changes_detected == 'true'
+        uses: actions/github-script@v6
+        env:
+          PR_HEAD_REF: ${{ needs.get-pr-info.outputs.PR_HEAD_REF }}
+          PR_HEAD_SHA: ${{ needs.check-timestamps.outputs.VERIFIED_PR_HEAD_SHA }}
+          PR_HEAD_REPO_OWNER: ${{ needs.get-pr-info.outputs.PR_HEAD_REPO_OWNER }}
+          PR_HEAD_REPO_NAME: ${{ needs.get-pr-info.outputs.PR_HEAD_REPO_NAME }}
+        with:
+          github-token: ${{ secrets.HF_STYLE_BOT_ACTION }}
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+            
+            const owner = process.env.PR_HEAD_REPO_OWNER;
+            const repo = process.env.PR_HEAD_REPO_NAME;
+            const baseSha = process.env.PR_HEAD_SHA;
+            const branch = process.env.PR_HEAD_REF;
+            
+            console.log(`Creating commit on ${owner}/${repo} branch ${branch} from ${baseSha}`);
+            
+            // Read list of modified files
+            const modifiedFiles = fs.readFileSync('modified-files.txt', 'utf8')
+              .trim()
+              .split('\n')
+              .filter(f => f.length > 0);
+            
+            console.log(`Modified files: ${modifiedFiles.join(', ')}`);
+            
+            // Get the base commit to retrieve its tree SHA (metadata only, no checkout)
+            const { data: baseCommit } = await github.rest.git.getCommit({
+              owner,
+              repo,
+              commit_sha: baseSha
+            });
+            
+            console.log(`Base tree SHA: ${baseCommit.tree.sha}`);
+            
+            // Create blobs for each modified file
+            const tree = [];
+            for (const file of modifiedFiles) {
+              const filePath = path.join('pr-repo', file);
+              const content = fs.readFileSync(filePath, 'utf8');
+              
+              console.log(`Creating blob for ${file}`);
+              const { data: blob } = await github.rest.git.createBlob({
+                owner,
+                repo,
+                content: content,
+                encoding: 'utf-8'
+              });
+              
+              tree.push({
+                path: file,
+                mode: '100644',
+                type: 'blob',
+                sha: blob.sha
+              });
+            }
+            
+            // Create new tree based on the base tree
+            console.log(`Creating tree with ${tree.length} modified files`);
+            const { data: newTree } = await github.rest.git.createTree({
+              owner,
+              repo,
+              base_tree: baseCommit.tree.sha,
+              tree: tree
+            });
+            
+            // Create commit
+            console.log(`Creating commit`);
+            const { data: newCommit } = await github.rest.git.createCommit({
+              owner,
+              repo,
+              message: 'Apply repo. consistency fixes',
+              tree: newTree.sha,
+              parents: [baseSha]
+            });
+            
+            console.log(`Created commit: ${newCommit.sha}`);
+            
+            // Update branch ref
+            console.log(`Updating ref heads/${branch} to ${newCommit.sha}`);
+            await github.rest.git.updateRef({
+              owner,
+              repo,
+              ref: `heads/${branch}`,
+              sha: newCommit.sha
+            });
+            
+            console.log(`Successfully pushed commit to ${branch}`);
+
+      - name: Prepare final comment message
+        id: prepare_final_comment
+        if: needs.init_comment_with_url.result == 'success'
+        env:
+          CHANGES_DETECTED: ${{ needs.run-repo-consistency-checks.outputs.changes_detected }}
+        run: |
+          if [ "$CHANGES_DETECTED" = 'true' ]; then
+            echo "final_comment=Repo. Consistency bot fixed some files and pushed the changes." >> $GITHUB_OUTPUT
+          else
+            echo "final_comment=Repo. Consistency fix runs successfully without any file modified." >> $GITHUB_OUTPUT
+          fi
+
+      - name: Comment on PR
+        if: needs.init_comment_with_url.result == 'success'
+        uses: actions/github-script@v6
+        env:
+          PR_NUMBER: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
+        with:
+          script: |
+            const PR_NUMBER = parseInt(process.env.PR_NUMBER, 10);
+            await github.rest.issues.updateComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              comment_id: ${{ needs.init_comment_with_url.outputs.comment_id }},
+              body: `${{ steps.prepare_final_comment.outputs.final_comment }}`
+            });

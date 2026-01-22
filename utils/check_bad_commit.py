@@ -1,5 +1,4 @@
 #!/usr/bin/env python
-# coding=utf-8
 
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
@@ -151,7 +150,7 @@ def find_bad_commit(target_test, start_commit, end_commit):
 
     bash = f"""
 git bisect reset
-git bisect start {start_commit} {end_commit}
+git bisect start --first-parent {start_commit} {end_commit}
 git bisect run python3 target_script.py
 """
 

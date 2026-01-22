@@ -35,7 +35,7 @@ import logging
 import os
 import sys
 from dataclasses import dataclass, field
-from typing import Any, Optional, Union
+from typing import Any
 
 import datasets
 import evaluate
@@ -45,10 +45,8 @@ from datasets import DatasetDict, load_dataset
 import transformers
 from transformers import (
     AutoConfig,
-    AutoFeatureExtractor,
     AutoModelForSpeechSeq2Seq,
     AutoProcessor,
-    AutoTokenizer,
     HfArgumentParser,
     Seq2SeqTrainer,
     Seq2SeqTrainingArguments,
@@ -79,19 +77,19 @@ class ModelArguments:
     model_name_or_path: str = field(
         metadata={"help": "Path to pretrained model or model identifier from huggingface.co/models"}
     )
-    config_name: Optional[str] = field(
+    config_name: str | None = field(
         default=None,
         metadata={"help": "Pretrained config name or path if not the same as model_name"},
     )
-    tokenizer_name: Optional[str] = field(
+    tokenizer_name: str | None = field(
         default=None,
         metadata={"help": "Pretrained tokenizer name or path if not the same as model_name"},
     )
-    feature_extractor_name: Optional[str] = field(
+    feature_extractor_name: str | None = field(
         default=None,
         metadata={"help": "feature extractor name or path if not the same as model_name"},
     )
-    cache_dir: Optional[str] = field(
+    cache_dir: str | None = field(
         default=None,
         metadata={"help": "Where to store the pretrained models downloaded from huggingface.co"},
     )
@@ -130,19 +128,6 @@ class ModelArguments:
         default=False,
         metadata={"help": "Whether to freeze the entire encoder of the seq2seq model."},
     )
-    forced_decoder_ids: list[list[int]] = field(
-        default=None,
-        metadata={"help": "Deprecated. Please use the `language` and `task` arguments instead."},
-    )
-    suppress_tokens: list[int] = field(
-        default=None,
-        metadata={
-            "help": (
-                "Deprecated. The use of `suppress_tokens` should not be required for the majority of fine-tuning examples."
-                "Should you need to use `suppress_tokens`, please manually update them in the fine-tuning script directly."
-            )
-        },
-    )
     apply_spec_augment: bool = field(
         default=False,
         metadata={
@@ -170,11 +155,11 @@ class DataTrainingArguments:
         default=False,
         metadata={"help": "Overwrite the cached training and evaluation sets"},
     )
-    preprocessing_num_workers: Optional[int] = field(
+    preprocessing_num_workers: int | None = field(
         default=None,
         metadata={"help": "The number of processes to use for the preprocessing."},
     )
-    max_train_samples: Optional[int] = field(
+    max_train_samples: int | None = field(
         default=None,
         metadata={
             "help": (
@@ -183,7 +168,7 @@ class DataTrainingArguments:
             )
         },
     )
-    max_eval_samples: Optional[int] = field(
+    max_eval_samples: int | None = field(
         default=None,
         metadata={
             "help": (
@@ -272,7 +257,7 @@ class DataCollatorSpeechSeq2SeqWithPadding:
     decoder_start_token_id: int
     forward_attention_mask: bool
 
-    def __call__(self, features: list[dict[str, Union[list[int], torch.Tensor]]]) -> dict[str, torch.Tensor]:
+    def __call__(self, features: list[dict[str, list[int] | torch.Tensor]]) -> dict[str, torch.Tensor]:
         # split inputs and labels since they have to be of different lengths and need
         # different padding methods
         model_input_name = self.processor.model_input_names[0]
@@ -396,17 +381,9 @@ def main():
     if getattr(config, "model_type", None) == "whisper":
         config.update({"apply_spec_augment": model_args.apply_spec_augment})
 
-    feature_extractor = AutoFeatureExtractor.from_pretrained(
-        (model_args.feature_extractor_name if model_args.feature_extractor_name else model_args.model_name_or_path),
+    processor = AutoProcessor.from_pretrained(
+        model_args.model_name_or_path,
         cache_dir=model_args.cache_dir,
-        revision=model_args.model_revision,
-        token=model_args.token,
-        trust_remote_code=model_args.trust_remote_code,
-    )
-    tokenizer = AutoTokenizer.from_pretrained(
-        (model_args.tokenizer_name if model_args.tokenizer_name else model_args.model_name_or_path),
-        cache_dir=model_args.cache_dir,
-        use_fast=model_args.use_fast_tokenizer,
         revision=model_args.model_revision,
         token=model_args.token,
         trust_remote_code=model_args.trust_remote_code,
@@ -432,7 +409,7 @@ def main():
 
     if hasattr(model.generation_config, "is_multilingual") and model.generation_config.is_multilingual:
         # We only need to set the language and task ids in a multilingual setting
-        tokenizer.set_prefix_tokens(language=data_args.language, task=data_args.task)
+        processor.tokenizer.set_prefix_tokens(language=data_args.language, task=data_args.task)
         model.generation_config.language = data_args.language
         model.generation_config.task = data_args.task
     elif data_args.language is not None:
@@ -441,40 +418,25 @@ def main():
             "only be set for multilingual checkpoints."
         )
 
-    # TODO (Sanchit): deprecate these arguments in v4.41
-    if model_args.forced_decoder_ids is not None:
-        logger.warning(
-            "The use of `forced_decoder_ids` is deprecated and will be removed in v4.41."
-            "Please use the `language` and `task` arguments instead"
-        )
-        model.generation_config.forced_decoder_ids = model_args.forced_decoder_ids
-    else:
-        model.generation_config.forced_decoder_ids = None
-        model.config.forced_decoder_ids = None
-
-    if model_args.suppress_tokens is not None:
-        logger.warning(
-            "The use of `suppress_tokens` is deprecated and will be removed in v4.41."
-            "Should you need `suppress_tokens`, please manually set them in the fine-tuning script."
-        )
-        model.generation_config.suppress_tokens = model_args.suppress_tokens
+    model.generation_config.forced_decoder_ids = None
+    model.config.forced_decoder_ids = None
 
     # 6. Resample speech dataset if necessary
     dataset_sampling_rate = next(iter(raw_datasets.values())).features[data_args.audio_column_name].sampling_rate
-    if dataset_sampling_rate != feature_extractor.sampling_rate:
+    if dataset_sampling_rate != processor.feature_extractor.sampling_rate:
         raw_datasets = raw_datasets.cast_column(
             data_args.audio_column_name,
-            datasets.features.Audio(sampling_rate=feature_extractor.sampling_rate),
+            datasets.features.Audio(sampling_rate=processor.feature_extractor.sampling_rate),
         )
 
     # 7. Preprocessing the datasets.
     # We need to read the audio files as arrays and tokenize the targets.
-    max_input_length = data_args.max_duration_in_seconds * feature_extractor.sampling_rate
-    min_input_length = data_args.min_duration_in_seconds * feature_extractor.sampling_rate
+    max_input_length = data_args.max_duration_in_seconds * processor.feature_extractor.sampling_rate
+    min_input_length = data_args.min_duration_in_seconds * processor.feature_extractor.sampling_rate
     audio_column_name = data_args.audio_column_name
     num_workers = data_args.preprocessing_num_workers
     text_column_name = data_args.text_column_name
-    model_input_name = feature_extractor.model_input_names[0]
+    model_input_name = processor.feature_extractor.model_input_names[0]
     do_lower_case = data_args.do_lower_case
     # if SpecAugment is used for whisper models, return attention_mask to guide the mask along time axis
     forward_attention_mask = (
@@ -492,7 +454,7 @@ def main():
     def prepare_dataset(batch):
         # process audio
         sample = batch[audio_column_name]
-        inputs = feature_extractor(
+        inputs = processor.feature_extractor(
             sample["array"],
             sampling_rate=sample["sampling_rate"],
             return_attention_mask=forward_attention_mask,
@@ -505,7 +467,7 @@ def main():
 
         # process targets
         input_str = batch[text_column_name].lower() if do_lower_case else batch[text_column_name]
-        batch["labels"] = tokenizer(input_str).input_ids
+        batch["labels"] = processor.tokenizer(input_str).input_ids
         return batch
 
     with training_args.main_process_first(desc="dataset map pre-processing"):
@@ -543,11 +505,11 @@ def main():
     def compute_metrics(pred):
         pred_ids = pred.predictions
 
-        pred.label_ids[pred.label_ids == -100] = tokenizer.pad_token_id
+        pred.label_ids[pred.label_ids == -100] = processor.tokenizer.pad_token_id
 
-        pred_str = tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
+        pred_str = processor.tokenizer.batch_decode(pred_ids, skip_special_tokens=True)
         # we do not want to group tokens when computing the metrics
-        label_str = tokenizer.batch_decode(pred.label_ids, skip_special_tokens=True)
+        label_str = processor.tokenizer.batch_decode(pred.label_ids, skip_special_tokens=True)
 
         wer = metric.compute(predictions=pred_str, references=label_str)
 
@@ -558,12 +520,7 @@ def main():
     with training_args.main_process_first():
         # only the main process saves them
         if is_main_process(training_args.local_process_index):
-            # save feature extractor, tokenizer and config
-            feature_extractor.save_pretrained(training_args.output_dir)
-            tokenizer.save_pretrained(training_args.output_dir)
             config.save_pretrained(training_args.output_dir)
-
-    processor = AutoProcessor.from_pretrained(training_args.output_dir)
 
     # 10. Define data collator
     data_collator = DataCollatorSpeechSeq2SeqWithPadding(
@@ -578,7 +535,7 @@ def main():
         args=training_args,
         train_dataset=vectorized_datasets["train"] if training_args.do_train else None,
         eval_dataset=vectorized_datasets["eval"] if training_args.do_eval else None,
-        processing_class=feature_extractor,
+        processing_class=processor.feature_extractor,
         data_collator=data_collator,
         compute_metrics=(compute_metrics if training_args.predict_with_generate else None),
     )

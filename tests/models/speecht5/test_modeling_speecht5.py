@@ -354,7 +354,7 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase, Generatio
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
-            self.assertEqual(info["missing_keys"], [])
+            self.assertEqual(info["missing_keys"], set())
 
     def test_model_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -645,32 +645,16 @@ class SpeechT5ForSpeechToTextTest(ModelTesterMixin, unittest.TestCase, Generatio
     def test_training(self):
         pass
 
-    @unittest.skip(reason="Training is not supported yet")
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
     # overwrite from test_modeling_common
     def _mock_init_weights(self, module):
         if hasattr(module, "weight") and module.weight is not None:
-            module.weight.data.fill_(3)
+            module.weight.fill_(3)
         if hasattr(module, "weight_g") and module.weight_g is not None:
             module.weight_g.data.fill_(3)
         if hasattr(module, "weight_v") and module.weight_v is not None:
             module.weight_v.data.fill_(3)
         if hasattr(module, "bias") and module.bias is not None:
-            module.bias.data.fill_(3)
+            module.bias.fill_(3)
         if hasattr(module, "masked_spec_embed") and module.masked_spec_embed is not None:
             module.masked_spec_embed.data.fill_(3)
 
@@ -859,7 +843,7 @@ class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
-            self.assertEqual(info["missing_keys"], [])
+            self.assertEqual(info["missing_keys"], set())
 
     def test_model_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -932,49 +916,36 @@ class SpeechT5ForTextToSpeechTest(ModelTesterMixin, unittest.TestCase):
     def test_training(self):
         pass
 
-    @unittest.skip(reason="training is not supported yet")
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
     # overwrite from test_modeling_common
     def _mock_init_weights(self, module):
         if hasattr(module, "weight") and module.weight is not None:
-            module.weight.data.fill_(3)
+            module.weight.fill_(3)
         if hasattr(module, "weight_g") and module.weight_g is not None:
             module.weight_g.data.fill_(3)
         if hasattr(module, "weight_v") and module.weight_v is not None:
             module.weight_v.data.fill_(3)
         if hasattr(module, "bias") and module.bias is not None:
-            module.bias.data.fill_(3)
+            module.bias.fill_(3)
 
 
 @require_torch
 @require_sentencepiece
 @require_tokenizers
+@slow
 class SpeechT5ForTextToSpeechIntegrationTests(unittest.TestCase):
     @cached_property
     def default_model(self):
-        return SpeechT5ForTextToSpeech.from_pretrained("microsoft/speecht5_tts").to(torch_device)
+        return SpeechT5ForTextToSpeech.from_pretrained("microsoft/speecht5_tts", revision="refs/pr/19").to(
+            torch_device
+        )
 
     @cached_property
     def default_processor(self):
-        return SpeechT5Processor.from_pretrained("microsoft/speecht5_tts")
+        return SpeechT5Processor.from_pretrained("microsoft/speecht5_tts", revision="refs/pr/19")
 
     @cached_property
     def default_vocoder(self):
-        return SpeechT5HifiGan.from_pretrained("microsoft/speecht5_hifigan").to(torch_device)
+        return SpeechT5HifiGan.from_pretrained("microsoft/speecht5_hifigan", revision="refs/pr/1").to(torch_device)
 
     def test_generation(self):
         model = self.default_model
@@ -1359,7 +1330,7 @@ class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
             with tempfile.TemporaryDirectory() as tmpdirname:
                 model.save_pretrained(tmpdirname)
                 model2, info = model_class.from_pretrained(tmpdirname, output_loading_info=True)
-            self.assertEqual(info["missing_keys"], [])
+            self.assertEqual(info["missing_keys"], set())
 
     def test_model_forward(self):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
@@ -1589,32 +1560,16 @@ class SpeechT5ForSpeechToSpeechTest(ModelTesterMixin, unittest.TestCase):
     def test_training(self):
         pass
 
-    @unittest.skip(reason="Training is not supported yet")
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
     # overwrite from test_modeling_common
     def _mock_init_weights(self, module):
         if hasattr(module, "weight") and module.weight is not None:
-            module.weight.data.fill_(3)
+            module.weight.fill_(3)
         if hasattr(module, "weight_g") and module.weight_g is not None:
             module.weight_g.data.fill_(3)
         if hasattr(module, "weight_v") and module.weight_v is not None:
             module.weight_v.data.fill_(3)
         if hasattr(module, "bias") and module.bias is not None:
-            module.bias.data.fill_(3)
+            module.bias.fill_(3)
         if hasattr(module, "masked_spec_embed") and module.masked_spec_embed is not None:
             module.masked_spec_embed.data.fill_(3)
 

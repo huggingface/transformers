@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The Nari Labs and HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,10 +13,8 @@
 # limitations under the License.
 """Dia model configuration"""
 
-from typing import Optional
-
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
@@ -56,7 +53,7 @@ class DiaEncoderConfig(PreTrainedConfig):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"swish"` and `"gelu_new"` are supported.
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -77,7 +74,7 @@ class DiaEncoderConfig(PreTrainedConfig):
         norm_eps: float = 1e-5,
         vocab_size: int = 256,
         hidden_act: str = "silu",
-        rope_parameters: Optional[RopeParameters] = None,
+        rope_parameters: RopeParameters | None = None,
         initializer_range: float = 0.02,
         **kwargs,
     ):
@@ -92,14 +89,8 @@ class DiaEncoderConfig(PreTrainedConfig):
         self.num_key_value_heads = num_key_value_heads
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
+        self.rope_parameters = rope_parameters
 
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 10000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
         super().__init__(**kwargs)
 
 
@@ -145,7 +136,7 @@ class DiaDecoderConfig(PreTrainedConfig):
         num_channels (`int`, *optional*, defaults to 9):
             Number of channels for the Dia decoder.
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         initializer_range (`float`, *optional*, defaults to 0.02):
@@ -175,7 +166,7 @@ class DiaDecoderConfig(PreTrainedConfig):
         vocab_size: int = 1028,
         hidden_act: str = "silu",
         num_channels: int = 9,
-        rope_parameters: Optional[RopeParameters] = None,
+        rope_parameters: RopeParameters | None = None,
         initializer_range: float = 0.02,
         use_cache: bool = True,
         is_encoder_decoder: bool = True,
@@ -198,14 +189,8 @@ class DiaDecoderConfig(PreTrainedConfig):
         self.num_channels = num_channels
         self.initializer_range = initializer_range
         self.use_cache = use_cache
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
+        self.rope_parameters = rope_parameters
 
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 10000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
 
@@ -263,14 +248,14 @@ class DiaConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        encoder_config: Optional[DiaEncoderConfig] = None,
-        decoder_config: Optional[DiaDecoderConfig] = None,
+        encoder_config: DiaEncoderConfig | None = None,
+        decoder_config: DiaDecoderConfig | None = None,
         norm_eps: float = 1e-5,
         is_encoder_decoder: bool = True,
         pad_token_id: int = 1025,
         eos_token_id: int = 1024,
         bos_token_id: int = 1026,
-        delay_pattern: Optional[list[int]] = None,
+        delay_pattern: list[int] | None = None,
         initializer_range: float = 0.02,
         use_cache: bool = True,
         **kwargs,
@@ -285,18 +270,15 @@ class DiaConfig(PreTrainedConfig):
         self.delay_pattern = delay_pattern if delay_pattern is not None else [0, 8, 9, 10, 11, 12, 13, 14, 15]
         self.initializer_range = initializer_range
         self.use_cache = use_cache
+        self.decoder_config.pad_token_id = pad_token_id
+        self.decoder_config.eos_token_id = eos_token_id
+        self.decoder_config.bos_token_id = bos_token_id
 
         assert self.decoder_config.num_channels == len(self.delay_pattern), (
             "Number of channels must match delay pattern length."
         )
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            eos_token_id=eos_token_id,
-            bos_token_id=bos_token_id,
-            is_encoder_decoder=is_encoder_decoder,
-            **kwargs,
-        )
+        super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 
     def get_text_config(self, *args, **kwargs):
         """Defaulting to audio config as it's the decoder in this case which is usually the text backbone"""

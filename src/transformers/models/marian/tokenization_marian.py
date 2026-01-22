@@ -16,11 +16,11 @@ import os
 import warnings
 from pathlib import Path
 from shutil import copyfile
-from typing import Any, Optional, Union
+from typing import Any
 
 import sentencepiece
 
-from ...tokenization_utils import PreTrainedTokenizer
+from ...tokenization_python import PreTrainedTokenizer
 from ...utils import logging
 from ...utils.import_utils import requires
 
@@ -116,7 +116,7 @@ class MarianTokenizer(PreTrainedTokenizer):
         eos_token="</s>",
         pad_token="<pad>",
         model_max_length=512,
-        sp_model_kwargs: Optional[dict[str, Any]] = None,
+        sp_model_kwargs: dict[str, Any] | None = None,
         separate_vocabs=False,
         **kwargs,
     ) -> None:
@@ -128,7 +128,6 @@ class MarianTokenizer(PreTrainedTokenizer):
         self.encoder = load_json(vocab)
         if str(unk_token) not in self.encoder:
             raise KeyError("<unk> token must be in the vocab")
-        assert str(pad_token) in self.encoder
 
         if separate_vocabs:
             self.target_encoder = load_json(target_vocab_file)
@@ -151,6 +150,8 @@ class MarianTokenizer(PreTrainedTokenizer):
         # Multilingual target side: default to using first supported language code.
 
         self._setup_normalizer()
+
+        self._decode_use_source_tokenizer = False
 
         super().__init__(
             # bos_token=bos_token,  unused. Start decoding with config.decoder_start_token_id
@@ -180,7 +181,11 @@ class MarianTokenizer(PreTrainedTokenizer):
         return self.punc_normalizer(x) if x else ""
 
     def _convert_token_to_id(self, token):
-        return self.current_encoder.get(token, self.current_encoder[self.unk_token])
+        if token in self.current_encoder:
+            return self.current_encoder[token]
+        # The Marian vocab is not aligned with the SentencePiece IDs, so falling back to raw
+        # SentencePiece indices would map to unrelated tokens. Treat such pieces as unknown.
+        return self.current_encoder[self.unk_token]
 
     def remove_language_code(self, text: str):
         """Remove language codes like >>fr<< before sentencepiece"""
@@ -197,7 +202,12 @@ class MarianTokenizer(PreTrainedTokenizer):
 
     def _convert_id_to_token(self, index: int) -> str:
         """Converts an index (integer) in a token (str) using the decoder."""
-        return self.decoder.get(index, self.unk_token)
+        if index in self.decoder:
+            return self.decoder[index]
+        # Fall back to SPM model for IDs not in external vocab
+        spm_model = self.spm_source if self._decode_use_source_tokenizer else self.spm_target
+        piece = spm_model.IdToPiece(index)
+        return piece if piece else self.unk_token
 
     def batch_decode(self, sequences, **kwargs):
         """
@@ -248,6 +258,23 @@ class MarianTokenizer(PreTrainedTokenizer):
         """
         return super().decode(token_ids, **kwargs)
 
+    def _decode(
+        self,
+        token_ids,
+        skip_special_tokens: bool = False,
+        clean_up_tokenization_spaces: bool | None = None,
+        **kwargs,
+    ) -> str:
+        """Internal decode method that handles use_source_tokenizer parameter."""
+        default_use_source = not self.separate_vocabs
+        self._decode_use_source_tokenizer = kwargs.pop("use_source_tokenizer", default_use_source)
+        return super()._decode(
+            token_ids=token_ids,
+            skip_special_tokens=skip_special_tokens,
+            clean_up_tokenization_spaces=clean_up_tokenization_spaces,
+            **kwargs,
+        )
+
     def convert_tokens_to_string(self, tokens: list[str]) -> str:
         """Uses source spm if _decode_use_source_tokenizer is True, and target spm otherwise"""
         sp_model = self.spm_source if self._decode_use_source_tokenizer else self.spm_target
@@ -284,7 +311,7 @@ class MarianTokenizer(PreTrainedTokenizer):
     def vocab_size(self) -> int:
         return len(self.encoder)
 
-    def save_vocabulary(self, save_directory: str, filename_prefix: Optional[str] = None) -> tuple[str]:
+    def save_vocabulary(self, save_directory: str, filename_prefix: str | None = None) -> tuple[str]:
         if not os.path.isdir(save_directory):
             logger.error(f"Vocabulary path ({save_directory}) should be a directory")
             return
@@ -351,6 +378,8 @@ class MarianTokenizer(PreTrainedTokenizer):
         # for backward compatibility
         if not hasattr(self, "sp_model_kwargs"):
             self.sp_model_kwargs = {}
+        if not hasattr(self, "_decode_use_source_tokenizer"):
+            self._decode_use_source_tokenizer = False
 
         self.spm_source, self.spm_target = (load_spm(f, self.sp_model_kwargs) for f in self.spm_files)
         self.current_spm = self.spm_source
@@ -366,7 +395,7 @@ class MarianTokenizer(PreTrainedTokenizer):
         return [1 if x in all_special_ids else 0 for x in seq]
 
     def get_special_tokens_mask(
-        self, token_ids_0: list, token_ids_1: Optional[list] = None, already_has_special_tokens: bool = False
+        self, token_ids_0: list, token_ids_1: list | None = None, already_has_special_tokens: bool = False
     ) -> list[int]:
         """Get list where entries are [1] if a token is [eos] or [pad] else 0."""
         if already_has_special_tokens:
@@ -388,7 +417,7 @@ def save_json(data, path: str) -> None:
         json.dump(data, f, indent=2)
 
 
-def load_json(path: str) -> Union[dict, list]:
+def load_json(path: str) -> dict | list:
     with open(path, "r") as f:
         return json.load(f)
 

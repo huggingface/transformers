@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_glm4v.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 The ZhipuAI Inc. team and HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -18,10 +17,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Optional
-
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 
 
 class Glm4vVisionConfig(PreTrainedConfig):
@@ -32,39 +29,35 @@ class Glm4vVisionConfig(PreTrainedConfig):
     GLM-4.1V-9B-Thinking [THUDM/GLM-4.1V-9B-Thinking](https://huggingface.co/THUDM/GLM-4.1V-9B-Thinking).
 
     Args:
-        hidden_size (`int`, *optional*, defaults to 1536):
-            Dimensionality of the encoder layers and the pooler layer.
-        depth (`int`, *optional*, defaults to 24):
-            Number of layers (depth) in the model.
-        attention_bias (`bool`, *optional*, defaults to `False`):
-            Whether to add a bias to the queries, keys and values.
-        intermediate_size (`int`, *optional*, defaults to 13696):
-            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
-        hidden_act (`str` or `function`, *optional*, defaults to `"selu"`):
-            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
-            `"relu"`, `"selu"` and `"gelu_new"` are supported.
-        hidden_dropout_prob (`float`, *optional*, defaults to 0.0):
-            The dropout probability for all fully connected layers in the embeddings, encoder, and pooler.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            Dropout probability for attention weights.
-        projection_dropout (`float`, *optional*, defaults to 0.0):
-            Dropout probability for the projection layer.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        image_size (`int` or `list[int]`, *optional*, defaults to `[336, 336]`):
-            The size (resolution) of each image.
-        patch_size (`int`, *optional*, defaults to `14`):
-            The size (resolution) of each patch.
-        num_channels (`int`, *optional*, defaults to 3):
-            The number of input channels.
-        out_hidden_size (`int`, *optional*, defaults to 4096):
-            The output hidden size of the vision model.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the rms normalization layers.
-        spatial_merge_size (`int`, *optional*, defaults to 2):
-            The size used for merging spatial dimensions.
-        temporal_patch_size (`int`, *optional*, defaults to 2):
-            The size used for patches along the temporal dimension.
+            depth (`int`, *optional*, defaults to 24):
+                Number of layers (depth) in the model.
+            hidden_size (`int`, *optional*, defaults to 1536):
+                Dimensionality of the encoder layers and the pooler layer.
+            hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
+                The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+                `"relu"`, `"selu"` and `"gelu_new"` are supported.
+            attention_bias (`bool`, *optional*, defaults to `False`):
+                Whether to add a bias to the queries, keys and values.
+            attention_dropout (`float`, *optional*, defaults to 0.0):
+                Dropout probability for attention weights.
+            num_heads (`<fill_type>`, *optional*, defaults to 12): <fill_docstring>
+            in_channels (`<fill_type>`, *optional*, defaults to 3): <fill_docstring>
+            image_size (`int` or `list[int]`, *optional*, defaults to 336):
+                The size (resolution) of each image.
+            patch_size (`int`, *optional*, defaults to 14):
+                The size (resolution) of each patch.
+            rms_norm_eps (`float`, *optional*, defaults to 1e-05):
+                The epsilon used by the rms normalization layers.
+            spatial_merge_size (`int`, *optional*, defaults to 2):
+                The size used for merging spatial dimensions.
+            temporal_patch_size (`int`, *optional*, defaults to 2):
+                The size used for patches along the temporal dimension.
+            out_hidden_size (`int`, *optional*, defaults to 4096):
+                The output hidden size of the vision model.
+            intermediate_size (`int`, *optional*, defaults to 13696):
+                Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
+            initializer_range (`float`, *optional*, defaults to 0.02):
+                The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
     Example:
 
     ```python
@@ -80,7 +73,7 @@ class Glm4vVisionConfig(PreTrainedConfig):
     >>> configuration = model.config
     ```"""
 
-    model_type = "glm4v"
+    model_type = "glm4v_vision"
     base_config_key = "vision_config"
 
     def __init__(
@@ -161,18 +154,12 @@ class Glm4vTextConfig(PreTrainedConfig):
         use_cache (`bool`, *optional*, defaults to `True`):
             Whether or not the model should return the last key/values attentions (not used by all models). Only
             relevant if `config.is_decoder=True`.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether the model's input and output word embeddings should be tied.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
-        image_token_id (`int`, *optional*):
-            Token index used as placeholder for image embeddings.
-        video_token_id (`int`, *optional*):
-            Token index used as placeholder for video embeddings.
 
     ```python
     >>> from transformers import Glm4vTextModel, Glm4vConfig
@@ -207,22 +194,19 @@ class Glm4vTextConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 151552,
-        hidden_size: Optional[int] = 4096,
-        intermediate_size: Optional[int] = 13696,
-        num_hidden_layers: Optional[int] = 40,
-        num_attention_heads: Optional[int] = 32,
-        num_key_value_heads: Optional[int] = 2,
-        hidden_act: Optional[str] = "silu",
-        max_position_embeddings: Optional[int] = 32768,
-        initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[int] = 1e-05,
-        use_cache: Optional[bool] = True,
-        tie_word_embeddings: Optional[bool] = False,
-        attention_dropout: Optional[float] = 0.0,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
-        image_token_id: Optional[int] = None,
-        video_token_id: Optional[int] = None,
+        vocab_size: int | None = 151552,
+        hidden_size: int | None = 4096,
+        intermediate_size: int | None = 13696,
+        num_hidden_layers: int | None = 40,
+        num_attention_heads: int | None = 32,
+        num_key_value_heads: int | None = 2,
+        hidden_act: str | None = "silu",
+        max_position_embeddings: int | None = 32768,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: int | None = 1e-05,
+        use_cache: bool | None = True,
+        attention_dropout: float | None = 0.0,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -242,18 +226,9 @@ class Glm4vTextConfig(PreTrainedConfig):
         self.rms_norm_eps = rms_norm_eps
         self.use_cache = use_cache
         self.attention_dropout = attention_dropout
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
+        self.rope_parameters = rope_parameters
 
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 10000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self, ignore_keys={"mrope_section"})
-        self.image_token_id = image_token_id
-        self.video_token_id = video_token_id
-
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+        super().__init__(ignore_keys_at_rope_validation={"mrope_section"}, **kwargs)
 
 
 class Glm4vConfig(PreTrainedConfig):
@@ -284,6 +259,8 @@ class Glm4vConfig(PreTrainedConfig):
             The video start token index to encode the start of video.
         video_end_token_id (`int`, *optional*, defaults to 151342):
             The video end token index to encode the end of video.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether the model's input and output word embeddings should be tied.
 
     ```python
     >>> from transformers import Glm4vForConditionalGeneration, Glm4vConfig
@@ -312,6 +289,7 @@ class Glm4vConfig(PreTrainedConfig):
         image_end_token_id=151340,
         video_start_token_id=151341,
         video_end_token_id=151342,
+        tie_word_embeddings=False,
         **kwargs,
     ):
         if isinstance(vision_config, dict):
@@ -330,8 +308,9 @@ class Glm4vConfig(PreTrainedConfig):
         self.video_end_token_id = video_end_token_id
         self.image_start_token_id = image_start_token_id
         self.image_end_token_id = image_end_token_id
+        self.tie_word_embeddings = tie_word_embeddings
 
         super().__init__(**kwargs)
 
 
-__all__ = ["Glm4vConfig", "Glm4vTextConfig"]
+__all__ = ["Glm4vConfig", "Glm4vTextConfig", "Glm4vVisionConfig"]

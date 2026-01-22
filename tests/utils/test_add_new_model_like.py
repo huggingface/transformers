@@ -159,7 +159,6 @@ class TestAddNewModelLike(unittest.TestCase):
         # directly from it
         EXPECTED_MODULAR = textwrap.dedent(
             f"""
-            # coding=utf-8
             # Copyright {CURRENT_YEAR} the HuggingFace Team. All rights reserved.
             #
             # Licensed under the Apache License, Version 2.0 (the "License");
@@ -253,7 +252,6 @@ class TestAddNewModelLike(unittest.TestCase):
 
         EXPECTED_INIT = textwrap.dedent(
             f"""
-            # coding=utf-8
             # Copyright {CURRENT_YEAR} the HuggingFace Team. All rights reserved.
             #
             # Licensed under the Apache License, Version 2.0 (the "License");
@@ -445,7 +443,6 @@ class TestAddNewModelLike(unittest.TestCase):
         # directly from it
         EXPECTED_MODULAR = textwrap.dedent(
             f"""
-            # coding=utf-8
             # Copyright {CURRENT_YEAR} the HuggingFace Team. All rights reserved.
             #
             # Licensed under the Apache License, Version 2.0 (the "License");
@@ -678,7 +675,6 @@ class TestAddNewModelLike(unittest.TestCase):
 
         EXPECTED_INIT = textwrap.dedent(
             f"""
-            # coding=utf-8
             # Copyright {CURRENT_YEAR} the HuggingFace Team. All rights reserved.
             #
             # Licensed under the Apache License, Version 2.0 (the "License");

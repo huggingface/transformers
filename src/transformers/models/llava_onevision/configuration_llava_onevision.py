@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -58,10 +57,10 @@ class LlavaOnevisionConfig(PreTrainedConfig):
         image_grid_pinpoints (`List`, *optional*):
             A list of possible resolutions to use for processing high resolution images. Each item in the list should be a tuple or list
             of the form `(height, width)`.
-        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
-            Whether the model's input and output word embeddings should be tied.
         multimodal_projector_bias (`bool`, *optional*, defaults to `True`):
             Whether to use bias in the multimodal projector.
+        tie_word_embeddings (`bool`, *optional*, defaults to `False`):
+            Whether to tie weight embeddings
 
     Example:
 
@@ -102,14 +101,15 @@ class LlavaOnevisionConfig(PreTrainedConfig):
         vision_feature_layer=-1,
         vision_aspect_ratio="anyres_max_9",
         image_grid_pinpoints=None,
-        tie_word_embeddings=False,
         multimodal_projector_bias=True,
+        tie_word_embeddings=False,
         **kwargs,
     ):
         self.image_token_index = image_token_index
         self.video_token_index = video_token_index
         self.projector_hidden_act = projector_hidden_act
         self.multimodal_projector_bias = multimodal_projector_bias
+        self.tie_word_embeddings = tie_word_embeddings
 
         if vision_feature_select_strategy not in ["default", "full"]:
             raise ValueError(
@@ -188,7 +188,7 @@ class LlavaOnevisionConfig(PreTrainedConfig):
 
         self.text_config = text_config
 
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+        super().__init__(**kwargs)
 
 
 __all__ = ["LlavaOnevisionConfig"]

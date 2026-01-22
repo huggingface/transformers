@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The ZhipuAI Inc. team and HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,13 +13,11 @@
 # limitations under the License.
 """PyTorch GLM-4-MOE model."""
 
-from typing import Optional
-
 import torch
 from torch import nn
 
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 from ..cohere.modeling_cohere import CohereAttention
 from ..deepseek_v3.modeling_deepseek_v3 import (
@@ -61,8 +58,6 @@ class Glm4MoeConfig(PreTrainedConfig):
             Number of hidden layers in the Transformer encoder.
         num_attention_heads (`int`, *optional*, defaults to 96):
             Number of attention heads for each attention layer in the Transformer encoder.
-        partial_rotary_factor (`float`, *optional*, defaults to 0.5):
-            The factor of the partial rotary position.
         num_key_value_heads (`int`, *optional*, defaults to 8):
             This is the number of key_value heads that should be used to implement Grouped Query Attention. If
             `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
@@ -85,7 +80,7 @@ class Glm4MoeConfig(PreTrainedConfig):
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether the model's input and output word embeddings should be tied.
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
         attention_bias (`bool`, defaults to `False`, *optional*, defaults to `False`):
@@ -113,6 +108,13 @@ class Glm4MoeConfig(PreTrainedConfig):
             Whether to normalize the topk probabilities.
         use_qk_norm (`bool`, *optional*, defaults to `False`):
             Whether to use query-key normalization in the attention
+        bos_token_id (`int`, *optional*):
+            Beginning of stream token id.
+        eos_token_id (`int`, *optional*):
+            End of stream token id.
+        pad_token_id (`int`, *optional*):
+            Padding token id.
+
     ```python
     >>> from transformers import Glm4MoeModel, Glm4MoeConfig
 
@@ -135,9 +137,9 @@ class Glm4MoeConfig(PreTrainedConfig):
         "layers.*.self_attn.k_proj": "colwise",
         "layers.*.self_attn.v_proj": "colwise",
         "layers.*.self_attn.o_proj": "rowwise",
-        "layers.*.mlp.experts.*.gate_proj": "colwise",
-        "layers.*.mlp.experts.*.up_proj": "colwise",
-        "layers.*.mlp.experts.*.down_proj": "rowwise",
+        "layers.*.mlp.experts.gate_up_proj": "local_rowwise",
+        "layers.*.mlp.experts.down_proj": "local_rowwise",
+        "layers.*.mlp.experts": "gather",
         "layers.*.mlp.gate_proj": "colwise",
         "layers.*.mlp.up_proj": "colwise",
         "layers.*.mlp.down_proj": "rowwise",
@@ -153,32 +155,34 @@ class Glm4MoeConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 151552,
-        hidden_size: Optional[int] = 4096,
-        intermediate_size: Optional[int] = 10944,
-        num_hidden_layers: Optional[int] = 46,
-        num_attention_heads: Optional[int] = 96,
-        partial_rotary_factor: Optional[float] = 0.5,
-        num_key_value_heads: Optional[int] = 8,
-        hidden_act: Optional[str] = "silu",
-        max_position_embeddings: Optional[int] = 131072,
-        initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[int] = 1e-5,
-        use_cache: Optional[bool] = True,
-        tie_word_embeddings: Optional[bool] = False,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
-        attention_bias: Optional[bool] = False,
-        attention_dropout: Optional[float] = 0.0,
-        moe_intermediate_size: Optional[int] = 1408,
-        num_experts_per_tok: Optional[int] = 8,
-        n_shared_experts: Optional[int] = 1,
-        n_routed_experts: Optional[int] = 128,
-        routed_scaling_factor: Optional[float] = 1.0,
-        n_group: Optional[int] = 1,
-        topk_group: Optional[int] = 1,
-        first_k_dense_replace: Optional[int] = 1,
-        norm_topk_prob: Optional[bool] = True,
-        use_qk_norm: Optional[bool] = False,
+        vocab_size: int | None = 151552,
+        hidden_size: int | None = 4096,
+        intermediate_size: int | None = 10944,
+        num_hidden_layers: int | None = 46,
+        num_attention_heads: int | None = 96,
+        num_key_value_heads: int | None = 8,
+        hidden_act: str | None = "silu",
+        max_position_embeddings: int | None = 131072,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: int | None = 1e-5,
+        use_cache: bool | None = True,
+        tie_word_embeddings: bool | None = False,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        attention_bias: bool | None = False,
+        attention_dropout: float | None = 0.0,
+        moe_intermediate_size: int | None = 1408,
+        num_experts_per_tok: int | None = 8,
+        n_shared_experts: int | None = 1,
+        n_routed_experts: int | None = 128,
+        routed_scaling_factor: float | None = 1.0,
+        n_group: int | None = 1,
+        topk_group: int | None = 1,
+        first_k_dense_replace: int | None = 1,
+        norm_topk_prob: bool | None = True,
+        use_qk_norm: bool | None = False,
+        bos_token_id: int | None = None,
+        eos_token_id: int | None = None,
+        pad_token_id: int | None = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -187,7 +191,6 @@ class Glm4MoeConfig(PreTrainedConfig):
         self.intermediate_size = intermediate_size
         self.num_hidden_layers = num_hidden_layers
         self.num_attention_heads = num_attention_heads
-        self.partial_rotary_factor = partial_rotary_factor
 
         self.num_key_value_heads = num_key_value_heads
         self.hidden_act = hidden_act
@@ -196,14 +199,8 @@ class Glm4MoeConfig(PreTrainedConfig):
         self.use_cache = use_cache
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
-
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 10000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
+        self.rope_parameters = rope_parameters
+        kwargs.setdefault("partial_rotary_factor", 0.5)  # assign default for BC
 
         # MoE arguments
         self.moe_intermediate_size = moe_intermediate_size
@@ -216,11 +213,12 @@ class Glm4MoeConfig(PreTrainedConfig):
         self.first_k_dense_replace = first_k_dense_replace
         self.norm_topk_prob = norm_topk_prob
         self.use_qk_norm = use_qk_norm
+        self.tie_word_embeddings = tie_word_embeddings
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.pad_token_id = pad_token_id
 
-        super().__init__(
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        super().__init__(**kwargs)
 
 
 class Glm4MoeRotaryEmbedding(GlmRotaryEmbedding):
@@ -228,7 +226,7 @@ class Glm4MoeRotaryEmbedding(GlmRotaryEmbedding):
 
 
 class Glm4MoeAttention(CohereAttention):
-    def __init__(self, config: Glm4MoeConfig, layer_idx: Optional[int] = None):
+    def __init__(self, config: Glm4MoeConfig, layer_idx: int | None = None):
         nn.Module.__init__(self)
         self.config = config
         self.layer_idx = layer_idx
@@ -283,7 +281,7 @@ class Glm4MoeDecoderLayer(DeepseekV3DecoderLayer):
 
 
 class Glm4MoePreTrainedModel(DeepseekV3PreTrainedModel):
-    _can_compile_fullgraph = False
+    pass
 
 
 class Glm4MoeModel(DeepseekV3Model):

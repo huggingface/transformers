@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 Microsoft and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,10 +14,8 @@
 
 """Phi model configuration"""
 
-from typing import Optional
-
 from ...configuration_utils import PreTrainedConfig
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
@@ -76,11 +73,9 @@ class PhiConfig(PreTrainedConfig):
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
-        partial_rotary_factor (`float`, *optional*, defaults to 0.5):
-            Percentage of the query and keys which will have rotary embedding.
         qk_layernorm (`bool`, *optional*, defaults to `False`):
             Whether or not to normalize the Queries and Keys after projecting the hidden states.
         bos_token_id (`int`, *optional*, defaults to 1):
@@ -122,26 +117,25 @@ class PhiConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 51200,
-        hidden_size: Optional[int] = 2048,
-        intermediate_size: Optional[int] = 8192,
-        num_hidden_layers: Optional[int] = 24,
-        num_attention_heads: Optional[int] = 32,
-        num_key_value_heads: Optional[int] = None,
-        resid_pdrop: Optional[float] = 0.0,
-        embd_pdrop: Optional[float] = 0.0,
-        attention_dropout: Optional[float] = 0.0,
-        hidden_act: Optional[str] = "gelu_new",
-        max_position_embeddings: Optional[int] = 2048,
-        initializer_range: Optional[float] = 0.02,
-        layer_norm_eps: Optional[int] = 1e-5,
-        use_cache: Optional[bool] = True,
-        tie_word_embeddings: Optional[bool] = False,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
-        partial_rotary_factor: Optional[float] = 0.5,
-        qk_layernorm: Optional[bool] = False,
-        bos_token_id: Optional[int] = 1,
-        eos_token_id: Optional[int] = 2,
+        vocab_size: int | None = 51200,
+        hidden_size: int | None = 2048,
+        intermediate_size: int | None = 8192,
+        num_hidden_layers: int | None = 24,
+        num_attention_heads: int | None = 32,
+        num_key_value_heads: int | None = None,
+        resid_pdrop: float | None = 0.0,
+        embd_pdrop: float | None = 0.0,
+        attention_dropout: float | None = 0.0,
+        hidden_act: str | None = "gelu_new",
+        max_position_embeddings: int | None = 2048,
+        initializer_range: float | None = 0.02,
+        layer_norm_eps: int | None = 1e-5,
+        use_cache: bool | None = True,
+        tie_word_embeddings: bool | None = False,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        qk_layernorm: bool | None = False,
+        bos_token_id: int | None = 1,
+        eos_token_id: int | None = 2,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -162,23 +156,14 @@ class PhiConfig(PreTrainedConfig):
         self.initializer_range = initializer_range
         self.layer_norm_eps = layer_norm_eps
         self.use_cache = use_cache
-        self.partial_rotary_factor = partial_rotary_factor
         self.qk_layernorm = qk_layernorm
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
+        self.rope_parameters = rope_parameters
+        kwargs.setdefault("partial_rotary_factor", 0.5)  # assign default for BC
 
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 10000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
-
-        super().__init__(
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(**kwargs)
 
 
 __all__ = ["PhiConfig"]

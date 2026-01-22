@@ -149,9 +149,9 @@ jobs:
     with:
       job: run_models_gpu
       slack_report_channel: "#transformers-ci-push"
-      docker: huggingface/transformers-all-latest-gpu
+      docker: huggingface/transformers-all-latest-gpu:flash-attn
       ci_event: push
       report_repo_id: hf-internal-testing/transformers_ci_push
       commit_sha: ${{ github.sha }}
-      models: ${{ needs.get_modified_models.outputs.matrix }}
+      subdirs: ${{ needs.get_modified_models.outputs.matrix }}
     secrets: inherit

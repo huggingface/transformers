@@ -22,7 +22,6 @@ from transformers import BitsAndBytesConfig, ChameleonConfig, is_torch_available
 from transformers.testing_utils import (
     Expectations,
     require_bitsandbytes,
-    require_read_token,
     require_torch,
     slow,
     torch_device,
@@ -246,11 +245,12 @@ class ChameleonVision2SeqModelTester(ChameleonModelTester):
 
 
 @require_torch
-class ChameleonVision2SeqModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class ChameleonVision2SeqModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (ChameleonModel, ChameleonForConditionalGeneration) if is_torch_available() else ()
     pipeline_model_mapping = (
         {
             "image-text-to-text": ChameleonForConditionalGeneration,
+            "any-to-any": ChameleonForConditionalGeneration,
         }
         if is_torch_available()
         else {}
@@ -327,7 +327,6 @@ class ChameleonVision2SeqModelTest(ModelTesterMixin, GenerationTesterMixin, unit
 class ChameleonIntegrationTest(unittest.TestCase):
     @slow
     @require_bitsandbytes
-    @require_read_token
     def test_model_7b(self):
         model = ChameleonForConditionalGeneration.from_pretrained(
             "facebook/chameleon-7b", quantization_config=BitsAndBytesConfig(load_in_4bit=True), device_map="auto"
@@ -339,7 +338,7 @@ class ChameleonIntegrationTest(unittest.TestCase):
         )
         prompt = "<image>Describe what do you see here and tell me about the history behind it?"
 
-        inputs = processor(images=image, text=prompt, return_tensors="pt").to(model.device, torch.float16)
+        inputs = processor(images=image, text=prompt, return_tensors="pt").to(model.device, torch.bfloat16)
 
         # greedy generation outputs
         EXPECTED_TEXT_COMPLETIONS = Expectations(
@@ -357,7 +356,6 @@ class ChameleonIntegrationTest(unittest.TestCase):
 
     @slow
     @require_bitsandbytes
-    @require_read_token
     def test_model_7b_batched(self):
         model = ChameleonForConditionalGeneration.from_pretrained(
             "facebook/chameleon-7b", quantization_config=BitsAndBytesConfig(load_in_4bit=True), device_map="auto"
@@ -376,7 +374,7 @@ class ChameleonIntegrationTest(unittest.TestCase):
         ]
 
         inputs = processor(images=[image, image_2], text=prompts, padding=True, return_tensors="pt").to(
-            model.device, torch.float16
+            model.device, torch.bfloat16
         )
 
         # greedy generation outputs
@@ -404,7 +402,6 @@ class ChameleonIntegrationTest(unittest.TestCase):
 
     @slow
     @require_bitsandbytes
-    @require_read_token
     def test_model_7b_multi_image(self):
         model = ChameleonForConditionalGeneration.from_pretrained(
             "facebook/chameleon-7b", quantization_config=BitsAndBytesConfig(load_in_4bit=True), device_map="auto"
@@ -419,7 +416,7 @@ class ChameleonIntegrationTest(unittest.TestCase):
         )
         prompt = "What do these two images have in common?<image><image>"
 
-        inputs = processor(images=[image, image_2], text=prompt, return_tensors="pt").to(model.device, torch.float16)
+        inputs = processor(images=[image, image_2], text=prompt, return_tensors="pt").to(model.device, torch.bfloat16)
 
         # greedy generation outputs
         EXPECTED_TEXT_COMPLETION = ['What do these two images have in common?The two images show a connection between the night sky and the internet. The first image shows a starry night sky, with the stars arranged in a pattern that resembles the structure of the internet. The']  # fmt: skip

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -23,7 +22,7 @@ logger = logging.get_logger(__name__)
 
 class XLMRobertaXLConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`XLMRobertaXLModel`] or a [`TFXLMRobertaXLModel`].
+    This is the configuration class to store the configuration of a [`XLMRobertaXLModel`].
     It is used to instantiate a XLM_ROBERTA_XL model according to the specified arguments, defining the model
     architecture. Instantiating a configuration with the defaults will yield a similar configuration to that of the
     XLM_ROBERTA_XL [facebook/xlm-roberta-xl](https://huggingface.co/facebook/xlm-roberta-xl) architecture.
@@ -55,8 +54,7 @@ class XLMRobertaXLConfig(PreTrainedConfig):
             The maximum sequence length that this model might ever be used with. Typically set this to something large
             just in case (e.g., 512 or 1024 or 2048).
         type_vocab_size (`int`, *optional*, defaults to 1):
-            The vocabulary size of the `token_type_ids` passed when calling [`XLMRobertaXLModel`] or
-            [`TFXLMRobertaXLModel`].
+            The vocabulary size of the `token_type_ids` passed when calling [`XLMRobertaXLModel`].
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-5):
@@ -103,9 +101,18 @@ class XLMRobertaXLConfig(PreTrainedConfig):
         eos_token_id=2,
         use_cache=True,
         classifier_dropout=None,
+        is_decoder=False,
+        add_cross_attention=False,
+        tie_word_embeddings=True,
         **kwargs,
     ):
-        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+        super().__init__(**kwargs)
+        self.is_decoder = is_decoder
+        self.add_cross_attention = add_cross_attention
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers

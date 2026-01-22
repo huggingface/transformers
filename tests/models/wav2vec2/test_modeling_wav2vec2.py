@@ -34,7 +34,7 @@ from transformers.testing_utils import (
     require_flash_attn,
     require_pyctcdecode,
     require_torch,
-    require_torch_gpu,
+    require_torch_accelerator,
     require_torchaudio,
     require_torchcodec,
     run_test_in_subprocess,
@@ -60,7 +60,6 @@ if is_torch_available():
         Wav2Vec2FeatureExtractor,
         Wav2Vec2ForAudioFrameClassification,
         Wav2Vec2ForCTC,
-        Wav2Vec2ForMaskedLM,
         Wav2Vec2ForPreTraining,
         Wav2Vec2ForSequenceClassification,
         Wav2Vec2ForXVector,
@@ -478,7 +477,7 @@ class Wav2Vec2ModelTester:
 @require_torch
 class Wav2Vec2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     all_model_classes = (
-        (Wav2Vec2ForCTC, Wav2Vec2Model, Wav2Vec2ForMaskedLM, Wav2Vec2ForSequenceClassification, Wav2Vec2ForPreTraining)
+        (Wav2Vec2ForCTC, Wav2Vec2Model, Wav2Vec2ForSequenceClassification, Wav2Vec2ForPreTraining)
         if is_torch_available()
         else ()
     )
@@ -487,7 +486,6 @@ class Wav2Vec2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
             "audio-classification": Wav2Vec2ForSequenceClassification,
             "automatic-speech-recognition": Wav2Vec2ForCTC,
             "feature-extraction": Wav2Vec2Model,
-            "fill-mask": Wav2Vec2ForMaskedLM,
         }
         if is_torch_available()
         else {}
@@ -602,13 +600,13 @@ class Wav2Vec2ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     # overwrite from test_modeling_common
     def _mock_init_weights(self, module):
         if hasattr(module, "weight") and module.weight is not None:
-            module.weight.data.fill_(3)
+            module.weight.fill_(3)
         if hasattr(module, "weight_g") and module.weight_g is not None:
             module.weight_g.data.fill_(3)
         if hasattr(module, "weight_v") and module.weight_v is not None:
             module.weight_v.data.fill_(3)
         if hasattr(module, "bias") and module.bias is not None:
-            module.bias.data.fill_(3)
+            module.bias.fill_(3)
         if hasattr(module, "codevectors") and module.codevectors is not None:
             module.codevectors.data.fill_(3)
         if hasattr(module, "masked_spec_embed") and module.masked_spec_embed is not None:
@@ -676,7 +674,6 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
         (
             Wav2Vec2ForCTC,
             Wav2Vec2Model,
-            Wav2Vec2ForMaskedLM,
             Wav2Vec2ForSequenceClassification,
             Wav2Vec2ForPreTraining,
             Wav2Vec2ForAudioFrameClassification,
@@ -807,13 +804,13 @@ class Wav2Vec2RobustModelTest(ModelTesterMixin, unittest.TestCase):
     # overwrite from test_modeling_common
     def _mock_init_weights(self, module):
         if hasattr(module, "weight") and module.weight is not None:
-            module.weight.data.fill_(3)
+            module.weight.fill_(3)
         if hasattr(module, "weight_g") and module.weight_g is not None:
             module.weight_g.data.fill_(3)
         if hasattr(module, "weight_v") and module.weight_v is not None:
             module.weight_v.data.fill_(3)
         if hasattr(module, "bias") and module.bias is not None:
-            module.bias.data.fill_(3)
+            module.bias.fill_(3)
         if hasattr(module, "codevectors") and module.codevectors is not None:
             module.codevectors.data.fill_(3)
         if hasattr(module, "masked_spec_embed") and module.masked_spec_embed is not None:
@@ -1808,7 +1805,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
             assert run_model(lang) == TRANSCRIPTIONS[lang]
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @mark.flash_attn_test
     def test_inference_ctc_fa2(self):
         model_fa = Wav2Vec2ForCTC.from_pretrained(
@@ -1830,7 +1827,7 @@ class Wav2Vec2ModelIntegrationTest(unittest.TestCase):
         self.assertListEqual(predicted_trans, EXPECTED_TRANSCRIPTIONS)
 
     @require_flash_attn
-    @require_torch_gpu
+    @require_torch_accelerator
     @mark.flash_attn_test
     def test_inference_ctc_fa2_batched(self):
         model_fa = Wav2Vec2ForCTC.from_pretrained(

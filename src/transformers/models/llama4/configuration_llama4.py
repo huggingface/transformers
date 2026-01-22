@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The LLAMA4 and HuggingFace Inc. team. All rights reserved.
 #
 #
@@ -14,11 +13,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import warnings
-from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...modeling_rope_utils import RopeParameters, rope_config_validation, standardize_rope_params
+from ...modeling_rope_utils import RopeParameters
 from ...utils import logging
 
 
@@ -86,25 +83,25 @@ class Llama4VisionConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        hidden_size: Optional[int] = 768,
-        hidden_act: Optional[str] = "gelu",
-        num_hidden_layers: Optional[int] = 34,
-        num_attention_heads: Optional[int] = 16,
-        num_channels: Optional[int] = 3,
-        intermediate_size: Optional[int] = 5632,
-        vision_output_dim: Optional[int] = 7680,
-        image_size: Optional[int] = 448,
-        patch_size: Optional[int] = 14,
-        norm_eps: Optional[float] = 1e-5,
-        vision_feature_select_strategy: Optional[str] = "default",
-        initializer_range: Optional[float] = 0.02,
-        pixel_shuffle_ratio: Optional[float] = 0.5,
-        projector_input_dim: Optional[int] = 4096,
-        projector_output_dim: Optional[int] = 4096,
-        multi_modal_projector_bias: Optional[bool] = False,
-        projector_dropout: Optional[float] = 0.0,
-        attention_dropout: Optional[float] = 0.0,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        hidden_size: int | None = 768,
+        hidden_act: str | None = "gelu",
+        num_hidden_layers: int | None = 34,
+        num_attention_heads: int | None = 16,
+        num_channels: int | None = 3,
+        intermediate_size: int | None = 5632,
+        vision_output_dim: int | None = 7680,
+        image_size: int | None = 448,
+        patch_size: int | None = 14,
+        norm_eps: float | None = 1e-5,
+        vision_feature_select_strategy: str | None = "default",
+        initializer_range: float | None = 0.02,
+        pixel_shuffle_ratio: float | None = 0.5,
+        projector_input_dim: int | None = 4096,
+        projector_output_dim: int | None = 4096,
+        multi_modal_projector_bias: bool | None = False,
+        projector_dropout: float | None = 0.0,
+        attention_dropout: float | None = 0.0,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
         **kwargs,
     ):
         self.hidden_size = hidden_size
@@ -125,26 +122,8 @@ class Llama4VisionConfig(PreTrainedConfig):
         self.projector_dropout = projector_dropout
         self.attention_dropout = attention_dropout
         self.vision_feature_select_strategy = vision_feature_select_strategy
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
 
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 10000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
-
-        @property
-        def vision_feature_layer(self):
-            warnings.warn(
-                "The `vision_feature_layer` attribute is deprecated and will be removed in v4.58.0.",
-                FutureWarning,
-            )
-            return self._vision_feature_layer
-
-        @vision_feature_layer.setter
-        def vision_feature_layer(self, value):
-            self._vision_feature_layer = value
+        self.rope_parameters = rope_parameters
 
         super().__init__(**kwargs)
 
@@ -205,7 +184,7 @@ class Llama4TextConfig(PreTrainedConfig):
         router_aux_loss_coef (`int`, *optional*, defaults to 0.001): TODO
         router_jitter_noise (`int`, *optional*, defaults to 0.0): TODO
         rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionaty should contain
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
             a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
             with longer `max_position_embeddings`.
             <TODO>
@@ -232,6 +211,7 @@ class Llama4TextConfig(PreTrainedConfig):
 
     model_type = "llama4_text"
     keys_to_ignore_at_inference = ["past_key_values"]
+    default_theta = 500000.0
     base_model_tp_plan = {
         "layers.*.self_attn.q_proj": "colwise",
         "layers.*.self_attn.k_proj": "colwise",
@@ -290,7 +270,7 @@ class Llama4TextConfig(PreTrainedConfig):
         output_router_logits=False,
         router_aux_loss_coef=0.001,
         router_jitter_noise=0.0,
-        rope_parameters: Optional[RopeParameters | dict[RopeParameters]] = None,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
         no_rope_layers=None,
         no_rope_layer_interval=4,
         attention_chunk_size=8192,
@@ -300,13 +280,10 @@ class Llama4TextConfig(PreTrainedConfig):
         attn_scale=0.1,
         **kwargs,
     ):
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
         self.attn_temperature_tuning = attn_temperature_tuning
         self.attn_scale = attn_scale
         self.floor_scale = floor_scale
@@ -330,10 +307,6 @@ class Llama4TextConfig(PreTrainedConfig):
         self.attention_dropout = attention_dropout
         self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
         self.use_qk_norm = use_qk_norm
-        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`
-        rope_scaling = kwargs.pop("rope_scaling", None)
-        self.rope_parameters = rope_scaling or rope_parameters
-
         self.num_experts_per_tok = num_experts_per_tok
         self.num_local_experts = num_local_experts
 
@@ -366,10 +339,8 @@ class Llama4TextConfig(PreTrainedConfig):
             ]
         layer_type_validation(self.layer_types, self.num_hidden_layers)
 
-        # Validate the correctness of rotary position embeddings parameters
-        rope_theta = kwargs.get("rope_theta", 500000.0)
-        standardize_rope_params(self, rope_theta=rope_theta)
-        rope_config_validation(self)
+        self.rope_parameters = rope_parameters
+        super().__init__(**kwargs)
 
 
 class Llama4Config(PreTrainedConfig):
@@ -451,7 +422,8 @@ class Llama4Config(PreTrainedConfig):
         elif isinstance(text_config, Llama4TextConfig):
             self.text_config = text_config
 
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+        self.tie_word_embeddings = tie_word_embeddings
+        super().__init__(**kwargs)
 
 
 __all__ = ["Llama4Config", "Llama4TextConfig", "Llama4VisionConfig"]

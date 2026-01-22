@@ -19,19 +19,17 @@ rendered properly in your Markdown viewer.
 [[open-in-colab]]
 
 Text-to-speech (TTS) is the task of creating natural-sounding speech from text, where the speech can be generated in multiple
-languages and for multiple speakers. Several text-to-speech models are currently available in 🤗 Transformers, such as
+languages and for multiple speakers. Several text-to-speech models are currently available in 🤗 Transformers, such as [Dia](../model_doc/dia), [CSM](../model_doc/csm),
 [Bark](../model_doc/bark), [MMS](../model_doc/mms), [VITS](../model_doc/vits) and [SpeechT5](../model_doc/speecht5).
 
-You can easily generate audio using the `"text-to-audio"` pipeline (or its alias - `"text-to-speech"`). Some models, like Bark,
-can also be conditioned to generate non-verbal communications such as laughing, sighing and crying, or even add music.
-Here's an example of how you would use the `"text-to-speech"` pipeline with Bark:
+You can easily generate audio using the `"text-to-audio"` pipeline (or its alias - `"text-to-speech"`).
+Here's an example of how you would use the `"text-to-speech"` pipeline with [CSM](https://huggingface.co/sesame/csm-1b):
 
-```py
+```python
 >>> from transformers import pipeline
 
->>> pipe = pipeline("text-to-speech", model="suno/bark-small")
->>> text = "[clears throat] This is a test ... and I just took a long pause."
->>> output = pipe(text)
+>>> pipe = pipeline("text-to-audio", model="sesame/csm-1b")
+>>> output = pipe("Hello from Sesame.")
 ```
 
 Here's a code snippet you can use to listen to the resulting audio in a notebook:
@@ -41,21 +39,58 @@ Here's a code snippet you can use to listen to the resulting audio in a notebook
 >>> Audio(output["audio"], rate=output["sampling_rate"])
 ```
 
-For more examples on what Bark and other pretrained TTS models can do, refer to our
+By default, CSM uses a random voice. You can do voice cloning by providing a reference audio as part of a chat template dictionary:
+
+```python
+>>> import soundfile as sf
+>>> import torch
+>>> from datasets import Audio, load_dataset
+>>> from transformers import pipeline
+
+>>> pipe = pipeline("text-to-audio", model="sesame/csm-1b")
+
+>>> ds = load_dataset("hf-internal-testing/dailytalk-dummy", split="train")
+>>> ds = ds.cast_column("audio", Audio(sampling_rate=24000))
+>>> conversation = [
+...     {
+...         "role": "0",
+...         "content": [
+...             {"type": "text", "text": "What are you working on?"},
+...             {"type": "audio", "path": ds[0]["audio"]["array"]},
+...         ],
+...     },
+...     {"role": "0", "content": [{"type": "text", "text": "How much money can you spend?"}]},
+... ]
+>>> output = pipe(conversation)
+```
+
+Some models, like [Dia](https://huggingface.co/nari-labs/Dia-1.6B-0626), can also be conditioned to generate non-verbal communications such as laughing, sighing and crying, or even add music. Below is such an example:
+
+```python
+>>> from transformers import pipeline
+
+>>> pipe = pipeline("text-to-speech", model="nari-labs/Dia-1.6B-0626")
+>>> text = "[S1] (clears throat) Hello! How are you? [S2] I'm good, thanks! How about you?"
+>>> output = pipe(text)
+```
+
+Note that Dia also accepts speaker tags such as [S1] and [S2] to generate a conversation between unique voices.
+
+For more examples on what CSM and other pretrained TTS models can do, refer to our
 [Audio course](https://huggingface.co/learn/audio-course/chapter6/pre-trained_models).
 
 If you are looking to fine-tune a TTS model, the only text-to-speech models currently available in 🤗 Transformers
-are [SpeechT5](model_doc/speecht5) and [FastSpeech2Conformer](model_doc/fastspeech2_conformer), though more will be added in the future. SpeechT5 is pre-trained on a combination of speech-to-text and text-to-speech data, allowing it to learn a unified space of hidden representations shared by both text and speech. This means that the same pre-trained model can be fine-tuned for different tasks. Furthermore, SpeechT5 supports multiple speakers through x-vector speaker embeddings.
+are [SpeechT5](model_doc/speecht5), [FastSpeech2Conformer](model_doc/fastspeech2_conformer), [Dia](model_doc/dia) and [CSM](model_doc/csm) though more will be added in the future. SpeechT5 is pre-trained on a combination of speech-to-text and text-to-speech data, allowing it to learn a unified space of hidden representations shared by both text and speech. This means that the same pre-trained model can be fine-tuned for different tasks. Furthermore, SpeechT5 supports multiple speakers through x-vector speaker embeddings.
 
 The remainder of this guide illustrates how to:
 
-1. Fine-tune [SpeechT5](../model_doc/speecht5) that was originally trained on English speech on the Dutch (`nl`) language subset of the [VoxPopuli](https://huggingface.co/datasets/facebook/voxpopuli) dataset.
+1. Fine-tune [SpeechT5](../model_doc/speecht5) that was originally trained on English speech on the Dutch (`nl`) language subset of the [VoxPopuli](https://huggingface.co/datasets/qmeeus/voxpopuli) dataset.
 2. Use your refined model for inference in one of two ways: using a pipeline or directly.
 
 Before you begin, make sure you have all the necessary libraries installed:
 
 ```bash
-pip install datasets soundfile speechbrain accelerate
+pip install transformers datasets soundfile librosa torchcodec speechbrain accelerate
 ```
 
 Install 🤗Transformers from source as not all the SpeechT5 features have been merged into an official release yet:
@@ -90,7 +125,7 @@ We encourage you to log in to your Hugging Face account to upload and share your
 
 ## Load the dataset
 
-[VoxPopuli](https://huggingface.co/datasets/facebook/voxpopuli) is a large-scale multilingual speech corpus consisting of
+[VoxPopuli](https://huggingface.co/datasets/qmeeus/voxpopuli) is a large-scale multilingual speech corpus consisting of
 data sourced from 2009-2020 European Parliament event recordings. It contains labelled audio-transcription data for 15
 European languages. In this guide, we are using the Dutch language subset, feel free to pick another subset.
 
@@ -104,7 +139,7 @@ Let's load the data:
 ```py
 >>> from datasets import load_dataset, Audio
 
->>> dataset = load_dataset("facebook/voxpopuli", "nl", split="train")
+>>> dataset = load_dataset("qmeeus/voxpopuli", "nl", split="train")
 >>> len(dataset)
 20968
 ```
@@ -135,9 +170,7 @@ Start by cleaning up the text data. You'll need the tokenizer part of the proces
 >>> tokenizer = processor.tokenizer
 ```
 
-The dataset examples contain `raw_text` and `normalized_text` features. When deciding which feature to use as the text input,
-consider that the SpeechT5 tokenizer doesn't have any tokens for numbers. In `normalized_text` the numbers are written
-out as text. Thus, it is a better fit, and we recommend using    `normalized_text` as input text.
+The dataset examples contain a `text` feature with the transcription. Note that the SpeechT5 tokenizer doesn't have any tokens for numbers, so any numbers in the text will be converted to `<unk>` tokens. If your dataset contains numbers, consider normalizing them to their written form.
 
 Because SpeechT5 was trained on the English language, it may not recognize certain characters in the Dutch dataset. If
 left as is, these characters will be converted to `<unk>` tokens. However, in Dutch, certain characters like `à` are
@@ -151,7 +184,7 @@ the mapping function.
 
 ```py
 >>> def extract_all_chars(batch):
-...     all_text = " ".join(batch["normalized_text"])
+...     all_text = " ".join(batch["text"])
 ...     vocab = list(set(all_text))
 ...     return {"vocab": [vocab], "all_text": [all_text]}
 
@@ -195,7 +228,7 @@ valid tokens. Note that spaces are already replaced by `▁` in the tokenizer an
 
 >>> def cleanup_text(inputs):
 ...     for src, dst in replacements:
-...         inputs["normalized_text"] = inputs["normalized_text"].replace(src, dst)
+...         inputs["text"] = inputs["text"].replace(src, dst)
 ...     return inputs
 
 
@@ -319,7 +352,7 @@ It should also add the speaker embeddings as an additional input.
 ...     audio = example["audio"]
 
 ...     example = processor(
-...         text=example["normalized_text"],
+...         text=example["text"],
 ...         audio_target=audio["array"],
 ...         sampling_rate=audio["sampling_rate"],
 ...         return_attention_mask=False,
@@ -482,7 +515,7 @@ only look at the loss:
 ...     save_steps=1000,
 ...     eval_steps=1000,
 ...     logging_steps=25,
-...     report_to=["tensorboard"],
+...     report_to="trackio",
 ...     load_best_model_at_end=True,
 ...     greater_is_better=False,
 ...     label_names=["labels"],

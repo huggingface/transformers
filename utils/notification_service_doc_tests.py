@@ -75,8 +75,8 @@ class Message:
         time_spent = [r["time_spent"].split(", ")[0] for r in all_results if len(r["time_spent"])]
         total_secs = 0
 
-        for time in time_spent:
-            time_parts = time.split(":")
+        for timings in time_spent:
+            time_parts = timings.split(":")
 
             # Time can be formatted as xx:xx:xx, as .xx, or as x.xx if the time spent was less than a minute.
             if len(time_parts) == 1:
@@ -379,6 +379,6 @@ if __name__ == "__main__":
     with open("doc_test_results/doc_test_results.json", "w", encoding="UTF-8") as fp:
         json.dump(doc_test_results, fp, ensure_ascii=False, indent=4)
 
-    message = Message("🤗 Results of the doc tests.", doc_test_results)
+    message = Message("[INFO] Results of the doc tests.", doc_test_results)
     message.post()
     message.post_reply()

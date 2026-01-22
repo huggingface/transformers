@@ -27,7 +27,6 @@ from transformers.testing_utils import (
     Expectations,
     cleanup,
     require_deterministic_for_xpu,
-    require_read_token,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -232,7 +231,6 @@ class Mistral3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
 @slow
 @require_torch_accelerator
 class Mistral3IntegrationTest(unittest.TestCase):
-    @require_read_token
     def setUp(self):
         cleanup(torch_device, gc_collect=True)
         self.model_checkpoint = "mistralai/Mistral-Small-3.1-24B-Instruct-2503"
@@ -242,7 +240,6 @@ class Mistral3IntegrationTest(unittest.TestCase):
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
-    @require_read_token
     def test_mistral3_integration_generate_text_only(self):
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
         processor.chat_template = processor.chat_template.replace('strftime_now("%Y-%m-%d")', '"2025-06-20"')
@@ -274,7 +271,7 @@ class Mistral3IntegrationTest(unittest.TestCase):
         expected_output = expected_outputs.get_expectation()
         self.assertEqual(decoded_output, expected_output)
 
-    @require_read_token
+    @require_deterministic_for_xpu
     def test_mistral3_integration_generate(self):
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
         processor.chat_template = processor.chat_template.replace('strftime_now("%Y-%m-%d")', '"2025-06-20"')
@@ -299,7 +296,7 @@ class Mistral3IntegrationTest(unittest.TestCase):
 
         expected_outputs = Expectations(
             {
-                ("xpu", 3): "The image features two cats resting on a pink blanket. The cat on the left is a kitten",
+                ("xpu", 3): "The image features two tabby cats lying on a pink surface, which appears to be a cushion or",
                 ("cuda", 8): 'The image features two cats lying on a pink surface, which appears to be a couch or a bed',
                 ("rocm", (9, 4)): "The image features two cats lying on a pink surface, which appears to be a couch or a bed",
                 ("rocm", (9, 5)): "The image features two tabby cats lying on a pink surface, which appears to be a cushion or"
@@ -308,7 +305,6 @@ class Mistral3IntegrationTest(unittest.TestCase):
         expected_output = expected_outputs.get_expectation()
         self.assertEqual(decoded_output, expected_output)
 
-    @require_read_token
     @require_deterministic_for_xpu
     def test_mistral3_integration_batched_generate(self):
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
@@ -354,7 +350,8 @@ class Mistral3IntegrationTest(unittest.TestCase):
         expected_outputs = Expectations(
             {
                 ("xpu", 3): "Calm lake's mirror gleams,\nWhispering pines stand in silence,\nPath to peace begins.",
-                ("cuda", 8): "Wooden path to calm,\nReflections whisper secrets,\nNature's peace unfolds.",
+                ("cuda", (8, 0)): "Wooden path to calm,\nReflections whisper secrets,\nNature's peace unfolds.",
+                ("cuda", (8, 6)): "Calm waters reflect\nWooden path to distant shore\nSilence in the woods",
                 ("rocm", (9, 5)): "Calm waters reflect\nWooden path to distant shore\nSilence in the scene"
             }
         )  # fmt: skip
@@ -380,7 +377,6 @@ class Mistral3IntegrationTest(unittest.TestCase):
             f"Decoded output: {decoded_output}\nExpected output: {expected_output}",
         )
 
-    @require_read_token
     @require_deterministic_for_xpu
     def test_mistral3_integration_batched_generate_multi_image(self):
         processor = AutoProcessor.from_pretrained(self.model_checkpoint)
@@ -431,7 +427,8 @@ class Mistral3IntegrationTest(unittest.TestCase):
         decoded_output = processor.decode(gen_tokens[0], skip_special_tokens=True)
         expected_outputs = Expectations(
             {
-                ("cuda", 8): 'Calm waters reflect\nWooden path to distant shore\nSilence in the scene',
+                ("cuda", 8): "Calm waters reflect\nWooden path to distant shore\nPeace in nature's hold",
+                ("rocm", (9, 4)): "Calm waters reflect\nWooden path to distant shore\nSilence in the pines"
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
@@ -447,6 +444,7 @@ class Mistral3IntegrationTest(unittest.TestCase):
             {
                 ("xpu", 3): "Certainly! The images depict two iconic landmarks:\n\n1. The first image shows the Statue of Liberty in New York City.",
                 ("cuda", 8): 'Certainly! The images depict two famous landmarks in the United States:\n\n1. The first image shows the Statue of Liberty,',
+                ("rocm", (9, 4)): 'Certainly! The images depict two famous landmarks in the United States:\n\n1. The first image shows the Statue of Liberty,',
             }
         )  # fmt: skip
         expected_output = expected_outputs.get_expectation()
