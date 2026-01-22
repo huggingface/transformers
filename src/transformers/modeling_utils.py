@@ -1917,7 +1917,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         opening the file, but avoids maintaining yet another property flag.
         """
         class_file = sys.modules[cls.__module__].__file__
-        with open(class_file, "r") as f:
+        with open(class_file, "r", encoding="utf-8") as f:
             code = f.read()
         # heuristic -> if we find those patterns, the model uses the correct interface
         if re.search(r"class \w+Attention\(nn.Module\)", code):
