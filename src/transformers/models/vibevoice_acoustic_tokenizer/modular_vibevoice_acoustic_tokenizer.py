@@ -460,9 +460,7 @@ class VibeVoiceAcousticTokenizerModel(VibeVoiceAcousticTokenizerPreTrainedModel)
             Input latent representations to be sampled.
         """
         noise_std = self.config.vae_std * torch.randn(latents.shape[0], device=latents.device, dtype=latents.dtype)
-        while noise_std.dim() < latents.dim():
-            noise_std = noise_std.unsqueeze(-1)
-        latents = latents + noise_std * torch.randn_like(latents)
+        latents = latents + noise_std[:, None, None] * torch.randn_like(latents)
         return VibeVoiceAcousticTokenizerEncoderOutput(latents=latents)
 
     @can_return_tuple
