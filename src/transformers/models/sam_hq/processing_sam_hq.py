@@ -16,6 +16,7 @@ Processor class for SAMHQ.
 """
 
 from copy import deepcopy
+from typing import Union
 
 import numpy as np
 
@@ -28,9 +29,7 @@ from ...utils import auto_docstring, is_torch_available
 if is_torch_available():
     import torch
 
-NestedList = list[float | int | None | list[float | int | None]]
-NestedList2 = list[NestedList]
-NestedList3 = list[NestedList2]
+NestedList = list[Union[float | int | None, "NestedList"]]
 
 
 class SamHQImagesKwargs(ImagesKwargs, total=False):
@@ -63,9 +62,9 @@ class SamHQImagesKwargs(ImagesKwargs, total=False):
     """
 
     segmentation_maps: ImageInput | None
-    input_points: NestedList3 | NestedList2 | NestedList | torch.Tensor | None
-    input_labels: NestedList2 | NestedList | int | torch.Tensor | None
-    input_boxes: NestedList3 | NestedList2 | NestedList | torch.Tensor | None
+    input_points: NestedList | torch.Tensor | None
+    input_labels: NestedList | int | torch.Tensor | None
+    input_boxes: NestedList | torch.Tensor | None
     point_pad_value: int | None
     mask_size: dict[str, int]
     mask_pad_size: dict[str, int]
