@@ -188,6 +188,7 @@ class AyaVisionModel(AyaVisionPreTrainedModel):
         pixel_values: torch.FloatTensor,
         vision_feature_layer: int | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
+        output_hidden_states: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         vision_feature_layer = (
@@ -204,8 +205,12 @@ class AyaVisionModel(AyaVisionPreTrainedModel):
 
         kwargs = {k: v for k, v in kwargs.items() if v is not None}
         # this is not memory efficient at all (output_hidden_states=True) will save all the hidden states.
-        kwargs["output_hidden_states"] = True
-        image_outputs = self.vision_tower(pixel_values, return_dict=True, **kwargs)
+        image_outputs = self.vision_tower(
+            pixel_values,
+            output_hidden_states=True,  # Ignore arg on purpose
+            return_dict=True,
+            **kwargs,
+        )
 
         # If we have one vision feature layer, return the corresponding hidden states,
         # otherwise, select the hidden states of each feature layer and concatenate them

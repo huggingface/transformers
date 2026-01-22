@@ -157,6 +157,7 @@ class VipLlavaModel(VipLlavaPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         vision_feature_layers: int | list[int] | None = None,
+        output_hidden_states: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -169,8 +170,12 @@ class VipLlavaModel(VipLlavaPreTrainedModel):
         vision_feature_layers = (
             vision_feature_layers if vision_feature_layers is not None else self.config.vision_feature_layers
         )
-        kwargs["output_hidden_states"] = True
-        image_outputs = self.vision_tower(pixel_values, return_dict=True, **kwargs)
+        image_outputs = self.vision_tower(
+            pixel_values,
+            output_hidden_states=True,  # Ignore arg on purpose
+            return_dict=True,
+            **kwargs,
+        )
 
         # If multiple feature layers are provided (which is usually the case)
         # then the image features are concatenated after the CLS is removed.

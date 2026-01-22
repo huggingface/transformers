@@ -178,6 +178,7 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
         pixel_values_images: torch.FloatTensor,
         vision_feature_layer: int | list[int] | None = None,
         vision_feature_select_strategy: str | None = None,
+        output_hidden_states: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -203,8 +204,12 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
         if vision_feature_select_strategy not in ["default", "full"]:
             raise ValueError(f"Unexpected select feature strategy: {self.config.vision_feature_select_strategy}")
 
-        kwargs["output_hidden_states"] = True
-        image_outputs = self.image_tower(pixel_values_images, return_dict=True, **kwargs)
+        image_outputs = self.image_tower(
+            pixel_values_images,
+            output_hidden_states=True,  # Ignore arg on purpose
+            return_dict=True,
+            **kwargs,
+        )
 
         # If we have one vision feature layer, return the corresponding hidden states,
         # otherwise, select the hidden states of each feature layer and concatenate them
@@ -232,6 +237,7 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
         self,
         pixel_values_videos: torch.FloatTensor,
         vision_feature_layer: int | list[int] | None = None,
+        output_hidden_states: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
     ) -> tuple | BaseModelOutputWithPooling:
         r"""
@@ -249,8 +255,12 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
         batch_size_vid, num_frames, channels, height, width = pixel_values_videos.shape
 
         pixel_values = pixel_values_videos.reshape(batch_size_vid * num_frames, channels, height, width)
-        kwargs["output_hidden_states"] = True
-        video_outputs = self.video_tower(pixel_values, return_dict=True, **kwargs)
+        video_outputs = self.video_tower(
+            pixel_values,
+            output_hidden_states=True,  # Ignore arg on purpose
+            return_dict=True,
+            **kwargs,
+        )
 
         # If we have one vision feature layer, return the corresponding hidden states,
         # otherwise, select the hidden states of each feature layer and concatenate them
