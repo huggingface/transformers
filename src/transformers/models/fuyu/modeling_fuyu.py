@@ -286,13 +286,15 @@ class FuyuForCausalLM(FuyuPreTrainedModel, GenerationMixin):
         ```python
         >>> from transformers import FuyuProcessor, FuyuForCausalLM
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> processor = FuyuProcessor.from_pretrained("adept/fuyu-8b")
         >>> model = FuyuForCausalLM.from_pretrained("adept/fuyu-8b")
 
         >>> url = "https://huggingface.co/datasets/hf-internal-testing/fixtures-captioning/resolve/main/bus.png"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
         >>> prompt = "Generate a coco-style caption.\n"
 
         >>> inputs = processor(images=image, text=prompt, return_tensors="pt")

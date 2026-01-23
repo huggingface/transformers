@@ -1394,7 +1394,8 @@ class AriaForConditionalGeneration(LlavaForConditionalGeneration):
         Example:
 
         ```python
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> import torch
         >>> from PIL import Image
         >>> from io import BytesIO

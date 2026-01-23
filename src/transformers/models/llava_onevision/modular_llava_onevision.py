@@ -582,7 +582,8 @@ class LlavaOnevisionForConditionalGeneration(LlavaNextVideoForConditionalGenerat
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> import torch
         >>> from transformers import LlavaOnevisionProcessor, LlavaOnevisionForConditionalGeneration
 
@@ -600,9 +601,10 @@ class LlavaOnevisionForConditionalGeneration(LlavaNextVideoForConditionalGenerat
         ... ]
         >>> prompt = processor.apply_chat_template(conversation, add_generation_prompt=True)
 
-        >>> image_file = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> raw_image = Image.open(requests.get(image_file, stream=True).raw)
-        >>> inputs = processor(text=prompt, images=raw_image, return_tensors='pt').to(0, torch.float16)
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
+        >>> inputs = processor(text=prompt, images=image, return_tensors='pt').to(0, torch.float16)
 
         >>> output = model.generate(**inputs, max_new_tokens=20, do_sample=False)
         >>> processor.batch_decode(output, skip_special_tokens=True)[0]

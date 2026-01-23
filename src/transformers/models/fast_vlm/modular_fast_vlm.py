@@ -304,7 +304,8 @@ class FastVlmForConditionalGeneration(LlavaForConditionalGeneration):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, AutoModelForImageTextToText
         >>> import torch
 
@@ -325,7 +326,8 @@ class FastVlmForConditionalGeneration(LlavaForConditionalGeneration):
 
         >>> prompt = processor.apply_chat_template(conversation, add_generation_prompt=True)
         >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> inputs = processor(images=image, text=prompt, return_tensors="pt").to(device)
 

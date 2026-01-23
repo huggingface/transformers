@@ -755,7 +755,8 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> import av
         >>> from transformers import AutoProcessor, LlavaNextVideoForConditionalGeneration
 
@@ -795,7 +796,8 @@ class LlavaNextVideoForConditionalGeneration(LlavaNextVideoPreTrainedModel, Gene
         >>> # load an image to generate from an image
         >>> prompt = "USER:<image>\nWhat is shown in this image? ASSISTANT:"
         >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
         >>> inputs_image = processor(text=prompt, images=image, return_tensors="pt").to(model.device)
 
         >>> # Generate from video

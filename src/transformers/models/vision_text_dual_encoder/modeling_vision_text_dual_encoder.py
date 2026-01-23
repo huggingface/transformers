@@ -190,7 +190,8 @@ class VisionTextDualEncoderModel(PreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import (
         ...     VisionTextDualEncoderModel,
         ...     VisionTextDualEncoderProcessor,
@@ -210,7 +211,14 @@ class VisionTextDualEncoderModel(PreTrainedModel):
         ...     "http://images.cocodataset.org/val2017/000000039769.jpg",
         ...     "https://farm3.staticflickr.com/2674/5850229113_4fe05d5265_z.jpg",
         ... ]
-        >>> images = [Image.open(requests.get(url, stream=True).raw) for url in urls]
+        >>> with httpx.stream("GET", urls[0]) as response:
+        ...     image1 = Image.open(BytesIO(response.read()))
+
+        >>> with httpx.stream("GET", urls[1]) as response:
+        ...     image2 = Image.open(BytesIO(response.read()))
+
+        >>> images = [image1, image2]
+
         >>> inputs = processor(
         ...     text=["a photo of a cat", "a photo of a dog"], images=images, return_tensors="pt", padding=True
         ... )
