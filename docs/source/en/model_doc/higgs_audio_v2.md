@@ -163,7 +163,7 @@ inputs = processor.apply_chat_template(
     return_tensors="pt"
 ).to(model.device)
 
-outputs = model.generate(**inputs, max_new_tokens=1000, do_sample=False)
+outputs = model.generate(**inputs, max_new_tokens=50, do_sample=False)
 decoded = processor.batch_decode(outputs)
 processor.save_audio(decoded, "output_multi_speaker_smart_voice.wav")
 ```
