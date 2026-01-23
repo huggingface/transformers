@@ -498,11 +498,11 @@ class VibeVoiceAcousticTokenizerDecoder(nn.Module):
             out_channels=config.channels,
             kernel_size=config.kernel_size,
             bias=config.bias,
-            layer_idx=sum(depth + 1 for depth in config.depths),
+            layer_idx=sum(depth + 1 for depth in config.decoder_depths),
         )
 
         # Parameters for cache creation
-        self.num_conv_layers = sum(depth + 1 for depth in config.depths) + 1
+        self.num_conv_layers = sum(depth + 1 for depth in config.decoder_depths) + 1
         self.per_conv_layer_padding = [self.stem.conv.causal_padding]
         self.per_conv_layer_in_channels = [self.stem.conv.conv.in_channels]
         self.per_conv_layer_padding.extend([block.mixer.causal_padding for block in self.stem.stage])
