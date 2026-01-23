@@ -991,7 +991,7 @@ def convert_and_load_state_dict_in_model(
             WeightConverter(
                 source_patterns=["qkv"],
                 target_patterns=["q", "k","v"],
-                operations=[Chunk(dim=0, chunks=3)]),
+                operations=[Chunk(dim=0)]),
                 collected_tensors={
                     "qkv": [Future]},
                 layer_targets={

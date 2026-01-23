@@ -271,6 +271,52 @@ def _build_checkpoint_conversion_mapping():
     mapping["qwen3_next"] = mapping["qwen2_moe"].copy()
     mapping["hunyuan_v1_moe"] = mapping["qwen2_moe"].copy()
     mapping["minimax"] = mapping["mixtral"].copy()
+    mapping["deepseek_ocr"] = [
+        WeightRenaming(r"\\\.", "."),  # for renaming issues... namely too many escapes
+        WeightRenaming(r"^model\.model\.", "model."),
+        WeightRenaming(r"^model\.sam_model\.blocks\.", "sam_model.layers."),
+        WeightRenaming(r"^sam_model\.blocks\.", "sam_model.layers."),
+        WeightRenaming(r"^model\.sam_model\.blocks\..*\.norm1\.", "sam_model.layers.layer_norm1."),
+        WeightRenaming(r"^sam_model\.blocks\..*\.norm1\.", "sam_model.layers.layer_norm1."),
+        WeightRenaming(r"^model\.sam_model\.blocks\..*\.norm2\.", "sam_model.layers.layer_norm2."),
+        WeightRenaming(r"^sam_model\.blocks\..*\.norm2\.", "sam_model.layers.layer_norm2."),
+        WeightRenaming(r"^sam_model\.layers\.(\d+)\.norm1\.", r"model.sam_model.layers.\1.layer_norm1."),
+        WeightRenaming(r"^sam_model\.layers\.(\d+)\.norm2\.", r"model.sam_model.layers.\1.layer_norm2."),
+        WeightRenaming(r"^model\.sam_model\.patch_embed\.proj\.", "sam_model.patch_embed.projection."),
+        WeightRenaming(r"^sam_model\.patch_embed\.proj\.", "sam_model.patch_embed.projection."),
+        # vision stuff
+        WeightRenaming(r"^model\.sam_model\.neck\.0\.", "sam_model.neck.conv1."),
+        WeightRenaming(r"^sam_model\.neck\.0\.", "sam_model.neck.conv1."),
+        WeightRenaming(r"^model\.sam_model\.neck\.1\.", "sam_model.neck.layer_norm1."),
+        WeightRenaming(r"^sam_model\.neck\.1\.", "sam_model.neck.layer_norm1."),
+        WeightRenaming(r"^model\.sam_model\.neck\.2\.", "sam_model.neck.conv2."),
+        WeightRenaming(r"^sam_model\.neck\.2\.", "sam_model.neck.conv2."),
+        WeightRenaming(r"^model\.sam_model\.neck\.3\.", "sam_model.neck.layer_norm2."),
+        WeightRenaming(r"^sam_model\.neck\.3\.", "sam_model.neck.layer_norm2."),
+        WeightRenaming(r"^model\.vision_model\.transformer\.layers\.", "clip_model.vision_model.encoder.layers."),
+        WeightRenaming(r"^vision_model\.transformer\.layers\.", "clip_model.vision_model.encoder.layers."),
+        WeightRenaming(r"^model\.vision_model\.embeddings\.", "clip_model.vision_model.embeddings."),
+        WeightRenaming(r"^vision_model\.embeddings\.", "clip_model.vision_model.embeddings."),
+        WeightRenaming(r"^model\.vision_model\.pre_layrnorm\.", "clip_model.vision_model.pre_layrnorm."),
+        WeightRenaming(r"^vision_model\.pre_layrnorm\.", "clip_model.vision_model.pre_layrnorm."),
+        WeightRenaming(r"^model\.vision_model\.", "clip_model.vision_model."),
+        WeightRenaming(r"^vision_model\.", "clip_model.vision_model."),
+        WeightRenaming(r"^model\.projector\.", "multi_modal_projector."),
+        WeightRenaming(r"^projector\.", "multi_modal_projector."),
+        # embeddings,layers, experts
+        WeightRenaming(r"^model\.embed_tokens\.", "language_model.embed_tokens."),
+        WeightRenaming(r"^embed_tokens\.", "language_model.embed_tokens."),
+        WeightRenaming(r"^model\.norm\.", "language_model.norm."),
+        WeightRenaming(r"^norm\.", "language_model.norm."),
+        WeightRenaming(r"^model\.layers\.", "language_model.layers."),
+        WeightRenaming(r"^layers\.", "language_model.layers."),
+        WeightConverter(
+            source_patterns="qkv_proj",
+            target_patterns=["q_proj", "k_proj", "v_proj"],
+            operations=[Chunk(dim=0)],
+        ),
+    ]
+    mapping["deepseek_vl_v2"] = mapping["deepseek_ocr"].copy()
     mapping["minimax_m2"] = mapping["mixtral"].copy()
     mapping["minimax_m2"] += [
         WeightRenaming(".block_sparse_moe.e_score_correction_bias", ".mlp.e_score_correction_bias"),
@@ -307,6 +353,7 @@ VLMS = [
     "aria",
     "ayavision",
     "colpali",
+    "deepseek_ocr",
     "emu3",
     "fuyu",
     "gotocr2",

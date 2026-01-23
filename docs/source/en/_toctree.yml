@@ -1061,6 +1061,8 @@
         title: ColQwen2
       - local: model_doc/data2vec
         title: Data2Vec
+      - local: model_doc/deepseek_ocr
+        title: DeepSeekOCR
       - local: model_doc/deepseek_vl
         title: DeepseekVL
       - local: model_doc/deepseek_vl_hybrid

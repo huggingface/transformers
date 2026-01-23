@@ -62,8 +62,10 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("cohere2_vision", "Cohere2VisionProcessor"),
         ("colpali", "ColPaliProcessor"),
         ("colqwen2", "ColQwen2Processor"),
+        ("deepseek_ocr", "DeepseekOcrProcessor"),
         ("deepseek_vl", "DeepseekVLProcessor"),
         ("deepseek_vl_hybrid", "DeepseekVLHybridProcessor"),
+        ("deepseek_vl_v2", "DeepseekOcrProcessor"),
         ("dia", "DiaProcessor"),
         ("edgetam", "Sam2Processor"),
         ("emu3", "Emu3Processor"),
@@ -165,7 +167,6 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("xclip", "XCLIPProcessor"),
     ]
 )
-
 PROCESSOR_MAPPING = _LazyAutoMapping(CONFIG_MAPPING_NAMES, PROCESSOR_MAPPING_NAMES)
 
 
@@ -371,6 +372,15 @@ class AutoProcessor:
 
         if processor_class is not None:
             processor_class = processor_class_from_name(processor_class)
+            if processor_class is None and not isinstance(config, PreTrainedConfig):
+                # If the recorded processor class cannot be resolved locally, fall back to the config
+                # to let PROCESSOR_MAPPING pick the right class (e.g. hub mislabels).
+                try:
+                    config = AutoConfig.from_pretrained(
+                        pretrained_model_name_or_path, trust_remote_code=trust_remote_code, **kwargs
+                    )
+                except Exception:
+                    config = None
 
         has_remote_code = processor_auto_map is not None
         has_local_code = processor_class is not None or type(config) in PROCESSOR_MAPPING

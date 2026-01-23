@@ -106,10 +106,12 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("deberta", "DebertaConfig"),
         ("deberta-v2", "DebertaV2Config"),
         ("decision_transformer", "DecisionTransformerConfig"),
+        ("deepseek_ocr", "DeepseekOcrConfig"),
         ("deepseek_v2", "DeepseekV2Config"),
         ("deepseek_v3", "DeepseekV3Config"),
         ("deepseek_vl", "DeepseekVLConfig"),
         ("deepseek_vl_hybrid", "DeepseekVLHybridConfig"),
+        ("deepseek_vl_v2", "DeepseekOcrConfig"),
         ("deformable_detr", "DeformableDetrConfig"),
         ("deit", "DeiTConfig"),
         ("depth_anything", "DepthAnythingConfig"),
@@ -563,10 +565,12 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("deberta", "DeBERTa"),
         ("deberta-v2", "DeBERTa-v2"),
         ("decision_transformer", "Decision Transformer"),
+        ("deepseek_ocr", "DeepSeek-OCR"),
         ("deepseek_v2", "DeepSeek-V2"),
         ("deepseek_v3", "DeepSeek-V3"),
         ("deepseek_vl", "DeepseekVL"),
         ("deepseek_vl_hybrid", "DeepseekVLHybrid"),
+        ("deepseek_vl_v2", "DeepSeek-OCR"),
         ("deformable_detr", "Deformable DETR"),
         ("deit", "DeiT"),
         ("deplot", "DePlot"),
@@ -1034,6 +1038,12 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("parakeet_encoder", "parakeet"),
         ("lw_detr_vit", "lw_detr"),
         ("parakeet_ctc", "parakeet"),
+        # hacky hacky again. These mappings need to exist somewhere else
+        # also this exposes us more to supply chain attacks
+        # it blurs a bit the line between remote code and distant
+        # (also we always use the code in transformers)
+        # ideas welcome
+        ("deepseek_vl_v2", "deepseek_ocr"),
         ("lasr_encoder", "lasr"),
         ("lasr_ctc", "lasr"),
         ("wav2vec2-bert", "wav2vec2_bert"),
