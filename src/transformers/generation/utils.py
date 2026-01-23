@@ -2198,6 +2198,8 @@ class GenerationMixin(ContinuousMixin):
     @contextmanager
     def _optimize_model_for_decode(self):
         original_experts_implementation = self.config._experts_implementation
+        # On non-CPU devices, 'batched_mm' can trade off a bit of memory (by duplicating selected experts weights)
+        # for much better speed during decoding, especially for smaller inputs. On CPU, grouped_mm is usually better.
         if original_experts_implementation == "grouped_mm" and self.device.type != "cpu":
             logger.info_once(
                 "We will be switching to 'batched_mm' for the decoding stage as it is much more performant than 'grouped_mm' on smaller inputs. "

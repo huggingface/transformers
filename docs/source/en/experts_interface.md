@@ -19,13 +19,20 @@ All Mixture-of-Experts (MoE) implementations perform the same high-level computa
 
 The [`ExpertsInterface`] provides optimized experts backends. It decouples the experts implementation from the model code to simplify experimentation with different functions. Add new backends through the same interface.
 
-| experts backend | description                                                                                                                                  |
-| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| `"eager"`       | Reference implementation that loops over active experts and applies projections per-expert.                                                  |
-| `"batched_mm"`  | Uses [torch.bmm](https://docs.pytorch.org/docs/stable/generated/torch.bmm.html) to compute per-(token, expert) projections in a batched way. |
-| `"grouped_mm"`  | Uses `torch._grouped_mm` to group tokens by expert and run grouped GEMMs (requires PyTorch 2.9+).                                            |
+| experts backend | description                                                                                                                             |
+| --------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| `"eager"`       | Reference implementation that loops over selected experts and applies projections on their tokens.                                      |
+| `"batched_mm"`  | Duplicates selected expert parameters for each token and projects all tokens in a single batched GEMM using `torch.bmm`.                |
+| `"grouped_mm"`  | Orders tokens by selected experts and uses `torch._grouped_mm` to project all tokens in a single grouped GEMMF (Requires PyTorch 2.9+). |
 
-`batched_mm` is fastest for very small inputs and compilation speeds it up further. `grouped_mm` performs best for larger inputs.
+On GPU:
+
+- `batched_mm` is fastest for very small inputs and compilation speeds it up further. `grouped_mm` performs.
+- `grouped_mm` is best for larger inputs and is more memory efficient as it avoids duplicating expert parameters for each token.
+
+On CPU:
+
+- `grouped_mm` is the most efficient backend for most input sizes.
 
 ## Set an experts backend
 
