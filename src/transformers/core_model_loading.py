@@ -472,6 +472,42 @@ class ErnieSplitAndDecoupleTextVisionExperts(ConversionOps):
         return ErnieFuseAndSplitTextVisionExperts(stack_dim=self.stack_dim, concat_dim=self.concat_dim)
 
 
+class Force16BytesAlignment(ConversionOps):
+    """
+    Ensures that the given tensor is 16-bytes aligned in memory and clones it if not.
+    This garantees 16-bytes alignmenet for kernels / implementations that use TMA or SIMD instructions like torch._grouped_mm.
+    """
+
+    @torch.no_grad()
+    def convert(
+        self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str], **kwargs
+    ) -> dict[str, torch.Tensor]:
+        target_pattern = self.get_target_pattern(input_dict, source_patterns, target_patterns)
+        tensors = next(iter(input_dict.values()))
+        tensor = tensors[0] if isinstance(tensors, list) else tensors
+        tensor = tensor.clone() if tensor.data_ptr() % 16 != 0 else tensor
+        return {target_pattern: tensor}
+
+    def get_target_pattern(
+        self, input_dict: dict[str, torch.Tensor], source_patterns: list[str], target_patterns: list[str]
+    ) -> str:
+        if len(input_dict) != 1:
+            raise ValueError("Undefined Operation encountered!")
+        # Here it's the first operation of a chain, so return the source
+        if len(target_patterns) > 1:
+            if len(source_patterns) == 1:
+                return source_patterns[0]
+            else:
+                raise ValueError("Undefined Operation encountered!")
+        # Here it's the only operation, or the last operation in a chain, so we return the target
+        else:
+            return target_patterns[0]
+
+    @property
+    def reverse_op(self) -> ConversionOps:
+        return Force16BytesAlignment()
+
+
 @dataclass(slots=True)
 class WeightTransform:
     source_patterns: str | list[str] = field(init=True)
