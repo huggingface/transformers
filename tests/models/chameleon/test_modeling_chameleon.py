@@ -382,7 +382,7 @@ class ChameleonIntegrationTest(unittest.TestCase):
         )
         prompt = "<image>Describe what do you see here and tell me about the history behind it?"
 
-        inputs = processor(images=image, text=prompt, return_tensors="pt").to(model.device, torch.float16)
+        inputs = processor(images=image, text=prompt, return_tensors="pt").to(model.device, torch.bfloat16)
 
         # greedy generation outputs
         EXPECTED_TEXT_COMPLETIONS = Expectations(
@@ -418,7 +418,7 @@ class ChameleonIntegrationTest(unittest.TestCase):
         ]
 
         inputs = processor(images=[image, image_2], text=prompts, padding=True, return_tensors="pt").to(
-            model.device, torch.float16
+            model.device, torch.bfloat16
         )
 
         # greedy generation outputs
@@ -460,7 +460,7 @@ class ChameleonIntegrationTest(unittest.TestCase):
         )
         prompt = "What do these two images have in common?<image><image>"
 
-        inputs = processor(images=[image, image_2], text=prompt, return_tensors="pt").to(model.device, torch.float16)
+        inputs = processor(images=[image, image_2], text=prompt, return_tensors="pt").to(model.device, torch.bfloat16)
 
         # greedy generation outputs
         EXPECTED_TEXT_COMPLETION = ['What do these two images have in common?The two images show a connection between the night sky and the internet. The first image shows a starry night sky, with the stars arranged in a pattern that resembles the structure of the internet. The']  # fmt: skip
