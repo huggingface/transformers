@@ -71,7 +71,6 @@ inputs = feature_extractor(
     sampling_rate=sampling_rate,
     padding=True,
     pad_to_multiple_of=3200,
-    return_tensors="pt",
 ).to(model.device, model.dtype)
 print("Input audio shape:", inputs.input_values.shape)
 # Input audio shape: torch.Size([1, 1, 224000])

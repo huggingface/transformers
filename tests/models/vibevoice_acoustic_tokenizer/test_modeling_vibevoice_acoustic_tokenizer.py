@@ -330,7 +330,7 @@ class VibeVoiceAcousticTokenizerIntegrationTest(unittest.TestCase):
             dtype=dtype,
             device_map=torch_device,
         ).eval()
-        processed_audio = feature_extractor(audio_arrays, return_tensors="pt", sampling_rate=self.sampling_rate).to(
+        processed_audio = feature_extractor(audio_arrays, sampling_rate=self.sampling_rate).to(
             torch_device, dtype=dtype
         )
         with torch.no_grad():
