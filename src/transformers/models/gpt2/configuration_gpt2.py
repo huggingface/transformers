@@ -138,7 +138,7 @@ class GPT2Config(PreTrainedConfig):
         n_layer=12,
         n_head=12,
         n_inner=None,
-        activation_function="gelu_new",
+        activation_function="gelu",
         resid_pdrop=0.1,
         embd_pdrop=0.1,
         attn_pdrop=0.1,
