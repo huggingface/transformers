@@ -162,8 +162,8 @@
   - local: in_translation
     title: (번역중) Overview
   - local: in_translation
-    title: (번역중) Selecting a quantization method
-  - local: in_translation
+    title: Selecting a quantization method
+  - local: quantization/selecting
     title: (번역중) Quantization concepts
   - local: in_translation
     title: (번역중) AQLM
