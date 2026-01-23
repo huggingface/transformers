@@ -307,9 +307,9 @@ def _apply_weight_conversions_to_state_dict(model, state_dict, weight_mapping):
             tp_size = max(tp_size, inference_config.get("tensor_parallel", {}).get("tp_size", 1))
         if tp_size > 1:
             raise NotImplementedError(
-                "Weight conversions (e.g., MoE expert fusion) have not been tested with "
-                "DeepSpeed Tensor Parallelism enabled. Please disable tensor_parallel in your "
-                "DeepSpeed config or convert your checkpoint to the expected format first."
+                "Weight conversions (e.g., MoE expert fusion) with DeepSpeed Tensor Parallelism "
+                "are not yet implemented but support is coming soon. Please disable tensor_parallel "
+                "in your DeepSpeed config or convert your checkpoint to the expected format first."
             )
 
     from ..core_model_loading import WeightConverter, WeightRenaming, dot_natural_key, rename_source_key
