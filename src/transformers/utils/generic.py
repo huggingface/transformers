@@ -33,9 +33,7 @@ from ..utils import logging
 from .import_utils import is_mlx_available, is_torch_available, is_torch_fx_proxy, requires
 
 
-# See https://docs.python.org/3/library/typing.html#typing.ParamSpec for documentation on how ParamSpec
-# should be used alongside TypeVar and ParamSpecArgs (P.args) and ParamSpecKwargs (P.kwargs) for type
-# hinting decorators.
+# Used to type hint decorators that modify the signature of the decorated function
 P = ParamSpec("P")
 T = TypeVar("T")
 
@@ -824,6 +822,8 @@ def del_attribute_from_modules(module: "torch.nn.Module", key: str):
         del_attribute_from_modules(submodule, key)
 
 
+# We follow the example from https://docs.python.org/3/library/typing.html#typing.ParamSpec to type-hint
+# this decorator, allowing it to add 'tuple' to the signature of the decorated function.
 def can_return_tuple(func: Callable[P, T]) -> Callable[P, tuple | T]:
     """
     Decorator to wrap model method, to call output.to_tuple() if return_dict=False passed as a kwarg or
@@ -870,6 +870,8 @@ class OutputRecorder:
     class_name: str | None = None
 
 
+# We follow the example from https://docs.python.org/3/library/typing.html#typing.ParamSpec to type-hint
+# this decorator, allowing it to add 'tuple' to the signature of the decorated function.
 def check_model_inputs(
     func: Callable[P, T] | None = None, *, tie_last_hidden_states: bool = True
 ) -> Callable[P, tuple | T]:
