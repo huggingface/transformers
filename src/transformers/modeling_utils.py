@@ -719,7 +719,7 @@ def _get_resolved_checkpoint_files(
             except Exception as e:
                 # For any other exception, we throw a generic error.
                 raise OSError(
-                    f"Can't load the model for '{pretrained_model_name_or_path}' (with filename {resolved_archive_file}). If you were trying to load it"
+                    f"Can't load the model for '{pretrained_model_name_or_path}'. If you were trying to load it"
                     " from 'https://huggingface.co/models', make sure you don't have a local directory with the"
                     f" same name. Otherwise, make sure '{pretrained_model_name_or_path}' is the correct path to a"
                     f" directory containing a file named {_add_variant(WEIGHTS_NAME, variant)}."
