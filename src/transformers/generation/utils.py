@@ -2496,6 +2496,20 @@ class GenerationMixin(ContinuousMixin):
         self._validate_model_kwargs(model_kwargs.copy())
         self._validate_generation_mode(generation_mode, generation_config, generation_mode_kwargs)
 
+        # Configure assistant model's generation_config with user parameters
+        if assistant_model is not None:
+            # The assistant model inherits ALL generation parameters from the main generate() call, including:
+            #   - Assistant-specific parameters (num_assistant_tokens, assistant_confidence_threshold, etc.)
+            #   - General generation parameters (do_sample, max_new_tokens, temperature, etc.)
+            # This ensures consistent behavior between main and assistant models. In the future,
+            # assistant-specific overrides could be added (e.g., assistant_do_sample) to allow
+            # different generation strategies for draft vs target models while maintaining the
+            # inheritance-by-default behavior.
+            assistant_generation_config, _ = assistant_model._prepare_generation_config(
+                assistant_model.generation_config, use_model_defaults, **kwargs
+            )
+            assistant_model.generation_config = assistant_generation_config
+
         # Deprecation-related step: set Hub repo for deprecated strategies.
         # NOTE: This must come after initializing generation_config, since we need it to determine if this is a deprecated mode.
         # It must also be before any preparation steps, since Hub repos expect to be loaded before preparation steps.

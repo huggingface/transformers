@@ -3490,6 +3490,41 @@ class GenerationIntegrationTests(unittest.TestCase):
         # update_candidate_strategy is called only once and therefore, assistant_model.generation_config.num_assistant_tokens should be either 4 or 7
         self.assertTrue(assistant_model.generation_config.num_assistant_tokens in (4, 7))
 
+    def test_assisted_decoding_parameter_inheritance(self):
+        # This test ensures that assistant models inherit generation parameters from the main generate() call.
+        # Before the fix, assistant models would use their default values instead of user-specified values.
+
+        prompt = "Alice and Bob"
+        checkpoint = "EleutherAI/pythia-160m-deduped"
+        tokenizer = AutoTokenizer.from_pretrained(checkpoint)
+        inputs = tokenizer(prompt, return_tensors="pt")
+
+        model = AutoModelForCausalLM.from_pretrained(checkpoint)
+        assistant_model = AutoModelForCausalLM.from_pretrained(checkpoint)
+
+        # Check assistant model defaults
+        self.assertEqual(assistant_model.generation_config.num_assistant_tokens, 20)
+        self.assertEqual(assistant_model.generation_config.assistant_confidence_threshold, 0.4)
+        self.assertEqual(assistant_model.generation_config.do_sample, False)
+
+        # Generate with user-specified values that differ from assistant defaults
+        generation_kwargs = {
+            "eos_token_id": -1,
+            "max_new_tokens": 5,
+            "assistant_model": assistant_model,
+            "do_sample": True,
+            "num_assistant_tokens": 7,
+            "assistant_confidence_threshold": 0.8,
+        }
+
+        model.generate(**inputs, **generation_kwargs)
+
+        # After generation, assistant model should have the user-specified values, not its defaults
+        # Inheritance applies to all main model parameters, not just ones that have "assistant" slots
+        self.assertEqual(assistant_model.generation_config.num_assistant_tokens, 7)
+        self.assertEqual(assistant_model.generation_config.assistant_confidence_threshold, 0.8)
+        self.assertEqual(assistant_model.generation_config.do_sample, True)
+
     def test_assisted_decoding_num_assistant_tokens_heuristic_transient_schedule(self):
         # This test ensures that the assisted generation num_assistant_tokens 'heuristic' schedule works properly.
 
