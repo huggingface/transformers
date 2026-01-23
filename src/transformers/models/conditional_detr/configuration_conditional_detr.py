@@ -202,8 +202,6 @@ class ConditionalDetrConfig(PreTrainedConfig):
                 backbone_model_type = backbone_config.get("model_type")
                 config_class = CONFIG_MAPPING[backbone_model_type]
                 backbone_config = config_class.from_dict(backbone_config)
-            # set timm attributes to None
-            dilation = None
 
         self.backbone_config = backbone_config
         self.num_channels = num_channels
@@ -227,7 +225,6 @@ class ConditionalDetrConfig(PreTrainedConfig):
         self.auxiliary_loss = auxiliary_loss
         self.position_embedding_type = position_embedding_type
         self.backbone = backbone
-        self.dilation = dilation
         # Hungarian matcher
         self.class_cost = class_cost
         self.bbox_cost = bbox_cost

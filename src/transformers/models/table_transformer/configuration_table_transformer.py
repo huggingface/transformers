@@ -171,6 +171,8 @@ class TableTransformerConfig(PreTrainedConfig):
         # Backwards compatibility, pop attributes and infer backbone config
         use_timm_backbone = kwargs.pop("use_timm_backbone", True)
         backbone_kwargs = kwargs.pop("backbone_kwargs", {})
+        kwargs.pop("use_pretrained_backbone", None)
+
         if use_timm_backbone and backbone is not None:
             # Default to values which were hard-coded in `modeling`
             backbone_config = CONFIG_MAPPING["timm_backbone"](
@@ -200,8 +202,6 @@ class TableTransformerConfig(PreTrainedConfig):
                 backbone_model_type = backbone_config.get("model_type")
                 config_class = CONFIG_MAPPING[backbone_model_type]
                 backbone_config = config_class.from_dict(backbone_config)
-            # set timm attributes to None
-            dilation = None
 
         self.backbone_config = backbone_config
         self.num_channels = num_channels
@@ -225,7 +225,6 @@ class TableTransformerConfig(PreTrainedConfig):
         self.auxiliary_loss = auxiliary_loss
         self.position_embedding_type = position_embedding_type
         self.backbone = backbone
-        self.dilation = dilation
         # Hungarian matcher
         self.class_cost = class_cost
         self.bbox_cost = bbox_cost
