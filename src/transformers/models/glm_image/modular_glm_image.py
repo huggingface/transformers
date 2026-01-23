@@ -1378,12 +1378,6 @@ class GlmImageProcessor(ProcessorMixin):
             **kwargs,
         )
 
-        # For generation tasks, we need left padding so that generated tokens are appended at the end
-        # Save original padding_side and restore after tokenization
-        original_padding_side = self.tokenizer.padding_side
-        if output_kwargs["text_kwargs"].get("padding", False):
-            self.tokenizer.padding_side = "left"
-
         target_h = output_kwargs["images_kwargs"].pop("target_h", None)
         target_w = output_kwargs["images_kwargs"].pop("target_w", None)
         is_text_to_image = images is None
@@ -1452,9 +1446,6 @@ class GlmImageProcessor(ProcessorMixin):
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
         text_inputs = self.tokenizer(text, **output_kwargs["text_kwargs"])
-
-        # Restore original padding_side
-        self.tokenizer.padding_side = original_padding_side
 
         self._check_special_mm_tokens(text, text_inputs, modalities=["image"])
 
