@@ -35,7 +35,6 @@ from ...utils import (
     TransformersKwargs,
     auto_docstring,
     can_return_tuple,
-    filter_out_non_signature_kwargs,
     torch_int,
 )
 from ...utils.generic import check_model_inputs, is_flash_attention_requested
@@ -621,10 +620,6 @@ class SiglipTextModel(SiglipPreTrainedModel):
 
 class SiglipVisionTransformer(SiglipPreTrainedModel):
     _input_embed_layer = "patch_embedding"
-    _can_record_outputs = {
-        "hidden_states": SiglipEncoderLayer,
-        "attentions": SiglipAttention,
-    }
 
     def __init__(self, config: SiglipVisionConfig):
         super().__init__(config)
@@ -640,7 +635,6 @@ class SiglipVisionTransformer(SiglipPreTrainedModel):
 
         self.post_init()
 
-    @check_model_inputs(tie_last_hidden_states=False)
     @auto_docstring
     def forward(
         self,
@@ -789,19 +783,16 @@ class SiglipModel(SiglipPreTrainedModel):
     def set_input_embeddings(self, value: nn.Module):
         self.text_model.embeddings.token_embedding = value
 
-    @filter_out_non_signature_kwargs()
+    @can_return_tuple
     @auto_docstring
     def get_text_features(
         self,
         input_ids: torch.Tensor,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.Tensor | None = None,
-    ) -> torch.FloatTensor:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        Returns:
-            text_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The text embeddings obtained by
-            applying the projection layer to the pooled output of [`SiglipTextModel`].
-
         Examples:
 
         ```python
@@ -816,28 +807,22 @@ class SiglipModel(SiglipPreTrainedModel):
         >>> with torch.no_grad():
         ...     text_features = model.get_text_features(**inputs)
         ```"""
-        text_outputs: BaseModelOutputWithPooling = self.text_model(
+        return self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
+            **kwargs,
         )
-        pooled_output = text_outputs.pooler_output
 
-        return pooled_output
-
-    @filter_out_non_signature_kwargs()
+    @can_return_tuple
     @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.FloatTensor:
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        Returns:
-            image_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
-            applying the projection layer to the pooled output of [`SiglipVisionModel`].
-
         Examples:
 
         ```python
@@ -856,14 +841,11 @@ class SiglipModel(SiglipPreTrainedModel):
         >>> with torch.no_grad():
         ...     image_features = model.get_image_features(**inputs)
         ```"""
-        vision_outputs: BaseModelOutputWithPooling = self.vision_model(
+        return self.vision_model(
             pixel_values=pixel_values,
             interpolate_pos_encoding=interpolate_pos_encoding,
             **kwargs,
         )
-        pooled_output = vision_outputs.pooler_output
-
-        return pooled_output
 
     # NOTE: SiglipModel uses Pretrained backbones, so we don't need to add `check_model_inputs` here
     @can_return_tuple

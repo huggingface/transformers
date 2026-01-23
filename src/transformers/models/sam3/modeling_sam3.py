@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 import math
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
@@ -32,12 +31,13 @@ from ...masking_utils import create_bidirectional_mask
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
+    BaseModelOutputWithPooling,
     ModelOutput,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import compile_compatible_method_lru_cache
-from ...utils import auto_docstring, logging
+from ...utils import auto_docstring, can_return_tuple, logging
 from ...utils.generic import TransformersKwargs, check_model_inputs, is_flash_attention_requested
 from ..auto import AutoModel
 from .configuration_sam3 import (
@@ -56,23 +56,16 @@ logger = logging.get_logger(__name__)
 
 @dataclass
 @auto_docstring
-class Sam3VisionEncoderOutput(ModelOutput):
+class Sam3VisionEncoderOutput(BaseModelOutputWithPooling):
     r"""
     fpn_hidden_states (`tuple[torch.FloatTensor]`):
         Tuple of multi-level FPN feature maps.
     fpn_position_encoding (`tuple[torch.FloatTensor]`):
         Tuple of position encodings for each FPN level.
-    hidden_states (`tuple[torch.FloatTensor]`, *optional*):
-        Tuple of hidden states from all ViT layers.
-    attentions (`tuple[torch.FloatTensor]`, *optional*):
-        Tuple of attention weights from all ViT layers.
     """
 
-    last_hidden_state: torch.FloatTensor = None
     fpn_hidden_states: tuple[torch.FloatTensor, ...] = None
     fpn_position_encoding: tuple[torch.FloatTensor, ...] = None
-    hidden_states: tuple[torch.FloatTensor] | None = None
-    attentions: tuple[torch.FloatTensor] | None = None
 
 
 @dataclass
@@ -1406,7 +1399,7 @@ class Sam3DetrEncoder(Sam3PreTrainedModel):
         text_mask: torch.Tensor | None = None,
         spatial_sizes: list[tuple[int, int]] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> tuple | Sam3DETREncoderOutput:
         """
         Forward pass for the DETR encoder.
 
@@ -1701,7 +1694,7 @@ class Sam3DetrDecoder(Sam3PreTrainedModel):
         text_mask: torch.Tensor | None = None,
         spatial_shapes: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor | None, torch.Tensor | None]:
+    ) -> tuple | Sam3DETRDecoderOutput:
         """
         Forward pass for the DETR decoder.
 
@@ -2017,7 +2010,7 @@ class Sam3MaskDecoder(Sam3PreTrainedModel):
         prompt_features: torch.Tensor | None = None,
         prompt_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> dict[str, torch.Tensor]:
+    ) -> tuple | Sam3MaskDecoderOutput:
         """
         Args:
             decoder_queries: Decoder output queries [batch_size, num_queries, hidden_size]
@@ -2147,18 +2140,15 @@ class Sam3Model(Sam3PreTrainedModel):
 
         self.post_init()
 
+    @can_return_tuple
     @auto_docstring
     def get_text_features(
         self,
         input_ids: torch.LongTensor,
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> torch.FloatTensor:
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        Returns:
-            text_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
-                Text embeddings that can be passed as `text_embeds` to the forward method.
-
         Example:
 
         ```python
@@ -2171,7 +2161,7 @@ class Sam3Model(Sam3PreTrainedModel):
 
         >>> # Pre-compute text embeddings
         >>> text_inputs = processor(text="cat", return_tensors="pt")
-        >>> text_embeds = model.get_text_features(**text_inputs)
+        >>> text_embeds = model.get_text_features(**text_inputs).pooler_output
 
         >>> # Reuse text embeddings for multiple images
         >>> img_url = "http://images.cocodataset.org/val2017/000000077595.jpg"
@@ -2180,11 +2170,13 @@ class Sam3Model(Sam3PreTrainedModel):
         >>> outputs = model(pixel_values=img_inputs.pixel_values, text_embeds=text_embeds)
         ```
         """
-        text_features = self.text_encoder(
-            input_ids=input_ids, attention_mask=attention_mask, **kwargs
-        ).last_hidden_state
-        text_features = self.text_projection(text_features)
-        return text_features
+        text_outputs = self.text_encoder(
+            input_ids=input_ids, attention_mask=attention_mask, return_dict=True, **kwargs
+        )
+        last_hidden_state = text_outputs.last_hidden_state
+        text_outputs.pooler_output = self.text_projection(last_hidden_state)
+
+        return text_outputs
 
     @auto_docstring
     def get_vision_features(
@@ -2193,10 +2185,6 @@ class Sam3Model(Sam3PreTrainedModel):
         **kwargs: Unpack[TransformersKwargs],
     ) -> Sam3VisionEncoderOutput:
         r"""
-        Returns:
-            vision_embeds (`Sam3VisionEncoderOutput`):
-                Vision embeddings that can be passed as `vision_embeds` to the forward method.
-
         Example:
 
         ```python
@@ -2289,7 +2277,9 @@ class Sam3Model(Sam3PreTrainedModel):
         fpn_position_encoding = vision_outputs.fpn_position_encoding[:-1]
 
         if text_embeds is None:
-            text_features = self.get_text_features(input_ids=input_ids, attention_mask=attention_mask, **kwargs)
+            text_features = self.get_text_features(
+                input_ids=input_ids, attention_mask=attention_mask, return_dict=True
+            ).pooler_output
         else:
             text_features = text_embeds
 

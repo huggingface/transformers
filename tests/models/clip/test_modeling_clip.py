@@ -587,6 +587,26 @@ class CLIPModelTest(CLIPModelTesterMixin, PipelineTesterMixin, unittest.TestCase
     def test_sdpa_can_compile_dynamic(self):
         self.skipTest(reason="CLIP model can't be compiled dynamic, error in clip_loss`")
 
+    @unittest.skip(reason="The CLIP family currently does not work with output_attentions.")
+    def test_get_text_features_attentions(self):
+        # This test should no longer be skipped once this architecture is refactored to work with output_attentions.
+        pass
+
+    @unittest.skip(reason="The CLIP family currently does not work with output_hidden_states.")
+    def test_get_text_features_hidden_states(self):
+        # This test should no longer be skipped once this architecture is refactored to work with output_hidden_states.
+        pass
+
+    @unittest.skip(reason="The CLIP family currently does not work with output_attentions.")
+    def test_get_image_features_attentions(self):
+        # This test should no longer be skipped once this architecture is refactored to work with output_attentions.
+        pass
+
+    @unittest.skip(reason="The CLIP family currently does not work with output_hidden_states.")
+    def test_get_image_features_hidden_states(self):
+        # This test should no longer be skipped once this architecture is refactored to work with output_hidden_states.
+        pass
+
 
 class CLIPForImageClassificationModelTester(CLIPModelTester):
     def __init__(self, parent):
