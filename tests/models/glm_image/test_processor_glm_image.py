@@ -31,10 +31,9 @@ if is_torch_available():
 
 @require_vision
 @require_torch
-@unittest.skip(reason="Model not released yet")
 class GlmImageProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = GlmImageProcessor
-    model_id = "zai-org/GLM-Image"
+    model_id = "zai-org/GLM-Image/processor"
 
     @classmethod
     def _setup_test_attributes(cls, processor):

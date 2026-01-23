@@ -506,6 +506,9 @@ class GlmImageModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
 @require_torch
 @slow
 class GlmImageIntegrationTest(unittest.TestCase):
+    model_id = "zai-org/GLM-Image/vision_language_encoder"
+    processor_id = "zai-org/GLM-Image/processor"
+
     @classmethod
     def setUpClass(cls):
         cls.model = None
@@ -514,7 +517,7 @@ class GlmImageIntegrationTest(unittest.TestCase):
     def get_model(cls):
         if cls.model is None:
             cls.model = GlmImageForConditionalGeneration.from_pretrained(
-                "zai-org/GLM-4.5V", dtype="auto", device_map="auto"
+                cls.model_id, torch_dtype=torch.bfloat16, device_map="auto"
             )
         return cls.model
 
@@ -526,10 +529,18 @@ class GlmImageIntegrationTest(unittest.TestCase):
 
     def setUp(self):
         cleanup(torch_device, gc_collect=True)
-        self.processor = AutoProcessor.from_pretrained(
-            "zai-org/GLM-4.5V", size={"shortest_edge": 10800, "longest_edge": 10800}
-        )
-        self.message = [
+        self.processor = AutoProcessor.from_pretrained(self.processor_id)
+        # Text-to-image generation message
+        self.t2i_message = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "A cute cat sitting on a wooden table"},
+                ],
+            }
+        ]
+        # Image-to-image generation message
+        self.i2i_message = [
             {
                 "role": "user",
                 "content": [
@@ -537,109 +548,90 @@ class GlmImageIntegrationTest(unittest.TestCase):
                         "type": "image",
                         "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg",
                     },
-                    {"type": "text", "text": "What kind of dog is this?"},
+                    {"type": "text", "text": "Add a red hat to this cat"},
                 ],
             }
-        ]
-        self.message2 = [
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "image",
-                        "url": "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/coco_sample.png",
-                    },
-                    {"type": "text", "text": "What kind of dog is this?"},
-                ],
-            }
-        ]
-        self.message_wo_image = [
-            {"role": "user", "content": [{"type": "text", "text": "Who are you?"}]},
         ]
 
     def tearDown(self):
         cleanup(torch_device, gc_collect=True)
 
-    def test_small_model_integration_test(self):
+    def test_processor_text_to_image(self):
+        """Test processor correctly prepares text-to-image inputs."""
         inputs = self.processor.apply_chat_template(
-            self.message, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
+            self.t2i_message, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
         )
-        expected_input_ids = [151331, 151333, 151336, 198, 151339, 151363, 151363, 151363, 151363, 151363, 151363,
-                              151340, 3838, 3093, 315, 5562, 374]  # fmt: skip
-        assert expected_input_ids == inputs.input_ids[0].tolist()[:17]
+        # For T2I, there should be no pixel_values (no source images)
+        self.assertIn("input_ids", inputs)
+        self.assertIn("attention_mask", inputs)
+        self.assertIn("image_grid_thw", inputs)
+        # T2I should have 2 target grids (main + prev for coarse-to-fine generation)
+        self.assertEqual(inputs["image_grid_thw"].shape[0], 2)
 
-        expected_pixel_slice = torch.tensor(
-            [
-                [-0.1134, -0.4492, -0.8580],
-                [-0.6244, -1.1645, -0.7120],
-                [-0.3324, -0.7996, -0.7120],
-                [0.2077, 0.2223, 0.4121],
-                [0.4413, 0.1931, 0.4559],
-                [0.5873, 0.3099, 0.4851],
-            ],
-            dtype=torch.float32,
-            device="cpu",
+    def test_processor_image_to_image(self):
+        """Test processor correctly prepares image-to-image inputs."""
+        inputs = self.processor.apply_chat_template(
+            self.i2i_message, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
         )
-        torch.testing.assert_close(expected_pixel_slice, inputs.pixel_values[:6, :3], atol=1e-4, rtol=1e-4)
+        # For I2I, there should be pixel_values from the source image
+        self.assertIn("input_ids", inputs)
+        self.assertIn("attention_mask", inputs)
+        self.assertIn("pixel_values", inputs)
+        self.assertIn("image_grid_thw", inputs)
+        # I2I should have 1 source grid + 1 target grid = 2 grids
+        self.assertEqual(inputs["image_grid_thw"].shape[0], 2)
+        # images_per_sample should be 2 (1 source + 1 target)
+        self.assertEqual(inputs["images_per_sample"].item(), 2)
+        # num_source_images_per_sample should be 1
+        self.assertEqual(inputs["num_source_images_per_sample"].item(), 1)
 
-    def test_small_model_integration_test_batch(self):
+    def test_text_to_image_generation(self):
+        """Test text-to-image generation produces valid image tokens."""
         model = self.get_model()
-        batch_messages = [self.message, self.message2, self.message_wo_image]
         inputs = self.processor.apply_chat_template(
-            batch_messages,
-            tokenize=True,
-            add_generation_prompt=True,
-            return_dict=True,
-            return_tensors="pt",
-            padding=True,
+            self.t2i_message, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
         ).to(torch_device)
 
-        # it should not matter whether two images are the same size or not
+        # Generate image tokens
         output = model.generate(**inputs, max_new_tokens=10)
 
-        EXPECTED_DECODED_TEXT = [
-            "\nWhat kind of dog is this?\n<think>Got it, let's try to figure out",
-            "\nWhat kind of dog is this?\n<think>Got it, let's see. The user",
-            '\nWho are you?\n<think>The user is asking "Who are you?"'
-        ]  # fmt: skip
-        decoded = self.processor.batch_decode(output, skip_special_tokens=True)
-        decoded = [x.replace("<|image|>", "") for x in decoded]
-        self.assertEqual(
-            decoded,
-            EXPECTED_DECODED_TEXT,
-        )
+        # Output should be longer than input (generated tokens)
+        self.assertGreater(output.shape[1], inputs["input_ids"].shape[1])
+        # Generated tokens should be within vision vocabulary range
+        generated_tokens = output[0, inputs["input_ids"].shape[1] :]
+        # Vision tokens are in range [image_start_token_id, image_end_token_id)
+        self.assertTrue(all(t.item() < model.config.text_config.vision_vocab_size for t in generated_tokens))
+
+    def test_image_to_image_generation(self):
+        """Test image-to-image generation produces valid image tokens."""
+        model = self.get_model()
+        inputs = self.processor.apply_chat_template(
+            self.i2i_message, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
+        ).to(torch_device)
+
+        # Generate image tokens
+        output = model.generate(**inputs, max_new_tokens=10)
+
+        # Output should be longer than input (generated tokens)
+        self.assertGreater(output.shape[1], inputs["input_ids"].shape[1])
 
     @run_first
     @require_flash_attn
     @require_torch_accelerator
-    def test_small_model_integration_test_batch_flashatt2(self):
+    def test_flash_attention_generation(self):
+        """Test generation with Flash Attention 2."""
         model = GlmImageForConditionalGeneration.from_pretrained(
-            "zai-org/GLM-4.5V",
-            dtype=torch.bfloat16,
+            self.model_id,
+            torch_dtype=torch.bfloat16,
             attn_implementation="flash_attention_2",
             device_map="auto",
         )
-        batch_messages = [self.message, self.message2, self.message_wo_image]
         inputs = self.processor.apply_chat_template(
-            batch_messages,
-            tokenize=True,
-            add_generation_prompt=True,
-            return_dict=True,
-            return_tensors="pt",
-            padding=True,
+            self.t2i_message, tokenize=True, add_generation_prompt=True, return_dict=True, return_tensors="pt"
         ).to(torch_device)
 
-        # it should not matter whether two images are the same size or not
-        output = model.generate(**inputs, max_new_tokens=3)
+        # Generate image tokens
+        output = model.generate(**inputs, max_new_tokens=5)
 
-        EXPECTED_DECODED_TEXT = [
-            "\nWhat kind of dog is this?\n<think>Got it",
-            "\nWhat kind of dog is this?\n<think>Got it",
-            "\nWho are you?\n<think>The user",
-        ]  # fmt: skip
-        decoded = self.processor.batch_decode(output, skip_special_tokens=True)
-        decoded = [x.replace("<|image|>", "") for x in decoded]
-        self.assertEqual(
-            decoded,
-            EXPECTED_DECODED_TEXT,
-        )
+        # Output should be longer than input
+        self.assertGreater(output.shape[1], inputs["input_ids"].shape[1])
