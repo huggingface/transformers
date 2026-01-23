@@ -251,11 +251,11 @@ class FalconH1Attention(LlamaAttention):
 
 
 class FalconH1RMSNormGated(MambaRMSNormGated):
-    def __init__(self, hidden_size, eps=1e-6, n_groups=1, norm_before_gate=True):
+    def __init__(self, hidden_size, group_size, eps=1e-6, norm_before_gate=True):
         super().__init__(hidden_size=hidden_size, eps=eps)
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
-        self.n_groups = n_groups
+        self.group_size = group_size
         self.norm_before_gate = norm_before_gate
 
     def forward(self, hidden_states, gate=None):
@@ -271,12 +271,13 @@ class FalconH1RMSNormGated(MambaRMSNormGated):
             seq_len = 1
         hidden_states = hidden_states.to(torch.float32)
 
-        hidden_states = hidden_states.view(batch_size, seq_len, self.n_groups, int(dim // self.n_groups))
+        group_count = dim // self.group_size
+        hidden_states = hidden_states.view(batch_size, seq_len, group_count, self.group_size)
         variance = hidden_states.pow(2).mean(-1, keepdim=True)
 
         hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
 
-        hidden_states = self.weight.view(self.n_groups, int(dim // self.n_groups)) * hidden_states
+        hidden_states = self.weight.view(group_count, self.group_size) * hidden_states
         hidden_states = hidden_states.view(batch_size, seq_len, dim)
 
         if seq_len == 1:
@@ -354,8 +355,8 @@ class FalconH1Mixer(nn.Module):
         if self.mamba_rms_norm:
             self.norm = FalconH1RMSNormGated(
                 self.intermediate_size,
+                group_size=self.intermediate_size // self.n_groups,
                 eps=self.layer_norm_epsilon,
-                n_groups=self.n_groups,
                 norm_before_gate=config.mamba_norm_before_gate,
             )
         self.D = nn.Parameter(torch.ones(self.num_heads))

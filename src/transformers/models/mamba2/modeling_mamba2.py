@@ -180,10 +180,11 @@ class Mamba2Cache:
 
 
 class MambaRMSNormGated(torch.nn.Module):
-    def __init__(self, hidden_size, eps=1e-6):
+    def __init__(self, hidden_size, group_size, eps=1e-6):
         super().__init__()
         self.weight = nn.Parameter(torch.ones(hidden_size))
         self.variance_epsilon = eps
+        self.group_size = group_size
 
     def forward(self, hidden_states, gate=None):
         input_dtype = hidden_states.dtype
@@ -191,8 +192,12 @@ class MambaRMSNormGated(torch.nn.Module):
 
         if gate is not None:
             hidden_states = hidden_states * nn.functional.silu(gate.to(torch.float32))
-        variance = hidden_states.pow(2).mean(-1, keepdim=True)
-        hidden_states = hidden_states * torch.rsqrt(variance + self.variance_epsilon)
+        *prefix_dims, last_dim = hidden_states.shape
+        group_count = last_dim // self.group_size
+        hidden_states_group = hidden_states.view(*prefix_dims, group_count, self.group_size)
+        variance = hidden_states_group.pow(2).mean(-1, keepdim=True)
+        hidden_states_group = hidden_states_group * torch.rsqrt(variance + self.variance_epsilon)
+        hidden_states = hidden_states_group.view(*prefix_dims, group_count * self.group_size)
 
         return self.weight * hidden_states.to(input_dtype)
 
@@ -256,7 +261,9 @@ class Mamba2Mixer(nn.Module):
         # The core is to load them, compute the discrete states, then write the updated state. Keeps the memory bounded
         A = torch.arange(1, self.num_heads + 1)
         self.A_log = nn.Parameter(torch.log(A))
-        self.norm = MambaRMSNormGated(self.intermediate_size, eps=self.layer_norm_epsilon)
+        self.norm = MambaRMSNormGated(
+            self.intermediate_size, group_size=self.intermediate_size // self.n_groups, eps=self.layer_norm_epsilon
+        )
         self.D = nn.Parameter(torch.ones(self.num_heads))
 
         self.out_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.use_bias)
