@@ -70,7 +70,7 @@ print(tokenizer.batch_decode(translated_tokens, skip_special_tokens=True)[0])
 <hfoption id="transformers CLI">
 
 ```bash
-echo -e "UN Chief says there is no military solution in Syria" | transformers run --task "translation_en_to_fr" --model facebook/nllb-200-distilled-600M --device 0
+echo -e "UN Chief says there is no military solution in Syria" | transformers run translation_en_to_fr --model facebook/nllb-200-distilled-600M --device 0
 ```
 
 </hfoption>

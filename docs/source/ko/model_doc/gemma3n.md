@@ -106,7 +106,7 @@ print(processor.decode(output[0], skip_special_tokens=True))
 <hfoption id="transformers CLI">
 
 ```bash
-echo -e "식물은 특정 과정을 통해 에너지를 생성합니다." | transformers run --task text-generation --model google/gemma-3n-e2b --device 0
+echo -e "식물은 특정 과정을 통해 에너지를 생성합니다." | transformers run text-generation --model google/gemma-3n-e2b --device 0
 ```
 
 </hfoption>
