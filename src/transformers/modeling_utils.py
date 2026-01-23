@@ -3223,8 +3223,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             files_timestamps = self._get_files_timestamps(save_directory)
 
         metadata = {}
+        quantizer_provided_state_dict = False
         if hf_quantizer is not None:
             state_dict, metadata = hf_quantizer.get_state_dict_and_metadata(self)
+            quantizer_provided_state_dict = state_dict is not None
         metadata["format"] = "pt"
 
         # Only save the model itself if we are using distributed training
@@ -3314,7 +3316,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         state_dict = remove_tied_weights_from_state_dict(state_dict, model_to_save)
 
         # Revert all renaming and/or weight operations
-        if save_original_format:
+        # Skip if the quantizer already provided the state_dict in the correct serialization format
+        if save_original_format and not quantizer_provided_state_dict:
             state_dict = revert_weight_conversion(model_to_save, state_dict)
 
         # Shard the model if it is too big.
