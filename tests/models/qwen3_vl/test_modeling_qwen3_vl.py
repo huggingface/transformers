@@ -94,8 +94,8 @@ class Qwen3VLVisionText2TextModelTester(VLMModelTester):
         input_ids[input_ids == self.image_token_id] = self.pad_token_id
         input_ids[input_ids == self.vision_start_token_id] = self.pad_token_id
         # Place image tokens with vision_start_token_id prefix
-        input_ids[:, self._base_num_image_tokens] = self.image_token_id
-        input_ids[:, self._base_num_image_tokens - 1] = self.vision_start_token_id
+        input_ids[:, -1] = self.image_token_id
+        input_ids[:, -2] = self.vision_start_token_id
         return input_ids
 
     def get_additional_inputs(self, config, input_ids, pixel_values):
