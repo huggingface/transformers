@@ -107,9 +107,10 @@ def batched_mm_experts_forward(
     hidden_dim = hidden_states.size(-1)
 
     # Reshape for easier indexing
-    expert_ids = top_k_index.reshape(-1)  # (S,)
+    # S is the number of selected tokens-experts pairs (S = num_tokens * num_top_k)
+    token_idx = torch.arange(num_tokens, device=device).unsqueeze(1).expand(-1, num_top_k).reshape(-1)  # (S,)
     sample_weights = top_k_weights.reshape(-1)  # (S,)
-    token_idx = torch.arange(num_tokens, device=device).unsqueeze(1).expand(-1, num_top_k).reshape(-1)
+    expert_ids = top_k_index.reshape(-1)  # (S,)
 
     # Get current hidden states for selected samples
     selected_hidden_states = hidden_states[token_idx]
@@ -197,10 +198,11 @@ def grouped_mm_experts_forward(
     num_tokens = hidden_states.size(0)
     hidden_dim = hidden_states.size(-1)
 
-    # Re
-    expert_ids = top_k_index.reshape(-1)  # (S,)
-    sample_weights = top_k_weights.reshape(-1)  # (S,)
+    # Reshape for easier indexing
+    # S is the number of selected tokens-experts pairs (S = num_tokens * num_top_k)
     token_idx = torch.arange(num_tokens, device=device).unsqueeze(1).expand(-1, num_top_k).reshape(-1)  # (S,)
+    sample_weights = top_k_weights.reshape(-1)  # (S,)
+    expert_ids = top_k_index.reshape(-1)  # (S,)
 
     # Get current hidden states for selected samples
     selected_hidden_states = hidden_states[token_idx]
