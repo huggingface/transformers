@@ -18,7 +18,7 @@ import json
 import tempfile
 import unittest
 
-from transformers.testing_utils import require_torch, torch_device
+from transformers.testing_utils import require_torch, require_torch_gpu, slow, torch_device
 from transformers.utils import is_datasets_available, is_torch_available
 
 from ...test_configuration_common import ConfigTester
@@ -257,6 +257,8 @@ class VocosModelIntegrationTest(unittest.TestCase):
         with open("tests/fixtures/vocos/vocos_mel_batch_integration.json", "r") as f:
             self.mel_batch_expected = json.load(f)
 
+    @slow
+    @require_torch_gpu
     def test_inference(self):
         hf_repo_id = "Manel/vocos-mel-24khz"
         feature_extractor = VocosFeatureExtractor.from_pretrained(hf_repo_id)
@@ -278,6 +280,8 @@ class VocosModelIntegrationTest(unittest.TestCase):
             atol=1e-5,
         )
 
+    @slow
+    @require_torch_gpu
     def test_inference_batch(self):
         repo_id = "Manel/vocos-mel-24khz"
         feature_extractor = VocosFeatureExtractor.from_pretrained(repo_id)

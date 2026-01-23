@@ -21,8 +21,10 @@ import unittest
 
 from transformers.testing_utils import (
     require_torch,
+    require_torch_gpu,
     set_config_for_less_flaky_test,
     set_model_for_less_flaky_test,
+    slow,
     torch_device,
 )
 from transformers.utils import is_datasets_available, is_torch_available
@@ -342,6 +344,8 @@ class VocosEncodecModelIntegrationTest(unittest.TestCase):
         with open("tests/fixtures/vocos/vocos_encodec_batch_integration.json", "r") as f:
             self.encodec_batch_expected = json.load(f)
 
+    @slow
+    @require_torch_gpu
     def test_inference(self):
         hf_repo_id = "Manel/vocos-encodec-24khz"
         model = VocosEncodecModel.from_pretrained(hf_repo_id).to(torch_device).eval()
@@ -383,6 +387,8 @@ class VocosEncodecModelIntegrationTest(unittest.TestCase):
                 atol=1e-5,
             )
 
+    @slow
+    @require_torch_gpu
     def test_batch(self):
         repo_id = "Manel/vocos-encodec-24khz"
         processor = VocosEncodecProcessor.from_pretrained(repo_id)
