@@ -183,12 +183,9 @@ class AssistedCandidateGenerator(CandidateGenerator):
         self.main_model_min_length = self.generation_config.min_length
         self.generation_config.min_length = 0
         self.generation_config.min_new_tokens = None
-        for processor in self.logits_processor:
-            if isinstance(processor, MinLengthLogitsProcessor):
-                raise ValueError(
-                    "Passing `MinLengthLogitsProcessor` when using `assisted_generation is disabled. "
-                    "Please pass in `min_length` into `.generate()` instead"
-                )
+        self.logits_processor = [
+            processor for processor in self.logits_processor if not isinstance(processor, MinLengthLogitsProcessor)
+        ]
 
         # We need to roll back the cache in assisted generation, only DynamicCache is supported
         self.generation_config.cache_implementation = "dynamic_full"

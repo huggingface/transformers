@@ -2251,6 +2251,7 @@ class GenerationMixin(ContinuousMixin):
             "assistant_tokenizer": kwargs.pop("assistant_tokenizer", None),
             "assistant_model": assistant_model,
             "streamer": streamer,
+            "assistant_temperature": kwargs.pop("assistant_temperature", None),
         }
         generation_mode_kwargs["synced_gpus"] = (
             (is_deepspeed_zero3_enabled() or is_fsdp_managed_module(self)) and dist.get_world_size() > 1
@@ -3557,6 +3558,7 @@ class GenerationMixin(ContinuousMixin):
         assistant_model: Optional["PreTrainedModel"] = None,
         assistant_tokenizer: Optional["PreTrainedTokenizerBase"] = None,
         tokenizer: Optional["PreTrainedTokenizerBase"] = None,
+        assistant_temperature: Optional[float] = None,
         **model_kwargs,
     ) -> GenerateNonBeamOutput | torch.LongTensor:
         r"""
@@ -3591,6 +3593,9 @@ class GenerationMixin(ContinuousMixin):
                 The tokenizer used for the assistant model. If not provided, the token space is assumed to be the same.
             tokenizer (`PreTrainedTokenizerBase`, *optional*):
                 The tokenizer used for the main model. If not provided, the token space is assumed to be the same.
+            assistant_temperature (`float`, *optional*):
+                The temperature to use for the assistant model. If not provided and main generation temperature is below
+                1.5, it will be set to 1.5 (to improve decoding speed).
             model_kwargs:
                 Additional model specific keyword arguments will be forwarded to the `forward` function of the model.
                 If model is an encoder-decoder model the kwargs should include `encoder_outputs`.
@@ -3611,6 +3616,20 @@ class GenerationMixin(ContinuousMixin):
             and any(getattr(l, "is_compileable", False) for l in model_kwargs["past_key_values"].layers)
         ):
             raise ValueError("assisted generate is not supported with Static cache classes`")
+        # Prefer a slightly higher temperature for the assistant when not explicitly provided
+        idx = next((i for i, p in enumerate(logits_processor) if isinstance(p, TemperatureLogitsWarper)), None)
+        temp_processor = logits_processor.pop(idx) if idx is not None else TemperatureLogitsWarper(temperature=1.0)
+
+        if assistant_temperature is None and temp_processor is not None and temp_processor.temperature < 1.5:
+            logger.warning_once(
+                f"The assistant's sampling temperature comes from main generation loop set to {temp_processor.temperature}, "
+                "but speculative decoding benefits from slightly hotter candidate generation, (see #40976) so we are setting it "
+                "to 1.5. This should improve decoding speed in most cases. Use `assistant_temperature` to override this value."
+            )
+            assistant_temperature = 1.5
+
+        if assistant_temperature is not None:
+            logits_processor.insert(0, TemperatureLogitsWarper(temperature=assistant_temperature))
         # Get the candidate generator, given the parameterization
         candidate_generator = self._get_candidate_generator(
             generation_config=generation_config,
