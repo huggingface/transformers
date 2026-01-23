@@ -149,20 +149,31 @@ class GlmImageTextConfig(PreTrainedConfig):
     documentation from [`PreTrainedConfig`] for more information.
 
     Args:
-        vocab_size (`int`, *optional*, defaults to 168064):
-            Vocabulary size of the GlmImage model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`GlmImageModel`]
-        vision_vocab_size (`int`, *optional*, defaults to 16512):
-            Vision vocabulary size of the GlmImage model. Defines the number of different tokens that can be represented
-            by the `inputs_ids` passed when calling [`GlmImageVisionModel`]
-        attention_bias (`bool`, *optional*, defaults to `True`):
-            Whether to add a bias to the queries, keys and values.
-        pad_token_id (`int`, *optional*, defaults to 167841):
-            The id of the padding token.
-        eos_token_id (`int`, *optional*, defaults to 16385):
-            The id of the end of sequence token.
-        max_position_embeddings (`int`, *optional*, defaults to 131072):
-            The maximum sequence length that this model might ever be used with.
+            vocab_size (`int`, *optional*, defaults to 168064):
+                Vocabulary size of the GlmImage model. Defines the number of different tokens that can be represented by the
+                `inputs_ids` passed when calling [`GlmImageModel`]
+            hidden_size (`int | None`, *optional*, defaults to 4096): <fill_docstring>
+            intermediate_size (`int | None`, *optional*, defaults to 13696): <fill_docstring>
+            num_hidden_layers (`int | None`, *optional*, defaults to 40): <fill_docstring>
+            num_attention_heads (`int | None`, *optional*, defaults to 32): <fill_docstring>
+            num_key_value_heads (`int | None`, *optional*, defaults to 2): <fill_docstring>
+            hidden_act (`str | None`, *optional*, defaults to `"silu"`): <fill_docstring>
+            max_position_embeddings (`int`, *optional*, defaults to 131072):
+                The maximum sequence length that this model might ever be used with.
+            initializer_range (`float | None`, *optional*, defaults to 0.02): <fill_docstring>
+            rms_norm_eps (`int | None`, *optional*, defaults to 1e-05): <fill_docstring>
+            use_cache (`bool | None`, *optional*, defaults to `True`): <fill_docstring>
+            attention_dropout (`float | None`, *optional*, defaults to 0.0): <fill_docstring>
+            rope_parameters (`transformers.modeling_rope_utils.RopeParameters | dict[str, transformers.modeling_rope_utils.RopeParameters] | None`, *optional*): <fill_docstring>
+            vision_vocab_size (`int`, *optional*, defaults to 16512):
+                Vision vocabulary size of the GlmImage model. Defines the number of different tokens that can be represented
+                by the `inputs_ids` passed when calling [`GlmImageVisionModel`]
+            attention_bias (`bool`, *optional*, defaults to `True`):
+                Whether to add a bias to the queries, keys and values.
+            pad_token_id (`int`, *optional*, defaults to 167841):
+                The id of the padding token.
+            eos_token_id (`int`, *optional*, defaults to 16385):
+                The id of the end of sequence token.
 
     ```python
     >>> from transformers import GlmImageTextModel, GlmImageConfig
