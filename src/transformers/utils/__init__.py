@@ -259,6 +259,7 @@ from .peft_utils import (
     check_peft_version,
     find_adapter_config_file,
 )
+from .tokenizer_selection import TokenizerSelector, suggest_and_train_tokenizer
 
 
 WEIGHTS_NAME = "pytorch_model.bin"
