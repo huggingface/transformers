@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team.
 # Copyright (c) 2020, NVIDIA CORPORATION.  All rights reserved.
 #
@@ -34,7 +33,7 @@ from ...generation.logits_process import LogitsProcessor
 from ...utils.logging import logging
 from ...utils.metrics import ContinuousBatchProcessorMetrics, attach_tracer, traced
 from .cache import PagedAttentionCache
-from .requests import GenerationOutput, RequestState, RequestStatus, get_device_and_memory_breakdown, logger
+from .requests import GenerationOutput, RequestState, RequestStatus, logger
 from .scheduler import SCHEDULER_MAPPING, FIFOScheduler, Scheduler
 
 
@@ -250,7 +249,7 @@ class ContinuousBatchProcessor:
     def setup_static_tensors(self, num_groups: int) -> None:
         """Setup the static tensors that are used for storage during the generation step. No other tensor will be
         allowed for the inputs or the outputs of the generation step."""
-        num_pages = self.cache.num_blocks * self.cache.block_size
+        self.num_pages = self.cache.num_blocks * self.cache.block_size
         self.tensor_metadata = {"dtype": torch.int32, "device": self.model_device}
 
         # Some tensors always have the same shape regardless of the model
@@ -259,7 +258,7 @@ class ContinuousBatchProcessor:
         self.cumulative_seqlens_q = torch.empty((self.max_batch_tokens + 1,), **self.tensor_metadata)
         self.max_seqlen_q = 0
         self.logits_indices = torch.empty((self.max_batch_tokens,), **self.tensor_metadata)
-        self.output_ids = torch.empty((1, self.max_batch_tokens), **self.tensor_metadata)
+        self.output_ids = torch.empty((self.max_batch_tokens,), **self.tensor_metadata)
 
         # For some kwargs, we have a dict of tensors with as many items as there are attention types
         layer_types = getattr(self.config, "layer_types", None)
@@ -275,7 +274,7 @@ class ContinuousBatchProcessor:
 
         if attn_mask_is_needed(self.config):
             attn_mask_kwargs = {
-                "size": (1, 1, self.max_batch_tokens, num_pages + self.max_batch_tokens),
+                "size": (1, 1, self.max_batch_tokens, self.num_pages + self.max_batch_tokens),
                 "dtype": self.model_dtype,
                 "device": self.model_device,
             }
@@ -288,7 +287,7 @@ class ContinuousBatchProcessor:
             torch.empty((self.max_batch_tokens,), **self.tensor_metadata) for _ in range(num_groups)
         ]
         self.read_index_storage = [
-            torch.empty((num_pages + self.max_batch_tokens), **self.tensor_metadata) for _ in range(num_groups)
+            torch.empty((self.num_pages + self.max_batch_tokens), **self.tensor_metadata) for _ in range(num_groups)
         ]
         # For read index, the +T is because there are -1 for seqlen_q when model uses a sliding window
 
@@ -311,7 +310,7 @@ class ContinuousBatchProcessor:
         self.cumulative_seqlens_q[: b_size + 1].zero_()
         self.max_seqlen_q = 0
         self.logits_indices[:q_len].fill_(-1)
-        self.output_ids[:, :q_len].fill_(-1)
+        self.output_ids[:q_len].fill_(-1)
 
         # Reset the attributes that are either tensors or dict of tensors
         for layer_type in self.cumulative_seqlens_k:
@@ -428,6 +427,33 @@ class ContinuousBatchProcessor:
         self.metrics.record_request_completion(state.created_time, state.request_id)
         self.output_queue.put(state.to_generation_output())
 
+    # TODO: there should be a way to choose the offloading policy: biggest request, oldest request, etc.
+    # Including a policy to not allow offloading and crashing the generation
+    def soft_reset_one_request(self) -> None:
+        """Soft resets one active request by removing it from active requests and re-adding it to the waiting queue.
+
+        The generated tokens are kept as part of the new request's initial prompt. When `block_new_requests` is False,
+        the oldest request is offloaded; when True, the newest request is offloaded. This method also sets
+        `block_new_requests` to True to prevent infinite loops of offloading and re-scheduling requests.
+        """
+        # The offloaded request is the newest (resp. oldest) if block_new_requests is True (resp. False)
+        if self.scheduler.block_new_requests:
+            request_id, state = self.scheduler.active_requests.popitem()
+        else:
+            request_id, state = next(iter(self.scheduler.active_requests.items()))
+        logger.info(
+            f"Soft resetting request {request_id} with {len(state.initial_tokens)} initial tokens and "
+            f"{len(state.generated_tokens)} generated tokens"
+        )
+        # Create a copy of the offloaded request keeping the generated tokens as addition to the initial prompt
+        new_state = state.create_equivalent_initial_request()
+        # Actual offloading of the request
+        self.scheduler.finish_request(request_id, evict_from_cache=True)
+        self.scheduler.add_waiting_request(new_state)
+        # This flag blocks any new requests from being scheduled until one request is finished. This ensures that we
+        # don't enter an offload / schedule loop
+        self.scheduler.block_new_requests = True
+
     @traced
     def prepare_next_batch(self) -> bool:
         """Prepare tensors and metadata for the next model forward pass. Returns True if there are requests to process,
@@ -441,13 +467,22 @@ class ContinuousBatchProcessor:
         self.metrics.record_queue_metrics(len(self.scheduler.active_requests), len(self.scheduler.waiting_requests))
 
         # Schedule the next batch of requests, stop if there are no requests in the batch
-        self.requests_in_batch = self.scheduler.schedule_batch(self.max_batch_tokens)
+        self.requests_in_batch = self.scheduler.schedule_batch(self.max_batch_tokens, self.num_pages)
+
+        # If requests_in_batch is None, it means we need to offload some requests if possible
+        if self.requests_in_batch is None:
+            if len(self.scheduler.active_requests) > 1:
+                self.soft_reset_one_request()
+            else:
+                raise RuntimeError("No requests can be scheduled and no request can be offloaded.")
+        # If it's an empty list, it means we have no requests to process
         if not self.requests_in_batch:
             return False
+        # Otherwise, we can continue with the non-empty batch
         self.metrics.record_batch_metrics(self.requests_in_batch)
 
         # Reset the static tensors used for storage
-        self.reset_static_tensors()  # TODO: this might be unnecessary
+        self.reset_static_tensors()  # FIXME: why does this make the generation faster?
 
         # Prepare accumulators
         self.actual_query_length = 0
@@ -557,13 +592,10 @@ class ContinuousBatchProcessor:
             self.actual_index_sizes[i] = (len(group_read_indices), len(group_write_indices))
 
     @traced
-    def _sync(self) -> list[int]:
-        if self.output_ids is not None:
-            try:
-                return self.output_ids.tolist()[0]
-            except Exception:
-                return [0, 1]
-        return [0, 0]
+    def _get_new_tokens(self, num_new_tokens: int) -> list[int]:
+        indices = self.logits_indices[:num_new_tokens]
+        new_tokens = self.output_ids[indices]
+        return new_tokens.tolist()
 
     @traced
     def _maybe_send_output(self, state: RequestState) -> None:
@@ -574,31 +606,56 @@ class ContinuousBatchProcessor:
     @traced
     def update_batch(self) -> None:
         """Update request states based on generated tokens."""
-        out_tokens = self._sync()
-        for i, state in enumerate(self.requests_in_batch):
+        new_tokens = self._get_new_tokens(len(self.requests_in_batch))
+        current_logits_index = 0
+        for state in self.requests_in_batch:
             # If the request has no remaining prompt ids, it means prefill has already ended or just finished
             if len(state.remaining_prefill_tokens) == 0:
-                self.metrics.record_ttft_metric(state.created_time, state.request_id)
-                state.status = RequestStatus.DECODING
-                token = out_tokens[self.logits_indices[i]]
+                # If there are no generated tokens yet, it means prefill just ended
+                if state.generated_len() == 0:
+                    self.metrics.record_ttft_metric(state.created_time, state.request_id)
+                    state.status = RequestStatus.DECODING
+
+                token = new_tokens[current_logits_index]
                 state.tokens_to_process = [token]
+                current_logits_index += 1
+
                 # Update the request and stop if it is complete
                 is_finished = state.update_and_check_completion(token)
                 # We mark the completed blocks as such
-                self.cache.mark_blocks_as_complete(state)
+                self.cache.mark_shareable_blocks_as_complete(state)
                 if is_finished:
                     self.metrics.record_request_completion(state.created_time, state.request_id)
                     self.scheduler.finish_request(state.request_id, evict_from_cache=(not self.manual_eviction))
+                    self.scheduler.block_new_requests = False
                 self._maybe_send_output(state)
             #  Otherwise, the request is still prefilling, but the prefill has been split
             elif state.status == RequestStatus.PREFILLING_SPLIT:
-                self.cache.mark_blocks_as_complete(state)
+                self.cache.mark_shareable_blocks_as_complete(state)
                 state.status = RequestStatus.SPLIT_PENDING_REMAINDER
             else:
                 raise ValueError(f"Request {state.request_id} is in an unexpected state: {state.status}")
 
-        if self.cache.get_num_free_blocks() == 0:
-            raise ValueError("No more free blocks")
+        # If some requests need to be forked, we do it now
+        copy_source, copy_destination = [], []
+        while self.scheduler._requests_to_fork:
+            # Get the number of children and reset it so it's not forked again
+            state = self.scheduler._requests_to_fork.pop()
+            num_children = state.num_children
+            state.num_children = 0
+            # Create the new request and add them to the scheduler
+            new_request_ids = [f"{state.request_id}__child#{i}" for i in range(num_children)]
+            for new_request_id in new_request_ids:
+                self.scheduler.active_requests[new_request_id] = state.fork(new_request_id)
+            # Fork the cache
+            copy_src, copy_dst = self.cache.fork_request(state.request_id, new_request_ids)
+            copy_source.extend(copy_src)
+            copy_destination.extend(copy_dst)
+            # FIXME: if fork cant be done, create a new pending request without forking instead of crashing everything
+
+        # The copy induced by the fork is done in one go (if it's even needed)
+        if copy_source:
+            self.cache.copy_cache(copy_source, copy_destination)
 
     @traced
     def has_pending_requests(self) -> bool:
@@ -655,11 +712,8 @@ class ContinuousBatchProcessor:
         if self._pad_inputs:
             padded_q = pad_by_intervals(self.actual_query_length, self.max_batch_tokens, self.q_padding_intervals)
             max_read_index_size = max(self.actual_index_sizes[i][0] for i in range(self.cache.num_groups))
-            padded_read_index_size = pad_by_intervals(
-                max_read_index_size - self.max_batch_tokens,
-                self.cache.num_blocks * self.cache.block_size,
-                self.kv_padding_intervals,
-            )
+            # The space planned for query tokens will be added later, so we remove it from the space planned for KV
+            padded_read_index_size = pad_by_intervals(max_read_index_size, self.num_pages, self.kv_padding_intervals)
         else:
             padded_q, padded_read_index_size = 0, 0
         # Retrieve the model kwargs with or without padding
@@ -727,12 +781,11 @@ class ContinuousBatchProcessor:
             probs = nn.functional.softmax(probs, dim=-1)
             # probs[0] has shape [seq_len, vocab_size], multinomial returns [seq_len, 1]
             next_tokens = torch.multinomial(probs[0], num_samples=1).squeeze(-1)  # Now [seq_len]
-            # Add batch dimension back to match argmax output
-            next_tokens = next_tokens.unsqueeze(0)  # Now [1, seq_len]
         else:
-            next_tokens = torch.argmax(probs, dim=-1)  # Already [1, seq_len]
-        tokens = next_tokens.size(1)  # Get seq_len dimension
-        self.output_ids[:, :tokens].copy_(next_tokens)
+            next_tokens = torch.argmax(probs, dim=-1)  # shape is [1, seq_len]
+            next_tokens = next_tokens.squeeze(0)  # shape is [seq_len]
+        tokens = next_tokens.size(0)  # Get seq_len dimension
+        self.output_ids[:tokens].copy_(next_tokens)
 
 
 # Manager Class (User Interface)
@@ -752,7 +805,7 @@ class ContinuousBatchingManager:
         max_queue_size: int = 0,
         num_q_padding_intervals: int = 0,
         num_kv_padding_intervals: int = 0,
-        allow_prefix_sharing: bool = True,
+        allow_block_sharing: bool = True,
     ) -> None:
         """Initialize the continuous batching manager.
 
@@ -762,30 +815,38 @@ class ContinuousBatchingManager:
             max_queue_size: Maximum size of the request queue (0 = unlimited)
             num_q_padding_intervals: (optional) Number of intervals used to pad the query dimension
             num_kv_padding_intervals: (optional) Number of intervals used to pad the keys/values dimension
-            allow_prefix_sharing: (optional) Whether to allow prefix sharing if the model has only full attention layers
+            allow_block_sharing: (optional) Whether to allow block sharing if the model has some full attention layers
         """
-        # Reloade paged version if necessary
+        # Reload paged version of the attention implementation if necessary
         if "paged|" not in model.config._attn_implementation:
             model.set_attn_implementation(f"paged|{model.config._attn_implementation}")
 
+        # Internal arguments
         self.model = model.eval()
-        generation_config = model.generation_config if generation_config is None else generation_config
-        self.generation_config = generation_config
+        self.manual_eviction = manual_eviction
+        self._allow_block_sharing = allow_block_sharing
+        self._use_prefix_sharing = allow_block_sharing  # approximation until the cache is created
+
         self.input_queue = queue.Queue(maxsize=max_queue_size)
         self.output_queue = queue.Queue()
         self.stop_event = threading.Event()
-        self.log_prob_generation = getattr(generation_config, "log_prob_generation", False)
+        self.batch_processor: ContinuousBatchProcessor | None = None
         self._generation_thread = None
         self._request_counter = 0
         self._request_lock = threading.Lock()
-        self.model.generation_config.top_p = None
+
+        # Generation config related arguments
+        generation_config = model.generation_config if generation_config is None else generation_config
+        self.generation_config = generation_config
+        self.log_prob_generation = getattr(generation_config, "log_prob_generation", False)
         self.do_sample = getattr(generation_config, "do_sample", True)
         self.logit_processor = self.model._get_logits_processor(generation_config)
-        self.profile = getattr(generation_config, "profile", False)  # TODO: not supported yet
-        self.manual_eviction = manual_eviction
-        self.batch_processor: ContinuousBatchProcessor | None = None
-        self._allow_prefix_sharing = allow_prefix_sharing
+        num_return_sequences = getattr(generation_config, "num_return_sequences", None)
+        self.num_return_sequences = num_return_sequences if num_return_sequences is not None else 1
 
+        # self.model.generation_config.top_p = None NOTE: figure out why this was here
+
+        # Cuda graph behavior is determined below using either user-specified arguments or heuristics
         self.use_cuda_graph = self._decide_use_cuda_graphs(
             use_cuda_graph=getattr(generation_config, "use_cuda_graph", None),
             num_q_padding_intervals=num_q_padding_intervals,
@@ -799,6 +860,7 @@ class ContinuousBatchingManager:
             num_kv_padding_intervals if num_kv_padding_intervals > 0 else NUM_KV_PADDING_INTERVALS
         )
 
+        # Log probability generation is not supported yet (TODO)
         if self.log_prob_generation:
             raise NotImplementedError("log_prob_generation is not supported yet")
 
@@ -932,6 +994,7 @@ class ContinuousBatchingManager:
         state = RequestState(
             request_id=request_id,
             initial_tokens=list(input_ids),
+            num_children=self.num_return_sequences - 1,
             record_timestamps=record_timestamps,
             tokens_to_process=list(input_ids),
             max_new_tokens=max_new_tokens,
@@ -950,6 +1013,10 @@ class ContinuousBatchingManager:
         streaming: bool = False,
         record_timestamps: bool = False,
     ) -> None:
+        # If there is prefix sharing, we sort the inputs to maximize cache hits
+        if self._use_prefix_sharing:
+            inputs = sorted(inputs, reverse=True)
+        # Add requests in order
         for input_ids in inputs:
             self.add_request(
                 input_ids, max_new_tokens=max_new_tokens, streaming=streaming, record_timestamps=record_timestamps
@@ -1020,8 +1087,9 @@ class ContinuousBatchingManager:
                 self.model.device,
                 self.model.dtype,
                 tp_size=getattr(self.model, "_tp_size", None),  # Use model's actual TP setting
-                allow_prefix_sharing=self._allow_prefix_sharing,
+                allow_block_sharing=self._allow_block_sharing,
             )
+            self._use_prefix_sharing = paged_attention_cache.use_prefix_sharing  # update the approximation
             logger.debug(f"PagedAttentionCache created in {perf_counter() - t0} seconds")
 
             scheduler = None
@@ -1071,19 +1139,15 @@ class ContinuousBatchingManager:
         # Loop body ends if there is no requests in the batch
         if not batch_processor.prepare_next_batch():
             return
-        # Debug logging of the current memory usage
-        if logger.level <= logging.DEBUG:
-            device, total, reserved, allocated = get_device_and_memory_breakdown()
-            available_memory = total - max(allocated, reserved)
-            logger.debug(
-                f"[Memory] Device: {device}, Total: {total}, Reserved: {reserved}, Allocated: {allocated}, Available: {available_memory}"
-            )
+        # Debug logging of the current memory usage -- commented out because it's often not used even in debug
+        # if logger.level < logging.DEBUG:
+        #     device, total, reserved, allocated = get_device_and_memory_breakdown()
+        #     available_memory = total - max(allocated, reserved)
+        #     logger.debug(
+        # f"[Memory] Device: {device}, Total: {total}, Reserved: {reserved}, Allocated: {allocated}, Available: {available_memory}"
+        #     )
 
         self._generation_step()
-
-        if torch.cuda.is_available():
-            torch.cuda.synchronize()  # FIXME: why is this needed?
-        # Processor updates the batch after generation step is truly over
         batch_processor.update_batch()
 
     @traced
@@ -1125,7 +1189,7 @@ class ContinuousMixin:
         max_queue_size: int = 0,
         num_q_cuda_graphs: int = 0,
         num_kv_cuda_graphs: int = 0,
-        allow_prefix_sharing: bool = True,
+        allow_block_sharing: bool = True,
         block: bool = True,
         timeout: float | None = None,
     ) -> Generator[ContinuousBatchingManager]:
@@ -1135,7 +1199,7 @@ class ContinuousMixin:
             max_queue_size,
             num_q_cuda_graphs,
             num_kv_cuda_graphs,
-            allow_prefix_sharing,
+            allow_block_sharing,
         )
         manager.start()
         try:
@@ -1154,7 +1218,7 @@ class ContinuousMixin:
         max_queue_size: int = 0,
         num_q_padding_intervals: int = 0,
         num_kv_padding_intervals: int = 0,
-        allow_prefix_sharing: bool = True,
+        allow_block_sharing: bool = True,
     ) -> ContinuousBatchingManager:
         """Initialize a manager for continuous batching inference.
 
@@ -1164,7 +1228,7 @@ class ContinuousMixin:
             max_queue_size: Maximum size of the input request queue
             num_q_padding_intervals: Number of intervals used to pad the query dimension
             num_kv_padding_intervals: Number of intervals used to pad the keys/values dimension
-            allow_prefix_sharing: A flag to allow prefix sharing if the model has only full attention layers
+            allow_block_sharing: A flag to allow block sharing if the model has some full attention layers
 
         Returns:
             `ContinuousBatchingManager`: The manager instance to add requests and retrieve results.
@@ -1188,7 +1252,7 @@ class ContinuousMixin:
             max_queue_size=max_queue_size,
             num_q_padding_intervals=num_q_padding_intervals,
             num_kv_padding_intervals=num_kv_padding_intervals,
-            allow_prefix_sharing=allow_prefix_sharing,
+            allow_block_sharing=allow_block_sharing,
         )
 
     # TODO: support streaming
@@ -1200,7 +1264,7 @@ class ContinuousMixin:
         generation_config: GenerationConfig | None = None,
         num_q_padding_intervals: int = 0,
         num_kv_padding_intervals: int = 0,
-        allow_prefix_sharing: bool = True,
+        allow_block_sharing: bool = True,
         record_timestamps: bool = False,
         progress_bar: bool = True,
         **kwargs,
@@ -1212,7 +1276,7 @@ class ContinuousMixin:
             generation_config: Optional generation configuration
             num_q_padding_intervals: Number of intervals used to pad the query dimension
             num_kv_padding_intervals: Number of intervals used to pad the keys/values dimension
-            allow_prefix_sharing: A flag to allow prefix sharing if the model has only full attention layers
+            allow_block_sharing: A flag to allow block sharing if the model has some full attention layers
             record_timestamps: If set to true, the requests will have a timestamp for each token generated
             progress_bar: If set to true, a progress bar will be displayed
             **kwargs: Additional generation parameters
@@ -1228,26 +1292,30 @@ class ContinuousMixin:
 
         # Initialize manager with the batch inputs
         results = {}
-        num_requests = len(inputs)
-        with (
-            self.continuous_batching_context_manager(
-                generation_config=generation_config,
-                num_q_cuda_graphs=num_q_padding_intervals,
-                num_kv_cuda_graphs=num_kv_padding_intervals,
-                allow_prefix_sharing=allow_prefix_sharing,
-                block=True,
-                timeout=5,
-            ) as manager,
-            logging_redirect_tqdm([logger]),
-            tqdm(
-                total=num_requests,
-                disable=(not progress_bar),
-                desc=f"Solving {num_requests} requests",
-                unit="request",
-            ) as pbar,
-        ):
+        gen_cfg = self.generation_config if generation_config is None else generation_config
+        num_requests = len(inputs) * (gen_cfg.num_return_sequences if gen_cfg.num_return_sequences is not None else 1)
+        # Prepare context managers for the main loop
+        manager_cm = self.continuous_batching_context_manager(
+            generation_config=generation_config,
+            num_q_cuda_graphs=num_q_padding_intervals,
+            num_kv_cuda_graphs=num_kv_padding_intervals,
+            allow_block_sharing=allow_block_sharing,
+            block=True,
+            timeout=5,
+        )
+        logging_cm = logging_redirect_tqdm([logger])
+        pbar_cm = tqdm(
+            total=num_requests,
+            disable=(not progress_bar),
+            desc=f"Solving {num_requests} requests",
+            unit="request",
+        )
+        # Main loop
+        with manager_cm as manager, logging_cm, pbar_cm as pbar:
             try:
-                manager.add_requests(inputs=inputs, max_new_tokens=kwargs.get("max_new_tokens"))
+                manager.add_requests(
+                    inputs=inputs, max_new_tokens=kwargs.get("max_new_tokens"), record_timestamps=record_timestamps
+                )
                 finished_count = 0
                 while finished_count < num_requests:
                     result = manager.get_result(timeout=1)

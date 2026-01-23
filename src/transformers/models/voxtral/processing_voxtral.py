@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Sesame and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,9 +13,8 @@
 # limitations under the License.
 
 import io
-from typing import Optional, Union
 
-from ...utils import is_mistral_common_available, is_soundfile_available, is_torch_available, logging
+from ...utils import auto_docstring, is_mistral_common_available, is_soundfile_available, is_torch_available, logging
 
 
 if is_torch_available():
@@ -38,10 +36,16 @@ logger = logging.get_logger(__name__)
 
 
 class VoxtralAudioKwargs(AudioKwargs, total=False):
-    max_source_positions: Optional[int]
+    """
+    max_source_positions (`int`, *optional*, defaults to `3000`):
+        Maximum number of positions per chunk when splitting mel spectrogram features along the time dimension.
+    """
+
+    max_source_positions: int | None
 
 
 class VoxtralProcessorKwargs(ProcessingKwargs, total=False):
+    audio_kwargs: VoxtralAudioKwargs
     _defaults = {
         "text_kwargs": {
             "padding": True,
@@ -61,19 +65,8 @@ class VoxtralProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
+@auto_docstring
 class VoxtralProcessor(ProcessorMixin):
-    r"""
-    Constructs a Voxtral processor which wraps [`WhisperFeatureExtractor`] and
-    [`MistralCommonBackend`] into a single processor that inherits both the audio feature extraction and
-    tokenizer functionalities.
-
-    Args:
-        feature_extractor ([`WhisperFeatureExtractor`]):
-            The feature extractor is a required input.
-        tokenizer ([`MistralCommonBackend`]):
-            The tokenizer is a required input.
-    """
-
     def __init__(
         self,
         feature_extractor,
@@ -103,7 +96,7 @@ class VoxtralProcessor(ProcessorMixin):
 
     def apply_chat_template(
         self,
-        conversation: Union[list[dict[str, str]], list[list[dict[str, str]]]],
+        conversation: list[dict[str, str]] | list[list[dict[str, str]]],
         **kwargs: Unpack[AllKwargsForChatTemplate],
     ) -> str:
         """
@@ -226,37 +219,21 @@ class VoxtralProcessor(ProcessorMixin):
 
         return encoded_instruct_inputs
 
+    @auto_docstring(
+        custom_intro=r"""
+    Method to prepare text to be fed as input to the model. This method forwards the `text`
+    arguments to MistralCommonBackend's [`~MistralCommonBackend.__call__`] to encode
+    the text. Please refer to the docstring of the above methods for more information.
+    This method does not support audio. To prepare the audio, please use:
+    1. `apply_chat_template` [`~VoxtralProcessor.apply_chat_template`] method.
+    2. `apply_transcription_request` [`~VoxtralProcessor.apply_transcription_request`] method.
+    """
+    )
     def __call__(
         self,
-        text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]],
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None,
         **kwargs: Unpack[VoxtralProcessorKwargs],
     ):
-        r"""
-        Method to prepare text to be fed as input to the model. This method forwards the `text`
-        arguments to MistralCommonBackend's [`~MistralCommonBackend.__call__`] to encode
-        the text. Please refer to the docstring of the above methods for more information.
-        This methods does not support audio. To prepare the audio, please use:
-        1. `apply_chat_template` [`~VoxtralProcessor.apply_chat_template`] method.
-        2. `apply_transcription_request` [`~VoxtralProcessor.apply_transcription_request`] method.
-
-        Args:
-            text (`str`, `list[str]`, `list[list[str]]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-                    - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                    - `'np'`: Return NumPy `np.ndarray` objects.
-        Returns:
-            [`BatchFeature`]: A [`BatchFeature`] with the following fields:
-
-            - **input_ids** -- List of token ids to be fed to a model. Returned when `text` is not `None`.
-            - **input_features** -- List of audio values to be fed to a model. Returned when `audio` is not `None`.
-            - **attention_mask** -- List of indices specifying which tokens should be attended to by the model (when
-              `return_attention_mask=True` or if *"attention_mask"* is in `self.model_input_names` and if `text` is not
-              `None`).
-        """
         if isinstance(text, str):
             text = [text]
 
@@ -273,11 +250,11 @@ class VoxtralProcessor(ProcessorMixin):
     # TODO: @eustlb, this should be moved to mistral_common + testing
     def apply_transcription_request(
         self,
-        audio: Union[str, list[str], AudioInput],
+        audio: str | list[str] | AudioInput,
         model_id: str,
-        language: Optional[Union[str, list[Union[str, None]]]] = None,
-        sampling_rate: Optional[int] = None,
-        format: Optional[Union[str, list[str]]] = None,
+        language: str | list[str | None] | None = None,
+        sampling_rate: int | None = None,
+        format: str | list[str] | None = None,
         **kwargs: Unpack[VoxtralProcessorKwargs],
     ):
         """

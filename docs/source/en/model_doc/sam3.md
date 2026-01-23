@@ -354,16 +354,33 @@ When running the same text prompt on multiple images, pre-compute text embedding
 ...     print(f"Image {i+1}: {len(results['masks'])} '{text_prompt}' objects found")
 ```
 
+### Custom Resolution Inference
+
+<div class="warning">
+⚠️ **Performance Note**: Custom resolutions may degrade accuracy. The model is meant to be used at 1008px resolution.
+</div>
+
+For faster inference or lower memory usage:
+
+```python
+>>> config = Sam3Config.from_pretrained("facebook/sam3")
+>>> config.image_size = 560
+>>> model = Sam3Model.from_pretrained("facebook/sam3", config=config).to(device)
+>>> processor = Sam3Processor.from_pretrained("facebook/sam3", size={"height": 560, "width": 560})
+```
+
 ### Prompt Label Conventions
 
 SAM3 uses the following label conventions:
 
 **For points and boxes:**
+
 - `1`: Positive prompt (include this region/object)
 - `0`: Negative prompt (exclude this region/object)
 - `-10`: Padding value for batched inputs
 
 **Coordinate formats:**
+
 - **Input boxes**: `[x1, y1, x2, y2]` (xyxy format) in pixel coordinates
 - **Output boxes** (raw): `[x1, y1, x2, y2]` (xyxy format), normalized to [0, 1]
 - **Output boxes** (post-processed): `[x1, y1, x2, y2]` (xyxy format) in absolute pixel coordinates
@@ -420,4 +437,3 @@ SAM3 uses the following label conventions:
 
 [[autodoc]] Sam3Model
     - forward
-

@@ -872,7 +872,7 @@ class Trainer:
 
         # 1 - Align EOS token. EOS is more complex than the others, as `generation_config` may hold more than one EOS
         # token.
-        tokenizer_has_new_eos = tokenizer.eos_token_id != self.model.config.eos_token_id
+        tokenizer_has_new_eos = tokenizer.eos_token_id != getattr(self.model.config, "eos_token_id", None)
         if model_has_generation_config:
             # `generation_config.eos_token_id` is None: direct comparison
             if self.model.generation_config.eos_token_id is None:
@@ -896,7 +896,7 @@ class Trainer:
                 self.model.generation_config.eos_token_id = [token for token in all_eos_tokens if token is not None]
 
         # 2 - Align BOS
-        tokenizer_has_new_bos = tokenizer.bos_token_id != self.model.config.bos_token_id
+        tokenizer_has_new_bos = tokenizer.bos_token_id != getattr(self.model.config, "bos_token_id", None)
         if model_has_generation_config:
             tokenizer_has_new_bos |= tokenizer.bos_token_id != self.model.generation_config.bos_token_id
 
@@ -907,7 +907,7 @@ class Trainer:
                 self.model.generation_config.bos_token_id = tokenizer.bos_token_id
 
         # 3 - Align PAD
-        tokenizer_has_new_pad = tokenizer.pad_token_id != self.model.config.pad_token_id
+        tokenizer_has_new_pad = tokenizer.pad_token_id != getattr(self.model.config, "pad_token_id", None)
         if model_has_generation_config:
             tokenizer_has_new_pad |= tokenizer.pad_token_id != self.model.generation_config.pad_token_id
 
@@ -1671,6 +1671,12 @@ class Trainer:
                 optimizer_cls = AdamW8bit
             else:
                 raise ValueError("Invalid optimizer")
+            optimizer_kwargs.update(
+                {
+                    "block_size": optim_args.get("block_size", 256),
+                    "bf16_stochastic_round": strtobool(optim_args.get("bf16_stochastic_round", "False")),
+                }
+            )
             optimizer_kwargs.update(adam_kwargs)
         elif args.optim in [
             OptimizerNames.SCHEDULE_FREE_RADAM,
@@ -2265,8 +2271,7 @@ class Trainer:
                 # nn.DataParallel(model) replicates the model, creating new variables and module
                 # references registered here no longer work on other gpus, breaking the module
                 raise ValueError(
-                    "Currently --debug underflow_overflow is not supported under DP. Please use DDP"
-                    " (torchrun or torch.distributed.launch (deprecated))."
+                    "Currently --debug underflow_overflow is not supported under DP. Please use DDP with torchrun"
                 )
             else:
                 DebugUnderflowOverflow(self.model)
@@ -2328,11 +2333,7 @@ class Trainer:
         if use_accelerator_prepare:
             self.model.train()
             if hasattr(self.lr_scheduler, "step"):
-                # We should avoid accelerate preparing the model in TP case since we dont need it as it is handled by transformers from_pretrained and also it goes into DDP based preparation.
-                if self.is_tp_enabled:
-                    self.optimizer = self.accelerator.prepare(self.optimizer)
-                else:
-                    model, self.optimizer = self.accelerator.prepare(self.model, self.optimizer)
+                model, self.optimizer = self.accelerator.prepare(self.model, self.optimizer)
             else:
                 # to handle cases wherein we pass "DummyScheduler" such as when it is specified in DeepSpeed config.
                 model, self.optimizer, self.lr_scheduler = self.accelerator.prepare(
@@ -2349,7 +2350,8 @@ class Trainer:
         if self.is_fsdp_enabled:
             self.model = self.model_wrapped = model
             # Fix `got mixed torch.Tensor and DTensor` error in model.generate() for FSDP2 with LoRA
-            dist.fsdp.register_fsdp_forward_method(self.model, "generate")
+            if hasattr(self.model, "generate"):
+                dist.fsdp.register_fsdp_forward_method(self.model, "generate")
 
         # for the rest of this function `model` is the outside model, whether it was wrapped or not
         if model is not self.model:
@@ -3049,7 +3051,8 @@ class Trainer:
                 return
 
         with safe_globals():
-            checkpoint_rng_state = torch.load(rng_file)
+            check_torch_load_is_safe()
+            checkpoint_rng_state = torch.load(rng_file, weights_only=True)
         random.setstate(checkpoint_rng_state["python"])
         np.random.set_state(checkpoint_rng_state["numpy"])
         torch.random.set_rng_state(checkpoint_rng_state["cpu"])
@@ -4021,7 +4024,16 @@ class Trainer:
                     self._save(output_dir, state_dict=state_dict)
         elif self.is_deepspeed_enabled:
             try:
-                state_dict = self.accelerator.get_state_dict(self.deepspeed)
+                accept_exclude_frozen_parameters = "exclude_frozen_parameters" in set(
+                    inspect.signature(self.model_wrapped.save_checkpoint).parameters.keys()
+                )
+                zero3_sharding = self.deepspeed.config.get("zero_optimization", {}).get("stage", None) == 3
+                if accept_exclude_frozen_parameters and _is_peft_model(self.model) and zero3_sharding:
+                    # When using PEFT with DeepSpeed ZeRO Stage 3,
+                    # we do not need to load the frozen parameters
+                    state_dict = self.deepspeed._zero3_consolidated_16bit_state_dict(exclude_frozen_parameters=True)
+                else:
+                    state_dict = self.accelerator.get_state_dict(self.deepspeed)
                 if self.args.should_save:
                     self._save(output_dir, state_dict=state_dict)
             except ValueError:
@@ -4827,6 +4839,7 @@ class Trainer:
         if not self.args.hub_always_push and self.push_in_progress is not None and not self.push_in_progress.is_done():
             return
 
+        self.callback_handler.on_push_begin(self.args, self.state, self.control)
         output_dir = self.args.output_dir
         # To avoid a new synchronization of all model weights, we just copy the file from the checkpoint folder
         modeling_files = [CONFIG_NAME, GENERATION_CONFIG_NAME, WEIGHTS_NAME, SAFE_WEIGHTS_NAME]
@@ -4921,6 +4934,8 @@ class Trainer:
             The URL of the repository where the model was pushed if `blocking=False`, or a `Future` object tracking the
             progress of the commit if `blocking=True`.
         """
+        self.callback_handler.on_push_begin(self.args, self.state, self.control)
+
         model_name = kwargs.pop("model_name", None)
         if model_name is None and self.args.should_save:
             if self.args.hub_model_id is None:
@@ -5082,7 +5097,8 @@ class Trainer:
                         args["parallelism_config"] = ParallelismConfig(tp_size=self.model.tp_size)
                 else:
                     raise ValueError("Requires accelerate>1.12.0 to use Tensor Parallelism.")
-
+            elif args["parallelism_config"].tp_size != self.model.tp_size:
+                args["parallelism_config"].tp_size = self.model.tp_size
         if is_accelerate_available("1.2.0"):
             # it we don't have the correct version, we will rely on env var instead that were set in TrainingArguments
             from accelerate.utils import TorchDynamoPlugin

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,7 +18,7 @@ import os
 import re
 from collections import OrderedDict
 from collections.abc import Callable, Iterator, KeysView, ValuesView
-from typing import Any, TypeVar, Union
+from typing import Any, TypeVar
 
 from ...configuration_utils import PreTrainedConfig
 from ...dynamic_module_utils import get_class_from_dynamic_module, resolve_trust_remote_code
@@ -142,6 +141,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("ernie", "ErnieConfig"),
         ("ernie4_5", "Ernie4_5Config"),
         ("ernie4_5_moe", "Ernie4_5_MoeConfig"),
+        ("ernie4_5_vl_moe", "Ernie4_5_VL_MoeConfig"),
         ("esm", "EsmConfig"),
         ("evolla", "EvollaConfig"),
         ("exaone4", "Exaone4Config"),
@@ -173,12 +173,19 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("glm4", "Glm4Config"),
         ("glm46v", "Glm46VConfig"),
         ("glm4_moe", "Glm4MoeConfig"),
+        ("glm4_moe_lite", "Glm4MoeLiteConfig"),
         ("glm4v", "Glm4vConfig"),
         ("glm4v_moe", "Glm4vMoeConfig"),
         ("glm4v_moe_text", "Glm4vMoeTextConfig"),
         ("glm4v_moe_vision", "Glm4vMoeVisionConfig"),
         ("glm4v_text", "Glm4vTextConfig"),
         ("glm4v_vision", "Glm4vVisionConfig"),
+        ("glm_image", "GlmImageConfig"),
+        ("glm_image_text", "GlmImageTextConfig"),
+        ("glm_image_vision", "GlmImageVisionConfig"),
+        ("glm_image_vqmodel", "GlmImageVQVAEConfig"),
+        ("glmasr", "GlmAsrConfig"),
+        ("glmasr_encoder", "GlmAsrEncoderConfig"),
         ("glpn", "GLPNConfig"),
         ("got_ocr2", "GotOcr2Config"),
         ("gpt-sw3", "GPT2Config"),
@@ -215,6 +222,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("instructblipvideo", "InstructBlipVideoConfig"),
         ("internvl", "InternVLConfig"),
         ("internvl_vision", "InternVLVisionConfig"),
+        ("jais2", "Jais2Config"),
         ("jamba", "JambaConfig"),
         ("janus", "JanusConfig"),
         ("jetmoe", "JetMoeConfig"),
@@ -233,6 +241,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("lfm2_moe", "Lfm2MoeConfig"),
         ("lfm2_vl", "Lfm2VlConfig"),
         ("lightglue", "LightGlueConfig"),
+        ("lighton_ocr", "LightOnOcrConfig"),
         ("lilt", "LiltConfig"),
         ("llama", "LlamaConfig"),
         ("llama4", "Llama4Config"),
@@ -245,6 +254,8 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("longformer", "LongformerConfig"),
         ("longt5", "LongT5Config"),
         ("luke", "LukeConfig"),
+        ("lw_detr", "LwDetrConfig"),
+        ("lw_detr_vit", "LwDetrViTConfig"),
         ("lxmert", "LxmertConfig"),
         ("m2m_100", "M2M100Config"),
         ("mamba", "MambaConfig"),
@@ -260,6 +271,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("mgp-str", "MgpstrConfig"),
         ("mimi", "MimiConfig"),
         ("minimax", "MiniMaxConfig"),
+        ("minimax_m2", "MiniMaxM2Config"),
         ("ministral", "MinistralConfig"),
         ("ministral3", "Ministral3Config"),
         ("mistral", "MistralConfig"),
@@ -306,6 +318,12 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("parakeet_encoder", "ParakeetEncoderConfig"),
         ("patchtsmixer", "PatchTSMixerConfig"),
         ("patchtst", "PatchTSTConfig"),
+        ("pe_audio", "PeAudioConfig"),
+        ("pe_audio_encoder", "PeAudioEncoderConfig"),
+        ("pe_audio_video", "PeAudioVideoConfig"),
+        ("pe_audio_video_encoder", "PeAudioVideoEncoderConfig"),
+        ("pe_video", "PeVideoConfig"),
+        ("pe_video_encoder", "PeVideoEncoderConfig"),
         ("pegasus", "PegasusConfig"),
         ("pegasus_x", "PegasusXConfig"),
         ("perceiver", "PerceiverConfig"),
@@ -316,6 +334,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("phi4_multimodal", "Phi4MultimodalConfig"),
         ("phimoe", "PhimoeConfig"),
         ("pix2struct", "Pix2StructConfig"),
+        ("pixio", "PixioConfig"),
         ("pixtral", "PixtralVisionConfig"),
         ("plbart", "PLBartConfig"),
         ("poolformer", "PoolFormerConfig"),
@@ -384,6 +403,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("smollm3", "SmolLM3Config"),
         ("smolvlm", "SmolVLMConfig"),
         ("smolvlm_vision", "SmolVLMVisionConfig"),
+        ("solar_open", "SolarOpenConfig"),
         ("speech-encoder-decoder", "SpeechEncoderDecoderConfig"),
         ("speech_to_text", "Speech2TextConfig"),
         ("speecht5", "SpeechT5Config"),
@@ -582,6 +602,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("ernie", "ERNIE"),
         ("ernie4_5", "Ernie4_5"),
         ("ernie4_5_moe", "Ernie4_5_MoE"),
+        ("ernie4_5_vl_moe", "Ernie4_5_VL_MoE"),
         ("esm", "ESM"),
         ("evolla", "Evolla"),
         ("exaone4", "EXAONE-4.0"),
@@ -616,12 +637,19 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("glm4", "GLM4"),
         ("glm46v", "Glm46V"),
         ("glm4_moe", "Glm4MoE"),
+        ("glm4_moe_lite", "Glm4MoELite"),
         ("glm4v", "GLM4V"),
         ("glm4v_moe", "GLM4VMOE"),
         ("glm4v_moe_text", "GLM4VMOE"),
         ("glm4v_moe_vision", "Glm4vMoeVisionModel"),
         ("glm4v_text", "GLM4V"),
         ("glm4v_vision", "Glm4vVisionModel"),
+        ("glm_image", "GlmImage"),
+        ("glm_image_text", "GlmImageText"),
+        ("glm_image_vision", "GlmImageVisionModel"),
+        ("glm_image_vqmodel", "GlmImageVQVAE"),
+        ("glmasr", "GLM-ASR"),
+        ("glmasr_encoder", "GLM-ASR Encoder"),
         ("glpn", "GLPN"),
         ("got_ocr2", "GOT-OCR2"),
         ("gpt-sw3", "GPT-Sw3"),
@@ -659,6 +687,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("instructblipvideo", "InstructBlipVideo"),
         ("internvl", "InternVL"),
         ("internvl_vision", "InternVLVision"),
+        ("jais2", "Jais2"),
         ("jamba", "Jamba"),
         ("janus", "Janus"),
         ("jetmoe", "JetMoe"),
@@ -678,6 +707,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("lfm2_moe", "Lfm2Moe"),
         ("lfm2_vl", "Lfm2Vl"),
         ("lightglue", "LightGlue"),
+        ("lighton_ocr", "LightOnOcr"),
         ("lilt", "LiLT"),
         ("llama", "LLaMA"),
         ("llama2", "Llama2"),
@@ -692,6 +722,8 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("longformer", "Longformer"),
         ("longt5", "LongT5"),
         ("luke", "LUKE"),
+        ("lw_detr", "LwDetr"),
+        ("lw_detr_vit", "LwDetrVit"),
         ("lxmert", "LXMERT"),
         ("m2m_100", "M2M100"),
         ("madlad-400", "MADLAD-400"),
@@ -711,6 +743,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("mgp-str", "MGP-STR"),
         ("mimi", "Mimi"),
         ("minimax", "MiniMax"),
+        ("minimax_m2", "MiniMax-M2"),
         ("ministral", "Ministral"),
         ("ministral3", "Ministral3"),
         ("mistral", "Mistral"),
@@ -762,6 +795,12 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("parakeet_encoder", "ParakeetEncoder"),
         ("patchtsmixer", "PatchTSMixer"),
         ("patchtst", "PatchTST"),
+        ("pe_audio", "PeAudio"),
+        ("pe_audio_encoder", "PeAudioEncoder"),
+        ("pe_audio_video", "PeAudioVideo"),
+        ("pe_audio_video_encoder", "PeAudioVideoEncoder"),
+        ("pe_video", "PeVideo"),
+        ("pe_video_encoder", "PeVideoEncoder"),
         ("pegasus", "Pegasus"),
         ("pegasus_x", "PEGASUS-X"),
         ("perceiver", "Perceiver"),
@@ -773,6 +812,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("phimoe", "Phimoe"),
         ("phobert", "PhoBERT"),
         ("pix2struct", "Pix2Struct"),
+        ("pixio", "Pixio"),
         ("pixtral", "Pixtral"),
         ("plbart", "PLBart"),
         ("poolformer", "PoolFormer"),
@@ -841,6 +881,7 @@ MODEL_NAMES_MAPPING = OrderedDict[str, str](
         ("smollm3", "SmolLM3"),
         ("smolvlm", "SmolVLM"),
         ("smolvlm_vision", "SmolVLMVisionTransformer"),
+        ("solar_open", "SolarOpen"),
         ("speech-encoder-decoder", "Speech Encoder decoder"),
         ("speech_to_text", "Speech2Text"),
         ("speecht5", "SpeechT5"),
@@ -955,6 +996,10 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("glm4v_moe_vision", "glm4v_moe"),
         ("glm4v_text", "glm4v"),
         ("glm4v_moe_text", "glm4v_moe"),
+        ("glm_image_vision", "glm_image"),
+        ("glm_image_vqmodel", "glm_image"),
+        ("glm_image_text", "glm_image"),
+        ("glmasr_encoder", "glmasr"),
         ("grounding-dino", "grounding_dino"),
         ("mm-grounding-dino", "mm_grounding_dino"),
         ("idefics3_vision", "idefics3"),
@@ -981,8 +1026,13 @@ SPECIAL_MODEL_TYPE_TO_MODULE_NAME = OrderedDict[str, str](
         ("llama4_text", "llama4"),
         ("blip_2_qformer", "blip_2"),
         ("fastspeech2_conformer_with_hifigan", "fastspeech2_conformer"),
+        ("perception_encoder", "perception_lm"),
+        ("pe_audio_encoder", "pe_audio"),
+        ("pe_video_encoder", "pe_video"),
+        ("pe_audio_video_encoder", "pe_audio_video"),
         ("video_llama_3_vision", "video_llama_3"),
         ("parakeet_encoder", "parakeet"),
+        ("lw_detr_vit", "lw_detr"),
         ("parakeet_ctc", "parakeet"),
         ("lasr_encoder", "lasr"),
         ("lasr_ctc", "lasr"),
@@ -1008,7 +1058,7 @@ def model_type_to_module_name(key) -> str:
     return key
 
 
-def config_class_to_model_type(config) -> Union[str, None]:
+def config_class_to_model_type(config) -> str | None:
     """Converts a config class name to the corresponding model type"""
     for key, cls in CONFIG_MAPPING_NAMES.items():
         if cls == config:
@@ -1125,7 +1175,7 @@ class _LazyLoadAllMappings(OrderedDict[str, str]):
         return item in self._data
 
 
-def _get_class_name(model_class: Union[str, list[str]]):
+def _get_class_name(model_class: str | list[str]):
     if isinstance(model_class, (list, tuple)):
         return " or ".join([f"[`{c}`]" for c in model_class if c is not None])
     return f"[`{model_class}`]"
@@ -1218,7 +1268,7 @@ class AutoConfig:
 
     @classmethod
     @replace_list_option_in_docstrings()
-    def from_pretrained(cls, pretrained_model_name_or_path: Union[str, os.PathLike[str]], **kwargs):
+    def from_pretrained(cls, pretrained_model_name_or_path: str | os.PathLike[str], **kwargs):
         r"""
         Instantiate one of the configuration classes of the library from a pretrained model configuration.
 

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The Google AI Language Team Authors, Facebook AI Research authors and The HuggingFace Inc. team.
 # Copyright (c) 2020, NVIDIA CORPORATION.  All rights reserved.
 #
@@ -19,12 +18,12 @@ import inspect
 import os
 import warnings
 from collections.abc import Callable
+from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Optional, Union
+from typing import TYPE_CHECKING, Any, Optional
 
 import torch
 import torch.distributed as dist
-from packaging import version
 from torch import nn
 
 from ..cache_utils import (
@@ -54,6 +53,7 @@ from ..utils import (
     is_torchdynamo_exporting,
     logging,
 )
+from ..utils.generic import is_flash_attention_requested
 from .candidate_generator import (
     AssistantVocabTranslatorCache,
     AssistedCandidateGenerator,
@@ -332,9 +332,9 @@ class GenerateBeamEncoderDecoderOutput(ModelOutput):
 
 
 # Typing shortcuts
-GenerateNonBeamOutput = Union[GenerateDecoderOnlyOutput, GenerateEncoderDecoderOutput]
-GenerateBeamOutput = Union[GenerateBeamDecoderOnlyOutput, GenerateBeamEncoderDecoderOutput]
-GenerateOutput = Union[GenerateNonBeamOutput, GenerateBeamOutput]
+GenerateNonBeamOutput = GenerateDecoderOnlyOutput | GenerateEncoderDecoderOutput
+GenerateBeamOutput = GenerateBeamDecoderOnlyOutput | GenerateBeamEncoderDecoderOutput
+GenerateOutput = GenerateNonBeamOutput | GenerateBeamOutput
 
 
 class GenerationMixin(ContinuousMixin):
@@ -407,6 +407,9 @@ class GenerationMixin(ContinuousMixin):
                     **repo_loading_kwargs,
                 )
             except OSError:
+                # `self` already has a generation config created from model config, but model config will
+                # not contain any generation-specific params. These are popped at config's `__init__`.
+                # Thus we have to load from `config.json` and create a generation config from it (for BART)
                 logger.info(
                     "Generation config file not found, using a generation config created from the model config."
                 )
@@ -418,6 +421,7 @@ class GenerationMixin(ContinuousMixin):
                     _from_model_config=True,
                     **repo_loading_kwargs,
                 )
+
             # Load custom generate function if `pretrained_model_name_or_path` defines it (and override `generate`)
             if hasattr(self, "load_custom_generate") and trust_remote_code:
                 try:
@@ -593,6 +597,7 @@ class GenerationMixin(ContinuousMixin):
         attention_mask: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         cache_position: torch.LongTensor | None = None,
+        is_first_iteration: bool | None = False,
         **kwargs,
     ):
         """
@@ -628,7 +633,7 @@ class GenerationMixin(ContinuousMixin):
         input_ids_key = "decoder_input_ids" if self.config.is_encoder_decoder else "input_ids"
         # if `inputs_embeds` are passed, we only want to use them in the 1st generation step for every prompt.
         if not self.config.is_encoder_decoder:
-            if inputs_embeds is not None and len(cache_position) == inputs_embeds.shape[1]:
+            if inputs_embeds is not None and is_first_iteration:
                 model_inputs[input_ids_key] = None
                 model_inputs["inputs_embeds"] = inputs_embeds
             else:
@@ -708,6 +713,7 @@ class GenerationMixin(ContinuousMixin):
                     past_key_values=past_key_values,
                     position_ids=position_ids,
                     token_type_ids=token_type_ids,
+                    is_first_iteration=is_first_iteration,
                 )
             else:
                 attention_mask = causal_mask_creation_function(
@@ -1300,7 +1306,7 @@ class GenerationMixin(ContinuousMixin):
         if generation_config.do_sample:
             # In beam methods, we need to keep at least one non-eos token to explore continuations that might have a
             # better score (i.e. keep len(list(generation_config._eos_token_tensor)) + 1)
-            if generation_config.num_beams > 1:
+            if generation_config.num_beams is not None and generation_config.num_beams > 1:
                 if isinstance(generation_config._eos_token_tensor, list):
                     min_tokens_to_keep = len(generation_config._eos_token_tensor) + 1
                 elif isinstance(generation_config._eos_token_tensor, torch.Tensor):
@@ -1722,8 +1728,8 @@ class GenerationMixin(ContinuousMixin):
                 )
             generation_config.max_length = generation_config.max_new_tokens + input_ids_length
 
-        # if both `inputs_embeds` and `input_ids` are passed, we do not correct the length
-        # otherwise we need total length [inputs-embeds-len + new-tokens-len] to not go beyond indicated `max_length``
+        # If both `inputs_embeds` and `input_ids` are passed, we correct length with `inputs_tensor.shape`
+        # We need to get max_length = inputs_embeds_len + max_new_tokens
         elif (
             model_input_name == "inputs_embeds"
             and input_ids_length != inputs_tensor.shape[1]
@@ -1731,11 +1737,10 @@ class GenerationMixin(ContinuousMixin):
         ):
             generation_config.max_length -= inputs_tensor.shape[1]
         elif has_default_max_length:  # by default let's always generate 20 new tokens
-            if generation_config.max_length == GenerationConfig().max_length:
-                generation_config.max_length = generation_config.max_length + input_ids_length
-                max_position_embeddings = getattr(self.config, "max_position_embeddings", None)
-                if max_position_embeddings is not None:
-                    generation_config.max_length = min(generation_config.max_length, max_position_embeddings)
+            generation_config.max_length = generation_config.max_length + input_ids_length
+            max_position_embeddings = getattr(self.config, "max_position_embeddings", None)
+            if max_position_embeddings is not None:
+                generation_config.max_length = min(generation_config.max_length, max_position_embeddings)
 
         # same for min length
         if generation_config.min_new_tokens is not None:
@@ -1760,7 +1765,6 @@ class GenerationMixin(ContinuousMixin):
     def _prepare_generation_config(
         self,
         generation_config: GenerationConfig | None,
-        use_model_defaults: bool | None = None,
         **kwargs: Any,
     ) -> tuple[GenerationConfig, dict]:
         """
@@ -1768,93 +1772,56 @@ class GenerationMixin(ContinuousMixin):
         function handles retrocompatibility with respect to configuration files.
         """
         # parameterization priority:
-        # kwargs > non-global default values in `generation_config` > `model.generation_config` > GenerationConfig()
+        # user-defined kwargs or `generation_config` > `self.generation_config` > global default values
         # TODO (joao): per-model generation config classes.
 
-        using_model_generation_config = False
+        generation_config_provided = generation_config is not None
         if generation_config is None:
-            # legacy: users may modify the model configuration to control generation. To trigger this legacy behavior,
-            # the following conditions must be met
-            # 1) the generation config must have been created from the model config (`_from_model_config` field);
-            # 2) the generation config must have seen no modification since its creation (the hash is the same);
-            # 3) there are non-default generation parameters in the model config.
-            # 4) the user must have set new generation parameters in the model config.
-            if (
-                self.generation_config._from_model_config  # 1)
-                and self.generation_config._original_object_hash == hash(self.generation_config)  # 2)
-                and len(self.config._get_non_default_generation_parameters()) > 0  # 3)
-            ):
-                new_generation_config = GenerationConfig.from_model_config(self.config)
-                if new_generation_config != self.generation_config:  # 4)
-                    raise ValueError(
-                        "You have modified the pretrained model configuration to control generation."
-                        " This strategy to control generation is not supported anymore. "
-                        " Please use and modify the model generation configuration (see"
-                        " https://huggingface.co/docs/transformers/generation_strategies#default-text-generation-configuration )",
-                    )
-
-            generation_config = self.generation_config
-            using_model_generation_config = True
-
-            # Related to #40039: prior to this PR, models with sliding window attention were forced to have
-            # `cache_implementation="hybrid"` (the static sliding window cache). For these models, we now want to use
-            # the dynamic sliding window cache by default, so we UNSET `cache_implementation` if it is a default value.
-            # (if we're inside this branch, then it is because we're using default values from the Hub)
-            if generation_config.cache_implementation == "hybrid":
-                generation_config.cache_implementation = None
+            # Users may modify `model.config` to control generation. This is a legacy behavior and is not supported anymore
+            if len(self.config._get_generation_parameters()) > 0:
+                raise ValueError(
+                    "You have modified the pretrained model configuration to control generation "
+                    f"We detected the following values set - {self.config._get_generation_parameters()}. "
+                    "This strategy to control generation is not supported anymore. Please use and modify `model.generation_config` "
+                    "(see https://huggingface.co/docs/transformers/generation_strategies#default-text-generation-configuration )",
+                )
+            generation_config = GenerationConfig()
 
         # `torch.export.export` usually raises an exception if it is called
         # with ``strict=True``. deepcopy can only be processed if ``strict=False``.
         generation_config = copy.deepcopy(generation_config)
 
-        if not using_model_generation_config:
-            # If `generation_config` is provided:
-            # - `use_model_defaults`: let's fallback ALL default values to the model's generation config
-            # - otherwise: legacy behavior, let's just make sure we have the tokens defined
-            model_base_version = version.parse(version.parse(self.generation_config.transformers_version).base_version)
-            if use_model_defaults is True or (
-                use_model_defaults is None and model_base_version >= version.parse("4.50.0")
-            ):
-                modified_values = {}
-                global_default_generation_config = GenerationConfig()
-                model_generation_config = self.generation_config
-                # we iterate over the model's generation config: it may hold custom keys, which we'll want to copy
-                for key, model_gen_config_value in model_generation_config.__dict__.items():
-                    if key.startswith("_") or key == "transformers_version":  # metadata
-                        continue
-                    # Don't set `cache_implementation = 'hybrid'` from the model defaults, see #40135
-                    if key == "cache_implementation" and model_generation_config.cache_implementation == "hybrid":
-                        continue
-                    global_default_value = getattr(global_default_generation_config, key, None)
-                    custom_gen_config_value = getattr(generation_config, key, None)
-                    if (
-                        custom_gen_config_value == global_default_value
-                        and model_gen_config_value != global_default_value
-                    ):
-                        modified_values[key] = model_gen_config_value
-                        setattr(generation_config, key, model_gen_config_value)
-                # edge case: we may set `temperature=0.0` and `do_sample=False`, but the model defaults to
-                # `do_sample=True`
-                if generation_config.temperature == 0.0:
-                    generation_config.do_sample = False
-                if use_model_defaults is None and len(modified_values) > 0:
-                    logger.warning_once(
-                        f"`generation_config` default values have been modified to match model-specific defaults: "
-                        f"{modified_values}. If this is not desired, please set these values explicitly."
-                    )
-            else:
-                if generation_config.bos_token_id is None:
-                    generation_config.bos_token_id = self.generation_config.bos_token_id
-                if generation_config.eos_token_id is None:
-                    generation_config.eos_token_id = self.generation_config.eos_token_id
-                if generation_config.pad_token_id is None:
-                    generation_config.pad_token_id = self.generation_config.pad_token_id
-                if generation_config.decoder_start_token_id is None:
-                    generation_config.decoder_start_token_id = self.generation_config.decoder_start_token_id
+        # First set values from the loaded `self.generation_config`, then set default values (BC)
+        #
+        # Only update values that are `None`, i.e. these values were not explicitly set by users to `generate()`,
+        # or values that are not present in the current config, i.e. custom entries that were set via `**kwargs`.
+        # Thus we use the specific kwargs `defaults_only=True` (`None` values only) and `allow_custom_entries=True`
+        # (custom entries are carried over).
+        global_defaults = self.generation_config._get_default_generation_params()
+        generation_config.update(**self.generation_config.to_dict(), defaults_only=True, allow_custom_entries=True)
+        generation_config.update(**global_defaults, defaults_only=True)
 
-        # Finally, apply any passed kwargs
+        # Finally, if there are any kwargs, update config with it -> highest priority at the end
         model_kwargs = generation_config.update(**kwargs)
-        # And keep in model_kwargs variable output controls
+
+        # Related to #40039: prior to this PR, models with sliding window attention were forced to have
+        # `cache_implementation="hybrid"` (the static sliding window cache). For these models, we now want to use
+        # the dynamic sliding window cache by default, so we UNSET `cache_implementation` if it is a default value.
+        # (if we're inside this branch, then it is because we're using default values from the Hub)
+        if generation_config.cache_implementation == "hybrid":
+            generation_config.cache_implementation = None
+
+        # It doesn't make sense to allow kwargs and `generation_config`, that should be mutually exclusive
+        if generation_config_provided and set(kwargs.keys()) - set(model_kwargs.keys()):
+            generation_kwargs = set(kwargs.keys()) - set(model_kwargs.keys())
+            logger.warning_once(
+                f"Passing `generation_config` together with generation-related "
+                f"arguments=({generation_kwargs}) is deprecated and will be removed in future versions. "
+                "Please pass either a `generation_config` object OR all generation "
+                "parameters explicitly, but not both.",
+            )
+
+        # Finally keep output_xxx args in `model_kwargs` so it can be passed to `forward`
         output_attentions = generation_config.output_attentions
         output_hidden_states = generation_config.output_hidden_states
         model_kwargs.update({"output_attentions": output_attentions} if output_attentions else {})
@@ -1946,6 +1913,7 @@ class GenerationMixin(ContinuousMixin):
         # NOTE: remove xlnet/reformer when the models are deprecated, non-standard model architecture/cache name
         return not cls._is_stateful and all(
             special_model_name not in cls.__name__.lower()
+            or "minimaxm2" in cls.__name__.lower()  # name clash between minimax and minimax m2
             for special_model_name in [
                 "reformer",
                 "minimax",
@@ -2211,19 +2179,37 @@ class GenerationMixin(ContinuousMixin):
                 "will be skipped."
             )
 
-            # Finally: if we can compile, disable tokenizers parallelism and check for FA2 + static cache
+        if can_compile:
+            # Finally: if we can compile, disable tokenizers parallelism
             os.environ["TOKENIZERS_PARALLELISM"] = "0"
-            # If we use FA2 and a static cache, we cannot compile with fullgraph
-            if self.config._attn_implementation == "flash_attention_2":
+
+            # If we use FA and a static cache, we cannot compile with fullgraph
+            if is_flash_attention_requested(self.config):
                 # only raise warning if the user passed an explicit compile-config
                 if generation_config.compile_config is not None and generation_config.compile_config.fullgraph:
                     logger.warning_once(
-                        "When using Flash Attention 2 and a static cache, you cannot use the option `CompileConfig(fullgraph=True)` as "
-                        "FA2 introduces graph breaks. We overrode the option with `fullgraph=False`."
+                        "When using Flash Attention and a static cache, you cannot use the option `CompileConfig(fullgraph=True)` as "
+                        "FA introduces graph breaks. We overrode the option with `fullgraph=False`."
                     )
                     generation_config.compile_config.fullgraph = False
 
         return can_compile
+
+    @contextmanager
+    def _optimize_model_for_decode(self):
+        original_experts_implementation = self.config._experts_implementation
+        if original_experts_implementation == "grouped_mm":
+            logger.info_once(
+                "We will be switching to 'batched_mm' for the decoding stage as it is much more performant than 'grouped_mm' on smaller inputs. "
+                "If you experience any issues with this, please open an issue on the Hugging Face Transformers GitHub repository.",
+            )
+            self.set_experts_implementation("batched_mm")
+
+        try:
+            yield
+        finally:
+            if original_experts_implementation == "grouped_mm":
+                self.set_experts_implementation(original_experts_implementation)
 
     def _get_deprecated_gen_repo(
         self,
@@ -2294,7 +2280,6 @@ class GenerationMixin(ContinuousMixin):
         streamer: Optional["BaseStreamer"] = None,
         negative_prompt_ids: torch.Tensor | None = None,
         negative_prompt_attention_mask: torch.Tensor | None = None,
-        use_model_defaults: bool | None = None,
         custom_generate: str | Callable | None = None,
         **kwargs,
     ) -> GenerateOutput | torch.LongTensor:
@@ -2360,11 +2345,6 @@ class GenerationMixin(ContinuousMixin):
                 size. This is an experimental feature, subject to breaking API changes in future versions.
             negative_prompt_attention_mask (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Attention_mask for `negative_prompt_ids`.
-            use_model_defaults (`bool`, *optional*):
-                When it is `True`, unset parameters in `generation_config` will be set to the model-specific default
-                generation configuration (`model.generation_config`), as opposed to the global defaults
-                (`GenerationConfig()`). If unset, models saved starting from `v4.50` will consider this flag to be
-                `True`.
             custom_generate (`str` or `Callable`, *optional*):
                 One of the following:
                 - `str` (Hugging Face Hub repository name): runs the custom `generate` function defined at
@@ -2449,7 +2429,7 @@ class GenerationMixin(ContinuousMixin):
                 raise NotImplementedError(
                     f"assistant_model is not supported for continuous batching. Got {assistant_model = }"
                 )
-            if streamer is not None:  # TODO: actualy this could be supported
+            if streamer is not None:  # TODO: actually this could be supported
                 raise NotImplementedError(f"streaming is not supported for continuous batching. Got {streamer = }")
             if negative_prompt_ids is not None:
                 raise NotImplementedError(
@@ -2474,7 +2454,7 @@ class GenerationMixin(ContinuousMixin):
             # switch to CB
             outputs = self.generate_batch(
                 inputs=inputs,
-                generation_config=self._prepare_generation_config(generation_config, use_model_defaults, **kwargs)[0],
+                generation_config=self._prepare_generation_config(generation_config, **kwargs)[0],
                 **kwargs,
             )
             sequences = [
@@ -2495,13 +2475,21 @@ class GenerationMixin(ContinuousMixin):
             streamer,
         )
 
-        generation_config, model_kwargs = self._prepare_generation_config(
-            generation_config, use_model_defaults, **kwargs
+        # Check length values before updating the config with defaults. We'll use it later to define the final min/max length (# 6)
+        has_default_max_length = kwargs.get("max_length") is None and (
+            generation_config is None or generation_config.max_length is None
         )
+        has_default_min_length = kwargs.get("min_length") is None and (
+            generation_config is None or generation_config.min_length is None
+        )
+        generation_config, model_kwargs = self._prepare_generation_config(generation_config, **kwargs)
+
         generation_mode = generation_config.get_generation_mode(assistant_model)
+        deprecated_mode_repo = self._get_deprecated_gen_repo(generation_mode, trust_remote_code, custom_generate)
+
         if isinstance(custom_generate, Callable):
             decoding_method = custom_generate
-        else:
+        elif deprecated_mode_repo is None:
             # type() required to access the unbound class-level method
             decoding_method = getattr(type(self), GENERATION_MODES_MAPPING[generation_mode])
 
@@ -2512,7 +2500,7 @@ class GenerationMixin(ContinuousMixin):
         # NOTE: This must come after initializing generation_config, since we need it to determine if this is a deprecated mode.
         # It must also be before any preparation steps, since Hub repos expect to be loaded before preparation steps.
         # TODO joao, manuel: remove this in v4.62.0
-        if deprecated_mode_repo := self._get_deprecated_gen_repo(generation_mode, trust_remote_code, custom_generate):
+        if deprecated_mode_repo is not None:
             return GenerationMixin.generate(
                 self,
                 inputs=inputs,
@@ -2523,7 +2511,6 @@ class GenerationMixin(ContinuousMixin):
                 assistant_model=assistant_model,
                 negative_prompt_ids=negative_prompt_ids,
                 negative_prompt_attention_mask=negative_prompt_attention_mask,
-                use_model_defaults=use_model_defaults,
                 custom_generate=deprecated_mode_repo,
                 trust_remote_code=trust_remote_code,
                 **generation_mode_kwargs,
@@ -2614,8 +2601,6 @@ class GenerationMixin(ContinuousMixin):
 
         # 6. Prepare `max_length` depending on other stopping criteria.
         input_ids_length = input_ids.shape[1]
-        has_default_max_length = kwargs.get("max_length") is None and generation_config.max_length is not None
-        has_default_min_length = kwargs.get("min_length") is None and generation_config.min_length is not None
         generation_config = self._prepare_generated_length(
             generation_config=generation_config,
             has_default_max_length=has_default_max_length,
@@ -2873,13 +2858,20 @@ class GenerationMixin(ContinuousMixin):
             else self.__call__
         )
 
-        prefill_consumed = False
-        outputs = self._prefill(input_ids, generation_config, model_kwargs)
+        # Assisted generation completes the prefill stage in candidate generator so that
+        # we don't have several `prefill` calls in one generation loop. Skip `_prefill` for assistants
+        if not generation_config.is_assistant:
+            outputs = self._prefill(input_ids, generation_config, model_kwargs)
+            prefill_consumed = False
+        else:
+            model_kwargs = self._get_initial_cache_position(input_ids.shape[1], input_ids.device, model_kwargs)
+            prefill_consumed = True
 
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             if prefill_consumed:
                 model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
-                outputs = model_forward(**model_inputs, return_dict=True)
+                with self._optimize_model_for_decode():
+                    outputs = model_forward(**model_inputs, return_dict=True)
             prefill_consumed = True
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs,
@@ -3351,9 +3343,15 @@ class GenerationMixin(ContinuousMixin):
         )
         beam_indices = running_beam_indices.detach().clone()
 
-        prefill_consumed = False
         flat_running_sequences = input_ids
-        model_outputs = self._prefill(input_ids, generation_config, model_kwargs)
+        # Assisted generation completes the prefill stage in candidate generator so that
+        # we don't have several `prefill` calls in one generation loop. Skip `_prefill` for assistants
+        if not generation_config.is_assistant:
+            model_outputs = self._prefill(input_ids, generation_config, model_kwargs)
+            prefill_consumed = False
+        else:
+            model_kwargs = self._get_initial_cache_position(input_ids.shape[1], input_ids.device, model_kwargs)
+            prefill_consumed = True
 
         # 4. run the generation loop
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
@@ -3659,7 +3657,7 @@ class GenerationMixin(ContinuousMixin):
             cur_len = input_ids.shape[1]
 
             #  1. Fetch candidate sequences from a `CandidateGenerator` and move to the correct device
-            candidate_input_ids, candidate_logits = candidate_generator.get_candidates(input_ids)
+            candidate_input_ids, candidate_logits = candidate_generator.get_candidates(input_ids, is_first_iteration)
             candidate_input_ids = candidate_input_ids.to(self.device)
             if candidate_logits is not None:
                 candidate_logits = candidate_logits.to(self.device)
@@ -3686,7 +3684,9 @@ class GenerationMixin(ContinuousMixin):
                     dim=0,
                 )
 
-            model_inputs = self.prepare_inputs_for_generation(candidate_input_ids, **candidate_kwargs)
+            model_inputs = self.prepare_inputs_for_generation(
+                candidate_input_ids, is_first_iteration=is_first_iteration, **candidate_kwargs
+            )
             if "logits_to_keep" in model_inputs:
                 model_inputs["logits_to_keep"] = candidate_length + 1
 
@@ -3849,7 +3849,7 @@ class GenerationMixin(ContinuousMixin):
     def _prefill(self, input_ids: torch.LongTensor, generation_config: GenerationConfig, model_kwargs):
         if generation_config.prefill_chunk_size is None:
             model_kwargs = self._get_initial_cache_position(input_ids.shape[1], input_ids.device, model_kwargs)
-            model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
+            model_inputs = self.prepare_inputs_for_generation(input_ids, is_first_iteration=True, **model_kwargs)
             return self(**model_inputs, return_dict=True)
         else:  # Chunked prefill
             # Even if we are not compiling the forward, flex is always compiled when used. With chunked prefill, we may
@@ -3877,7 +3877,6 @@ class GenerationMixin(ContinuousMixin):
                 model_kwargs["cache_position"] = torch.arange(
                     past_length, current_length, dtype=torch.long, device=input_chunk.device
                 )
-                model_kwargs["position_ids"] = model_kwargs["cache_position"].unsqueeze(0)
                 model_inputs = self.prepare_inputs_for_generation(input_chunk, **model_kwargs)
 
                 outputs = model_forward(**model_inputs, return_dict=True)

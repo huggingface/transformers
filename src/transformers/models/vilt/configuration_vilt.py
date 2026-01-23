@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -115,12 +114,15 @@ class ViltConfig(PreTrainedConfig):
         num_channels=3,
         qkv_bias=True,
         max_image_length=-1,
-        tie_word_embeddings=False,
+        tie_word_embeddings=True,
         num_images=-1,
+        pad_token_id=None,
         **kwargs,
     ):
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+        super().__init__(**kwargs)
 
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
         self.vocab_size = vocab_size
         self.type_vocab_size = type_vocab_size
         self.modality_type_vocab_size = modality_type_vocab_size
@@ -142,7 +144,7 @@ class ViltConfig(PreTrainedConfig):
         self.qkv_bias = qkv_bias
         self.max_image_length = max_image_length
         self.num_images = num_images
-        self.tie_encoder_decoder = True
+        self.tie_word_embeddings = True  # force it
 
 
 __all__ = ["ViltConfig"]

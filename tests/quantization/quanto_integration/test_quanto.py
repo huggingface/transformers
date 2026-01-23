@@ -19,19 +19,16 @@ from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, Quanto
 from transformers.testing_utils import (
     require_accelerate,
     require_optimum_quanto,
-    require_read_token,
     require_torch_accelerator,
     slow,
     torch_device,
 )
-from transformers.utils import is_accelerate_available, is_optimum_quanto_available, is_torch_available
+from transformers.utils import is_optimum_quanto_available, is_torch_available
 
 
 if is_torch_available():
     import torch
 
-if is_accelerate_available():
-    from accelerate import init_empty_weights
 
 if is_optimum_quanto_available():
     from optimum.quanto import QLayerNorm, QLinear
@@ -46,7 +43,7 @@ class QuantoTestIntegration(unittest.TestCase):
 
     def setUp(self):
         config = AutoConfig.from_pretrained(self.model_id)
-        with init_empty_weights():
+        with torch.device("meta"):
             self.model = AutoModelForCausalLM.from_config(config)
         self.nb_linear = 0
         self.nb_layernorm = 0
@@ -238,6 +235,54 @@ class QuantoQuantizationTest(unittest.TestCase):
         self.check_same_model(model, self.quantized_model)
         self.check_inference_correctness(model, device=torch_device)
 
+    def test_compute_module_sizes(self):
+        r"""
+        Test if we compute the right module sizes needed to generate the device map.
+        Also test if we get the right values for `total_byte_count` in `caching_allocator_warmup`.
+        Note that `compute_module_sizes` is being used in `get_total_byte_count`
+        """
+        from transformers.integrations.accelerate import compute_module_sizes
+        from transformers.modeling_utils import expand_device_map, get_total_byte_count
+        from transformers.quantizers import AutoHfQuantizer
+
+        # we need to preprocess the model like that because device_map calculation happens before we load the weights inside the model.
+        # For normal wieghts, it's fine but for quantized weights, the tensors dtype might change during loading.
+        with torch.device("meta"):
+            config = AutoConfig.from_pretrained(self.model_name)
+            model = AutoModelForCausalLM.from_config(config, dtype=torch.bfloat16)
+            model_size, _ = compute_module_sizes(model, only_modules=False)
+
+            expected_keys = [name for name, _ in model.named_parameters()] + [
+                name for name, _ in model.named_buffers()
+            ]
+            expanded_device_map = expand_device_map({"": torch_device}, expected_keys)
+            total_byte_count = list(get_total_byte_count(model, expanded_device_map).values())[0]
+
+            # testing prequantized = False should be enough, the shape should be the same whether it is pre-quantized or not
+            hf_quantizer = AutoHfQuantizer.from_config(QuantoConfig(weights="int4"), pre_quantized=False)
+            hf_quantizer.preprocess_model(model=model, config=model.config)
+            quantized_model_size, _ = compute_module_sizes(model, hf_quantizer, only_modules=False)
+
+            expected_keys = [name for name, _ in model.named_parameters()] + [
+                name for name, _ in model.named_buffers()
+            ]
+            expanded_device_map = expand_device_map({"": torch_device}, expected_keys)
+            quantized_total_byte_count = list(get_total_byte_count(model, expanded_device_map, hf_quantizer).values())[
+                0
+            ]
+
+        for name, module in model.named_modules():
+            if isinstance(module, torch.nn.Linear) and "lm_head" not in name:
+                # from 16 bits to 4 bits
+                assert int(model_size[f"{name}.weight"] // 4) == int(quantized_model_size[f"{name}.weight"])
+
+        # check that we get the same value, as we use `compute_module_sizes` in `get_total_byte_count`
+        assert total_byte_count == model_size[""]
+        assert quantized_total_byte_count == quantized_model_size[""]
+
+        # we should at least have 1.5 times memory reduction in total
+        assert model_size[""] > quantized_model_size[""] * 1.5
+
 
 class QuantoQuantizationQBitsTensorTest(QuantoQuantizationTest):
     EXPECTED_OUTPUTS = "Hello my name is joe and i am a little girl\n\n"
@@ -260,7 +305,6 @@ class QuantoQuantizationActivationTest(unittest.TestCase):
 @require_torch_accelerator
 class QuantoKVCacheQuantizationTest(unittest.TestCase):
     @slow
-    @require_read_token
     def test_quantized_cache(self):
         EXPECTED_TEXT_COMPLETION = [
             "Simply put, the theory of relativity states that 1) time and space are not absolute, but are relative to the observer, and 2) the laws of physics are the same everywhere in the universe. This means that the speed of light is",

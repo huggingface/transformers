@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -68,6 +67,7 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("dia", "DiaProcessor"),
         ("edgetam", "Sam2Processor"),
         ("emu3", "Emu3Processor"),
+        ("ernie4_5_vl_moe", "Ernie4_5_VL_MoeProcessor"),
         ("evolla", "EvollaProcessor"),
         ("flava", "FlavaProcessor"),
         ("florence2", "Florence2Processor"),
@@ -78,6 +78,8 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("glm46v", "Glm46VProcessor"),
         ("glm4v", "Glm4vProcessor"),
         ("glm4v_moe", "Glm4vProcessor"),
+        ("glm_image", "Glm4vProcessor"),
+        ("glmasr", "GlmAsrProcessor"),
         ("got_ocr2", "GotOcr2Processor"),
         ("granite_speech", "GraniteSpeechProcessor"),
         ("grounding-dino", "GroundingDinoProcessor"),
@@ -93,10 +95,13 @@ PROCESSOR_MAPPING_NAMES = OrderedDict(
         ("kosmos-2", "Kosmos2Processor"),
         ("kosmos-2.5", "Kosmos2_5Processor"),
         ("kyutai_speech_to_text", "KyutaiSpeechToTextProcessor"),
+        ("lasr_ctc", "LasrProcessor"),
+        ("lasr_encoder", "LasrProcessor"),
         ("layoutlmv2", "LayoutLMv2Processor"),
         ("layoutlmv3", "LayoutLMv3Processor"),
         ("layoutxlm", "LayoutXLMProcessor"),
         ("lfm2_vl", "Lfm2VlProcessor"),
+        ("lighton_ocr", "LightOnOcrProcessor"),
         ("llama4", "Llama4Processor"),
         ("llava", "LlavaProcessor"),
         ("llava_next", "LlavaNextProcessor"),

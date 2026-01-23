@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2020 The Allen Institute for AI team and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Longformer configuration"""
-
-from typing import Union
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
@@ -88,7 +85,7 @@ class LongformerConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        attention_window: Union[list[int], int] = 512,
+        attention_window: list[int] | int = 512,
         sep_token_id: int = 2,
         pad_token_id: int = 1,
         bos_token_id: int = 0,
@@ -106,11 +103,14 @@ class LongformerConfig(PreTrainedConfig):
         initializer_range: float = 0.02,
         layer_norm_eps: float = 1e-12,
         onnx_export: bool = False,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         """Constructs LongformerConfig."""
-        super().__init__(pad_token_id=pad_token_id, **kwargs)
+        super().__init__(**kwargs)
 
+        self.pad_token_id = pad_token_id
+        self.tie_word_embeddings = tie_word_embeddings
         self.attention_window = attention_window
         self.sep_token_id = sep_token_id
         self.bos_token_id = bos_token_id

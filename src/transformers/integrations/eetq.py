@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 NetEase, Inc. and the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,15 +13,13 @@
 # limitations under the License.
 from ..core_model_loading import ConversionOps
 from ..quantizers.quantizers_utils import should_convert_module
-from ..utils import is_accelerate_available, is_torch_available, logging
+from ..utils import is_torch_available, logging
 
 
 if is_torch_available():
     import torch
     import torch.nn as nn
 
-if is_accelerate_available():
-    from accelerate import init_empty_weights
 
 logger = logging.get_logger(__name__)
 
@@ -97,7 +94,7 @@ def replace_with_eetq_linear(model, modules_to_not_convert: list[str] | None = N
             Names of the modules to not convert in `EetqLinear`. In practice we keep the `lm_head` in full precision
             for numerical stability reasons.
     """
-    from kernels import get_kernel
+    from .hub_kernels import get_kernel
 
     global eetq_kernels_hub
     eetq_kernels_hub = get_kernel("kernels-community/quantization-eetq")
@@ -108,7 +105,7 @@ def replace_with_eetq_linear(model, modules_to_not_convert: list[str] | None = N
     for module_name, module in model.named_modules():
         if not should_convert_module(module_name, modules_to_not_convert):
             continue
-        with init_empty_weights():
+        with torch.device("meta"):
             if isinstance(module, nn.Linear):
                 new_module = EetqLinear(
                     module.in_features, module.out_features, bias=module.bias is not None, **module_kwargs

@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -148,7 +147,6 @@ class Sam3VisionModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (Sam3VisionModel,) if is_torch_available() else ()
 
     test_resize_embeddings = False
-    test_torch_exportable = False
 
     def setUp(self):
         self.model_tester = Sam3VisionModelTester(self)
@@ -428,7 +426,6 @@ class Sam3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     pipeline_model_mapping = {"mask-generation": Sam3Model} if is_torch_available() else {}
 
     test_resize_embeddings = False
-    test_torch_exportable = False
     _is_composite = True
 
     def setUp(self):
@@ -854,6 +851,29 @@ class Sam3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
             with self.assertRaises(ValueError):
                 model(**inputs_with_both)
+
+    def test_custom_image_size(self):
+        """Test that custom image size can be set and propagates correctly through nested configs."""
+        config = self.model_tester.get_config()
+        config.image_size = 560
+
+        self.assertEqual(config.image_size, 560)
+        self.assertEqual(config.vision_config.image_size, 560)
+        self.assertEqual(config.vision_config.backbone_config.image_size, 560)
+
+        # Verify model works with custom size
+        model = Sam3Model(config=config).to(torch_device).eval()
+        pixel_values = floats_tensor([self.model_tester.batch_size, self.model_tester.num_channels, 560, 560]).to(
+            torch_device
+        )
+        input_ids = torch.randint(0, 1000, (self.model_tester.batch_size, 16), device=torch_device)
+
+        with torch.no_grad():
+            outputs = model(pixel_values=pixel_values, input_ids=input_ids, attention_mask=torch.ones_like(input_ids))
+
+        self.assertIsNotNone(outputs.pred_masks)
+        self.assertIsNotNone(outputs.pred_boxes)
+        self.assertIsNotNone(outputs.pred_logits)
 
     @unittest.skip(reason="SAM3 model can't be compiled dynamic yet")
     def test_sdpa_can_compile_dynamic(self):

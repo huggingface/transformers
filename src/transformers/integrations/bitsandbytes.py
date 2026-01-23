@@ -22,7 +22,6 @@ if is_torch_available():
 
 if is_accelerate_available():
     import accelerate
-    from accelerate import init_empty_weights
     from accelerate.hooks import add_hook_to_module, remove_hook_from_module
 
 logger = logging.get_logger(__name__)
@@ -181,7 +180,7 @@ def replace_with_bnb_linear(
         if not should_convert_module(module_name, modules_to_not_convert):
             continue
         new_module = None
-        with init_empty_weights():
+        with torch.device("meta"):
             if isinstance(module, (nn.Linear, Conv1D)):
                 if isinstance(module, Conv1D):
                     in_features, out_features = module.weight.shape
@@ -233,7 +232,7 @@ def replace_with_bnb_linear(
 
 
 # Copied from PEFT: https://github.com/huggingface/peft/blob/47b3712898539569c02ec5b3ed4a6c36811331a1/src/peft/utils/integrations.py#L41
-def dequantize_bnb_weight(weight: "torch.nn.Parameter", dtype: "torch.dtype", state=None):
+def dequantize_bnb_weight(weight: "torch.nn.Parameter", state=None):
     """
     Helper function to dequantize 4bit or 8bit bnb weights.
 
@@ -248,10 +247,7 @@ def dequantize_bnb_weight(weight: "torch.nn.Parameter", dtype: "torch.dtype", st
 
     if cls_name == "Params4bit":
         output_tensor = bnb.functional.dequantize_4bit(weight.data, weight.quant_state)
-        logger.warning_once(
-            f"The model is going to be dequantized in {output_tensor.dtype} - if you want to upcast it to another dtype, make sure to pass the desired dtype when quantizing the model through `bnb_4bit_quant_type` argument of `BitsAndBytesConfig`"
-        )
-        return output_tensor.to(dtype)
+        return output_tensor
 
     if state.SCB is None:
         state.SCB = weight.SCB
@@ -263,7 +259,7 @@ def dequantize_bnb_weight(weight: "torch.nn.Parameter", dtype: "torch.dtype", st
         # Multiply by (scale/127) to dequantize.
         dequantized = weight.data * state.SCB.view(-1, 1) * 7.874015718698502e-3
 
-    return dequantized.to(dtype)
+    return dequantized
 
 
 def _create_accelerate_new_hook(old_hook):
@@ -283,10 +279,7 @@ def _create_accelerate_new_hook(old_hook):
     return new_hook
 
 
-def dequantize_and_replace(
-    model,
-    quantization_config=None,
-):
+def dequantize_and_replace(model, quantization_config=None, dtype=None):
     """
     Converts a quantized model into its dequantized original version. The newly converted model will have
     some performance drop compared to the original model before quantization - use it only for specific usecases
@@ -297,14 +290,22 @@ def dequantize_and_replace(
     quant_method = quantization_config.quantization_method()
 
     target_cls = bnb.nn.Linear8bitLt if quant_method == "llm_int8" else bnb.nn.Linear4bit
-
     for module_name, module in model.named_modules():
         if isinstance(module, target_cls):
-            with init_empty_weights():
+            with torch.device("meta"):
                 bias = getattr(module, "bias", None)
                 new_module = torch.nn.Linear(module.in_features, module.out_features, bias=bias is not None)
             state = module.state if quant_method == "llm_int8" else None
-            new_module.weight = torch.nn.Parameter(dequantize_bnb_weight(module.weight, model.dtype, state))
+            new_module.weight = torch.nn.Parameter(dequantize_bnb_weight(module.weight, state))
+            weight = dequantize_bnb_weight(module.weight, state)
+            if dtype is None:
+                logger.warning_once(
+                    f"The modules are dequantized in {weight.dtype}. If you want to change the dtype, please specify `dtype` in `dequantize`. "
+                )
+            else:
+                logger.warning_once(f"The modules are dequantized in {weight.dtype} and casted to {dtype}.")
+                weight = weight.to(dtype)
+            new_module.weight = torch.nn.Parameter(weight)
             if bias is not None:
                 new_module.bias = bias
             if hasattr(module, "_hf_hook"):

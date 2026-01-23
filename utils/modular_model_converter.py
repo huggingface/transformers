@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -1264,7 +1263,7 @@ class ModularFileMapper(ModuleMapper):
                     imported_object = self.python_module.code_for_node(imported_.name)
                     self.model_specific_imported_objects[imported_object] = import_module
         if m.matches(node.module, m.Name()):
-            if "transformers" == import_module:
+            if import_module == "transformers":
                 raise ValueError(
                     f"You are importing from {import_module} directly using global imports. Import from the correct local path"
                 )
@@ -1478,10 +1477,15 @@ class ModularFileMapper(ModuleMapper):
                 suffix = common_partial_suffix(class_name, modeling_bases[0])
                 if len(suffix) > 0 and suffix[0].isupper():
                     cased_model_name = class_name.replace(suffix, "")
-                    # If both the old model and new model share the last part of their name, is detected as a common
+                    # If both the old model and new model share the last part of their name, it is detected as a common
                     # suffix, but it should not be the case -> use the full name in this case
                     if len(cased_model_name) < len(cased_default_name) and cased_default_name in class_name:
                         cased_model_name = cased_default_name
+                # If the new class name is of the form ` class NewNameOldNameClass(OldNameClass):`, i.e. it contains both names,
+                # add the OldName as suffix (see `examples/modular-transformers/modular_test_suffix.py`)
+                elif class_name.replace(cased_default_name, "") == modeling_bases[0]:
+                    file_model_name = filename.split(".")[-2]
+                    cased_model_name = cased_default_name + get_cased_name(file_model_name)
                 prefix_model_name_mapping[filename].update([cased_model_name])
 
         # Check if we found multiple prefixes for some modeling files
@@ -1741,14 +1745,10 @@ def create_modules(
     return files
 
 
-def run_ruff(code, check=False):
-    if check:
-        command = ["ruff", "check", "-", "--fix", "--exit-zero"]
-    else:
-        command = ["ruff", "format", "-", "--config", "pyproject.toml", "--silent"]
-    process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, stdin=subprocess.PIPE)
-    stdout, _ = process.communicate(input=code.encode())
-    return stdout.decode()
+def run_ruff(file: str):
+    """Run `ruff` linter and formatter on `file`, as in `make style`"""
+    subprocess.run(["ruff", "check", file, "--fix"], stdout=subprocess.DEVNULL)
+    subprocess.run(["ruff", "format", file], stdout=subprocess.DEVNULL)
 
 
 def convert_modular_file(modular_file: str, source_library: str | None = "transformers") -> dict[str, str]:
@@ -1793,9 +1793,7 @@ def convert_modular_file(modular_file: str, source_library: str | None = "transf
                 header = AUTO_GENERATED_MESSAGE.format(
                     relative_path=relative_path, short_name=os.path.basename(relative_path)
                 )
-                ruffed_code = run_ruff(header + module.code, True)
-                formatted_code = run_ruff(ruffed_code, False)
-                output[file] = formatted_code
+                output[file] = header + module.code
         return output
     else:
         print(f"modular pattern not found in {modular_file}, exiting")
@@ -1810,8 +1808,11 @@ def save_modeling_files(modular_file: str, converted_files: dict[str, str]):
         new_file_name = modular_file.replace("modular_", f"{file_name_prefix}_").replace(
             ".py", f"{file_name_suffix}.py"
         )
+        # Write the file
         with open(new_file_name, "w", encoding="utf-8") as f:
             f.write(converted_files[file_type])
+        # Run ruff on the new file
+        run_ruff(new_file_name)
 
 
 def count_loc(file_path: str) -> int:

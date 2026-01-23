@@ -13,7 +13,6 @@
 # limitations under the License.
 
 from functools import lru_cache
-from typing import Optional
 
 from ..activations import ACT2FN
 from ..core_model_loading import ConversionOps
@@ -49,7 +48,7 @@ class FbgemmFp8Quantize(ConversionOps):
     def convert(
         self,
         input_dict: dict[str, torch.Tensor | list[torch.Tensor]],
-        model: Optional[torch.nn.Module] = None,
+        model: torch.nn.Module | None = None,
         **kwargs,
     ) -> dict[str, torch.Tensor]:
         target_key, value = tuple(input_dict.items())[0]
@@ -257,7 +256,7 @@ class FbgemmFp8Llama4TextExperts(nn.Module):
 @lru_cache(maxsize=1)
 def get_quantize_fp8_per_row():
     if _is_torch_xpu_available:
-        from kernels import get_kernel
+        from .hub_kernels import get_kernel
 
         return get_kernel("kernels-community/fp8-fbgemm").quantize_fp8_per_row
     return torch.ops.fbgemm.quantize_fp8_per_row

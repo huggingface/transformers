@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team and Google DeepMind.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,7 +15,7 @@
 import collections
 from dataclasses import dataclass
 from functools import lru_cache
-from typing import Any
+from typing import TYPE_CHECKING, Any, Union
 
 import numpy as np
 import torch
@@ -24,11 +23,14 @@ from torch import nn
 from torch.nn import BCELoss
 
 from .. import initialization as init
+from ..configuration_utils import PreTrainedConfig
 from ..modeling_utils import PreTrainedModel
 from ..utils import ModelOutput, logging
-from .configuration_utils import PreTrainedConfig, WatermarkingConfig
 from .logits_process import SynthIDTextWatermarkLogitsProcessor, WatermarkLogitsProcessor
 
+
+if TYPE_CHECKING:
+    from .configuration_utils import WatermarkingConfig
 
 logger = logging.get_logger(__name__)
 
@@ -120,13 +122,13 @@ class WatermarkDetector:
 
     def __init__(
         self,
-        model_config: PreTrainedConfig,
+        model_config: "PreTrainedConfig",
         device: str,
-        watermarking_config: WatermarkingConfig | dict,
+        watermarking_config: Union["WatermarkingConfig", dict] | None,
         ignore_repeated_ngrams: bool = False,
         max_cache_size: int = 128,
     ):
-        if isinstance(watermarking_config, WatermarkingConfig):
+        if not isinstance(watermarking_config, dict):
             watermarking_config = watermarking_config.to_dict()
 
         self.bos_token_id = (

@@ -155,11 +155,31 @@ def is_torch_dtype(x):
     return isinstance(x, torch.dtype)
 
 
+def _is_tensor_or_array_like(value):
+    """
+    Check if a value is array-like (includes ragged arrays)
+    """
+    if is_numpy_array(value):
+        return True
+    if is_torch_tensor(value):
+        return True
+    if isinstance(value, (int, float, bool, np.number)):
+        return True
+
+    if isinstance(value, (list, tuple)):
+        if len(value) == 0:
+            # consider empty list or nested list as array-like
+            return True
+        return _is_tensor_or_array_like(value[0])
+
+    return False
+
+
 def maybe_autocast(
     device_type: str,
     dtype: Optional["_dtype"] = None,
     enabled: bool = True,
-    cache_enabled: Optional[bool] = None,
+    cache_enabled: bool | None = None,
 ):
     """
     Context manager that only autocasts if:
@@ -188,6 +208,31 @@ def is_mlx_array(x):
     Tests if `x` is a mlx array or not. Safe to call even when mlx is not installed.
     """
     return False if not _is_mlx_available else _is_mlx(x)
+
+
+def is_flash_attention_requested(config=None, requested_attention_implementation: str | None = None):
+    """
+    Checks whether some flavor of flash attention is requested or not.
+
+    This is checked against one of the two arguments, i.e. either the `config` or the directly passed value
+    `requested_attention_implementation`. Otherwise, an error will be raised (ambiguity).
+
+    The different versions of flash attention are usually
+    - Implementations based on the original flash attention repo: https://github.com/Dao-AILab/flash-attention
+    - Kernels implementations such as: https://huggingface.co/kernels-community/vllm-flash-attn3
+    """
+    if config is not None and requested_attention_implementation is not None:
+        raise ValueError(
+            "Requested attention implementation is ambiguous: "
+            "Please pass either the config or the name of the attention implementation, not both."
+        )
+
+    if config is not None:
+        checked_attention_implementation = config._attn_implementation
+    else:
+        checked_attention_implementation = requested_attention_implementation
+
+    return "flash" in checked_attention_implementation
 
 
 def to_py_obj(obj):

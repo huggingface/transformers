@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Blt model configuration"""
-
-from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
@@ -34,21 +31,21 @@ class BltLocalEncoderConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 260,
-        cross_attn_all_layers: Optional[bool] = False,
-        cross_attn_k: Optional[int] = 2,
-        hidden_size_global: Optional[int] = 2048,
-        hidden_size: Optional[int] = 1024,
-        num_attention_heads: Optional[int] = 16,
-        num_key_value_heads: Optional[int] = None,
-        num_hidden_layers: Optional[int] = 1,
-        rms_norm_eps: Optional[float] = 1e-5,
-        dropout: Optional[float] = 0.0,
-        max_position_embeddings: Optional[int] = 24576,
-        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        hidden_act: Optional[str] = "silu",
-        intermediate_size: Optional[int] = 2816,
-        initializer_range: Optional[float] = 0.02,
+        vocab_size: int | None = 260,
+        cross_attn_all_layers: bool | None = False,
+        cross_attn_k: int | None = 2,
+        hidden_size_global: int | None = 2048,
+        hidden_size: int | None = 1024,
+        num_attention_heads: int | None = 16,
+        num_key_value_heads: int | None = None,
+        num_hidden_layers: int | None = 1,
+        rms_norm_eps: float | None = 1e-5,
+        dropout: float | None = 0.0,
+        max_position_embeddings: int | None = 24576,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        hidden_act: str | None = "silu",
+        intermediate_size: int | None = 2816,
+        initializer_range: float | None = 0.02,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -83,21 +80,25 @@ class BltLocalDecoderConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 260,
-        cross_attn_all_layers: Optional[bool] = True,
-        cross_attn_k: Optional[int] = 2,
-        hidden_size_global: Optional[int] = 2048,
-        hidden_size: Optional[int] = 1024,
-        num_attention_heads: Optional[int] = 16,
-        num_key_value_heads: Optional[int] = None,
-        num_hidden_layers: Optional[int] = 9,
-        rms_norm_eps: Optional[float] = 1e-5,
-        dropout: Optional[float] = 0.0,
-        max_position_embeddings: Optional[int] = 24576,
-        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        hidden_act: Optional[str] = "silu",
-        intermediate_size: Optional[int] = 2816,
-        initializer_range: Optional[float] = 0.02,
+        vocab_size: int | None = 260,
+        cross_attn_all_layers: bool | None = True,
+        cross_attn_k: int | None = 2,
+        hidden_size_global: int | None = 2048,
+        hidden_size: int | None = 1024,
+        num_attention_heads: int | None = 16,
+        num_key_value_heads: int | None = None,
+        num_hidden_layers: int | None = 9,
+        rms_norm_eps: float | None = 1e-5,
+        dropout: float | None = 0.0,
+        max_position_embeddings: int | None = 24576,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        hidden_act: str | None = "silu",
+        intermediate_size: int | None = 2816,
+        initializer_range: float | None = 0.02,
+        pad_token_id: int | None = None,
+        bos_token_id: int | None = None,
+        eos_token_id: int | None = None,
+        tie_word_embeddings: bool | None = False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -115,11 +116,13 @@ class BltLocalDecoderConfig(PreTrainedConfig):
         self.max_position_embeddings = max_position_embeddings
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = False  # Force-set to False for BC
         self.rope_parameters = rope_parameters
 
-        # Remove tie_word_embeddings from kwargs to avoid duplicate parameter error
-        kwargs.pop("tie_word_embeddings", None)
-        super().__init__(**kwargs, tie_word_embeddings=False)
+        super().__init__(**kwargs)
 
 
 class BltGlobalTransformerConfig(PreTrainedConfig):
@@ -132,17 +135,18 @@ class BltGlobalTransformerConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        hidden_size: Optional[int] = 2048,
-        num_attention_heads: Optional[int] = 16,
-        num_key_value_heads: Optional[int] = None,
-        num_hidden_layers: Optional[int] = 25,
-        rms_norm_eps: Optional[float] = 1e-5,
-        dropout: Optional[float] = 0.0,
-        max_position_embeddings: Optional[int] = 4096,
-        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        hidden_act: Optional[str] = "silu",
-        intermediate_size: Optional[int] = 5632,
-        initializer_range: Optional[float] = 0.02,
+        hidden_size: int | None = 2048,
+        num_attention_heads: int | None = 16,
+        num_key_value_heads: int | None = None,
+        num_hidden_layers: int | None = 25,
+        rms_norm_eps: float | None = 1e-5,
+        dropout: float | None = 0.0,
+        max_position_embeddings: int | None = 4096,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        hidden_act: str | None = "silu",
+        intermediate_size: int | None = 5632,
+        initializer_range: float | None = 0.02,
+        tie_word_embeddings: bool | None = False,
         **kwargs,
     ):
         self.hidden_size = hidden_size
@@ -156,11 +160,10 @@ class BltGlobalTransformerConfig(PreTrainedConfig):
         self.max_position_embeddings = max_position_embeddings
         self.hidden_act = hidden_act
         self.initializer_range = initializer_range
+        self.tie_word_embeddings = False
         self.rope_parameters = rope_parameters
 
-        # Remove tie_word_embeddings from kwargs to avoid duplicate parameter error
-        kwargs.pop("tie_word_embeddings", None)
-        super().__init__(**kwargs, tie_word_embeddings=False)
+        super().__init__(**kwargs)
 
 
 class BltPatcherConfig(PreTrainedConfig):
@@ -205,17 +208,18 @@ class BltPatcherConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 260,
-        hidden_size: Optional[int] = 768,
-        num_hidden_layers: Optional[int] = 14,
-        num_attention_heads: Optional[int] = 12,
-        num_key_value_heads: Optional[int] = None,
-        max_position_embeddings: Optional[int] = 8192,
-        rms_norm_eps: Optional[float] = 1e-5,
-        dropout: Optional[float] = 0.0,
-        intermediate_size: Optional[int] = 2048,
-        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        initializer_range: Optional[float] = 0.02,
+        vocab_size: int | None = 260,
+        hidden_size: int | None = 768,
+        num_hidden_layers: int | None = 14,
+        num_attention_heads: int | None = 12,
+        num_key_value_heads: int | None = None,
+        max_position_embeddings: int | None = 8192,
+        rms_norm_eps: float | None = 1e-5,
+        dropout: float | None = 0.0,
+        intermediate_size: int | None = 2048,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        initializer_range: float | None = 0.02,
+        tie_word_embeddings: bool | None = False,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -232,9 +236,8 @@ class BltPatcherConfig(PreTrainedConfig):
         self.initializer_range = initializer_range
         self.rope_parameters = rope_parameters
 
-        # Remove tie_word_embeddings from kwargs to avoid duplicate parameter error
-        kwargs.pop("tie_word_embeddings", None)
-        super().__init__(**kwargs, tie_word_embeddings=False)
+        self.tie_word_embeddings = False
+        super().__init__(**kwargs)
 
 
 class BltConfig(PreTrainedConfig):
@@ -316,25 +319,28 @@ class BltConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 260,
-        max_position_embeddings: Optional[int] = 4096,
-        patch_in_forward: Optional[bool] = True,
-        patch_size: Optional[int] = 4,
-        patching_mode: Optional[str] = "entropy",
-        patching_threshold: Optional[float] = 1.335442066192627,
-        patching_batch_size: Optional[int] = 1,
-        max_patch_length: Optional[int] = None,
-        cross_attn_k: Optional[int] = 2,
-        encoder_hash_byte_group_size: Optional[int] = None,
-        encoder_hash_byte_group_vocab: Optional[int] = 500002,
-        encoder_hash_byte_group_nb_functions: Optional[int] = 1,
-        patcher_config: Optional[dict] = None,
-        encoder_config: Optional[dict] = None,
-        decoder_config: Optional[dict] = None,
-        global_config: Optional[dict] = None,
-        tie_word_embeddings: Optional[bool] = False,
-        initializer_range: Optional[float] = 0.02,
-        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
+        vocab_size: int | None = 260,
+        max_position_embeddings: int | None = 4096,
+        patch_in_forward: bool | None = True,
+        patch_size: int | None = 4,
+        patching_mode: str | None = "entropy",
+        patching_threshold: float | None = 1.335442066192627,
+        patching_batch_size: int | None = 1,
+        max_patch_length: int | None = None,
+        cross_attn_k: int | None = 2,
+        encoder_hash_byte_group_size: int | None = None,
+        encoder_hash_byte_group_vocab: int | None = 500002,
+        encoder_hash_byte_group_nb_functions: int | None = 1,
+        patcher_config: dict | None = None,
+        encoder_config: dict | None = None,
+        decoder_config: dict | None = None,
+        global_config: dict | None = None,
+        tie_word_embeddings: bool | None = False,
+        pad_token_id: int | None = None,
+        bos_token_id: int | None = None,
+        eos_token_id: int | None = None,
+        initializer_range: float | None = 0.02,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
         **kwargs,
     ):
         # Basic model configuration
@@ -405,11 +411,13 @@ class BltConfig(PreTrainedConfig):
             encoder_cross_output_size if encoder_cross_output_size != self.global_config.hidden_size else None
         )
 
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
         self.rope_parameters = rope_parameters
 
-        # Remove tie_word_embeddings from kwargs to avoid duplicate parameter error
-        kwargs.pop("tie_word_embeddings", None)
-        super().__init__(tie_word_embeddings=tie_word_embeddings, **kwargs)
+        super().__init__(**kwargs)
 
 
 __all__ = [

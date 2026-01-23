@@ -70,6 +70,7 @@ class GPTQConfigTest(unittest.TestCase):
         self.assertEqual(dict["bits"], quantization_config.bits)
 
     @require_optimum
+    @require_gptqmodel
     def test_optimum_config(self):
         from optimum.gptq import GPTQQuantizer
 
@@ -173,14 +174,6 @@ class GPTQTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             # Tries with a `dtype``
             self.quantized_model.to(torch.float16)
-
-    def test_original_dtype(self):
-        r"""
-        A simple test to check if the model successfully stores the original dtype
-        """
-        self.assertTrue(hasattr(self.quantized_model.config, "_pre_quantization_dtype"))
-        self.assertFalse(hasattr(self.model_fp16.config, "_pre_quantization_dtype"))
-        self.assertEqual(self.quantized_model.config._pre_quantization_dtype, torch.float16)
 
     def test_quantized_layers_class(self):
         """

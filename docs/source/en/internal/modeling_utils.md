@@ -20,6 +20,24 @@ This page lists all the custom layers used by the library, as well as the utilit
 
 Most of those are only useful if you are studying the code of the models in the library.
 
+## WeightConverter
+
+[[autodoc]] WeightConverter
+
+### Conversion operations
+
+[[autodoc]] ConversionOps
+
+[[autodoc]] Chunk
+
+[[autodoc]] Concatenate
+
+[[autodoc]] MergeModulelist
+
+[[autodoc]] SplitModulelist
+
+[[autodoc]] PermuteForRope
+
 ## Layers
 
 [[autodoc]] GradientCheckpointingLayer

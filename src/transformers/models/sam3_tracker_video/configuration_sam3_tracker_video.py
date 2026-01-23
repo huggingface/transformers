@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_sam3_tracker_video.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 the HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -396,6 +395,31 @@ class Sam3TrackerVideoConfig(PreTrainedConfig):
         self.memory_fuser_hidden_act = memory_fuser_hidden_act
 
         super().__init__(**kwargs)
+
+    @property
+    def image_size(self):
+        """Image size for the tracker video model."""
+        return self.vision_config.image_size
+
+    @image_size.setter
+    def image_size(self, value):
+        """Set the image size and propagate to sub-configs. Calculates feature sizes based on patch_size."""
+        self.prompt_encoder_config.image_size = value
+        self.vision_config.image_size = value
+
+        patch_size = self.vision_config.backbone_config.patch_size
+        self.vision_config.backbone_feature_sizes = [
+            [4 * value // patch_size, 4 * value // patch_size],
+            [2 * value // patch_size, 2 * value // patch_size],
+            [value // patch_size, value // patch_size],
+        ]
+        self.memory_attention_rope_feat_sizes = [
+            value // patch_size,
+            value // patch_size,
+        ]
+
+        # keep the image_size in the __dict__ to save the value in the config file (backward compatibility)
+        self.__dict__["image_size"] = value
 
 
 __all__ = ["Sam3TrackerVideoMaskDecoderConfig", "Sam3TrackerVideoPromptEncoderConfig", "Sam3TrackerVideoConfig"]

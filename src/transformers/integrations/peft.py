@@ -84,6 +84,7 @@ class PeftAdapterMixin:
         low_cpu_mem_usage: bool = False,
         is_trainable: bool = False,
         hotswap: bool | Literal["auto"] = "auto",
+        local_files_only: bool = False,
         adapter_kwargs: dict[str, Any] | None = None,
     ) -> None:
         """
@@ -243,6 +244,7 @@ class PeftAdapterMixin:
             adapter_config_file = find_adapter_config_file(
                 peft_model_id,
                 token=token,
+                local_files_only=local_files_only,
                 **adapter_kwargs,
             )
 
@@ -255,6 +257,7 @@ class PeftAdapterMixin:
             peft_config = PeftConfig.from_pretrained(
                 peft_model_id,
                 token=token,
+                local_files_only=local_files_only,
                 **adapter_kwargs,
             )
             peft_config.inference_mode = not is_trainable
@@ -268,6 +271,8 @@ class PeftAdapterMixin:
             self._hf_peft_config_loaded = True
 
         if peft_model_id is not None:
+            if "local_files_only" not in adapter_kwargs:
+                adapter_kwargs["local_files_only"] = local_files_only
             adapter_state_dict = load_peft_weights(peft_model_id, token=token, device=device, **adapter_kwargs)
 
         # We need to pre-process the state dict to remove unneeded prefixes - for backward compatibility

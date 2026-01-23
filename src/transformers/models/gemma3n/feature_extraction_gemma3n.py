@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 Google LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +14,6 @@
 
 import math
 from collections.abc import Sequence
-from typing import Optional, Union
 
 import numpy as np
 
@@ -34,7 +32,7 @@ def create_fb_matrix(
     n_mels: int,
     sample_rate: int,
     fft_length: int,
-    norm: Optional[str] = None,
+    norm: str | None = None,
 ) -> np.ndarray:
     r"""Create a frequency bin conversion matrix (NumPy version).
 
@@ -169,8 +167,8 @@ class Gemma3nAudioFeatureExtractor(SequenceFeatureExtractor):
         dither: float = 0.0,
         input_scale_factor: float = 1.0,
         mel_floor: float = 1e-5,
-        per_bin_mean: Optional[Sequence[float]] = None,
-        per_bin_stddev: Optional[Sequence[float]] = None,
+        per_bin_mean: Sequence[float] | None = None,
+        per_bin_stddev: Sequence[float] | None = None,
         **kwargs,
     ):
         super().__init__(
@@ -268,13 +266,13 @@ class Gemma3nAudioFeatureExtractor(SequenceFeatureExtractor):
 
     def __call__(
         self,
-        raw_speech: Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]],
-        padding: Union[bool, str, PaddingStrategy] = "longest",
-        max_length: Optional[int] = 480_000,
+        raw_speech: np.ndarray | list[float] | list[np.ndarray] | list[list[float]],
+        padding: bool | str | PaddingStrategy = "longest",
+        max_length: int | None = 480_000,
         truncation: bool = True,
-        pad_to_multiple_of: Optional[int] = 128,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        return_attention_mask: Optional[bool] = True,
+        pad_to_multiple_of: int | None = 128,
+        return_tensors: str | TensorType | None = None,
+        return_attention_mask: bool | None = True,
         **kwargs,
     ) -> BatchFeature:
         """Creates a batch of MEL spectrograms from the provided raw speech.

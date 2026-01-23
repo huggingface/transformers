@@ -23,7 +23,7 @@ rendered properly in your Markdown viewer.
     </div>
 </div>
 
-[NanoChat](https://huggingface.co/karpathy/nanochat-d32) is a compact decoder-only transformer model designed for educational purposes and efficient training. The model features several fundamental architectural innovations which are common in modern transformer models. Therefore, it is a good model to use as a starting point to understand the principles of modern transformer models. NanoChat is a variant of the [Llama](https://huggingface.co/docs/transformers/en/model_doc/llama) architecture, with simplified attention mechanism and normalization layers. 
+[NanoChat](https://huggingface.co/karpathy/nanochat-d32) is a compact decoder-only transformer model designed for educational purposes and efficient training. The model features several fundamental architectural innovations which are common in modern transformer models. Therefore, it is a good model to use as a starting point to understand the principles of modern transformer models. NanoChat is a variant of the [Llama](https://huggingface.co/docs/transformers/en/model_doc/llama) architecture, with simplified attention mechanism and normalization layers.
 
 The architecture is based on [nanochat](https://github.com/karpathy/nanochat) by [Andrej Karpathy](https://huggingface.co/karpathy), adapted for the Hugging Face Transformers library by [Ben Burtenshaw](https://huggingface.co/burtenshaw).
 

@@ -57,7 +57,6 @@ class Mask2FormerImageProcessingTester:
         num_labels=10,
         do_reduce_labels=True,
         ignore_index=255,
-        pad_size=None,
     ):
         self.parent = parent
         self.batch_size = batch_size
@@ -70,7 +69,6 @@ class Mask2FormerImageProcessingTester:
         self.image_mean = image_mean
         self.image_std = image_std
         self.size_divisor = 0
-        self.pad_size = pad_size
         # for the post_process_functions
         self.batch_size = 2
         self.num_queries = 3
@@ -92,7 +90,6 @@ class Mask2FormerImageProcessingTester:
             "num_labels": self.num_labels,
             "do_reduce_labels": self.do_reduce_labels,
             "ignore_index": self.ignore_index,
-            "pad_size": self.pad_size,
         }
 
     def get_expected_values(self, image_inputs, batched=False):

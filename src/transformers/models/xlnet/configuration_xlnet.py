@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 Google AI, Google Brain and Carnegie Mellon University Authors and the HuggingFace Inc. team.
 # Copyright (c) 2018, NVIDIA CORPORATION.  All rights reserved.
 #
@@ -14,8 +13,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """XLNet configuration"""
-
-import warnings
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
@@ -168,6 +165,7 @@ class XLNetConfig(PreTrainedConfig):
         pad_token_id=5,
         bos_token_id=1,
         eos_token_id=2,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         """Constructs XLNetConfig."""
@@ -207,18 +205,11 @@ class XLNetConfig(PreTrainedConfig):
         self.bos_token_id = bos_token_id
         self.pad_token_id = pad_token_id
         self.eos_token_id = eos_token_id
-
-        if "use_cache" in kwargs:
-            warnings.warn(
-                "The `use_cache` argument is deprecated and will be removed in a future version, use `use_mems_eval`"
-                " instead.",
-                FutureWarning,
-            )
-            use_mems_eval = kwargs["use_cache"]
+        self.tie_word_embeddings = tie_word_embeddings
 
         self.use_mems_eval = use_mems_eval
         self.use_mems_train = use_mems_train
-        super().__init__(pad_token_id=pad_token_id, bos_token_id=bos_token_id, eos_token_id=eos_token_id, **kwargs)
+        super().__init__(**kwargs)
 
     @property
     def max_position_embeddings(self):

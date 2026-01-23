@@ -18,7 +18,7 @@ from typing import TYPE_CHECKING
 from packaging import version
 
 from .base import HfQuantizer
-from .quantizers_utils import get_module_from_name
+from .quantizers_utils import get_module_from_name, should_convert_module
 
 
 if TYPE_CHECKING:
@@ -94,19 +94,19 @@ class TorchAoHfQuantizer(HfQuantizer):
     def __init__(self, quantization_config, **kwargs):
         super().__init__(quantization_config, **kwargs)
 
-        if isinstance(self.quantization_config.quant_type, str):
-            is_int_4 = "int4" in self.quantization_config.quant_type
+        self.quantized_param_size = None
+        quant_type = self.quantization_config.quant_type
+        if isinstance(quant_type, str):
+            map_to_param_size = {
+                "int4_weight_only": 0.5,
+                "int8_weight_only": 1,
+                "int8_dynamic_activation_int8_weight": 1,
+            }
+            if quant_type in map_to_param_size:
+                self.quantized_param_size = map_to_param_size[quant_type]
         else:
-            config_name = self.quantization_config.quant_type.__class__.__name__
-            is_int_4 = fuzzy_match_size(config_name) == "4"
-
-        # TODO: better way to get the serialized key names? Hard to read from torchao codebase
-        if is_int_4:
-            self.weight_ao_keys = ["qdata", "scale", "zero_point"]
-        else:
-            self.weight_ao_keys = ["qdata", "scale"]
-        # Instead of serializing the simple torch.Tensor like usual, torchao adds a `:_data` suffix so we need this
-        self.full_ao_keys = self.weight_ao_keys + ["_data"]
+            size_digit = fuzzy_match_size(quant_type.__class__.__name__)
+            self.quantized_param_size = 0.5 if size_digit == "4" else 1
 
     def validate_environment(self, *args, **kwargs):
         if not is_torchao_available():
@@ -134,80 +134,39 @@ class TorchAoHfQuantizer(HfQuantizer):
 
     def update_dtype(self, dtype):
         if self.quantization_config.quant_type == "int4_weight_only":
-            if dtype is not None and dtype != torch.bfloat16:
+            if dtype != torch.bfloat16:
                 logger.warning_once(
-                    f"Setting dtype to {dtype} for int4_weight_only quantization, but only bfloat16 is supported right now. Please set the dtype to bfloat16."
-                )
-            if dtype is None:
-                logger.warning_once(
-                    "Setting dtype to torch.bfloat16 for int4_weight_only quantization since only bfloat16 is supported right now. Please set dtype=torch.bfloat16 to remove this warning."
+                    f"Setting dtype to {dtype} for int4_weight_only quantization, but only bfloat16 is supported right now. Overwriting torch_dtype to bfloat16."
                 )
                 dtype = torch.bfloat16
-        if self.quantization_config.quant_type == "int8_dynamic_activation_int8_weight":
-            if dtype is None:
-                logger.info(
-                    "Setting dtype to torch.float32 for int8_dynamic_activation_int8_weight quantization as no dtype was specified in from_pretrained"
-                )
-                # we need to set the dtype, otherwise we have dtype mismatch when performing the quantized linear op
-                dtype = torch.float32
         return dtype
 
     def get_state_dict_and_metadata(self, model):
         """
         We flatten the state dict of tensor subclasses so that it is compatible with the safetensors format.
         """
-        if TORCHAO_VERSION >= version.parse("0.15.0"):
-            return flatten_tensor_state_dict(model.state_dict()), {}
+        if version.parse("0.15.0") <= TORCHAO_VERSION:
+            return flatten_tensor_state_dict(model.state_dict())
         else:
             raise RuntimeError(
                 f"In order to use safetensors with torchao, please use torchao version >= 0.15.0. Current version: {TORCHAO_VERSION}"
             )
 
-    def adjust_target_dtype(self, dtype: "torch.dtype") -> "torch.dtype":
-        from accelerate.utils import CustomDtype
+    def param_element_size(self, model: "PreTrainedModel", param_name: str, param: "torch.Tensor") -> float:
+        "Return the element size (in bytes) for `param_name`."
+        if self.param_needs_quantization(model, param_name) and self.quantized_param_size is not None:
+            return self.quantized_param_size
 
-        # Import AOBaseConfig directly since we know we have the right version
-        if self.quantization_config._get_ao_version() > version.Version("0.9.0"):
-            from torchao.core.config import AOBaseConfig
-
-            quant_type = self.quantization_config.quant_type
-            if isinstance(quant_type, AOBaseConfig):
-                # Extract size digit using fuzzy match on the class name
-                config_name = quant_type.__class__.__name__
-                size_digit = fuzzy_match_size(config_name)
-
-                # Map the extracted digit to appropriate dtype
-                if size_digit == "4":
-                    return CustomDtype.INT4
-                else:
-                    # Default to int8
-                    return torch.int8
-
-            # Original mapping for non-AOBaseConfig types
-            map_to_target_dtype = {
-                "int4_weight_only": CustomDtype.INT4,
-                "int8_weight_only": torch.int8,
-                "int8_dynamic_activation_int8_weight": torch.int8,
-                "autoquant": None,
-            }
-            return map_to_target_dtype[self.quantization_config.quant_type]
-        else:
-            raise ValueError(
-                "You are using `device_map='auto'` on a torchao quantized model. To automatically compute"
-                " the appropriate device map, you should upgrade your `accelerate` library with "
-                "`pip install --upgrade accelerate`"
-            )
+        return super().param_element_size(model, param_name, param)
 
     def adjust_max_memory(self, max_memory: dict[str, int | str]) -> dict[str, int | str]:
         # need more space for the quantization parameters (e.g. scale). Tested with int4 wo and group size = 128
         max_memory = {key: val * 0.9 for key, val in max_memory.items()}
         return max_memory
 
-    def _process_model_before_weight_loading(
-        self, model: "PreTrainedModel", keep_in_fp32_modules: list[str] | None = None, **kwargs
-    ):
+    def _process_model_before_weight_loading(self, model: "PreTrainedModel", checkpoint_files=None, **kwargs):
         self.modules_to_not_convert = self.get_modules_to_not_convert(
-            model, self.quantization_config.modules_to_not_convert, keep_in_fp32_modules
+            model, self.quantization_config.modules_to_not_convert, model._keep_in_fp32_modules
         )
         if self.quantization_config.include_input_output_embeddings:
             input_emb = model.get_input_embeddings()
@@ -217,16 +176,16 @@ class TorchAoHfQuantizer(HfQuantizer):
             self.modules_to_not_convert = [
                 x for x in self.modules_to_not_convert if x not in input_emb_names + output_emb_names
             ]
-        return
+        if checkpoint_files is not None:
+            # Torchao needs access to all metadata later
+            self.set_metadata(checkpoint_files)
 
     def param_needs_quantization(self, model: "PreTrainedModel", param_name: str, **kwargs) -> bool:
-        if self.pre_quantized:
-            return False
         if self.quantization_config.quant_type == "autoquant":
             return False
 
         # check if the param_name is not in self.modules_to_not_convert
-        if any(key + "." in param_name or key == param_name for key in self.modules_to_not_convert):
+        if not should_convert_module(param_name, self.modules_to_not_convert):
             return False
 
         # we only quantize the weight of nn.Linear and nn.Embedding
@@ -253,22 +212,6 @@ class TorchAoHfQuantizer(HfQuantizer):
 
         return isinstance(module, tuple(_QUANTIZABLE)) and tensor_name == "weight"
 
-    def preprocess_model(self, model: "PreTrainedModel", config, dtype=None, checkpoint_files=None, **kwargs):
-        """
-        Setting model attributes and/or converting model before weights loading. At this point
-        the model should be initialized on the meta device so you can freely manipulate the skeleton
-        of the model in order to replace modules in-place. Make sure to override the abstract method `_process_model_before_weight_loading`.
-
-        Args:
-            model (`~transformers.PreTrainedModel`):
-                The model to quantize
-            kwargs (`dict`, *optional*):
-                The keyword arguments that are passed along `_process_model_before_weight_loading`.
-        """
-        super().preprocess_model(model, config, dtype, checkpoint_files, **kwargs)
-        # Torchao needs access to all metadata later
-        self.set_metadata(checkpoint_files)
-
     def _process_model_after_weight_loading(self, model, **kwargs):
         """No process required for torchao quantized model"""
         if self.quantization_config.quant_type == "autoquant":
@@ -286,52 +229,13 @@ class TorchAoHfQuantizer(HfQuantizer):
         return
 
     def is_serializable(self) -> bool:
-        _is_torchao_serializable = TORCHAO_VERSION >= version.parse("0.15.0")
-        if not TORCHAO_VERSION >= version.parse("0.15.0"):
+        _is_torchao_serializable = version.parse("0.15.0") <= TORCHAO_VERSION
+        if not version.parse("0.15.0") <= TORCHAO_VERSION:
             logger.warning(
                 "torchao quantized model only supports serialization for torchao version >= 0.15.0, please upgrade "
                 "your version to save the quantized model"
             )
         return _is_torchao_serializable
-
-    def get_accelerator_warm_up_factor(self):
-        """
-        This factor is used in caching_allocator_warmup to determine how many bytes to pre-allocate for accelerator warmup.
-        - A factor of 2 means we pre-allocate the full memory footprint of the model.
-        - A factor of 4 means we pre-allocate half of that, and so on
-
-        However, when using TorchAO, calculating memory usage with param.numel() * param.element_size() doesn't give the correct size for quantized weights (like int4 or int8)
-        That's because TorchAO internally represents quantized tensors using subtensors and metadata, and the reported element_size() still corresponds to the dtype
-        not the actual bit-width of the quantized data.
-
-        To correct for this:
-        - Use a division factor of 8 for int4 weights
-        - Use a division factor of 4 for int8 weights
-        """
-        if self.quantization_config._get_ao_version() > version.Version("0.9.0"):
-            from torchao.core.config import AOBaseConfig
-
-            quant_type = self.quantization_config.quant_type
-            # For autoquant case, it will be treated in the string implementation below in map_to_target_dtype
-            if isinstance(quant_type, AOBaseConfig):
-                # Extract size digit using fuzzy match on the class name
-                config_name = quant_type.__class__.__name__
-                size_digit = fuzzy_match_size(config_name)
-
-                if size_digit == "4":
-                    return 8
-                else:
-                    return 4
-
-        # Original mapping for non-AOBaseConfig types
-        map_to_target_dtype = {
-            "int4_weight_only": 8,
-            "int8_weight_only": 4,
-            "int8_dynamic_activation_int8_weight": 4,
-            "autoquant": 4,
-        }
-
-        return map_to_target_dtype[self.quantization_config.quant_type]
 
     @property
     def is_trainable(self) -> bool:
