@@ -226,7 +226,9 @@ class GlmImageModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
         num_grids_per_sample = 2  # 1 source + 1 target
 
         filtered_inputs_dict = {
-            k: v[:batch_size, ...] if isinstance(v, torch.Tensor) and k not in ["pixel_values", "image_grid_thw", "images_per_sample"] else v
+            k: v[:batch_size, ...]
+            if isinstance(v, torch.Tensor) and k not in ["pixel_values", "image_grid_thw", "images_per_sample"]
+            else v
             for k, v in inputs_dict.items()
             if k not in input_keys_to_ignore
         }
@@ -235,7 +237,9 @@ class GlmImageModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
         # image_grid_thw: each sample has 2 grids (1 source + 1 target)
         filtered_inputs_dict["image_grid_thw"] = inputs_dict["image_grid_thw"][: batch_size * num_grids_per_sample]
         # images_per_sample: each sample has 2 images
-        filtered_inputs_dict["images_per_sample"] = torch.tensor([num_grids_per_sample] * batch_size, device=torch_device)
+        filtered_inputs_dict["images_per_sample"] = torch.tensor(
+            [num_grids_per_sample] * batch_size, device=torch_device
+        )
 
         # It is important set `eos_token_id` to `None` to avoid early stopping (would break for length-based checks)
         text_gen_config = config.get_text_config(decoder=True)
@@ -316,15 +320,11 @@ class GlmImageModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
     def test_model_parallelism(self):
         pass
 
-    @unittest.skip(
-        reason="GLM-Image has special image token IDs that get clamped when vocab is resized smaller"
-    )
+    @unittest.skip(reason="GLM-Image has special image token IDs that get clamped when vocab is resized smaller")
     def test_resize_embeddings_untied(self):
         pass
 
-    @unittest.skip(
-        reason="GLM-Image has special image token IDs that get clamped when vocab is resized smaller"
-    )
+    @unittest.skip(reason="GLM-Image has special image token IDs that get clamped when vocab is resized smaller")
     def test_resize_tokens_embeddings(self):
         pass
 
