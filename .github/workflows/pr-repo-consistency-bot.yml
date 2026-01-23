@@ -162,7 +162,7 @@ jobs:
           cp utils/check_docstrings.py pr-repo/utils/check_docstrings.py
           cp utils/add_dates.py pr-repo/utils/add_dates.py
           
-          # Run commands in PR directory
+          # Run commands in PR directory (with the copied trusted scripts)
           cd pr-repo
           
           # Run style commands
