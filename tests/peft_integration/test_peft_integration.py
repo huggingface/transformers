@@ -637,7 +637,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
             _ = AutoModelForCausalLM.from_pretrained(peft_model_id)
 
         # This should work
-        adapter_kwargs = {"revision": "test"}
+        adapter_kwargs = {"revision": "test", "use_safetensors": False}
         model = AutoModelForCausalLM.from_pretrained(peft_model_id, adapter_kwargs=adapter_kwargs)
         self.assertTrue(self._check_lora_correctly_converted(model))
 

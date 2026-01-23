@@ -59,24 +59,10 @@ if TYPE_CHECKING:
 
 
 def _block_diag_3d(*tensors):
-    # same as torch.block_diag but 3d tensors
-    # tensors: list of [B, Ni, Mi]
-    B = tensors[0].shape[0]
-    device = tensors[0].device
-    dtype = tensors[0].dtype
-
-    Ns = [t.shape[1] for t in tensors]
-    Ms = [t.shape[2] for t in tensors]
-
-    out = torch.zeros(B, sum(Ns), sum(Ms), device=device, dtype=dtype)
-
-    i = j = 0
-    for t in tensors:
-        n, m = t.shape[1:]
-        out[:, i : i + n, j : j + m] = t
-        i += n
-        j += m
-
+    lora_b_block_diag = []
+    for i in range(len(tensors[0])):
+        lora_b_block_diag.append(torch.block_diag(tensors[0][i], tensors[1][i]))
+    out= torch.stack(lora_b_block_diag, dim=0)
     return out
 
 
@@ -132,8 +118,7 @@ class PeftConcatenate(Concatenate):
         else:
             out = _block_diag_3d(*input_dict.values())  # shape = experts, 2*out_feat, 2*r
             out = torch.permute(out, (2, 0, 1))  # shape = 2*r, experts, 2*out_feat
-            r, e, o = out.shape
-            out = out.flatten(0, 1)  # PEFT expects flattened
+            out = out.flatten(0, 1)  # shape = 2*r * experts, 2*out_feat
             output_dict = {full_layer_name: out}
         return output_dict
 
