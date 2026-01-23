@@ -164,6 +164,7 @@ else:
             ("paligemma", ("SiglipImageProcessor", "SiglipImageProcessorFast")),
             ("perceiver", ("PerceiverImageProcessor", "PerceiverImageProcessorFast")),
             ("perception_lm", (None, "PerceptionLMImageProcessorFast")),
+            ("phi3_v", (None, "Phi3VImageProcessorFast")),
             ("phi4_multimodal", (None, "Phi4MultimodalImageProcessorFast")),
             ("pix2struct", ("Pix2StructImageProcessor", "Pix2StructImageProcessorFast")),
             ("pixio", ("BitImageProcessor", "BitImageProcessorFast")),
