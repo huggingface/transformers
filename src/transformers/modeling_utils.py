@@ -26,7 +26,7 @@ from abc import abstractmethod
 from collections import defaultdict
 from collections.abc import Callable, Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass, replace
+from dataclasses import dataclass, replace, field
 from enum import Enum
 from functools import partial, wraps
 from itertools import cycle
@@ -173,7 +173,7 @@ class LoadStateDictConfig:
     """
 
     pretrained_model_name_or_path: str | None = None
-    download_kwargs: DownloadKwargs | None = None
+    download_kwargs: DownloadKwargs | None = field(default_factory=DownloadKwargs)
     use_safetensors: bool = True
     ignore_mismatched_sizes: bool = False
     sharded_metadata: dict | None = None
