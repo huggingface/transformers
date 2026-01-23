@@ -32,12 +32,12 @@ from transformers import (
 )
 from transformers.testing_utils import (
     cleanup,
+    require_deterministic_for_xpu,
     require_flash_attn,
     require_kernels,
     require_torch,
     require_torch_accelerator,
     require_torch_gpu,
-    require_deterministic_for_xpu,
     slow,
     torch_device,
 )
@@ -421,6 +421,7 @@ if __name__ == "__main__":
     def test_model_outputs_distributed(self, quantized, model, kernels, attn_impl, mode):
         if torch_device == "xpu" and attn_impl == "kernels-community/vllm-flash-attn3":
             self.skipTest("flash attention 3 is not supported on XPU yet.")
+
         self.run_distributed_test(quantized, model, kernels, attn_impl, mode)
 
     # ------------------------
