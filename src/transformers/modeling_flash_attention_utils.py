@@ -443,17 +443,10 @@ def _is_packed_sequence(position_ids, batch_size):
     if position_ids is None:
         return False
 
-    # Handle both 1D and 2D position_ids
-    if position_ids.ndim == 1:
-        increasing_position_sequences = (
-            torch.arange(position_ids.shape[0], device=position_ids.device) + position_ids.min()
-        )
-        return batch_size == 1 and (increasing_position_sequences - position_ids).abs().sum().bool()
-    else:
-        increasing_position_sequences = (
-            torch.arange(position_ids.shape[1], device=position_ids.device) + position_ids.min()
-        )
-        return batch_size == 1 and (increasing_position_sequences - position_ids).abs().sum().bool()
+    increasing_position_sequences = (
+        torch.arange(position_ids.shape[1], device=position_ids.device) + position_ids.min()
+    )
+    return batch_size == 1 and (increasing_position_sequences - position_ids).abs().sum().bool()
 
 
 def fa_peft_integration_check(
