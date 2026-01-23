@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The Microsoft Team and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +14,7 @@
 
 import math
 from dataclasses import dataclass
-from typing import Optional, Union
+from typing import Optional
 
 import torch
 import torch.nn as nn
@@ -29,9 +28,9 @@ from ..llama.modeling_llama import LlamaMLP
 from ..mimi.modeling_mimi import MimiConv1dPaddingCache
 from ..qwen2.modeling_qwen2 import Qwen2RMSNorm
 from ..vibevoice_acoustic_tokenizer.modeling_vibevoice_acoustic_tokenizer import (
+    VibeVoiceAcousticTokenizerEncoder,
     VibeVoiceAcousticTokenizerModel,
     VibeVoiceAcousticTokenizerPreTrainedModel,
-    VibeVoiceAcousticTokenizerEncoder,
 )
 from .configuration_vibevoice import VibeVoiceConfig, VibeVoiceSemanticTokenizerConfig
 from .generation_vibevoice import VibeVoiceGenerationMixin
@@ -67,13 +66,13 @@ class VibeVoiceCausalLMOutputWithPast(BaseModelOutputWithPast):
         Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    diffusion_loss: Optional[torch.FloatTensor] = None
-    logits: Optional[torch.FloatTensor] = None
-    past_key_values: Optional[tuple[tuple[torch.FloatTensor]]] = None
-    last_hidden_state: Optional[torch.FloatTensor] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
+    loss: torch.FloatTensor | None = None
+    diffusion_loss: torch.FloatTensor | None = None
+    logits: torch.FloatTensor | None = None
+    past_key_values: tuple[tuple[torch.FloatTensor]] | None = None
+    last_hidden_state: torch.FloatTensor | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
 
 
 class VibeVoiceRMSNorm(Qwen2RMSNorm):
@@ -92,10 +91,9 @@ class VibeVoiceDiffusionHeadTimestepEmbedder(nn.Module):
         self.layer_2 = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
         self.frequency_embedding_size = config.frequency_embedding_size
 
-    # Original: https://github.com/pengzhiliang/transformers/blob/6e6e60fb95ca908feb0b039483adcc009809f579/src/transformers/models/vibevoice/modular_vibevoice_diffusion_head.py#L66
     @staticmethod
     def timestep_embedding(timesteps, dim, max_period=10000):
-        # NOTE (ebezzam) imitate `LlamaRotaryEmbedding` device handling: https://github.com/huggingface/transformers/blob/5b6c209bc5a19b80c866279ee0c8e124ff7e4e49/src/transformers/models/llama/modeling_llama.py#L128
+        # NOTE (ebezzam) imitate `LlamaRotaryEmbedding` device handling
         device_type = (
             timesteps.device.type
             if isinstance(timesteps.device.type, str) and timesteps.device.type != "mps"
@@ -237,7 +235,7 @@ class VibeVoiceSemanticTokenizerOutput(ModelOutput):
         can be passed to subsequent forward calls.
     """
 
-    latents: Optional[torch.FloatTensor] = None
+    latents: torch.FloatTensor | None = None
     padding_cache: Optional["VibeVoiceConv1dPaddingCache"] = None
 
 
@@ -246,21 +244,21 @@ class VibeVoiceEncoder(VibeVoiceAcousticTokenizerEncoder):
         super().__init__(config)
 
         # Parameters for cache creation
-        self.num_conv_layers = layer_idx + 1
-        self.per_conv_layer_padding_mode = ["constant"] * self.num_conv_layers
+        self.num_conv_layers = sum(depth + 1 for depth in config.depths) + 1
         self.per_conv_layer_padding = [self.stem.conv.causal_padding]
         self.per_conv_layer_in_channels = [self.stem.conv.conv.in_channels]
-        for block in self.stem.stage:
-            self.per_conv_layer_padding.append(block.mixer.causal_padding)
-            self.per_conv_layer_in_channels.append(block.mixer.conv.in_channels)
+        self.per_conv_layer_padding.extend([block.mixer.causal_padding for block in self.stem.stage])
+        self.per_conv_layer_in_channels.extend([block.mixer.conv.in_channels for block in self.stem.stage])
+
         for layer in self.conv_layers:
             self.per_conv_layer_padding.append(layer.conv.causal_padding)
             self.per_conv_layer_in_channels.append(layer.conv.conv.in_channels)
-            for block in layer.stage:
-                self.per_conv_layer_padding.append(block.mixer.causal_padding)
-                self.per_conv_layer_in_channels.append(block.mixer.conv.in_channels)
+            self.per_conv_layer_padding.extend([block.mixer.causal_padding for block in layer.stage])
+            self.per_conv_layer_in_channels.extend([block.mixer.conv.in_channels for block in layer.stage])
+
         self.per_conv_layer_padding.append(self.head.causal_padding)
         self.per_conv_layer_in_channels.append(self.head.conv.in_channels)
+        self.per_conv_layer_padding_mode = ["constant" for _ in self.per_conv_layer_padding]
 
 
 @auto_docstring(
@@ -373,13 +371,13 @@ class VibeVoiceModel(VibeVoicePreTrainedModel):
     def forward(
         self,
         input_ids: torch.LongTensor = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        input_values: Optional[torch.FloatTensor] = None,
-        padding_mask: Optional[torch.BoolTensor] = None,
-        latent_scaling_factor: Optional[torch.FloatTensor] = None,
-        latent_bias_factor: Optional[torch.FloatTensor] = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        input_values: torch.FloatTensor | None = None,
+        padding_mask: torch.BoolTensor | None = None,
+        latent_scaling_factor: torch.FloatTensor | None = None,
+        latent_bias_factor: torch.FloatTensor | None = None,
         **kwargs,
-    ) -> Union[tuple, BaseModelOutputWithPast]:
+    ) -> tuple | BaseModelOutputWithPast:
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
@@ -419,14 +417,14 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
     def forward(
         self,
         input_ids: torch.LongTensor = None,
-        inputs_embeds: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        logits_to_keep: Union[int, slice] = 0,
-        input_values: Optional[torch.FloatTensor] = None,
-        padding_mask: Optional[torch.BoolTensor] = None,
-        acoustic_loss_mask: Optional[torch.BoolTensor] = None,
+        inputs_embeds: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        logits_to_keep: int | slice = 0,
+        input_values: torch.FloatTensor | None = None,
+        padding_mask: torch.BoolTensor | None = None,
+        acoustic_loss_mask: torch.BoolTensor | None = None,
         **kwargs,
-    ) -> Union[tuple, VibeVoiceCausalLMOutputWithPast]:
+    ) -> tuple | VibeVoiceCausalLMOutputWithPast:
         r"""
         input_values (`torch.FloatTensor`, *optional*):
             Preprocessed audio waveform for voice cloning or speech understanding.
