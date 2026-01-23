@@ -206,6 +206,7 @@ class DummyMLP(nn.Module):
 
 class DummyRoot(nn.Module):
     base_model_prefix = "model"
+    config: PretrainedConfig
 
     def __init__(self, add_extra_moe=False):
         super().__init__()

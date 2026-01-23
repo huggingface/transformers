@@ -168,7 +168,8 @@ FLASH_ATTN_KERNEL_FALLBACK = {
 @dataclass(frozen=True)
 class LoadStateDictConfig:
     """
-    Bundles arguments for state-dict loading and finalization to keep call sites lightweight.
+    Config for loading weights. This allows bundling arguments that are just
+    passed around.
     """
 
     pretrained_model_name_or_path: str | None = None
@@ -190,7 +191,10 @@ class LoadStateDictConfig:
 
 @dataclass
 class LoadStateDictInfo:
-    """Return container for state-dict loading results and diagnostics."""
+    """
+    Return container for state-dict loading results and diagnostics.
+    This simplifies the code a bit.
+    """
 
     missing_keys: set[str]
     unexpected_keys: set[str]
@@ -4127,7 +4131,6 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             )  # usually a no-op but sometimes needed, e.g to remove the quant config when dequantizing
 
         if _adapter_model_path is not None:
-            adapter_kwargs["key_mapping"] = key_mapping
             if token is not None:
                 adapter_kwargs["token"] = token
             model.load_adapter(
