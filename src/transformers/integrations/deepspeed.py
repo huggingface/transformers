@@ -295,6 +295,10 @@ def _apply_weight_conversions_to_state_dict(model, state_dict, weight_mapping):
     Apply weight conversions (renaming and merging/splitting operations) to a state dict.
     This is a simplified version that handles the conversion without loading into the model.
     """
+    # Note: DeepSpeed ZeRO-3 handles weight sharding internally - it takes un-sharded models
+    # and partitions them. Our code only handles key transformations (e.g., MoE expert fusion).
+    # If keys match, DeepSpeed handles the partitioning correctly.
+
     # Local import to avoid circular dependency (core_model_loading -> accelerate -> deepspeed)
     from ..core_model_loading import WeightConverter, WeightRenaming, dot_natural_key, rename_source_key
 
