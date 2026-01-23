@@ -139,11 +139,29 @@ def neftune_post_forward_hook(module, input, output):
         output (`torch.Tensor`):
             The output tensor of the model (i.e. the embeddings).
     """
-    if module.training:
+    if not module.training:
+        return output
+
+    # Get attention mask if provided
+    attention_mask = None
+    if len(input) > 1 and input[1] is not None:
+        attention_mask = input[1]
+
+    if attention_mask is None:
+        # Original behavior for non-packed sequences
         dims = torch.tensor(output.size(1) * output.size(2))
         mag_norm = module.neftune_noise_alpha / torch.sqrt(dims)
-        output = output + torch.zeros_like(output).uniform_(-mag_norm, mag_norm)
-    return output
+        noise = torch.zeros_like(output).uniform_(-mag_norm, mag_norm)
+    else:
+        # Handle packed sequences
+        noise = torch.zeros_like(output)
+        for i in range(output.size(0)):
+            seq_len = attention_mask[i].sum()
+            dims = seq_len * output.size(2)
+            mag_norm = module.neftune_noise_alpha / torch.sqrt(dims)
+            noise[i, :seq_len] = torch.zeros_like(output[i, :seq_len]).uniform_(-mag_norm, mag_norm)
+
+    return output + noise
 
 
 class EvalPrediction:
