@@ -178,7 +178,7 @@ class Gemma3nTextConfig(PreTrainedConfig):
         pad_token_id: int = 0,
         eos_token_id: int = 1,
         bos_token_id: int = 2,
-        rope_parameters: dict[Literal["full_attention", "sliding_attention"], RopeParameters] | None = None,
+        rope_parameters: dict[Literal["sliding_attention", "full_attention"], RopeParameters] | None = None,
         attention_bias: bool = False,
         attention_dropout: float = 0.0,
         sliding_window: int = 512,

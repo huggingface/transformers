@@ -18,7 +18,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
 from typing import Literal
 
 from ...configuration_utils import PreTrainedConfig
@@ -215,8 +214,7 @@ class ModernBertDecoderConfig(PreTrainedConfig):
             "sliding_attention": {"rope_type": "default"},
             "full_attention": {"rope_type": "default"},
         }
-        self.rope_parameters = default_rope_params if self.rope_parameters is None else self.rope_parameters
-
+        self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else default_rope_params
         if rope_scaling is not None:
             self.rope_parameters["full_attention"].update(rope_scaling)
             self.rope_parameters["sliding_attention"].update(rope_scaling)

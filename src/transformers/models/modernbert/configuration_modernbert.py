@@ -250,7 +250,7 @@ class ModernBertConfig(PreTrainedConfig):
         if self.rope_parameters.get("sliding_attention") is None:
             self.rope_parameters["sliding_attention"] = {"rope_type": "default"}
         self.rope_parameters["sliding_attention"].setdefault(
-            "rope_theta", kwargs.pop("local_rope_base_freq", self.default_theta["local"])
+            "rope_theta", kwargs.pop("local_rope_theta", self.default_theta["local"])
         )
 
         # Standardize and validate the correctness of rotary position embeddings parameters
