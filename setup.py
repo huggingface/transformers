@@ -41,10 +41,13 @@ To create the package for pypi.
 
 import re
 import shutil
+import sys
 from pathlib import Path
 
 from setuptools import Command, find_packages, setup
 
+
+PYTHON_MINOR_VERSION = sys.version_info.minor
 
 # Remove stale transformers.egg-info directory to avoid https://github.com/pypa/pip/issues/5466
 stale_egg_info = Path(__file__).parent / "transformers.egg-info"
@@ -115,7 +118,6 @@ _deps = [
     "pytest-xdist",
     "pytest-order",
     "python>=3.10.0",
-    "ray[tune]>=2.7.0",
     "regex!=2019.12.17",
     "rhoknp>=1.1.0,<1.3.1",
     "rjieba",
@@ -172,7 +174,9 @@ extras = {}
 
 extras["torch"] = deps_list("torch", "accelerate")
 extras["vision"] = deps_list("torchvision", "Pillow")
-extras["audio"] = deps_list("torchaudio", "librosa", "pyctcdecode", "phonemizer", "kenlm")
+extras["audio"] = deps_list("torchaudio", "librosa", "pyctcdecode", "phonemizer")
+if PYTHON_MINOR_VERSION < 13:
+    extras["audio"] += deps_list("kenlm")
 extras["video"] = deps_list("av")
 extras["timm"] = deps_list("timm")
 extras["quality"] = deps_list("datasets", "ruff", "GitPython", "urllib3", "libcst", "rich")
@@ -187,14 +191,18 @@ extras["retrieval"] = deps_list("faiss-cpu", "datasets")
 extras["sagemaker"] = deps_list("sagemaker")
 extras["deepspeed"] = deps_list("deepspeed", "accelerate")
 extras["optuna"] = deps_list("optuna")
-extras["ray"] = deps_list("ray[tune]")
-extras["codecarbon"] = deps_list("codecarbon")
 extras["integrations"] = deps_list("kernels", "optuna", "ray[tune]", "codecarbon")
+if PYTHON_MINOR_VERSION < 14:
+    extras["ray"] = deps_list("ray[tune]>=2.7.0")
+    extras["integrations"] += extras["ray"]
+extras["codecarbon"] = deps_list("codecarbon")
 extras["serving"] = deps_list("openai", "pydantic", "uvicorn", "fastapi", "starlette", "rich") + extras["torch"]
 extras["natten"] = deps_list("natten")
 extras["num2words"] = deps_list("num2words")
 extras["benchmark"] = deps_list("optimum-benchmark")
-extras["ja"] = deps_list("fugashi", "ipadic", "unidic_lite", "unidic", "sudachipy", "sudachidict_core", "rhoknp")
+extras["ja"] = deps_list("fugashi", "ipadic", "unidic_lite", "unidic", "rhoknp")
+if PYTHON_MINOR_VERSION < 14:
+    extras["ja"] += deps_list("sudachipy", "sudachidict_core")
 # OpenTelemetry dependencies for metrics collection in continuous batching
 extras["open-telemetry"] = deps_list("opentelemetry-api", "opentelemetry-exporter-otlp", "opentelemetry-sdk")
 
