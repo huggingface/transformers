@@ -839,6 +839,9 @@ class TrainingArguments:
     adam_beta2: float = field(default=0.999, metadata={"help": "Beta2 for AdamW optimizer"})
     adam_epsilon: float = field(default=1e-8, metadata={"help": "Epsilon for AdamW optimizer."})
     max_grad_norm: float = field(default=1.0, metadata={"help": "Max gradient norm."})
+    skip_unnecessary_grad_clip: bool = field(
+        default=False, metadata={"help": "Skip gradient clipping when grad norm is below max_grad_norm threshold"}
+    )
 
     num_train_epochs: float = field(default=3.0, metadata={"help": "Total number of training epochs to perform."})
     max_steps: int = field(
