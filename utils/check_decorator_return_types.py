@@ -87,18 +87,11 @@ def _decorator_name(node: ast.expr) -> str | None:
 
 
 def _is_none_annotation(returns: ast.expr | None) -> bool:
-    if returns is None:
-        return True
-
-    # -> None
-    if isinstance(returns, ast.Constant) and returns.value is None:
-        return True
-
-    # -> None (as a name)
-    if isinstance(returns, ast.Name) and returns.id == "None":
-        return True
-
-    return False
+    return (
+        returns is None
+        or isinstance(returns, ast.Constant) and returns.value is None
+        or isinstance(returns, ast.Name) and returns.id == "None"
+    )
 
 
 def _is_tuple_type(node: ast.AST) -> bool:
