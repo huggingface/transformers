@@ -36,7 +36,7 @@ from ...modeling_outputs import BackboneOutput, BaseModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...pytorch_utils import meshgrid
-from ...utils import auto_docstring, torch_int
+from ...utils import auto_docstring, torch_compilable_check, torch_int
 from ...utils.backbone_utils import BackboneMixin
 from ...utils.generic import ModelOutput, TransformersKwargs, can_return_tuple, check_model_inputs
 from .configuration_rf_detr import RfDetrConfig, RfDetrDinov2Config
@@ -997,10 +997,10 @@ class RfDetrMultiscaleDeformableAttention(nn.Module):
         batch_size, num_queries, _ = hidden_states.shape
         batch_size, sequence_length, _ = encoder_hidden_states.shape
         total_elements = sum(height * width for height, width in spatial_shapes_list)
-        if total_elements != sequence_length:
-            raise ValueError(
-                "Make sure to align the spatial shapes with the sequence length of the encoder hidden states"
-            )
+        torch_compilable_check(
+            total_elements == sequence_length,
+            "Make sure to align the spatial shapes with the sequence length of the encoder hidden states",
+        )
 
         value = self.value_proj(encoder_hidden_states)
         if attention_mask is not None:
