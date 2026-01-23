@@ -4,18 +4,49 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_modernvbert.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+# coding=utf-8
+# MIT License
+#
+# Copyright 2026 Illuin Technology, and contributors, and The HuggingFace Inc. team.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Optional, Union
 
+import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+from torch.nn.init import _calculate_fan_in_and_fan_out
 
 from ... import initialization as init
 from ...activations import ACT2FN
+from ...integrations import use_kernel_func_from_hub
+from ...modeling_attn_mask_utils import _prepare_4d_attention_mask
+from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import (
     BaseModelOutput,
+    BaseModelOutputWithPooling,
     BaseModelOutputWithPoolingAndCrossAttentions,
     MaskedLMOutput,
     MultipleChoiceModelOutput,
@@ -23,12 +54,31 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
-from ..modernbert import ModernBertConfig, ModernBertModel
-from ..siglip import SiglipVisionModel
-from .configuration_modernvbert import ModernVBertConfig
+from ...utils import (
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    is_flash_attn_2_available,
+    logging,
+    torch_int,
+)
+from ...utils.generic import check_model_inputs, maybe_autocast
+from ...utils.import_utils import is_triton_available
+from .configuration_modernvbert import ModernVBertConfig, ModernVBertVisionConfig
+
+
+if is_flash_attn_2_available():
+    from flash_attn.flash_attn_interface import flash_attn_varlen_qkvpacked_func
+    from flash_attn.layers.rotary import RotaryEmbedding
+    from flash_attn.ops.triton.rotary import apply_rotary
+else:
+    RotaryEmbedding = object
+
+
+logger = logging.get_logger(__name__)
 
 
 @dataclass
@@ -129,6 +179,36 @@ class ModernVBertConnector(nn.Module):
         return self.modality_projection(image_hidden_states)
 
 
+def variance_scaling_(tensor, mode="fan_in", distribution="normal"):
+    fan_in, fan_out = _calculate_fan_in_and_fan_out(tensor)
+    if mode == "fan_in":
+        denom = fan_in
+    elif mode == "fan_out":
+        denom = fan_out
+    elif mode == "fan_avg":
+        denom = (fan_in + fan_out) / 2
+
+    variance = 1.0 / denom
+
+    if distribution == "truncated_normal":
+        init.trunc_normal_(tensor, std=math.sqrt(variance) / 0.87962566103423978)
+    elif distribution == "normal":
+        init.normal_(tensor, std=math.sqrt(variance))
+    elif distribution == "uniform":
+        bound = math.sqrt(3 * variance)
+        init.uniform_(tensor, -bound, bound)
+    else:
+        raise ValueError(f"invalid distribution {distribution}")
+
+
+def default_flax_embed_init(tensor):
+    variance_scaling_(tensor, mode="fan_in", distribution="normal")
+
+
+def lecun_normal_(tensor):
+    variance_scaling_(tensor, mode="fan_in", distribution="truncated_normal")
+
+
 @auto_docstring
 class ModernVBertPreTrainedModel(PreTrainedModel):
     config_class = ModernVBertConfig
@@ -138,15 +218,18 @@ class ModernVBertPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = False
     input_modalities = ["image", "text"]
+    _no_split_modules = [
+        "ModernVBertEmbeddingsVision",
+        "ModernVBertEncoderLayerVision",
+        "ModernVBertMultiheadAttentionPoolingHead",
+        "ModernVBertEmbeddings",
+        "ModernVBertEncoderLayer",
+    ]
 
+    @torch.no_grad()
     def _init_weights(self, module):
-        std = self.config.initializer_range
-        cutoff_factor = self.config.initializer_cutoff_factor
-
-        out_std = self.config.initializer_range / math.sqrt(2.0 * self.config.text_config.num_hidden_layers)
-        final_out_std = self.config.text_config.hidden_size**-0.5
-
         def init_weight(module: nn.Module, std: float):
+            cutoff_factor = getattr(self.config, "initializer_cutoff_factor", 2.0)
             init.trunc_normal_(
                 module.weight,
                 mean=0.0,
@@ -155,13 +238,17 @@ class ModernVBertPreTrainedModel(PreTrainedModel):
                 b=cutoff_factor * std,
             )
 
-            if isinstance(module, nn.Linear):
+            if isinstance(module, (nn.Linear, nn.Conv2d)):
                 if module.bias is not None:
                     init.zeros_(module.bias)
 
-        if isinstance(module, ModernVBertConnector):
+        if isinstance(module, ModernVBertEmbeddings):
+            init_weight(module.tok_embeddings, self.config.initializer_range)
+        elif isinstance(module, ModernVBertConnector):
+            out_std = self.config.initializer_range / math.sqrt(2.0 * self.config.text_config.num_hidden_layers)
             init_weight(module.modality_projection, out_std)
         elif isinstance(module, ModernVBertForMaskedLM):
+            out_std = self.config.initializer_range / math.sqrt(2.0 * self.config.text_config.num_hidden_layers)
             init_weight(module.lm_head, out_std)
         elif isinstance(
             module,
@@ -172,13 +259,1270 @@ class ModernVBertPreTrainedModel(PreTrainedModel):
                 ModernVBertForQuestionAnswering,
             ),
         ):
+            final_out_std = self.config.initializer_range / math.sqrt(self.config.text_config.hidden_size)
             init_weight(module.classifier, final_out_std)
+        elif isinstance(module, ModernVBertRotaryEmbedding):
+            for layer_type in module.layer_types:
+                rope_init_fn = module.compute_default_rope_parameters
+                if module.rope_type[layer_type] != "default":
+                    rope_init_fn = ROPE_INIT_FUNCTIONS[module.rope_type[layer_type]]
+                curr_inv_freq, _ = rope_init_fn(module.config, layer_type=layer_type)
+                init.copy_(getattr(module, f"{layer_type}_inv_freq"), curr_inv_freq)
+                init.copy_(getattr(module, f"{layer_type}_original_inv_freq"), curr_inv_freq)
+        elif isinstance(module, ModernVBertEmbeddingsVision):
+            width = self.config.hidden_size
+            init.normal_(module.position_embedding.weight, std=1 / np.sqrt(width))
+            if hasattr(module, "position_ids"):
+                init.copy_(
+                    module.position_ids,
+                    torch.arange(module.position_ids.shape[-1], device=module.position_ids.device).expand((1, -1)),
+                )
+        elif isinstance(module, nn.Embedding):
+            default_flax_embed_init(module.weight)
+        elif isinstance(module, ModernVBertAttentionVision):
+            init.xavier_uniform_(module.q_proj.weight)
+            init.xavier_uniform_(module.k_proj.weight)
+            init.xavier_uniform_(module.v_proj.weight)
+            init.xavier_uniform_(module.out_proj.weight)
+            init.zeros_(module.q_proj.bias)
+            init.zeros_(module.k_proj.bias)
+            init.zeros_(module.v_proj.bias)
+            init.zeros_(module.out_proj.bias)
+        elif isinstance(module, ModernVBertMLPVision):
+            init.xavier_uniform_(module.fc1.weight)
+            init.xavier_uniform_(module.fc2.weight)
+            init.normal_(module.fc1.bias, std=1e-6)
+            init.normal_(module.fc2.bias, std=1e-6)
+        elif isinstance(module, ModernVBertMultiheadAttentionPoolingHead):
+            init.xavier_uniform_(module.probe)
+            if hasattr(module.attention, "in_proj_weight") and module.attention.in_proj_weight is not None:
+                init.xavier_uniform_(module.attention.in_proj_weight)
+            if hasattr(module.attention, "in_proj_bias") and module.attention.in_proj_bias is not None:
+                init.zeros_(module.attention.in_proj_bias)
+            if hasattr(module.attention, "out_proj") and module.attention.out_proj.bias is not None:
+                init.zeros_(module.attention.out_proj.bias)
         elif isinstance(module, (nn.Linear, nn.Conv2d)):
-            init_weight(module, std)
+            if isinstance(self.config, ModernVBertVisionConfig):
+                lecun_normal_(module.weight)
+                if module.bias is not None:
+                    init.zeros_(module.bias)
+            else:
+                init_weight(module, self.config.initializer_range)
         elif isinstance(module, nn.LayerNorm):
             init.ones_(module.weight)
             if module.bias is not None:
                 init.zeros_(module.bias)
+
+
+class ModernVBertEmbeddings(nn.Module):
+    """
+    Same as BertEmbeddings with a tiny tweak for positional embeddings indexing.
+    """
+
+    def __init__(self, config: ModernVBertConfig):
+        super().__init__()
+        self.config = config
+        self.tok_embeddings = nn.Embedding(config.vocab_size, config.hidden_size, padding_idx=config.pad_token_id)
+        self.norm = nn.LayerNorm(config.hidden_size, eps=config.norm_eps, bias=config.norm_bias)
+        self.drop = nn.Dropout(config.embedding_dropout)
+
+    @torch.compile(dynamic=True)
+    def compiled_embeddings(self, input_ids: torch.LongTensor) -> torch.Tensor:
+        return self.drop(self.norm(self.tok_embeddings(input_ids)))
+
+    def forward(
+        self, input_ids: Optional[torch.LongTensor] = None, inputs_embeds: Optional[torch.Tensor] = None
+    ) -> torch.Tensor:
+        if inputs_embeds is not None:
+            hidden_states = self.drop(self.norm(inputs_embeds))
+        else:
+            hidden_states = (
+                self.compiled_embeddings(input_ids)
+                if self.config.reference_compile
+                else self.drop(self.norm(self.tok_embeddings(input_ids)))
+            )
+        return hidden_states
+
+
+class ModernVBertRotaryEmbedding(nn.Module):
+    inv_freq: torch.Tensor  # fix linting for `register_buffer`
+
+    def __init__(self, config: ModernVBertConfig, device=None):
+        super().__init__()
+        self.max_seq_len_cached = config.max_position_embeddings
+        self.original_max_seq_len = config.max_position_embeddings
+
+        self.config = config
+
+        self.layer_types = list(set(config.layer_types))
+        self.rope_type = {}
+        for layer_type in self.layer_types:
+            rope_params = self.config.rope_parameters[layer_type]
+            if rope_params is None:
+                continue
+
+            self.rope_type[layer_type] = rope_params["rope_type"]
+            rope_init_fn: Callable = self.compute_default_rope_parameters
+            if self.rope_type[layer_type] != "default":
+                rope_init_fn = ROPE_INIT_FUNCTIONS[self.rope_type[layer_type]]
+            curr_inv_freq, curr_attention_scaling = rope_init_fn(self.config, device, layer_type=layer_type)
+            self.register_buffer(f"{layer_type}_inv_freq", curr_inv_freq, persistent=False)
+            self.register_buffer(f"{layer_type}_original_inv_freq", curr_inv_freq.clone(), persistent=False)
+            setattr(self, f"{layer_type}_attention_scaling", curr_attention_scaling)
+
+    @staticmethod
+    def compute_default_rope_parameters(
+        config: Optional[ModernVBertConfig] = None,
+        device: Optional["torch.device"] = None,
+        seq_len: Optional[int] = None,
+        layer_type: Optional[str] = None,
+    ) -> tuple["torch.Tensor", float]:
+        """
+        Computes the inverse frequencies according to the original RoPE implementation
+        Args:
+            config ([`~transformers.PreTrainedConfig`]):
+                The model configuration.
+            device (`torch.device`):
+                The device to use for initialization of the inverse frequencies.
+            seq_len (`int`, *optional*):
+                The current sequence length. Unused for this type of RoPE.
+            layer_type (`str`, *optional*):
+                The current layer type if the model has different RoPE parameters per type.
+                Should not be used unless `config.layer_types is not None`
+
+        Returns:
+            Tuple of (`torch.Tensor`, `float`), containing the inverse frequencies for the RoPE embeddings and the
+            post-processing scaling factor applied to the computed cos/sin (unused in this type of RoPE).
+        """
+        # For backward compatibility standardize the `rope_parameters_dict` if it uses old format
+        base = config.rope_parameters[layer_type]["rope_theta"]
+        dim = getattr(config, "head_dim", None) or config.hidden_size // config.num_attention_heads
+
+        attention_factor = 1.0  # Unused in this type of RoPE
+
+        # Compute the inverse frequencies
+        inv_freq = 1.0 / (
+            base ** (torch.arange(0, dim, 2, dtype=torch.int64).to(device=device, dtype=torch.float) / dim)
+        )
+        return inv_freq, attention_factor
+
+    @torch.no_grad()
+    @dynamic_rope_update  # power user: used with advanced RoPE types (e.g. dynamic rope)
+    def forward(self, x, position_ids, layer_type=None):
+        inv_freq = getattr(self, f"{layer_type}_inv_freq")
+        attention_scaling = getattr(self, f"{layer_type}_attention_scaling")
+
+        inv_freq_expanded = inv_freq[None, :, None].float().expand(position_ids.shape[0], -1, 1).to(x.device)
+        position_ids_expanded = position_ids[:, None, :].float()
+
+        device_type = x.device.type if isinstance(x.device.type, str) and x.device.type != "mps" else "cpu"
+        with maybe_autocast(device_type=device_type, enabled=False):  # Force float32
+            freqs = (inv_freq_expanded.float() @ position_ids_expanded.float()).transpose(1, 2)
+            emb = torch.cat((freqs, freqs), dim=-1)
+            cos = emb.cos() * attention_scaling
+            sin = emb.sin() * attention_scaling
+
+        return cos.to(dtype=x.dtype), sin.to(dtype=x.dtype)
+
+
+class ApplyRotaryEmbUnpad(torch.autograd.Function):
+    @staticmethod
+    def forward(
+        ctx,
+        qkv,
+        cos,
+        sin,
+        cu_seqlens: Optional[torch.Tensor] = None,
+        max_seqlen: Optional[int] = None,
+    ):
+        # (total_nnz, 3, nheads, headdim)
+        qkv = qkv.contiguous()
+        total_nnz, _three, _nheads, headdim = qkv.shape
+        # We need qkv to be contiguous so that when we reshape to combine (3, nheads) dimensions,
+        # we get the same tensor
+        # qk = rearrange(qkv[:, :2], "b_s t h d -> b_s (t h) d")
+        qk = qkv[:, :2].view(total_nnz, -1, headdim)
+        apply_rotary(
+            qk,
+            cos,
+            sin,
+            seqlen_offsets=0,
+            cu_seqlens=cu_seqlens,
+            max_seqlen=max_seqlen,
+            interleaved=False,
+            inplace=True,
+        )
+
+        ctx.save_for_backward(cos, sin, cu_seqlens)
+        ctx.max_seqlen = max_seqlen
+        return qkv
+
+    @staticmethod
+    def backward(ctx, do):
+        cos, sin, cu_seqlens = ctx.saved_tensors
+        do = do.contiguous()
+        total_nnz, _three, _nheads, headdim = do.shape
+        # We need dqkv to be contiguous so that when we reshape to combine (3, nheads) dimensions,
+        # we get the same tensor
+        dqk = do[:, :2].view(total_nnz, -1, headdim)
+        apply_rotary(
+            dqk,
+            cos,
+            sin,
+            seqlen_offsets=0,
+            cu_seqlens=cu_seqlens,
+            max_seqlen=ctx.max_seqlen,
+            interleaved=False,
+            inplace=True,
+            conjugate=True,
+        )
+
+        return do, None, None, None, None, None, None
+
+
+def apply_rotary_unpadded(
+    qkv,
+    cos,
+    sin,
+    cu_seqlens: Optional[torch.Tensor] = None,
+    max_seqlen: Optional[int] = None,
+):
+    """
+    Arguments:
+        qkv: (total_nnz, 3, nheads, headdim) - input tensor for packed QKV.
+        cos, sin: (seqlen_rotary, rotary_dim / 2)
+        interleaved: if True, rotate pairs of even and odd dimensions (GPT-J style) instead
+            of 1st half and 2nd half (GPT-NeoX style).
+        inplace: if True, apply rotary embedding in-place.
+        seqlen_offsets: (batch_size,) or int. Each sequence in x is shifted by this amount.
+            Most commonly used in inference when we have KV cache.
+        cu_seqlens: (batch + 1,) or None
+        max_seqlen: int
+    Return:
+        out: (total_nnz, dim)
+    rotary_dim must be <= headdim
+    Apply rotary embedding to the first rotary_dim of x.
+    """
+    return ApplyRotaryEmbUnpad.apply(qkv, cos, sin, cu_seqlens, max_seqlen)
+
+
+class ModernVBertUnpaddedRotaryEmbedding(RotaryEmbedding):
+    """
+    The rotary position embeddings applied directly to unpadded sequences.
+    """
+
+    def __init__(
+        self,
+        dim: int,
+        base: float = 10000.0,
+        max_seqlen: Optional[int] = None,
+        device: Optional[torch.device] = None,
+        dtype: Optional[torch.dtype] = None,
+    ):
+        """
+        max_seqlen: if max_seqlen, device, and dtype are provided, we precompute the cos_sin_cache
+            up to max_seqlen. If the max_seqlen, device, or dtype during training/inference differ,
+            the cos_sin_cache will be recomputed during the forward pass.
+        """
+        super().__init__(dim=dim, base=base, device=device, interleaved=False)
+        self.max_seqlen = max_seqlen
+
+        if max_seqlen is not None and device is not None and dtype is not None:
+            self._update_cos_sin_cache(max_seqlen, device=device, dtype=dtype)
+
+    def forward(
+        self,
+        qkv: torch.Tensor,
+        cu_seqlens: torch.Tensor,
+        max_seqlen: Optional[int] = None,
+    ) -> Union[torch.Tensor, tuple[torch.Tensor, torch.Tensor]]:
+        """
+        Apply rotary embedding *inplace* to qkv.
+        qkv: (total_nnz, 3, nheads, headdim)
+        cu_seqlens: (batch + 1,) cumulative sequence lengths
+        max_seqlen: int max seq length in the batch
+        """
+        if max_seqlen is not None:
+            self._update_cos_sin_cache(max_seqlen, device=qkv.device, dtype=qkv.dtype)
+
+        qkv = apply_rotary_unpadded(
+            qkv,
+            self._cos_cached,
+            self._sin_cached,
+            cu_seqlens=cu_seqlens,
+            max_seqlen=max_seqlen,
+        )
+
+        return qkv
+
+    def extra_repr(self) -> str:
+        return f"dim={self.dim}, base={self.base}, scale_base={self.scale_base}"
+
+
+class ModernVBertMLP(nn.Module):
+    """Applies the GLU at the end of each ModernVBert layer.
+
+    Compared to the default BERT architecture, this block replaces :class:`~transformers.model.bert.modeling_bert.BertIntermediate`
+    and :class:`~transformers.model.bert.modeling_bert.SelfOutput` with a single module that has similar functionality.
+    """
+
+    def __init__(self, config: ModernVBertConfig):
+        super().__init__()
+        self.config = config
+        self.Wi = nn.Linear(config.hidden_size, int(config.intermediate_size) * 2, bias=config.mlp_bias)
+        self.act = ACT2FN[config.hidden_activation]
+        self.drop = nn.Dropout(config.mlp_dropout)
+        self.Wo = nn.Linear(config.intermediate_size, config.hidden_size, bias=config.mlp_bias)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        input, gate = self.Wi(hidden_states).chunk(2, dim=-1)
+        return self.Wo(self.drop(self.act(input) * gate))
+
+
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
+
+
+@use_kernel_func_from_hub("rotary_pos_emb")
+def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+    """Applies Rotary Position Embedding to the query and key tensors.
+
+    Args:
+        q (`torch.Tensor`): The query tensor.
+        k (`torch.Tensor`): The key tensor.
+        cos (`torch.Tensor`): The cosine part of the rotary embedding.
+        sin (`torch.Tensor`): The sine part of the rotary embedding.
+        position_ids (`torch.Tensor`, *optional*):
+            Deprecated and unused.
+        unsqueeze_dim (`int`, *optional*, defaults to 1):
+            The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
+            sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
+            that cos[position_ids] and sin[position_ids] have the shape [batch_size, seq_len, head_dim]. Then, if q and
+            k have the shape [batch_size, heads, seq_len, head_dim], then setting unsqueeze_dim=1 makes
+            cos[position_ids] and sin[position_ids] broadcastable to the shapes of q and k. Similarly, if q and k have
+            the shape [batch_size, seq_len, heads, head_dim], then set unsqueeze_dim=2.
+    Returns:
+        `tuple(torch.Tensor)` comprising of the query and key tensors rotated using the Rotary Position Embedding.
+    """
+    cos = cos.unsqueeze(unsqueeze_dim)
+    sin = sin.unsqueeze(unsqueeze_dim)
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    return q_embed, k_embed
+
+
+def eager_attention_forward(
+    module: "ModernVBertAttention",
+    qkv: torch.Tensor,
+    attention_mask: torch.Tensor,
+    sliding_window_mask: torch.Tensor,
+    position_ids: Optional[torch.LongTensor],
+    local_attention: tuple[int, int],
+    bs: int,
+    dim: int,
+    position_embeddings: torch.Tensor,
+    output_attentions: Optional[bool] = False,
+    **_kwargs,
+) -> Union[tuple[torch.Tensor, torch.Tensor], tuple[torch.Tensor]]:
+    # qkv: [batch_size, seqlen, 3, nheads, headdim]
+    cos, sin = position_embeddings
+    query, key, value = qkv.transpose(3, 1).unbind(dim=2)
+    # query, key, value: [batch_size, heads, seq_len, head_dim]
+    query, key = apply_rotary_pos_emb(query, key, cos, sin)
+
+    scale = module.head_dim**-0.5
+    attn_weights = torch.matmul(query, key.transpose(2, 3)) * scale
+
+    if local_attention != (-1, -1):
+        attention_mask = sliding_window_mask
+
+    attn_weights = attn_weights + attention_mask
+
+    # upcast attention to fp32
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=module.attention_dropout, training=module.training)
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+    attn_output = attn_output.view(bs, -1, dim)
+    if output_attentions:
+        return (attn_output, attn_weights)
+    return (attn_output,)
+
+
+def flash_attention_forward(
+    module: "ModernVBertAttention",
+    qkv: torch.Tensor,
+    rotary_emb: ModernVBertUnpaddedRotaryEmbedding,
+    cu_seqlens: torch.Tensor,
+    max_seqlen: int,
+    local_attention: tuple[int, int],
+    bs: int,
+    dim: int,
+    target_dtype: torch.dtype = torch.bfloat16,
+    **_kwargs,
+) -> tuple[torch.Tensor]:
+    # (total_seqlen, 3, nheads, headdim)
+    qkv = rotary_emb(qkv, cu_seqlens=cu_seqlens, max_seqlen=max_seqlen)
+
+    convert_dtype = qkv.dtype not in (torch.float16, torch.bfloat16)
+    if convert_dtype:
+        # FA2 implementation only supports fp16 and bf16. If FA2 is supported,
+        # bfloat16 must be supported as of FA2 2.5.7. (Turing GPUs not supported)
+        orig_dtype = qkv.dtype
+        qkv = qkv.to(target_dtype)
+
+        attn = flash_attn_varlen_qkvpacked_func(
+            qkv,
+            cu_seqlens=cu_seqlens,
+            max_seqlen=max_seqlen,
+            dropout_p=module.attention_dropout if module.training else 0.0,
+            deterministic=module.deterministic_flash_attn,
+            window_size=local_attention,
+        )
+        attn = attn.to(orig_dtype)  # type: ignore
+    else:
+        attn = flash_attn_varlen_qkvpacked_func(
+            qkv,
+            cu_seqlens=cu_seqlens,
+            max_seqlen=max_seqlen,
+            dropout_p=module.attention_dropout if module.training else 0.0,
+            deterministic=module.deterministic_flash_attn,
+            window_size=local_attention,
+        )
+    return (attn.view(bs, dim),)
+
+
+def sdpa_attention_forward(
+    module: "ModernVBertAttention",
+    qkv: torch.Tensor,
+    attention_mask: torch.Tensor,
+    sliding_window_mask: torch.Tensor,
+    position_ids: Optional[torch.LongTensor],
+    local_attention: tuple[int, int],
+    bs: int,
+    dim: int,
+    position_embeddings: torch.Tensor,
+    **_kwargs,
+) -> tuple[torch.Tensor]:
+    # qkv: [batch_size, seqlen, 3, nheads, headdim]
+    cos, sin = position_embeddings
+    query, key, value = qkv.transpose(3, 1).unbind(dim=2)
+    # query, key, value: [batch_size, heads, seq_len, head_dim]
+    query, key = apply_rotary_pos_emb(query, key, cos, sin)
+
+    if local_attention != (-1, -1):
+        attention_mask = sliding_window_mask
+
+    attn_output = (
+        F.scaled_dot_product_attention(
+            query,
+            key,
+            value,
+            dropout_p=module.attention_dropout if module.training else 0.0,
+            attn_mask=attention_mask,
+        )
+        .transpose(1, 2)
+        .contiguous()
+    )
+    attn_output = attn_output.view(bs, -1, dim)
+    return (attn_output,)
+
+
+MODERNVBERT_ATTENTION_FUNCTION = {
+    "flash_attention_2": flash_attention_forward,
+    "eager": eager_attention_forward,
+    "sdpa": sdpa_attention_forward,
+}
+
+
+class ModernVBertAttention(nn.Module):
+    """Performs multi-headed self attention on a batch of unpadded sequences.
+
+    If Flash Attention 2 is installed, this module uses Flash Attention to improve throughput.
+    If Flash Attention 2 is not installed, the implementation will use PyTorch's SDPA kernel,
+    which requires padding and unpadding inputs, adding some overhead.
+
+    See `forward` method for additional details.
+    """
+
+    def __init__(self, config: ModernVBertConfig, layer_id: Optional[int] = None):
+        super().__init__()
+        self.config = config
+        self.layer_id = layer_id
+
+        if config.hidden_size % config.num_attention_heads != 0:
+            raise ValueError(
+                f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention heads ({config.num_attention_heads})"
+            )
+
+        self.attention_dropout = config.attention_dropout
+        self.deterministic_flash_attn = config.deterministic_flash_attn
+        self.num_heads = config.num_attention_heads
+        self.head_dim = config.hidden_size // config.num_attention_heads
+        self.all_head_size = self.head_dim * self.num_heads
+        self.Wqkv = nn.Linear(config.hidden_size, 3 * self.all_head_size, bias=config.attention_bias)
+        layer_type = config.layer_types[layer_id]
+
+        if layer_id % config.global_attn_every_n_layers != 0:
+            self.local_attention = (config.local_attention // 2, config.local_attention // 2)
+            max_position_embeddings = config.local_attention
+        else:
+            self.local_attention = (-1, -1)
+            max_position_embeddings = config.max_position_embeddings
+
+        if config._attn_implementation == "flash_attention_2":
+            rope_parameters_dict = (
+                self.config.rope_parameters[layer_type] if layer_type is not None else self.config.rope_parameters
+            )
+            rope_theta = rope_parameters_dict["rope_theta"]
+            self.rotary_emb = ModernVBertUnpaddedRotaryEmbedding(
+                dim=self.head_dim, max_seqlen=max_position_embeddings, base=rope_theta
+            )
+        else:
+            self.rotary_emb = None
+
+        self.Wo = nn.Linear(config.hidden_size, config.hidden_size, bias=config.attention_bias)
+        self.out_drop = nn.Dropout(config.attention_dropout) if config.attention_dropout > 0.0 else nn.Identity()
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        position_embeddings: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = False,
+        **kwargs,
+    ) -> torch.Tensor:
+        qkv = self.Wqkv(hidden_states)
+
+        bs = hidden_states.shape[0]
+        if self.config._attn_implementation == "flash_attention_2":
+            qkv = qkv.view(-1, 3, self.num_heads, self.head_dim)
+        else:
+            qkv = qkv.view(bs, -1, 3, self.num_heads, self.head_dim)
+
+        attn_outputs = MODERNVBERT_ATTENTION_FUNCTION[self.config._attn_implementation](
+            self,
+            qkv=qkv,
+            rotary_emb=self.rotary_emb,
+            local_attention=self.local_attention,
+            bs=bs,
+            dim=self.all_head_size,
+            position_embeddings=position_embeddings,
+            output_attentions=output_attentions,
+            **kwargs,
+        )
+        hidden_states = attn_outputs[0]
+        hidden_states = self.out_drop(self.Wo(hidden_states))
+
+        return (hidden_states,) + attn_outputs[1:]  # add attentions if outputted
+
+
+class ModernVBertEncoderLayer(GradientCheckpointingLayer):
+    def __init__(self, config: ModernVBertConfig, layer_id: Optional[int] = None):
+        super().__init__()
+        self.config = config
+        if layer_id == 0:
+            self.attn_norm = nn.Identity()
+        else:
+            self.attn_norm = nn.LayerNorm(config.hidden_size, eps=config.norm_eps, bias=config.norm_bias)
+        self.attn = ModernVBertAttention(config=config, layer_id=layer_id)
+        self.mlp_norm = nn.LayerNorm(config.hidden_size, eps=config.norm_eps, bias=config.norm_bias)
+        self.mlp = ModernVBertMLP(config)
+        self.attention_type = config.layer_types[layer_id]
+
+    @torch.compile(dynamic=True)
+    def compiled_mlp(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        return self.mlp(self.mlp_norm(hidden_states))
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        sliding_window_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        cu_seqlens: Optional[torch.Tensor] = None,
+        max_seqlen: Optional[int] = None,
+        position_embeddings: Optional[torch.Tensor] = None,
+        output_attentions: Optional[bool] = False,
+    ) -> torch.Tensor:
+        attn_outputs = self.attn(
+            self.attn_norm(hidden_states),
+            attention_mask=attention_mask,
+            sliding_window_mask=sliding_window_mask,
+            position_ids=position_ids,
+            cu_seqlens=cu_seqlens,
+            max_seqlen=max_seqlen,
+            position_embeddings=position_embeddings,
+            output_attentions=output_attentions,
+        )
+        hidden_states = hidden_states + attn_outputs[0]
+        mlp_output = (
+            self.compiled_mlp(hidden_states)
+            if self.config.reference_compile
+            else self.mlp(self.mlp_norm(hidden_states))
+        )
+        hidden_states = hidden_states + mlp_output
+
+        return (hidden_states,) + attn_outputs[1:]  # add attentions if outputted
+
+
+def _unpad_modernvbert_input(
+    inputs: torch.Tensor,
+    attention_mask: torch.Tensor,
+    position_ids: Optional[torch.Tensor] = None,
+    labels: Optional[torch.Tensor] = None,
+) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor, int, Optional[torch.Tensor], Optional[torch.Tensor]]:
+    """
+    Remove padding from input sequences.
+
+    Args:
+        inputs: (batch, seqlen, ...) or (batch, seqlen)
+        attention_mask: (batch, seqlen), bool / int, 1 means valid and 0 means not valid.
+        position_ids: (batch, seqlen), int, position ids
+        labels: (batch, seqlen), int, labels
+
+    Returns:
+        unpadded_inputs: (total_nnz, ...), where total_nnz = number of tokens selected in attention_mask.
+        indices: (total_nnz)
+        cu_seqlens: (batch + 1), the cumulative sequence lengths
+        max_seqlen_in_batch: int
+        unpadded_position_ids: (total_nnz) or None
+        unpadded_labels: (total_nnz) or None
+    """
+    seqlens_in_batch = attention_mask.sum(dim=-1, dtype=torch.int32)
+    indices = torch.nonzero(attention_mask.flatten(), as_tuple=False).flatten()
+    max_seqlen_in_batch = int(seqlens_in_batch.max().item())
+    cu_seqlens = torch.nn.functional.pad(torch.cumsum(seqlens_in_batch, dim=0, dtype=torch.int32), (1, 0))
+
+    if inputs.dim() == 2:
+        unpadded_inputs = inputs.flatten()[indices]
+    else:
+        batch, seqlen, *rest = inputs.shape
+        shape = batch * seqlen
+        unpadded_inputs = inputs.view(shape, *rest)[indices]
+
+    unpadded_position_ids = position_ids.flatten()[indices] if position_ids is not None else None
+    unpadded_labels = labels.flatten()[indices] if labels is not None else None
+
+    return unpadded_inputs, indices, cu_seqlens, max_seqlen_in_batch, unpadded_position_ids, unpadded_labels
+
+
+def _pad_modernvbert_output(
+    inputs: torch.Tensor,
+    indices: torch.Tensor,
+    batch: int,
+    seqlen: int,
+) -> torch.Tensor:
+    """
+    Add padding to sequences.
+
+    Args:
+        inputs: (total_nnz, ...) or (total_nnz,), where total_nnz = number of tokens selected in attention_mask.
+        indices: (total_nnz)
+        batch: int, batch size
+        seqlen: int, max sequence length
+
+    Returns:
+        padded_inputs: (batch, seqlen, ...) or (batch, seqlen)
+    """
+    if inputs.dim() == 1:
+        output = torch.zeros(batch * seqlen, dtype=inputs.dtype, device=inputs.device)
+        output[indices] = inputs
+        padded_inputs = output.view(batch, seqlen)
+    else:
+        _, *rest = inputs.shape
+        output = torch.zeros(batch * seqlen, *rest, dtype=inputs.dtype, device=inputs.device)
+        output[indices] = inputs
+        padded_inputs = output.view(batch, seqlen, *rest)
+
+    return padded_inputs
+
+
+@auto_docstring
+class ModernVBertTextModel(ModernVBertPreTrainedModel):
+    def __init__(self, config: ModernVBertConfig):
+        super().__init__(config)
+        self.config = config
+        self.embeddings = ModernVBertEmbeddings(config)
+        self.layers = nn.ModuleList(
+            [ModernVBertEncoderLayer(config, layer_id) for layer_id in range(config.num_hidden_layers)]
+        )
+        self.final_norm = nn.LayerNorm(config.hidden_size, eps=config.norm_eps, bias=config.norm_bias)
+        self.rotary_emb = ModernVBertRotaryEmbedding(config=config)
+        self.gradient_checkpointing = False
+        self.post_init()
+
+    def get_input_embeddings(self):
+        return self.embeddings.tok_embeddings
+
+    def set_input_embeddings(self, value):
+        self.embeddings.tok_embeddings = value
+
+    @auto_docstring
+    def forward(
+        self,
+        input_ids: Optional[torch.LongTensor] = None,
+        attention_mask: Optional[torch.Tensor] = None,
+        sliding_window_mask: Optional[torch.Tensor] = None,
+        position_ids: Optional[torch.LongTensor] = None,
+        inputs_embeds: Optional[torch.Tensor] = None,
+        indices: Optional[torch.Tensor] = None,
+        cu_seqlens: Optional[torch.Tensor] = None,
+        max_seqlen: Optional[int] = None,
+        batch_size: Optional[int] = None,
+        seq_len: Optional[int] = None,
+        output_attentions: Optional[bool] = None,
+        output_hidden_states: Optional[bool] = None,
+        return_dict: Optional[bool] = None,
+        **kwargs,
+    ) -> Union[tuple[torch.Tensor, ...], BaseModelOutput]:
+        r"""
+        sliding_window_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding or far-away tokens. In ModernVBertText, only every few layers
+            perform global attention, while the rest perform local attention. This mask is used to avoid attending to
+            far-away tokens in the local attention layers when not using Flash Attention.
+        indices (`torch.Tensor` of shape `(total_unpadded_tokens,)`, *optional*):
+            Indices of the non-padding tokens in the input sequence. Used for unpadding the output.
+        cu_seqlens (`torch.Tensor` of shape `(batch + 1,)`, *optional*):
+            Cumulative sequence lengths of the input sequences. Used to index the unpadded tensors.
+        max_seqlen (`int`, *optional*):
+            Maximum sequence length in the batch excluding padding tokens. Used to unpad input_ids and pad output tensors.
+        batch_size (`int`, *optional*):
+            Batch size of the input sequences. Used to pad the output tensors.
+        seq_len (`int`, *optional*):
+            Sequence length of the input sequences including padding tokens. Used to pad the output tensors.
+        """
+        output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
+        output_hidden_states = (
+            output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
+        )
+        return_dict = return_dict if return_dict is not None else self.config.use_return_dict
+
+        if (input_ids is None) ^ (inputs_embeds is not None):
+            raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
+
+        all_hidden_states = () if output_hidden_states else None
+        all_self_attentions = () if output_attentions else None
+
+        self._maybe_set_compile()
+
+        if input_ids is not None:
+            self.warn_if_padding_and_no_attention_mask(input_ids, attention_mask)
+
+        if batch_size is None and seq_len is None:
+            if inputs_embeds is not None:
+                batch_size, seq_len = inputs_embeds.shape[:2]
+            else:
+                batch_size, seq_len = input_ids.shape[:2]
+        device = input_ids.device if input_ids is not None else inputs_embeds.device
+
+        if attention_mask is None:
+            attention_mask = torch.ones((batch_size, seq_len), device=device, dtype=torch.bool)
+
+        repad = False
+        if self.config._attn_implementation == "flash_attention_2":
+            if indices is None and cu_seqlens is None and max_seqlen is None:
+                repad = True
+                if inputs_embeds is None:
+                    with torch.no_grad():
+                        input_ids, indices, cu_seqlens, max_seqlen, *_ = _unpad_modernvbert_input(
+                            inputs=input_ids, attention_mask=attention_mask
+                        )
+                else:
+                    inputs_embeds, indices, cu_seqlens, max_seqlen, *_ = _unpad_modernvbert_input(
+                        inputs=inputs_embeds, attention_mask=attention_mask
+                    )
+            if position_ids is None:
+                position_ids = indices.unsqueeze(0)
+        else:
+            if position_ids is None:
+                position_ids = torch.arange(seq_len, device=device).unsqueeze(0)
+
+            attention_mask, sliding_window_mask = self._update_attention_mask(
+                attention_mask, output_attentions=output_attentions
+            )
+
+        hidden_states = self.embeddings(input_ids=input_ids, inputs_embeds=inputs_embeds)
+        position_embeddings = {}
+        for layer_type in self.config.layer_types:
+            position_embeddings[layer_type] = self.rotary_emb(hidden_states, position_ids, layer_type)
+
+        for encoder_layer in self.layers:
+            if output_hidden_states:
+                all_hidden_states = all_hidden_states + (hidden_states,)
+
+            layer_outputs = encoder_layer(
+                hidden_states,
+                attention_mask=attention_mask,
+                sliding_window_mask=sliding_window_mask,
+                position_ids=position_ids,
+                cu_seqlens=cu_seqlens,
+                max_seqlen=max_seqlen,
+                position_embeddings=position_embeddings[encoder_layer.attention_type],
+                output_attentions=output_attentions,
+            )
+            hidden_states = layer_outputs[0]
+            if output_attentions and len(layer_outputs) > 1:
+                all_self_attentions = all_self_attentions + (layer_outputs[1],)
+
+        if output_hidden_states:
+            all_hidden_states = all_hidden_states + (hidden_states,)
+
+        hidden_states = self.final_norm(hidden_states)
+
+        if repad:
+            hidden_states = _pad_modernvbert_output(
+                inputs=hidden_states, indices=indices, batch=batch_size, seqlen=seq_len
+            )
+            if all_hidden_states is not None:
+                all_hidden_states = tuple(
+                    _pad_modernvbert_output(inputs=hs, indices=indices, batch=batch_size, seqlen=seq_len)
+                    for hs in all_hidden_states
+                )
+        # If the attention implementation is FA2 and there is no need for repadding, there might still be the batch
+        # dimension missing
+        elif (
+            self.config._attn_implementation == "flash_attention_2"
+            and all_hidden_states is not None
+            and all_hidden_states[-1].dim() == 2
+        ):
+            hidden_states = hidden_states.unsqueeze(0)
+            all_hidden_states = tuple(hs.unsqueeze(0) for hs in all_hidden_states)
+
+        if not return_dict:
+            return tuple(v for v in [hidden_states, all_hidden_states, all_self_attentions] if v is not None)
+        return BaseModelOutput(
+            last_hidden_state=hidden_states,
+            hidden_states=all_hidden_states,
+            attentions=all_self_attentions,
+        )
+
+    def _update_attention_mask(self, attention_mask: torch.Tensor, output_attentions: bool) -> torch.Tensor:
+        if output_attentions:
+            if self.config._attn_implementation == "sdpa":
+                logger.warning_once(
+                    "Outputting attentions is only supported with the 'eager' attention implementation, "
+                    'not with "sdpa". Falling back to `attn_implementation="eager"`.'
+                )
+                self.config._attn_implementation = "eager"
+            elif self.config._attn_implementation != "eager":
+                logger.warning_once(
+                    "Outputting attentions is only supported with the eager attention implementation, "
+                    f'not with {self.config._attn_implementation}. Consider setting `attn_implementation="eager"`.'
+                    " Setting `output_attentions=False`."
+                )
+
+        global_attention_mask = _prepare_4d_attention_mask(attention_mask, self.dtype)
+
+        # Create position indices
+        rows = torch.arange(global_attention_mask.shape[2]).unsqueeze(0)
+        # Calculate distance between positions
+        distance = torch.abs(rows - rows.T)
+
+        # Create sliding window mask (1 for positions within window, 0 outside)
+        window_mask = (
+            (distance <= self.config.local_attention // 2).unsqueeze(0).unsqueeze(0).to(attention_mask.device)
+        )
+        # Combine with existing mask
+        sliding_window_mask = global_attention_mask.masked_fill(window_mask.logical_not(), torch.finfo(self.dtype).min)
+
+        return global_attention_mask, sliding_window_mask
+
+    def _maybe_set_compile(self):
+        if self.config.reference_compile is False:
+            return
+
+        if hasattr(self, "hf_device_map") and len(self.hf_device_map) > 1:
+            if self.config.reference_compile:
+                logger.warning_once(
+                    "If `accelerate` split the model across devices, `torch.compile` will not work. "
+                    "Falling back to non-compiled mode."
+                )
+            self.config.reference_compile = False
+
+        if self.device.type == "mps":
+            if self.config.reference_compile:
+                logger.warning_once(
+                    "Compiling the model with `torch.compile` and using a `torch.mps` device is not supported. "
+                    "Falling back to non-compiled mode."
+                )
+            self.config.reference_compile = False
+
+        if self.device.type == "cpu":
+            if self.config.reference_compile:
+                logger.warning_once(
+                    "Compiling the model with `torch.compile` and using a `torch.cpu` device is not supported. "
+                    "Falling back to non-compiled mode."
+                )
+            self.config.reference_compile = False
+
+        if self.config.reference_compile is None:
+            self.config.reference_compile = is_triton_available()
+
+
+def eager_attention_forward_vision(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs,
+):
+    attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+
+class ModernVBertAttentionVision(nn.Module):
+    """Multi-headed attention from 'Attention Is All You Need' paper"""
+
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.embed_dim = config.hidden_size
+        self.num_heads = config.num_attention_heads
+        self.head_dim = self.embed_dim // self.num_heads
+        if self.head_dim * self.num_heads != self.embed_dim:
+            raise ValueError(
+                f"embed_dim must be divisible by num_heads (got `embed_dim`: {self.embed_dim} and `num_heads`:"
+                f" {self.num_heads})."
+            )
+        self.scale = self.head_dim**-0.5
+        self.dropout = config.attention_dropout
+        self.is_causal = False
+
+        self.k_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.v_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.q_proj = nn.Linear(self.embed_dim, self.embed_dim)
+        self.out_proj = nn.Linear(self.embed_dim, self.embed_dim)
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        **kwargs,
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+        """Input shape: Batch x Time x Channel"""
+
+        batch_size, seq_length, embed_dim = hidden_states.shape
+
+        queries = self.q_proj(hidden_states)
+        keys = self.k_proj(hidden_states)
+        values = self.v_proj(hidden_states)
+
+        queries = queries.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+        keys = keys.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+        values = values.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+
+        attention_interface: Callable = eager_attention_forward_vision
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            queries,
+            keys,
+            values,
+            attention_mask,
+            is_causal=self.is_causal,
+            scaling=self.scale,
+            dropout=0.0 if not self.training else self.dropout,
+        )
+
+        attn_output = attn_output.reshape(batch_size, seq_length, embed_dim).contiguous()
+        attn_output = self.out_proj(attn_output)
+
+        return attn_output, attn_weights
+
+
+class ModernVBertEmbeddingsVision(nn.Module):
+    def __init__(self, config: ModernVBertVisionConfig):
+        super().__init__()
+        self.config = config
+        self.embed_dim = config.hidden_size
+        self.image_size = config.image_size
+        self.patch_size = config.patch_size
+
+        self.patch_embedding = nn.Conv2d(
+            in_channels=config.num_channels,
+            out_channels=self.embed_dim,
+            kernel_size=self.patch_size,
+            stride=self.patch_size,
+            padding="valid",
+        )
+
+        self.num_patches = (self.image_size // self.patch_size) ** 2
+        self.num_positions = self.num_patches
+        self.position_embedding = nn.Embedding(self.num_positions, self.embed_dim)
+        self.register_buffer("position_ids", torch.arange(self.num_positions).expand((1, -1)), persistent=False)
+
+    def interpolate_pos_encoding(self, embeddings: torch.Tensor, height: int, width: int) -> torch.Tensor:
+        """
+        This method allows to interpolate the pre-trained position encodings, to be able to use the model on higher resolution
+        images. This method is also adapted to support torch.jit tracing and no class embeddings.
+
+        Adapted from:
+        - https://github.com/facebookresearch/dino/blob/de9ee3df6cf39fac952ab558447af1fa1365362a/vision_transformer.py#L174-L194, and
+        - https://github.com/facebookresearch/dinov2/blob/e1277af2ba9496fbadf7aec6eba56e8d882d1e35/dinov2/models/vision_transformer.py#L179-L211
+        """
+
+        num_patches = embeddings.shape[1]
+        num_positions = self.position_embedding.weight.shape[0]
+
+        # always interpolate when tracing to ensure the exported model works for dynamic input shapes
+        if not torch.jit.is_tracing() and num_patches == num_positions and height == width:
+            return self.position_embedding(self.position_ids)
+
+        patch_pos_embed = self.position_embedding.weight.unsqueeze(0)
+
+        dim = embeddings.shape[-1]
+
+        new_height = height // self.patch_size
+        new_width = width // self.patch_size
+
+        sqrt_num_positions = torch_int(num_positions**0.5)
+        patch_pos_embed = patch_pos_embed.reshape(1, sqrt_num_positions, sqrt_num_positions, dim)
+        patch_pos_embed = patch_pos_embed.permute(0, 3, 1, 2)
+
+        patch_pos_embed = nn.functional.interpolate(
+            patch_pos_embed,
+            size=(new_height, new_width),
+            mode="bicubic",
+            align_corners=False,
+        )
+
+        patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
+        return patch_pos_embed
+
+    def forward(self, pixel_values: torch.FloatTensor, interpolate_pos_encoding=False) -> torch.Tensor:
+        _, _, height, width = pixel_values.shape
+        target_dtype = self.patch_embedding.weight.dtype
+        patch_embeds = self.patch_embedding(pixel_values.to(dtype=target_dtype))  # shape = [*, width, grid, grid]
+        embeddings = patch_embeds.flatten(2).transpose(1, 2)
+
+        if interpolate_pos_encoding:
+            embeddings = embeddings + self.interpolate_pos_encoding(embeddings, height, width)
+        else:
+            embeddings = embeddings + self.position_embedding(self.position_ids)
+        return embeddings
+
+
+class ModernVBertMLPVision(nn.Module):
+    def __init__(self, config):
+        super().__init__()
+        self.config = config
+        self.activation_fn = ACT2FN[config.hidden_act]
+        self.fc1 = nn.Linear(config.hidden_size, config.intermediate_size)
+        self.fc2 = nn.Linear(config.intermediate_size, config.hidden_size)
+
+    def forward(self, hidden_states: torch.Tensor) -> torch.Tensor:
+        hidden_states = self.fc1(hidden_states)
+        hidden_states = self.activation_fn(hidden_states)
+        hidden_states = self.fc2(hidden_states)
+        return hidden_states
+
+
+class ModernVBertEncoderLayerVision(GradientCheckpointingLayer):
+    def __init__(self, config: ModernVBertVisionConfig):
+        super().__init__()
+        self.embed_dim = config.hidden_size
+        self.layer_norm1 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.self_attn = ModernVBertAttentionVision(config)
+        self.layer_norm2 = nn.LayerNorm(self.embed_dim, eps=config.layer_norm_eps)
+        self.mlp = ModernVBertMLPVision(config)
+
+    @auto_docstring
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> torch.FloatTensor:
+        residual = hidden_states
+
+        hidden_states = self.layer_norm1(hidden_states)
+        hidden_states, _ = self.self_attn(
+            hidden_states=hidden_states,
+            attention_mask=attention_mask,
+            **kwargs,
+        )
+        hidden_states = residual + hidden_states
+
+        residual = hidden_states
+        hidden_states = self.layer_norm2(hidden_states)
+        hidden_states = self.mlp(hidden_states)
+        hidden_states = residual + hidden_states
+
+        return hidden_states
+
+
+class ModernVBertEncoderVision(nn.Module):
+    """
+    Transformer encoder consisting of `config.num_hidden_layers` self attention layers. Each layer is a
+    [`ModernVBertEncoderVisionLayer`].
+
+    Args:
+        config: ModernVBertConfig
+    """
+
+    def __init__(self, config: ModernVBertVisionConfig):
+        super().__init__()
+        self.config = config
+        self.layers = nn.ModuleList([ModernVBertEncoderLayerVision(config) for _ in range(config.num_hidden_layers)])
+        self.gradient_checkpointing = False
+
+    # Ignore copy
+    @auto_docstring
+    def forward(
+        self,
+        inputs_embeds,
+        attention_mask: Optional[torch.Tensor] = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutput:
+        hidden_states = inputs_embeds
+        for encoder_layer in self.layers:
+            hidden_states = encoder_layer(
+                hidden_states,
+                attention_mask,
+                **kwargs,
+            )
+
+        return BaseModelOutput(last_hidden_state=hidden_states)
+
+
+class ModernVBertMultiheadAttentionPoolingHead(nn.Module):
+    """Multihead Attention Pooling."""
+
+    def __init__(self, config: ModernVBertVisionConfig):
+        super().__init__()
+
+        self.probe = nn.Parameter(torch.randn(1, 1, config.hidden_size))
+        self.attention = torch.nn.MultiheadAttention(config.hidden_size, config.num_attention_heads, batch_first=True)
+        self.layernorm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_eps)
+        self.mlp = ModernVBertMLPVision(config)
+
+    def forward(self, hidden_state):
+        batch_size = hidden_state.shape[0]
+        probe = self.probe.repeat(batch_size, 1, 1)
+
+        hidden_state = self.attention(probe, hidden_state, hidden_state)[0]
+
+        residual = hidden_state
+        hidden_state = self.layernorm(hidden_state)
+        hidden_state = residual + self.mlp(hidden_state)
+
+        return hidden_state[:, 0]
+
+
+class ModernVBertVisionTransformer(ModernVBertPreTrainedModel):
+    _input_embed_layer = "patch_embedding"
+    _can_record_outputs = {
+        "hidden_states": ModernVBertEncoderLayer,
+        "attentions": ModernVBertAttention,
+    }
+
+    def __init__(self, config: ModernVBertVisionConfig):
+        super().__init__(config)
+        self.config = config
+        embed_dim = config.hidden_size
+        self.embeddings = ModernVBertEmbeddingsVision(config)
+        self.encoder = ModernVBertEncoderVision(config)
+        self.post_layernorm = nn.LayerNorm(embed_dim, eps=config.layer_norm_eps)
+        self.use_head = True if not hasattr(config, "vision_use_head") else config.vision_use_head
+        if self.use_head:
+            self.head = ModernVBertMultiheadAttentionPoolingHead(config)
+
+        self.post_init()
+
+    @check_model_inputs(tie_last_hidden_states=False)
+    @auto_docstring
+    def forward(
+        self,
+        pixel_values,
+        interpolate_pos_encoding: Optional[bool] = False,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPooling:
+        hidden_states = self.embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
+
+        encoder_outputs: BaseModelOutput = self.encoder(
+            inputs_embeds=hidden_states,
+            **kwargs,
+        )
+
+        last_hidden_state = encoder_outputs.last_hidden_state
+        last_hidden_state = self.post_layernorm(last_hidden_state)
+
+        pooler_output = self.head(last_hidden_state) if self.use_head else None
+
+        return BaseModelOutputWithPooling(
+            last_hidden_state=last_hidden_state,
+            pooler_output=pooler_output,
+        )
+
+
+@auto_docstring
+class ModernVBertVisionModel(ModernVBertPreTrainedModel):
+    config: ModernVBertVisionConfig
+    main_input_name = "pixel_values"
+    input_modalities = ("image",)
+
+    def __init__(self, config: ModernVBertVisionConfig):
+        super().__init__(config)
+
+        self.vision_model = ModernVBertVisionTransformer(config)
+
+        # Initialize weights and apply final processing
+        self.post_init()
+
+    def get_input_embeddings(self) -> nn.Module:
+        return self.vision_model.embeddings.patch_embedding
+
+    @check_model_inputs(tie_last_hidden_states=False)
+    @auto_docstring
+    def forward(
+        self,
+        pixel_values,
+        interpolate_pos_encoding: bool = False,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> BaseModelOutputWithPooling:
+        r"""
+        Examples:
+
+        ```python
+        >>> from PIL import Image
+        >>> import requests
+        >>> from transformers import AutoProcessor, ModernVBertVisionModel
+
+        >>> model = ModernVBertVisionModel.from_pretrained("google/modernvbert-base-patch16-224")
+        >>> processor = AutoProcessor.from_pretrained("google/modernvbert-base-patch16-224")
+
+        >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
+        >>> image = Image.open(requests.get(url, stream=True).raw)
+
+        >>> inputs = processor(images=image, return_tensors="pt")
+
+        >>> outputs = model(**inputs)
+        >>> last_hidden_state = outputs.last_hidden_state
+        >>> pooled_output = outputs.pooler_output  # pooled features
+        ```"""
+
+        return self.vision_model(
+            pixel_values=pixel_values,
+            interpolate_pos_encoding=interpolate_pos_encoding,
+            **kwargs,
+        )
 
 
 @auto_docstring(
@@ -190,15 +1534,27 @@ class ModernVBertPreTrainedModel(PreTrainedModel):
     """
 )
 class ModernVBertModel(ModernVBertPreTrainedModel):
+    """
+    A subclass of Idefics3Model. We do *not* remove or block the call to inputs_merger
+    in forward. Instead, we override inputs_merger here with custom logic.
+    """
+
     def __init__(self, config: ModernVBertConfig):
         super().__init__(config)
+        self.padding_idx = self.config.text_config.pad_token_id
+        self.vocab_size = self.config.text_config.vocab_size
+        self.vision_model = ModernVBertVisionModel(config.vision_config)
 
         # init components
         self.connector = ModernVBertConnector(config)
-        self.text_model = ModernBertModel(config.text_config)
-        self.vision_model = SiglipVisionModel(config.vision_config)
+        self.text_model = ModernVBertTextModel(config.text_config)
 
-        # initialize weights and apply final processing
+        self.image_seq_len = int(
+            ((config.vision_config.image_size // config.vision_config.patch_size) ** 2)
+            / (config.pixel_shuffle_factor**2)
+        )
+        self.image_token_id = self.config.image_token_id
+
         self.post_init()
 
     def get_input_embeddings(self):
@@ -207,60 +1563,10 @@ class ModernVBertModel(ModernVBertPreTrainedModel):
     def set_input_embeddings(self, value):
         self.text_model.set_input_embeddings(value)
 
-    def get_image_features(
-        self, pixel_values: torch.FloatTensor, pixel_attention_mask: Optional[torch.LongTensor] = None
+    def inputs_merger(
+        self, input_ids: torch.LongTensor, inputs_embeds: torch.Tensor, image_hidden_states: torch.Tensor
     ):
         """
-        Derived from: https://github.com/huggingface/transformers/blob/main/src/transformers/models/smolvlm/modeling_smolvlm.py
-        Encodes images into continuous embeddings that can be forwarded to the language model.
-
-        Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-                The tensors corresponding to the input images.
-            pixel_attention_mask (`torch.LongTensor`, *optional*):
-                The attention mask indicating padded regions in the image.
-        """
-        batch_size, num_images, num_channels, height, width = pixel_values.shape
-        pixel_values = pixel_values.view(batch_size * num_images, *pixel_values.shape[2:])
-
-        # Remove padding images - padding images are full 0.
-        nb_values_per_image = pixel_values.shape[1:].numel()
-        real_images_inds = (pixel_values == 0.0).sum(dim=(-1, -2, -3)) != nb_values_per_image
-
-        if not any(real_images_inds):
-            real_images_inds[0] = True
-
-        pixel_values = pixel_values[real_images_inds].contiguous()
-
-        # Handle the vision attention mask
-        if pixel_attention_mask is None:
-            pixel_attention_mask = torch.ones(
-                size=[pixel_values.shape[i] for i in (0, 2, 3)],
-                dtype=torch.bool,
-                device=pixel_values.device,
-            )
-        else:
-            # Remove padding images from the mask
-            pixel_attention_mask = pixel_attention_mask.view(batch_size * num_images, *pixel_attention_mask.shape[2:])
-            pixel_attention_mask = pixel_attention_mask[real_images_inds].contiguous()
-
-        patch_size = self.config.vision_config.patch_size
-        patches_subgrid = pixel_attention_mask.unfold(dimension=1, size=patch_size, step=patch_size)
-        patches_subgrid = patches_subgrid.unfold(dimension=2, size=patch_size, step=patch_size)
-        patch_attention_mask = (patches_subgrid.sum(dim=(-1, -2)) > 0).bool()
-
-        # Get sequence from the vision encoder
-        image_hidden_states = self.vision_model(pixel_values=pixel_values, patch_attention_mask=patch_attention_mask)
-        image_hidden_states = image_hidden_states.last_hidden_state
-
-        # Modality projection & resampling
-        image_hidden_states = self.connector(image_hidden_states)
-
-        return image_hidden_states
-
-    def inputs_merger(self, input_ids, inputs_embeds, image_hidden_states):
-        """Adapted from https://github.com/huggingface/transformers/blob/main/src/transformers/models/smolvlm/modeling_smolvlm.py
-
         This method aims at merging the token embeddings with the image hidden states into one single sequence of vectors that are fed to the transformer LM.
         The merging happens as follows:
         - The text token sequence is: `tok_1 tok_2 tok_3 <fake_token_around_image> <image> <image> ... <image> <fake_token_around_image> tok_4`.
@@ -269,7 +1575,6 @@ class ModernVBertModel(ModernVBertPreTrainedModel):
         - The merging happens so that we obtain the following sequence: `vector_tok_1 vector_tok_2 vector_tok_3 vector_fake_tok_around_image {sequence of image_seq_len image hidden states} vector_fake_toke_around_image vector_tok_4`. That sequence is fed to the LM.
         - To fit the format of that sequence, `input_ids`, `input_embeds`, `attention_mask` are all 3 adapted to insert the image hidden states.
         """
-
         _, patch_size, _ = image_hidden_states.shape
 
         if input_ids is None:
@@ -280,10 +1585,9 @@ class ModernVBertModel(ModernVBertPreTrainedModel):
         else:
             image_mask = input_ids == self.config.image_token_id
 
-        # Assert that the input <image> tokens are valid (i.e. multiple of patch_size)
         num_image_tokens = image_mask.sum(dim=1)
         if not torch.all(num_image_tokens % patch_size == 0):
-            raise ValueError("Number of <image> tokens not divisible by patch_size.")
+            raise ValueError("At least one sample has <image> tokens not divisible by patch_size.")
 
         blocks_per_sample = num_image_tokens // patch_size
 
@@ -297,7 +1601,57 @@ class ModernVBertModel(ModernVBertPreTrainedModel):
         image_embeds = torch.zeros_like(inputs_embeds)
         image_embeds[image_mask] = image_hidden_states[block_idx[image_mask], local_idx[image_mask], :]
 
-        return torch.where(image_mask.unsqueeze(-1), image_embeds, inputs_embeds)
+        merged_embeds = torch.where(image_mask.unsqueeze(-1), image_embeds, inputs_embeds)
+        return merged_embeds
+
+    def get_image_features(
+        self, pixel_values: torch.FloatTensor, pixel_attention_mask: Optional[torch.LongTensor] = None
+    ):
+        """
+        Encodes images into continuous embeddings that can be forwarded to the language model.
+
+        Args:
+            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+                The tensors corresponding to the input images.
+            pixel_attention_mask (`torch.LongTensor`, *optional*):
+                The attention mask indicating padded regions in the image.
+        """
+        batch_size, num_images, num_channels, height, width = pixel_values.shape
+        pixel_values = pixel_values.to(dtype=self.dtype)  # fp16 compatibility
+        pixel_values = pixel_values.view(batch_size * num_images, *pixel_values.shape[2:])
+
+        # Remove padding images - padding images are full 0.
+        nb_values_per_image = pixel_values.shape[1:].numel()
+        real_images_inds = (pixel_values == 0.0).sum(dim=(-1, -2, -3)) != nb_values_per_image
+
+        if not any(real_images_inds):
+            # no images, leave one empty image.
+            real_images_inds[0] = True
+
+        pixel_values = pixel_values[real_images_inds].contiguous()
+        # Handle the vision attention mask
+        if pixel_attention_mask is None:
+            pixel_attention_mask = torch.ones(
+                size=[pixel_values.shape[i] for i in (0, 2, 3)],
+                dtype=torch.bool,
+                device=pixel_values.device,
+            )
+        else:
+            # Remove padding images from the mask
+            pixel_attention_mask = pixel_attention_mask.view(batch_size * num_images, *pixel_attention_mask.shape[2:])
+            pixel_attention_mask = pixel_attention_mask[real_images_inds].contiguous()
+        patch_size = self.config.vision_config.patch_size
+        patches_subgrid = pixel_attention_mask.unfold(dimension=1, size=patch_size, step=patch_size)
+        patches_subgrid = patches_subgrid.unfold(dimension=2, size=patch_size, step=patch_size)
+        patch_attention_mask = (patches_subgrid.sum(dim=(-1, -2)) > 0).bool()
+
+        # Get sequence from the vision encoder
+        image_hidden_states = self.vision_model(pixel_values=pixel_values, patch_attention_mask=patch_attention_mask)
+        image_hidden_states = image_hidden_states.last_hidden_state
+
+        # Modality projection & resampling
+        image_hidden_states = self.connector(image_hidden_states)
+        return image_hidden_states
 
     @can_return_tuple
     @auto_docstring(
@@ -634,7 +1988,7 @@ class ModernVBertForSequenceClassification(ModernVBertPreTrainedModel):
     """
 )
 class ModernVBertForTokenClassification(ModernVBertPreTrainedModel):
-    def __init__(self, config: ModernBertConfig):
+    def __init__(self, config: ModernVBertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -713,7 +2067,7 @@ class ModernVBertForTokenClassification(ModernVBertPreTrainedModel):
 
 @auto_docstring
 class ModernVBertForQuestionAnswering(ModernVBertPreTrainedModel):
-    def __init__(self, config: ModernBertConfig):
+    def __init__(self, config: ModernVBertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 

@@ -4,14 +4,40 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_colmodernvbert.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+# coding=utf-8
+# MIT License
+#
+# Copyright 2026 Illuin Technology, and contributors, and The HuggingFace Inc. team.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
+import re
+from itertools import accumulate
 from typing import Optional, Union
 
+import numpy as np
+
 from ...feature_extraction_utils import BatchFeature
-from ...image_utils import ImageInput, is_valid_image
-from ...processing_utils import ProcessingKwargs, Unpack
-from ...tokenization_utils_base import PreTokenizedInput, TextInput
+from ...image_utils import ImageInput, is_valid_image, load_image
+from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
+from ...tokenization_utils_base import AddedToken, BatchEncoding, PreTokenizedInput, TextInput
 from ...utils import is_torch_available
-from ..modernvbert import ModernVBertProcessor
 
 
 if is_torch_available():
@@ -22,8 +48,12 @@ class ColModernVBertProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
             "padding": "longest",
+            "add_special_tokens": True,
+            "is_split_into_words": False,
+            "return_mm_token_type_ids": False,
         },
         "images_kwargs": {
+            "return_row_col_info": True,
             "data_format": "channels_first",
             "do_convert_rgb": True,
         },
@@ -31,7 +61,59 @@ class ColModernVBertProcessorKwargs(ProcessingKwargs, total=False):
     }
 
 
-class ColModernVBertProcessor(ModernVBertProcessor):
+def is_url(val) -> bool:
+    return isinstance(val, str) and val.startswith("http")
+
+
+def is_image_or_image_url(elem):
+    return is_url(elem) or is_valid_image(elem)
+
+
+def _prompt_split_image(image_seq_len, image_rows, image_cols, fake_token_around_image, image_token, global_img_token):
+    """Prompt with expanded image tokens for when the image is split into patches."""
+    text_split_images = ""
+    for n_h in range(image_rows):
+        for n_w in range(image_cols):
+            text_split_images += (
+                f"{fake_token_around_image}" + f"<row_{n_h + 1}_col_{n_w + 1}>" + f"{image_token}" * image_seq_len
+            )
+        text_split_images += "\n"
+
+    text_split_images += (
+        f"\n{fake_token_around_image}"
+        + f"{global_img_token}"
+        + f"{image_token}" * image_seq_len
+        + f"{fake_token_around_image}"
+    )
+    return text_split_images
+
+
+def _prompt_single_image(image_seq_len, fake_token_around_image, image_token, global_img_token):
+    """Prompt with expanded image tokens for a single image."""
+    return (
+        f"{fake_token_around_image}"
+        + f"{global_img_token}"
+        + f"{image_token}" * image_seq_len
+        + f"{fake_token_around_image}"
+    )
+
+
+def get_image_prompt_string(
+    image_rows, image_cols, image_seq_len, fake_token_around_image, image_token, global_img_token
+):
+    if image_rows == 0 and image_cols == 0:
+        return _prompt_single_image(
+            image_seq_len,
+            fake_token_around_image=fake_token_around_image,
+            image_token=image_token,
+            global_img_token=global_img_token,
+        )
+    return _prompt_split_image(
+        image_seq_len, image_rows, image_cols, fake_token_around_image, image_token, global_img_token
+    )
+
+
+class ColModernVBertProcessor(ProcessorMixin):
     r"""
     Constructs a ColModernVBert processor which wraps a ModernVBertProcessor and special methods to process images and queries, as
     well as to compute the late-interaction retrieval score.
@@ -51,23 +133,46 @@ class ColModernVBertProcessor(ModernVBertProcessor):
         self,
         image_processor,
         tokenizer=None,
+        chat_template=None,
         image_seq_len: int = 64,
         visual_prompt_prefix: Optional[str] = None,
         query_prefix: Optional[str] = None,
         **kwargs,
     ):
-        super().__init__(
-            image_processor=image_processor,
-            tokenizer=tokenizer,
-            image_seq_len=image_seq_len,
-            chat_template=None,  # No chat template used for retrieval
-            **kwargs,
+        super().__init__(image_processor, tokenizer, chat_template=chat_template)
+        self.image_token = AddedToken("<image>", normalized=False, special=True).content
+        self.video_token = None  #    ColModernVBert does not process video inputs
+
+        self.visual_prompt_prefix = visual_prompt_prefix or (
+            f"<|begin_of_text|>User:{self.image_token}Describe the image.<end_of_utterance>\nAssistant:"
         )
-        self.visual_prompt_prefix = (
-            visual_prompt_prefix or "<|begin_of_text|>User:<image>Describe the image.<end_of_utterance>\nAssistant:"
-        )
+
         self.query_prefix = query_prefix or ""
-        self.query_augmentation_token = self.end_of_utterance_token
+
+        self.chat_template = None  # ColModernVBert does not use chat templates
+        self.fake_image_token = AddedToken("<fake_token_around_image>", normalized=False, special=True).content
+        self.end_of_utterance_token = AddedToken("<end_of_utterance>", normalized=False, special=True).content
+        self.global_image_tag = "<global-img>"  # https://github.com/huggingface/transformers/pull/32473/files/8063e5e17362571b693f1db95167f5443a3be1b2#r1734825341
+        self.image_seq_len = image_seq_len
+        self.image_token_id = tokenizer.convert_tokens_to_ids(self.image_token)
+        self.fake_image_token_id = tokenizer.convert_tokens_to_ids(self.fake_image_token)
+        self.global_image_token_id = tokenizer.convert_tokens_to_ids(self.global_image_tag)
+        self.row_col_ids = [
+            tokenizer.convert_tokens_to_ids(f"<row_{i + 1}_col_{j + 1}>") for i in range(6) for j in range(6)
+        ]
+
+        # This regex matches one or more occurrences of <global-img> tags (optionally surrounded by newline characters)
+        # or <row_x_col_y> tags (where x and y are digits, also optionally surrounded by newline characters).
+        self._regex_to_remove_extra_special_tokens = re.compile(r"(\n?<global-img>\n?|<row_\d+_col_\d+>\n?)+")
+
+        tokens_to_add = {
+            "additional_special_tokens": [
+                self.fake_image_token,
+                self.image_token,
+                self.end_of_utterance_token,
+            ]
+        }
+        tokenizer.add_special_tokens(tokens_to_add)
 
     def __call__(
         self,
@@ -134,7 +239,7 @@ class ColModernVBertProcessor(ModernVBertProcessor):
 
             images = [image.convert("RGB") for image in images]
 
-            batch_doc = super().__call__(
+            batch_doc = self._process_elements(
                 text=[self.visual_prompt_prefix] * len(images),
                 images=images,
                 images_kwargs=output_kwargs["images_kwargs"],
@@ -162,13 +267,60 @@ class ColModernVBertProcessor(ModernVBertProcessor):
                 augmented_query = self.query_prefix + query + suffix
                 texts_query.append(augmented_query)
 
-            batch_query = super().__call__(
+            batch_query = self._process_elements(
                 text=texts_query,
                 return_token_type_ids=False,
                 text_kwargs=output_kwargs["text_kwargs"],
             )
 
             return batch_query
+
+    def _get_num_multimodal_tokens(self, image_sizes=None, **kwargs):
+        """
+        Computes the number of placeholder tokens needed for multimodal inputs with the given sizes.
+        Args:
+            image_sizes (`list[list[int]]`, *optional*):
+                The input sizes formatted as (height, width) per each image.
+        Returns:
+            `MultiModalData`: A `MultiModalData` object holding number of tokens per each of the provided
+            input modalities, along with other useful data.
+        """
+
+        vision_data = {}
+        if image_sizes is not None:
+            images_kwargs = ColModernVBertProcessorKwargs._defaults.get("images_kwargs", {})
+            images_kwargs.update(kwargs)
+            merge_size = images_kwargs.get("merge_size", None) or self.image_processor.merge_size
+
+            num_image_patches = [
+                self.image_processor.get_number_of_image_patches(*image_size, images_kwargs)
+                for image_size in image_sizes
+            ]
+            num_image_tokens = [(num_patches // merge_size**2) for num_patches in num_image_patches]
+            vision_data.update({"num_image_tokens": num_image_tokens, "num_image_patches": num_image_patches})
+
+        return MultiModalData(**vision_data)
+
+    @property
+    def model_input_names(self):
+        tokenizer_input_names = self.tokenizer.model_input_names
+        image_processor_input_names = self.image_processor.model_input_names
+
+        # ColQwen doesn't process videos. Make a copy of list when removing
+        # otherwise `self.feature_extractor.model_input_names` is also modified
+        image_processor_input_names = [
+            name for name in image_processor_input_names if name not in ["pixel_values_videos", "video_grid_thw"]
+        ]
+        return tokenizer_input_names + image_processor_input_names
+
+    @property
+    def query_augmentation_token(self) -> str:
+        """
+        Return the query augmentation token.
+
+        Query augmentation buffers are used as reasoning buffers during inference.
+        """
+        return self.end_of_utterance_token
 
     def process_images(
         self,
@@ -178,6 +330,7 @@ class ColModernVBertProcessor(ModernVBertProcessor):
         """
         Prepare for the model one or several image(s). This method is a wrapper around the `__call__` method of the ColModernVBertProcessor's
         [`ColModernVBertProcessor.__call__`].
+
         This method forwards the `images` and `kwargs` arguments to the image processor.
 
         Args:
@@ -210,6 +363,7 @@ class ColModernVBertProcessor(ModernVBertProcessor):
         """
         Prepare for the model one or several texts. This method is a wrapper around the `__call__` method of the ColModernVBertProcessor's
         [`ColModernVBertProcessor.__call__`].
+
         This method forwards the `text` and `kwargs` arguments to the tokenizer.
 
         Args:
@@ -243,7 +397,7 @@ class ColModernVBertProcessor(ModernVBertProcessor):
     ) -> "torch.Tensor":
         """
         Compute the late-interaction/MaxSim score (ColBERT-like) for the given multi-vector
-        query embeddings (`qs`) and passage embeddings (`ps`). For ColPali, a passage is the
+        query embeddings (`qs`) and passage embeddings (`ps`). For ColModernVBert, a passage is the
         image of a document page.
 
         Because the embedding tensors are multi-vector and can thus have different shapes, they
@@ -296,6 +450,158 @@ class ColModernVBertProcessor(ModernVBertProcessor):
             scores.append(torch.cat(batch_scores, dim=1).to(output_dtype).to(output_device))
 
         return torch.cat(scores, dim=0)
+
+    def _extract_images_from_prompts(self, prompts):
+        prompt_images = []
+        for prompt in prompts:
+            images = []
+            for elem in prompt:
+                if is_valid_image(elem):
+                    images.append(elem)
+                elif is_url(elem):
+                    images.append(load_image(elem))
+            prompt_images.append(images)
+        return prompt_images
+
+    def _process_elements(
+        self,
+        images: Union[ImageInput, list[ImageInput], list[list[ImageInput]]] = None,
+        text: Union[TextInput, "PreTokenizedInput", list[TextInput], list["PreTokenizedInput"]] = None,
+        image_seq_len: Optional[int] = None,
+        **kwargs: Unpack[ColModernVBertProcessorKwargs],
+    ) -> BatchEncoding:
+        """Processes the input prompts and returns a BatchEncoding."""
+        if text is None and images is None:
+            raise ValueError("You must provide either `text` or `images`.")
+
+        output_kwargs = self._merge_kwargs(
+            ColModernVBertProcessorKwargs,
+            tokenizer_init_kwargs=self.tokenizer.init_kwargs,
+            **kwargs,
+        )
+
+        image_seq_len = image_seq_len if image_seq_len is not None else self.image_seq_len
+        return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
+        return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
+
+        n_images_in_text = []
+        n_images_in_images = []
+        inputs = {}
+
+        if text is not None:
+            if isinstance(text, str):
+                text = [text]
+            elif not isinstance(text, list) and not isinstance(text[0], str):
+                raise ValueError("Invalid input text. Please provide a string, or a list of strings")
+            n_images_in_text = [sample.count(self.image_token) for sample in text]
+
+        if images is not None:
+            if is_image_or_image_url(images):
+                images = [[images]]
+            elif isinstance(images, (list, tuple)) and is_image_or_image_url(images[0]):
+                if text is not None:
+                    if sum(n_images_in_text) != len(images):
+                        raise ValueError(
+                            f"The total number of {self.image_token} tokens in the prompts should be the same as the number of images passed."
+                            f" Found {sum(n_images_in_text)} {self.image_token} tokens and {len(images)} images."
+                        )
+                    # Reorganize the images to match the prompts
+                    cumsum_images_in_text = [0] + list(accumulate(n_images_in_text))
+                    images = [
+                        images[cumsum_images_in_text[i] : cumsum_images_in_text[i + 1]]
+                        for i in range(len(n_images_in_text))
+                    ]
+                else:
+                    images = [images]
+            elif (
+                not isinstance(images, (list, tuple))
+                and not isinstance(images[0], (list, tuple))
+                and not is_image_or_image_url(images[0][0])
+            ):
+                raise ValueError(
+                    "Invalid input images. Please provide a single image or a list of images or a list of list of images."
+                )
+            n_images_in_images = [len(sample) for sample in images]
+
+            # Load images if they are URLs
+            images = [[load_image(im) if is_url(im) else im for im in sample] for sample in images]
+
+            image_inputs = self.image_processor(images, **output_kwargs["images_kwargs"])
+            inputs.update(image_inputs)
+
+            if text is not None:
+                if n_images_in_images != n_images_in_text:
+                    raise ValueError(
+                        f"The number of images in the text {n_images_in_text} and images {n_images_in_images} should be the same."
+                    )
+
+                image_rows = inputs.pop("rows", [[0] * n_images for n_images in n_images_in_text])
+                image_cols = inputs.pop("cols", [[0] * n_images for n_images in n_images_in_text])
+
+                fake_image_token = self.fake_image_token
+                image_token = self.image_token
+                global_img_token = self.global_image_tag
+
+                prompt_strings = []
+                batch_image_seq_lengths = []
+                for sample, sample_rows, sample_cols in zip(text, image_rows, image_cols):
+                    # Replace the image token with fake tokens around the expanded image token sequence of length `image_seq_len`
+                    image_prompt_strings = []
+                    image_seq_lengths = []
+                    for n_rows, n_cols in zip(sample_rows, sample_cols):
+                        image_prompt_string = get_image_prompt_string(
+                            n_rows,
+                            n_cols,
+                            image_seq_len,
+                            image_token=image_token,
+                            fake_token_around_image=fake_image_token,
+                            global_img_token=global_img_token,
+                        )
+                        # Add +2 and +3 for special BOI/EOI/fake_image_wrapper tokens
+                        row_length = (self.image_seq_len + 2) * n_cols + 1
+                        image_seq_lengths.append((self.image_seq_len + 3) + row_length * n_rows)
+                        image_prompt_strings.append(image_prompt_string)
+
+                    batch_image_seq_lengths.append(image_seq_lengths)
+                    split_sample = sample.split(image_token)
+                    if len(split_sample) == 0:
+                        raise ValueError("The image token should be present in the text.")
+
+                    # Place in the image prompt strings where the image tokens are
+                    sample = split_sample[0]
+                    for i, image_prompt_string in enumerate(image_prompt_strings):
+                        sample += image_prompt_string + split_sample[i + 1]
+                    prompt_strings.append(sample)
+
+                text_inputs = self.tokenizer(prompt_strings, **output_kwargs["text_kwargs"])
+                self._check_special_mm_tokens(prompt_strings, text_inputs, modalities=["image"])
+                inputs.update(text_inputs)
+
+        elif text is not None:
+            if any(n_images_in_text):
+                raise ValueError(
+                    f"Found {sum(n_images_in_text)} {self.image_token} tokens in the text but no images were passed."
+                )
+            text_inputs = self.tokenizer(text=text, **output_kwargs["text_kwargs"])
+            inputs.update(text_inputs)
+
+        if return_mm_token_type_ids:
+            array_ids = np.array(inputs["input_ids"])
+            mm_token_type_ids = np.zeros_like(array_ids)
+            for i, seq_lengths in enumerate(batch_image_seq_lengths):
+                image_start_positions = np.where(array_ids[i] == self.fake_image_token_id)[0]
+                j = 0
+                for seq_len in seq_lengths:
+                    if j >= len(image_start_positions):
+                        break
+                    start = image_start_positions[j]
+                    end = start + seq_len
+                    mm_token_type_ids[i, start:end] = 1
+                    j = np.searchsorted(image_start_positions, end)
+
+            inputs["mm_token_type_ids"] = mm_token_type_ids.tolist()
+
+        return BatchFeature(data=inputs, tensor_type=return_tensors)
 
 
 __all__ = ["ColModernVBertProcessor"]

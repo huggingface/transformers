@@ -55,7 +55,8 @@ class ColQwen2Config(PreTrainedConfig):
     """
 
     model_type = "colqwen2"
-    sub_configs: dict[str, Any] = {"vlm_config": Qwen2VLConfig}
+    sub_configs: dict[str, Any] = {"vlm_config": PreTrainedConfig}
+    default_vlm_config_class = Qwen2VLConfig
 
     def __init__(
         self,
@@ -65,7 +66,7 @@ class ColQwen2Config(PreTrainedConfig):
         **kwargs,
     ):
         if vlm_config is None:
-            vlm_config = self.sub_configs["vlm_config"]()
+            vlm_config = self.default_vlm_config_class()
             logger.info(
                 "`vlm_config` is `None`. Initializing `vlm_config` with the `Qwen2VLConfig` with default values."
             )

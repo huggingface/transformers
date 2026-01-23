@@ -4,13 +4,440 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_colmodernvbert.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-from typing import Any
+# coding=utf-8
+# MIT License
+#
+# Copyright 2026 Illuin Technology, and contributors, and The HuggingFace Inc. team.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
 
-from ..colqwen2 import ColQwen2Config
-from ..modernvbert import ModernVBertConfig
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
+from copy import deepcopy
+from typing import Any, Literal, Optional
+
+from ...configuration_utils import PreTrainedConfig, PretrainedConfig, layer_type_validation
+from ...modeling_rope_utils import RopeParameters
+from ...utils import logging
+from ..auto import CONFIG_MAPPING
 
 
-class ColModernVBertConfig(ColQwen2Config):
+logger = logging.get_logger(__name__)
+
+
+class ModernVBertTextConfig(PreTrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`ColModernVBertModernVBertTextModel`]. It is used to instantiate an ColModernVBertModernVBertText
+    model according to the specified arguments, defining the model architecture. Instantiating a configuration with the
+    defaults will yield a similar configuration to that of the ColModernVBertModernVBertText-base.
+    e.g. [answerdotai/ColModernVBertModernVBertText-base](https://huggingface.co/answerdotai/ColModernVBertModernVBertText-base)
+
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
+
+    Args:
+        vocab_size (`int`, *optional*, defaults to 50368):
+            Vocabulary size of the ColModernVBertModernVBertText model. Defines the number of different tokens that can be represented by the
+            `inputs_ids` passed when calling [`ColModernVBertModernVBertTextModel`]
+        hidden_size (`int`, *optional*, defaults to 768):
+            Dimension of the hidden representations.
+        intermediate_size (`int`, *optional*, defaults to 1152):
+            Dimension of the MLP representations.
+        num_hidden_layers (`int`, *optional*, defaults to 22):
+            Number of hidden layers in the Transformer decoder.
+        num_attention_heads (`int`, *optional*, defaults to 12):
+            Number of attention heads for each attention layer in the Transformer decoder.
+        hidden_activation (`str` or `function`, *optional*, defaults to `"gelu"`):
+            The non-linear activation function (function or string) in the decoder. Will default to `"gelu"`
+            if not specified.
+        max_position_embeddings (`int`, *optional*, defaults to 8192):
+            The maximum sequence length that this model might ever be used with.
+        initializer_range (`float`, *optional*, defaults to 0.02):
+            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        initializer_cutoff_factor (`float`, *optional*, defaults to 2.0):
+            The cutoff factor for the truncated_normal_initializer for initializing all weight matrices.
+        norm_eps (`float`, *optional*, defaults to 1e-05):
+            The epsilon used by the rms normalization layers.
+        norm_bias (`bool`, *optional*, defaults to `False`):
+            Whether to use bias in the normalization layers.
+        pad_token_id (`int`, *optional*, defaults to 50283):
+            Padding token id.
+        eos_token_id (`int`, *optional*, defaults to 50282):
+            End of stream token id.
+        bos_token_id (`int`, *optional*, defaults to 50281):
+            Beginning of stream token id.
+        cls_token_id (`int`, *optional*, defaults to 50281):
+            Classification token id.
+        sep_token_id (`int`, *optional*, defaults to 50282):
+            Separation token id.
+        attention_bias (`bool`, *optional*, defaults to `False`):
+            Whether to use a bias in the query, key, value and output projection layers during self-attention.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
+        layer_types (`list`, *optional*):
+            Attention pattern for each layer.
+        rope_parameters (`RopeParameters`, *optional*):
+            Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
+            a value for `rope_theta` and optionally parameters used for scaling in case you want to use RoPE
+            with longer `max_position_embeddings`.
+        local_attention (`int`, *optional*, defaults to 128):
+            The window size for local attention.
+        embedding_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the embeddings.
+        mlp_bias (`bool`, *optional*, defaults to `False`):
+            Whether to use bias in the MLP layers.
+        mlp_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the MLP layers.
+        decoder_bias (`bool`, *optional*, defaults to `True`):
+            Whether to use bias in the decoder layers.
+        classifier_pooling (`str`, *optional*, defaults to `"cls"`):
+            The pooling method for the classifier. Should be either `"cls"` or `"mean"`. In local attention layers, the
+            CLS token doesn't attend to all tokens on long sequences.
+        classifier_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the classifier.
+        classifier_bias (`bool`, *optional*, defaults to `False`):
+            Whether to use bias in the classifier.
+        classifier_activation (`str`, *optional*, defaults to `"gelu"`):
+            The activation function for the classifier.
+        deterministic_flash_attn (`bool`, *optional*, defaults to `False`):
+            Whether to use deterministic flash attention. If `False`, inference will be faster but not deterministic.
+        sparse_prediction (`bool`, *optional*, defaults to `False`):
+            Whether to use sparse prediction for the masked language model instead of returning the full dense logits.
+        sparse_pred_ignore_index (`int`, *optional*, defaults to -100):
+            The index to ignore for the sparse prediction.
+        reference_compile (`bool`, *optional*):
+            Whether to compile the layers of the model which were compiled during pretraining. If `None`, then parts of
+            the model will be compiled if 1) `triton` is installed, 2) the model is not on MPS, 3) the model is not
+            shared between devices, and 4) the model is not resized after initialization. If `True`, then the model may
+            be faster in some scenarios.
+        repad_logits_with_grad (`bool`, *optional*, defaults to `False`):
+            When True, ColModernVBertModernVBertTextForMaskedLM keeps track of the logits' gradient when repadding for output. This only
+            applies when using Flash Attention 2 with passed labels. Otherwise output logits always have a gradient.
+
+    Examples:
+
+    ```python
+    >>> from transformers import ColModernVBertModernVBertTextModel, ModernVBertTextConfig
+
+    >>> # Initializing a ColModernVBertModernVBertText style configuration
+    >>> configuration = ModernVBertTextConfig()
+
+    >>> # Initializing a model from the ColModernVBertModernVBertText-base style configuration
+    >>> model = ColModernVBertModernVBertTextModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
+    model_type = "ColModernVBertModernVBertText"
+    keys_to_ignore_at_inference = ["past_key_values"]
+    default_theta = {"global": 160_000.0, "local": 10_000.0}
+
+    def __init__(
+        self,
+        vocab_size: Optional[int] = 50368,
+        hidden_size: Optional[int] = 768,
+        intermediate_size: Optional[int] = 1152,
+        num_hidden_layers: Optional[int] = 22,
+        num_attention_heads: Optional[int] = 12,
+        hidden_activation: Optional[str] = "gelu",
+        max_position_embeddings: Optional[int] = 8192,
+        initializer_range: Optional[float] = 0.02,
+        initializer_cutoff_factor: Optional[float] = 2.0,
+        norm_eps: Optional[int] = 1e-5,
+        norm_bias: Optional[bool] = False,
+        pad_token_id: Optional[int] = 50283,
+        eos_token_id: Optional[int] = 50282,
+        bos_token_id: Optional[int] = 50281,
+        cls_token_id: Optional[int] = 50281,
+        sep_token_id: Optional[int] = 50282,
+        attention_bias: Optional[bool] = False,
+        attention_dropout: Optional[float] = 0.0,
+        layer_types: Optional[list[str]] = None,
+        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
+        local_attention: Optional[int] = 128,
+        embedding_dropout: Optional[float] = 0.0,
+        mlp_bias: Optional[bool] = False,
+        mlp_dropout: Optional[float] = 0.0,
+        decoder_bias: Optional[bool] = True,
+        classifier_pooling: Literal["cls", "mean"] = "cls",
+        classifier_dropout: Optional[float] = 0.0,
+        classifier_bias: Optional[bool] = False,
+        classifier_activation: Optional[str] = "gelu",
+        deterministic_flash_attn: Optional[bool] = False,
+        sparse_prediction: Optional[bool] = False,
+        sparse_pred_ignore_index: Optional[int] = -100,
+        reference_compile: Optional[bool] = None,
+        repad_logits_with_grad: Optional[bool] = False,
+        **kwargs,
+    ):
+        self.vocab_size = vocab_size
+        self.max_position_embeddings = max_position_embeddings
+        self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.initializer_range = initializer_range
+        self.initializer_cutoff_factor = initializer_cutoff_factor
+        self.norm_eps = norm_eps
+        self.norm_bias = norm_bias
+        self.attention_bias = attention_bias
+        self.attention_dropout = attention_dropout
+        self.hidden_activation = hidden_activation
+        self.local_attention = local_attention
+        self.embedding_dropout = embedding_dropout
+        self.mlp_bias = mlp_bias
+        self.mlp_dropout = mlp_dropout
+        self.decoder_bias = decoder_bias
+        self.classifier_pooling = classifier_pooling
+        self.classifier_dropout = classifier_dropout
+        self.classifier_bias = classifier_bias
+        self.classifier_activation = classifier_activation
+        self.deterministic_flash_attn = deterministic_flash_attn
+        self.sparse_prediction = sparse_prediction
+        self.sparse_pred_ignore_index = sparse_pred_ignore_index
+        self.reference_compile = reference_compile
+        self.repad_logits_with_grad = repad_logits_with_grad
+
+        if self.classifier_pooling not in ["cls", "mean"]:
+            raise ValueError(
+                f'Invalid value for `classifier_pooling`, should be either "cls" or "mean", but is {self.classifier_pooling}.'
+            )
+
+        self.layer_types = layer_types
+
+        # BC -> the pattern used to be a simple int, and it's still present in configs on the Hub
+        self.global_attn_every_n_layers = kwargs.get("global_attn_every_n_layers", 3)
+
+        if self.layer_types is None:
+            self.layer_types = [
+                "sliding_attention" if bool(i % self.global_attn_every_n_layers) else "full_attention"
+                for i in range(self.num_hidden_layers)
+            ]
+        layer_type_validation(self.layer_types, self.num_hidden_layers)
+
+        self.rope_parameters = rope_parameters
+        super().__init__(
+            pad_token_id=pad_token_id,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
+            cls_token_id=cls_token_id,
+            sep_token_id=sep_token_id,
+            **kwargs,
+        )
+
+    def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation=None, **kwargs):
+        rope_scaling = kwargs.pop("rope_scaling", None)
+
+        # Try to set `rope_scaling` if available, otherwise use `rope_parameters`. If we find `rope_parameters`
+        # as arg in the inputs, we can safely assume that it is in the new format. New naming used -> new format
+        default_rope_params = {
+            "sliding_attention": {"rope_type": "default"},
+            "full_attention": {"rope_type": "default"},
+        }
+        self.rope_parameters = self.rope_parameters if self.rope_parameters is not None else default_rope_params
+        if rope_scaling is not None:
+            self.rope_parameters["full_attention"].update(rope_scaling)
+            self.rope_parameters["sliding_attention"].update(rope_scaling)
+        self.rope_parameters["full_attention"].setdefault(
+            "rope_theta", kwargs.pop("global_rope_theta", self.default_theta["global"])
+        )
+        self.rope_parameters["sliding_attention"].setdefault(
+            "rope_theta", kwargs.pop("local_rope_theta", self.default_theta["local"])
+        )
+
+        # Standardize and validate the correctness of rotary position embeddings parameters
+        self.standardize_rope_params()
+        self.validate_rope(ignore_keys=ignore_keys_at_rope_validation)
+        return kwargs
+
+    def to_dict(self):
+        output = super().to_dict()
+        output.pop("reference_compile", None)
+        return output
+
+
+class ModernVBertVisionConfig(PreTrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a [`ColModernVBertModernVBertVisionModel`]. It is used to instantiate a
+    ColModernVBertModernVBert vision encoder according to the specified arguments, defining the model architecture. Instantiating a
+    configuration with the defaults will yield a similar configuration to that of the vision encoder of the ColModernVBertModernVBert
+    [google/col_modern_v_bert_modern_v_bert-base-patch16-224](https://huggingface.co/google/col_modern_v_bert_modern_v_bert-base-patch16-224) architecture.
+
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
+    documentation from [`PreTrainedConfig`] for more information.
+
+    Args:
+        hidden_size (`int`, *optional*, defaults to 768):
+            Dimensionality of the encoder layers and the pooler layer.
+        intermediate_size (`int`, *optional*, defaults to 3072):
+            Dimensionality of the "intermediate" (i.e., feed-forward) layer in the Transformer encoder.
+        num_hidden_layers (`int`, *optional*, defaults to 12):
+            Number of hidden layers in the Transformer encoder.
+        num_attention_heads (`int`, *optional*, defaults to 12):
+            Number of attention heads for each attention layer in the Transformer encoder.
+        num_channels (`int`, *optional*, defaults to 3):
+            Number of channels in the input images.
+        image_size (`int`, *optional*, defaults to 224):
+            The size (resolution) of each image.
+        patch_size (`int`, *optional*, defaults to 16):
+            The size (resolution) of each patch.
+        hidden_act (`str` or `function`, *optional*, defaults to `"gelu_pytorch_tanh"`):
+            The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
+            `"relu"`, `"selu"` and `"gelu_new"` `"quick_gelu"` are supported.
+        layer_norm_eps (`float`, *optional*, defaults to 1e-06):
+            The epsilon used by the layer normalization layers.
+        attention_dropout (`float`, *optional*, defaults to 0.0):
+            The dropout ratio for the attention probabilities.
+
+    Example:
+
+    ```python
+    >>> from transformers import ModernVBertVisionConfig, ColModernVBertModernVBertVisionModel
+
+    >>> # Initializing a ModernVBertVisionConfig with google/col_modern_v_bert_modern_v_bert-base-patch16-224 style configuration
+    >>> configuration = ModernVBertVisionConfig()
+
+    >>> # Initializing a ColModernVBertModernVBertVisionModel (with random weights) from the google/col_modern_v_bert_modern_v_bert-base-patch16-224 style configuration
+    >>> model = ColModernVBertModernVBertVisionModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> configuration = model.config
+    ```"""
+
+    model_type = "col_modern_v_bert_modern_v_bert_vision_model"
+    base_config_key = "vision_config"
+
+    def __init__(
+        self,
+        hidden_size=768,
+        intermediate_size=3072,
+        num_hidden_layers=12,
+        num_attention_heads=12,
+        num_channels=3,
+        image_size=224,
+        patch_size=16,
+        hidden_act="gelu_pytorch_tanh",
+        layer_norm_eps=1e-6,
+        attention_dropout=0.0,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+
+        self.hidden_size = hidden_size
+        self.intermediate_size = intermediate_size
+        self.num_hidden_layers = num_hidden_layers
+        self.num_attention_heads = num_attention_heads
+        self.num_channels = num_channels
+        self.patch_size = patch_size
+        self.image_size = image_size
+        self.attention_dropout = attention_dropout
+        self.layer_norm_eps = layer_norm_eps
+        self.hidden_act = hidden_act
+
+
+class ModernVBertConfig(PretrainedConfig):
+    r"""
+    This is the configuration class to store the configuration of a `ColModernVBertModernVBert` model. It is used to
+    instantiate a ColModernVBertModernVBert model according to the specified arguments and defines the model architecture.
+    e.g. [ColModernVBertModernVBert/col_modern_v_bert_modern_v_bert](https://huggingface.co/ColModernVBertModernVBert/col_modern_v_bert_modern_v_bert).
+
+    Configuration objects inherit from [`PretrainedConfig`] and can be used to control the model outputs.
+    See the documentation for [`PretrainedConfig`] for more details.
+
+    Args:
+            text_config ([`ColModernVBertModernVBertTextConfig`], *optional*): [`ColModernVBertModernVBertModel`] config to build the text encoder.
+            vision_config ([`ColModernVBertModernVBertVisionConfig`], *optional*): [`ColModernVBertModernVBertVisionModel`] config to build the vision encoder.
+            image_token_id (`Optional`, *optional*, defaults to 50407): The token id reserved for image tokens inserted into the text stream.
+            pixel_shuffle_factor (`Optional`, *optional*, defaults to 4): Scale factor used by any pixel-shuffle / upsampling operations in the vision head.
+            vocab_size (`Optional`, *optional*): Vocabulary size of the text model. Defines the number of different tokens that can be represented
+                by the `inputs_ids` passed when calling [`ColModernVBertModernVBertModel`]. If not provided, will be taken from
+                the `text_config`.
+            hidden_size (`Optional`, *optional*): Dimensionality of the encoder layers and the pooler layer. If not provided, will be taken from
+                the `text_config`.
+            num_hidden_layers (`Optional`, *optional*): Number of hidden layers in the Transformer encoder. If not provided, will be taken from
+                the `text_config`.
+            initializer_range (`Optional`, *optional*, defaults to 0.02): The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+            initializer_cutoff_factor (`Optional`, *optional*, defaults to 2.0): The cutoff factor for the truncated_normal_initializer for initializing all weight matrices.
+            classifier_pooling (`Literal`, *optional*, defaults to `"cls"`): The pooling strategy to use for classification tasks. Can be either `"cls"` or `"mean"`.
+            classifier_dropout (`Optional`, *optional*, defaults to 0.0): The dropout probability for the classification head.
+            classifier_bias (`Optional`, *optional*, defaults to `False`): Whether to add a bias term to the classification head.
+
+    Example:
+    ```python
+    >>> from col_modern_v_bert_modern_v_bert import ModernVBertConfig
+
+    >>> # Initializing configuration
+    >>> configuration = ModernVBertConfig()
+
+    >>> # Initializing a model from the configuration (model class is implemented in
+    >>> # `col_modern_v_bert_modern_v_bert.modeling_col_modern_v_bert_modern_v_bert`)
+
+    >>> from col_modern_v_bert_modern_v_bert import ColModernVBertModernVBertModel
+    >>> model = ColModernVBertModernVBertModel(configuration)
+
+    >>> # Accessing the model configuration
+    >>> cfg = model.config
+    ```"""
+
+    model_type = "modernvbert"
+    sub_configs: dict[str, Any] = {"text_config": ModernVBertTextConfig, "vision_config": ModernVBertVisionConfig}
+
+    def __init__(
+        self,
+        text_config=None,
+        vision_config=None,
+        image_token_id: Optional[int] = 50407,
+        pixel_shuffle_factor: Optional[int] = 4,
+        initializer_range: Optional[float] = 0.02,
+        initializer_cutoff_factor: Optional[float] = 2.0,
+        classifier_pooling: Literal["cls", "mean"] = "cls",
+        classifier_dropout: Optional[float] = 0.0,
+        classifier_bias: Optional[bool] = False,
+        **kwargs,
+    ):
+        if classifier_pooling not in ["cls", "mean"]:
+            raise ValueError(
+                f'Invalid value for `classifier_pooling`, should be either "cls" or "mean", but is {classifier_pooling}.'
+            )
+
+        if text_config is None:
+            text_config = self.sub_configs["text_config"]()
+        elif isinstance(text_config, dict):
+            text_config = self.sub_configs["text_config"](**text_config)
+        self.text_config = text_config
+
+        if vision_config is None:
+            vision_config = self.sub_configs["vision_config"]()
+        elif isinstance(vision_config, dict):
+            vision_config = self.sub_configs["vision_config"](**vision_config)
+        self.vision_config = vision_config
+
+        self.pixel_shuffle_factor = pixel_shuffle_factor
+        self.initializer_range = initializer_range
+        self.initializer_cutoff_factor = initializer_cutoff_factor
+        self.classifier_pooling = classifier_pooling
+        self.classifier_dropout = classifier_dropout
+        self.classifier_bias = classifier_bias
+
+        super().__init__(image_token_id=image_token_id, **kwargs)
+
+
+class ColModernVBertConfig(PreTrainedConfig):
     r"""
     Configuration class to store the configuration of a [`ColModernVBertForRetrieval`]. It is used to instantiate an instance
     of `ColModernVBertForRetrieval` according to the specified arguments, defining the model architecture following the methodology
@@ -40,7 +467,43 @@ class ColModernVBertConfig(ColQwen2Config):
     """
 
     model_type = "colmodernvbert"
-    sub_configs: dict[str, Any] = {"vlm_config": ModernVBertConfig}
+    sub_configs: dict[str, Any] = {"vlm_config": PreTrainedConfig}
+    default_vlm_config_class = ModernVBertConfig
+
+    def __init__(
+        self,
+        vlm_config=None,
+        embedding_dim: int = 128,
+        initializer_range: float = 0.02,
+        **kwargs,
+    ):
+        if vlm_config is None:
+            vlm_config = self.default_vlm_config_class()
+            logger.info(
+                "`vlm_config` is `None`. Initializing `vlm_config` with the `Qwen2VLConfig` with default values."
+            )
+        elif isinstance(vlm_config, dict):
+            vlm_config = deepcopy(vlm_config)
+            if "model_type" not in vlm_config:
+                raise KeyError(
+                    "The `model_type` key is missing in the `vlm_config` dictionary. Please provide the model type."
+                )
+            vlm_config = CONFIG_MAPPING[vlm_config["model_type"]](**vlm_config)
+        elif not isinstance(vlm_config, PreTrainedConfig):
+            raise TypeError(
+                f"Invalid type for `vlm_config`. Expected `PreTrainedConfig`, `dict`, or `None`, but got {type(vlm_config)}."
+            )
+
+        if not hasattr(vlm_config, "vocab_size"):
+            vlm_config.vocab_size = vlm_config.get_text_config().vocab_size
+
+        self.vlm_config = vlm_config
+        self.embedding_dim = embedding_dim
+        self.initializer_range = initializer_range
+        super().__init__(**kwargs)
+
+    def get_text_config(self, *args, **kwargs) -> PreTrainedConfig:
+        return self.vlm_config.get_text_config(*args, **kwargs)
 
 
 __all__ = ["ColModernVBertConfig"]

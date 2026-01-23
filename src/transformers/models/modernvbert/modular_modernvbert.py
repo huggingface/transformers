@@ -1,10 +1,37 @@
+# coding=utf-8
+# MIT License
+# 
+# Copyright 2026 Illuin Technology, and contributors, and The HuggingFace Inc. team.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
 import math
+import numpy as np
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Literal, Optional, Union
 
 import torch
 import torch.nn as nn
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
+from torch.nn.init import _calculate_fan_in_and_fan_out
+import torch.nn.functional as F
 
 from ... import initialization as init
 from ...configuration_utils import PretrainedConfig
@@ -17,13 +44,33 @@ from ...modeling_outputs import (
     SequenceClassifierOutput,
     TokenClassifierOutput,
 )
-from ...modeling_utils import PreTrainedModel
+from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS
+from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
-from ..idefics3 import Idefics3ImageProcessor, Idefics3ImageProcessorFast, Idefics3Processor
-from ..modernbert import ModernBertConfig, ModernBertModel
-from ..modernbert.modeling_modernbert import ModernBertPredictionHead
-from ..siglip import SiglipVisionConfig, SiglipVisionModel
+from ...utils.import_utils import is_triton_available
+from ..idefics3.processing_idefics3 import Idefics3Processor
+from ..idefics3.image_processing_idefics3 import Idefics3ImageProcessor
+from ..idefics3.image_processing_idefics3_fast import Idefics3ImageProcessorFast
+from ..modernbert.configuration_modernbert import ModernBertConfig
+from ..modernbert.modeling_modernbert import (
+    ModernBertModel, 
+    ModernBertPredictionHead, 
+    ModernBertRotaryEmbedding,
+    ModernBertEmbeddings
+)
+from ..siglip.configuration_siglip import SiglipVisionConfig
+from ..siglip.modeling_siglip import (
+    SiglipVisionEmbeddings,
+    SiglipVisionModel, 
+    SiglipVisionTransformer, 
+    SiglipMultiheadAttentionPoolingHead,
+    SiglipEncoder, 
+    SiglipEncoderLayer, 
+    SiglipAttention, 
+    SiglipMLP
+)
+from ..smolvlm.modeling_smolvlm import SmolVLMModel
 
 
 logger = logging.get_logger(__name__)
@@ -57,6 +104,11 @@ class ModernVBertProcessor(Idefics3Processor):
             in a chat into a tokenizable string.
     """
 
+class ModernVBertTextConfig(ModernBertConfig):
+    pass
+
+class ModernVBertVisionConfig(SiglipVisionConfig):
+    pass
 
 class ModernVBertConfig(PretrainedConfig):
     r"""
@@ -68,8 +120,8 @@ class ModernVBertConfig(PretrainedConfig):
     See the documentation for [`PretrainedConfig`] for more details.
 
     Args:
-            text_config ([`ModernBertConfig`], *optional*): [`ModernBertModel`] config to build the text encoder.
-            vision_config ([`SiglipVisionConfig`], *optional*): [`SiglipVisionModel`] config to build the vision encoder.
+            text_config ([`ModernVBertTextConfig`], *optional*): [`ModernVBertModel`] config to build the text encoder.
+            vision_config ([`ModernVBertVisionConfig`], *optional*): [`ModernVBertVisionModel`] config to build the vision encoder.
             image_token_id (`Optional`, *optional*, defaults to 50407): The token id reserved for image tokens inserted into the text stream.
             pixel_shuffle_factor (`Optional`, *optional*, defaults to 4): Scale factor used by any pixel-shuffle / upsampling operations in the vision head.
             vocab_size (`Optional`, *optional*): Vocabulary size of the text model. Defines the number of different tokens that can be represented
@@ -103,7 +155,7 @@ class ModernVBertConfig(PretrainedConfig):
     ```"""
 
     model_type = "modernvbert"
-    sub_configs: dict[str, Any] = {"text_config": ModernBertConfig, "vision_config": SiglipVisionConfig}
+    sub_configs: dict[str, Any] = {"text_config": ModernVBertTextConfig, "vision_config": ModernVBertVisionConfig}
 
     def __init__(
         self,
@@ -121,11 +173,6 @@ class ModernVBertConfig(PretrainedConfig):
         if classifier_pooling not in ["cls", "mean"]:
             raise ValueError(
                 f'Invalid value for `classifier_pooling`, should be either "cls" or "mean", but is {classifier_pooling}.'
-            )
-
-        if "vocab_size" in kwargs:
-            logger.warning(
-                "The vocab_size parameter is deprecated, please set vocab_size in the `text_config` instead."
             )
 
         if text_config is None:
@@ -257,15 +304,18 @@ class ModernVBertPreTrainedModel(PreTrainedModel):
     _supports_sdpa = True
     _supports_flex_attn = False
     input_modalities = ["image", "text"]
+    _no_split_modules = [
+        "ModernVBertEmbeddingsVision",
+        "ModernVBertEncoderLayerVision",
+        "ModernVBertMultiheadAttentionPoolingHead",
+        "ModernVBertEmbeddings", 
+        "ModernVBertEncoderLayer"
+    ]
 
+    @torch.no_grad()
     def _init_weights(self, module):
-        std = self.config.initializer_range
-        cutoff_factor = self.config.initializer_cutoff_factor
-
-        out_std = self.config.initializer_range / math.sqrt(2.0 * self.config.text_config.num_hidden_layers)
-        final_out_std = self.config.text_config.hidden_size**-0.5
-
         def init_weight(module: nn.Module, std: float):
+            cutoff_factor = getattr(self.config, "initializer_cutoff_factor", 2.0)
             init.trunc_normal_(
                 module.weight,
                 mean=0.0,
@@ -274,13 +324,17 @@ class ModernVBertPreTrainedModel(PreTrainedModel):
                 b=cutoff_factor * std,
             )
 
-            if isinstance(module, nn.Linear):
+            if isinstance(module, (nn.Linear, nn.Conv2d)):
                 if module.bias is not None:
                     init.zeros_(module.bias)
 
-        if isinstance(module, ModernVBertConnector):
+        if isinstance(module, ModernVBertEmbeddings):
+            init_weight(module.tok_embeddings, self.config.initializer_range)
+        elif isinstance(module, ModernVBertConnector):
+            out_std = self.config.initializer_range / math.sqrt(2.0 * self.config.text_config.num_hidden_layers)
             init_weight(module.modality_projection, out_std)
         elif isinstance(module, ModernVBertForMaskedLM):
+            out_std = self.config.initializer_range / math.sqrt(2.0 * self.config.text_config.num_hidden_layers)
             init_weight(module.lm_head, out_std)
         elif isinstance(
             module,
@@ -291,14 +345,217 @@ class ModernVBertPreTrainedModel(PreTrainedModel):
                 ModernVBertForQuestionAnswering,
             ),
         ):
+            final_out_std = self.config.initializer_range / math.sqrt(self.config.text_config.hidden_size)
             init_weight(module.classifier, final_out_std)
+        elif isinstance(module, ModernVBertRotaryEmbedding):
+            for layer_type in module.layer_types:
+                rope_init_fn = module.compute_default_rope_parameters
+                if module.rope_type[layer_type] != "default":
+                    rope_init_fn = ROPE_INIT_FUNCTIONS[module.rope_type[layer_type]]
+                curr_inv_freq, _ = rope_init_fn(module.config, layer_type=layer_type)
+                init.copy_(getattr(module, f"{layer_type}_inv_freq"), curr_inv_freq)
+                init.copy_(getattr(module, f"{layer_type}_original_inv_freq"), curr_inv_freq)
+        elif isinstance(module, ModernVBertEmbeddingsVision):
+            width = self.config.hidden_size
+            init.normal_(module.position_embedding.weight, std=1 / np.sqrt(width))
+            if hasattr(module, "position_ids"):
+                init.copy_(
+                    module.position_ids,
+                    torch.arange(module.position_ids.shape[-1], device=module.position_ids.device).expand((1, -1)),
+                )
+        elif isinstance(module, nn.Embedding):
+            default_flax_embed_init(module.weight)
+        elif isinstance(module, ModernVBertAttentionVision):
+            init.xavier_uniform_(module.q_proj.weight)
+            init.xavier_uniform_(module.k_proj.weight)
+            init.xavier_uniform_(module.v_proj.weight)
+            init.xavier_uniform_(module.out_proj.weight)
+            init.zeros_(module.q_proj.bias)
+            init.zeros_(module.k_proj.bias)
+            init.zeros_(module.v_proj.bias)
+            init.zeros_(module.out_proj.bias)
+        elif isinstance(module, ModernVBertMLPVision):
+            init.xavier_uniform_(module.fc1.weight)
+            init.xavier_uniform_(module.fc2.weight)
+            init.normal_(module.fc1.bias, std=1e-6)
+            init.normal_(module.fc2.bias, std=1e-6)
+        elif isinstance(module, ModernVBertMultiheadAttentionPoolingHead):
+            init.xavier_uniform_(module.probe)
+            if hasattr(module.attention, "in_proj_weight") and module.attention.in_proj_weight is not None:
+                init.xavier_uniform_(module.attention.in_proj_weight)
+            if hasattr(module.attention, "in_proj_bias") and module.attention.in_proj_bias is not None:
+                init.zeros_(module.attention.in_proj_bias)
+            if hasattr(module.attention, "out_proj") and module.attention.out_proj.bias is not None:
+                init.zeros_(module.attention.out_proj.bias)
         elif isinstance(module, (nn.Linear, nn.Conv2d)):
-            init_weight(module, std)
+            if isinstance(self.config, ModernVBertVisionConfig):
+                lecun_normal_(module.weight)
+                if module.bias is not None:
+                    init.zeros_(module.bias)
+            else:
+                init_weight(module, self.config.initializer_range)
         elif isinstance(module, nn.LayerNorm):
             init.ones_(module.weight)
             if module.bias is not None:
                 init.zeros_(module.bias)
 
+class ModernVBertEmbeddings(ModernBertEmbeddings):
+    pass
+
+class ModernVBertRotaryEmbedding(ModernBertRotaryEmbedding):
+    pass
+
+@auto_docstring
+class ModernVBertTextModel(ModernBertModel):
+    def _maybe_set_compile(self):
+        if self.config.reference_compile is False:
+            return
+
+        if hasattr(self, "hf_device_map") and len(self.hf_device_map) > 1:
+            if self.config.reference_compile:
+                logger.warning_once(
+                    "If `accelerate` split the model across devices, `torch.compile` will not work. "
+                    "Falling back to non-compiled mode."
+                )
+            self.config.reference_compile = False
+
+        if self.device.type == "mps":
+            if self.config.reference_compile:
+                logger.warning_once(
+                    "Compiling the model with `torch.compile` and using a `torch.mps` device is not supported. "
+                    "Falling back to non-compiled mode."
+                )
+            self.config.reference_compile = False
+
+        if self.device.type == "cpu":
+            if self.config.reference_compile:
+                logger.warning_once(
+                    "Compiling the model with `torch.compile` and using a `torch.cpu` device is not supported. "
+                    "Falling back to non-compiled mode."
+                )
+            self.config.reference_compile = False
+
+        if self.config.reference_compile is None:
+            self.config.reference_compile = is_triton_available()
+
+def variance_scaling_(tensor, mode="fan_in", distribution="normal"):
+    fan_in, fan_out = _calculate_fan_in_and_fan_out(tensor)
+    if mode == "fan_in":
+        denom = fan_in
+    elif mode == "fan_out":
+        denom = fan_out
+    elif mode == "fan_avg":
+        denom = (fan_in + fan_out) / 2
+
+    variance = 1.0 / denom
+
+    if distribution == "truncated_normal":
+        init.trunc_normal_(tensor, std=math.sqrt(variance) / 0.87962566103423978)
+    elif distribution == "normal":
+        init.normal_(tensor, std=math.sqrt(variance))
+    elif distribution == "uniform":
+        bound = math.sqrt(3 * variance)
+        init.uniform_(tensor, -bound, bound)
+    else:
+        raise ValueError(f"invalid distribution {distribution}")
+    
+def default_flax_embed_init(tensor):
+    variance_scaling_(tensor, mode="fan_in", distribution="normal")
+
+def lecun_normal_(tensor):
+    variance_scaling_(tensor, mode="fan_in", distribution="truncated_normal")
+
+def eager_attention_forward_vision(
+    module: nn.Module,
+    query: torch.Tensor,
+    key: torch.Tensor,
+    value: torch.Tensor,
+    attention_mask: Optional[torch.Tensor],
+    scaling: float,
+    dropout: float = 0.0,
+    **kwargs,
+):
+    attn_weights = torch.matmul(query, key.transpose(-1, -2)) * scaling
+    if attention_mask is not None:
+        attn_weights = attn_weights + attention_mask
+
+    attn_weights = nn.functional.softmax(attn_weights, dim=-1, dtype=torch.float32).to(query.dtype)
+    attn_weights = nn.functional.dropout(attn_weights, p=dropout, training=module.training)
+
+    attn_output = torch.matmul(attn_weights, value)
+    attn_output = attn_output.transpose(1, 2).contiguous()
+
+    return attn_output, attn_weights
+
+class ModernVBertAttentionVision(SiglipAttention):
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        attention_mask: Optional[torch.Tensor] = None,
+        **kwargs,
+    ) -> tuple[torch.Tensor, Optional[torch.Tensor]]:
+        """Input shape: Batch x Time x Channel"""
+
+        batch_size, seq_length, embed_dim = hidden_states.shape
+
+        queries = self.q_proj(hidden_states)
+        keys = self.k_proj(hidden_states)
+        values = self.v_proj(hidden_states)
+
+        queries = queries.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+        keys = keys.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+        values = values.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
+
+        attention_interface: Callable = eager_attention_forward_vision
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        attn_output, attn_weights = attention_interface(
+            self,
+            queries,
+            keys,
+            values,
+            attention_mask,
+            is_causal=self.is_causal,
+            scaling=self.scale,
+            dropout=0.0 if not self.training else self.dropout,
+        )
+
+        attn_output = attn_output.reshape(batch_size, seq_length, embed_dim).contiguous()
+        attn_output = self.out_proj(attn_output)
+
+        return attn_output, attn_weights
+
+class ModernVBertEmbeddingsVision(SiglipVisionEmbeddings):
+    pass
+class ModernVBertMLPVision(SiglipMLP):
+    pass
+
+class ModernVBertEncoderLayerVision(SiglipEncoderLayer):
+    def __init__(self, config: ModernVBertVisionConfig):
+        super().__init__()
+        self.self_attn = ModernVBertAttentionVision(config)
+        self.mlp = ModernVBertMLPVision(config)
+
+class ModernVBertEncoderVision(SiglipEncoder):
+    def __init__(self, config: ModernVBertVisionConfig):
+        super().__init__()
+        self.layers = nn.ModuleList([ModernVBertEncoderLayerVision(config) for _ in range(config.num_hidden_layers)])
+class ModernVBertMultiheadAttentionPoolingHead(SiglipMultiheadAttentionPoolingHead):
+    def __init__(self, config: ModernVBertVisionConfig):
+        super().__init__()
+        self.mlp = ModernVBertMLPVision(config)
+
+class ModernVBertVisionTransformer(SiglipVisionTransformer):
+    def __init__(self, config: ModernVBertVisionConfig):
+        super().__init__(config)
+        self.embeddings = ModernVBertEmbeddingsVision(config)
+        self.encoder = ModernVBertEncoderVision(config)
+        self.post_init()
+
+@auto_docstring
+class ModernVBertVisionModel(SiglipVisionModel):
+    pass
 
 @auto_docstring(
     custom_intro="""
@@ -308,14 +565,18 @@ class ModernVBertPreTrainedModel(PreTrainedModel):
     [*ModernVBERT: Towards Smaller Visual Document Retrievers*](https://arxiv.org/abs/2510.01149).
     """
 )
-class ModernVBertModel(ModernVBertPreTrainedModel):
+class ModernVBertModel(ModernVBertPreTrainedModel, SmolVLMModel):
     def __init__(self, config: ModernVBertConfig):
         super().__init__(config)
 
         # init components
         self.connector = ModernVBertConnector(config)
-        self.text_model = ModernBertModel(config.text_config)
-        self.vision_model = SiglipVisionModel(config.vision_config)
+        self.text_model = ModernVBertTextModel(config.text_config)
+        self.vision_model = ModernVBertVisionModel(config.vision_config)
+
+        self.image_seq_len = int(
+            ((config.vision_config.image_size // config.vision_config.patch_size) ** 2) / (config.pixel_shuffle_factor**2)
+        )
 
         # initialize weights and apply final processing
         self.post_init()
@@ -325,98 +586,6 @@ class ModernVBertModel(ModernVBertPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.text_model.set_input_embeddings(value)
-
-    def get_image_features(
-        self, pixel_values: torch.FloatTensor, pixel_attention_mask: Optional[torch.LongTensor] = None
-    ):
-        """
-        Derived from: https://github.com/huggingface/transformers/blob/main/src/transformers/models/smolvlm/modeling_smolvlm.py
-        Encodes images into continuous embeddings that can be forwarded to the language model.
-
-        Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-                The tensors corresponding to the input images.
-            pixel_attention_mask (`torch.LongTensor`, *optional*):
-                The attention mask indicating padded regions in the image.
-        """
-        batch_size, num_images, num_channels, height, width = pixel_values.shape
-        pixel_values = pixel_values.view(batch_size * num_images, *pixel_values.shape[2:])
-
-        # Remove padding images - padding images are full 0.
-        nb_values_per_image = pixel_values.shape[1:].numel()
-        real_images_inds = (pixel_values == 0.0).sum(dim=(-1, -2, -3)) != nb_values_per_image
-
-        if not any(real_images_inds):
-            real_images_inds[0] = True
-
-        pixel_values = pixel_values[real_images_inds].contiguous()
-
-        # Handle the vision attention mask
-        if pixel_attention_mask is None:
-            pixel_attention_mask = torch.ones(
-                size=[pixel_values.shape[i] for i in (0, 2, 3)],
-                dtype=torch.bool,
-                device=pixel_values.device,
-            )
-        else:
-            # Remove padding images from the mask
-            pixel_attention_mask = pixel_attention_mask.view(batch_size * num_images, *pixel_attention_mask.shape[2:])
-            pixel_attention_mask = pixel_attention_mask[real_images_inds].contiguous()
-
-        patch_size = self.config.vision_config.patch_size
-        patches_subgrid = pixel_attention_mask.unfold(dimension=1, size=patch_size, step=patch_size)
-        patches_subgrid = patches_subgrid.unfold(dimension=2, size=patch_size, step=patch_size)
-        patch_attention_mask = (patches_subgrid.sum(dim=(-1, -2)) > 0).bool()
-
-        # Get sequence from the vision encoder
-        image_hidden_states = self.vision_model(pixel_values=pixel_values, patch_attention_mask=patch_attention_mask)
-        image_hidden_states = image_hidden_states.last_hidden_state
-
-        # Modality projection & resampling
-        image_hidden_states = self.connector(image_hidden_states)
-
-        return image_hidden_states
-
-    def inputs_merger(self, input_ids, inputs_embeds, image_hidden_states):
-        """Adapted from https://github.com/huggingface/transformers/blob/main/src/transformers/models/smolvlm/modeling_smolvlm.py
-
-        This method aims at merging the token embeddings with the image hidden states into one single sequence of vectors that are fed to the transformer LM.
-        The merging happens as follows:
-        - The text token sequence is: `tok_1 tok_2 tok_3 <fake_token_around_image> <image> <image> ... <image> <fake_token_around_image> tok_4`.
-        - We get the image hidden states for the image through the vision encoder and that hidden state, after a pixel shuffle operation, is then projected into the text embedding space.
-        We thus have a sequence of image hidden states of size (1, image_seq_len, hidden_dim), where 1 is for batch_size of 1 image and hidden_dim is the hidden_dim of the LM transformer.
-        - The merging happens so that we obtain the following sequence: `vector_tok_1 vector_tok_2 vector_tok_3 vector_fake_tok_around_image {sequence of image_seq_len image hidden states} vector_fake_toke_around_image vector_tok_4`. That sequence is fed to the LM.
-        - To fit the format of that sequence, `input_ids`, `input_embeds`, `attention_mask` are all 3 adapted to insert the image hidden states.
-        """
-
-        _, patch_size, _ = image_hidden_states.shape
-
-        if input_ids is None:
-            image_mask = inputs_embeds == self.get_input_embeddings()(
-                torch.tensor(self.config.image_token_id, dtype=torch.long, device=inputs_embeds.device)
-            )
-            image_mask = image_mask[..., 0]  # slice off the hidden dim
-        else:
-            image_mask = input_ids == self.config.image_token_id
-
-        # Assert that the input <image> tokens are valid (i.e. multiple of patch_size)
-        num_image_tokens = image_mask.sum(dim=1)
-        if not torch.all(num_image_tokens % patch_size == 0):
-            raise ValueError("Number of <image> tokens not divisible by patch_size.")
-
-        blocks_per_sample = num_image_tokens // patch_size
-
-        offsets = torch.nn.functional.pad(blocks_per_sample.cumsum(dim=0), (1, 0), value=0)
-        block_offset = offsets[:-1]
-        row_cum = image_mask.cumsum(dim=-1)
-        chunk_idx = (row_cum - 1) // patch_size
-        local_idx = (row_cum - 1) % patch_size
-        block_idx = block_offset.unsqueeze(1) + chunk_idx
-
-        image_embeds = torch.zeros_like(inputs_embeds)
-        image_embeds[image_mask] = image_hidden_states[block_idx[image_mask], local_idx[image_mask], :]
-
-        return torch.where(image_mask.unsqueeze(-1), image_embeds, inputs_embeds)
 
     @can_return_tuple
     @auto_docstring(
@@ -745,7 +914,7 @@ class ModernVBertForSequenceClassification(ModernVBertPreTrainedModel):
     """
 )
 class ModernVBertForTokenClassification(ModernVBertPreTrainedModel):
-    def __init__(self, config: ModernBertConfig):
+    def __init__(self, config: ModernVBertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 
@@ -824,7 +993,7 @@ class ModernVBertForTokenClassification(ModernVBertPreTrainedModel):
 
 @auto_docstring
 class ModernVBertForQuestionAnswering(ModernVBertPreTrainedModel):
-    def __init__(self, config: ModernBertConfig):
+    def __init__(self, config: ModernVBertConfig):
         super().__init__(config)
         self.num_labels = config.num_labels
 

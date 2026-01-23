@@ -77,13 +77,10 @@ class ColQwen2Processor(ProcessorMixin):
         self.image_token = "<|image_pad|>" if not hasattr(tokenizer, "image_token") else tokenizer.image_token
         self.video_token = "<|video_pad|>" if not hasattr(tokenizer, "video_token") else tokenizer.video_token
 
-        if visual_prompt_prefix is None:
-            visual_prompt_prefix = "<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>Describe the image.<|im_end|><|endoftext|>"
-        self.visual_prompt_prefix = visual_prompt_prefix
-
-        if query_prefix is None:
-            query_prefix = "Query: "
-        self.query_prefix = query_prefix
+        self.visual_prompt_prefix = visual_prompt_prefix or (
+            "<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>Describe the image.<|im_end|><|endoftext|>"
+        )
+        self.query_prefix = query_prefix or "Query: "
 
     def __call__(
         self,

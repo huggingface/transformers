@@ -4,6 +4,29 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_colmodernvbert.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
+# coding=utf-8
+# MIT License
+#
+# Copyright 2026 Illuin Technology, and contributors, and The HuggingFace Inc. team.
+#
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
 from dataclasses import dataclass
 from typing import Optional
 
@@ -12,7 +35,7 @@ from torch import nn
 from ... import initialization as init
 from ...modeling_utils import PreTrainedModel
 from ...utils import ModelOutput, auto_docstring, can_return_tuple, is_torch_available
-from ..modernvbert import ModernVBertModel
+from ..auto.modeling_auto import AutoModel
 from .configuration_colmodernvbert import ColModernVBertConfig
 
 
@@ -24,27 +47,29 @@ if is_torch_available():
 class ColModernVBertPreTrainedModel(PreTrainedModel):
     config: ColModernVBertConfig
     base_model_prefix = "model"
-    input_modalities = ["image", "text"]
-    _no_split_modules = []
+    input_modalities = ("image", "text")
+    _no_split_modules = ["ModernVBertEncoderLayer", "ModernVBertEncoderLayerVision"]
     _supports_sdpa = True
     _supports_flash_attn = True
     _supports_flex_attn = True
 
+    @torch.no_grad()
     def _init_weights(self, module):
-        std = self.config.vlm_config.initializer_range
-        cutoff_factor = self.config.vlm_config.initializer_cutoff_factor
+        std = (
+            self.config.initializer_range
+            if hasattr(self.config, "initializer_range")
+            else self.config.vlm_config.text_config.initializer_range
+        )
 
-        if isinstance(module, (nn.Linear)):
-            init.trunc_normal_(
-                module.weight,
-                mean=0.0,
-                std=std,
-                a=-cutoff_factor * std,
-                b=cutoff_factor * std,
-            )
-
+        if isinstance(module, (nn.Linear, nn.Conv2d)):
+            init.normal_(module.weight, mean=0.0, std=std)
             if module.bias is not None:
                 init.zeros_(module.bias)
+        elif isinstance(module, nn.Embedding):
+            init.normal_(module.weight, mean=0.0, std=std)
+            # Here we need the check explicitly, as we slice the weight in the `zeros_` call, so it looses the flag
+            if module.padding_idx is not None and not getattr(module.weight, "_is_hf_initialized", False):
+                init.zeros_(module.weight[module.padding_idx])
 
 
 @dataclass
@@ -97,14 +122,24 @@ class ColModernVBertForRetrievalOutput(ModelOutput):
     """
 )
 class ColModernVBertForRetrieval(ColModernVBertPreTrainedModel):
+    _checkpoint_conversion_mapping = {
+        "vlm.language_model.model": "vlm.model.language_model",
+        "vlm.vision_tower": "vlm.model.vision_tower",
+        "vlm.multi_modal_projector": "vlm.model.multi_modal_projector",
+        "vlm.language_model.lm_head": "vlm.lm_head",
+    }
+
     def __init__(self, config: ColModernVBertConfig):
         super().__init__(config)
         self.config = config
+        self.vocab_size = config.vlm_config.text_config.vocab_size
+        self.vlm = AutoModel.from_config(config.vlm_config)
 
-        self.vlm = ModernVBertModel(config.vlm_config)
-        self.embedding_proj_layer = nn.Linear(self.config.get_text_config().hidden_size, self.config.embedding_dim)
-
-        self._tied_weights_keys = {f"model.{k}": v for k, v in (self.vlm._tied_weights_keys or {}).items()}
+        self.embedding_dim = self.config.embedding_dim
+        self.embedding_proj_layer = nn.Linear(
+            self.config.vlm_config.text_config.hidden_size,
+            self.embedding_dim,
+        )
 
         self.post_init()
 
@@ -155,6 +190,12 @@ class ColModernVBertForRetrieval(ColModernVBertPreTrainedModel):
 
     def set_input_embeddings(self, value):
         self.vlm.set_input_embeddings(value)
+
+    def get_output_embeddings(self):
+        return self.vlm.get_output_embeddings()
+
+    def set_output_embeddings(self, new_embeddings):
+        self.vlm.set_output_embeddings(new_embeddings)
 
     def resize_token_embeddings(
         self,
