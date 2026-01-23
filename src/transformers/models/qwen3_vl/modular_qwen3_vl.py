@@ -153,6 +153,8 @@ class Qwen3VLTextConfig(PreTrainedConfig):
             Whether to use a bias in the query, key, value and output projection layers during self-attention.
         attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
+        pad_token_id (`int`, *optional*):
+            The id of the padding token. If unset, the config is treated as not having a dedicated padding token.
 
     ```python
     >>> from transformers import Qwen3VLTextModel, Qwen3VLTextConfig
@@ -188,6 +190,7 @@ class Qwen3VLTextConfig(PreTrainedConfig):
         rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
         attention_bias: bool | None = False,
         attention_dropout: float | None = 0.0,
+        pad_token_id: int | None = None,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -210,6 +213,7 @@ class Qwen3VLTextConfig(PreTrainedConfig):
         self.attention_bias = attention_bias
         self.attention_dropout = attention_dropout
         self.rope_parameters = rope_parameters
+        self.pad_token_id = pad_token_id
 
         super().__init__(
             ignore_keys_at_rope_validation={"mrope_section", "mrope_interleaved"},
