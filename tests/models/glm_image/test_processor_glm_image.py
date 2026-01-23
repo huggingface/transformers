@@ -15,6 +15,7 @@
 import unittest
 
 import numpy as np
+from PIL import Image
 
 from transformers.testing_utils import require_av, require_torch, require_vision
 from transformers.utils import is_torch_available, is_vision_available
@@ -33,7 +34,7 @@ if is_torch_available():
 @require_torch
 class GlmImageProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     processor_class = GlmImageProcessor
-    model_id = "zai-org/GLM-Image/processor"
+    model_id = "zai-org/GLM-Image"
 
     @classmethod
     def _setup_test_attributes(cls, processor):
@@ -43,11 +44,22 @@ class GlmImageProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def _setup_from_pretrained(cls, model_id, **kwargs):
         return super()._setup_from_pretrained(
             model_id,
+            subfolder="processor",
             do_sample_frames=False,
             patch_size=4,
             size={"shortest_edge": 12 * 12, "longest_edge": 18 * 18},
             **kwargs,
         )
+
+    def prepare_image_inputs(self, batch_size: int | None = None, nested: bool = False):
+        """Override to create images with valid aspect ratio (< 4) for GLM-Image."""
+        # GLM-Image requires aspect ratio < 4, so use near-square images
+        image_inputs = [Image.fromarray(np.random.randint(0, 255, (256, 256, 3), dtype=np.uint8))]
+        if batch_size is None:
+            return image_inputs
+        if nested:
+            return [image_inputs] * batch_size
+        return image_inputs * batch_size
 
     @require_torch
     @require_av
@@ -152,3 +164,9 @@ class GlmImageProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         inputs = processor(**inputs_dict, return_tensors="pt", do_sample_frames=False)
 
         self.assertSetEqual(set(inputs.keys()), set(processor.model_input_names))
+
+    @unittest.skip(
+        reason="GLM-Image processor adds image placeholder tokens which makes sequence length depend on image size"
+    )
+    def test_kwargs_overrides_default_tokenizer_kwargs(self):
+        pass

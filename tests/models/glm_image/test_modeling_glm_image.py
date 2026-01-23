@@ -421,8 +421,9 @@ class GlmImageModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
 @require_torch
 @slow
 class GlmImageIntegrationTest(unittest.TestCase):
-    model_id = "zai-org/GLM-Image/vision_language_encoder"
-    processor_id = "zai-org/GLM-Image/processor"
+    model_id = "zai-org/GLM-Image"
+    model_subfolder = "vision_language_encoder"
+    processor_subfolder = "processor"
 
     @classmethod
     def setUpClass(cls):
@@ -432,7 +433,7 @@ class GlmImageIntegrationTest(unittest.TestCase):
     def get_model(cls):
         if cls.model is None:
             cls.model = GlmImageForConditionalGeneration.from_pretrained(
-                cls.model_id, torch_dtype=torch.bfloat16, device_map="auto"
+                cls.model_id, subfolder=cls.model_subfolder, torch_dtype=torch.bfloat16, device_map="auto"
             )
         return cls.model
 
@@ -444,7 +445,7 @@ class GlmImageIntegrationTest(unittest.TestCase):
 
     def setUp(self):
         cleanup(torch_device, gc_collect=True)
-        self.processor = AutoProcessor.from_pretrained(self.processor_id)
+        self.processor = AutoProcessor.from_pretrained(self.model_id, subfolder=self.processor_subfolder)
         # Text-to-image generation message
         self.t2i_message = [
             {
@@ -535,6 +536,7 @@ class GlmImageIntegrationTest(unittest.TestCase):
         """Test generation with Flash Attention 2."""
         model = GlmImageForConditionalGeneration.from_pretrained(
             self.model_id,
+            subfolder=self.model_subfolder,
             torch_dtype=torch.bfloat16,
             attn_implementation="flash_attention_2",
             device_map="auto",

@@ -1283,11 +1283,11 @@ def smart_resize(
 
 
 class GlmImageImageProcessor(Qwen2VLImageProcessor):
-    pass
+    model_input_names = ["pixel_values", "image_grid_thw", "images_per_sample"]
 
 
 class GlmImageImageProcessorFast(Qwen2VLImageProcessorFast):
-    pass
+    model_input_names = ["pixel_values", "image_grid_thw", "images_per_sample"]
 
 
 class GlmImageImagesKwargs(ImagesKwargs, total=False):
