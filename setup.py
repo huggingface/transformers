@@ -41,10 +41,13 @@ To create the package for pypi.
 
 import re
 import shutil
+import sys
 from pathlib import Path
 
 from setuptools import Command, find_packages, setup
 
+
+PYTHON_MINOR_VERSION = sys.version_info.minor
 
 # Remove stale transformers.egg-info directory to avoid https://github.com/pypa/pip/issues/5466
 stale_egg_info = Path(__file__).parent / "transformers.egg-info"
@@ -89,7 +92,6 @@ _deps = [
     "ipadic>=1.0.0,<2.0",
     "jinja2>=3.1.0",
     "jmespath>=1.0.1",
-    "kenlm",
     "kernels>=0.10.2,<0.11",
     "librosa",
     "natten>=0.14.6,<0.15.0",
@@ -116,7 +118,6 @@ _deps = [
     "pytest-xdist",
     "pytest-order",
     "python>=3.10.0",
-    "ray[tune]>=2.7.0",
     "regex!=2019.12.17",
     "requests",
     "rhoknp>=1.1.0,<1.3.1",
@@ -135,8 +136,6 @@ _deps = [
     "scipy",
     "sentencepiece>=0.1.91,!=0.1.92",
     "starlette",
-    "sudachipy>=0.6.6",
-    "sudachidict_core>=20220729",
     "tensorboard",
     "timeout-decorator",
     "tiktoken",
@@ -159,6 +158,8 @@ _deps = [
     "mistral-common[image]>=1.8.8",
 ]
 
+if PYTHON_MINOR_VERSION < 14:
+    _deps += ["sudachipy>=0.6.6", "sudachidict_core>=20220729", "ray[tune]>=2.7.0", "kenlm"]
 
 # this is a lookup table with items like:
 #
@@ -225,7 +226,10 @@ class DepsTableUpdateCommand(Command):
 
 extras = {}
 
-extras["ja"] = deps_list("fugashi", "ipadic", "unidic_lite", "unidic", "sudachipy", "sudachidict_core", "rhoknp")
+extras["ja"] = deps_list("fugashi", "ipadic", "unidic_lite", "unidic", "rhoknp")
+if PYTHON_MINOR_VERSION < 14:
+    extras["ja"] += deps_list("sudachipy", "sudachidict_core")
+
 extras["sklearn"] = deps_list("scikit-learn")
 
 extras["torch"] = deps_list("torch", "accelerate")
@@ -241,18 +245,22 @@ extras["modelcreation"] = deps_list("cookiecutter")
 extras["sagemaker"] = deps_list("sagemaker")
 extras["deepspeed"] = deps_list("deepspeed") + extras["accelerate"]
 extras["optuna"] = deps_list("optuna")
-extras["ray"] = deps_list("ray[tune]")
 extras["hub-kernels"] = deps_list("kernels")
 
-extras["integrations"] = extras["hub-kernels"] + extras["optuna"] + extras["ray"]
+extras["integrations"] = extras["hub-kernels"] + extras["optuna"]  # + extras["ray"]
+if PYTHON_MINOR_VERSION < 14:
+    extras["ray"] = deps_list("ray[tune]")
+    extras["integrations"] += extras["ray"]
 
 extras["serving"] = deps_list("openai", "pydantic", "uvicorn", "fastapi", "starlette", "rich") + extras["torch"]
 extras["audio"] = deps_list(
     "librosa",
     "pyctcdecode",
     "phonemizer",
-    "kenlm",
 )
+if PYTHON_MINOR_VERSION < 14:
+    extras["audio"] += deps_list("kenlm")
+
 # `pip install ".[speech]"` is deprecated and `pip install ".[torch-speech]"` should be used instead
 extras["speech"] = deps_list("torchaudio") + extras["audio"]
 extras["torch-speech"] = deps_list("torchaudio") + extras["audio"]
