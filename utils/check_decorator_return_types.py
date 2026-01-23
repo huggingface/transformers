@@ -196,7 +196,7 @@ def _is_delegating_to_super(func_node: ast.AST) -> bool:
     return False
 
 
-def _collect_decorated_functions(tree: ast.AST, file_path: str) -> list[tuple[ast.AST, str]]:
+def _collect_decorated_functions(tree: ast.AST) -> list[tuple[ast.AST, str]]:
     """Return (function_node, decorator_name) pairs for targeted decorators."""
 
     functions: list[tuple[ast.AST, str]] = []
@@ -254,7 +254,7 @@ def check_decorator_return_types(overwrite: bool = False):
             print(f"Skipping {file_path} due to SyntaxError: {e}")
             continue
 
-        functions = _collect_decorated_functions(tree, file_path)
+        functions = _collect_decorated_functions(tree)
         if not functions:
             continue
 
