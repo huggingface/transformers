@@ -608,7 +608,7 @@ class GlmImageModel(Glm4vModel):
 
         # Per-sample caches for batch processing
         self._cached_decode_position_ids = None  # shape: [batch_size, 3, max_decode_len]
-        self._prefill_lens = None  # shape: [batch_size]
+        self._prefill_len = None  # prefill sequence length (same for all samples in batch)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -662,7 +662,6 @@ class GlmImageModel(Glm4vModel):
 
         # Per-sample caches for decode stage
         all_decode_position_ids = []
-        all_prefill_lens = []
 
         for batch_idx in range(batch_size):
             curr_input_ids = input_ids[batch_idx]
@@ -729,8 +728,6 @@ class GlmImageModel(Glm4vModel):
             else:
                 position_ids[:, batch_idx, :] = curr_position_ids
 
-            all_prefill_lens.append(seq_len)
-
             # Build decode position ids for this sample
             if curr_grids is not None and len(curr_grids) > 0:
                 num_decode_grids = len(curr_grids) - num_complete_images
@@ -771,29 +768,17 @@ class GlmImageModel(Glm4vModel):
                     dim=0,
                 )
                 all_decode_position_ids.append(sample_decode_pos_ids)
-            else:
-                all_decode_position_ids.append(None)
 
-        # Store per-sample caches
-        self._prefill_lens = torch.tensor(all_prefill_lens, device=device, dtype=torch.long)
+        # Store prefill length (same for all samples since input_ids is padded to same length)
+        self._prefill_len = seq_len
 
         # Pad decode position ids to same length and stack
-        if any(x is not None for x in all_decode_position_ids):
-            max_decode_len = max(x.shape[1] if x is not None else 0 for x in all_decode_position_ids)
-            padded_decode_pos_ids = []
-            for decode_pos_ids in all_decode_position_ids:
-                if decode_pos_ids is None:
-                    # No decode for this sample, create placeholder
-                    padded = torch.zeros(3, max_decode_len, device=device, dtype=torch.long)
-                else:
-                    pad_len = max_decode_len - decode_pos_ids.shape[1]
-                    if pad_len > 0:
-                        # Pad with the last position value
-                        last_val = decode_pos_ids[:, -1:].expand(-1, pad_len)
-                        padded = torch.cat([decode_pos_ids, last_val], dim=1)
-                    else:
-                        padded = decode_pos_ids
-                padded_decode_pos_ids.append(padded)
+        if all_decode_position_ids:
+            max_decode_len = max(x.shape[1] for x in all_decode_position_ids)
+            padded_decode_pos_ids = [
+                F.pad(pos_ids, (0, max_decode_len - pos_ids.shape[1]), mode="replicate")
+                for pos_ids in all_decode_position_ids
+            ]
             self._cached_decode_position_ids = torch.stack(padded_decode_pos_ids, dim=0)  # [batch, 3, max_decode_len]
         else:
             self._cached_decode_position_ids = None
@@ -970,16 +955,9 @@ class GlmImageModel(Glm4vModel):
                 batch_size, seq_length, _ = inputs_embeds.shape
                 # Per-sample decode position lookup
                 # _cached_decode_position_ids shape: [batch_size, 3, max_decode_len]
-                # _prefill_lens shape: [batch_size]
-                position_ids_list = []
-                for batch_idx in range(batch_size):
-                    prefill_len = self._prefill_lens[batch_idx].item()
-                    step = cache_position[0].item() - prefill_len
-                    # Get position ids for this sample
-                    sample_pos_ids = self._cached_decode_position_ids[batch_idx, :, step : step + seq_length]
-                    position_ids_list.append(sample_pos_ids)
-                # Stack and transpose to [3, batch_size, seq_length]
-                position_ids = torch.stack(position_ids_list, dim=1)
+                step = cache_position[0].item() - self._prefill_len
+                # Get position ids for all samples at once, then transpose to [3, batch_size, seq_length]
+                position_ids = self._cached_decode_position_ids[:, :, step : step + seq_length].permute(1, 0, 2)
 
         outputs = self.language_model(
             input_ids=None,
