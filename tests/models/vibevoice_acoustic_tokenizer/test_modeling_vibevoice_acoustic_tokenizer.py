@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 import inspect
 import json
 import unittest
@@ -114,7 +115,6 @@ class VibeVoiceAcousticTokenizerModelTest(ModelTesterMixin, unittest.TestCase):
     test_disk_offload_bin = False
 
     def _prepare_for_class(self, inputs_dict, model_class, return_labels=False):
-        # model does not support returning hidden states
         inputs_dict = super()._prepare_for_class(inputs_dict, model_class, return_labels=return_labels)
         if "output_attentions" in inputs_dict:
             inputs_dict.pop("output_attentions")
@@ -144,7 +144,6 @@ class VibeVoiceAcousticTokenizerModelTest(ModelTesterMixin, unittest.TestCase):
         for model_class in self.all_model_classes:
             model = model_class(config)
             signature = inspect.signature(model.forward)
-            # signature.parameters is an OrderedDict => so arg_names order is deterministic
             arg_names = [*signature.parameters.keys()]
 
             expected_arg_names = ["audio", "padding_cache", "use_cache", "sample"]
@@ -323,9 +322,9 @@ class VibeVoiceAcousticTokenizerIntegrationTest(unittest.TestCase):
             "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Frank_man.wav",
         ]
         audio_arrays = [load_audio_librosa(path, sampling_rate=self.sampling_rate) for path in audio_paths]
+        feature_extractor = AutoFeatureExtractor.from_pretrained(self.model_checkpoint)
 
         # apply model and compare
-        feature_extractor = AutoFeatureExtractor.from_pretrained(self.model_checkpoint)
         model = AutoModel.from_pretrained(
             self.model_checkpoint,
             dtype=dtype,

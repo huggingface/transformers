@@ -114,15 +114,13 @@ class VibeVoiceAcousticTokenizerFeatureExtractionTest(SequenceFeatureExtractionT
     def test_call(self):
         TOL = 1e-6
 
-        # Tests that all call wrap to encode_plus and batch_encode_plus
         feature_extractor = self.feature_extraction_class(**self.feat_extract_tester.prepare_feat_extract_dict())
         sampling_rate = feature_extractor.sampling_rate
-        # create three inputs of length 800, 1000, and 1200
         audio_inputs = [floats_list((1, x))[0] for x in range(800, 1400, 200)]
         np_audio_inputs = [np.asarray(audio_input) for audio_input in audio_inputs]
         torch_audio_inputs = [torch.tensor(audio_input) for audio_input in audio_inputs]
 
-        # Test not batched input
+        # Test non-batched input
         encoded_sequences_1 = feature_extractor(
             torch_audio_inputs[0], sampling_rate=sampling_rate, return_tensors="np"
         ).input_values
@@ -131,7 +129,7 @@ class VibeVoiceAcousticTokenizerFeatureExtractionTest(SequenceFeatureExtractionT
         ).input_values
         self.assertTrue(np.allclose(encoded_sequences_1, encoded_sequences_2, atol=TOL))
 
-        # Test batched
+        # Test batched input
         encoded_sequences_1 = feature_extractor(
             torch_audio_inputs, sampling_rate=sampling_rate, padding=True, return_tensors="np"
         ).input_values
@@ -156,7 +154,6 @@ class VibeVoiceAcousticTokenizerFeatureExtractionTest(SequenceFeatureExtractionT
         from datasets import load_dataset
 
         ds = load_dataset("hf-internal-testing/librispeech_asr_dummy", "clean", split="validation")
-        # automatic decoding with librispeech
         audio_samples = ds.sort("id")[:num_samples]["input_values"]
 
         return [x["array"] for x in audio_samples]
@@ -197,14 +194,11 @@ class VibeVoiceAcousticTokenizerFeatureExtractionTest(SequenceFeatureExtractionT
     def test_padding_mask_generation(self):
         """Test that padding masks are generated correctly."""
         feature_extractor = VibeVoiceAcousticTokenizerFeatureExtractor()
-
-        # Create audio samples of different lengths
         audio1 = np.random.randn(100).astype(np.float32)
         audio2 = np.random.randn(200).astype(np.float32)
 
-        result = feature_extractor([audio1, audio2], padding=True, return_tensors="pt", return_attention_mask=True)
-
         # Should have padding_mask
+        result = feature_extractor([audio1, audio2], padding=True, return_tensors="pt", return_attention_mask=True)
         self.assertIn("padding_mask", result)
         self.assertEqual(result.padding_mask.shape, result.input_values.squeeze(1).shape)
 
