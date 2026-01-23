@@ -2896,6 +2896,8 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             dtype=old_lm_head.weight.dtype,
         )
 
+        new_lm_head._is_hf_initialized = True
+
         if new_num_tokens > old_num_tokens and not mean_resizing:
             # initialize new embeddings (in particular added tokens) with a mean of 0 and std equals `config.initializer_range`.
             self._init_weights(new_lm_head)
@@ -2945,6 +2947,10 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             self._copy_lm_head_original_to_resized(
                 new_lm_head, old_lm_head, num_tokens_to_copy, transposed, has_new_lm_head_bias
             )
+
+        # # Add after new_lm_head creation:
+        # new_lm_head._is_hf_initialized = True
+        print("new_lm_head")
 
         return new_lm_head
 
