@@ -285,8 +285,9 @@ def patch_mixtral_moe_parameter_targeting(model, peft_config):
     This will be addressed in PEFT >0.19 until then we need to handle
     it here for now.
     """
-    import peft
     from functools import wraps
+
+    import peft
 
     if model.config.model_type == "mixtral":
         get_in_out_features = peft.tuners.lora.layer.ParamWrapper._get_in_out_features
@@ -947,9 +948,9 @@ def _convert_peft_config_mixtral(peft_config):
         key for key in peft_config.target_modules if not ((key == "w2") or (key.endswith(".w2")))
     }
 
-    if 'gate_up_proj' in peft_config.target_parameters:
+    if "gate_up_proj" in peft_config.target_parameters:
         # this weight is a fusion of two adapters so the internal representation is r*2
-        peft_config.rank_pattern[r'.*\.experts\.gate_up_proj'] = peft_config.r * 2
+        peft_config.rank_pattern[r".*\.experts\.gate_up_proj"] = peft_config.r * 2
 
     return peft_config
 
