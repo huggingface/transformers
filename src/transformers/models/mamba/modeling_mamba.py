@@ -166,36 +166,48 @@ class MambaMixer(nn.Module):
         self.time_step_rank = int(config.time_step_rank)
         self.layer_idx = layer_idx
         self.use_conv_bias = config.use_conv_bias
+        self.use_bias = config.use_bias
+
+        # Initialize conv1d with bias if specified
         self.conv1d = nn.Conv1d(
             in_channels=self.intermediate_size,
             out_channels=self.intermediate_size,
-            bias=config.use_conv_bias,
+            bias=self.use_conv_bias,
             kernel_size=config.conv_kernel,
             groups=self.intermediate_size,
             padding=config.conv_kernel - 1,
         )
+        if self.use_conv_bias:
+            nn.init.zeros_(self.conv1d.bias)
 
         self.activation = config.hidden_act
         self.act = ACT2FN[config.hidden_act]
 
         self.use_mambapy = config.use_mambapy
 
-        # projection of the input hidden states
-        self.in_proj = nn.Linear(self.hidden_size, self.intermediate_size * 2, bias=config.use_bias)
+        # Initialize projections with bias if specified
+        self.in_proj = nn.Linear(self.hidden_size, self.intermediate_size * 2, bias=self.use_bias)
+        if self.use_bias:
+            nn.init.zeros_(self.in_proj.bias)
+
         # selective projection used to make dt, B and C input dependent
         self.x_proj = nn.Linear(self.intermediate_size, self.time_step_rank + self.ssm_state_size * 2, bias=False)
+        
         # time step projection (discretization)
         self.dt_proj = nn.Linear(self.time_step_rank, self.intermediate_size, bias=True)
+        nn.init.zeros_(self.dt_proj.bias)
 
-        # S4D real initialization. These are not discretized!
-        # The core is to load them, compute the discrete states, then write the updated state. Keeps the memory bounded
+        # S4D real initialization
         A = torch.arange(1, self.ssm_state_size + 1, dtype=torch.float32)[None, :]
         A = A.expand(self.intermediate_size, -1).contiguous()
 
         self.A_log = nn.Parameter(torch.log(A))
         self.D = nn.Parameter(torch.ones(self.intermediate_size))
-        self.out_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=config.use_bias)
-        self.use_bias = config.use_bias
+        
+        # Initialize output projection with bias if specified
+        self.out_proj = nn.Linear(self.intermediate_size, self.hidden_size, bias=self.use_bias)
+        if self.use_bias:
+            nn.init.zeros_(self.out_proj.bias)
 
         global causal_conv1d, causal_conv1d_update, causal_conv1d_fn
         causal_conv1d = lazy_load_kernel("causal-conv1d")
@@ -248,19 +260,32 @@ class MambaMixer(nn.Module):
         projected_states = self.in_proj(hidden_states).transpose(1, 2)
 
         if self.training and cache_params is None:  # Doesn't support outputting the states -> used for training
+            # Ensure all bias terms are properly handled and have correct shapes
+            conv_bias = self.conv1d.bias if self.use_conv_bias else None
+            dt_bias = self.dt_proj.bias if hasattr(self.dt_proj, "bias") else None
+            out_bias = self.out_proj.bias if self.use_bias else None
+
+            # Convert bias terms to float32 to ensure consistent dtype
+            if conv_bias is not None:
+                conv_bias = conv_bias.float()
+            if dt_bias is not None:
+                dt_bias = dt_bias.float()
+            if out_bias is not None:
+                out_bias = out_bias.float()
+
             contextualized_states = mamba_inner_fn(
                 projected_states,
                 self.conv1d.weight,
-                self.conv1d.bias if self.use_conv_bias else None,
+                conv_bias,
                 self.x_proj.weight,
                 self.dt_proj.weight,
                 self.out_proj.weight,
-                self.out_proj.bias.float() if self.use_bias else None,
+                out_bias,
                 -torch.exp(self.A_log.float()),
                 None,  # input-dependent B
                 None,  # input-dependent C
                 self.D.float(),
-                delta_bias=self.dt_proj.bias.float(),
+                delta_bias=dt_bias,
                 delta_softplus=True,
             )
 
