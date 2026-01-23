@@ -225,6 +225,8 @@ class LightOnOcrForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
         else ()
     )
     pipeline_model_mapping = {"image-text-to-text": LightOnOcrForConditionalGeneration} if is_torch_available() else {}
+    # LightOnOcr uses a PixtralVisionModel, which merges batch_size and num_patches in index 1, with index 0 hardcoded to 1
+    skip_test_image_features_output_shape = True
 
     _is_composite = True
     test_torch_exportable = False
@@ -422,7 +424,7 @@ class LightOnOcrForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
             image_features_list = model.get_image_features(
                 pixel_values=input_dict["pixel_values"].to(torch_device),
                 image_sizes=input_dict["image_sizes"],
-            )
+            ).pooler_output
 
             # Check that features are returned as a list
             self.assertIsNotNone(image_features_list)

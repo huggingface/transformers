@@ -15,8 +15,9 @@
 
 import argparse
 import json
+from io import BytesIO
 
-import requests
+import httpx
 import timm
 import torch
 from huggingface_hub import hf_hub_download
@@ -179,7 +180,8 @@ def convert_swinv2_checkpoint(swinv2_name, pytorch_dump_folder_path):
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 
     image_processor = AutoImageProcessor.from_pretrained("microsoft/{}".format(swinv2_name.replace("_", "-")))
-    image = Image.open(requests.get(url, stream=True).raw)
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
     inputs = image_processor(images=image, return_tensors="pt")
 
     timm_outs = timm_model(inputs["pixel_values"])

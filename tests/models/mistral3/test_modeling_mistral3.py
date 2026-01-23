@@ -174,6 +174,8 @@ class Mistral3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         if is_torch_available()
         else {}
     )
+    # Mistral3 merges batch_size and num_patches in index 1, with index 0 hardcoded to 1
+    skip_test_image_features_output_shape = True
     _is_composite = True
     test_torch_exportable = False
 
