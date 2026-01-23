@@ -315,30 +315,12 @@ def load_backbone(config):
     from transformers import AutoBackbone
 
     backbone_config = getattr(config, "backbone_config", None)
-    backbone_checkpoint = getattr(config, "backbone", None)
 
-    if backbone_checkpoint is not None and backbone_config is not None:
-        raise ValueError("You can't specify both `backbone_checkpoint` and `backbone_config`.")
-
-    # If any of the following are set, then the config passed in is from a model which contains a backbone.
-    if backbone_config is None and backbone_checkpoint is None:
-        return AutoBackbone.from_config(config=config)
-
-    # config from the parent model that has a backbone
-    print("backbone_config", backbone_checkpoint, backbone_config)
-    if backbone_checkpoint is not None:
-        backbone = AutoBackbone.from_pretrained(backbone_checkpoint)
+    if backbone_config is None:
+        backbone = AutoBackbone.from_config(config=config)
     else:
         backbone = AutoBackbone.from_config(config=backbone_config)
     return backbone
-
-
-# def infer_config_type_from_checkpoint(backbone_checkpoint):
-#     if not repo_exists(backbone_checkpoint):
-#         return CONFIG_MAPPING["timm_backbone"]
-#     config_dict, _ = PreTrainedConfig.get_config_dict(backbone_checkpoint)
-#     config_class = CONFIG_MAPPING[config_dict["model_type"]]
-#     return config_class
 
 
 def verify_backbone_config_arguments(

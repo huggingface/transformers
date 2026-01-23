@@ -102,22 +102,12 @@ class DepthAnythingConfig(PreTrainedConfig):
         max_depth=None,
         **kwargs,
     ):
-        if backbone_config is None and backbone is None:
-            logger.info("`backbone_config` is `None`. Initializing the config with the default `Dinov2` backbone.")
-            backbone_config = CONFIG_MAPPING["dinov2"](
-                image_size=518,
-                hidden_size=384,
-                num_attention_heads=6,
-                out_indices=[9, 10, 11, 12],
-                apply_layernorm=True,
-                reshape_hidden_states=False,
-            )
-        elif isinstance(backbone_config, dict):
-            backbone_model_type = backbone_config.get("model_type")
-            config_class = CONFIG_MAPPING[backbone_model_type]
-            backbone_config = config_class.from_dict(backbone_config)
-        elif kwargs.get("backbone_kwargs") and backbone is not None:
-            backbone_kwargs = kwargs.pop("backbone_kwargs")
+        # Backwards compatibility, pop attributes and infer backbone config
+        kwargs.pop("use_timm_backbone", None)
+        backbone_kwargs = kwargs.pop("backbone_kwargs", {})
+        kwargs.pop("use_pretrained_backbone", None)
+
+        if backbone is not None:
             try:
                 config_dict, _ = PreTrainedConfig.get_config_dict(backbone)
                 config_class = CONFIG_MAPPING[config_dict["model_type"]]
@@ -125,12 +115,21 @@ class DepthAnythingConfig(PreTrainedConfig):
                 backbone_config = config_class(**config_dict)
             except Exception:
                 backbone_config = CONFIG_MAPPING["timm_backbone"](backbone=backbone, **backbone_kwargs)
-            backbone = None
-        elif backbone is not None and backbone_config is not None:
-            raise ValueError("You can't specify both `backbone` and `backbone_config`.")
+        elif backbone_config is None:
+            logger.info("`backbone_config` is `None`. Initializing the config with the default `Dinov2` backbone.")
+            backbone_config = CONFIG_MAPPING["dinov2"](
+                image_size=518,
+                hidden_size=384,
+                num_attention_heads=6,
+                out_indices=[9, 10, 11, 12],
+                reshape_hidden_states=False,
+            )
+        elif isinstance(backbone_config, dict):
+            backbone_model_type = backbone_config.get("model_type")
+            config_class = CONFIG_MAPPING[backbone_model_type]
+            backbone_config = config_class.from_dict(backbone_config)
 
         self.backbone_config = backbone_config
-        self.backbone = backbone
         self.reassemble_hidden_size = reassemble_hidden_size
         self.patch_size = patch_size
         self.initializer_range = initializer_range

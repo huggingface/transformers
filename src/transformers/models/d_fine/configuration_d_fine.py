@@ -277,29 +277,12 @@ class DFineConfig(PreTrainedConfig):
         self.layer_norm_eps = layer_norm_eps
         self.batch_norm_eps = batch_norm_eps
 
-        # backbone
-        if backbone_config is None and backbone is None:
-            logger.info(
-                "`backbone_config` and `backbone` are `None`. Initializing the config with the default `HGNet-V2` backbone."
-            )
-            backbone_config = CONFIG_MAPPING["hgnet_v2"](
-                num_channels=3,
-                embedding_size=64,
-                hidden_sizes=[256, 512, 1024, 2048],
-                depths=[3, 4, 6, 3],
-                layer_type="bottleneck",
-                hidden_act="relu",
-                downsample_in_first_stage=False,
-                downsample_in_bottleneck=False,
-                out_features=None,
-                out_indices=[2, 3, 4],
-            )
-        elif isinstance(backbone_config, dict):
-            backbone_model_type = backbone_config.pop("model_type")
-            config_class = CONFIG_MAPPING[backbone_model_type]
-            backbone_config = config_class.from_dict(backbone_config)
-        elif kwargs.get("backbone_kwargs") and backbone is not None:
-            backbone_kwargs = kwargs.pop("backbone_kwargs")
+        # Backwards compatibility, pop attributes and infer backbone config
+        kwargs.pop("use_timm_backbone", None)
+        backbone_kwargs = kwargs.pop("backbone_kwargs", {})
+        kwargs.pop("use_pretrained_backbone", None)
+
+        if backbone is not None:
             try:
                 config_dict, _ = PreTrainedConfig.get_config_dict(backbone)
                 config_class = CONFIG_MAPPING[config_dict["model_type"]]
@@ -307,12 +290,15 @@ class DFineConfig(PreTrainedConfig):
                 backbone_config = config_class(**config_dict)
             except Exception:
                 backbone_config = CONFIG_MAPPING["timm_backbone"](backbone=backbone, **backbone_kwargs)
-            backbone = None
-        elif backbone is not None and backbone_config is not None:
-            raise ValueError("You can't specify both `backbone` and `backbone_config`.")
+        elif backbone_config is None:
+            logger.info("`backbone_config` is `None`. Initializing the config with the default `HGNet-V2` backbone.")
+            backbone_config = CONFIG_MAPPING["hgnet_v2"](out_indices=[2, 3, 4])
+        elif isinstance(backbone_config, dict):
+            backbone_model_type = backbone_config.pop("model_type")
+            config_class = CONFIG_MAPPING[backbone_model_type]
+            backbone_config = config_class.from_dict(backbone_config)
 
         self.backbone_config = backbone_config
-        self.backbone = backbone
         self.freeze_backbone_batch_norms = freeze_backbone_batch_norms
         # encoder
         self.encoder_hidden_dim = encoder_hidden_dim

@@ -86,15 +86,12 @@ class VitMatteConfig(PreTrainedConfig):
         fusion_hidden_sizes: list[int] = [256, 128, 64, 32],
         **kwargs,
     ):
-        if backbone_config is None and backbone is None:
-            logger.info("`backbone_config` is `None`. Initializing the config with the default `VitDet` backbone.")
-            backbone_config = CONFIG_MAPPING["vitdet"](out_features=["stage4"])
-        elif isinstance(backbone_config, dict):
-            backbone_model_type = backbone_config.get("model_type")
-            config_class = CONFIG_MAPPING[backbone_model_type]
-            backbone_config = config_class.from_dict(backbone_config)
-        elif kwargs.get("backbone_kwargs") and backbone is not None:
-            backbone_kwargs = kwargs.pop("backbone_kwargs")
+        # Backwards compatibility, pop attributes and infer backbone config
+        kwargs.pop("use_timm_backbone", None)
+        backbone_kwargs = kwargs.pop("backbone_kwargs", {})
+        kwargs.pop("use_pretrained_backbone", None)
+
+        if backbone is not None:
             try:
                 config_dict, _ = PreTrainedConfig.get_config_dict(backbone)
                 config_class = CONFIG_MAPPING[config_dict["model_type"]]
@@ -102,12 +99,15 @@ class VitMatteConfig(PreTrainedConfig):
                 backbone_config = config_class(**config_dict)
             except Exception:
                 backbone_config = CONFIG_MAPPING["timm_backbone"](backbone=backbone, **backbone_kwargs)
-            backbone = None
-        elif backbone is not None and backbone_config is not None:
-            raise ValueError("You can't specify both `backbone` and `backbone_config`.")
+        elif backbone_config is None:
+            logger.info("`backbone_config` is `None`. Initializing the config with the default `VitDet` backbone.")
+            backbone_config = CONFIG_MAPPING["vitdet"](out_features=["stage4"])
+        elif isinstance(backbone_config, dict):
+            backbone_model_type = backbone_config.get("model_type")
+            config_class = CONFIG_MAPPING[backbone_model_type]
+            backbone_config = config_class.from_dict(backbone_config)
 
         self.backbone_config = backbone_config
-        self.backbone = backbone
         self.batch_norm_eps = batch_norm_eps
         self.hidden_size = hidden_size
         self.initializer_range = initializer_range

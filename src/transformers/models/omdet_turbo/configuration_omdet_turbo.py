@@ -194,6 +194,11 @@ class OmDetTurboConfig(PreTrainedConfig):
         is_encoder_decoder=True,
         **kwargs,
     ):
+        # Backwards compatibility, pop attributes and infer backbone config
+        kwargs.pop("use_timm_backbone", None)
+        backbone_kwargs = kwargs.pop("backbone_kwargs", {})
+        kwargs.pop("use_pretrained_backbone", None)
+
         # Init timm backbone with hardcoded values for BC
         use_timm_backbone = kwargs.pop("use_timm_backbone", True)
         if use_timm_backbone and backbone_config is None:
@@ -203,27 +208,24 @@ class OmDetTurboConfig(PreTrainedConfig):
                 "always_partition": True,
             }
             backbone_config = CONFIG_MAPPING["timm_backbone"](backbone=backbone, **backbone_kwargs)
-            backbone = None
-        elif backbone_config is None:
+        elif backbone is not None:
+            try:
+                config_dict, _ = PreTrainedConfig.get_config_dict(backbone)
+                config_class = CONFIG_MAPPING[config_dict["model_type"]]
+                config_dict.update(backbone_kwargs)
+                backbone_config = config_class(**config_dict)
+            except Exception:
+                backbone_config = CONFIG_MAPPING["timm_backbone"](backbone=backbone, **backbone_kwargs)
+        if backbone_config is None:
             logger.info("`backbone_config` is `None`. Initializing the config with the default `swin` vision config.")
             backbone_config = CONFIG_MAPPING["swin"](
-                window_size=7,
                 image_size=image_size,
-                embed_dim=96,
-                depths=[2, 2, 6, 2],
-                num_heads=[3, 6, 12, 24],
                 out_indices=[2, 3, 4],
             )
         elif isinstance(backbone_config, dict):
             backbone_model_type = backbone_config.get("model_type")
             config_class = CONFIG_MAPPING[backbone_model_type]
             backbone_config = config_class.from_dict(backbone_config)
-        elif kwargs.get("backbone_kwargs") and backbone is not None:
-            backbone_kwargs = kwargs.pop("backbone_kwargs")
-            backbone_config = CONFIG_MAPPING["timm_backbone"](backbone=backbone, **backbone_kwargs)
-            backbone = None
-        elif backbone is not None and backbone_config is not None:
-            raise ValueError("You can't specify both `backbone` and `backbone_config`.")
 
         if text_config is None:
             logger.info("`text_config` is `None`. Initializing the config with the default `clip_text_model`")
@@ -239,7 +241,6 @@ class OmDetTurboConfig(PreTrainedConfig):
 
         self.text_config = text_config
         self.backbone_config = backbone_config
-        self.backbone = backbone
         self.apply_layernorm_after_vision_backbone = apply_layernorm_after_vision_backbone
         self.image_size = image_size
         self.disable_custom_kernels = disable_custom_kernels

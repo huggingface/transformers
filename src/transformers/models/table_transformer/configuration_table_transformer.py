@@ -173,8 +173,8 @@ class TableTransformerConfig(PreTrainedConfig):
         backbone_kwargs = kwargs.pop("backbone_kwargs", {})
         kwargs.pop("use_pretrained_backbone", None)
 
+        # Default to values which were hard-coded in `modeling` for BC
         if use_timm_backbone and backbone is not None:
-            # Default to values which were hard-coded in `modeling`
             backbone_config = CONFIG_MAPPING["timm_backbone"](
                 backbone=backbone,
                 num_channels=backbone_kwargs.get("num_channels", num_channels),
@@ -184,8 +184,7 @@ class TableTransformerConfig(PreTrainedConfig):
             )
             if dilation:
                 backbone_config.output_stride = backbone_kwargs.get("output_stride", 16)
-            backbone = None
-        elif backbone_kwargs and backbone is not None:
+        elif backbone is not None:
             try:
                 config_dict, _ = PreTrainedConfig.get_config_dict(backbone)
                 config_class = CONFIG_MAPPING[config_dict["model_type"]]
@@ -193,15 +192,13 @@ class TableTransformerConfig(PreTrainedConfig):
                 backbone_config = config_class(**config_dict)
             except Exception:
                 backbone_config = CONFIG_MAPPING["timm_backbone"](backbone=backbone, **backbone_kwargs)
-            backbone = None
-        else:
-            if backbone_config is None:
-                logger.info("`backbone_config` is `None`. Initializing the config with the default `ResNet` backbone.")
-                backbone_config = CONFIG_MAPPING["resnet"](out_features=["stage4"])
-            elif isinstance(backbone_config, dict):
-                backbone_model_type = backbone_config.get("model_type")
-                config_class = CONFIG_MAPPING[backbone_model_type]
-                backbone_config = config_class.from_dict(backbone_config)
+        elif backbone_config is None:
+            logger.info("`backbone_config` is `None`. Initializing the config with the default `ResNet` backbone.")
+            backbone_config = CONFIG_MAPPING["resnet"](out_features=["stage4"])
+        elif isinstance(backbone_config, dict):
+            backbone_model_type = backbone_config.get("model_type")
+            config_class = CONFIG_MAPPING[backbone_model_type]
+            backbone_config = config_class.from_dict(backbone_config)
 
         self.backbone_config = backbone_config
         self.num_channels = num_channels
@@ -224,7 +221,6 @@ class TableTransformerConfig(PreTrainedConfig):
         self.num_hidden_layers = encoder_layers
         self.auxiliary_loss = auxiliary_loss
         self.position_embedding_type = position_embedding_type
-        self.backbone = backbone
         # Hungarian matcher
         self.class_cost = class_cost
         self.bbox_cost = bbox_cost
