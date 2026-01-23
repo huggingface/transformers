@@ -5300,12 +5300,11 @@ class Trainer:
                 num_train_epochs = max_steps // num_update_steps_per_epoch + int(
                     max_steps % num_update_steps_per_epoch > 0
                 )
-                # May be slightly incorrect if the last batch in the training dataloader has a smaller size but it's
-                # the best we can do.
-                num_train_samples = max_steps * total_train_batch_size
             else:
                 num_train_epochs = math.ceil(args.num_train_epochs)
-                num_train_samples = self.num_examples(dataloader) * args.num_train_epochs
+            # May be slightly incorrect if the last batch in the training dataloader has a smaller size but it's
+            # the best we can do.
+            num_train_samples = max_steps * total_train_batch_size
         elif args.max_steps > 0:  # Rely on max_steps when dataloader does not have a working size
             # Setting a very large number of epochs so we go as many times as necessary over the iterator.
             num_train_epochs = sys.maxsize
