@@ -144,8 +144,8 @@ jobs:
           git remote add pr-origin https://github.com/${PR_HEAD_REPO_FULL_NAME}.git
           git fetch pr-origin ${PR_HEAD_SHA}
           git checkout ${PR_HEAD_SHA}
-    
-          # Fetch main branch from upstream for comparison
+
+          # Also fetch main branch from upstream for comparison (required by `check_modular_conversion`)
           git remote add upstream https://github.com/${{ github.repository }}.git
           git fetch upstream main:main
 
