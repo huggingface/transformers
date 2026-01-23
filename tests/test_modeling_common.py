@@ -4805,12 +4805,15 @@ class ModelTesterMixin:
     def _video_features_get_expected_num_hidden_states(self, model_tester=None):
         return self._video_features_get_expected_num_attentions(model_tester) + 1
 
-    def test_get_text_features_output(self):
+    @parameterized.expand([True, False, None])
+    def test_get_text_features_output(self, return_dict: bool | None):
         for model_class in self.all_model_classes:
             if not hasattr(model_class, "get_text_features"):
                 continue
 
             config, inputs_dict = self._text_features_prepare_config_and_inputs()
+            if return_dict is not None:
+                config.return_dict = return_dict
 
             model = model_class(config).eval()
             model = model.to(torch_device)
@@ -4818,43 +4821,39 @@ class ModelTesterMixin:
             torch.manual_seed(0)
             with torch.no_grad():
                 outputs = model.get_text_features(**inputs_dict)
-            self.assertTrue(isinstance(outputs, ModelOutput), "get_text_features() must return a BaseModelOutput")
-            self.assertTrue(
-                hasattr(outputs, "last_hidden_state"),
-                "get_text_features() must return a BaseModelOutput with last_hidden_state",
-            )
-            self.assertTrue(
-                hasattr(outputs, "pooler_output"),
-                "get_text_features() must return a BaseModelOutput with pooler_output",
-            )
-            self.assertTrue(
-                hasattr(outputs, "hidden_states"),
-                "get_text_features() must return a BaseModelOutput with hidden_states",
-            )
-            if self.has_attentions:
+
+            if return_dict in (True, None):
+                self.assertTrue(isinstance(outputs, ModelOutput), "get_text_features() must return a BaseModelOutput")
                 self.assertTrue(
-                    hasattr(outputs, "attentions"), "get_text_features() must return a BaseModelOutput with attentions"
+                    hasattr(outputs, "last_hidden_state"),
+                    "get_text_features() must return a BaseModelOutput with last_hidden_state",
                 )
+                self.assertTrue(
+                    hasattr(outputs, "pooler_output"),
+                    "get_text_features() must return a BaseModelOutput with pooler_output",
+                )
+                self.assertTrue(
+                    hasattr(outputs, "hidden_states"),
+                    "get_text_features() must return a BaseModelOutput with hidden_states",
+                )
+                if self.has_attentions:
+                    self.assertTrue(
+                        hasattr(outputs, "attentions"),
+                        "get_text_features() must return a BaseModelOutput with attentions",
+                    )
 
-            # Test against (batch_size, seq_len, hidden_size)
-            last_hidden_state = outputs.last_hidden_state
-            expected_hidden_size = config.text_config.hidden_size
-            expected_shape = (
-                inputs_dict["input_ids"].shape[0],
-                inputs_dict["input_ids"].shape[1],
-                expected_hidden_size,
-            )
-            self.assertEqual(last_hidden_state.shape, expected_shape, "last_hidden_state shape mismatch")
+                # Test against (batch_size, seq_len, hidden_size)
+                last_hidden_state = outputs.last_hidden_state
+                expected_hidden_size = config.text_config.hidden_size
+                expected_shape = (
+                    inputs_dict["input_ids"].shape[0],
+                    inputs_dict["input_ids"].shape[1],
+                    expected_hidden_size,
+                )
+                self.assertEqual(last_hidden_state.shape, expected_shape, "last_hidden_state shape mismatch")
 
-            config, inputs_dict = self._text_features_prepare_config_and_inputs()
-            config.return_dict = False
-
-            model = model_class(config).eval()
-            model = model.to(torch_device)
-
-            with torch.no_grad():
-                outputs = model.get_text_features(**inputs_dict)
-            self.assertTrue(isinstance(outputs, tuple), "get_text_features() must return a tuple if return_dict=False")
+            else:
+                self.assertIsInstance(outputs, tuple, "get_text_features() must return a tuple if return_dict=False")
 
     def test_get_text_features_hidden_states(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
@@ -4924,12 +4923,15 @@ class ModelTesterMixin:
 
             check_attentions_output(inputs_dict, config, model_class)
 
-    def test_get_image_features_output(self):
+    @parameterized.expand([True, False, None])
+    def test_get_image_features_output(self, return_dict: bool | None):
         for model_class in self.all_model_classes:
             if not hasattr(model_class, "get_image_features"):
                 continue
 
             config, inputs_dict = self._image_features_prepare_config_and_inputs()
+            if return_dict is not None:
+                config.return_dict = return_dict
 
             model = model_class(config).eval()
             model = model.to(torch_device)
@@ -4937,81 +4939,76 @@ class ModelTesterMixin:
             torch.manual_seed(0)
             with torch.no_grad():
                 outputs = model.get_image_features(**inputs_dict)
-            self.assertTrue(isinstance(outputs, ModelOutput), "get_image_features() must return a BaseModelOutput")
-            self.assertTrue(
-                hasattr(outputs, "last_hidden_state"),
-                "get_image_features() must return a BaseModelOutput with last_hidden_state",
-            )
-            self.assertTrue(
-                hasattr(outputs, "pooler_output"),
-                "get_image_features() must return a BaseModelOutput with pooler_output",
-            )
-            self.assertTrue(
-                hasattr(outputs, "hidden_states"),
-                "get_image_features() must return a BaseModelOutput with hidden_states",
-            )
-            if self.has_attentions:
+
+            if return_dict in (True, None):
+                self.assertTrue(isinstance(outputs, ModelOutput), "get_image_features() must return a BaseModelOutput")
                 self.assertTrue(
-                    hasattr(outputs, "attentions"),
-                    "get_image_features() must return a BaseModelOutput with attentions",
+                    hasattr(outputs, "last_hidden_state"),
+                    "get_image_features() must return a BaseModelOutput with last_hidden_state",
+                )
+                self.assertTrue(
+                    hasattr(outputs, "pooler_output"),
+                    "get_image_features() must return a BaseModelOutput with pooler_output",
+                )
+                self.assertTrue(
+                    hasattr(outputs, "hidden_states"),
+                    "get_image_features() must return a BaseModelOutput with hidden_states",
+                )
+                if self.has_attentions:
+                    self.assertTrue(
+                        hasattr(outputs, "attentions"),
+                        "get_image_features() must return a BaseModelOutput with attentions",
+                    )
+
+                if getattr(self, "skip_test_image_features_output_shape", False):
+                    return
+
+                last_hidden_state_shape = outputs.last_hidden_state.shape
+                batch_size = (
+                    inputs_dict["pixel_values"].shape[0]
+                    if "pixel_values" in inputs_dict
+                    else inputs_dict["pixel_values_images"].shape[0]
+                )
+                self.assertEqual(
+                    last_hidden_state_shape[0],
+                    batch_size,
+                    f"batch_size mismatch, full shape: {last_hidden_state_shape}",
                 )
 
-            if getattr(self, "skip_test_image_features_output_shape", False):
-                return
+                vision_config = config.vision_config if hasattr(config, "vision_config") else config
+                vision_config = (
+                    vision_config.backbone_config if hasattr(vision_config, "backbone_config") else vision_config
+                )
+                vision_config = vision_config.vq_config if hasattr(vision_config, "vq_config") else vision_config
+                vision_config = vision_config.model_args if hasattr(vision_config, "model_args") else vision_config
+                attribute_candidates = [
+                    "embed_dim_per_stage",
+                    "embed_dim",
+                    "embed_dims",
+                    "out_hidden_size",
+                    "hidden_size",
+                    "hidden_dim",
+                ]
+                hidden_size = None
+                for attr in attribute_candidates:
+                    if hasattr(vision_config, attr):
+                        hidden_size = getattr(vision_config, attr)
+                        break
+                    elif isinstance(vision_config, dict) and attr in vision_config:
+                        hidden_size = vision_config[attr]
+                        break
+                else:
+                    raise ValueError("Cannot find the hidden size attribute in vision_config")
+                if isinstance(hidden_size, (list, tuple)):
+                    hidden_size = hidden_size[-1]
+                self.assertEqual(
+                    last_hidden_state_shape[-1],
+                    hidden_size,
+                    f"hidden_size mismatch, full shape: {last_hidden_state_shape}",
+                )
 
-            last_hidden_state_shape = outputs.last_hidden_state.shape
-            batch_size = (
-                inputs_dict["pixel_values"].shape[0]
-                if "pixel_values" in inputs_dict
-                else inputs_dict["pixel_values_images"].shape[0]
-            )
-            self.assertEqual(
-                last_hidden_state_shape[0], batch_size, f"batch_size mismatch, full shape: {last_hidden_state_shape}"
-            )
-
-            vision_config = config.vision_config if hasattr(config, "vision_config") else config
-            vision_config = (
-                vision_config.backbone_config if hasattr(vision_config, "backbone_config") else vision_config
-            )
-            vision_config = vision_config.vq_config if hasattr(vision_config, "vq_config") else vision_config
-            vision_config = vision_config.model_args if hasattr(vision_config, "model_args") else vision_config
-            attribute_candidates = [
-                "embed_dim_per_stage",
-                "embed_dim",
-                "embed_dims",
-                "out_hidden_size",
-                "hidden_size",
-                "hidden_dim",
-            ]
-            hidden_size = None
-            for attr in attribute_candidates:
-                if hasattr(vision_config, attr):
-                    hidden_size = getattr(vision_config, attr)
-                    break
-                elif isinstance(vision_config, dict) and attr in vision_config:
-                    hidden_size = vision_config[attr]
-                    break
             else:
-                raise ValueError("Cannot find the hidden size attribute in vision_config")
-            if isinstance(hidden_size, (list, tuple)):
-                hidden_size = hidden_size[-1]
-            self.assertEqual(
-                last_hidden_state_shape[-1],
-                hidden_size,
-                f"hidden_size mismatch, full shape: {last_hidden_state_shape}",
-            )
-
-            config, inputs_dict = self._image_features_prepare_config_and_inputs()
-            config.return_dict = False
-
-            model = model_class(config).eval()
-            model = model.to(torch_device)
-
-            with torch.no_grad():
-                outputs = model.get_image_features(**inputs_dict)
-            self.assertTrue(
-                isinstance(outputs, tuple), "get_image_features() must return a tuple if return_dict=False"
-            )
+                self.assertIsInstance(outputs, tuple, "get_image_features() must return a tuple if return_dict=False")
 
     def test_get_image_features_hidden_states(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
@@ -5081,12 +5078,15 @@ class ModelTesterMixin:
 
             check_attentions_output(inputs_dict, config, model_class)
 
-    def test_get_audio_features_output(self):
+    @parameterized.expand([True, False, None])
+    def test_get_audio_features_output(self, return_dict: bool | None):
         for model_class in self.all_model_classes:
             if not hasattr(model_class, "get_audio_features"):
                 continue
 
             config, inputs_dict = self._audio_features_prepare_config_and_inputs()
+            if return_dict is not None:
+                config.return_dict = return_dict
 
             model = model_class(config).eval()
             model = model.to(torch_device)
@@ -5094,60 +5094,55 @@ class ModelTesterMixin:
             torch.manual_seed(0)
             with torch.no_grad():
                 outputs = model.get_audio_features(**inputs_dict)
-            self.assertTrue(isinstance(outputs, ModelOutput), "get_audio_features() must return a BaseModelOutput")
-            self.assertTrue(
-                hasattr(outputs, "last_hidden_state"),
-                "get_audio_features() must return a BaseModelOutput with last_hidden_state",
-            )
-            self.assertTrue(
-                hasattr(outputs, "pooler_output"),
-                "get_audio_features() must return a BaseModelOutput with pooler_output",
-            )
-            self.assertTrue(
-                hasattr(outputs, "hidden_states"),
-                "get_audio_features() must return a BaseModelOutput with hidden_states",
-            )
-            if self.has_attentions:
+
+            if return_dict in (True, None):
+                self.assertTrue(isinstance(outputs, ModelOutput), "get_audio_features() must return a BaseModelOutput")
                 self.assertTrue(
-                    hasattr(outputs, "attentions"),
-                    "get_audio_features() must return a BaseModelOutput with attentions",
+                    hasattr(outputs, "last_hidden_state"),
+                    "get_audio_features() must return a BaseModelOutput with last_hidden_state",
+                )
+                self.assertTrue(
+                    hasattr(outputs, "pooler_output"),
+                    "get_audio_features() must return a BaseModelOutput with pooler_output",
+                )
+                self.assertTrue(
+                    hasattr(outputs, "hidden_states"),
+                    "get_audio_features() must return a BaseModelOutput with hidden_states",
+                )
+                if self.has_attentions:
+                    self.assertTrue(
+                        hasattr(outputs, "attentions"),
+                        "get_audio_features() must return a BaseModelOutput with attentions",
+                    )
+
+                if getattr(self, "skip_test_audio_features_output_shape", False):
+                    return
+
+                last_hidden_state_shape = outputs.last_hidden_state.shape
+                batch_size = inputs_dict["input_features"].shape[0]
+                self.assertEqual(
+                    last_hidden_state_shape[0],
+                    batch_size,
+                    f"batch_size mismatch, full shape: {last_hidden_state_shape}",
                 )
 
-            if getattr(self, "skip_test_audio_features_output_shape", False):
-                return
+                audio_config = config.audio_config if hasattr(config, "audio_config") else config
+                if hasattr(audio_config, "projection_dim"):
+                    hidden_size = audio_config.projection_dim
+                elif hasattr(audio_config, "hidden_size"):
+                    hidden_size = audio_config.hidden_size
+                elif hasattr(audio_config, "encoder_config"):
+                    hidden_size = audio_config.encoder_config.hidden_dim
+                elif hasattr(audio_config, "encoder_ffn_dim"):
+                    hidden_size = audio_config.encoder_ffn_dim
+                self.assertEqual(
+                    last_hidden_state_shape[-1],
+                    hidden_size,
+                    f"hidden_size mismatch, full shape: {last_hidden_state_shape}",
+                )
 
-            last_hidden_state_shape = outputs.last_hidden_state.shape
-            batch_size = inputs_dict["input_features"].shape[0]
-            self.assertEqual(
-                last_hidden_state_shape[0], batch_size, f"batch_size mismatch, full shape: {last_hidden_state_shape}"
-            )
-
-            audio_config = config.audio_config if hasattr(config, "audio_config") else config
-            if hasattr(audio_config, "projection_dim"):
-                hidden_size = audio_config.projection_dim
-            elif hasattr(audio_config, "hidden_size"):
-                hidden_size = audio_config.hidden_size
-            elif hasattr(audio_config, "encoder_config"):
-                hidden_size = audio_config.encoder_config.hidden_dim
-            elif hasattr(audio_config, "encoder_ffn_dim"):
-                hidden_size = audio_config.encoder_ffn_dim
-            self.assertEqual(
-                last_hidden_state_shape[-1],
-                hidden_size,
-                f"hidden_size mismatch, full shape: {last_hidden_state_shape}",
-            )
-
-            config, inputs_dict = self._audio_features_prepare_config_and_inputs()
-            config.return_dict = False
-
-            model = model_class(config).eval()
-            model = model.to(torch_device)
-
-            with torch.no_grad():
-                outputs = model.get_audio_features(**inputs_dict)
-            self.assertTrue(
-                isinstance(outputs, tuple), "get_audio_features() must return a tuple if return_dict=False"
-            )
+            else:
+                self.assertIsInstance(outputs, tuple, "get_audio_features() must return a tuple if return_dict=False")
 
     def test_get_audio_features_hidden_states(self):
         def check_hidden_states_output(inputs_dict, config, model_class):
@@ -5215,12 +5210,15 @@ class ModelTesterMixin:
 
             check_attentions_output(inputs_dict, config, model_class)
 
-    def test_get_video_features_output(self):
+    @parameterized.expand([True, False, None])
+    def test_get_video_features_output(self, return_dict: bool | None):
         for model_class in self.all_model_classes:
             if not hasattr(model_class, "get_video_features"):
                 continue
 
             config, inputs_dict = self._video_features_prepare_config_and_inputs()
+            if return_dict is not None:
+                config.return_dict = return_dict
 
             model = model_class(config).eval()
             model = model.to(torch_device)
@@ -5228,62 +5226,57 @@ class ModelTesterMixin:
             torch.manual_seed(0)
             with torch.no_grad():
                 outputs = model.get_video_features(**inputs_dict)
-            self.assertTrue(isinstance(outputs, ModelOutput), "get_video_features() must return a BaseModelOutput")
-            self.assertTrue(
-                hasattr(outputs, "last_hidden_state"),
-                "get_video_features() must return a BaseModelOutput with last_hidden_state",
-            )
-            self.assertTrue(
-                hasattr(outputs, "pooler_output"),
-                "get_video_features() must return a BaseModelOutput with pooler_output",
-            )
-            self.assertTrue(
-                hasattr(outputs, "hidden_states"),
-                "get_video_features() must return a BaseModelOutput with hidden_states",
-            )
-            if self.has_attentions:
+
+            if return_dict in (True, None):
+                self.assertTrue(isinstance(outputs, ModelOutput), "get_video_features() must return a BaseModelOutput")
                 self.assertTrue(
-                    hasattr(outputs, "attentions"),
-                    "get_video_features() must return a BaseModelOutput with attentions",
+                    hasattr(outputs, "last_hidden_state"),
+                    "get_video_features() must return a BaseModelOutput with last_hidden_state",
+                )
+                self.assertTrue(
+                    hasattr(outputs, "pooler_output"),
+                    "get_video_features() must return a BaseModelOutput with pooler_output",
+                )
+                self.assertTrue(
+                    hasattr(outputs, "hidden_states"),
+                    "get_video_features() must return a BaseModelOutput with hidden_states",
+                )
+                if self.has_attentions:
+                    self.assertTrue(
+                        hasattr(outputs, "attentions"),
+                        "get_video_features() must return a BaseModelOutput with attentions",
+                    )
+
+                if getattr(self, "skip_test_video_features_output_shape", False):
+                    return
+
+                last_hidden_state_shape = outputs.last_hidden_state.shape
+                if "pixel_values_videos" in inputs_dict:
+                    batch_size = inputs_dict["pixel_values_videos"].shape[0]
+                elif "pixel_values" in inputs_dict:
+                    batch_size = inputs_dict["pixel_values"].shape[0]
+                self.assertEqual(
+                    last_hidden_state_shape[0],
+                    batch_size,
+                    f"batch_size mismatch, full shape: {last_hidden_state_shape}",
+                )
+                video_config = config
+                if hasattr(config, "video_config"):
+                    video_config = config.video_config
+                elif hasattr(config, "vision_config"):
+                    video_config = config.vision_config
+                if hasattr(video_config, "out_hidden_size"):
+                    hidden_size = video_config.out_hidden_size
+                else:
+                    hidden_size = video_config.hidden_size
+                self.assertEqual(
+                    last_hidden_state_shape[-1],
+                    hidden_size,
+                    f"hidden_size mismatch, full shape: {last_hidden_state_shape}",
                 )
 
-            if getattr(self, "skip_test_video_features_output_shape", False):
-                return
-
-            last_hidden_state_shape = outputs.last_hidden_state.shape
-            if "pixel_values_videos" in inputs_dict:
-                batch_size = inputs_dict["pixel_values_videos"].shape[0]
-            elif "pixel_values" in inputs_dict:
-                batch_size = inputs_dict["pixel_values"].shape[0]
-            self.assertEqual(
-                last_hidden_state_shape[0], batch_size, f"batch_size mismatch, full shape: {last_hidden_state_shape}"
-            )
-            video_config = config
-            if hasattr(config, "video_config"):
-                video_config = config.video_config
-            elif hasattr(config, "vision_config"):
-                video_config = config.vision_config
-            if hasattr(video_config, "out_hidden_size"):
-                hidden_size = video_config.out_hidden_size
             else:
-                hidden_size = video_config.hidden_size
-            self.assertEqual(
-                last_hidden_state_shape[-1],
-                hidden_size,
-                f"hidden_size mismatch, full shape: {last_hidden_state_shape}",
-            )
-
-            config, inputs_dict = self._video_features_prepare_config_and_inputs()
-            config.return_dict = False
-
-            model = model_class(config).eval()
-            model = model.to(torch_device)
-
-            with torch.no_grad():
-                outputs = model.get_video_features(**inputs_dict)
-            self.assertTrue(
-                isinstance(outputs, tuple), "get_video_features() must return a tuple if return_dict=False"
-            )
+                self.assertIsInstance(outputs, tuple, "get_video_features() must return a tuple if return_dict=False")
 
     def test_get_video_features_hidden_states(self):
         def check_hidden_states_output(inputs_dict, config, model_class):

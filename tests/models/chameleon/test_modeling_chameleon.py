@@ -17,6 +17,7 @@ import copy
 import unittest
 
 import requests
+from parameterized import parameterized
 
 from transformers import BitsAndBytesConfig, ChameleonConfig, is_torch_available, is_vision_available
 from transformers.testing_utils import (
@@ -232,7 +233,8 @@ class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
         pass
 
     @unittest.skip("Skip get_image_features tests as those are tested via ChameleonVision2SeqModelTest instead")
-    def test_get_image_features_output(self):
+    @parameterized.expand([True, False, None])
+    def test_get_image_features_output(self, return_dict: bool | None):
         pass
 
     @unittest.skip("Skip get_image_features tests as those are tested via ChameleonVision2SeqModelTest instead")

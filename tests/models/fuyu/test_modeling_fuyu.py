@@ -171,9 +171,6 @@ class FuyuModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
     test_cpu_offload = False
     test_disk_offload = False
-    test_get_image_features_output = False
-    test_get_image_features_hidden_states = False
-    test_get_image_features_attentions = False
 
     def setUp(self):
         self.model_tester = FuyuModelTester(self)
@@ -247,6 +244,24 @@ class FuyuModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMixin
 
     @unittest.skip(reason="Fuyu has no separate base model without a head.")
     def test_model_base_model_prefix(self):
+        pass
+
+    def _image_features_prepare_config_and_inputs(self):
+        """
+        Helper method to extract only image-related inputs from the full set of inputs, for testing `get_image_features`.
+
+        The Fuyu model uses image_patches, except for get_image_features, where they're called pixel_values.
+        """
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        inputs_dict = {"pixel_values": inputs_dict["image_patches"]}
+        return config, inputs_dict
+
+    @unittest.skip("Skip get_image_features tests as Fuyu's image features originate from a simple Linear")
+    def test_get_image_features_hidden_states(self):
+        pass
+
+    @unittest.skip("Skip get_image_features tests as Fuyu's image features originate from a simple Linear")
+    def test_get_image_features_attentions(self):
         pass
 
 
