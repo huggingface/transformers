@@ -148,7 +148,6 @@ class FuyuConfig(PreTrainedConfig):
         text_model_type = text_config.get("model_type", "persimmon")
         self.text_config = CONFIG_MAPPING[text_model_type](**text_config)
 
-        self._vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.image_size = image_size
         self.patch_size = patch_size
