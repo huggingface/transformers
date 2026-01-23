@@ -750,10 +750,11 @@ class Qwen3VLVisionModel(Qwen3VLPreTrainedModel):
         Returns:
             `torch.Tensor`: hidden_states.
         """
+        input_dtype = hidden_states.dtype
         hidden_states = self.patch_embed(hidden_states)
 
         pos_embeds = self.fast_pos_embed_interpolate(grid_thw)
-        hidden_states = hidden_states + pos_embeds
+        hidden_states = (hidden_states + pos_embeds).to(input_dtype)
 
         rotary_pos_emb = self.rot_pos_emb(grid_thw)
 
