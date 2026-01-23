@@ -16,8 +16,8 @@
 from typing import Optional, Union
 
 import torch
+import torchvision.transforms.v2.functional as tvF
 from torch import nn
-from torchvision.transforms.v2 import functional as F
 
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
@@ -165,10 +165,10 @@ def compute_segments(
     segments: list[dict] = []
 
     if target_size is not None:
-        mask_probs = F.resize(
+        mask_probs = tvF.resize(
             mask_probs.unsqueeze(0),
             size=target_size,
-            interpolation=F.InterpolationMode.BILINEAR,
+            interpolation=tvF.InterpolationMode.BILINEAR,
         )[0]
 
     current_segment_id = 0
@@ -388,7 +388,7 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
         instance_id_to_semantic_id: list[dict[int, int]] | dict[int, int] | None,
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
@@ -422,7 +422,7 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
             for shape, stacked_segmentation_maps in grouped_segmentation_maps.items():
                 if do_resize:
                     stacked_segmentation_maps = self.resize(
-                        stacked_segmentation_maps, size=size, interpolation=F.InterpolationMode.NEAREST_EXACT
+                        stacked_segmentation_maps, size=size, interpolation=tvF.InterpolationMode.NEAREST_EXACT
                     )
                 processed_segmentation_maps_grouped[shape] = stacked_segmentation_maps
             processed_segmentation_maps = reorder_images(
@@ -467,7 +467,7 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
         pad_bottom = output_height - input_height
         pad_right = output_width - input_width
 
-        padded_image = F.pad(image, padding=[0, 0, pad_right, pad_bottom], fill=constant_values)
+        padded_image = tvF.pad(image, padding=[0, 0, pad_right, pad_bottom], fill=constant_values)
 
         return padded_image
 
@@ -725,10 +725,10 @@ class OneFormerImageProcessorFast(BaseImageProcessorFast):
 
             semantic_segmentation = []
             for idx in range(batch_size):
-                resized_logits = F.resize(
+                resized_logits = tvF.resize(
                     segmentation[idx].unsqueeze(dim=0),
                     size=target_sizes[idx],
-                    interpolation=F.InterpolationMode.BILINEAR,
+                    interpolation=tvF.InterpolationMode.BILINEAR,
                 )
                 semantic_map = resized_logits[0].argmax(dim=0)
                 semantic_segmentation.append(semantic_map)

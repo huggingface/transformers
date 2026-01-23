@@ -16,7 +16,7 @@
 from typing import Optional
 
 import torch
-from torchvision.transforms.v2 import functional as F
+import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
@@ -65,7 +65,7 @@ class JanusImageProcessorFast(BaseImageProcessorFast):
         image: "torch.Tensor",
         size: SizeDict,
         min_size: int,
-        interpolation: Optional["F.InterpolationMode"] = None,
+        interpolation: Optional["tvF.InterpolationMode"] = None,
         antialias: bool = True,
         **kwargs,
     ) -> "torch.Tensor":
@@ -143,7 +143,7 @@ class JanusImageProcessorFast(BaseImageProcessorFast):
         do_resize: bool,
         size: SizeDict,
         min_size: int,
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
@@ -215,7 +215,7 @@ class JanusImageProcessorFast(BaseImageProcessorFast):
             images = [image.clip(0, 255).to(torch.uint8) for image in images]
 
         if do_normalize and do_rescale and return_tensors == "PIL.Image.Image":
-            images = [F.to_pil_image(image) for image in images]
+            images = [tvF.to_pil_image(image) for image in images]
 
         return_tensors = return_tensors if return_tensors != "PIL.Image.Image" else None
         images = torch.stack(images, dim=0) if return_tensors == "pt" else images
