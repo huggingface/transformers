@@ -188,24 +188,20 @@ class BlipVisionModelTest(ModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training(self):
         pass
 
-    @unittest.skip
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     @slow
@@ -323,22 +319,6 @@ class BlipTextModelTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip
     def test_training(self):
-        pass
-
-    @unittest.skip
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
     @unittest.skip(reason="Blip does not use inputs_embeds")
@@ -483,7 +463,7 @@ class BlipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         model.eval()
         image_features = model.get_image_features(**inputs_dict)
         self.assertEqual(
-            image_features.shape,
+            image_features.pooler_output.shape,
             (
                 self.model_tester.batch_size,
                 model.projection_dim,
@@ -502,7 +482,7 @@ class BlipModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
         model.eval()
         text_features = model.get_text_features(**inputs_dict)
         self.assertEqual(
-            text_features.shape,
+            text_features.pooler_output.shape,
             (
                 self.model_tester.batch_size,
                 model.projection_dim,
@@ -832,7 +812,7 @@ class BlipTextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
             loss = model(**inputs).loss
             loss.backward()
 
-    def test_training_gradient_checkpointing(self):
+    def check_training_gradient_checkpointing(self, gradient_checkpointing_kwargs=None):
         if not self.model_tester.is_training:
             self.skipTest(reason="ModelTester is not setup for training")
 
@@ -843,7 +823,7 @@ class BlipTextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
 
             model = model_class(config)
             model.to(torch_device)
-            model.gradient_checkpointing_enable()
+            model.gradient_checkpointing_enable(gradient_checkpointing_kwargs=gradient_checkpointing_kwargs)
             model.train()
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
 
@@ -852,18 +832,6 @@ class BlipTextRetrievalModelTest(ModelTesterMixin, unittest.TestCase):
 
             loss = model(**inputs).loss
             loss.backward()
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
 
     def test_load_vision_text_config(self):
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
@@ -960,7 +928,7 @@ class BlipTextImageModelTest(ModelTesterMixin, unittest.TestCase):
             loss = model(**inputs).loss
             loss.backward()
 
-    def test_training_gradient_checkpointing(self):
+    def check_training_gradient_checkpointing(self, gradient_checkpointing_kwargs=None):
         if not self.model_tester.is_training:
             self.skipTest(reason="ModelTester is not setup for training")
 
@@ -971,7 +939,7 @@ class BlipTextImageModelTest(ModelTesterMixin, unittest.TestCase):
 
             model = model_class(config)
             model.to(torch_device)
-            model.gradient_checkpointing_enable()
+            model.gradient_checkpointing_enable(gradient_checkpointing_kwargs=gradient_checkpointing_kwargs)
             model.train()
             inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
 

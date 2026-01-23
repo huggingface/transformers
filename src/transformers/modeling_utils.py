@@ -106,6 +106,7 @@ from .utils import (
     copy_func,
     has_file,
     is_accelerate_available,
+    is_bitsandbytes_available,
     is_env_variable_true,
     is_flash_attn_2_available,
     is_flash_attn_3_available,
@@ -1908,7 +1909,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         opening the file, but avoids maintaining yet another property flag.
         """
         class_file = sys.modules[cls.__module__].__file__
-        with open(class_file, "r") as f:
+        with open(class_file, "r", encoding="utf-8") as f:
             code = f.read()
         # heuristic -> if we find those patterns, the model uses the correct interface
         if re.search(r"class \w+Attention\(nn.Module\)", code):
@@ -1926,7 +1927,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         opening the file, but avoids maintaining yet another property flag.
         """
         class_file = sys.modules[cls.__module__].__file__
-        with open(class_file, "r") as f:
+        with open(class_file, "r", encoding="utf-8") as f:
             code = f.read()
         # heuristic -> if we the use_experts_implementation decorator is used, then we can set it
         return "@use_experts_implementation" in code
@@ -3051,7 +3052,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             raise ValueError(f"{self.__class__.__name__} does not support gradient checkpointing.")
 
         if gradient_checkpointing_kwargs is None:
-            gradient_checkpointing_kwargs = {"use_reentrant": True}
+            gradient_checkpointing_kwargs = {"use_reentrant": False}
 
         gradient_checkpointing_func = functools.partial(checkpoint, **gradient_checkpointing_kwargs)
 
@@ -3529,10 +3530,9 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
                     " desired `dtype` by passing the correct `dtype` argument."
                 )
 
-            if getattr(self, "is_loaded_in_8bit", False):
+            if getattr(self, "is_loaded_in_8bit", False) and not is_bitsandbytes_available("0.48"):
                 raise ValueError(
-                    "`.to` is not supported for `8-bit` bitsandbytes models. Please use the model as it is, since the"
-                    " model has already been set to the correct devices and casted to the correct `dtype`."
+                    "You need to install `pip install bitsandbytes>=0.48.0` if you want to move a 8-bit model across devices using to()."
                 )
         elif getattr(self, "quantization_method", None) == QuantizationMethod.GPTQ:
             if dtype_present_in_args:
@@ -3586,7 +3586,15 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
 
         return init_contexts
 
-    def set_use_kernels(self, use_kernels, kernel_config):
+    def set_use_kernels(self, use_kernels, kernel_config: KernelConfig | None = None):
+        """
+        Set whether or not to use the `kernels` library to kernelize some layers of the model.
+        Args:
+            use_kernels (`bool`):
+                Whether or not to use the `kernels` library to kernelize some layers of the model.
+            kernel_config (`KernelConfig`, *optional*):
+                The kernel configuration to use to kernelize the model. If `None`, the default kernel mapping will be used.
+        """
         if use_kernels:
             if not is_kernels_available():
                 raise ValueError(

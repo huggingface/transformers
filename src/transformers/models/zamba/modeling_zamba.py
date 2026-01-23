@@ -492,12 +492,12 @@ class ZambaMambaMixer(nn.Module):
                     hidden_states += self.conv1d.bias
                 hidden_states = self.act(hidden_states).to(dtype).unsqueeze(-1)
             else:
-                if attention_mask is not None and not torch.all(attention_mask == 1):
+                if attention_mask is not None:
                     hidden_states = hidden_states * attention_mask[:, -hidden_states.shape[-1] :].unsqueeze(1)
                 conv_state = nn.functional.pad(hidden_states, (self.conv_kernel_size - hidden_states.shape[-1], 0))
                 cache_params.conv_states[self.layer_idx] = conv_state
                 hidden_states = self.act(self.conv1d(hidden_states)[..., :seq_len])
-                if attention_mask is not None and not torch.all(attention_mask == 1):
+                if attention_mask is not None:
                     hidden_states = hidden_states * attention_mask[:, -hidden_states.shape[-1] :].unsqueeze(1)
         else:
             ssm_state = torch.zeros(
@@ -505,10 +505,10 @@ class ZambaMambaMixer(nn.Module):
                 device=hidden_states.device,
                 dtype=dtype,
             )
-            if attention_mask is not None and not torch.all(attention_mask == 1):
+            if attention_mask is not None:
                 hidden_states = hidden_states * attention_mask.unsqueeze(1)
             hidden_states = self.act(self.conv1d(hidden_states)[..., :seq_len])
-            if attention_mask is not None and not torch.all(attention_mask == 1):
+            if attention_mask is not None:
                 hidden_states = hidden_states * attention_mask.unsqueeze(1)
 
         # 3. State Space Model sequence transformation
@@ -978,9 +978,9 @@ class ZambaModel(ZambaPreTrainedModel):
         if attention_mask is not None:
             causal_mask = causal_mask.clone()  # copy to contiguous memory for in-place edit
             if attention_mask.dim() == 2:
-                mask_length = attention_mask.shape[-1]
-                padding_mask = causal_mask[..., :mask_length].eq(0.0) * attention_mask[:, None, None, :].eq(0.0)
-                causal_mask[..., :mask_length] = causal_mask[..., :mask_length].masked_fill(padding_mask, min_dtype)
+                expanded_attn_mask = attention_mask[:, None, None, :].expand(-1, 1, sequence_length, -1)
+                padding_mask = causal_mask.eq(0.0) * expanded_attn_mask.eq(0.0)
+                causal_mask.masked_fill_(padding_mask, min_dtype)
 
         if (
             self.config._attn_implementation == "sdpa"
