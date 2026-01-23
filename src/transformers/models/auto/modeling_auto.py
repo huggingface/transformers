@@ -337,6 +337,7 @@ MODEL_MAPPING_NAMES = OrderedDict(
         ("pvt", "PvtModel"),
         ("pvt_v2", "PvtV2Model"),
         ("qwen2", "Qwen2Model"),
+        ("qwen2_5_omni", "Qwen2_5OmniForConditionalGeneration"),
         ("qwen2_5_vl", "Qwen2_5_VLModel"),
         ("qwen2_5_vl_text", "Qwen2_5_VLTextModel"),
         ("qwen2_audio_encoder", "Qwen2AudioEncoder"),
