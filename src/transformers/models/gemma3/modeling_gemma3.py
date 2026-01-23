@@ -636,8 +636,8 @@ class Gemma3ForCausalLM(Gemma3PreTrainedModel, GenerationMixin):
         ```python
         >>> from transformers import AutoTokenizer, Gemma3ForCausalLM
 
-        >>> model = Gemma3ForCausalLM.from_pretrained("google/gemma-2-9b")
-        >>> tokenizer = AutoTokenizer.from_pretrained("google/gemma-2-9b")
+        >>> model = Gemma3ForCausalLM.from_pretrained("google/gemma-3-12b-pt")
+        >>> tokenizer = AutoTokenizer.from_pretrained("google/gemma-3-12b-pt")
 
         >>> prompt = "What is your favorite condiment?"
         >>> inputs = tokenizer(prompt, return_tensors="pt")
