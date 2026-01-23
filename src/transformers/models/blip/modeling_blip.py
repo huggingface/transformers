@@ -486,7 +486,7 @@ class BlipVisionModel(BlipPreTrainedModel):
         pixel_values: torch.FloatTensor | None = None,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
@@ -570,7 +570,7 @@ class BlipModel(BlipPreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         r"""
         Examples:
 
@@ -602,7 +602,7 @@ class BlipModel(BlipPreTrainedModel):
         pixel_values: torch.FloatTensor | None = None,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         r"""
         Examples:
 
@@ -693,7 +693,7 @@ class BlipModel(BlipPreTrainedModel):
         return_loss: bool | None = None,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BlipOutput:
+    ) -> BlipOutput:
         r"""
         return_loss (`bool`, *optional*):
             Whether or not to return the contrastive loss.
@@ -809,7 +809,7 @@ class BlipForConditionalGeneration(BlipPreTrainedModel, GenerationMixin):
         interpolate_pos_encoding: bool = False,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BlipForConditionalGenerationModelOutput:
+    ) -> BlipForConditionalGenerationModelOutput:
         r"""
         Examples:
 
@@ -980,7 +980,7 @@ class BlipForQuestionAnswering(BlipPreTrainedModel, GenerationMixin):
         labels: torch.LongTensor | None = None,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BlipTextVisionModelOutput:
+    ) -> BlipTextVisionModelOutput:
         r"""
         Examples:
 
@@ -1208,7 +1208,7 @@ class BlipForImageTextRetrieval(BlipPreTrainedModel):
         attention_mask: torch.LongTensor | None = None,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BlipTextVisionModelOutput:
+    ) -> BlipTextVisionModelOutput:
         r"""
         use_itm_head (`bool`, *optional*, defaults to `True`):
             Whether or not to use the image-text matching head.

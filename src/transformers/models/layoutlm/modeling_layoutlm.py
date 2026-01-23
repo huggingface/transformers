@@ -326,7 +326,7 @@ class LayoutLMEncoder(nn.Module):
         output_hidden_states: bool | None = False,
         return_dict: bool | None = True,
         **kwargs,
-    ) -> tuple[torch.Tensor] | BaseModelOutput:
+    ) -> BaseModelOutput:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
@@ -466,7 +466,7 @@ class LayoutLMModel(LayoutLMPreTrainedModel):
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
         **kwargs,
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         r"""
         bbox (`torch.LongTensor` of shape `(batch_size, sequence_length, 4)`, *optional*):
             Bounding boxes of each input sequence tokens. Selected in the range `[0,
@@ -602,7 +602,7 @@ class LayoutLMForMaskedLM(LayoutLMPreTrainedModel):
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
         **kwargs,
-    ) -> tuple | MaskedLMOutput:
+    ) -> MaskedLMOutput:
         r"""
         bbox (`torch.LongTensor` of shape `(batch_size, sequence_length, 4)`, *optional*):
             Bounding boxes of each input sequence tokens. Selected in the range `[0,
@@ -719,7 +719,7 @@ class LayoutLMForSequenceClassification(LayoutLMPreTrainedModel):
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
         **kwargs,
-    ) -> tuple | SequenceClassifierOutput:
+    ) -> SequenceClassifierOutput:
         r"""
         bbox (`torch.LongTensor` of shape `(batch_size, sequence_length, 4)`, *optional*):
             Bounding boxes of each input sequence tokens. Selected in the range `[0,
@@ -854,7 +854,7 @@ class LayoutLMForTokenClassification(LayoutLMPreTrainedModel):
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
         **kwargs,
-    ) -> tuple | TokenClassifierOutput:
+    ) -> TokenClassifierOutput:
         r"""
         bbox (`torch.LongTensor` of shape `(batch_size, sequence_length, 4)`, *optional*):
             Bounding boxes of each input sequence tokens. Selected in the range `[0,
@@ -968,7 +968,7 @@ class LayoutLMForQuestionAnswering(LayoutLMPreTrainedModel):
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
         **kwargs,
-    ) -> tuple | QuestionAnsweringModelOutput:
+    ) -> QuestionAnsweringModelOutput:
         r"""
         bbox (`torch.LongTensor` of shape `(batch_size, sequence_length, 4)`, *optional*):
             Bounding boxes of each input sequence tokens. Selected in the range `[0,

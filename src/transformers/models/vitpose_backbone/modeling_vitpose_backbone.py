@@ -397,7 +397,7 @@ class VitPoseBackbone(VitPoseBackbonePreTrainedModel, BackboneMixin):
         dataset_index: torch.Tensor | None = None,
         output_hidden_states: bool | None = None,
         **kwargs,
-    ):
+    ) -> BackboneOutput:
         r"""
         dataset_index (`torch.Tensor` of shape `(batch_size,)`):
             Index to use in the Mixture-of-Experts (MoE) blocks of the backbone.

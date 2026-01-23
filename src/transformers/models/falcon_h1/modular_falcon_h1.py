@@ -1015,7 +1015,7 @@ class FalconH1Model(FalconH1PreTrainedModel):
         output_hidden_states: bool | None = None,
         cache_position: torch.LongTensor | None = None,
         **kwargs,  # NOOP kwargs, for now
-    ) -> tuple | BaseModelOutputWithPast:
+    ) -> BaseModelOutputWithPast:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1239,7 +1239,7 @@ class FalconH1ForCausalLM(LlamaForCausalLM):
         cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs,
-    ) -> tuple | CausalLMOutputWithPast:
+    ) -> CausalLMOutputWithPast:
         r"""
         Example:
 

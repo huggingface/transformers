@@ -390,7 +390,7 @@ class DistilBertModel(DistilBertPreTrainedModel):
         inputs_embeds: torch.Tensor | None = None,
         position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutput | tuple[torch.Tensor, ...]:
+    ) -> BaseModelOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, num_choices)`):
             Indices of input sequence tokens in the vocabulary.
@@ -481,7 +481,7 @@ class DistilBertForMaskedLM(DistilBertPreTrainedModel):
         labels: torch.LongTensor | None = None,
         position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> MaskedLMOutput | tuple[torch.Tensor, ...]:
+    ) -> MaskedLMOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, num_choices)`):
             Indices of input sequence tokens in the vocabulary.
@@ -575,7 +575,7 @@ class DistilBertForSequenceClassification(DistilBertPreTrainedModel):
         labels: torch.LongTensor | None = None,
         position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> SequenceClassifierOutput | tuple[torch.Tensor, ...]:
+    ) -> SequenceClassifierOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the sequence classification/regression loss. Indices should be in `[0, ...,
@@ -674,7 +674,7 @@ class DistilBertForQuestionAnswering(DistilBertPreTrainedModel):
         end_positions: torch.Tensor | None = None,
         position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> QuestionAnsweringModelOutput | tuple[torch.Tensor, ...]:
+    ) -> QuestionAnsweringModelOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, num_choices)`):
             Indices of input sequence tokens in the vocabulary.
@@ -773,7 +773,7 @@ class DistilBertForTokenClassification(DistilBertPreTrainedModel):
         labels: torch.LongTensor | None = None,
         position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> TokenClassifierOutput | tuple[torch.Tensor, ...]:
+    ) -> TokenClassifierOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the token classification loss. Indices should be in `[0, ..., config.num_labels - 1]`.
@@ -848,7 +848,7 @@ class DistilBertForMultipleChoice(DistilBertPreTrainedModel):
         labels: torch.LongTensor | None = None,
         position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> MultipleChoiceModelOutput | tuple[torch.Tensor, ...]:
+    ) -> MultipleChoiceModelOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, num_choices, sequence_length)`):
             Indices of input sequence tokens in the vocabulary.

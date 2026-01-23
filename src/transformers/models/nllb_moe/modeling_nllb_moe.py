@@ -719,7 +719,7 @@ class NllbMoeEncoder(NllbMoePreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         inputs_embeds: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> MoEModelOutput:
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
@@ -808,7 +808,7 @@ class NllbMoeDecoder(NllbMoePreTrainedModel):
         use_cache: bool | None = None,
         cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPastAndCrossAttentions:
+    ) -> BaseModelOutputWithPastAndCrossAttentions:
         if inputs_embeds is None:
             inputs_embeds = self.embed_tokens(input_ids)
 
@@ -916,7 +916,7 @@ class NllbMoeModel(NllbMoePreTrainedModel):
         use_cache: bool | None = None,
         cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor] | Seq2SeqMoEModelOutput:
+    ) -> Seq2SeqMoEModelOutput:
         if encoder_outputs is None:
             encoder_outputs = self.encoder(
                 input_ids=input_ids,
@@ -1088,7 +1088,7 @@ class NllbMoeForConditionalGeneration(NllbMoePreTrainedModel, GenerationMixin):
         output_router_logits: bool | None = None,
         cache_position: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor] | Seq2SeqMoEOutput:
+    ) -> Seq2SeqMoEOutput:
         output_router_logits = (
             output_router_logits if output_router_logits is not None else self.config.output_router_logits
         )

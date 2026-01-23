@@ -439,7 +439,7 @@ class MLCDVisionModel(CLIPVisionModel):
         self,
         pixel_values: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         r"""
         Example:
 

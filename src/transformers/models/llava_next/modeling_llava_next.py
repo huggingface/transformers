@@ -356,7 +356,7 @@ class LlavaNextModel(LlavaNextPreTrainedModel):
         vision_feature_select_strategy: str | None = None,
         output_hidden_states: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         r"""
         pixel_values (`torch.FloatTensor]` of shape `(batch_size, num_patches, channels, height, width)`)
             The tensors corresponding to the input images.
@@ -460,7 +460,7 @@ class LlavaNextModel(LlavaNextPreTrainedModel):
         return_dict: bool | None = None,
         cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple | LlavaNextModelOutputWithPast:
+    ) -> LlavaNextModelOutputWithPast:
         r"""
         vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
             The feature selection strategy used to select the vision feature from the vision backbone.
@@ -603,7 +603,7 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
         cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | LlavaNextCausalLMOutputWithPast:
+    ) -> LlavaNextCausalLMOutputWithPast:
         r"""
         vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
             The feature selection strategy used to select the vision feature from the vision backbone.

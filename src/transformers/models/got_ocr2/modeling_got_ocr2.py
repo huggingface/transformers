@@ -437,7 +437,7 @@ class GotOcr2VisionEncoder(GotOcr2PreTrainedModel):
     @check_model_inputs(tie_last_hidden_states=False)
     def forward(
         self, pixel_values: torch.FloatTensor | None = None, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple | GotOcr2VisionEncoderOutput:
+    ) -> GotOcr2VisionEncoderOutput:
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
@@ -556,7 +556,7 @@ class GotOcr2Model(GotOcr2PreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         image_outputs = self.vision_tower(pixel_values, return_dict=True, **kwargs)
         last_hidden_state = image_outputs.last_hidden_state
         image_outputs.pooler_output = self.multi_modal_projector(last_hidden_state)
@@ -603,7 +603,7 @@ class GotOcr2Model(GotOcr2PreTrainedModel):
         return_dict: bool | None = None,
         cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | GotOcr2ModelOutputWithPast:
+    ) -> GotOcr2ModelOutputWithPast:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -701,7 +701,7 @@ class GotOcr2ForConditionalGeneration(GotOcr2PreTrainedModel, GenerationMixin):
         cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | GotOcr2CausalLMOutputWithPast:
+    ) -> GotOcr2CausalLMOutputWithPast:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,

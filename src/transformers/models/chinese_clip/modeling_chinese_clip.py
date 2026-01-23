@@ -632,7 +632,7 @@ class ChineseCLIPTextEncoder(nn.Module):
         output_hidden_states: bool | None = False,
         return_dict: bool | None = True,
         **kwargs,
-    ) -> tuple[torch.Tensor] | BaseModelOutput:
+    ) -> BaseModelOutput:
         all_hidden_states = () if output_hidden_states else None
         all_self_attentions = () if output_attentions else None
 
@@ -683,7 +683,7 @@ class ChineseCLIPVisionEncoder(nn.Module):
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
-    ) -> tuple | BaseModelOutput:
+    ) -> BaseModelOutput:
         r"""
         Args:
             inputs_embeds (`torch.FloatTensor` of shape `(batch_size, sequence_length, hidden_size)`):
@@ -750,7 +750,7 @@ class ChineseCLIPVisionTransformer(nn.Module):
         output_hidden_states: bool | None = None,
         interpolate_pos_encoding: bool = False,
         return_dict: bool | None = None,
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -843,7 +843,7 @@ class ChineseCLIPTextModel(ChineseCLIPPreTrainedModel):
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
         **kwargs,
-    ) -> tuple[torch.Tensor] | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1010,7 +1010,7 @@ class ChineseCLIPModel(ChineseCLIPPreTrainedModel):
         token_type_ids: torch.Tensor | None = None,
         position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         r"""
         Examples:
 
@@ -1046,7 +1046,7 @@ class ChineseCLIPModel(ChineseCLIPPreTrainedModel):
         pixel_values: torch.FloatTensor,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         r"""
         Examples:
 
@@ -1093,7 +1093,7 @@ class ChineseCLIPModel(ChineseCLIPPreTrainedModel):
         interpolate_pos_encoding: bool = False,
         return_dict: bool | None = None,
         **kwargs,
-    ) -> tuple | ChineseCLIPOutput:
+    ) -> ChineseCLIPOutput:
         r"""
         return_loss (`bool`, *optional*):
             Whether or not to return the contrastive loss.

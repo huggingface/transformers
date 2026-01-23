@@ -312,7 +312,7 @@ class GlmAsrEncoder(GlmAsrPreTrainedModel):
 
     @check_model_inputs
     @auto_docstring
-    def forward(self, input_features, **kwargs: Unpack[TransformersKwargs]):
+    def forward(self, input_features, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutputWithPooling:
         inputs_embeds = nn.functional.gelu(self.conv1(input_features))
         inputs_embeds = nn.functional.gelu(self.conv2(inputs_embeds))
         inputs_embeds = inputs_embeds.transpose(1, 2)
@@ -395,7 +395,7 @@ class GlmAsrForConditionalGeneration(GlmAsrPreTrainedModel, GenerationMixin):
         input_features: torch.FloatTensor,
         input_features_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         r"""
         input_features (`torch.FloatTensor`):
             Float values of mel features extracted from the raw speech waveform. Raw speech waveform can be

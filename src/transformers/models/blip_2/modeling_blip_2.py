@@ -507,7 +507,7 @@ class Blip2VisionModel(Blip2PreTrainedModel):
         pixel_values: torch.FloatTensor | None = None,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
@@ -807,7 +807,7 @@ class Blip2QFormerEncoder(nn.Module):
         encoder_attention_mask=None,
         query_length=0,
         **kwargs: Unpack[TransformersKwargs],
-    ):
+    ) -> BaseModelOutputWithPastAndCrossAttentions:
         for i in range(self.config.num_hidden_layers):
             layer_module = self.layer[i]
 
@@ -963,7 +963,7 @@ class Blip2QFormerModel(Blip2PreTrainedModel):
         encoder_hidden_states: torch.FloatTensor | None = None,
         encoder_attention_mask: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[torch.Tensor] | BaseModelOutputWithPoolingAndCrossAttentions:
+    ) -> BaseModelOutputWithPoolingAndCrossAttentions:
         r"""
         query_embeds (`torch.FloatTensor`  of shape `(batch_size, sequence_length, hidden_size)`):
             Hidden states to be used in the attention computation. If cross-attention,
@@ -1091,7 +1091,7 @@ class Blip2Model(Blip2PreTrainedModel):
         decoder_attention_mask: torch.Tensor | None = None,
         labels: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         r"""
         decoder_input_ids (`torch.LongTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Indices of decoder input sequence tokens in the vocabulary.
@@ -1150,7 +1150,7 @@ class Blip2Model(Blip2PreTrainedModel):
         pixel_values: torch.FloatTensor,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         r"""
         Examples:
         ```python
@@ -1251,7 +1251,7 @@ class Blip2Model(Blip2PreTrainedModel):
         labels: torch.LongTensor | None = None,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Blip2ForConditionalGenerationModelOutput:
+    ) -> Blip2ForConditionalGenerationModelOutput:
         r"""
         decoder_attention_mask (`torch.BoolTensor` of shape `(batch_size, target_sequence_length)`, *optional*):
             Default behavior: generate a tensor that ignores pad tokens in `decoder_input_ids`. Causal mask will also
@@ -1396,7 +1396,7 @@ class Blip2TextModelWithProjection(Blip2PreTrainedModel):
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Blip2TextModelOutput:
+    ) -> Blip2TextModelOutput:
         r"""
         Examples:
 
@@ -1478,7 +1478,7 @@ class Blip2VisionModelWithProjection(Blip2PreTrainedModel):
         self,
         pixel_values: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Blip2VisionModelOutput:
+    ) -> Blip2VisionModelOutput:
         r"""
         Examples:
 
@@ -1622,7 +1622,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
         pixel_values: torch.FloatTensor,
         interpolate_pos_encoding: bool | None = False,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithVisionQformerOutputs:
+    ) -> BaseModelOutputWithVisionQformerOutputs:
         r"""
         pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
             The tensors corresponding to the input images.
@@ -1696,7 +1696,7 @@ class Blip2ForConditionalGeneration(Blip2PreTrainedModel, GenerationMixin):
         labels: torch.LongTensor | None = None,
         interpolate_pos_encoding: bool = False,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Blip2ForConditionalGenerationModelOutput:
+    ) -> Blip2ForConditionalGenerationModelOutput:
         r"""
         input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Indices of input sequence tokens in the vocabulary of the language model. Input tokens can optionally be

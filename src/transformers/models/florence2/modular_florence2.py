@@ -1400,9 +1400,7 @@ class Florence2VisionBackbone(Florence2VisionPreTrainedModel):
         self.post_init()
 
     @check_model_inputs
-    def forward(
-        self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple | BaseModelOutputWithPooling:
+    def forward(self, hidden_states: torch.Tensor, **kwargs: Unpack[TransformersKwargs]) -> BaseModelOutputWithPooling:
         for conv, block in zip(self.convs, self.blocks):
             hidden_states = conv(hidden_states)
             for layer in block:
@@ -1520,7 +1518,7 @@ class Florence2Model(LlavaModel):
     )
     def get_image_features(
         self, pixel_values: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         r"""
         pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`):
             The tensors corresponding to the input images.
@@ -1549,7 +1547,7 @@ class Florence2Model(LlavaModel):
         return_dict: bool | None = None,
         cache_position: torch.LongTensor | None = None,
         **kwargs,
-    ) -> tuple | Florence2Seq2SeqModelOutput:
+    ) -> Florence2Seq2SeqModelOutput:
         output_attentions = output_attentions if output_attentions is not None else self.config.output_attentions
         output_hidden_states = (
             output_hidden_states if output_hidden_states is not None else self.config.output_hidden_states
@@ -1649,7 +1647,7 @@ class Florence2ForConditionalGeneration(LlavaForConditionalGeneration):
         cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Florence2Seq2SeqLMOutput:
+    ) -> Florence2Seq2SeqLMOutput:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
             Labels for computing the masked language modeling loss. Indices should either be in `[0, ...,

@@ -181,7 +181,7 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
         vision_feature_select_strategy: str | None = None,
         output_hidden_states: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         r"""
         pixel_values_images (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`)
             The tensors corresponding to the input images.
@@ -228,7 +228,7 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
         vision_feature_layer: int | list[int] | None = None,
         output_hidden_states: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         r"""
         pixel_values_videos (`torch.FloatTensor]` of shape `(batch_size, num_frames, channels, height, width)`)
             The tensors corresponding to the input videos.
@@ -320,7 +320,7 @@ class VideoLlavaModel(VideoLlavaPreTrainedModel):
         return_dict: bool | None = None,
         cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple | VideoLlavaModelOutputWithPast:
+    ) -> VideoLlavaModelOutputWithPast:
         r"""
         pixel_values_images (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
             The tensors corresponding to the input images. Pixel values can be obtained using
@@ -462,7 +462,7 @@ class VideoLlavaForConditionalGeneration(VideoLlavaPreTrainedModel, GenerationMi
         cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | VideoLlavaCausalLMOutputWithPast:
+    ) -> VideoLlavaCausalLMOutputWithPast:
         r"""
         pixel_values_images (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
             The tensors corresponding to the input images. Pixel values can be obtained using

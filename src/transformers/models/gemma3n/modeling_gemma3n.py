@@ -944,7 +944,7 @@ class Gemma3nAudioEncoder(PreTrainedModel):
     @check_model_inputs
     def forward(
         self, audio_mel: torch.Tensor, audio_mel_mask: torch.BoolTensor, **kwargs: Unpack[TransformersKwargs]
-    ) -> tuple | Gemma3nAudioEncoderModelOutput:
+    ) -> Gemma3nAudioEncoderModelOutput:
         """Encodes a batch of MELs.
 
         Args:
@@ -1952,7 +1952,7 @@ class Gemma3nModel(Gemma3nPreTrainedModel):
         self,
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         vision_outputs = self.vision_tower(pixel_values=pixel_values, do_pooling=False, return_dict=True, **kwargs)
         last_hidden_state = vision_outputs.last_hidden_state
         # Convert from (batch, channels, height, width) to (batch, height * width, channels) where:
@@ -2163,7 +2163,7 @@ class Gemma3nModel(Gemma3nPreTrainedModel):
         input_features: torch.Tensor,
         input_features_mask: torch.Tensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Gemma3nAudioEncoderModelOutput:
+    ) -> Gemma3nAudioEncoderModelOutput:
         r"""
         input_features (`torch.FloatTensor]` of shape `(num_images, seq_length, num_features)`):
             The tensors corresponding to the input audio.

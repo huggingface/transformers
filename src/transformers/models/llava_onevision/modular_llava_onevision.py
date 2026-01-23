@@ -324,7 +324,7 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
         batch_num_images: torch.LongTensor | None = None,
         output_hidden_states: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         r"""
         image_sizes (`torch.Tensor` of shape `(num_images, 2)`):
             Actual image size of each images (H, W).
@@ -397,7 +397,7 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
         vision_feature_select_strategy: str | None = None,
         output_hidden_states: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         r"""
         pixel_values (`torch.FloatTensor]` of shape `(batch_size, num_frames, channels, height, width)`)
             The tensors corresponding to the input video.
@@ -459,7 +459,7 @@ class LlavaOnevisionModel(LlavaNextVideoModel):
         return_dict: bool | None = None,
         cache_position: torch.LongTensor | None = None,
         **kwargs: Unpack[FlashAttentionKwargs],
-    ) -> tuple | LlavaOnevisionModelOutputWithPast:
+    ) -> LlavaOnevisionModelOutputWithPast:
         r"""
         image_sizes_videos (`torch.LongTensor` of shape `(batch_size, frames, 2)`, *optional*):
             The sizes of the videos in the batch, being (height, width) for each frame in the video.
@@ -565,7 +565,7 @@ class LlavaOnevisionForConditionalGeneration(LlavaNextVideoForConditionalGenerat
         cache_position: torch.LongTensor | None = None,
         logits_to_keep: int | torch.Tensor = 0,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | LlavaOnevisionCausalLMOutputWithPast:
+    ) -> LlavaOnevisionCausalLMOutputWithPast:
         r"""
         image_sizes_videos (`torch.LongTensor` of shape `(batch_size, frames, 2)`, *optional*):
             The sizes of the videos in the batch, being (height, width) for each frame in the video.

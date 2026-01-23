@@ -416,7 +416,7 @@ class GPTBigCodeModel(GPTBigCodePreTrainedModel):
         return_dict: bool | None = None,
         cache_position: torch.Tensor | None = None,
         **kwargs,
-    ) -> tuple | BaseModelOutputWithPastAndCrossAttentions:
+    ) -> BaseModelOutputWithPastAndCrossAttentions:
         r"""
         input_ids (`torch.Tensor` of shape `(batch_size, input_ids_length)`):
             `input_ids_length` = `sequence_length` if `past_key_values` is `None` else

@@ -1031,7 +1031,7 @@ class Sam3VisionModel(Sam3PreTrainedModel):
         self,
         pixel_values: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Sam3VisionEncoderOutput:
+    ) -> Sam3VisionEncoderOutput:
         if pixel_values is None:
             raise ValueError("You have to specify pixel_values")
 
@@ -1399,7 +1399,7 @@ class Sam3DetrEncoder(Sam3PreTrainedModel):
         text_mask: torch.Tensor | None = None,
         spatial_sizes: list[tuple[int, int]] | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Sam3DETREncoderOutput:
+    ) -> Sam3DETREncoderOutput:
         """
         Forward pass for the DETR encoder.
 
@@ -1694,7 +1694,7 @@ class Sam3DetrDecoder(Sam3PreTrainedModel):
         text_mask: torch.Tensor | None = None,
         spatial_shapes: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Sam3DETRDecoderOutput:
+    ) -> Sam3DETRDecoderOutput:
         """
         Forward pass for the DETR decoder.
 
@@ -2010,7 +2010,7 @@ class Sam3MaskDecoder(Sam3PreTrainedModel):
         prompt_features: torch.Tensor | None = None,
         prompt_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | Sam3MaskDecoderOutput:
+    ) -> Sam3MaskDecoderOutput:
         """
         Args:
             decoder_queries: Decoder output queries [batch_size, num_queries, hidden_size]
@@ -2147,7 +2147,7 @@ class Sam3Model(Sam3PreTrainedModel):
         input_ids: torch.LongTensor,
         attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple | BaseModelOutputWithPooling:
+    ) -> BaseModelOutputWithPooling:
         r"""
         Example:
 
