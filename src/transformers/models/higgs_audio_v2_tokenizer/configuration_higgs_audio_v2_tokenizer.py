@@ -36,8 +36,8 @@ class HiggsAudioV2TokenizerConfig(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of an [`HiggsAudioV2TokenizerModel`]. It is used to instantiate a
     HiggsAudioV2Tokenizer model according to the specified arguments, defining the model architecture. Instantiating a configuration
-    with the defaults will yield a similar configuration to that of the
-    [https://huggingface.co/bosonai/higgs-audio-v2-tokenizer](https://huggingface.co/bosonai/higgs-audio-v2-tokenizer) architecture.
+    with the defaults will yield a similar configuration to that of the [`Higgs Audio v2 Tokenizer`](https://huggingface.co/bosonai/higgs-audio-v2-tokenizer).
+    e.g. [bosonai/higgs-audio-v2-tokenizer](https://huggingface.co/bosonai/higgs-audio-v2-tokenizer)
 
     Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
