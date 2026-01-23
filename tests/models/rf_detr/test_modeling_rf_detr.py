@@ -21,7 +21,6 @@ import numpy as np
 
 from transformers import (
     CONFIG_NAME,
-    DeformableDetrImageProcessor,
     DetrImageProcessor,
     RfDetrConfig,
     RfDetrDinov2Config,
@@ -515,8 +514,8 @@ class RfDetrModelIntegrationTest(unittest.TestCase):
     def default_image_processor(self):
         if is_vision_available():
             return {
-                "base": DeformableDetrImageProcessor.from_pretrained(CHECKPOINT["base"]),
-                "large": DeformableDetrImageProcessor.from_pretrained(CHECKPOINT["large"]),
+                "base": DetrImageProcessor.from_pretrained(CHECKPOINT["base"]),
+                "large": DetrImageProcessor.from_pretrained(CHECKPOINT["large"]),
                 "segmentation": DetrImageProcessor.from_pretrained(CHECKPOINT["segmentation"]),
             }
 
@@ -564,19 +563,19 @@ class RfDetrModelIntegrationTest(unittest.TestCase):
 
         expectations = Expectations(
             {
-                ("cpu", None): [0.9596, 0.9335, 0.8987, 0.7271],
+                ("cpu", None): [0.9829, 0.9763, 0.9780, 0.8663],
             }
         )
         expected_scores = torch.tensor(expectations.get_expectation()).to(torch_device)
 
-        expected_labels = [17, 17, 75, 75]
+        expected_labels = [17, 75, 17, 75]
 
         expectations = Expectations(
             {
                 ("cpu", None): [
                     [7.5101, 54.5667, 318.4421, 472.1259],
-                    [343.0202, 23.9165, 639.3325, 372.2062],
                     [40.7178, 72.6109, 175.9414, 117.5903],
+                    [343.0202, 23.9165, 639.3325, 372.2062],
                     [333.5370, 76.9845, 370.3848, 187.3158],
                 ],
             }
@@ -631,19 +630,19 @@ class RfDetrModelIntegrationTest(unittest.TestCase):
 
         expectations = Expectations(
             {
-                ("cpu", None): [0.9558, 0.9538, 0.9465, 0.9084],
+                ("cpu", None): [0.9820, 0.9874, 0.9918, 0.9696],
             }
         )
         expected_scores = torch.tensor(expectations.get_expectation()).to(torch_device)
 
-        expected_labels = [75, 17, 17, 75]
+        expected_labels = [17, 17, 75, 75]
 
         expectations = Expectations(
             {
                 ("cpu", None): [
-                    [40.3736, 73.1451, 175.8807, 117.5796],
-                    [345.1129, 24.5076, 640.0582, 373.1581],
                     [10.8431, 55.1121, 316.5317, 473.3869],
+                    [345.1129, 24.5076, 640.0582, 373.1581],
+                    [40.3736, 73.1451, 175.8807, 117.5796],
                     [333.9091, 76.8915, 370.1848, 186.7155],
                 ],
             }
