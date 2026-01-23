@@ -62,7 +62,7 @@ def _block_diag_3d(*tensors):
     lora_b_block_diag = []
     for i in range(len(tensors[0])):
         lora_b_block_diag.append(torch.block_diag(tensors[0][i], tensors[1][i]))
-    out= torch.stack(lora_b_block_diag, dim=0)
+    out = torch.stack(lora_b_block_diag, dim=0)
     return out
 
 
@@ -463,7 +463,6 @@ class PeftAdapterMixin:
             )
         else:
             checkpoint_files, sharded_metadata = [], {}
-
 
         load_config = replace(
             load_config,
