@@ -116,9 +116,10 @@ class DepthAnythingConfig(PreTrainedConfig):
             backbone_model_type = backbone_config.get("model_type")
             config_class = CONFIG_MAPPING[backbone_model_type]
             backbone_config = config_class.from_dict(backbone_config)
-        elif kwargs.get("backbone_kwargs"):
+        elif kwargs.get("backbone_kwargs") and backbone is not None:
             backbone_kwargs = kwargs.pop("backbone_kwargs")
-            backbone_config = CONFIG_MAPPING["timm_backbone"](**backbone_kwargs)
+            backbone_config = CONFIG_MAPPING["timm_backbone"](backbone=backbone, **backbone_kwargs)
+            backbone = None
         elif backbone is not None and backbone_config is not None:
             raise ValueError("You can't specify both `backbone` and `backbone_config`.")
 

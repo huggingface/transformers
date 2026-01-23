@@ -261,8 +261,11 @@ class ConditionalDetrConvEncoder(nn.Module):
 
         self.config = config
 
-        # Move this part to config init!
+        # We used to load with timm library directly instead of the AutoBackbone API
+        # so we need to unwrap the `backbone._backbone` module to load weights without mismatch
         backbone = load_backbone(config)
+        if hasattr(backbone, "_backbone"):
+            backbone = backbone._backbone
 
         # replace batch norm by frozen batch norm
         with torch.no_grad():

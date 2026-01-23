@@ -171,7 +171,7 @@ class TableTransformerConfig(PreTrainedConfig):
         # Backwards compatibility, pop attributes and infer backbone config
         use_timm_backbone = kwargs.pop("use_timm_backbone", True)
         backbone_kwargs = kwargs.pop("backbone_kwargs", {})
-        if use_timm_backbone:
+        if use_timm_backbone and backbone is not None:
             # Default to values which were hard-coded in `modeling`
             backbone_config = CONFIG_MAPPING["timm_backbone"](
                 backbone=backbone,

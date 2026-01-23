@@ -40,16 +40,16 @@ if TYPE_CHECKING:
 
 def _build_checkpoint_conversion_mapping():
     mapping = {
-        # NOTE: need to add `_backbone` only if it's not yet in param key
-        "conditional_detr": [
-            WeightRenaming(".conv_encoder.model", ".conv_encoder.model._backbone"),
-        ],
+        # NOTE: need to add `_backbone` only if  certain config values set, will unwrap in model code
+        # "conditional_detr": [
+        #     WeightRenaming(".conv_encoder.model", ".conv_encoder.model._backbone"),
+        # ],
         # "mm_grounding_dino": [
         #     WeightRenaming(".conv_encoder.model", ".conv_encoder.model._backbone"),
         # ],
-        "table_transformer": [
-            WeightRenaming(".conv_encoder.model", ".conv_encoder.model._backbone"),
-        ],
+        # "table_transformer": [
+        #     WeightRenaming(".conv_encoder.model", ".conv_encoder.model._backbone"),
+        # ],
         "mixtral": [
             WeightRenaming(".block_sparse_moe.gate", ".mlp.gate"),
             WeightConverter(

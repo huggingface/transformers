@@ -325,11 +325,20 @@ def load_backbone(config):
         return AutoBackbone.from_config(config=config)
 
     # config from the parent model that has a backbone
+    print("backbone_config", backbone_checkpoint, backbone_config)
     if backbone_checkpoint is not None:
         backbone = AutoBackbone.from_pretrained(backbone_checkpoint)
     else:
         backbone = AutoBackbone.from_config(config=backbone_config)
     return backbone
+
+
+# def infer_config_type_from_checkpoint(backbone_checkpoint):
+#     if not repo_exists(backbone_checkpoint):
+#         return CONFIG_MAPPING["timm_backbone"]
+#     config_dict, _ = PreTrainedConfig.get_config_dict(backbone_checkpoint)
+#     config_class = CONFIG_MAPPING[config_dict["model_type"]]
+#     return config_class
 
 
 def verify_backbone_config_arguments(
