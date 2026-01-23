@@ -331,11 +331,11 @@ class Mistral3ForConditionalGeneration(LlavaForConditionalGeneration):
             image_hidden_states=outputs.image_hidden_states,
         )
 
-    def tie_weights(self):
+    def tie_weights(self, missing_keys: set[str] | None = None, recompute_mapping: bool = True):
         """
         Tie the weights between the input embeddings and the output embeddings.
         """
-        super().tie_weights()
+        super().tie_weights(missing_keys=missing_keys, recompute_mapping=recompute_mapping)
 
         # Check for tie_word_embeddings in text_config (for VLMs) or top-level
         should_tie = getattr(self.config, "tie_word_embeddings", False)
