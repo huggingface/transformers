@@ -535,12 +535,13 @@ def _get_resolved_checkpoint_files(
     subfolder = download_kwargs.get("subfolder", "")
     commit_hash = download_kwargs.get("commit_hash")
     if transformers_explicit_filename is not None:
-        if not transformers_explicit_filename.endswith(".safetensors") and not transformers_explicit_filename.endswith(".safetensors.index.json") or transformers_explicit_filename != "adapter_model.bin":
-            raise ValueError(
-                "The transformers file in the config seems to be incorrect: it is neither a safetensors file "
-                "(*.safetensors) nor a safetensors index file (*.safetensors.index.json): "
-                f"{transformers_explicit_filename}"
-            )
+        if not transformers_explicit_filename.endswith(".safetensors") and not transformers_explicit_filename.endswith(".safetensors.index.json"):
+            if transformers_explicit_filename != "adapter_model.bin":
+                raise ValueError(
+                    "The transformers file in the config seems to be incorrect: it is neither a safetensors file "
+                    "(*.safetensors) nor a safetensors index file (*.safetensors.index.json): "
+                    f"{transformers_explicit_filename}"
+                )
 
     is_sharded = False
 

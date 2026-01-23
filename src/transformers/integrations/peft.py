@@ -474,7 +474,7 @@ class PeftAdapterMixin:
             use_safetensors=load_config.use_safetensors,
             user_agent={},
             is_remote_code=False,
-            transformers_explicit_filename="adapter_model.safetensors" if load_config.use_safetensors else "adapter_model.bin",
+            transformers_explicit_filename="adapter_model.bin" if load_config.use_safetensors is False else "adapter_model.safetensors",
             download_kwargs=load_config.download_kwargs,
         )
 
