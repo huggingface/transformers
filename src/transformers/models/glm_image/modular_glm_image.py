@@ -185,36 +185,8 @@ class GlmImageTextConfig(Glm4vTextConfig):
             The id of the padding token.
         eos_token_id (`int`, *optional*, defaults to 16385):
             The id of the end of sequence token.
-        hidden_size (`int`, *optional*, defaults to 4096):
-            Dimension of the hidden representations.
-        intermediate_size (`int`, *optional*, defaults to 13696):
-            Dimension of the MLP representations.
-        num_hidden_layers (`int`, *optional*, defaults to 40):
-            Number of hidden layers in the Transformer encoder.
-        num_attention_heads (`int`, *optional*, defaults to 32):
-            Number of attention heads for each attention layer in the Transformer encoder.
-        num_key_value_heads (`int`, *optional*, defaults to 2):
-            This is the number of key_value heads that should be used to implement Grouped Query Attention. If
-            `num_key_value_heads=num_attention_heads`, the model will use Multi Head Attention (MHA), if
-            `num_key_value_heads=1` the model will use Multi Query Attention (MQA) otherwise GQA is used. When
-            converting a multi-head checkpoint to a GQA checkpoint, each group key and value head should be constructed
-            by meanpooling all the original heads within that group. For more details checkout [this
-            paper](https://huggingface.co/papers/2305.13245). If it is not specified, will default to `2`.
-        hidden_act (`str` or `function`, *optional*, defaults to `"silu"`):
-            The non-linear activation function (function or string) in the decoder.
         max_position_embeddings (`int`, *optional*, defaults to 131072):
             The maximum sequence length that this model might ever be used with.
-        initializer_range (`float`, *optional*, defaults to 0.02):
-            The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        rms_norm_eps (`float`, *optional*, defaults to 1e-05):
-            The epsilon used by the rms normalization layers.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether or not the model should return the last key/values attentions (not used by all models). Only
-            relevant if `config.is_decoder=True`.
-        attention_dropout (`float`, *optional*, defaults to 0.0):
-            The dropout ratio for the attention probabilities.
-        rope_parameters (`RopeParameters`, *optional*):
-            Dictionary containing the configuration parameters for the RoPE embeddings.
 
     ```python
     >>> from transformers import GlmImageTextModel, GlmImageConfig
@@ -231,46 +203,23 @@ class GlmImageTextConfig(Glm4vTextConfig):
 
     def __init__(
         self,
-        vocab_size: int | None = 168064,
-        vision_vocab_size: int | None = 16512,
-        attention_bias: bool | None = True,
-        pad_token_id: int | None = 167841,
-        eos_token_id: int | None = 16385,
-        hidden_size: int | None = 4096,
-        intermediate_size: int | None = 13696,
-        num_hidden_layers: int | None = 40,
-        num_attention_heads: int | None = 32,
-        num_key_value_heads: int | None = 2,
-        hidden_act: str | None = "silu",
-        max_position_embeddings: int | None = 131072,
-        initializer_range: float | None = 0.02,
-        rms_norm_eps: int | None = 1e-05,
-        use_cache: bool | None = True,
-        attention_dropout: float | None = 0.0,
-        rope_parameters=None,
-        **kwargs,
+        vocab_size: int = 168064,
+        vision_vocab_size: int = 16512,
+        attention_bias: bool = True,
+        pad_token_id: int = 167841,
+        eos_token_id: int = 16385,
+        max_position_embeddings: int = 131072,
+        **super_kwargs,
     ):
+        super().__init__(
+            vocab_size=vocab_size,
+            max_position_embeddings=max_position_embeddings,
+            **super_kwargs,
+        )
         self.vision_vocab_size = vision_vocab_size
         self.attention_bias = attention_bias
         self.pad_token_id = pad_token_id
         self.eos_token_id = eos_token_id
-        super().__init__(
-            vocab_size=vocab_size,
-            hidden_size=hidden_size,
-            intermediate_size=intermediate_size,
-            num_hidden_layers=num_hidden_layers,
-            num_attention_heads=num_attention_heads,
-            num_key_value_heads=num_key_value_heads,
-            hidden_act=hidden_act,
-            max_position_embeddings=max_position_embeddings,
-            initializer_range=initializer_range,
-            rms_norm_eps=rms_norm_eps,
-            use_cache=use_cache,
-            attention_dropout=attention_dropout,
-            rope_parameters=rope_parameters,
-            ignore_keys_at_rope_validation={"mrope_section"},
-            **kwargs,
-        )
 
 
 class GlmImageConfig(PreTrainedConfig):
@@ -714,7 +663,6 @@ class GlmImageModel(Glm4vModel):
         # Per-sample caches for decode stage
         all_decode_position_ids = []
         all_prefill_lens = []
-        all_final_positions = []
 
         for batch_idx in range(batch_size):
             curr_input_ids = input_ids[batch_idx]
@@ -782,7 +730,6 @@ class GlmImageModel(Glm4vModel):
                 position_ids[:, batch_idx, :] = curr_position_ids
 
             all_prefill_lens.append(seq_len)
-            all_final_positions.append(current_pos)
 
             # Build decode position ids for this sample
             if curr_grids is not None and len(curr_grids) > 0:

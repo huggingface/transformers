@@ -990,7 +990,6 @@ class GlmImageModel(GlmImagePreTrainedModel):
         # Per-sample caches for decode stage
         all_decode_position_ids = []
         all_prefill_lens = []
-        all_final_positions = []
 
         for batch_idx in range(batch_size):
             curr_input_ids = input_ids[batch_idx]
@@ -1058,7 +1057,6 @@ class GlmImageModel(GlmImagePreTrainedModel):
                 position_ids[:, batch_idx, :] = curr_position_ids
 
             all_prefill_lens.append(seq_len)
-            all_final_positions.append(current_pos)
 
             # Build decode position ids for this sample
             if curr_grids is not None and len(curr_grids) > 0:
