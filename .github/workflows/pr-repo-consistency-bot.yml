@@ -153,6 +153,9 @@ jobs:
       - name: Run checks with trusted script
         id: run_checks
         run: |
+          # Continue on errors (like Makefile's - prefix)
+          set +e
+ 
           # Security: Copy trusted scripts from main branch and run commands explicitly (not via make)
           # to avoid executing potentially malicious Makefile or scripts from the PR
           cp setup.py pr-repo/setup.py
