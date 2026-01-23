@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_colmodernvbert.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # MIT License
 #
 # Copyright 2026 Illuin Technology, and contributors, and The HuggingFace Inc. team.
@@ -37,7 +36,7 @@ from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image, load_image
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import AddedToken, BatchEncoding, PreTokenizedInput, TextInput
-from ...utils import is_torch_available
+from ...utils import auto_docstring, is_torch_available
 
 
 if is_torch_available():
@@ -113,6 +112,7 @@ def get_image_prompt_string(
     )
 
 
+@auto_docstring
 class ColModernVBertProcessor(ProcessorMixin):
     r"""
     Constructs a ColModernVBert processor which wraps a ModernVBertProcessor and special methods to process images and queries, as
@@ -139,6 +139,12 @@ class ColModernVBertProcessor(ProcessorMixin):
         query_prefix: str | None = None,
         **kwargs,
     ):
+        r"""
+        visual_prompt_prefix (`str`, *optional*, defaults to `"<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>Describe the image.<|im_end|><|endoftext|>"`):
+            A string that gets tokenized and prepended to the image tokens.
+        query_prefix (`str`, *optional*, defaults to `"Query: "`):
+            A prefix to be used for the query.
+        """
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
         self.image_token = AddedToken("<image>", normalized=False, special=True).content
         self.video_token = None  #    ColModernVBert does not process video inputs
@@ -174,6 +180,7 @@ class ColModernVBertProcessor(ProcessorMixin):
         }
         tokenizer.add_special_tokens(tokens_to_add)
 
+    @auto_docstring
     def __call__(
         self,
         images: ImageInput | None = None,
