@@ -1204,6 +1204,11 @@ class GlmImageModel(GlmImagePreTrainedModel):
                     )
                     if num_source > 0
                 ]
+                if len(source_grids_list) == 0:
+                    raise ValueError(
+                        "pixel_values provided but no source images found in input_ids. "
+                        "Ensure input_ids contains image_end_token_id for each source image."
+                    )
                 source_grids = torch.cat(source_grids_list, dim=0)
             else:
                 # Fallback for batch_size=1: all but last grid are source images

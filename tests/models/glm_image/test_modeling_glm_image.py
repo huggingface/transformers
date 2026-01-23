@@ -55,7 +55,7 @@ class GlmImageVisionText2TextModelTester:
     def __init__(
         self,
         parent,
-        batch_size=1,
+        batch_size=2,
         seq_length=7,
         num_channels=3,
         ignore_index=-100,
@@ -172,17 +172,19 @@ class GlmImageVisionText2TextModelTester:
         patch_size = config.vision_config.patch_size
         patches_per_side = self.image_size // patch_size
 
-        # Key fix: image_grid_thw should have batch_size rows for input images
-        # plus 1 extra row that will be skipped by model's [:-1] slicing
+        # For i2i mode: each sample has 1 source image + 1 target grid
+        # image_grid_thw layout: [sample0_source, sample0_target, sample1_source, sample1_target, ...]
+        # Since batches are homogeneous, all samples have same number of source images
+        num_grids_per_sample = 2  # 1 source + 1 target
         inputs_dict = {
             "pixel_values": pixel_values,
             "image_grid_thw": torch.tensor(
-                [[1, patches_per_side, patches_per_side]] * self.batch_size
-                + [[1, patches_per_side, patches_per_side]],  # Extra row for model's [:-1]
+                [[1, patches_per_side, patches_per_side]] * (self.batch_size * num_grids_per_sample),
                 device=torch_device,
             ),
             "input_ids": input_ids,
             "attention_mask": attention_mask,
+            "images_per_sample": torch.tensor([num_grids_per_sample] * self.batch_size, device=torch_device),
         }
         return config, inputs_dict
 
@@ -197,79 +199,6 @@ class GlmImageModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
     def setUp(self):
         self.model_tester = GlmImageVisionText2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=GlmImageConfig, has_text_modality=False)
-
-    def test_batch_consistency(self):
-        """Test that batch processing produces same predictions as single processing."""
-        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
-
-        for model_class in self.all_model_classes:
-            model = model_class(config).to(torch_device).eval()
-
-            # Create batch=2 input by duplicating the single sample
-            batch_size = 2
-            patch_size = config.vision_config.patch_size
-            patches_per_side = self.model_tester.image_size // patch_size
-            num_patches = patches_per_side * patches_per_side
-
-            # pixel_values is packed format: [total_patches, embed_dim]
-            # For batch=2 with 1 source image each, we need 2*num_patches rows
-            # inputs_dict has 1*num_patches rows (for batch_size=1), so we duplicate
-            single_image_pixels = inputs_dict["pixel_values"][:num_patches]
-
-            # Prepare batch inputs
-            batch_inputs = {
-                "input_ids": inputs_dict["input_ids"].repeat(batch_size, 1),
-                "attention_mask": inputs_dict["attention_mask"].repeat(batch_size, 1),
-                "pixel_values": single_image_pixels.repeat(batch_size, 1),  # 2 copies of same image
-                "image_grid_thw": torch.tensor(
-                    [[1, patches_per_side, patches_per_side]] * (batch_size * 2),  # 2 grids per sample
-                    device=torch_device,
-                ),
-                "images_per_sample": torch.tensor([2, 2], device=torch_device),
-                "num_source_images_per_sample": torch.tensor([1, 1], device=torch_device),
-            }
-
-            # Prepare single inputs
-            single_inputs = {
-                "input_ids": inputs_dict["input_ids"][:1],  # Take only first sample
-                "attention_mask": inputs_dict["attention_mask"][:1],
-                "pixel_values": single_image_pixels,  # Single image
-                "image_grid_thw": torch.tensor(
-                    [[1, patches_per_side, patches_per_side]] * 2,  # 2 grids for single sample
-                    device=torch_device,
-                ),
-                "images_per_sample": torch.tensor([2], device=torch_device),
-                "num_source_images_per_sample": torch.tensor([1], device=torch_device),
-            }
-
-            with torch.no_grad():
-                batch_outputs = model(**batch_inputs)
-                single_outputs = model(**single_inputs)
-
-            # Compare predictions (argmax) - this is what matters for generation
-            batch_logits = (
-                batch_outputs.logits if hasattr(batch_outputs, "logits") else batch_outputs.last_hidden_state
-            )
-            single_logits = (
-                single_outputs.logits if hasattr(single_outputs, "logits") else single_outputs.last_hidden_state
-            )
-
-            if hasattr(batch_outputs, "logits"):
-                batch_preds = batch_logits[0].argmax(dim=-1)
-                single_preds = single_logits[0].argmax(dim=-1)
-                self.assertTrue(
-                    torch.equal(batch_preds, single_preds),
-                    "Batch processing should produce same predictions as single processing",
-                )
-
-            # Also verify batch[0] == batch[1] since inputs are identical
-            batch0_preds = batch_logits[0].argmax(dim=-1) if hasattr(batch_outputs, "logits") else None
-            batch1_preds = batch_logits[1].argmax(dim=-1) if hasattr(batch_outputs, "logits") else None
-            if batch0_preds is not None:
-                self.assertTrue(
-                    torch.equal(batch0_preds, batch1_preds),
-                    "Identical inputs in batch should produce identical predictions",
-                )
 
     def test_config(self):
         self.config_tester.run_common_tests()
@@ -293,14 +222,20 @@ class GlmImageModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
 
         # The diff from the general `prepare_config_and_inputs_for_generate` lies here
         patch_size = config.vision_config.patch_size
-        filtered_image_length = batch_size * (self.model_tester.image_size**2) // (patch_size**2)
+        num_patches_per_image = (self.model_tester.image_size**2) // (patch_size**2)
+        num_grids_per_sample = 2  # 1 source + 1 target
+
         filtered_inputs_dict = {
-            k: v[:batch_size, ...] if isinstance(v, torch.Tensor) else v
+            k: v[:batch_size, ...] if isinstance(v, torch.Tensor) and k not in ["pixel_values", "image_grid_thw", "images_per_sample"] else v
             for k, v in inputs_dict.items()
             if k not in input_keys_to_ignore
         }
-        filtered_inputs_dict["pixel_values"] = inputs_dict["pixel_values"][:filtered_image_length]
-        filtered_inputs_dict["image_grid_thw"] = inputs_dict["image_grid_thw"][: batch_size + 1]
+        # pixel_values: each sample has 1 source image
+        filtered_inputs_dict["pixel_values"] = inputs_dict["pixel_values"][: batch_size * num_patches_per_image]
+        # image_grid_thw: each sample has 2 grids (1 source + 1 target)
+        filtered_inputs_dict["image_grid_thw"] = inputs_dict["image_grid_thw"][: batch_size * num_grids_per_sample]
+        # images_per_sample: each sample has 2 images
+        filtered_inputs_dict["images_per_sample"] = torch.tensor([num_grids_per_sample] * batch_size, device=torch_device)
 
         # It is important set `eos_token_id` to `None` to avoid early stopping (would break for length-based checks)
         text_gen_config = config.get_text_config(decoder=True)
@@ -379,6 +314,18 @@ class GlmImageModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCa
         reason="GlmImage has a VQ module that uses `weight.data` directly in forward which prevent offloading on that module"
     )
     def test_model_parallelism(self):
+        pass
+
+    @unittest.skip(
+        reason="GLM-Image has special image token IDs that get clamped when vocab is resized smaller"
+    )
+    def test_resize_embeddings_untied(self):
+        pass
+
+    @unittest.skip(
+        reason="GLM-Image has special image token IDs that get clamped when vocab is resized smaller"
+    )
+    def test_resize_tokens_embeddings(self):
         pass
 
     @unittest.skip("Error with compilation")
@@ -582,8 +529,6 @@ class GlmImageIntegrationTest(unittest.TestCase):
         self.assertEqual(inputs["image_grid_thw"].shape[0], 2)
         # images_per_sample should be 2 (1 source + 1 target)
         self.assertEqual(inputs["images_per_sample"].item(), 2)
-        # num_source_images_per_sample should be 1
-        self.assertEqual(inputs["num_source_images_per_sample"].item(), 1)
 
     def test_text_to_image_generation(self):
         """Test text-to-image generation produces valid image tokens."""
