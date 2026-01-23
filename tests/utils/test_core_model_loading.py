@@ -581,7 +581,7 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
             WeightRenaming("mlp.w2.weight", "mlp.down_proj.weight"),
         ]
         missing, unexpected, mismatch, _, misc = convert_and_load_state_dict_in_model(
-            model, state_dict, weight_mapping, tp_plan=None
+            model, state_dict, LoadStateDictConfig(weight_mapping=weight_mapping), tp_plan=None
         )
 
         self.assertEqual(missing, set())
@@ -705,7 +705,7 @@ class TestConvertAndLoadStateDict(unittest.TestCase):
 
         # Use the mapping to load
         missing, unexpected, mismatch, _, misc = convert_and_load_state_dict_in_model(
-            model, state_dict, weight_mapping, tp_plan=None
+            model, state_dict, LoadStateDictConfig(weight_mapping=weight_mapping), tp_plan=None
         )
         self.assertTrue(len(missing) == 0)
         self.assertTrue(len(unexpected) == 0)
