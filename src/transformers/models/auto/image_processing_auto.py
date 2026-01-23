@@ -150,6 +150,7 @@ else:
             ("mlcd", ("CLIPImageProcessor", "CLIPImageProcessorFast")),
             ("mllama", ("MllamaImageProcessor", "MllamaImageProcessorFast")),
             ("mm-grounding-dino", ("GroundingDinoImageProcessor", "GroundingDinoImageProcessorFast")),
+            ("molmo2", ("Molmo2ImageProcessor", None)),
             ("mobilenet_v1", ("MobileNetV1ImageProcessor", "MobileNetV1ImageProcessorFast")),
             ("mobilenet_v2", ("MobileNetV2ImageProcessor", "MobileNetV2ImageProcessorFast")),
             ("mobilevit", ("MobileViTImageProcessor", "MobileViTImageProcessorFast")),

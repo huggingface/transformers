@@ -280,6 +280,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("mlcd", "MLCDVisionConfig"),
         ("mllama", "MllamaConfig"),
         ("mm-grounding-dino", "MMGroundingDinoConfig"),
+        ("molmo2", "Molmo2Config"),
         ("mobilebert", "MobileBertConfig"),
         ("mobilenet_v1", "MobileNetV1Config"),
         ("mobilenet_v2", "MobileNetV2Config"),
