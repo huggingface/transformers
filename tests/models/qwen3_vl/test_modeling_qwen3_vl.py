@@ -39,12 +39,11 @@ if is_torch_available():
 
 
 class Qwen3VLVisionText2TextModelTester(VLMModelTester):
-    if is_torch_available():
-        base_model_class = Qwen3VLModel
-        config_class = Qwen3VLConfig
-        text_config_class = Qwen3VLTextConfig
-        vision_config_class = Qwen3VLVisionConfig
-        conditional_generation_class = Qwen3VLForConditionalGeneration
+    base_model_class = Qwen3VLModel
+    config_class = Qwen3VLConfig
+    text_config_class = Qwen3VLTextConfig
+    vision_config_class = Qwen3VLVisionConfig
+    conditional_generation_class = Qwen3VLForConditionalGeneration
 
     # Qwen3 VL-specific configuration
     image_token_id = 3
