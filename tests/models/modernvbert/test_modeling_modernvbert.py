@@ -295,6 +295,9 @@ class ModernVBertModelTest(ModelTesterMixin, unittest.TestCase):
 
     _is_composite = True
     test_mismatched_shapes = False
+    test_cpu_offload = False  # Disabled due to nn.MultiheadAttention compatibility issues with accelerate
+    test_disk_offload_bin = False  # Disabled due to nn.MultiheadAttention compatibility issues with accelerate
+    test_disk_offload_safetensors = False  # Disabled due to nn.MultiheadAttention compatibility issues with accelerate
 
     def setUp(self):
         self.model_tester = ModernVBertModelTester(self)

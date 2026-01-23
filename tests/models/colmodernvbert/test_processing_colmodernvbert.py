@@ -306,3 +306,39 @@ class ColModernVBertProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     @unittest.skip("ColModernVBert can't process text+image inputs at the same time")
     def test_processor_with_multiple_inputs(self):
         pass
+
+    @unittest.skip("ColModernVBert does not have a chat template")
+    def test_chat_template_save_loading(self):
+        pass
+
+    @unittest.skip("ColModernVBert does not have a chat template")
+    def test_apply_chat_template_audio(self):
+        pass
+
+    @unittest.skip("ColModernVBert does not have a chat template")
+    def test_apply_chat_template_decoded_video(self):
+        pass
+
+    @unittest.skip("ColModernVBert does not have a chat template")
+    def test_apply_chat_template_video(self):
+        pass
+
+    @unittest.skip("ColModernVBert does not have a chat template")
+    def test_apply_chat_template_image(self):
+        pass
+
+    @unittest.skip("ColModernVBert does not have a chat template")
+    def test_apply_chat_template_video_frame_sampling(self):
+        pass
+
+    @unittest.skip("ColModernVBert does not have a chat template")
+    def test_chat_template_audio_from_video(self):
+        pass
+
+    @unittest.skip("ColModernVBert does not have a chat template")
+    def test_chat_template_jinja_kwargs(self):
+        pass
+
+    @unittest.skip("ColModernVBert does not have a chat template")
+    def test_apply_chat_template_assistant_mask(self):
+        pass
