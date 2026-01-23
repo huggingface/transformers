@@ -612,7 +612,7 @@ make style
 To verify the code style passes quality checks, run the command below.
 
 ```bash
-make quality
+make check-repo
 ```
 
 There may be other failing tests or checks (missing docstring or incorrect naming) on your pull request due to Transformers strict design tests. We can help you with these issues if you're stuck.

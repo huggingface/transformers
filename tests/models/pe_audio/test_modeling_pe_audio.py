@@ -17,6 +17,7 @@ from transformers import PeAudioConfig, PeAudioEncoderConfig
 from transformers.audio_utils import load_audio
 from transformers.testing_utils import (
     require_torch,
+    require_torch_gpu,
     slow,
     torch_device,
 )
@@ -132,9 +133,7 @@ class PeAudioEncoderTester:
 @require_torch
 class PeAudioEncoderTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (PeAudioEncoder,)
-    test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
     _is_composite = True
 
     def setUp(self):
@@ -156,6 +155,10 @@ class PeAudioEncoderTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip("PeAudioEncoder does not support feed forward chunking")
     def test_feed_forward_chunking(self):
+        pass
+
+    @unittest.skip(reason="SDPA can't dispatch on flash with not None `attention_mask`")
+    def test_sdpa_can_dispatch_on_flash(self):
         pass
 
 
@@ -279,9 +282,7 @@ class PeAudioModelTest(ModelTesterMixin, unittest.TestCase):
     # TODO: add PipelineTesterMixin
     all_model_classes = (PeAudioModel,)
     additional_model_inputs = ["input_values", "padding_mask"]
-    test_pruning = False
     test_resize_embeddings = False
-    test_head_masking = False
     has_attentions = False
     _is_composite = True
 
@@ -325,6 +326,10 @@ class PeAudioModelTest(ModelTesterMixin, unittest.TestCase):
     @unittest.skip(reason="@eustlb this is not really expected")
     def test_can_init_all_missing_weights(self):
         pass
+
+    @require_torch_gpu  # pe-audio contains triton code which cannot run on CPU, so we only test on GPU
+    def test_all_tensors_are_parameter_or_buffer(self):
+        super().test_all_tensors_are_parameter_or_buffer()
 
 
 @require_torch

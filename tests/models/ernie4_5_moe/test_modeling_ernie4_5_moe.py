@@ -152,6 +152,7 @@ class Ernie4_5_MoeIntegrationTest(unittest.TestCase):
         cls.model = Ernie4_5_MoeForCausalLM.from_pretrained(
             "baidu/ERNIE-4.5-21B-A3B-PT",
             device_map="auto",
+            experts_implementation="eager",
             quantization_config=BitsAndBytesConfig(load_in_4bit=True),
         )
 
@@ -160,9 +161,7 @@ class Ernie4_5_MoeIntegrationTest(unittest.TestCase):
     @classmethod
     def get_small_model(cls):
         cls.model = Ernie4_5_MoeForCausalLM.from_pretrained(
-            "hf-internal-testing/ERNIE-4.5-Small-Moe",
-            device_map="auto",
-            dtype="auto",
+            "hf-internal-testing/ERNIE-4.5-Small-Moe", device_map="auto", dtype="auto", experts_implementation="eager"
         )
 
         return cls.model

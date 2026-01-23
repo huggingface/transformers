@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 the HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,7 +11,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Optional, Union
 
 from ...configuration_utils import PreTrainedConfig, PretrainedConfig
 from ...modeling_rope_utils import RopeParameters
@@ -90,20 +88,20 @@ class PeAudioEncoderConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        dac_config: Optional[Union[dict, PreTrainedConfig]] = None,
-        hidden_size: Optional[int] = 1792,
-        intermediate_size: Optional[int] = 4800,
-        num_hidden_layers: Optional[int] = 6,
-        num_attention_heads: Optional[int] = 14,
-        num_key_value_heads: Optional[int] = None,
-        head_dim: Optional[int] = 128,
-        hidden_act: Optional[str] = "silu",
-        max_position_embeddings: Optional[int] = 10000,
-        initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[float] = 1e-5,
-        rope_parameters: Optional[Union[RopeParameters, dict]] = {"rope_theta": 20000},
-        attention_bias: Optional[bool] = False,
-        attention_dropout: Optional[float] = 0.0,
+        dac_config: dict | PreTrainedConfig | None = None,
+        hidden_size: int | None = 1792,
+        intermediate_size: int | None = 4800,
+        num_hidden_layers: int | None = 6,
+        num_attention_heads: int | None = 14,
+        num_key_value_heads: int | None = None,
+        head_dim: int | None = 128,
+        hidden_act: str | None = "silu",
+        max_position_embeddings: int | None = 10000,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: float | None = 1e-5,
+        rope_parameters: RopeParameters | dict | None = {"rope_theta": 20000},
+        attention_bias: bool | None = False,
+        attention_dropout: float | None = 0.0,
         **kwargs,
     ):
         self.hidden_size = hidden_size

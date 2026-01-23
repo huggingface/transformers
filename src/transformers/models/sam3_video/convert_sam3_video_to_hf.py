@@ -20,7 +20,6 @@ Convert SAM3 checkpoints from the original implementation to HuggingFace format.
 import argparse
 import gc
 import os
-from typing import Optional
 
 import regex as re
 import torch
@@ -538,8 +537,8 @@ def load_original_state_dict(checkpoint_path: str) -> dict[str, torch.Tensor]:
 
 
 def get_sam3_video_config(
-    vision_config: Optional[dict] = None,
-    text_config: Optional[dict] = None,
+    vision_config: dict | None = None,
+    text_config: dict | None = None,
 ) -> Sam3VideoConfig:
     """
     Create SAM3 configuration.
@@ -569,9 +568,9 @@ def get_sam3_video_config(
 def convert_sam3_checkpoint(
     checkpoint_path: str,
     output_path: str,
-    config: Optional[Sam3VideoConfig] = None,
+    config: Sam3VideoConfig | None = None,
     push_to_hub: bool = False,
-    repo_id: Optional[str] = None,
+    repo_id: str | None = None,
 ):
     """
     Convert SAM3 checkpoint from original format to HuggingFace format.

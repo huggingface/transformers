@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -17,7 +16,7 @@
 from typing import Optional, Union
 
 import torch
-from torchvision.transforms.v2 import functional as F
+import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
@@ -42,7 +41,7 @@ from .image_processing_mobilevit import MobileVitImageProcessorKwargs
 
 @auto_docstring
 class MobileViTImageProcessorFast(BaseImageProcessorFast):
-    resample = PILImageResampling.BILINEAR
+    resample = PILImageResampling.BICUBIC
     size = {"shortest_edge": 224}
     default_to_square = False
     crop_size = {"height": 256, "width": 256}
@@ -73,7 +72,7 @@ class MobileViTImageProcessorFast(BaseImageProcessorFast):
     def preprocess(
         self,
         images: ImageInput,
-        segmentation_maps: Optional[ImageInput] = None,
+        segmentation_maps: ImageInput | None = None,
         **kwargs: Unpack[MobileVitImageProcessorKwargs],
     ) -> BatchFeature:
         r"""
@@ -85,10 +84,10 @@ class MobileViTImageProcessorFast(BaseImageProcessorFast):
     def _preprocess_image_like_inputs(
         self,
         images: ImageInput,
-        segmentation_maps: Optional[ImageInput],
+        segmentation_maps: ImageInput | None,
         do_convert_rgb: bool,
         input_data_format: ChannelDimension,
-        device: Optional[Union[str, "torch.device"]] = None,
+        device: Union[str, "torch.device"] | None = None,
         **kwargs: Unpack[MobileVitImageProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -115,7 +114,7 @@ class MobileViTImageProcessorFast(BaseImageProcessorFast):
                     "do_rescale": False,
                     "do_flip_channel_order": False,
                     # Nearest interpolation is used for segmentation maps instead of BILINEAR.
-                    "interpolation": F.InterpolationMode.NEAREST_EXACT,
+                    "interpolation": tvF.InterpolationMode.NEAREST_EXACT,
                 }
             )
 
@@ -131,15 +130,15 @@ class MobileViTImageProcessorFast(BaseImageProcessorFast):
         images: list["torch.Tensor"],
         do_reduce_labels: bool,
         do_resize: bool,
-        size: Optional[SizeDict],
-        interpolation: Optional["F.InterpolationMode"],
+        size: SizeDict | None,
+        interpolation: Optional["tvF.InterpolationMode"],
         do_rescale: bool,
-        rescale_factor: Optional[float],
+        rescale_factor: float | None,
         do_center_crop: bool,
-        crop_size: Optional[SizeDict],
+        crop_size: SizeDict | None,
         do_flip_channel_order: bool,
         disable_grouping: bool,
-        return_tensors: Optional[Union[str, TensorType]],
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         processed_images = []
@@ -185,7 +184,7 @@ class MobileViTImageProcessorFast(BaseImageProcessorFast):
 
         return BatchFeature(data={"pixel_values": processed_images}, tensor_type=return_tensors)
 
-    def post_process_semantic_segmentation(self, outputs, target_sizes: Optional[list[tuple]] = None):
+    def post_process_semantic_segmentation(self, outputs, target_sizes: list[tuple] | None = None):
         """
         Converts the output of [`MobileNetV2ForSemanticSegmentation`] into semantic segmentation maps. Only supports PyTorch.
 
