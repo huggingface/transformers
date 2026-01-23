@@ -360,8 +360,10 @@ def _apply_weight_conversions_to_state_dict(model, state_dict, weight_mapping):
             for target_name, param in realized_value.items():
                 param = param[0] if isinstance(param, list) else param
                 new_state_dict[target_name] = param
+            # Free memory by clearing source tensors (only WeightConverter has this)
+            if hasattr(mapping, 'source_tensors'):
+                mapping.source_tensors = {}
         except Exception as e:
-            # If conversion fails, raise an error since the model won't load correctly anyway
             raise RuntimeError(
                 f"Failed to apply weight conversion for '{first_param_name}'. "
                 f"This likely means the checkpoint format is incompatible with the current model version. "
