@@ -1325,7 +1325,13 @@ class TapasTokenizer(PreTrainedTokenizer):
         for idx, row in table.iterrows():
             tokenized_row = []
             for cell in row:
-                tokenized_row.append(self.tokenize(cell))
+                # NOTE: PreTrainedTokenizer.tokenize("") returns [] before calling _tokenize(),
+                # so empty-string cells would be silently dropped. We route empty/whitespace-only
+                # cells through _tokenize() to map them to the TAPAS empty token.
+                if isinstance(cell, str) and cell.strip() == "":
+                    tokenized_row.append(self._tokenize(cell))
+                else:
+                    tokenized_row.append(self.tokenize(cell))
             tokenized_rows.append(tokenized_row)
 
         token_coordinates = []

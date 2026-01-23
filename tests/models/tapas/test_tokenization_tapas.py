@@ -273,6 +273,17 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(
             [tokenizer.tokenize(t) for t in ["Test", "\xad", "test"]], [["[UNK]"], ["[EMPTY]"], ["[UNK]"]]
         )
+        
+    def test_tokenize_table_empty_string_cell_maps_to_empty_token(self):
+        tokenizer = self.get_tokenizer()
+
+        table = pd.DataFrame({"Actors": ["Brad Pitt", "", "n/a", "nan", "?"]})
+        tokenized_table = tokenizer._tokenize_table(table)
+
+        self.assertListEqual(tokenized_table.rows[2][0], [tokenizer.empty_token])
+        self.assertListEqual(tokenized_table.rows[3][0], [tokenizer.empty_token])
+        self.assertListEqual(tokenized_table.rows[4][0], [tokenizer.empty_token])
+        self.assertListEqual(tokenized_table.rows[5][0], [tokenizer.empty_token])
 
     @slow
     def test_sequence_builders(self):
