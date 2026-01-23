@@ -417,7 +417,6 @@ class HiggsAudioV2ModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.Te
 class HiggsAudioV2ForConditionalGenerationIntegrationTest(unittest.TestCase):
     def setUp(self):
         self.checkpoint_name = "eustlb/higgs-v2"
-        self.dtype = torch.float32
         self.processor = AutoProcessor.from_pretrained(self.checkpoint_name, device_map=torch_device)
 
     def tearDown(self):
@@ -443,14 +442,12 @@ class HiggsAudioV2ForConditionalGenerationIntegrationTest(unittest.TestCase):
             },
         ]
 
-        model = HiggsAudioV2ForConditionalGeneration.from_pretrained(
-            self.checkpoint_name, dtype=self.dtype, device_map=torch_device
-        )
+        model = HiggsAudioV2ForConditionalGeneration.from_pretrained(self.checkpoint_name, device_map=torch_device)
 
         inputs = self.processor.apply_chat_template(
             conversation, tokenize=True, return_dict=True, sampling_rate=24000, return_tensors="pt"
         )
-        inputs = inputs.to(torch_device, dtype=self.dtype)
+        inputs = inputs.to(torch_device)
 
         outputs = model.generate(**inputs, do_sample=False, max_new_tokens=500)
 
@@ -482,9 +479,7 @@ class HiggsAudioV2ForConditionalGenerationIntegrationTest(unittest.TestCase):
             {"role": "user", "content": [{"type": "text", "text": user_message}]},
         ]
 
-        model = HiggsAudioV2ForConditionalGeneration.from_pretrained(
-            self.checkpoint_name, dtype=self.dtype, device_map=torch_device
-        )
+        model = HiggsAudioV2ForConditionalGeneration.from_pretrained(self.checkpoint_name, device_map=torch_device)
 
         inputs = self.processor.apply_chat_template(
             conversation,
@@ -494,7 +489,7 @@ class HiggsAudioV2ForConditionalGenerationIntegrationTest(unittest.TestCase):
             sampling_rate=24000,
             return_tensors="pt",
         )
-        inputs = inputs.to(torch_device, dtype=self.dtype)
+        inputs = inputs.to(torch_device)
 
         outputs = model.generate(**inputs, do_sample=False, max_new_tokens=500)
 
@@ -536,9 +531,7 @@ class HiggsAudioV2ForConditionalGenerationIntegrationTest(unittest.TestCase):
             },
         ]
 
-        model = HiggsAudioV2ForConditionalGeneration.from_pretrained(
-            self.checkpoint_name, dtype=self.dtype, device_map=torch_device
-        )
+        model = HiggsAudioV2ForConditionalGeneration.from_pretrained(self.checkpoint_name, device_map=torch_device)
 
         inputs = self.processor.apply_chat_template(
             conversation,
@@ -548,7 +541,7 @@ class HiggsAudioV2ForConditionalGenerationIntegrationTest(unittest.TestCase):
             sampling_rate=24000,
             return_tensors="pt",
         )
-        inputs = inputs.to(torch_device, dtype=self.dtype)
+        inputs = inputs.to(torch_device)
 
         outputs = model.generate(**inputs, do_sample=False, max_new_tokens=500)
 
@@ -584,9 +577,7 @@ class HiggsAudioV2ForConditionalGenerationIntegrationTest(unittest.TestCase):
             },
         ]
 
-        model = HiggsAudioV2ForConditionalGeneration.from_pretrained(
-            self.checkpoint_name, dtype=self.dtype, device_map=torch_device
-        )
+        model = HiggsAudioV2ForConditionalGeneration.from_pretrained(self.checkpoint_name, device_map=torch_device)
 
         inputs = self.processor.apply_chat_template(
             conversation,
@@ -596,7 +587,7 @@ class HiggsAudioV2ForConditionalGenerationIntegrationTest(unittest.TestCase):
             sampling_rate=24000,
             return_tensors="pt",
         )
-        inputs = inputs.to(torch_device, dtype=self.dtype)
+        inputs = inputs.to(torch_device)
 
         outputs = model.generate(**inputs, do_sample=False, max_new_tokens=500)
 
@@ -665,9 +656,7 @@ class HiggsAudioV2ForConditionalGenerationIntegrationTest(unittest.TestCase):
             {"role": "user", "content": [{"type": "text", "text": "Hey, here is a clone from the given voice."}]},
         ]
 
-        model = HiggsAudioV2ForConditionalGeneration.from_pretrained(
-            self.checkpoint_name, dtype=self.dtype, device_map=torch_device
-        )
+        model = HiggsAudioV2ForConditionalGeneration.from_pretrained(self.checkpoint_name, device_map=torch_device)
 
         inputs = self.processor.apply_chat_template(
             [conversation1, conversation2],
@@ -677,7 +666,7 @@ class HiggsAudioV2ForConditionalGenerationIntegrationTest(unittest.TestCase):
             sampling_rate=24000,
             return_tensors="pt",
         )
-        inputs = inputs.to(torch_device, dtype=self.dtype)
+        inputs = inputs.to(torch_device)
 
         outputs = model.generate(**inputs, do_sample=False, max_new_tokens=500)
 

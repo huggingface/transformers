@@ -18,7 +18,7 @@ import torch.nn.functional as F
 import torchaudio
 
 from ..xcodec.configuration_xcodec import XcodecConfig
-from ..xcodec.modeling_xcodec import XcodecEuclideanCodebook, XcodecModel
+from ..xcodec.modeling_xcodec import XcodecEuclideanCodebook, XcodecModel, XcodecPreTrainedModel
 
 
 class HiggsAudioV2TokenizerConfig(XcodecConfig):
@@ -114,6 +114,9 @@ class HiggsAudioV2TokenizerConfig(XcodecConfig):
         return int(self.hop_length / (self.sample_rate / self.semantic_sample_rate) / self.downsample_factor)
 
 
+class HiggsAudioV2TokenizerPreTrainedModel(XcodecPreTrainedModel): ...
+
+
 class HiggsAudioV2TokenizerEuclideanCodebook(XcodecEuclideanCodebook): ...
 
 
@@ -161,4 +164,4 @@ class HiggsAudioV2TokenizerModel(XcodecModel):
         return semantic_features
 
 
-__all__ = ["HiggsAudioV2TokenizerConfig", "HiggsAudioV2TokenizerModel"]
+__all__ = ["HiggsAudioV2TokenizerConfig", "HiggsAudioV2TokenizerPreTrainedModel", "HiggsAudioV2TokenizerModel"]

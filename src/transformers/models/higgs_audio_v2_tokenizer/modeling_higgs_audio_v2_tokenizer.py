@@ -35,6 +35,127 @@ from ..auto import AutoModel
 from .configuration_higgs_audio_v2_tokenizer import HiggsAudioV2TokenizerConfig
 
 
+@auto_docstring
+class HiggsAudioV2TokenizerPreTrainedModel(PreTrainedAudioTokenizerBase):
+    """
+    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
+    models.
+    """
+
+    config_class = HiggsAudioV2TokenizerConfig
+    base_model_prefix = "higgs_audio_v2_tokenizer"
+    main_input_name = "input_values"
+    input_modalities = "audio"
+    _no_split_modules = ["HiggsAudioV2TokenizerResidualVectorQuantization"]
+
+    @torch.no_grad()
+    def _init_weights(self, module):
+        """Initialize the weights"""
+        if isinstance(module, nn.Linear):
+            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
+            if module.bias is not None:
+                init.zeros_(module.bias)
+        elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
+            init.zeros_(module.bias)
+            init.ones_(module.weight)
+        elif isinstance(module, nn.Conv1d):
+            init.kaiming_normal_(module.weight)
+            if module.bias is not None:
+                k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
+                init.uniform_(module.bias, a=-k, b=k)
+        elif module.__class__.__name__ == "Snake1d":
+            init.ones_(module.alpha)
+        elif isinstance(module, nn.ConvTranspose1d):
+            module.reset_parameters()
+        elif isinstance(module, nn.Embedding):
+            init.normal_(module.weight, mean=0.0, std=0.02)
+        elif isinstance(module, HiggsAudioV2TokenizerModel):
+            # The conv1d are not handled correctly, as `self.acoustic_encoder/decoder` are initialized from a PreTrainedModel,
+            # but then only the submodules are used (which are not PreTrainedModels...) -> here we reinit them as in DacModel
+            for submodule in module.acoustic_encoder.modules():
+                if isinstance(submodule, nn.Conv1d):
+                    init.trunc_normal_(submodule.weight, std=0.02)
+                    init.constant_(submodule.bias, 0)
+            for submodule in module.acoustic_decoder.modules():
+                if isinstance(submodule, nn.Conv1d):
+                    init.trunc_normal_(submodule.weight, std=0.02)
+                    init.constant_(submodule.bias, 0)
+        elif isinstance(module, HiggsAudioV2TokenizerEuclideanCodebook):
+            init.copy_(module.inited, torch.Tensor([True]))
+            init.zeros_(module.cluster_size)
+            init.zeros_(module.embed)
+            init.zeros_(module.embed_avg)
+
+    def apply_weight_norm(self):
+        """Apply weight norm in the acoustic encoder and decoder because the original checkpoint has weight norm applied."""
+        weight_norm = torch.nn.utils.weight_norm
+        if hasattr(torch.nn.utils.parametrizations, "weight_norm"):
+            weight_norm = torch.nn.utils.parametrizations.weight_norm
+
+        weight_norm(self.acoustic_encoder.conv1)
+        weight_norm(self.acoustic_encoder.conv2)
+
+        for block in self.acoustic_encoder.block:
+            weight_norm(block.conv1)
+            for res_unit in (block.res_unit1, block.res_unit2, block.res_unit3):
+                weight_norm(res_unit.conv1)
+                weight_norm(res_unit.conv2)
+
+        weight_norm(self.acoustic_decoder.conv1, name="weight")
+        weight_norm(self.acoustic_decoder.conv2, name="weight")
+
+        for block in self.acoustic_decoder.block:
+            weight_norm(block.conv_t1, name="weight")
+            for res_unit in (block.res_unit1, block.res_unit2, block.res_unit3):
+                weight_norm(res_unit.conv1, name="weight")
+                weight_norm(res_unit.conv2, name="weight")
+
+    def remove_weight_norm(self):
+        """Remove the weight norm from the acoustic encoder and decoder."""
+        for module in (self.acoustic_encoder, self.acoustic_decoder):
+            for m in module.modules():
+                try:
+                    torch.nn.utils.remove_weight_norm(m, name="weight")
+                except (ValueError, AttributeError):
+                    pass
+                if hasattr(m, "parametrizations") and "weight" in m.parametrizations:
+                    torch.nn.utils.parametrize.remove_parametrizations(m, "weight", leave_parametrized=True)
+
+    @lru_cache
+    def _get_conv1d_layers(self, module):
+        """
+        Recursively iterate to fetch all Conv1d layers.
+        """
+
+        def get_conv1d_layers_recursive(module: nn.Module):
+            params_list = []
+
+            if isinstance(module, nn.Conv1d):
+                params_list.append(module)
+
+            # Recursively check all child modules
+            for child in module.children():
+                params_list.extend(get_conv1d_layers_recursive(child))
+
+            return params_list
+
+        return tuple(get_conv1d_layers_recursive(module))
+
+    def _get_conv1d_output_lengths(self, input_length, module=None):
+        """
+        For a given module, compute the output length that would be obtained after all Conv1d layers.
+        """
+        if module is None:
+            module = self
+
+        conv1d_layers = self._get_conv1d_layers(module)
+
+        for layer in conv1d_layers:
+            input_length = conv1d_output_length(layer, input_length)
+
+        return input_length
+
+
 class HiggsAudioV2TokenizerEuclideanCodebook(nn.Module):
     """Codebook with Euclidean distance."""
 
@@ -327,127 +448,6 @@ class HiggsAudioV2TokenizerResidualVectorQuantization(nn.Module):
         return quantized_out
 
 
-@auto_docstring
-class HiggsAudioV2TokenizerPreTrainedModel(PreTrainedAudioTokenizerBase):
-    """
-    An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
-    models.
-    """
-
-    config_class = HiggsAudioV2TokenizerConfig
-    base_model_prefix = "higgs_audio_v2_tokenizer"
-    main_input_name = "input_values"
-    input_modalities = "audio"
-    _no_split_modules = ["HiggsAudioV2TokenizerResidualVectorQuantization"]
-
-    @torch.no_grad()
-    def _init_weights(self, module):
-        """Initialize the weights"""
-        if isinstance(module, nn.Linear):
-            init.normal_(module.weight, mean=0.0, std=self.config.initializer_range)
-            if module.bias is not None:
-                init.zeros_(module.bias)
-        elif isinstance(module, (nn.LayerNorm, nn.GroupNorm)):
-            init.zeros_(module.bias)
-            init.ones_(module.weight)
-        elif isinstance(module, nn.Conv1d):
-            init.kaiming_normal_(module.weight)
-            if module.bias is not None:
-                k = math.sqrt(module.groups / (module.in_channels * module.kernel_size[0]))
-                init.uniform_(module.bias, a=-k, b=k)
-        elif module.__class__.__name__ == "Snake1d":
-            init.ones_(module.alpha)
-        elif isinstance(module, nn.ConvTranspose1d):
-            module.reset_parameters()
-        elif isinstance(module, nn.Embedding):
-            init.normal_(module.weight, mean=0.0, std=0.02)
-        elif isinstance(module, HiggsAudioV2TokenizerModel):
-            # The conv1d are not handled correctly, as `self.acoustic_encoder/decoder` are initialized from a PreTrainedModel,
-            # but then only the submodules are used (which are not PreTrainedModels...) -> here we reinit them as in DacModel
-            for submodule in module.acoustic_encoder.modules():
-                if isinstance(submodule, nn.Conv1d):
-                    init.trunc_normal_(submodule.weight, std=0.02)
-                    init.constant_(submodule.bias, 0)
-            for submodule in module.acoustic_decoder.modules():
-                if isinstance(submodule, nn.Conv1d):
-                    init.trunc_normal_(submodule.weight, std=0.02)
-                    init.constant_(submodule.bias, 0)
-        elif isinstance(module, HiggsAudioV2TokenizerEuclideanCodebook):
-            init.copy_(module.inited, torch.Tensor([True]))
-            init.zeros_(module.cluster_size)
-            init.zeros_(module.embed)
-            init.zeros_(module.embed_avg)
-
-    def apply_weight_norm(self):
-        """Apply weight norm in the acoustic encoder and decoder because the original checkpoint has weight norm applied."""
-        weight_norm = torch.nn.utils.weight_norm
-        if hasattr(torch.nn.utils.parametrizations, "weight_norm"):
-            weight_norm = torch.nn.utils.parametrizations.weight_norm
-
-        weight_norm(self.acoustic_encoder.conv1)
-        weight_norm(self.acoustic_encoder.conv2)
-
-        for block in self.acoustic_encoder.block:
-            weight_norm(block.conv1)
-            for res_unit in (block.res_unit1, block.res_unit2, block.res_unit3):
-                weight_norm(res_unit.conv1)
-                weight_norm(res_unit.conv2)
-
-        weight_norm(self.acoustic_decoder.conv1, name="weight")
-        weight_norm(self.acoustic_decoder.conv2, name="weight")
-
-        for block in self.acoustic_decoder.block:
-            weight_norm(block.conv_t1, name="weight")
-            for res_unit in (block.res_unit1, block.res_unit2, block.res_unit3):
-                weight_norm(res_unit.conv1, name="weight")
-                weight_norm(res_unit.conv2, name="weight")
-
-    def remove_weight_norm(self):
-        """Remove the weight norm from the acoustic encoder and decoder."""
-        for module in (self.acoustic_encoder, self.acoustic_decoder):
-            for m in module.modules():
-                try:
-                    torch.nn.utils.remove_weight_norm(m, name="weight")
-                except (ValueError, AttributeError):
-                    pass
-                if hasattr(m, "parametrizations") and "weight" in m.parametrizations:
-                    torch.nn.utils.parametrize.remove_parametrizations(m, "weight", leave_parametrized=True)
-
-    @lru_cache
-    def _get_conv1d_layers(self, module):
-        """
-        Recursively iterate to fetch all Conv1d layers.
-        """
-
-        def get_conv1d_layers_recursive(module: nn.Module):
-            params_list = []
-
-            if isinstance(module, nn.Conv1d):
-                params_list.append(module)
-
-            # Recursively check all child modules
-            for child in module.children():
-                params_list.extend(get_conv1d_layers_recursive(child))
-
-            return params_list
-
-        return tuple(get_conv1d_layers_recursive(module))
-
-    def _get_conv1d_output_lengths(self, input_length, module=None):
-        """
-        For a given module, compute the output length that would be obtained after all Conv1d layers.
-        """
-        if module is None:
-            module = self
-
-        conv1d_layers = self._get_conv1d_layers(module)
-
-        for layer in conv1d_layers:
-            input_length = conv1d_output_length(layer, input_length)
-
-        return input_length
-
-
 @auto_docstring(custom_intro="""The HiggsAudioV2Tokenizer neural audio codec model.""")
 class HiggsAudioV2TokenizerModel(HiggsAudioV2TokenizerPreTrainedModel):
     def __init__(self, config):
@@ -645,4 +645,4 @@ class HiggsAudioV2TokenizerModel(HiggsAudioV2TokenizerPreTrainedModel):
         return HiggsAudioV2TokenizerOutput(audio_codes=audio_codes, audio_values=audio_values)
 
 
-__all__ = ["HiggsAudioV2TokenizerModel"]
+__all__ = ["HiggsAudioV2TokenizerPreTrainedModel", "HiggsAudioV2TokenizerModel"]
