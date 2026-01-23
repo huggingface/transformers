@@ -1051,6 +1051,17 @@ class StaticCache(Cache):
         offload_only_non_sliding: bool = True,
         **kwargs,
     ):
+        if kwargs:
+            raise TypeError(f"Unknown arguments passed to StaticCache: {list(kwargs.keys())}")
+
+        if not isinstance(offloading, bool):
+            raise TypeError(
+                f"`offloading` must be a bool, got {type(offloading)}. "
+                "Did you accidentally pass `device` as a positional argument?"
+            )
+        if not isinstance(offload_only_non_sliding, bool):
+            raise TypeError(f"`offload_only_non_sliding` must be a bool, got {type(offload_only_non_sliding)}.")
+
         config = config.get_text_config(decoder=True)
         layer_types = getattr(config, "layer_types", None)
         # If `layer_types` is not explicitly provided, infer if the model is fully sliding

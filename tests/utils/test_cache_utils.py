@@ -890,6 +890,28 @@ class SyntheticCacheTest(unittest.TestCase):
             static_cache.layers[0].keys[0, 0, :, 0].tolist(), [1.0, 2.0, 3.0, 4.0], "StaticCache Scenario 2 failed"
         )
 
+    def test_static_cache_type_checks(self):
+        """Test that StaticCache validates offloading types and unknown kwargs."""
+        cache = StaticCache(
+            config=self.config, max_cache_len=self.max_cache_len, offloading=True, offload_only_non_sliding=False
+        )
+        self.assertIsInstance(cache, StaticCache)
+
+        # Passing wrong type for offloading should raise TypeError
+        with self.assertRaises(TypeError) as cm:
+            StaticCache(config=self.config, max_cache_len=self.max_cache_len, offloading="cuda:0")
+        self.assertIn("`offloading` must be a bool", str(cm.exception))
+
+        # Passing wrong type for offload_only_non_sliding should raise TypeError
+        with self.assertRaises(TypeError) as cm:
+            StaticCache(config=self.config, max_cache_len=self.max_cache_len, offload_only_non_sliding=1)
+        self.assertIn("`offload_only_non_sliding` must be a bool", str(cm.exception))
+
+        # Passing unknown kwargs should raise TypeError
+        with self.assertRaises(TypeError) as cm:
+            StaticCache(config=self.config, max_cache_len=self.max_cache_len, foo="bar")
+        self.assertIn("Unknown arguments passed to StaticCache", str(cm.exception))
+
     def test_sliding_window_cache(self):
         """Test fully sliding StaticCache with manually prefilled states and hardcoded assertions.
 
