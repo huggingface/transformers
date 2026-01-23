@@ -827,7 +827,10 @@ class MetaClip2Model(MetaClip2PreTrainedModel):
             attention_mask=attention_mask,
             position_ids=position_ids,
         )
+        # Extract pooled output and immediately delete the full output to free memory
         pooled_output = text_outputs.pooler_output
+        del text_outputs  # Explicitly delete to help with memory management
+
         text_features = self.text_projection(pooled_output)
 
         return text_features
@@ -865,7 +868,10 @@ class MetaClip2Model(MetaClip2PreTrainedModel):
             pixel_values=pixel_values,
             interpolate_pos_encoding=interpolate_pos_encoding,
         )
+        # Extract pooled output and immediately delete the full output to free memory
         pooled_output = vision_outputs.pooler_output
+        del vision_outputs  # Explicitly delete to help with memory management
+
         image_features = self.visual_projection(pooled_output)
 
         return image_features
