@@ -279,6 +279,7 @@ class PhimoeTopKRouter(nn.Linear):
         super().__init__(config.hidden_size, config.num_local_experts, bias=False)
         self.router_jitter_noise = config.router_jitter_noise
         self.input_jitter_noise = config.input_jitter_noise
+        self.top_k = config.num_experts_per_tok
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
         if self.training and self.input_jitter_noise > 0:
@@ -287,11 +288,8 @@ class PhimoeTopKRouter(nn.Linear):
             )
         router_logits = super().forward(hidden_states)
         routing_weights, selected_experts = sparsemixer(
-            router_logits,
-            jitter_eps=self.router_jitter_noise,
-            training=self.training,
+            router_logits, jitter_eps=self.router_jitter_noise, training=self.training, top_k=self.top_k
         )
-        routing_weights = torch.zeros_like(router_logits).scatter_(1, selected_experts, routing_weights)
         return routing_weights, selected_experts
 
 
