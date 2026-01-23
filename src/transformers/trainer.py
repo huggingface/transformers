@@ -1,4 +1,4 @@
-# Copyright 2020-present the HuggingFace Inc. team.
+    # Copyright 2020-present the HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -3748,6 +3748,19 @@ class Trainer:
 
         return contextlib.nullcontext, inputs
 
+    def _reduce_loss(self, loss, num_items_in_batch=None):
+        """
+        Properly reduce the loss depending on GPU setup and token averaging.
+        If running on multiple GPUs, aggregate losses correctly:
+        - If num_items_in_batch is provided, scale by total items (e.g., tokens).
+        - Otherwise, average across devices.
+        """
+        if self.args.n_gpu > 1:
+            if num_items_in_batch is not None:
+                return loss.sum() / num_items_in_batch
+            return loss.mean()
+        return loss
+
     def compute_loss_context_manager(self):
         """
         A helper wrapper to group together context managers.
@@ -3821,8 +3834,9 @@ class Trainer:
             if self.args.optim in [OptimizerNames.LOMO, OptimizerNames.ADALOMO]:
                 kwargs["learning_rate"] = self._get_learning_rate()
 
-            if self.args.n_gpu > 1:
-                loss = loss.mean()  # mean() to average on multi-gpu parallel training
+            # Properly reduce the loss across devices and batch/token averaging
+            loss = self._reduce_loss(loss, num_items_in_batch)
+
 
             # Finally we need to normalize the loss for reporting if GA loss bug is not fixed during compute loss
             if (not self.model_accepts_loss_kwargs or num_items_in_batch is None) and self.compute_loss_func is None:
