@@ -900,7 +900,8 @@ class Emu3ForCausalLM(LlamaForCausalLM, Emu3PreTrainedModel, GenerationMixin):
         ```python
         >>> from transformers import Emu3Processor, Emu3ForConditionalGeneration
         >>> import torch
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from PIL import Image
 
         >>> model = Emu3ForCausalLM.from_pretrained("BAAI/Emu3-Chat-hf", dtype=torch.bfloat16)
@@ -1133,7 +1134,8 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
         ```python
         >>> from transformers import Emu3Processor, Emu3ForConditionalGeneration
         >>> import torch
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from PIL import Image
 
         >>> model = Emu3ForConditionalGeneration.from_pretrained("BAAI/Emu3-Chat-hf", dtype=torch.bfloat16)
@@ -1156,7 +1158,9 @@ class Emu3ForConditionalGeneration(Emu3PreTrainedModel, GenerationMixin):
         ... ]
 
         >>> prompt = processor.apply_chat_template(conversation, add_generation_prompt=True)
-        >>> image = Image.open(requests.get("https://www.ilankelman.org/stopsigns/australia.jpg", stream=True).raw)
+        >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> inputs = processor(images=[image], text=[prompt], return_tensors="pt").to(model.device, torch.bfloat16)
 

@@ -413,7 +413,8 @@ class Ovis2ForConditionalGeneration(LlavaForConditionalGeneration, GenerationMix
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Ovis2ForConditionalGeneration
 
         >>> model = Ovis2ForConditionalGeneration.from_pretrained("thisisiron/Ovis2-2B-hf")
@@ -421,7 +422,8 @@ class Ovis2ForConditionalGeneration(LlavaForConditionalGeneration, GenerationMix
 
         >>> prompt = "<|im_start|>user\n<image>\nDescribe the image.<|im_end|>\n<|im_start|>assistant\n"
         >>> url = "http://images.cocodataset.org/val2014/COCO_val2014_000000537955.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> inputs = processor(images=image, text=prompt, return_tensors="pt")
 

@@ -618,7 +618,8 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, LlavaNextForConditionalGeneration
 
         >>> model = LlavaNextForConditionalGeneration.from_pretrained("llava-hf/llava-v1.6-mistral-7b-hf")
@@ -626,7 +627,8 @@ class LlavaNextForConditionalGeneration(LlavaNextPreTrainedModel, GenerationMixi
 
         >>> prompt = "[INST] <image>\nWhat is shown in this image? [/INST]"
         >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> inputs = processor(images=image, text=prompt, return_tensors="pt")
 

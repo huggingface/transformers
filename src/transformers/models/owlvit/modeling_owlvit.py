@@ -896,13 +896,15 @@ class OwlViTVisionModel(OwlViTPreTrainedModel):
         Examples:
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, OwlViTVisionModel
 
         >>> model = OwlViTVisionModel.from_pretrained("google/owlvit-base-patch32")
         >>> processor = AutoProcessor.from_pretrained("google/owlvit-base-patch32")
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> inputs = processor(images=image, return_tensors="pt")
 
@@ -1052,13 +1054,15 @@ class OwlViTModel(OwlViTPreTrainedModel):
         Examples:
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, OwlViTModel
 
         >>> model = OwlViTModel.from_pretrained("google/owlvit-base-patch32")
         >>> processor = AutoProcessor.from_pretrained("google/owlvit-base-patch32")
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
         >>> inputs = processor(text=[["a photo of a cat", "a photo of a dog"]], images=image, return_tensors="pt")
         >>> outputs = model(**inputs)
         >>> logits_per_image = outputs.logits_per_image  # this is the image-text similarity score
@@ -1452,7 +1456,8 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
 
         Examples:
         ```python
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from PIL import Image
         >>> import torch
         >>> from transformers import AutoProcessor, OwlViTForObjectDetection
@@ -1460,9 +1465,11 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         >>> processor = AutoProcessor.from_pretrained("google/owlvit-base-patch16")
         >>> model = OwlViTForObjectDetection.from_pretrained("google/owlvit-base-patch16")
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
         >>> query_url = "http://images.cocodataset.org/val2017/000000001675.jpg"
-        >>> query_image = Image.open(requests.get(query_url, stream=True).raw)
+        >>> with httpx.stream("GET", query_url) as response:
+        ...     query_image = Image.open(BytesIO(response.read()))
         >>> inputs = processor(images=image, query_images=query_image, return_tensors="pt")
         >>> with torch.no_grad():
         ...     outputs = model.image_guided_detection(**inputs)
@@ -1562,7 +1569,8 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
 
         Examples:
         ```python
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from PIL import Image
         >>> import torch
 
@@ -1572,7 +1580,8 @@ class OwlViTForObjectDetection(OwlViTPreTrainedModel):
         >>> model = OwlViTForObjectDetection.from_pretrained("google/owlvit-base-patch32")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
         >>> text_labels = [["a photo of a cat", "a photo of a dog"]]
         >>> inputs = processor(text=text_labels, images=image, return_tensors="pt")
         >>> outputs = model(**inputs)

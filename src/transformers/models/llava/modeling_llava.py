@@ -347,7 +347,8 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel, GenerationMixin):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, LlavaForConditionalGeneration
 
         >>> model = LlavaForConditionalGeneration.from_pretrained("llava-hf/llava-1.5-7b-hf")
@@ -355,7 +356,8 @@ class LlavaForConditionalGeneration(LlavaPreTrainedModel, GenerationMixin):
 
         >>> prompt = "USER: <image>\nWhat's the content of the image? ASSISTANT:"
         >>> url = "https://www.ilankelman.org/stopsigns/australia.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> inputs = processor(images=image, text=prompt, return_tensors="pt")
 

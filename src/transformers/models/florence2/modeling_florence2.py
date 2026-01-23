@@ -889,7 +889,8 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Florence2ForConditionalGeneration
 
         >>> model = Florence2ForConditionalGeneration.from_pretrained("florence-community/Florence-2-large")
@@ -897,7 +898,8 @@ class Florence2ForConditionalGeneration(Florence2PreTrainedModel, GenerationMixi
 
         >>> prompt = "<CAPTION>"
         >>> url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/transformers/tasks/car.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> inputs = processor(text=prompt, images=image, return_tensors="pt")
 

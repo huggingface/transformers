@@ -1050,7 +1050,6 @@ class Idefics2ForConditionalGeneration(Idefics2PreTrainedModel, GenerationMixin)
         Example:
 
         ```python
-        >>> import requests
         >>> import torch
         >>> from PIL import Image
         >>> from io import BytesIO
