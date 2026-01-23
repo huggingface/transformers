@@ -881,33 +881,29 @@ class GlmImageModel(Glm4vModel):
         batch_size = input_ids.shape[0] if input_ids is not None else inputs_embeds.shape[0]
 
         if pixel_values is not None:
-            # Process images with batch support
-            # Determine which grids are source images (not target grids for generation)
+            # Process source images (image-to-image mode)
             # Source images are identified by counting image_end_token_id in input_ids
             if images_per_sample is not None:
                 grids_per_sample = torch.split(image_grid_thw, images_per_sample.tolist())
-                source_grids_list = []
-                for batch_idx in range(batch_size):
-                    sample_grids = grids_per_sample[batch_idx]
-                    num_source = (input_ids[batch_idx] == self.config.image_end_token_id).sum().item()
-                    if num_source > 0:
-                        source_grids_list.append(sample_grids[:num_source])
-
-                if len(source_grids_list) > 0:
-                    source_grids = torch.cat(source_grids_list, dim=0)
-                else:
-                    source_grids = None
+                source_grids_list = [
+                    grids[:num_source]
+                    for grids, num_source in (
+                        (grids_per_sample[i], (input_ids[i] == self.config.image_end_token_id).sum().item())
+                        for i in range(batch_size)
+                    )
+                    if num_source > 0
+                ]
+                source_grids = torch.cat(source_grids_list, dim=0)
             else:
                 # Fallback for batch_size=1: all but last grid are source images
-                source_grids = image_grid_thw[:-1] if len(image_grid_thw) > 1 else None
+                source_grids = image_grid_thw[:-1]
 
-            if source_grids is not None and len(source_grids) > 0:
-                image_embeds = self.get_image_features(pixel_values, source_grids)
-                image_embeds = torch.cat(image_embeds, dim=0)
-                image_ids = self.get_image_tokens(image_embeds, source_grids)
-                image_ids = image_ids.view(-1).to(input_ids.device)
-                special_image_mask = self.get_placeholder_mask(input_ids, image_ids)
-                input_ids = input_ids.masked_scatter(special_image_mask, image_ids)
+            image_embeds = self.get_image_features(pixel_values, source_grids)
+            image_embeds = torch.cat(image_embeds, dim=0)
+            image_ids = self.get_image_tokens(image_embeds, source_grids)
+            image_ids = image_ids.view(-1).to(input_ids.device)
+            special_image_mask = self.get_placeholder_mask(input_ids, image_ids)
+            input_ids = input_ids.masked_scatter(special_image_mask, image_ids)
 
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
