@@ -195,8 +195,6 @@ class GlmImageProcessor(ProcessorMixin):
         image_inputs["images_per_sample"] = torch.tensor(
             [n + num_target_grids for n in images_per_sample], dtype=torch.long
         )
-        # Store number of source images per sample (for model to identify source vs target grids)
-        image_inputs["num_source_images_per_sample"] = torch.tensor(images_per_sample, dtype=torch.long)
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
         return_mm_token_type_ids = output_kwargs["text_kwargs"].pop("return_mm_token_type_ids", False)
