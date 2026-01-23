@@ -15,7 +15,7 @@ permissions: read-all
 jobs:
   get-pr-number:
     name: Get PR number
-    if: ${{ github.event.issue.state == 'open' && contains(fromJSON('["ydshieh", "ArthurZucker", "zucchini-nlp", "molbap", "gante", "LysandreJik", "Cyrilvallez", "Rocketknight1", "SunMarc", "eustlb", "MekkCyber", "vasqu", "ivarflakstad", "stevhliu", "ebezzam", "remi-or", "itazap", "3outeille", "IlyasMoutawwakil"]'), github.actor) && startsWith(github.event.comment.body, '@bot /repo') }}
+    if: ${{ github.event.issue.state == 'open' && contains(fromJSON('["ydshieh", "ArthurZucker", "zucchini-nlp", "molbap", "gante", "LysandreJik", "Cyrilvallez", "Rocketknight1", "SunMarc", "eustlb", "MekkCyber", "vasqu", "ivarflakstad", "stevhliu", "ebezzam", "remi-or", "itazap", "3outeille", "IlyasMoutawwakil", "tarekziade"]'), github.actor) && startsWith(github.event.comment.body, '@bot /repo') }}
     uses: ./.github/workflows/get-pr-number.yml
 
   get-pr-info:
@@ -133,27 +133,62 @@ jobs:
       - name: Fetch and checkout PR code manually
         env:
           PR_HEAD_REPO_FULL_NAME: ${{ needs.get-pr-info.outputs.PR_HEAD_REPO_FULL_NAME }}
+          PR_HEAD_REF: ${{ needs.get-pr-info.outputs.PR_HEAD_REF }}
           PR_HEAD_SHA: ${{ needs.check-timestamps.outputs.VERIFIED_PR_HEAD_SHA }}
         run: |
           # Create separate directory for PR code
           mkdir -p pr-repo
           cd pr-repo
           
-          # Initialize git and fetch only the specific commit
+          # Initialize git and fetch with full history
           git init
           git remote add pr-origin https://github.com/${PR_HEAD_REPO_FULL_NAME}.git
-          git fetch --depth=1 pr-origin ${PR_HEAD_SHA}
+          git fetch pr-origin ${PR_HEAD_REF}
           git checkout ${PR_HEAD_SHA}
+
+          # Also fetch main branch from upstream for comparison (required by `check_modular_conversion`)
+          git remote add upstream https://github.com/${{ github.repository }}.git
+          git fetch upstream main:main
 
       - name: Run checks with trusted script
         id: run_checks
         run: |
-          # Copy trusted script to PR directory
+          # Continue on errors (like Makefile's - prefix)
+          set +e
+ 
+          # Security: Copy trusted scripts from main branch and run commands explicitly (not via make)
+          # to avoid executing potentially malicious Makefile or scripts from the PR
+          cp setup.py pr-repo/setup.py
+          cp utils/custom_init_isort.py pr-repo/utils/custom_init_isort.py
+          cp utils/sort_auto_mappings.py pr-repo/utils/sort_auto_mappings.py
+          cp utils/check_doc_toc.py pr-repo/utils/check_doc_toc.py
           cp utils/check_copies.py pr-repo/utils/check_copies.py
+          cp utils/check_modular_conversion.py pr-repo/utils/check_modular_conversion.py
+          cp utils/check_dummies.py pr-repo/utils/check_dummies.py
+          cp utils/check_pipeline_typing.py pr-repo/utils/check_pipeline_typing.py
+          cp utils/check_doctest_list.py pr-repo/utils/check_doctest_list.py
+          cp utils/check_docstrings.py pr-repo/utils/check_docstrings.py
+          cp utils/add_dates.py pr-repo/utils/add_dates.py
           
-          # Run the trusted script in PR directory
+          # Run commands in PR directory (with the copied trusted scripts)
           cd pr-repo
+          
+          # Run style commands
+          ruff check examples tests src utils scripts benchmark benchmark_v2 setup.py conftest.py --fix
+          ruff format examples tests src utils scripts benchmark benchmark_v2 setup.py conftest.py
+          python utils/custom_init_isort.py
+          python utils/sort_auto_mappings.py
+          
+          # Run fix-repo commands
+          python setup.py deps_table_update
+          python utils/check_doc_toc.py --fix_and_overwrite
           python utils/check_copies.py --fix_and_overwrite
+          python utils/check_modular_conversion.py --fix_and_overwrite
+          python utils/check_dummies.py --fix_and_overwrite
+          python utils/check_pipeline_typing.py --fix_and_overwrite
+          python utils/check_doctest_list.py --fix_and_overwrite
+          python utils/check_docstrings.py --fix_and_overwrite
+          python utils/add_dates.py
           
           # Check if there are changes
           if [ -n "$(git status --porcelain)" ]; then

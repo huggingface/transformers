@@ -17,6 +17,7 @@ import torch
 
 from ...configuration_utils import PreTrainedConfig
 from ...generation.configuration_utils import GenerationConfig
+from ...utils.generic import is_flash_attention_requested
 from ...utils.metrics import attach_tracer, traced
 from .cache_manager import BlockManager, CacheAllocator, FullAttentionCacheAllocator, SlidingAttentionCacheAllocator
 from .requests import RequestState, get_device_and_memory_breakdown, logger
@@ -172,7 +173,7 @@ class PagedAttentionCache:
         # Infer number of blocks and max batch tokens
         page_size = self.head_dim * self.num_key_value_heads
 
-        if "flash" in self.config._attn_implementation:
+        if is_flash_attention_requested(self.config):
             num_attention_masks = 0  # only used to compute the default memory footprint args
         elif "sliding_attention" in group_types:
             # TODO: when we generalize to allow for block-attn, we can use `num_attention_masks=sum(set(group_types))`

@@ -27,14 +27,16 @@ from ...modeling_attn_mask_utils import _create_4d_causal_attention_mask, _prepa
 from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
+from ...processing_utils import Unpack
 from ...utils import (
     ModelOutput,
+    TransformersKwargs,
     auto_docstring,
     can_return_tuple,
-    filter_out_non_signature_kwargs,
     logging,
     torch_int,
 )
+from ...utils.generic import is_flash_attention_requested
 from .configuration_x_clip import XCLIPConfig, XCLIPTextConfig, XCLIPVisionConfig
 
 
@@ -289,7 +291,7 @@ class XCLIPAttention(nn.Module):
         values = values.view(batch_size, seq_length, self.num_heads, self.head_dim).transpose(1, 2)
         # CLIP text model uses both `causal_attention_mask` and `attention_mask`
         # in case FA2 kernel is called, `is_causal` should be inferred from `causal_attention_mask`
-        if self.config._attn_implementation != "flash_attention_2":
+        if not is_flash_attention_requested(self.config):
             if attention_mask is not None and causal_attention_mask is not None:
                 attention_mask = attention_mask + causal_attention_mask
             elif causal_attention_mask is not None:
@@ -1201,19 +1203,16 @@ class XCLIPModel(XCLIPPreTrainedModel):
         # Initialize weights and apply final processing
         self.post_init()
 
-    @filter_out_non_signature_kwargs()
+    @can_return_tuple
     @auto_docstring
     def get_text_features(
         self,
         input_ids: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.Tensor | None = None,
-    ) -> torch.FloatTensor:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        Returns:
-            text_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The text embeddings obtained by
-            applying the projection layer to the pooled output of [`XCLIPTextModel`].
-
         Examples:
 
         ```python
@@ -1231,22 +1230,22 @@ class XCLIPModel(XCLIPPreTrainedModel):
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
+            return_dict=True,
+            **kwargs,
         )
-        text_features = self.text_projection(text_outputs.pooler_output)
-        return text_features
+        pooled_output = text_outputs.pooler_output
+        text_outputs.pooler_output = self.text_projection(pooled_output)
 
-    @filter_out_non_signature_kwargs()
+        return text_outputs
+
+    @can_return_tuple
     @auto_docstring
     def get_video_features(
         self,
         pixel_values: torch.Tensor,
-    ) -> torch.FloatTensor:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        Returns:
-            video_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The video embeddings obtained by
-            applying the projection layer to the pooled output of [`XCLIPVisionModel`] and
-            [`XCLIPMultiframeIntegrationTransformer`].
-
         Examples:
 
         ```python
@@ -1319,17 +1318,17 @@ class XCLIPModel(XCLIPPreTrainedModel):
         batch_size, num_frames, num_channels, height, width = pixel_values.shape
         pixel_values = pixel_values.reshape(-1, num_channels, height, width)
 
-        vision_outputs: BaseModelOutputWithPooling = self.vision_model(pixel_values=pixel_values)
-
-        video_embeds = vision_outputs.pooler_output
+        video_outputs: BaseModelOutputWithPooling = self.vision_model(
+            pixel_values=pixel_values, return_dict=True, **kwargs
+        )
+        video_embeds = video_outputs.pooler_output
         video_embeds = self.visual_projection(video_embeds)
 
         cls_features = video_embeds.view(batch_size, num_frames, -1)
+        mit_outputs: BaseModelOutputWithPooling = self.mit(cls_features, return_dict=True, **kwargs)
+        video_outputs.pooler_output = mit_outputs.pooler_output
 
-        mit_outputs: BaseModelOutputWithPooling = self.mit(cls_features)
-        video_embeds = mit_outputs.pooler_output
-
-        return video_embeds
+        return video_outputs
 
     @auto_docstring
     def forward(

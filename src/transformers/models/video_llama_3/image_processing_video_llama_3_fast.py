@@ -21,7 +21,7 @@ import math
 from typing import Optional, Union
 
 import torch
-import torch.nn.functional as F
+import torchvision.transforms.v2.functional as tvF
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast, group_images_by_shape, reorder_images
@@ -80,8 +80,6 @@ class VideoLlama3ImageProcessorFast(BaseImageProcessorFast):
     patch_size = 14
     temporal_patch_size = 1
     merge_size = 1
-    min_pixels = None
-    max_pixels = None
     valid_kwargs = VideoLlama3ImageProcessorKwargs
     model_input_names = [
         "pixel_values",
@@ -104,7 +102,7 @@ class VideoLlama3ImageProcessorFast(BaseImageProcessorFast):
         if "shortest_edge" not in size or "longest_edge" not in size:
             raise ValueError("size must contain 'shortest_edge' and 'longest_edge' keys.")
 
-        super().__init__(size=size, min_pixels=min_pixels, max_pixels=max_pixels, **kwargs)
+        super().__init__(size=size, **kwargs)
 
     def _further_process_kwargs(
         self,
@@ -127,7 +125,7 @@ class VideoLlama3ImageProcessorFast(BaseImageProcessorFast):
         else:
             size = {**self.size}
 
-        return super()._further_process_kwargs(size=size, min_pixels=min_pixels, max_pixels=max_pixels, **kwargs)
+        return super()._further_process_kwargs(size=size, **kwargs)
 
     @auto_docstring
     def preprocess(
@@ -170,7 +168,7 @@ class VideoLlama3ImageProcessorFast(BaseImageProcessorFast):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,

@@ -13,7 +13,7 @@ specific language governing permissions and limitations under the License.
 rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2024-04-05 and added to Hugging Face Transformers on 2026-01-10.* 
+*This model was released on 2024-04-05 and added to Hugging Face Transformers on 2026-01-12.* 
 
 <div style="float: right;">
  <div class="flex flex-wrap space-x-1">
@@ -32,7 +32,7 @@ It enhances the DETR architecture for efficiency and speed using the following c
 3. Faster Decoder: Employs a shallow 3-layer DETR decoder with deformable cross-attention for lower latency and faster convergence.
 4. Optimized Queries: Uses a mixed-query scheme combining learnable content queries and generated spatial queries.
 
-You can find all the available Deformable DETR checkpoints under the [stevenbucaille](https://huggingface.co/stevenbucaille) organization.
+You can find all the available LW DETR checkpoints under the [AnnaZhang](https://huggingface.co/AnnaZhang) organization.
 The original code can be found [here](https://github.com/Atten4Vis/LW-DETR).
 
 > [!TIP]
@@ -52,7 +52,7 @@ import torch
 
 pipeline = pipeline(
     "object-detection", 
-    model="stevenbucaille/lwdetr_small_60e_coco",
+    model="AnnaZhang/lwdetr_small_60e_coco",
     dtype=torch.float16,
     device_map=0
 )
@@ -72,8 +72,8 @@ import torch
 url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 image = Image.open(requests.get(url, stream=True).raw)
 
-image_processor = AutoImageProcessor.from_pretrained("stevenbucaille/lwdetr_small_60e_coco")
-model = AutoModelForObjectDetection.from_pretrained("stevenbucaille/lwdetr_small_60e_coco")
+image_processor = AutoImageProcessor.from_pretrained("AnnaZhang/lwdetr_small_60e_coco")
+model = AutoModelForObjectDetection.from_pretrained("AnnaZhang/lwdetr_small_60e_coco")
 
 # prepare image for the model
 inputs = image_processor(images=image, return_tensors="pt")

@@ -21,15 +21,19 @@ from transformers.testing_utils import (
     require_sentencepiece,
     require_tokenizers,
     require_torch,
+    require_torchvision,
     slow,
 )
-from transformers.utils import is_pytesseract_available
+from transformers.utils import is_pytesseract_available, is_torchvision_available
 
 from ...test_processing_common import ProcessorTesterMixin
 
 
 if is_pytesseract_available():
     from transformers import LayoutLMv2ImageProcessor
+
+if is_torchvision_available():
+    from transformers import LayoutLMv2ImageProcessorFast
 
 
 @require_pytesseract
@@ -62,11 +66,12 @@ class LayoutXLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
     def test_processor_with_multiple_inputs(self):
         pass
 
+    @require_torchvision
     def test_save_load_pretrained_additional_features(self):
         processor = self.get_processor()
-        # slow tokenizer
+        # slow tokenizer and image processor
         tokenizer_add_kwargs = self.get_component("tokenizer", bos_token="(BOS)", eos_token="(EOS)")
-        image_processor_add_kwargs = self.get_component("image_processor", do_resize=False, size=30)
+        image_processor_add_kwargs = self.get_component("image_processor", do_resize=False, size=30, use_fast=False)
 
         processor = LayoutXLMProcessor.from_pretrained(
             self.tmpdirname,
@@ -83,7 +88,7 @@ class LayoutXLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
         self.assertIsInstance(processor.image_processor, LayoutLMv2ImageProcessor)
 
-        # fast tokenizer
+        # fast tokenizer and image processor
         tokenizer_add_kwargs = self.get_component("tokenizer", bos_token="(BOS)", eos_token="(EOS)")
         image_processor_add_kwargs = self.get_component("image_processor", do_resize=False, size=30)
 
@@ -95,7 +100,7 @@ class LayoutXLMProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         self.assertIsInstance(processor.tokenizer, LayoutXLMTokenizerFast)
 
         self.assertEqual(processor.image_processor.to_json_string(), image_processor_add_kwargs.to_json_string())
-        self.assertIsInstance(processor.image_processor, LayoutLMv2ImageProcessor)
+        self.assertIsInstance(processor.image_processor, LayoutLMv2ImageProcessorFast)
 
     @slow
     def test_overflowing_tokens(self):

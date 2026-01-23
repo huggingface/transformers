@@ -46,6 +46,7 @@ from ...utils import (
     is_torch_flex_attn_available,
     is_torchdynamo_compiling,
     logging,
+    torch_compilable_check,
 )
 from .configuration_mbart import MBartConfig
 
@@ -1268,8 +1269,10 @@ class MBartForSequenceClassification(MBartPreTrainedModel):
 
         eos_mask = input_ids.eq(self.config.eos_token_id).to(hidden_states.device)
 
-        if len(torch.unique_consecutive(eos_mask.sum(1))) > 1:
-            raise ValueError("All examples must have the same number of <eos> tokens.")
+        torch_compilable_check(
+            torch.unique_consecutive(eos_mask.sum(1)).numel() == 1,
+            "All examples must have the same number of <eos> tokens.",
+        )
         sentence_representation = hidden_states[eos_mask, :].view(hidden_states.size(0), -1, hidden_states.size(-1))[
             :, -1, :
         ]
@@ -1505,7 +1508,7 @@ class MBartForCausalLM(MBartPreTrainedModel, GenerationMixin):
         >>> from transformers import AutoTokenizer, MBartForCausalLM
 
         >>> tokenizer = AutoTokenizer.from_pretrained("facebook/mbart-large-cc25")
-        >>> model = MBartForCausalLM.from_pretrained("facebook/mbart-large-cc25", add_cross_attention=False)
+        >>> model = MBartForCausalLM.from_pretrained("facebook/mbart-large-cc25")
         >>> assert model.config.is_decoder, f"{model.__class__} has to be configured as a decoder."
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)

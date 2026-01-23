@@ -46,6 +46,7 @@ from ...utils import (
     is_torch_flex_attn_available,
     is_torchdynamo_compiling,
 )
+from ...utils.generic import is_flash_attention_requested
 
 
 if is_torch_flex_attn_available():
@@ -1297,7 +1298,7 @@ class UdopStack(UdopPreTrainedModel):
         past_key_values: Cache,
         output_attentions: bool = False,
     ):
-        if self.config._attn_implementation == "flash_attention_2":
+        if is_flash_attention_requested(self.config):
             if attention_mask is not None and (attention_mask == 0.0).any():
                 return attention_mask
             return None
@@ -1465,7 +1466,7 @@ class UdopModel(UdopPreTrainedModel):
         encoder_outputs: Tensor | None = None,
         past_key_values: Cache | None = None,
         decoder_inputs_embeds: Tensor | None = None,
-        use_cache=True,
+        use_cache: bool | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
@@ -1641,7 +1642,7 @@ class UdopForConditionalGeneration(UdopPreTrainedModel, GenerationMixin):
         encoder_outputs: Tensor | None = None,
         past_key_values: Cache | None = None,
         decoder_inputs_embeds: Tensor | None = None,
-        use_cache=True,
+        use_cache: bool | None = None,
         output_attentions: bool | None = None,
         output_hidden_states: bool | None = None,
         return_dict: bool | None = None,
