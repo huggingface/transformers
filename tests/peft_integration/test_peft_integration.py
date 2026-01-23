@@ -745,7 +745,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
         """
         for model_id in self.peft_test_model_ids:
             for transformers_class in self.transformers_test_model_classes:
-                peft_model = transformers_class.from_pretrained(model_id).to(torch_device)
+                peft_model = transformers_class.from_pretrained(model_id, use_safetensors=False).to(torch_device)
 
                 with tempfile.TemporaryDirectory() as tmpdirname:
                     peft_model.save_pretrained(tmpdirname)

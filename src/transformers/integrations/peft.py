@@ -420,12 +420,10 @@ class PeftAdapterMixin:
                 raise ValueError("Hotswapping is currently only supported for LoRA, please set `hotswap=False`.")
 
         adapter_name = adapter_name if adapter_name is not None else "default"
-        if adapter_kwargs is None:
-            adapter_kwargs = {}
+        adapter_kwargs = adapter_kwargs or {}
 
         weight_conversions = get_model_conversion_mapping(self)
         peft_weight_conversions = _build_peft_weight_mapping(weight_conversions, adapter_name)
-        peft_load_kwargs = {"low_cpu_mem_usage": low_cpu_mem_usage}
 
         from peft import PeftConfig, inject_adapter_in_model
 
@@ -445,7 +443,6 @@ class PeftAdapterMixin:
             adapter_config_file = find_adapter_config_file(
                 peft_model_id,
                 **load_config.download_kwargs,
-                **adapter_kwargs,
             )
 
             if adapter_config_file is None:
@@ -465,7 +462,7 @@ class PeftAdapterMixin:
 
         if not hotswap:
             # Create and add fresh new adapters into the model, unless the weights are hotswapped
-            inject_adapter_in_model(peft_config, self, adapter_name, **peft_load_kwargs)
+            inject_adapter_in_model(peft_config, self, adapter_name, state_dict=adapter_state_dict)
 
         if not self._hf_peft_config_loaded:
             self._hf_peft_config_loaded = True
