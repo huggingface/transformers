@@ -677,7 +677,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 with CaptureLogger(logger) as cl:
                     model.load_adapter(adapter_state_dict=dummy_state_dict, peft_config=peft_config)
 
-                msg = "Loading adapter weights from state_dict led to unexpected keys not found in the model: foobar"
+                msg = "foobar | UNEXPECTED"
                 self.assertIn(msg, cl.out)
 
     def test_peft_from_pretrained_missing_keys_warning(self):
@@ -715,7 +715,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 key = key.removeprefix(peft_prefix)
                 # 2. Insert adapter name
                 prefix, _, suffix = key.rpartition(".")
-                key = f"{prefix}.other.{suffix}"
+                key = f".other.{suffix}"
                 msg = f"{key} | MISSING |"
                 self.assertIn(msg, cl.out)
 

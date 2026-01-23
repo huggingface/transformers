@@ -198,7 +198,6 @@ def _build_peft_weight_mapping(
         WeightRenaming("base_model.model.model", "model"),
         WeightRenaming("lora_A.weight", f"lora_A.{adapter_name}.weight"),
         WeightRenaming("lora_B.weight", f"lora_B.{adapter_name}.weight"),
-        WeightRenaming(".(.+)$", r"m\1."+adapter_name), # TODO this is very very very weird but fixes test_non_lora_load_adapter
         # TODO: lora_embedding_A and B
     ]
 
@@ -449,18 +448,22 @@ class PeftAdapterMixin:
         if not self._hf_peft_config_loaded:
             self._hf_peft_config_loaded = True
 
-        checkpoint_files, sharded_metadata = _get_resolved_checkpoint_files(
-            pretrained_model_name_or_path=peft_model_id,
-            variant=None,
-            gguf_file=None,
-            use_safetensors=load_config.use_safetensors,
-            user_agent={},
-            is_remote_code=False,
-            transformers_explicit_filename="adapter_model.bin"
-            if load_config.use_safetensors is False
-            else "adapter_model.safetensors",
-            download_kwargs=load_config.download_kwargs,
-        )
+        if adapter_state_dict is None:
+            checkpoint_files, sharded_metadata = _get_resolved_checkpoint_files(
+                pretrained_model_name_or_path=peft_model_id,
+                variant=None,
+                gguf_file=None,
+                use_safetensors=load_config.use_safetensors,
+                user_agent={},
+                is_remote_code=False,
+                transformers_explicit_filename="adapter_model.bin"
+                if load_config.use_safetensors is False
+                else "adapter_model.safetensors",
+                download_kwargs=load_config.download_kwargs,
+            )
+        else:
+            checkpoint_files, sharded_metadata = [], {}
+
 
         load_config = replace(
             load_config,
@@ -482,7 +485,7 @@ class PeftAdapterMixin:
         def is_adapter_key(key: str) -> bool:
             return any(marker in key for marker in adapter_key_markers)
 
-        unexpected_keys = [key for key in load_info.unexpected_keys if is_adapter_key(key)]
+        unexpected_keys = load_info.unexpected_keys
         missing_keys = [key for key in load_info.missing_keys if is_adapter_key(key)]
         mismatched_keys = [item for item in load_info.mismatched_keys if is_adapter_key(item[0])]
 

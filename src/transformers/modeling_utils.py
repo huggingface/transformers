@@ -4210,17 +4210,15 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             unexpected_keys, mismatched_keys, conversion_errors = set(), set(), set()
         else:
             all_pointer = set()
-            # Checkpoints are safetensors
-            if checkpoint_files is not None and checkpoint_files[0].endswith(".safetensors") and state_dict is None:
+            if state_dict is not None:
+                merged_state_dict = state_dict
+            elif checkpoint_files is not None and checkpoint_files[0].endswith(".safetensors") and state_dict is None:
                 merged_state_dict = {}
                 for file in checkpoint_files:
                     file_pointer = safe_open(file, framework="pt", device="cpu")
                     all_pointer.add(file_pointer)
                     for k in file_pointer.keys():
                         merged_state_dict[k] = file_pointer.get_slice(k)  # don't materialize yet
-            # User passed an explicit state_dict
-            elif state_dict is not None:
-                merged_state_dict = state_dict
             # Checkpoints are .bin
             elif checkpoint_files is not None:
                 merged_state_dict = {}
