@@ -46,7 +46,7 @@ class DataCollatorMixin:
         else:
             raise ValueError(f"Framework '{return_tensors}' not recognized!")
 
-        if not isinstance(batch, BatchFeature):
+        if isinstance(batch, dict):
             batch = BatchFeature(batch, return_tensors)
 
         return batch
