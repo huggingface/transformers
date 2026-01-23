@@ -213,7 +213,6 @@ class PaliGemmaForConditionalGenerationModelTest(ModelTesterMixin, GenerationTes
 
             # remove one image but leave the image token in text
             curr_input_dict["pixel_values"] = curr_input_dict["pixel_values"][-1:, ...]
-            # _ = model(**curr_input_dict)
             with self.assertRaisesRegex(ValueError, "Image features and image tokens do not match"):
                 _ = model(**curr_input_dict)
 
