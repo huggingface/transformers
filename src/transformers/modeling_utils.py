@@ -4208,7 +4208,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         else:
             all_pointer = set()
             # Checkpoints are safetensors
-            if checkpoint_files is not None and checkpoint_files[0].endswith(".safetensors"):
+            if checkpoint_files is not None and checkpoint_files[0].endswith(".safetensors") and state_dict is None:
                 merged_state_dict = {}
                 for file in checkpoint_files:
                     file_pointer = safe_open(file, framework="pt", device="cpu")

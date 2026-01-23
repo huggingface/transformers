@@ -718,8 +718,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 # 2. Insert adapter name
                 prefix, _, suffix = key.rpartition(".")
                 key = f"{prefix}.other.{suffix}"
-
-                msg = f"Loading adapter weights from state_dict led to missing keys in the model: {key}"
+                msg = f"{key} | MISSING |"
                 self.assertIn(msg, cl.out)
 
     def test_peft_load_adapter_training_inference_mode_true(self):

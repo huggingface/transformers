@@ -489,7 +489,7 @@ class PeftAdapterMixin:
         )
         load_info = self._load_pretrained_model(
             model=self,
-            state_dict=None,
+            state_dict=adapter_state_dict,
             checkpoint_files=checkpoint_files,
             load_config=load_config,
         )
