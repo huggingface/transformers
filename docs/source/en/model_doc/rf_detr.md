@@ -104,10 +104,6 @@ for result in results:
 
 ## Resources
 
-A list of official Hugging Face and community (indicated by 🌎) resources to help you get started with RF-DETR.
-
-<PipelineTag pipeline="object-detection"/>
-<PipelineTag pipeline="instance-segmentation"/>
 
 - Scripts for finetuning [`RfDetrForObjectDetection`] with [`Trainer`]
   or [Accelerate](https://huggingface.co/docs/accelerate/index) can be
