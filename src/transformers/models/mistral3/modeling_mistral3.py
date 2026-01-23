@@ -529,7 +529,8 @@ class Mistral3ForConditionalGeneration(Mistral3PreTrainedModel, GenerationMixin)
             should_tie = getattr(self.config.text_config, "tie_word_embeddings", should_tie)
 
         if should_tie and hasattr(self.model, 'language_model') and hasattr(self.model.language_model, 'embed_tokens'):
-            self._tie_or_clone_weights(self.lm_head, self.model.language_model.embed_tokens)
+            # Tie lm_head weight to embed_tokens weight
+            self.lm_head.weight = self.model.language_model.embed_tokens.weight
 
 
 __all__ = ["Mistral3Model", "Mistral3PreTrainedModel", "Mistral3ForConditionalGeneration"]
