@@ -199,6 +199,7 @@ def _build_peft_weight_mapping(
         WeightRenaming("lora_A.weight", f"lora_A.{adapter_name}.weight"),
         WeightRenaming("lora_B.weight", f"lora_B.{adapter_name}.weight"),
         # TODO: lora_embedding_A and B
+        # TODO: lokr_w1 and etc
     ]
 
     for orig_conversion in weight_conversions:
@@ -421,6 +422,7 @@ class PeftAdapterMixin:
             )
 
         if peft_config is None:
+            load_config.download_kwargs.update(**adapter_kwargs)
             adapter_config_file = find_adapter_config_file(
                 peft_model_id,
                 **load_config.download_kwargs,
@@ -435,7 +437,6 @@ class PeftAdapterMixin:
             peft_config = PeftConfig.from_pretrained(
                 peft_model_id,
                 **load_config.download_kwargs,
-                **adapter_kwargs,
             )
             peft_config.inference_mode = not is_trainable
 
@@ -449,18 +450,32 @@ class PeftAdapterMixin:
             self._hf_peft_config_loaded = True
 
         if adapter_state_dict is None:
-            checkpoint_files, sharded_metadata = _get_resolved_checkpoint_files(
-                pretrained_model_name_or_path=peft_model_id,
-                variant=None,
-                gguf_file=None,
-                use_safetensors=load_config.use_safetensors,
-                user_agent={},
-                is_remote_code=False,
-                transformers_explicit_filename="adapter_model.bin"
-                if load_config.use_safetensors is False
-                else "adapter_model.safetensors",
-                download_kwargs=load_config.download_kwargs,
-            )
+            adapter_filenames = ["adapter_model.safetensors", "adapter_model.bin"]
+            if load_config.use_safetensors is False:
+                adapter_filenames = adapter_filenames[::-1]
+
+            checkpoint_files = sharded_metadata = None
+            last_error = None
+            for adapter_filename in adapter_filenames:
+                try:
+                    checkpoint_files, sharded_metadata = _get_resolved_checkpoint_files(
+                        pretrained_model_name_or_path=peft_model_id,
+                        variant=None,
+                        gguf_file=None,
+                        use_safetensors=(
+                            load_config.use_safetensors if adapter_filename.endswith(".safetensors") else False
+                        ),
+                        user_agent={},
+                        is_remote_code=False,
+                        transformers_explicit_filename=adapter_filename,
+                        download_kwargs=load_config.download_kwargs,
+                    )
+                    break
+                except OSError as error:
+                    last_error = error
+
+            if checkpoint_files is None:
+                raise last_error or OSError("Could not resolve any adapter checkpoint files.")
         else:
             checkpoint_files, sharded_metadata = [], {}
 
