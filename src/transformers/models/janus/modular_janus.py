@@ -41,7 +41,7 @@ from ...image_utils import (
     valid_images,
     validate_preprocess_arguments,
 )
-from ...modeling_outputs import ModelOutput
+from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ModelOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import ImagesKwargs, Unpack
 from ...utils import (
@@ -52,6 +52,7 @@ from ...utils import (
     filter_out_non_signature_kwargs,
     is_vision_available,
     logging,
+    torch_compilable_check,
 )
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..blip.image_processing_blip import BlipImageProcessor
@@ -551,9 +552,41 @@ class JanusVisionEncoder(SiglipEncoder):
 
 
 class JanusVisionModel(Blip2VisionModel):
+    _can_record_outputs = {
+        "hidden_states": JanusVisionEncoderLayer,
+        "attentions": JanusVisionAttention,
+    }
+
     def __init__(self, config: JanusVisionConfig):
         super().__init__(config)
         self.encoder = JanusVisionEncoder(config)
+
+    def forward(
+        self,
+        pixel_values: torch.FloatTensor | None = None,
+        interpolate_pos_encoding: bool = False,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        if pixel_values is None:
+            raise ValueError("You have to specify pixel_values")
+
+        hidden_states = self.embeddings(pixel_values, interpolate_pos_encoding=interpolate_pos_encoding)
+
+        encoder_outputs: BaseModelOutput = self.encoder(
+            inputs_embeds=hidden_states,
+            **kwargs,
+        )
+
+        last_hidden_state = encoder_outputs.last_hidden_state
+        last_hidden_state = self.post_layernorm(last_hidden_state)
+
+        pooled_output = last_hidden_state[:, 0, :]
+        pooled_output = self.post_layernorm(pooled_output)
+
+        return BaseModelOutputWithPooling(
+            last_hidden_state=last_hidden_state,
+            pooler_output=pooled_output,
+        )
 
 
 class JanusVisionAlignerMLP(nn.Module):
@@ -791,6 +824,10 @@ class JanusVQVAE(ChameleonVQVAE):
         "JanusVQVAEResnetBlock",
         "JanusVQVAEVectorQuantizer",
     ]
+    _can_record_outputs = {
+        "hidden_states": JanusVQVAEResnetBlock,
+        "attentions": JanusVQVAEAttnBlock,
+    }
     main_input_name = "pixel_values"
 
     def __init__(self, config: JanusVQVAEConfig):
@@ -828,10 +865,10 @@ class JanusVQVAE(ChameleonVQVAE):
         **kwargs,
     ) -> tuple[torch.FloatTensor, torch.FloatTensor]:
         batch_size = pixel_values.shape[0]
-        quant, embedding_loss, indices = self.encode(pixel_values)
-        decoded_pixel_values = self.decode(indices.view(batch_size, -1))
+        encode_outputs = self.encode(pixel_values, return_dict=True, **kwargs)
+        decoded_pixel_values = self.decode(encode_outputs.image_tokens.view(batch_size, -1))
 
-        return JanusVQVAEOutput(decoded_pixel_values, embedding_loss)
+        return JanusVQVAEOutput(decoded_pixel_values, encode_outputs.embedding_loss)
 
 
 class JanusVQVAEAlignerMLP(nn.Module):
@@ -901,10 +938,15 @@ class JanusModel(JanusPreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
-    def get_image_features(self, pixel_values):
-        image_embeds = self.vision_model(pixel_values)
-        image_embeds = self.aligner(image_embeds.last_hidden_state)
-        return image_embeds
+    @can_return_tuple
+    @auto_docstring
+    def get_image_features(
+        self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | BaseModelOutputWithPooling:
+        vision_outputs = self.vision_model(pixel_values, return_dict=True, **kwargs)
+        vision_outputs.pooler_output = self.aligner(vision_outputs.last_hidden_state)
+
+        return vision_outputs
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
@@ -922,12 +964,12 @@ class JanusModel(JanusPreTrainedModel):
             special_image_mask = input_ids == self.config.image_token_id
 
         n_image_tokens = special_image_mask.sum()
+        n_image_features = image_features.shape[0] * image_features.shape[1]
         special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-        if inputs_embeds[special_image_mask].numel() != image_features.numel():
-            n_image_features = image_features.shape[0] * image_features.shape[1]
-            raise ValueError(
-                f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
-            )
+        torch_compilable_check(
+            inputs_embeds[special_image_mask].numel() == image_features.numel(),
+            f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {n_image_features}",
+        )
         return special_image_mask
 
     @can_return_tuple
@@ -953,7 +995,7 @@ class JanusModel(JanusPreTrainedModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None:
-            image_embeds = self.get_image_features(pixel_values)
+            image_embeds = self.get_image_features(pixel_values, return_dict=True).pooler_output
             image_features = image_embeds.reshape(-1, inputs_embeds.shape[-1])
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             image_attention_mask = self.get_placeholder_mask(

@@ -521,7 +521,7 @@ class AfmoePreTrainedModel(PreTrainedModel):
         "expert_bias",
     ]
     _supports_sdpa = True
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_flex_attn = True
     _supports_attention_backend = True
     supports_gradient_checkpointing = True
@@ -571,7 +571,7 @@ class AfmoeModel(AfmoePreTrainedModel):
         cache_position: torch.LongTensor | None = None,
         use_cache: bool | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> MoeModelOutputWithPast:
+    ) -> tuple | MoeModelOutputWithPast:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 

@@ -34,12 +34,18 @@ from ...integrations import use_experts_implementation, use_kernel_forward_from_
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import MoeCausalLMOutputWithPast, MoeModelOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPooling, MoeCausalLMOutputWithPast, MoeModelOutputWithPast
 from ...modeling_rope_utils import dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, is_torchdynamo_compiling
-from ...utils.generic import OutputRecorder, check_model_inputs, maybe_autocast
+from ...utils import (
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    is_torchdynamo_compiling,
+    torch_compilable_check,
+)
+from ...utils.generic import OutputRecorder, check_model_inputs, is_flash_attention_requested, maybe_autocast
 from .configuration_ernie4_5_vl_moe import (
     Ernie4_5_VL_MoeConfig,
     Ernie4_5_VL_MoeTextConfig,
@@ -546,6 +552,142 @@ class Ernie4_5_VL_MoeDecoderLayer(GradientCheckpointingLayer):
         return hidden_states
 
 
+def rotate_half(x):
+    """Rotates half the hidden dims of the input."""
+    x1 = x[..., : x.shape[-1] // 2]
+    x2 = x[..., x.shape[-1] // 2 :]
+    return torch.cat((-x2, x1), dim=-1)
+
+
+def apply_rotary_pos_emb_vision(
+    q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor
+) -> tuple[torch.Tensor, torch.Tensor]:
+    orig_q_dtype = q.dtype
+    orig_k_dtype = k.dtype
+    q, k = q.float(), k.float()
+    cos, sin = cos.unsqueeze(-2).float(), sin.unsqueeze(-2).float()
+    q_embed = (q * cos) + (rotate_half(q) * sin)
+    k_embed = (k * cos) + (rotate_half(k) * sin)
+    q_embed = q_embed.to(orig_q_dtype)
+    k_embed = k_embed.to(orig_k_dtype)
+    return q_embed, k_embed
+
+
+class Ernie4_5_VL_MoeVisionAttention(nn.Module):
+    def __init__(self, config: Ernie4_5_VL_MoeVisionConfig) -> None:
+        super().__init__()
+        self.dim = config.hidden_size
+        self.num_heads = config.num_heads
+        self.head_dim = self.dim // self.num_heads
+        self.num_key_value_groups = 1  # needed for eager attention
+        self.qkv = nn.Linear(self.dim, self.dim * 3, bias=True)
+        self.proj = nn.Linear(self.dim, self.dim)
+        self.scaling = self.head_dim**-0.5
+        self.config = config
+        self.attention_dropout = 0.0
+        self.is_causal = False
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        cu_seqlens: torch.Tensor,
+        rotary_pos_emb: torch.Tensor | None = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        **kwargs,
+    ) -> torch.Tensor:
+        seq_length = hidden_states.shape[0]
+        query_states, key_states, value_states = (
+            self.qkv(hidden_states).reshape(seq_length, 3, self.num_heads, -1).permute(1, 0, 2, 3).unbind(0)
+        )
+        cos, sin = position_embeddings
+        query_states, key_states = apply_rotary_pos_emb_vision(query_states, key_states, cos, sin)
+
+        query_states = query_states.transpose(0, 1).unsqueeze(0)
+        key_states = key_states.transpose(0, 1).unsqueeze(0)
+        value_states = value_states.transpose(0, 1).unsqueeze(0)
+
+        attention_interface: Callable = eager_attention_forward
+        if self.config._attn_implementation != "eager":
+            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
+
+        if is_flash_attention_requested(self.config):
+            # Flash Attention: Use cu_seqlens for variable length attention
+            max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
+            attn_output, _ = attention_interface(
+                self,
+                query_states,
+                key_states,
+                value_states,
+                attention_mask=None,
+                scaling=self.scaling,
+                dropout=0.0 if not self.training else self.attention_dropout,
+                cu_seq_lens_q=cu_seqlens,
+                cu_seq_lens_k=cu_seqlens,
+                max_length_q=max_seqlen,
+                max_length_k=max_seqlen,
+                is_causal=False,
+                **kwargs,
+            )
+        else:
+            # Other implementations: Process each chunk separately
+            lengths = cu_seqlens[1:] - cu_seqlens[:-1]
+            splits = [
+                torch.split(tensor, lengths.tolist(), dim=2) for tensor in (query_states, key_states, value_states)
+            ]
+
+            attn_outputs = [
+                attention_interface(
+                    self,
+                    q,
+                    k,
+                    v,
+                    attention_mask=None,
+                    scaling=self.scaling,
+                    dropout=0.0 if not self.training else self.attention_dropout,
+                    is_causal=False,
+                    **kwargs,
+                )[0]
+                for q, k, v in zip(*splits)
+            ]
+            attn_output = torch.cat(attn_outputs, dim=1)
+
+        attn_output = attn_output.reshape(seq_length, -1).contiguous()
+        attn_output = self.proj(attn_output)
+        return attn_output
+
+
+class Ernie4_5_VL_MoeVisionBlock(GradientCheckpointingLayer):
+    def __init__(self, config) -> None:
+        super().__init__()
+
+        self.norm1 = nn.LayerNorm(config.hidden_size, config.rms_norm_eps)
+        self.norm2 = nn.LayerNorm(config.hidden_size, config.rms_norm_eps)
+        self.attn = Ernie4_5_VL_MoeVisionAttention(config=config)
+        self.mlp = Ernie4_5VLVisionMLP(
+            dim=config.hidden_size,
+            hidden_dim=config.intermediate_size,
+            hidden_act=config.hidden_act,
+        )
+
+    def forward(
+        self,
+        hidden_states: torch.Tensor,
+        cu_seqlens: torch.Tensor,
+        rotary_pos_emb: torch.Tensor | None = None,
+        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
+        **kwargs,
+    ) -> torch.Tensor:
+        hidden_states = hidden_states + self.attn(
+            self.norm1(hidden_states),
+            cu_seqlens=cu_seqlens,
+            rotary_pos_emb=rotary_pos_emb,
+            position_embeddings=position_embeddings,
+            **kwargs,
+        )
+        hidden_states = hidden_states + self.mlp(self.norm2(hidden_states))
+        return hidden_states
+
+
 @auto_docstring
 class Ernie4_5_VL_MoePreTrainedModel(PreTrainedModel):
     config: Ernie4_5_VL_MoeConfig
@@ -730,148 +872,17 @@ class Ernie4_5_VL_MoeVisionRotaryEmbedding(nn.Module):
         return freqs
 
 
-def rotate_half(x):
-    """Rotates half the hidden dims of the input."""
-    x1 = x[..., : x.shape[-1] // 2]
-    x2 = x[..., x.shape[-1] // 2 :]
-    return torch.cat((-x2, x1), dim=-1)
-
-
-def apply_rotary_pos_emb_vision(
-    q: torch.Tensor, k: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor
-) -> tuple[torch.Tensor, torch.Tensor]:
-    orig_q_dtype = q.dtype
-    orig_k_dtype = k.dtype
-    q, k = q.float(), k.float()
-    cos, sin = cos.unsqueeze(-2).float(), sin.unsqueeze(-2).float()
-    q_embed = (q * cos) + (rotate_half(q) * sin)
-    k_embed = (k * cos) + (rotate_half(k) * sin)
-    q_embed = q_embed.to(orig_q_dtype)
-    k_embed = k_embed.to(orig_k_dtype)
-    return q_embed, k_embed
-
-
-class Ernie4_5_VL_MoeVisionAttention(nn.Module):
-    def __init__(self, config: Ernie4_5_VL_MoeVisionConfig) -> None:
-        super().__init__()
-        self.dim = config.hidden_size
-        self.num_heads = config.num_heads
-        self.head_dim = self.dim // self.num_heads
-        self.num_key_value_groups = 1  # needed for eager attention
-        self.qkv = nn.Linear(self.dim, self.dim * 3, bias=True)
-        self.proj = nn.Linear(self.dim, self.dim)
-        self.scaling = self.head_dim**-0.5
-        self.config = config
-        self.attention_dropout = 0.0
-        self.is_causal = False
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        cu_seqlens: torch.Tensor,
-        rotary_pos_emb: torch.Tensor | None = None,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        **kwargs,
-    ) -> torch.Tensor:
-        seq_length = hidden_states.shape[0]
-        query_states, key_states, value_states = (
-            self.qkv(hidden_states).reshape(seq_length, 3, self.num_heads, -1).permute(1, 0, 2, 3).unbind(0)
-        )
-        cos, sin = position_embeddings
-        query_states, key_states = apply_rotary_pos_emb_vision(query_states, key_states, cos, sin)
-
-        query_states = query_states.transpose(0, 1).unsqueeze(0)
-        key_states = key_states.transpose(0, 1).unsqueeze(0)
-        value_states = value_states.transpose(0, 1).unsqueeze(0)
-
-        attention_interface: Callable = eager_attention_forward
-        if self.config._attn_implementation != "eager":
-            attention_interface = ALL_ATTENTION_FUNCTIONS[self.config._attn_implementation]
-
-        if "flash" in self.config._attn_implementation:
-            # Flash Attention: Use cu_seqlens for variable length attention
-            max_seqlen = (cu_seqlens[1:] - cu_seqlens[:-1]).max()
-            attn_output, _ = attention_interface(
-                self,
-                query_states,
-                key_states,
-                value_states,
-                attention_mask=None,
-                scaling=self.scaling,
-                dropout=0.0 if not self.training else self.attention_dropout,
-                cu_seq_lens_q=cu_seqlens,
-                cu_seq_lens_k=cu_seqlens,
-                max_length_q=max_seqlen,
-                max_length_k=max_seqlen,
-                is_causal=False,
-                **kwargs,
-            )
-        else:
-            # Other implementations: Process each chunk separately
-            lengths = cu_seqlens[1:] - cu_seqlens[:-1]
-            splits = [
-                torch.split(tensor, lengths.tolist(), dim=2) for tensor in (query_states, key_states, value_states)
-            ]
-
-            attn_outputs = [
-                attention_interface(
-                    self,
-                    q,
-                    k,
-                    v,
-                    attention_mask=None,
-                    scaling=self.scaling,
-                    dropout=0.0 if not self.training else self.attention_dropout,
-                    is_causal=False,
-                    **kwargs,
-                )[0]
-                for q, k, v in zip(*splits)
-            ]
-            attn_output = torch.cat(attn_outputs, dim=1)
-
-        attn_output = attn_output.reshape(seq_length, -1).contiguous()
-        attn_output = self.proj(attn_output)
-        return attn_output
-
-
-class Ernie4_5_VL_MoeVisionBlock(GradientCheckpointingLayer):
-    def __init__(self, config) -> None:
-        super().__init__()
-
-        self.norm1 = nn.LayerNorm(config.hidden_size, config.rms_norm_eps)
-        self.norm2 = nn.LayerNorm(config.hidden_size, config.rms_norm_eps)
-        self.attn = Ernie4_5_VL_MoeVisionAttention(config=config)
-        self.mlp = Ernie4_5VLVisionMLP(
-            dim=config.hidden_size,
-            hidden_dim=config.intermediate_size,
-            hidden_act=config.hidden_act,
-        )
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        cu_seqlens: torch.Tensor,
-        rotary_pos_emb: torch.Tensor | None = None,
-        position_embeddings: tuple[torch.Tensor, torch.Tensor] | None = None,
-        **kwargs,
-    ) -> torch.Tensor:
-        hidden_states = hidden_states + self.attn(
-            self.norm1(hidden_states),
-            cu_seqlens=cu_seqlens,
-            rotary_pos_emb=rotary_pos_emb,
-            position_embeddings=position_embeddings,
-            **kwargs,
-        )
-        hidden_states = hidden_states + self.mlp(self.norm2(hidden_states))
-        return hidden_states
-
-
 @auto_docstring
 class Ernie4_5_VL_MoeVisionTransformerPretrainedModel(Ernie4_5_VL_MoePreTrainedModel):
     config: Ernie4_5_VL_MoeVisionConfig
     input_modalities = ("image", "video")
     _no_split_modules = ["Ernie4_5_VL_MoeVisionBlock"]
     _input_embed_layer = "patch_embed"
+    _can_record_outputs = {
+        "router_logits": OutputRecorder(Ernie4_5_VL_MoeMoeBlock, index=1),
+        "hidden_states": Ernie4_5_VL_MoeVisionBlock,
+        "attentions": Ernie4_5_VL_MoeVisionAttention,
+    }
 
     def __init__(self, config) -> None:
         super().__init__(config)
@@ -922,13 +933,10 @@ class Ernie4_5_VL_MoeVisionTransformerPretrainedModel(Ernie4_5_VL_MoePreTrainedM
         rotary_pos_emb = rotary_pos_emb_full[pos_ids].flatten(1)
         return rotary_pos_emb
 
-    @auto_docstring
+    @check_model_inputs
     def forward(
-        self,
-        hidden_states: torch.Tensor,
-        grid_thw: torch.Tensor,
-        **kwargs,
-    ) -> torch.Tensor:
+        self, hidden_states: torch.Tensor, grid_thw: torch.Tensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
         grid_thw (`torch.LongTensor` of shape `(num_images, 3)`):
             The temporal, height and width dimensions of feature shape for each image. Each row contains [t, h, w] values.
@@ -956,7 +964,7 @@ class Ernie4_5_VL_MoeVisionTransformerPretrainedModel(Ernie4_5_VL_MoePreTrainedM
                 **kwargs,
             )
         hidden_states = self.ln(hidden_states)
-        return hidden_states
+        return BaseModelOutputWithPooling(last_hidden_state=hidden_states)
 
 
 class Ernie4_5_VL_MoeVisionMLP(nn.Module):
@@ -1258,43 +1266,51 @@ class Ernie4_5_VL_MoeModel(Ernie4_5_VL_MoePreTrainedModel):
 
             return position_ids, mrope_position_deltas
 
+    @can_return_tuple
+    @auto_docstring
     def get_video_features(
-        self, pixel_values_videos: torch.FloatTensor, video_grid_thw: torch.LongTensor | None = None
-    ):
+        self,
+        pixel_values_videos: torch.FloatTensor,
+        video_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input videos.
+        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+            The temporal, height and width of feature shape of each video in LLM.
         """
-        Encodes videos into continuous embeddings that can be forwarded to the language model.
-
-        Args:
-            pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-                The tensors corresponding to the input videos.
-            video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
-                The temporal, height and width of feature shape of each video in LLM.
-        """
-        video_embeds = self.vision_tower(pixel_values_videos, video_grid_thw)
-        video_embeds = self.resampler_model(video_embeds, video_grid_thw)
+        video_outputs = self.vision_tower(pixel_values_videos, video_grid_thw, return_dict=True, **kwargs)
+        video_embeds = self.resampler_model(video_outputs.last_hidden_state, video_grid_thw)
         split_sizes = (
             video_grid_thw.prod(-1)
             // self.vision_tower.spatial_merge_size**2
             // self.resampler_model.temporal_merge_size
         ).tolist()
         video_embeds = torch.split(video_embeds, split_sizes)
-        return video_embeds
+        video_outputs.pooler_output = video_embeds
+        return video_outputs
 
-    def get_image_features(self, pixel_values: torch.FloatTensor, image_grid_thw: torch.LongTensor | None = None):
+    @can_return_tuple
+    @auto_docstring
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        image_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input images.
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of feature shape of each image in LLM.
         """
-        Encodes images into continuous embeddings that can be forwarded to the language model.
-
-        Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-                The tensors corresponding to the input images.
-            image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
-                The temporal, height and width of feature shape of each image in LLM.
-        """
-        image_embeds = self.vision_tower(pixel_values, image_grid_thw)
-        image_embeds = self.resampler_model(image_embeds, image_grid_thw)
+        image_outputs = self.vision_tower(pixel_values, image_grid_thw, return_dict=True, **kwargs)
+        image_embeds = self.resampler_model(image_outputs.last_hidden_state, image_grid_thw)
         split_sizes = (image_grid_thw.prod(-1) // self.vision_tower.spatial_merge_size**2).tolist()
         image_embeds = torch.split(image_embeds, split_sizes)
-        return image_embeds
+        image_outputs.pooler_output = image_embeds
+        return image_outputs
 
     def get_placeholder_mask(
         self,
@@ -1322,18 +1338,19 @@ class Ernie4_5_VL_MoeModel(Ernie4_5_VL_MoePreTrainedModel):
 
         n_image_tokens = special_image_mask.sum()
         special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-        if image_features is not None and inputs_embeds[special_image_mask].numel() != image_features.numel():
-            raise ValueError(
-                f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {image_features.shape[0]}"
+        if image_features is not None:
+            torch_compilable_check(
+                inputs_embeds[special_image_mask].numel() == image_features.numel(),
+                f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {image_features.shape[0]}",
             )
 
         n_video_tokens = special_video_mask.sum()
         special_video_mask = special_video_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-        if video_features is not None and inputs_embeds[special_video_mask].numel() != video_features.numel():
-            raise ValueError(
-                f"Videos features and video tokens do not match: tokens: {n_video_tokens}, features {video_features.shape[0]}"
+        if video_features is not None:
+            torch_compilable_check(
+                inputs_embeds[special_video_mask].numel() == video_features.numel(),
+                f"Video features and video tokens do not match, tokens: {n_video_tokens}, features: {video_features.shape[0]}",
             )
-
         return special_image_mask, special_video_mask
 
     @auto_docstring
@@ -1372,7 +1389,7 @@ class Ernie4_5_VL_MoeModel(Ernie4_5_VL_MoePreTrainedModel):
             inputs_embeds = self.get_input_embeddings()(input_ids)
 
         if pixel_values is not None:
-            image_embeds = self.get_image_features(pixel_values, image_grid_thw)
+            image_embeds = self.get_image_features(pixel_values, image_grid_thw, return_dict=True).pooler_output
             image_embeds = torch.cat(image_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
@@ -1380,7 +1397,7 @@ class Ernie4_5_VL_MoeModel(Ernie4_5_VL_MoePreTrainedModel):
             inputs_embeds = inputs_embeds.masked_scatter(image_mask, image_embeds)
 
         if pixel_values_videos is not None:
-            video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw)
+            video_embeds = self.get_video_features(pixel_values_videos, video_grid_thw, return_dict=True).pooler_output
             video_embeds = torch.cat(video_embeds, dim=0).to(inputs_embeds.device, inputs_embeds.dtype)
             _, video_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, video_features=video_embeds
@@ -1592,13 +1609,37 @@ class Ernie4_5_VL_MoeForConditionalGeneration(Ernie4_5_VL_MoePreTrainedModel, Ge
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
 
+    @auto_docstring
     def get_video_features(
-        self, pixel_values_videos: torch.FloatTensor, video_grid_thw: torch.LongTensor | None = None
-    ):
-        return self.model.get_video_features(pixel_values_videos, video_grid_thw)
+        self,
+        pixel_values_videos: torch.FloatTensor,
+        video_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values_videos (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input videos.
+        video_grid_thw (`torch.LongTensor` of shape `(num_videos, 3)`, *optional*):
+            The temporal, height and width of feature shape of each video in LLM.
+        """
+        return self.model.get_video_features(
+            pixel_values_videos=pixel_values_videos, video_grid_thw=video_grid_thw, **kwargs
+        )
 
-    def get_image_features(self, pixel_values: torch.FloatTensor, image_grid_thw: torch.LongTensor | None = None):
-        return self.model.get_image_features(pixel_values, image_grid_thw)
+    @auto_docstring
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        image_grid_thw: torch.LongTensor | None = None,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input images.
+        image_grid_thw (`torch.LongTensor` of shape `(num_images, 3)`, *optional*):
+            The temporal, height and width of feature shape of each image in LLM.
+        """
+        return self.model.get_image_features(pixel_values=pixel_values, image_grid_thw=image_grid_thw, **kwargs)
 
     @auto_docstring
     @can_return_tuple

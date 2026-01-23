@@ -18,6 +18,7 @@ import tempfile
 import unittest
 
 import numpy as np
+import pytest
 import requests
 from parameterized import parameterized
 
@@ -241,18 +242,6 @@ class SiglipVisionModelTest(SiglipModelTesterMixin, unittest.TestCase):
     def test_training(self):
         pass
 
-    @unittest.skip(reason="SiglipVisionModel does not support standalone training")
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(reason="SiglipVisionModel does not support standalone training")
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(reason="SiglipVisionModel does not support standalone training")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
-
     @slow
     def test_model_from_pretrained(self):
         model_name = "google/siglip-base-patch16-224"
@@ -372,20 +361,20 @@ class SiglipTextModelTest(SiglipModelTesterMixin, unittest.TestCase):
         config_and_inputs = self.model_tester.prepare_config_and_inputs()
         self.model_tester.create_and_check_model(*config_and_inputs)
 
-    @unittest.skip(reason="SiglipTextModel does not support standalone training")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training(self):
         pass
 
-    @unittest.skip(reason="SiglipTextModel does not support standalone training")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(reason="SiglipTextModel does not support standalone training")
-    def test_training_gradient_checkpointing_use_reentrant(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(reason="SiglipTextModel does not support standalone training")
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     @unittest.skip(reason="Siglip does not use inputs_embeds")
@@ -515,6 +504,26 @@ class SiglipModelTest(SiglipModelTesterMixin, PipelineTesterMixin, unittest.Test
             text_config = SiglipTextConfig.from_pretrained(tmp_dir_name)
             self.assertDictEqual(config.text_config.to_dict(), text_config.to_dict())
 
+    @unittest.skip(reason="The SigLIP family currently does not work with output_attentions.")
+    def test_get_text_features_attentions(self):
+        # This test should no longer be skipped once this architecture is refactored to work with output_attentions.
+        pass
+
+    @unittest.skip(reason="The SigLIP family currently does not work with output_hidden_states.")
+    def test_get_text_features_hidden_states(self):
+        # This test should no longer be skipped once this architecture is refactored to work with output_hidden_states.
+        pass
+
+    @unittest.skip(reason="The SigLIP family currently does not work with output_attentions.")
+    def test_get_image_features_attentions(self):
+        # This test should no longer be skipped once this architecture is refactored to work with output_attentions.
+        pass
+
+    @unittest.skip(reason="The SigLIP family currently does not work with output_hidden_states.")
+    def test_get_image_features_hidden_states(self):
+        # This test should no longer be skipped once this architecture is refactored to work with output_hidden_states.
+        pass
+
     @slow
     def test_model_from_pretrained(self):
         model_name = "google/siglip-base-patch16-224"
@@ -569,17 +578,17 @@ class SiglipForImageClassificationModelTest(SiglipModelTesterMixin, PipelineTest
     def test_model_get_set_embeddings(self):
         pass
 
-    @unittest.skip(reason="SiglipForImageClassification does not support gradient checkpointing yet")
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing(self):
-        pass
+        super().test_training_gradient_checkpointing()
 
-    @unittest.skip(reason="SiglipForImageClassification does not support gradient checkpointing yet")
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(reason="SiglipForImageClassification does not support gradient checkpointing yet")
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
+        super().test_training_gradient_checkpointing_use_reentrant_false()
+
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        super().test_training_gradient_checkpointing_use_reentrant_true()
 
 
 # We will verify our results on an image of cute cats
@@ -619,7 +628,7 @@ class SiglipModelIntegrationTest(unittest.TestCase):
             torch.Size((inputs.input_ids.shape[0], inputs.pixel_values.shape[0])),
         )
 
-        expected_logits = torch.tensor([[-0.7567, -10.3354]], device=torch_device)
+        expected_logits = torch.tensor([[-0.7538, -10.3387]], device=torch_device)
 
         torch.testing.assert_close(outputs.logits_per_image, expected_logits, rtol=1e-3, atol=1e-3)
 

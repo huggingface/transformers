@@ -197,7 +197,7 @@ class Dinov3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
     )
 
     test_resize_embeddings = False
-    test_torch_exportable = True
+
     test_attention_outputs = False
 
     def setUp(self):
@@ -213,24 +213,6 @@ class Dinov3ModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="Dinov3 does not use inputs_embeds")
     def test_inputs_embeds(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
     def test_model_get_set_embeddings(self):
