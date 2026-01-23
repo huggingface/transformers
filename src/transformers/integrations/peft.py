@@ -938,6 +938,66 @@ def maybe_load_adapters(
 # TODO: These functions will be added to PEFT in release 0.19.0. Drop them here once 0.19.0 becomes the min PEFT
 # version.
 
+def _convert_peft_config_qwen2_moe(peft_config):
+    peft_config.target_parameters = peft_config.target_parameters or set()
+
+    # add gate.weight to target_parameters
+    for target in peft_config.target_modules:
+        if (target == "gate") or target.endswith(".gate"):
+            # FIXME: what if only specific layers are targeted, e.g. '0.gate'
+            peft_config.target_parameters.add(f"{target}.weight")
+
+    # remove gate from target_modules
+    peft_config.target_modules = {
+        key for key in peft_config.target_modules if not ((key == "gate") or (key.endswith(".gate")))
+    }
+
+    # similar to mixtral but w1 = gate_proj and w3 = up_proj, w2 = down_proj
+    # add expert layers: w1 & w3 => gate_up_proj, ModuleList of layers is now a stacked parameter.
+    for target in peft_config.target_modules:
+        msg_no_conversion_fused = (
+            f"Cannot convert {target} because these weights are now fused and "
+            "converting a single adapter into a fused weight is not supported "
+            "right now."
+        )
+
+        # if only gate_proj or only up_proj are targeted, conversion is not possible
+        if (target == "gate_proj") or target.endswith(".gate_proj"):
+            if target.replace("gate_proj", "up_proj") not in peft_config.target_modules:
+                raise ValueError(msg_no_conversion_fused)
+        if (target == "up_proj") or target.endswith(".up_proj"):
+            if target.replace("up_proj", "gate_proj") not in peft_config.target_modules:
+                raise ValueError(msg_no_conversion_fused)
+
+        if (target == "gate_proj") or target.endswith(".gate_proj"):
+            # FIXME: what if only specific layers are targeted, e.g. '0.w1'
+            peft_config.target_parameters.add("gate_up_proj")
+
+    # remove gate_proj and up_proj
+    peft_config.target_modules = {
+        key for key in peft_config.target_modules if not ((key == "gate_proj") or (key.endswith(".gate_proj")))
+    }
+    peft_config.target_modules = {
+        key for key in peft_config.target_modules if not ((key == "up_proj") or (key.endswith(".up_proj")))
+    }
+
+    # add expert layers: down_proj => down_proj, ModuleList of layers is now a stacked parameter.
+    for target in peft_config.target_modules:
+        if (target == "down_proj") or target.endswith(".down_proj"):
+            # FIXME: what if only specific layers are targeted, e.g. '0.w2'
+            peft_config.target_parameters.add("down_proj")
+
+    # remove down_proj
+    peft_config.target_modules = {
+        key for key in peft_config.target_modules if not ((key == "down_proj") or (key.endswith(".down_proj")))
+    }
+
+    if "gate_up_proj" in peft_config.target_parameters:
+        # this weight is a fusion of two adapters so the internal representation is r*2
+        peft_config.rank_pattern[r".*\.experts\.gate_up_proj"] = peft_config.r * 2
+
+    return peft_config
+
 
 def _convert_peft_config_mixtral(peft_config):
     peft_config.target_parameters = peft_config.target_parameters or set()
@@ -1025,8 +1085,12 @@ def convert_peft_config_for_transformers(peft_config, model: torch.nn.Module, co
 
     peft_config = copy.deepcopy(peft_config)  # don't mutate the original config
 
-    # TODO So far, only dealing with Mixtral
+    # TODO So far, only dealing with Mixtral conversion pattern and qwen2_moe conversion
+    # pattern. See conversion_mapping.py for all MoE conversion recipes.
     if model.config.model_type == "mixtral":
         peft_config = _convert_peft_config_mixtral(peft_config)
+
+    if model.config.model_type == "qwen3_moe":
+        peft_config = _convert_peft_config_qwen2_moe(peft_config)
 
     return peft_config
