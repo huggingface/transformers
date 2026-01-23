@@ -35,6 +35,16 @@ Custom models should also include a `_supports_assign_param_buffer`, which deter
 on the particular model. Signs that your model needs this are if `test_save_and_load_from_pretrained` fails. If so,
 set this to `False`.
 
+> **Note on encoder-decoder models**  
+> When using seq2seq models such as MarianMT, BART, or T5, the decoder can take either  
+> - `decoder_input_ids` (integer token IDs), **or**  
+> - `decoder_inputs_embeds` (pre-computed embeddings).  
+>  
+> You must provide **only one of these arguments**, not both. Passing both will raise  
+> `ValueError: You cannot specify both decoder_input_ids and decoder_inputs_embeds at the same time`.  
+>  
+> If you are writing a custom model or overriding `forward`, ensure you only forward **one of these** to the decoder.
+
 ## ModuleUtilsMixin
 
 [[autodoc]] modeling_utils.ModuleUtilsMixin
