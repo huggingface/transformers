@@ -39,7 +39,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 
 
-PATH_TO_TRANSFORMERS = "src/transformers"
+PATH_TO_TRANSFORMERS = "src/transformers/models"
 
 
 TARGET_DECORATORS = {"can_return_tuple", "check_model_inputs"}
