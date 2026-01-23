@@ -24,7 +24,7 @@ from PIL import Image
 from torchvision import transforms
 
 from transformers import (
-    DeformableDetrImageProcessor,
+    DetrImageProcessor,
     RfDetrConfig,
     RfDetrForInstanceSegmentation,
     RfDetrForObjectDetection,
@@ -432,9 +432,7 @@ def original_preprocess_image(image, size):
     return image
 
 
-def test_models_outputs(
-    model: RfDetrForObjectDetection, image_processor: DeformableDetrImageProcessor, model_name: str
-):
+def test_models_outputs(model: RfDetrForObjectDetection, image_processor: DetrImageProcessor, model_name: str):
     expected_outputs = {
         "rf-detr-nano": {
             "logits": [-6.68004, -5.66107, -11.70373, -8.32324, -5.76176],
@@ -469,7 +467,7 @@ def test_models_outputs(
         "rf-detr-segmentation": {
             "logits": [-7.05877, -4.23362, -6.54288, -8.13384, -6.36838],
             "boxes": [0.25603, 0.55164, 0.48340, 0.87798, 0.73861],
-            "mask_logits": [-16.72129, -16.17153, -17.06426, -17.29409, -17.78559],
+            "pred_masks": [-16.72129, -16.17153, -17.06426, -17.29409, -17.78559],
             "loss": 76.156754,
         },
     }
@@ -510,8 +508,8 @@ def test_models_outputs(
     torch.testing.assert_close(predicted_boxes, torch.Tensor(expected_boxes), rtol=5e-3, atol=5e-3)
 
     if is_segmentation:
-        predicted_mask_logits = outputs.mask_logits.flatten()[:5]
-        expected_mask_logits = expected_outputs[model_name]["mask_logits"]
+        predicted_mask_logits = outputs.pred_masks.flatten()[:5]
+        expected_mask_logits = expected_outputs[model_name]["pred_masks"]
         torch.testing.assert_close(predicted_mask_logits, torch.Tensor(expected_mask_logits), rtol=5e-3, atol=5e-3)
 
     predicted_loss = outputs.loss
@@ -581,7 +579,7 @@ def convert_rf_detr_checkpoint(
         print("MISMATCH:", len(mismatch))
         print(mismatch)
 
-    image_processor = DeformableDetrImageProcessor(**image_processor_config, use_fast=True)
+    image_processor = DetrImageProcessor(**image_processor_config, use_fast=True)
     test_models_outputs(model, image_processor, model_name)
 
     repo_id = f"{organization}/{model_name}"
