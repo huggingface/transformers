@@ -67,7 +67,8 @@ python run_object_detection.py \
 
 > Note:  
 `--eval_do_concat_batches false` is required for correct evaluation of detection models;  
-`--ignore_mismatched_sizes true` is required to load detection model for finetuning with different number of classes.
+`--ignore_mismatched_sizes true` is required to load detection model for finetuning with different number of classes;
+`--image_square_size` should be multiples of 64 in rtdetr model.
 
 The resulting model can be seen here: https://huggingface.co/qubvel-hf/qubvel-hf/detr-resnet-50-finetuned-10k-cppe5. The corresponding Weights and Biases report [here](https://api.wandb.ai/links/qubvel-hf-co/bnm0r5ex). Note that it's always advised to check the original paper to know the details regarding training hyperparameters. Hyperparameters for current example were not tuned. To improve model quality you could try:
  - changing image size parameters (`--shortest_edge`/`--longest_edge`)
