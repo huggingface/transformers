@@ -273,7 +273,7 @@ class TapasTokenizationTest(TokenizerTesterMixin, unittest.TestCase):
         self.assertListEqual(
             [tokenizer.tokenize(t) for t in ["Test", "\xad", "test"]], [["[UNK]"], ["[EMPTY]"], ["[UNK]"]]
         )
-        
+
     def test_tokenize_table_empty_string_cell_maps_to_empty_token(self):
         tokenizer = self.get_tokenizer()
 
