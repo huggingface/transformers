@@ -304,16 +304,18 @@ def patch_mixtral_moe_parameter_targeting(model, peft_config):
     import peft
 
     if model.config.model_type == "mixtral":
-        get_in_out_features = peft.tuners.lora.layer.ParamWrapper._get_in_out_features
+        update_layer = peft.tuners.lora.layer.ParamWrapper.update_layer
 
-        @wraps(get_in_out_features)
-        def new_get_in_out_features(layer, module):
-            if layer.parameter_name in ("down_proj", "gate_up_proj"):
-                in_features, out_features = get_in_out_features(layer, module)
-                return out_features, in_features
-            return get_in_out_features(layer, module)
+        @wraps(update_layer)
+        def new_update_layer(layer, *args, **kwargs):
+            if not hasattr(layer, '_swapped_in_out') and layer.parameter_name in ("down_proj", "gate_up_proj"):
+                tmp_in_features = layer.in_features
+                layer.in_features = layer.out_features
+                layer.out_features = tmp_in_features
+                layer._swapped_in_out = True
+            return update_layer(layer, *args, **kwargs)
 
-        peft.tuners.lora.layer.ParamWrapper._get_in_out_features = new_get_in_out_features
+        peft.tuners.lora.layer.ParamWrapper.update_layer = new_update_layer
 
 
 class PeftAdapterMixin:
