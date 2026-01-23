@@ -89,7 +89,6 @@ _deps = [
     "ipadic>=1.0.0,<2.0",
     "jinja2>=3.1.0",
     "jmespath>=1.0.1",
-    "kenlm",
     "kernels>=0.10.2,<0.11",
     "librosa",
     "natten>=0.14.6,<0.15.0",
@@ -135,8 +134,6 @@ _deps = [
     "scipy",
     "sentencepiece>=0.1.91,!=0.1.92",
     "starlette",
-    "sudachipy>=0.6.6",
-    "sudachidict_core>=20220729",
     "tensorboard",
     "timeout-decorator",
     "tiktoken",
@@ -161,7 +158,17 @@ _deps = [
     "mistral-common[image]>=1.8.8",
 ]
 
-# This is a lookup table with items like: {"tokenizers": "tokenizers==0.9.4", "packaging": "packaging"}, i.e.
+if PYTHON_MINOR_VERSION < 14:
+    _deps += ["sudachipy>=0.6.6", "sudachidict_core>=20220729", "ray[tune]>=2.7.0"]
+
+if PYTHON_MINOR_VERSION < 13:
+    _deps += ["kenlm"]
+
+# this is a lookup table with items like:
+#
+# tokenizers: "tokenizers==0.9.4"
+# packaging: "packaging"
+#
 # some of the values are versioned whereas others aren't.
 deps = {b: a for a, b in (re.findall(r"^(([^!=<>~ ]+)(?:[!=<>~ ].*)?$)", x)[0] for x in _deps)}
 
@@ -191,7 +198,7 @@ extras["retrieval"] = deps_list("faiss-cpu", "datasets")
 extras["sagemaker"] = deps_list("sagemaker")
 extras["deepspeed"] = deps_list("deepspeed", "accelerate")
 extras["optuna"] = deps_list("optuna")
-extras["integrations"] = deps_list("kernels", "optuna", "ray[tune]", "codecarbon")
+extras["integrations"] = deps_list("kernels", "optuna", "codecarbon")
 if PYTHON_MINOR_VERSION < 14:
     extras["ray"] = deps_list("ray[tune]>=2.7.0")
     extras["integrations"] += extras["ray"]
