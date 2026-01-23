@@ -322,7 +322,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
 
             # Perform audio generation with diffusion head
             diffusion_start_mask = unfinished_sequences.bool() & (next_tokens == self.config.audio_bos_token_id)
-            diffusion_start_idx = diffusion_start_mask.nonzero(as_tuple=True)[0]
+            diffusion_start_idx = diffusion_start_mask.nonzero(as_tuple=True)[0].cpu()
             if diffusion_start_idx.numel() > 0:
                 negative_model_kwargs["attention_mask"][diffusion_start_idx, :] = 0
                 negative_model_kwargs["attention_mask"][diffusion_start_idx, -1] = 1
@@ -335,7 +335,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                         v_cache[diffusion_start_idx, :, -1, :] = v_cache[diffusion_start_idx, :, 0, :].clone()
 
             diffusion_mask = unfinished_sequences.bool() & (next_tokens == self.config.audio_diffusion_token_id)
-            diffusion_idx = diffusion_mask.nonzero(as_tuple=True)[0]
+            diffusion_idx = diffusion_mask.nonzero(as_tuple=True)[0].cpu()
             if diffusion_idx.numel() > 0:
                 # Negative pass for classifier-free guidance
                 negative_model_inputs = self.prepare_inputs_for_generation(negative_input_ids, **negative_model_kwargs)
@@ -370,7 +370,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                     audio_latent.device
                 ) - self.latent_bias_factor.to(audio_latent.device)
                 if diffusion_idx.numel() < batch_size:
-                    padded_latent = torch.zeros(batch_size, *scaled_latent.shape[1:], device=scaled_latent.device)
+                    padded_latent = torch.zeros(batch_size, *scaled_latent.shape[1:]).to(scaled_latent.device, scaled_latent.dtype)
                     padded_latent[diffusion_idx] = scaled_latent
                 else:
                     padded_latent = scaled_latent
@@ -403,7 +403,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                 acoustic_embed = self.model.acoustic_connector(audio_latent)
                 semantic_embed = self.model.semantic_connector(semantic_features)
                 diffusion_embeds = acoustic_embed + semantic_embed
-                next_inputs_embeds[diffusion_idx] = diffusion_embeds
+                next_inputs_embeds[diffusion_idx] = diffusion_embeds.to(next_inputs_embeds.device)
 
             inputs_embeds = next_inputs_embeds
             # ============================================

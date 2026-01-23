@@ -4,7 +4,7 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_vibevoice.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# Copyright 2025 The Microsoft Team and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The Microsoft Team and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -420,7 +420,7 @@ class VibeVoicePreTrainedModel(PreTrainedModel):
     config: VibeVoiceConfig
     base_model_prefix = "model"
     main_input_name = "input_ids"
-    _no_split_modules = None
+    _no_split_modules = ["VibeVoiceEncoderLayer"]
     input_modalities = ("audio", "text")
     supports_gradient_checkpointing = True
     _skip_keys_device_placement = "past_key_values"
@@ -644,9 +644,10 @@ class VibeVoiceModel(VibeVoicePreTrainedModel):
                 The audio embeddings.
         """
         # adjust padding mask according to tokenizer compression
-        tokenizer_hop_length = self.acoustic_tokenizer.config.hop_length
-        num_audio_tokens = torch.ceil(padding_mask.sum(dim=-1) / tokenizer_hop_length).to(torch.int64)
-        padding_mask = torch.arange(max(num_audio_tokens), device=padding_mask.device) < num_audio_tokens[:, None]
+        num_audio_tokens = torch.ceil(padding_mask.sum(dim=-1) / self.acoustic_tokenizer.config.hop_length).to(
+            torch.int64
+        )
+        padding_mask = torch.arange(max(num_audio_tokens)) < num_audio_tokens[:, None].cpu()
 
         with torch.no_grad():
             acoustic_latents = self.acoustic_tokenizer.encode(input_values).latents

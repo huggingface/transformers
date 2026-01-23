@@ -25,7 +25,6 @@ rendered properly in your Markdown viewer.
 
 [VibeVoice](https://huggingface.co/papers/2508.19205) is a novel framework for synthesizing high-fidelity, long-form speech with multiple speakers by employing a next-token diffusion approach within a Large Language Model (LLM) structure. It's designed to capture the authentic conversational "vibe" and is particularly suited for generating audio content like podcasts and multi-participant audiobooks.
 
-
 Two model checkpoint are available at:
 - [bezzam/VibeVoice-1.5B](https://huggingface.co/bezzam/VibeVoice-1.5B)
 - [bezzam/VibeVoice-7B](https://huggingface.co/bezzam/VibeVoice-7B)
@@ -70,8 +69,8 @@ pip install soundfile   # for saving audio
 ```python
 from transformers import AutoProcessor, VibeVoiceForConditionalGeneration
 
-model_id = "bezzam/VibeVoice-1.5Bv2"
-# model_id = "bezzam/VibeVoice-7Bv2"
+model_id = "bezzam/VibeVoice-1.5B"
+# model_id = "bezzam/VibeVoice-7B"
 processor = AutoProcessor.from_pretrained(model_id)
 model = VibeVoiceForConditionalGeneration.from_pretrained(model_id)
 ```
@@ -80,21 +79,17 @@ model = VibeVoiceForConditionalGeneration.from_pretrained(model_id)
 
 ```python
 import os
-import torch
 from transformers import AutoProcessor, VibeVoiceForConditionalGeneration, set_seed
 
 
-model_id = "bezzam/VibeVoice-1.5Bv2"
-# model_id = "bezzam/VibeVoice-7Bv2"
+model_id = "bezzam/VibeVoice-1.5B"
+# model_id = "bezzam/VibeVoice-7B"
 text = "Hello, nice to meet you. How are you?"
 set_seed(42)  # for deterministic results
 
 # Load model
-device = "cuda" if torch.cuda.is_available() else "cpu"
 processor = AutoProcessor.from_pretrained(model_id)
-model = VibeVoiceForConditionalGeneration.from_pretrained(model_id)
-model = model.to(device).eval()
-model_dtype = next(model.parameters()).dtype
+model = VibeVoiceForConditionalGeneration.from_pretrained(model_id, device_map="auto")
 sampling_rate = processor.feature_extractor.sampling_rate
 
 # Prepare input
@@ -103,7 +98,7 @@ inputs = processor.apply_chat_template(
     chat_template,
     tokenize=True,
     return_dict=True,
-).to(device, dtype=model_dtype)
+).to(model.device, model.dtype)
 
 # Generate!
 audio = model.generate(**inputs)
@@ -122,21 +117,17 @@ A url (`url`), local path (`path`), or loaded audio array (`audio`) can be provi
 
 ```python
 import os
-import torch
 from transformers import AutoProcessor, VibeVoiceForConditionalGeneration, set_seed
 
 
-model_id = "bezzam/VibeVoice-1.5Bv2"
-# model_id = "bezzam/VibeVoice-7Bv2"
+model_id = "bezzam/VibeVoice-1.5B"
+# model_id = "bezzam/VibeVoice-7B"
 text = "Hello, nice to meet you. How are you?"
 set_seed(42)  # for deterministic results
 
 # Load model
-device = "cuda" if torch.cuda.is_available() else "cpu"
 processor = AutoProcessor.from_pretrained(model_id)
-model = VibeVoiceForConditionalGeneration.from_pretrained(model_id)
-model = model.to(device).eval()
-model_dtype = next(model.parameters()).dtype
+model = VibeVoiceForConditionalGeneration.from_pretrained(model_id, device_map="auto")
 sampling_rate = processor.feature_extractor.sampling_rate
 
 # Prepare input
@@ -147,7 +138,7 @@ chat_template = [
             {"type": "text", "text": text},
             {
                 "type": "audio",
-                "url": "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Alice_woman.wav",
+                "url": "https://hf.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Alice_woman.wav",
             },
         ],
     }
@@ -157,7 +148,7 @@ inputs = processor.apply_chat_template(
     tokenize=True,
     return_dict=True,
     sampling_rate=sampling_rate,
-).to(device, dtype=model_dtype)
+).to(model.device, model.dtype)
 
 # Generate!
 audio = model.generate(**inputs)
@@ -182,9 +173,8 @@ from tqdm import tqdm
 from transformers import AutoProcessor, VibeVoiceForConditionalGeneration, set_seed
 
 
-model_id = "bezzam/VibeVoice-1.5Bv2"
-# model_id = "bezzam/VibeVoice-7Bv2"
-sampling_rate = 24000
+model_id = "bezzam/VibeVoice-1.5B"
+# model_id = "bezzam/VibeVoice-7B"
 max_new_tokens = 400  # `None` to ensure full generation
 set_seed(42)  # for deterministic results
 
@@ -199,7 +189,7 @@ chat_template = [
             },
             {
                 "type": "audio",
-                "url": "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Alice_woman.wav",
+                "url": "https://hf.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Alice_woman.wav",
             },
         ],
     },
@@ -212,7 +202,7 @@ chat_template = [
             },
             {
                 "type": "audio",
-                "url": "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Frank_man.wav",
+                "url": "https://hf.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Frank_man.wav",
             },
         ],
     },
@@ -236,18 +226,18 @@ chat_template = [
     },
 ]
 
-# load model
-device = "cuda" if torch.cuda.is_available() else "cpu"
+# Load model
 processor = AutoProcessor.from_pretrained(model_id)
-model = VibeVoiceForConditionalGeneration.from_pretrained(
-    model_id,
-    device_map=device,
-).eval()
+model = VibeVoiceForConditionalGeneration.from_pretrained(model_id, device_map="auto")
+sampling_rate = processor.feature_extractor.sampling_rate
 
 # prepare inputs
-inputs = processor.apply_chat_template(chat_template, tokenize=True, return_dict=True, sampling_rate=sampling_rate).to(
-    device
-)
+inputs = processor.apply_chat_template(
+    chat_template, 
+    tokenize=True, 
+    return_dict=True, 
+    sampling_rate=sampling_rate
+).to(model.device, model.dtype)
 
 # Generate audio with a callback to track progress
 start_time = time.time()
@@ -255,15 +245,7 @@ completed_samples = set()
 with tqdm(desc="Generating") as pbar:
 
     def monitor_progress(p_batch):
-        # p_batch format: [current_step, max_step, completion_step] for each sample
-        finished_samples = (p_batch[:, 0] == p_batch[:, 1]).nonzero(as_tuple=False).squeeze(1)
-        if finished_samples.numel() > 0:
-            for sample_idx in finished_samples.tolist():
-                if sample_idx not in completed_samples:
-                    completed_samples.add(sample_idx)
-                    completion_step = int(p_batch[sample_idx, 2])
-                    print(f"Sample {sample_idx} completed at step {completion_step}", flush=True)
-
+        # p_batch format: [current_step, max_step] for each sample
         active_samples = p_batch[:, 0] < p_batch[:, 1]
         if active_samples.any():
             active_progress = p_batch[active_samples]
@@ -302,9 +284,8 @@ from tqdm import tqdm
 from transformers import AutoProcessor, VibeVoiceForConditionalGeneration, set_seed
 
 
-model_id = "bezzam/VibeVoice-1.5Bv2"
-# model_id = "bezzam/VibeVoice-7Bv2"
-sampling_rate = 24000
+model_id = "bezzam/VibeVoice-1.5B"
+# model_id = "bezzam/VibeVoice-7B"
 max_new_tokens = 400  # `None` to ensure full generation
 set_seed(42)  # for deterministic results
 
@@ -319,7 +300,7 @@ chat_template = [
                 },
                 {
                     "type": "audio",
-                    "url": "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Alice_woman.wav",
+                    "url": "https://hf.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Alice_woman.wav",
                 },
             ],
         },
@@ -332,7 +313,7 @@ chat_template = [
                 },
                 {
                     "type": "audio",
-                    "url": "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Frank_man.wav",
+                    "url": "https://hf.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Frank_man.wav",
                 },
             ],
         },
@@ -365,7 +346,7 @@ chat_template = [
                 },
                 {
                     "type": "audio",
-                    "url": "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Alice_woman.wav",
+                    "url": "https://hf.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Alice_woman.wav",
                 },
             ],
         },
@@ -375,7 +356,7 @@ chat_template = [
                 {"type": "text", "text": "Hi Alice, it's great to be here. I'm Carter."},
                 {
                     "type": "audio",
-                    "url": "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Carter_man.wav",
+                    "url": "https://hf.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Carter_man.wav",
                 },
             ],
         },
@@ -385,7 +366,7 @@ chat_template = [
                 {"type": "text", "text": "Hello, uh, I'm Frank. Good to be on."},
                 {
                     "type": "audio",
-                    "url": "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Frank_man.wav",
+                    "url": "https://hf.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Frank_man.wav",
                 },
             ],
         },
@@ -395,20 +376,17 @@ chat_template = [
                 {"type": "text", "text": "And I'm Maya. Thanks for having me."},
                 {
                     "type": "audio",
-                    "url": "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Maya_woman.wav",
+                    "url": "https://hf.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Maya_woman.wav",
                 },
             ],
         },
     ],
 ]
 
-# load model
-device = "cuda" if torch.cuda.is_available() else "cpu"
+# Load model
 processor = AutoProcessor.from_pretrained(model_id)
-model = VibeVoiceForConditionalGeneration.from_pretrained(
-    model_id,
-    device_map=device,
-).eval()
+model = VibeVoiceForConditionalGeneration.from_pretrained(model_id, device_map="auto")
+sampling_rate = processor.feature_extractor.sampling_rate
 
 # prepare inputs
 inputs = processor.apply_chat_template(
@@ -416,7 +394,7 @@ inputs = processor.apply_chat_template(
     return_dict=True,
     tokenize=True,
     sampling_rate=sampling_rate,
-).to(device)
+).to(model.device, model.dtype)
 
 # Generate audio with a callback to track progress
 start_time = time.time()
@@ -424,15 +402,7 @@ completed_samples = set()
 with tqdm(desc="Generating") as pbar:
 
     def monitor_progress(p_batch):
-        # p_batch format: [current_step, max_step, completion_step] for each sample
-        finished_samples = (p_batch[:, 0] == p_batch[:, 1]).nonzero(as_tuple=False).squeeze(1)
-        if finished_samples.numel() > 0:
-            for sample_idx in finished_samples.tolist():
-                if sample_idx not in completed_samples:
-                    completed_samples.add(sample_idx)
-                    completion_step = int(p_batch[sample_idx, 2])
-                    print(f"Sample {sample_idx} completed at step {completion_step}", flush=True)
-
+        # p_batch format: [current_step, max_step] for each sample
         active_samples = p_batch[:, 0] < p_batch[:, 1]
         if active_samples.any():
             active_progress = p_batch[active_samples]
@@ -469,8 +439,8 @@ import soundfile as sf
 from transformers import pipeline, set_seed
 
 
-model_id = "bezzam/VibeVoice-1.5Bv2"
-# model_id = "bezzam/VibeVoice-7Bv2"
+model_id = "bezzam/VibeVoice-1.5B"
+# model_id = "bezzam/VibeVoice-7B"
 text = "Hello, nice to meet you. How are you?"
 set_seed(42)  # for deterministic results
 
@@ -485,12 +455,13 @@ chat_template = [
             {"type": "text", "text": text},
             {
                 "type": "audio",
-                "url": "https://huggingface.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Alice_woman.wav",
+                "url": "https://hf.co/datasets/bezzam/vibevoice_samples/resolve/main/voices/en-Alice_woman.wav",
             },
         ],
     }
 ]
-output = pipe(chat_template)
+generate_kwargs = {"cfg_scale": 1.5}
+output = pipe(chat_template, generate_kwargs=generate_kwargs)
 
 # Save to file
 fn = f"{os.path.basename(model_id)}_pipeline.wav"
@@ -498,19 +469,9 @@ sf.write(fn, output["audio"], output["sampling_rate"])
 print(f"Saved output to {fn}")
 ```
 
-### Training
-
-TODO
-
-### Full-graph compilation
-
-TODO
-
-
 ## VibeVoiceConfig
 
 [[autodoc]] VibeVoiceConfig
-
 
 ## VibeVoiceProcessor
 
@@ -527,11 +488,9 @@ TODO
 
 [[autodoc]] VibeVoiceModel
 
-
 ## VibeVoiceSemanticTokenizerConfig
 
 [[autodoc]] VibeVoiceSemanticTokenizerConfig
-
 
 ## VibeVoiceSemanticTokenizerModel
 
