@@ -22,9 +22,9 @@
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
 
 
-class ExaoneMoEConfig(PreTrainedConfig):
+class ExaoneMoeConfig(PreTrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a [`ExaoneMoEModel`]. It is used to
+    This is the configuration class to store the configuration of a [`ExaoneMoeModel`]. It is used to
     instantiate a EXAONE 4.0 model according to the specified arguments, defining the model architecture. Instantiating a
     configuration with the defaults will yield a similar configuration to that of the EXAONE-4.0-32B [LGAI-EXAONE/EXAONE-4.0-32B](https://huggingface.co/LGAI-EXAONE/EXAONE-4.0-32B)
 
@@ -34,7 +34,7 @@ class ExaoneMoEConfig(PreTrainedConfig):
     Args:
         vocab_size (`int`, *optional*, defaults to 102400):
             Vocabulary size of the EXAONE 4.0 model. Defines the number of different tokens that can be represented by the
-            `inputs_ids` passed when calling [`ExaoneMoEModel`].
+            `inputs_ids` passed when calling [`ExaoneMoeModel`].
         hidden_size (`int`, *optional*, defaults to 4096):
             Dimension of the hidden representations.
         intermediate_size (`int`, *optional*, defaults to `hidden_size * 4`):
@@ -94,13 +94,13 @@ class ExaoneMoEConfig(PreTrainedConfig):
     Example:
 
     ```python
-    >>> from transformers import ExaoneMoEModel, ExaoneMoEConfig
+    >>> from transformers import ExaoneMoeModel, ExaoneMoeConfig
 
     >>> # Initializing a EXAONE configuration
-    >>> configuration = ExaoneMoEConfig()
+    >>> configuration = ExaoneMoeConfig()
 
     >>> # Initializing a model from configuration
-    >>> model = ExaoneMoEModel(configuration)
+    >>> model = ExaoneMoeModel(configuration)
 
     >>> # Accessing the model configuration
     >>> configuration = model.config
@@ -207,4 +207,16 @@ class ExaoneMoEConfig(PreTrainedConfig):
         )
 
 
-__all__ = ["ExaoneMoEConfig"]
+# class ExaoneMoeForSequenceClassification(Exaone4ForSequenceClassification):
+#     pass
+
+
+# class ExaoneMoeForTokenClassification(Exaone4ForTokenClassification):
+#     pass
+
+
+# class ExaoneMoeForQuestionAnswering(Exaone4ForQuestionAnswering):
+#     pass
+
+
+__all__ = ["ExaoneMoeConfig"]

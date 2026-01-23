@@ -62,6 +62,7 @@ _MODEL_TO_CONVERSION_PATTERN = {
     "hunyuan_v1_moe": "qwen2_moe",
     "flex_olmo": "qwen2_moe",
     "olmoe": "qwen2_moe",
+    "exaone_moe": "qwen2_moe",
 }
 
 
@@ -286,6 +287,10 @@ def _build_checkpoint_conversion_mapping():
     mapping["minimax_m2"] = mapping["mixtral"].copy()
     mapping["minimax_m2"] += [
         WeightRenaming(".block_sparse_moe.e_score_correction_bias", ".mlp.e_score_correction_bias"),
+    ]
+    mapping["exaone_moe"] = mapping["qwen2_moe"].copy()
+    mapping["exaone_moe"] += [
+        WeightRenaming("mlp.e_score_correction_bias", "mlp.gate.e_score_correction_bias")
     ]
 
     for model_type, base_pattern in _MODEL_TO_CONVERSION_PATTERN.items():

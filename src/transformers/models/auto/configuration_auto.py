@@ -145,7 +145,7 @@ CONFIG_MAPPING_NAMES = OrderedDict[str, str](
         ("esm", "EsmConfig"),
         ("evolla", "EvollaConfig"),
         ("exaone4", "Exaone4Config"),
-        ("exaone_moe", "ExaoneMoEConfig"),
+        ("exaone_moe", "ExaoneMoeConfig"),
         ("falcon", "FalconConfig"),
         ("falcon_h1", "FalconH1Config"),
         ("falcon_mamba", "FalconMambaConfig"),

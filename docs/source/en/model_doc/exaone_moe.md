@@ -170,31 +170,31 @@ output_ids = generated_ids[0][input_ids['input_ids'].shape[-1]:]
 print(tokenizer.decode(output_ids, skip_special_tokens=True))
 ```
 
-## ExaoneMoEConfig
+## ExaoneMoeConfig
 
-[[autodoc]] ExaoneMoEConfig
+[[autodoc]] ExaoneMoeConfig
 
-## ExaoneMoEModel
+## ExaoneMoeModel
 
-[[autodoc]] ExaoneMoEModel
+[[autodoc]] ExaoneMoeModel
     - forward
 
-## ExaoneMoEForCausalLM
+## ExaoneMoeForCausalLM
 
-[[autodoc]] ExaoneMoEForCausalLM
+[[autodoc]] ExaoneMoeForCausalLM
     - forward
 
-## ExaoneMoEForSequenceClassification
+## ExaoneMoeForSequenceClassification
 
-[[autodoc]] ExaoneMoEForSequenceClassification
+[[autodoc]] ExaoneMoeForSequenceClassification
     - forward
 
-## ExaoneMoEForTokenClassification
+## ExaoneMoeForTokenClassification
 
-[[autodoc]] ExaoneMoEForTokenClassification
+[[autodoc]] ExaoneMoeForTokenClassification
     - forward
 
-## ExaoneMoEForQuestionAnswering
+## ExaoneMoeForQuestionAnswering
 
-[[autodoc]] ExaoneMoEForQuestionAnswering
+[[autodoc]] ExaoneMoeForQuestionAnswering
     - forward
