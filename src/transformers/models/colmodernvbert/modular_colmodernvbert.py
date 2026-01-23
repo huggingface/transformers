@@ -186,6 +186,14 @@ class ColModernVBertProcessor(ColQwen2Processor):
         query_prefix: str | None = None,
         **kwargs,
     ):
+        r"""
+        image_seq_len (`int`, *optional*, defaults to 64):
+            The length of the image sequence i.e. the number of <image> tokens per image in the input.
+        visual_prompt_prefix (`str`, *optional*):
+            A string that gets tokenized and prepended to the image tokens.
+        query_prefix (`str`, *optional*):
+            A prefix to be used for the query.
+        """
         super().__init__(
             image_processor,
             tokenizer,
@@ -415,11 +423,6 @@ class ColModernVBertProcessor(ColQwen2Processor):
                 The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
                 (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
                 `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:

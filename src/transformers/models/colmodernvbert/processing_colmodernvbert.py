@@ -140,9 +140,11 @@ class ColModernVBertProcessor(ProcessorMixin):
         **kwargs,
     ):
         r"""
-        visual_prompt_prefix (`str`, *optional*, defaults to `"<|im_start|>user\n<|vision_start|><|image_pad|><|vision_end|>Describe the image.<|im_end|><|endoftext|>"`):
+        image_seq_len (`int`, *optional*, defaults to 64):
+            The length of the image sequence i.e. the number of <image> tokens per image in the input.
+        visual_prompt_prefix (`str`, *optional*):
             A string that gets tokenized and prepended to the image tokens.
-        query_prefix (`str`, *optional*, defaults to `"Query: "`):
+        query_prefix (`str`, *optional*):
             A prefix to be used for the query.
         """
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
@@ -187,31 +189,15 @@ class ColModernVBertProcessor(ProcessorMixin):
         text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         **kwargs: Unpack[ColModernVBertProcessorKwargs],
     ) -> BatchFeature:
-        """
-        Main method to prepare for the model either (1) one or several texts, either (2) one or several image(s). This method is a custom
-        wrapper around the ModernVBertProcessor's [`~ModernVBertProcessor.__call__`] method adapted for the ColModernVBert model. It cannot process
-        both text and images at the same time.
-
-        When preparing the the text(s), this method forwards the `text` and `kwargs` arguments to ModernVBertTokenizerFast's
-        [`~ModernVBertTokenizerFast.__call__`].
-        When preparing the the image(s), this method forwards the `images` and `kwargs` arguments to ModernVBertImageProcessor's
-        [`~ModernVBertImageProcessor.__call__`].
-        Please refer to the doctsring of the above two methods for more information.
-
-        Args:
-            images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
-                The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
-                tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
-                number of channels, H and W are image height and width.
-            text (`str`, `list[str]`, `list[list[str]]`):
-                The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
-                (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
-                `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
-            return_tensors (`str` or [`~utils.TensorType`], *optional*):
-                If set, will return tensors of a particular framework. Acceptable values are:
-
-                - `'pt'`: Return PyTorch `torch.Tensor` objects.
-                - `'np'`: Return NumPy `np.ndarray` objects.
+        r"""
+        images (`PIL.Image.Image`, `np.ndarray`, `torch.Tensor`, `list[PIL.Image.Image]`, `list[np.ndarray]`, `list[torch.Tensor]`):
+            The image or batch of images to be prepared. Each image can be a PIL image, NumPy array or PyTorch
+            tensor. In case of a NumPy array/PyTorch tensor, each image should be of shape (C, H, W), where C is a
+            number of channels, H and W are image height and width.
+        text (`str`, `list[str]`, `list[list[str]]`):
+            The sequence or batch of sequences to be encoded. Each sequence can be a string or a list of strings
+            (pretokenized string). If the sequences are provided as list of strings (pretokenized), you must set
+            `is_split_into_words=True` (to lift the ambiguity with a batch of sequences).
 
         Returns:
             [`BatchFeature`]: A [`BatchFeature`] with the following fields:
