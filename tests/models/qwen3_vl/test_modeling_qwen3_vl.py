@@ -74,8 +74,7 @@ class Qwen3VLVisionText2TextModelTester(VLMModelTester):
         self.temporal_patch_size = 2
         self.num_position_embeddings = 16
         self.deepstack_visual_indexes = [0, 1]
-        self.rope_theta = 10000
-        self.rope_parameters = {"rope_type": "default", "mrope_section": [16, 8, 8], "mrope_interleaved": True}
+        self.rope_parameters = {"rope_type": "default", "mrope_section": [16, 8, 8], "mrope_interleaved": True, "rope_theta": 10000}
 
     def create_pixel_values(self):
         # Qwen3VL expects flattened patches: (total_patches, channels * patch_size^2 * temporal_patch_size)
