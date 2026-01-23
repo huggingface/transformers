@@ -25,10 +25,9 @@ from contextlib import AbstractContextManager, ExitStack, nullcontext
 from dataclasses import dataclass, fields, is_dataclass
 from enum import Enum
 from functools import partial, wraps
-from typing import Any, Optional, TypedDict, TypeVar
+from typing import Any, Optional, ParamSpec, TypedDict, TypeVar
 
 import numpy as np
-from typing_extensions import ParamSpec
 
 from ..utils import logging
 from .import_utils import is_mlx_available, is_torch_available, is_torch_fx_proxy, requires
