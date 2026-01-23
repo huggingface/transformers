@@ -371,15 +371,23 @@ def get_tensor_shard(param, empty_param, device_mesh, rank, dim, tensor_idx: int
         rank (int): Global rank of the current process/device.
         dim (int): Dimension along which to shard the tensor.
     """
+
+    # Helper function to get shape consistently whether param is a Tensor or has get_shape() method
+    def _get_shape(tensor):
+        if isinstance(tensor, torch.Tensor):
+            return tensor.shape
+        else:
+            return tensor.get_shape()
+
     param_dim = empty_param.ndim
     # Flatten the mesh to get the total number of devices
     mesh_shape = device_mesh.shape
     world_size = reduce(operator.mul, mesh_shape)
     if dim < 0:
         dim = param_dim + dim
-    if empty_param.dim() == 3 and dim == 1 and len(param.get_shape()) == 2:
+    if empty_param.dim() == 3 and dim == 1 and len(_get_shape(param)) == 2:
         dim = 0
-    elif empty_param.dim() == 3 and dim == 2 and len(param.get_shape()) == 2:
+    elif empty_param.dim() == 3 and dim == 2 and len(_get_shape(param)) == 2:
         dim = 0
 
     shard_size = math.ceil(empty_param.size(dim) / world_size)
@@ -401,9 +409,9 @@ def get_tensor_shard(param, empty_param, device_mesh, rank, dim, tensor_idx: int
     # actually we still shard dim=0 does not change
     # so only case is if the dim of the empty param is 3 and the shard dim is 0 -> we put the
     # tensor on a certain device (with the input tensor_index)
-    dimensions = param.get_shape()
+    dimensions = list(_get_shape(param))
 
-    if empty_param.dim() == 3 and dim == 0 and len(param.get_shape()) == 2:
+    if empty_param.dim() == 3 and dim == 0 and len(_get_shape(param)) == 2:
         # special case we don't "shard" just send this entire tensor to the correct rank.
         if start <= tensor_idx < end:
             # this tensor does need to be materialized on this device:
@@ -411,9 +419,9 @@ def get_tensor_shard(param, empty_param, device_mesh, rank, dim, tensor_idx: int
         else:
             return torch.empty([], dtype=torch.int64, device=rank)
 
-    slice_indices = [slice(None)] * len(param.get_shape())
+    slice_indices = [slice(None)] * len(_get_shape(param))
 
-    if start < param.get_shape()[dim]:
+    if start < _get_shape(param)[dim]:
         slice_indices[dim] = slice(start, end)
         param = param[tuple(slice_indices)]
         if isinstance(param, list):  # TODO handle the modulelist case!
