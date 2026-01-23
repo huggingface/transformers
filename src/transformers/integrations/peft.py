@@ -15,6 +15,7 @@ import copy
 import inspect
 import json
 import os
+import re
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any, Literal, Optional
 
@@ -188,7 +189,7 @@ class PermuteDims(ConversionOps):
 
 
 def _build_peft_weight_mapping(
-    weight_conversions: list[WeightConverter | WeightRenaming] | None, adapter_name: str
+    weight_conversions: list[WeightConverter | WeightRenaming] | None, adapter_name: str, peft_config=None
 ) -> list[WeightConverter | WeightRenaming]:
     # We iterate over all the operations of the original model and simply edit them to apply to the PEFT adapter when
     # appropriate.
@@ -196,13 +197,24 @@ def _build_peft_weight_mapping(
         return []
 
     # strip "base_model.model" and add adapter name
-    new_weight_conversions = [
-        WeightRenaming("base_model.model.model", "model"),
-        WeightRenaming("lora_A.weight", f"lora_A.{adapter_name}.weight"),
-        WeightRenaming("lora_B.weight", f"lora_B.{adapter_name}.weight"),
-        # TODO: lora_embedding_A and B
-        # TODO: lokr_w1 and etc
-    ]
+    new_weight_conversions = [WeightRenaming("base_model.model.model", "model")]
+
+    prefixes = set()
+    from peft.mapping import PEFT_TYPE_TO_PREFIX_MAPPING
+    peft_type = getattr(peft_config, "peft_type", None)
+    if peft_type in PEFT_TYPE_TO_PREFIX_MAPPING:
+        prefixes.add(PEFT_TYPE_TO_PREFIX_MAPPING[peft_type])
+    else:
+        prefixes.update(PEFT_TYPE_TO_PREFIX_MAPPING.values())
+
+    for prefix in sorted(prefixes):
+        escaped_prefix = re.escape(prefix)
+        new_weight_conversions.append(
+            WeightRenaming(
+                source_patterns=rf"({escaped_prefix}[^\.]*)",
+                target_patterns=rf"\1.{adapter_name}",
+            )
+        )
 
     for orig_conversion in weight_conversions:
         if isinstance(orig_conversion, WeightRenaming):
@@ -432,7 +444,6 @@ class PeftAdapterMixin:
         adapter_kwargs = adapter_kwargs or {}
 
         weight_conversions = get_model_conversion_mapping(self)
-        peft_weight_conversions = _build_peft_weight_mapping(weight_conversions, adapter_name)
 
         from peft import PeftConfig, inject_adapter_in_model
 
@@ -465,9 +476,15 @@ class PeftAdapterMixin:
                 peft_model_id,
                 **load_config.download_kwargs,
             )
-            peft_config.inference_mode = not is_trainable
 
         peft_config = convert_peft_config_for_transformers(peft_config, model=self, conversions=weight_conversions)
+
+        if hasattr(peft_config, "inference_mode"):
+            peft_config.inference_mode = not is_trainable
+
+        peft_weight_conversions = _build_peft_weight_mapping(
+            weight_conversions, adapter_name, peft_config=peft_config
+        )
 
         patch_mixtral_moe_parameter_targeting(model=self, peft_config=peft_config)
 
