@@ -327,6 +327,7 @@ def check_task(task: str) -> tuple[str, dict, Any]:
             - `"depth-estimation"`
             - `"document-question-answering"`
             - `"text-embedding"` (alias `"feature-extraction"` available)
+            - `"fill-mask"`
             - `"image-classification"`
             - `"image-embedding"` (alias `"image-feature-extraction"` available)
             - `"image-segmentation"`
@@ -477,6 +478,7 @@ def pipeline(
             - `"depth-estimation"`: will return a [`DepthEstimationPipeline`].
             - `"document-question-answering"`: will return a [`DocumentQuestionAnsweringPipeline`].
             - `"text-embedding"`: will return a [`TextEmbeddingPipeline`].
+            - `"fill-mask"`: will return a [`FillMaskPipeline`]:.
             - `"image-classification"`: will return a [`ImageClassificationPipeline`].
             - `"image-embedding"`: will return an [`ImageEmbeddingPipeline`].
             - `"image-segmentation"`: will return a [`ImageSegmentationPipeline`].

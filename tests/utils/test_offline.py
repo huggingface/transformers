@@ -40,7 +40,7 @@ mname = "hf-internal-testing/tiny-random-bert"
 BertConfig.from_pretrained(mname)
 BertModel.from_pretrained(mname)
 BertTokenizer.from_pretrained(mname)
-pipe = pipeline(task="text-embedding", model=mname)
+pipe = pipeline(task="fill-mask", model=mname)
 print("success")
         """
 
