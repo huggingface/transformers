@@ -70,9 +70,9 @@ class MusicFlamingoProcessor(ProcessorMixin):
             template will be used.
         audio_token (`Optional[str]`, *optional*, defaults to `"<sound>"`):
             Special token used to represent audio inputs in the chat template.
-        sound_bos_token (`Optional[str]`, *optional*, defaults to `"<|sound_bos|>"`):
+        audio_bos_token (`Optional[str]`, *optional*, defaults to `"<|sound_bos|>"`):
             Special token used to represent the beginning of an audio sequence.
-        sound_eos_token (`Optional[str]`, *optional*, defaults to `"<|sound_eos|>"`):
+        audio_eos_token (`Optional[str]`, *optional*, defaults to `"<|sound_eos|>"`):
             Special token used to represent the end of an audio sequence.
     """
 
@@ -82,15 +82,15 @@ class MusicFlamingoProcessor(ProcessorMixin):
         tokenizer,
         chat_template=None,
         audio_token="<sound>",
-        sound_bos_token="<|sound_bos|>",
-        sound_eos_token="<|sound_eos|>",
+        audio_bos_token="<|sound_bos|>",
+        audio_eos_token="<|sound_eos|>",
     ):
         self.audio_token = audio_token
-        self.sound_bos_token = sound_bos_token
-        self.sound_eos_token = sound_eos_token
+        self.audio_bos_token = audio_bos_token
+        self.audio_eos_token = audio_eos_token
         self.audio_token_id = tokenizer.convert_tokens_to_ids(audio_token)
-        self.sound_bos_token_id = tokenizer.convert_tokens_to_ids(sound_bos_token)
-        self.sound_eos_token_id = tokenizer.convert_tokens_to_ids(sound_eos_token)
+        self.audio_bos_token_id = tokenizer.convert_tokens_to_ids(audio_bos_token)
+        self.audio_eos_token_id = tokenizer.convert_tokens_to_ids(audio_eos_token)
         super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
 
     def __call__(
@@ -193,7 +193,7 @@ class MusicFlamingoProcessor(ProcessorMixin):
             for i, audio_length in enumerate(audio_tokens_lengths):
                 expanded = re.sub(
                     re.escape(self.audio_token),
-                    self.sound_bos_token + self.audio_token * audio_length + self.sound_eos_token,
+                    self.audio_bos_token + self.audio_token * audio_length + self.audio_eos_token,
                     text[i],
                 )
                 text[i] = expanded
@@ -205,8 +205,8 @@ class MusicFlamingoProcessor(ProcessorMixin):
         if output_labels:
             labels = data["input_ids"].clone()
             labels[labels == self.audio_token_id] = -100
-            labels[labels == self.sound_bos_token_id] = -100
-            labels[labels == self.sound_eos_token_id] = -100
+            labels[labels == self.audio_bos_token_id] = -100
+            labels[labels == self.audio_eos_token_id] = -100
             labels[labels == self.tokenizer.pad_token_id] = -100
             data["labels"] = labels
 
