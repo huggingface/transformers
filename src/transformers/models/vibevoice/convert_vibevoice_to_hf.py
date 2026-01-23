@@ -184,7 +184,6 @@ def convert_checkpoint(checkpoint, output_dir, config_path, push_to_hub, bfloat1
     feature_extractor = VibeVoiceAcousticTokenizerFeatureExtractor(**audio_config)
 
     # 3) Prepare model configuration
-    # -- Load
     with open(config_path, "r") as f:
         model_config = json.load(f)
 
@@ -192,11 +191,13 @@ def convert_checkpoint(checkpoint, output_dir, config_path, push_to_hub, bfloat1
     model_config["semantic_tokenizer_config"]["encoder_depths"] = list(
         map(int, model_config["semantic_tokenizer_config"]["encoder_depths"].split("-"))
     )
+    model_config["semantic_tokenizer_config"]["rms_norm_eps"] = model_config["semantic_tokenizer_config"].pop(
+        "layernorm_eps"
+    )
     # -- reverse order of ratios here instead of in modeling
     model_config["semantic_tokenizer_config"]["downsampling_ratios"] = list(
-        reversed(model_config["semantic_tokenizer_config"]["encoder_ratios"])
+        reversed(model_config["semantic_tokenizer_config"].pop("encoder_ratios"))
     )
-    del model_config["semantic_tokenizer_config"]["encoder_ratios"]
     model_config["semantic_tokenizer_config"]["n_filters"] = model_config["semantic_tokenizer_config"].pop(
         "encoder_n_filters"
     )
@@ -206,48 +207,28 @@ def convert_checkpoint(checkpoint, output_dir, config_path, push_to_hub, bfloat1
     model_config["semantic_tokenizer_config"]["hidden_size"] = model_config["semantic_tokenizer_config"].pop("vae_dim")
     model_config["semantic_tokenizer_config"]["bias"] = model_config["semantic_tokenizer_config"].pop("conv_bias")
     # -- remove unused / constant parameters that lead to unused code paths removed in HF model
-    if "mixer_layer" in model_config["semantic_tokenizer_config"]:
-        del model_config["semantic_tokenizer_config"]["mixer_layer"]
-    if "layernorm" in model_config["semantic_tokenizer_config"]:
-        del model_config["semantic_tokenizer_config"]["layernorm"]
-    if "disable_last_norm" in model_config["semantic_tokenizer_config"]:
-        del model_config["semantic_tokenizer_config"]["disable_last_norm"]
-    if "conv_norm" in model_config["semantic_tokenizer_config"]:
-        del model_config["semantic_tokenizer_config"]["conv_norm"]
-    if "corpus_normalize" in model_config["semantic_tokenizer_config"]:
-        del model_config["semantic_tokenizer_config"]["corpus_normalize"]
-    if "std_dist_type" in model_config["semantic_tokenizer_config"]:
-        # No vae component, so no sampling
-        del model_config["semantic_tokenizer_config"]["std_dist_type"]
-    if "layernorm_elementwise_affine" in model_config["semantic_tokenizer_config"]:
-        del model_config["semantic_tokenizer_config"]["layernorm_elementwise_affine"]
-    if "layernorm_eps" in model_config["semantic_tokenizer_config"]:
-        model_config["semantic_tokenizer_config"]["rms_norm_eps"] = model_config["semantic_tokenizer_config"][
-            "layernorm_eps"
-        ]
-        del model_config["semantic_tokenizer_config"]["layernorm_eps"]
-    if "pad_mode" in model_config["semantic_tokenizer_config"]:
-        # always "constant"
-        del model_config["semantic_tokenizer_config"]["pad_mode"]
-    if "fix_std" in model_config["semantic_tokenizer_config"]:
-        # Only delete for semantic model!
-        del model_config["semantic_tokenizer_config"]["fix_std"]
-    if "causal" in model_config["semantic_tokenizer_config"]:
-        # always True
-        del model_config["semantic_tokenizer_config"]["causal"]
+    model_config["semantic_tokenizer_config"].pop("pad_mode")  # always constant
+    model_config["semantic_tokenizer_config"].pop("causal")  # always True
+    model_config["semantic_tokenizer_config"].pop("mixer_layer")
+    model_config["semantic_tokenizer_config"].pop("layernorm")
+    model_config["semantic_tokenizer_config"].pop("disable_last_norm")
+    model_config["semantic_tokenizer_config"].pop("conv_norm")
+    model_config["semantic_tokenizer_config"].pop("corpus_normalize")
+    model_config["semantic_tokenizer_config"].pop("std_dist_type")  # no VAE component, so no sampling
+    model_config["semantic_tokenizer_config"].pop("fix_std")  # no VAE component, so no sampling
+    model_config["semantic_tokenizer_config"].pop("layernorm_elementwise_affine")
 
     # clean up acoustic tokenizer config
     model_config["acoustic_tokenizer_config"]["encoder_depths"] = list(
         map(int, model_config["acoustic_tokenizer_config"]["encoder_depths"].split("-"))
     )
-    if "std_dist_type" in model_config["acoustic_tokenizer_config"]:
-        # always gaussian
-        del model_config["acoustic_tokenizer_config"]["std_dist_type"]
-    # -- reverse order of ratios here instead of in modeling
-    model_config["acoustic_tokenizer_config"]["downsampling_ratios"] = list(
-        reversed(model_config["acoustic_tokenizer_config"]["encoder_ratios"])
+    model_config["acoustic_tokenizer_config"]["rms_norm_eps"] = model_config["acoustic_tokenizer_config"].pop(
+        "layernorm_eps"
     )
-    del model_config["acoustic_tokenizer_config"]["encoder_ratios"]
+    # -- reverse order of ratios here instead of in modeling (as done in original)
+    model_config["acoustic_tokenizer_config"]["downsampling_ratios"] = list(
+        reversed(model_config["acoustic_tokenizer_config"].pop("encoder_ratios"))
+    )
     model_config["acoustic_tokenizer_config"]["n_filters"] = model_config["acoustic_tokenizer_config"].pop(
         "encoder_n_filters"
     )
@@ -261,36 +242,19 @@ def convert_checkpoint(checkpoint, output_dir, config_path, push_to_hub, bfloat1
         model_config["acoustic_tokenizer_config"].pop("fix_std") / 0.8
     )
     # -- remove decoder parameters as they can be derived from encoder ones
-    if "decoder_depths" in model_config["acoustic_tokenizer_config"]:
-        del model_config["acoustic_tokenizer_config"]["decoder_depths"]
-    if "decoder_n_filters" in model_config["acoustic_tokenizer_config"]:
-        del model_config["acoustic_tokenizer_config"]["decoder_n_filters"]
-    if "decoder_ratios" in model_config["acoustic_tokenizer_config"]:
-        del model_config["acoustic_tokenizer_config"]["decoder_ratios"]
+    model_config["acoustic_tokenizer_config"].pop("decoder_depths")
+    model_config["acoustic_tokenizer_config"].pop("decoder_n_filters")
+    model_config["acoustic_tokenizer_config"].pop("decoder_ratios")
     # -- remove unused / constant parameters that lead to unused code paths removed in HF model
-    if "mixer_layer" in model_config["acoustic_tokenizer_config"]:
-        del model_config["acoustic_tokenizer_config"]["mixer_layer"]
-    if "layernorm" in model_config["acoustic_tokenizer_config"]:
-        del model_config["acoustic_tokenizer_config"]["layernorm"]
-    if "disable_last_norm" in model_config["acoustic_tokenizer_config"]:
-        del model_config["acoustic_tokenizer_config"]["disable_last_norm"]
-    if "conv_norm" in model_config["acoustic_tokenizer_config"]:
-        del model_config["acoustic_tokenizer_config"]["conv_norm"]
-    if "corpus_normalize" in model_config["acoustic_tokenizer_config"]:
-        del model_config["acoustic_tokenizer_config"]["corpus_normalize"]
-    if "layernorm_elementwise_affine" in model_config["acoustic_tokenizer_config"]:
-        del model_config["acoustic_tokenizer_config"]["layernorm_elementwise_affine"]
-    if "layernorm_eps" in model_config["acoustic_tokenizer_config"]:
-        model_config["acoustic_tokenizer_config"]["rms_norm_eps"] = model_config["acoustic_tokenizer_config"][
-            "layernorm_eps"
-        ]
-        del model_config["acoustic_tokenizer_config"]["layernorm_eps"]
-    if "pad_mode" in model_config["acoustic_tokenizer_config"]:
-        # always "constant"
-        del model_config["acoustic_tokenizer_config"]["pad_mode"]
-    if "causal" in model_config["acoustic_tokenizer_config"]:
-        # always True
-        del model_config["acoustic_tokenizer_config"]["causal"]
+    model_config["acoustic_tokenizer_config"].pop("std_dist_type")  # always Gaussian
+    model_config["acoustic_tokenizer_config"].pop("pad_mode")  # always constant
+    model_config["acoustic_tokenizer_config"].pop("causal")  # always True
+    model_config["acoustic_tokenizer_config"].pop("mixer_layer")
+    model_config["acoustic_tokenizer_config"].pop("layernorm")
+    model_config["acoustic_tokenizer_config"].pop("disable_last_norm")
+    model_config["acoustic_tokenizer_config"].pop("conv_norm")
+    model_config["acoustic_tokenizer_config"].pop("corpus_normalize")
+    model_config["acoustic_tokenizer_config"].pop("layernorm_elementwise_affine")
 
     # clean up diffusion head config
     model_config["intermediate_size"] = int(
@@ -335,7 +299,6 @@ def convert_checkpoint(checkpoint, output_dir, config_path, push_to_hub, bfloat1
     acoustic_config = VibeVoiceAcousticTokenizerConfig(**model_config["acoustic_tokenizer_config"])
 
     # 7) Create VibeVoice processor
-    # -- load processor config
     print("\n=== Creating VibeVoice processor ===")
 
     # Define a chat template adapted for VibeVoice's speech use case
@@ -455,7 +418,6 @@ def convert_checkpoint(checkpoint, output_dir, config_path, push_to_hub, bfloat1
         vibevoice_model.generation_config.max_length = 40500
 
     vibevoice_model.save_pretrained(output_dir)
-    # -- push to hub
     if push_to_hub is not None:
         print(f"------ Pushing full VibeVoice model to hub as {push_to_hub} ------")
         vibevoice_model.push_to_hub(push_to_hub)
@@ -464,7 +426,7 @@ def convert_checkpoint(checkpoint, output_dir, config_path, push_to_hub, bfloat1
     gc.collect()
     print("Reloading the model to check if it's saved correctly.")
     VibeVoiceProcessor.from_pretrained(output_dir)
-    VibeVoiceForConditionalGeneration.from_pretrained(output_dir, dtype=torch.bfloat16, device_map="auto")
+    VibeVoiceForConditionalGeneration.from_pretrained(output_dir, dtype=dtype, device_map="auto")
     print("Model reloaded successfully.")
 
 
@@ -489,8 +451,7 @@ python src/transformers/models/vibevoice/convert_vibevoice_to_hf.py \
     --processor_config /raid/eric/vibevoice/preprocessor_config.json \
     --push_to_hub bezzam/VibeVoice-1.5B
 ```
-Models will be pushed to: bezzam/VibeVoice-1.5B
-
+Model will be pushed to: bezzam/VibeVoice-1.5B
 
 # 7B Model: https://huggingface.co/aoi-ot/VibeVoice-Large
 
@@ -509,7 +470,7 @@ python src/transformers/models/vibevoice/convert_vibevoice_to_hf.py \
     --processor_config /raid/eric/vibevoice_7b/preprocessor_config.json \
     --push_to_hub bezzam/VibeVoice-7B
 ```
-Models will be pushed to: bezzam/VibeVoice-7B
+Model will be pushed to: bezzam/VibeVoice-7B
 
 """
 if __name__ == "__main__":
