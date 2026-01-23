@@ -3024,7 +3024,7 @@ class Trainer:
                 self.control.should_save = is_new_best_metric
 
         if self.control.should_save:
-            self._save_checkpoint(model, trial)
+            self._save_checkpoint(trial)
             self.control = self.callback_handler.on_save(self.args, self.state, self.control)
 
     def _load_rng_state(self, checkpoint):
@@ -3109,7 +3109,7 @@ class Trainer:
 
         return is_new_best_metric
 
-    def _save_checkpoint(self, model, trial):
+    def _save_checkpoint(self, trial):
         # In all cases, including ddp/dp/deepspeed, self.model is always a reference to the model we
         # want to save except FullyShardedDDP.
         # assert unwrap_model(model) is self.model, "internal model should be a reference to self.model"
@@ -3122,7 +3122,14 @@ class Trainer:
 
         run_dir = self._get_output_dir(trial=trial)
         output_dir = os.path.join(run_dir, checkpoint_folder)
-        self.save_model(output_dir, _internal_call=True)
+
+        if self.args.save_only_model or not self.is_fsdp_enabled:
+            self.save_model(output_dir, _internal_call=True)
+        else:
+            # save fsdp specific ckpt for resuming from ckpt
+            save_fsdp_model(
+                self.accelerator.state.fsdp_plugin, self.accelerator, self.model, output_dir, **_get_fsdp_ckpt_kwargs()
+            )
 
         if self.args.save_strategy in [SaveStrategy.STEPS, SaveStrategy.EPOCH] and self.state.best_global_step:
             # Wait for everyone to get here so we are sure the model has been saved by process 0
@@ -3260,10 +3267,6 @@ class Trainer:
             else:
                 self.model_wrapped.save_checkpoint(output_dir)
         elif self.is_fsdp_enabled:
-            # save fsdp specific ckpt for resuming from ckpt
-            save_fsdp_model(
-                self.accelerator.state.fsdp_plugin, self.accelerator, self.model, output_dir, **_get_fsdp_ckpt_kwargs()
-            )
             save_fsdp_optimizer(
                 self.accelerator.state.fsdp_plugin, self.accelerator, self.optimizer, self.model, output_dir
             )
