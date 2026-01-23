@@ -114,7 +114,7 @@ class ModernVBertVisionConfig(SiglipVisionConfig):
 
 class ModernVBertConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a `ModernVBert` model. It is used to
+    This is the configuration class to store the configuration of a [`ModernVBert`] model. It is used to
     instantiate a ModernVBert model according to the specified arguments and defines the model architecture.
     e.g. [ModernVBERT/modernvbert](https://huggingface.co/ModernVBERT/modernvbert).
 
@@ -122,22 +122,15 @@ class ModernVBertConfig(PretrainedConfig):
     See the documentation for [`PretrainedConfig`] for more details.
 
     Args:
-            text_config ([`ModernVBertTextConfig`], *optional*): [`ModernVBertModel`] config to build the text encoder.
-            vision_config ([`ModernVBertVisionConfig`], *optional*): [`ModernVBertVisionModel`] config to build the vision encoder.
-            image_token_id (`Optional`, *optional*, defaults to 50407): The token id reserved for image tokens inserted into the text stream.
-            pixel_shuffle_factor (`Optional`, *optional*, defaults to 4): Scale factor used by any pixel-shuffle / upsampling operations in the vision head.
-            vocab_size (`Optional`, *optional*): Vocabulary size of the text model. Defines the number of different tokens that can be represented
-                by the `inputs_ids` passed when calling [`ModernVBertModel`]. If not provided, will be taken from
-                the `text_config`.
-            hidden_size (`Optional`, *optional*): Dimensionality of the encoder layers and the pooler layer. If not provided, will be taken from
-                the `text_config`.
-            num_hidden_layers (`Optional`, *optional*): Number of hidden layers in the Transformer encoder. If not provided, will be taken from
-                the `text_config`.
-            initializer_range (`Optional`, *optional*, defaults to 0.02): The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-            initializer_cutoff_factor (`Optional`, *optional*, defaults to 2.0): The cutoff factor for the truncated_normal_initializer for initializing all weight matrices.
-            classifier_pooling (`Literal`, *optional*, defaults to `"cls"`): The pooling strategy to use for classification tasks. Can be either `"cls"` or `"mean"`.
-            classifier_dropout (`Optional`, *optional*, defaults to 0.0): The dropout probability for the classification head.
-            classifier_bias (`Optional`, *optional*, defaults to `False`): Whether to add a bias term to the classification head.
+        text_config (`ModernVBertTextConfig`, *optional*): Configuration for the text encoder.
+        vision_config (`ModernVBertVisionConfig`, *optional*): Configuration for the vision encoder.
+        image_token_id (`int | None`, *optional*, defaults to 50407): The token id reserved for image tokens inserted into the text stream.
+        pixel_shuffle_factor (`int | None`, *optional*, defaults to 4): Scale factor used by any pixel-shuffle / upsampling operations in the vision head.
+        initializer_range (`float | None`, *optional*, defaults to 0.02): The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        initializer_cutoff_factor (`float | None`, *optional*, defaults to 2.0): The cutoff factor for the truncated_normal_initializer for initializing all weight matrices.
+        classifier_pooling (`Literal["cls", "mean"]`, *optional*, defaults to `"cls"`): The pooling strategy to use for classification tasks.
+        classifier_dropout (`float | None`, *optional*, defaults to 0.0): The dropout probability for the classification head.
+        classifier_bias (`bool | None`, *optional*, defaults to `False`): Whether to add a bias term to the classification head.
 
     Example:
     ```python

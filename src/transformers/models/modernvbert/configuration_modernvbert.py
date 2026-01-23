@@ -347,7 +347,7 @@ class ModernVBertVisionConfig(PreTrainedConfig):
 
 class ModernVBertConfig(PretrainedConfig):
     r"""
-    This is the configuration class to store the configuration of a `ModernVBert` model. It is used to
+    This is the configuration class to store the configuration of a [`ModernVBert`] model. It is used to
     instantiate a ModernVBert model according to the specified arguments and defines the model architecture.
     e.g. [ModernVBERT/modernvbert](https://huggingface.co/ModernVBERT/modernvbert).
 
@@ -355,15 +355,15 @@ class ModernVBertConfig(PretrainedConfig):
     See the documentation for [`PretrainedConfig`] for more details.
 
     Args:
-            text_config (`<fill_type>`, *optional*): <fill_docstring>
-            vision_config (`<fill_type>`, *optional*): <fill_docstring>
-            image_token_id (`int | None`, *optional*, defaults to 50407): <fill_docstring>
-            pixel_shuffle_factor (`int | None`, *optional*, defaults to 4): <fill_docstring>
-            initializer_range (`float | None`, *optional*, defaults to 0.02): <fill_docstring>
-            initializer_cutoff_factor (`float | None`, *optional*, defaults to 2.0): <fill_docstring>
-            classifier_pooling (`Literal`, *optional*, defaults to `"cls"`): <fill_docstring>
-            classifier_dropout (`float | None`, *optional*, defaults to 0.0): <fill_docstring>
-            classifier_bias (`bool | None`, *optional*, defaults to `False`): <fill_docstring>
+        text_config (`ModernVBertTextConfig`, *optional*): Configuration for the text encoder.
+        vision_config (`ModernVBertVisionConfig`, *optional*): Configuration for the vision encoder.
+        image_token_id (`int | None`, *optional*, defaults to 50407): The token id reserved for image tokens inserted into the text stream.
+        pixel_shuffle_factor (`int | None`, *optional*, defaults to 4): Scale factor used by any pixel-shuffle / upsampling operations in the vision head.
+        initializer_range (`float | None`, *optional*, defaults to 0.02): The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
+        initializer_cutoff_factor (`float | None`, *optional*, defaults to 2.0): The cutoff factor for the truncated_normal_initializer for initializing all weight matrices.
+        classifier_pooling (`Literal["cls", "mean"]`, *optional*, defaults to `"cls"`): The pooling strategy to use for classification tasks.
+        classifier_dropout (`float | None`, *optional*, defaults to 0.0): The dropout probability for the classification head.
+        classifier_bias (`bool | None`, *optional*, defaults to `False`): Whether to add a bias term to the classification head.
 
     Example:
     ```python
