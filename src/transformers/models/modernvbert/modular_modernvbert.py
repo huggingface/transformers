@@ -1,6 +1,6 @@
 # coding=utf-8
 # MIT License
-# 
+#
 # Copyright 2026 Illuin Technology, and contributors, and The HuggingFace Inc. team.
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -22,16 +22,16 @@
 # SOFTWARE.
 
 import math
-import numpy as np
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Literal, Optional, Union
 
+import numpy as np
 import torch
 import torch.nn as nn
+import torch.nn.functional as F
 from torch.nn import BCEWithLogitsLoss, CrossEntropyLoss, MSELoss
 from torch.nn.init import _calculate_fan_in_and_fan_out
-import torch.nn.functional as F
 
 from ... import initialization as init
 from ...configuration_utils import PretrainedConfig
@@ -49,26 +49,26 @@ from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
 from ...utils.import_utils import is_triton_available
-from ..idefics3.processing_idefics3 import Idefics3Processor
 from ..idefics3.image_processing_idefics3 import Idefics3ImageProcessor
 from ..idefics3.image_processing_idefics3_fast import Idefics3ImageProcessorFast
+from ..idefics3.processing_idefics3 import Idefics3Processor
 from ..modernbert.configuration_modernbert import ModernBertConfig
 from ..modernbert.modeling_modernbert import (
-    ModernBertModel, 
-    ModernBertPredictionHead, 
+    ModernBertEmbeddings,
+    ModernBertModel,
+    ModernBertPredictionHead,
     ModernBertRotaryEmbedding,
-    ModernBertEmbeddings
 )
 from ..siglip.configuration_siglip import SiglipVisionConfig
 from ..siglip.modeling_siglip import (
-    SiglipVisionEmbeddings,
-    SiglipVisionModel, 
-    SiglipVisionTransformer, 
+    SiglipAttention,
+    SiglipEncoder,
+    SiglipEncoderLayer,
+    SiglipMLP,
     SiglipMultiheadAttentionPoolingHead,
-    SiglipEncoder, 
-    SiglipEncoderLayer, 
-    SiglipAttention, 
-    SiglipMLP
+    SiglipVisionEmbeddings,
+    SiglipVisionModel,
+    SiglipVisionTransformer,
 )
 from ..smolvlm.modeling_smolvlm import SmolVLMModel
 
@@ -104,11 +104,14 @@ class ModernVBertProcessor(Idefics3Processor):
             in a chat into a tokenizable string.
     """
 
+
 class ModernVBertTextConfig(ModernBertConfig):
     pass
 
+
 class ModernVBertVisionConfig(SiglipVisionConfig):
     pass
+
 
 class ModernVBertConfig(PretrainedConfig):
     r"""
@@ -308,8 +311,8 @@ class ModernVBertPreTrainedModel(PreTrainedModel):
         "ModernVBertEmbeddingsVision",
         "ModernVBertEncoderLayerVision",
         "ModernVBertMultiheadAttentionPoolingHead",
-        "ModernVBertEmbeddings", 
-        "ModernVBertEncoderLayer"
+        "ModernVBertEmbeddings",
+        "ModernVBertEncoderLayer",
     ]
 
     @torch.no_grad()
@@ -399,11 +402,14 @@ class ModernVBertPreTrainedModel(PreTrainedModel):
             if module.bias is not None:
                 init.zeros_(module.bias)
 
+
 class ModernVBertEmbeddings(ModernBertEmbeddings):
     pass
 
+
 class ModernVBertRotaryEmbedding(ModernBertRotaryEmbedding):
     pass
+
 
 @auto_docstring
 class ModernVBertTextModel(ModernBertModel):
@@ -438,6 +444,7 @@ class ModernVBertTextModel(ModernBertModel):
         if self.config.reference_compile is None:
             self.config.reference_compile = is_triton_available()
 
+
 def variance_scaling_(tensor, mode="fan_in", distribution="normal"):
     fan_in, fan_out = _calculate_fan_in_and_fan_out(tensor)
     if mode == "fan_in":
@@ -458,12 +465,15 @@ def variance_scaling_(tensor, mode="fan_in", distribution="normal"):
         init.uniform_(tensor, -bound, bound)
     else:
         raise ValueError(f"invalid distribution {distribution}")
-    
+
+
 def default_flax_embed_init(tensor):
     variance_scaling_(tensor, mode="fan_in", distribution="normal")
 
+
 def lecun_normal_(tensor):
     variance_scaling_(tensor, mode="fan_in", distribution="truncated_normal")
+
 
 def eager_attention_forward_vision(
     module: nn.Module,
@@ -486,6 +496,7 @@ def eager_attention_forward_vision(
     attn_output = attn_output.transpose(1, 2).contiguous()
 
     return attn_output, attn_weights
+
 
 class ModernVBertAttentionVision(SiglipAttention):
     def forward(
@@ -526,10 +537,14 @@ class ModernVBertAttentionVision(SiglipAttention):
 
         return attn_output, attn_weights
 
+
 class ModernVBertEmbeddingsVision(SiglipVisionEmbeddings):
     pass
+
+
 class ModernVBertMLPVision(SiglipMLP):
     pass
+
 
 class ModernVBertEncoderLayerVision(SiglipEncoderLayer):
     def __init__(self, config: ModernVBertVisionConfig):
@@ -537,14 +552,18 @@ class ModernVBertEncoderLayerVision(SiglipEncoderLayer):
         self.self_attn = ModernVBertAttentionVision(config)
         self.mlp = ModernVBertMLPVision(config)
 
+
 class ModernVBertEncoderVision(SiglipEncoder):
     def __init__(self, config: ModernVBertVisionConfig):
         super().__init__()
         self.layers = nn.ModuleList([ModernVBertEncoderLayerVision(config) for _ in range(config.num_hidden_layers)])
+
+
 class ModernVBertMultiheadAttentionPoolingHead(SiglipMultiheadAttentionPoolingHead):
     def __init__(self, config: ModernVBertVisionConfig):
         super().__init__()
         self.mlp = ModernVBertMLPVision(config)
+
 
 class ModernVBertVisionTransformer(SiglipVisionTransformer):
     def __init__(self, config: ModernVBertVisionConfig):
@@ -553,9 +572,11 @@ class ModernVBertVisionTransformer(SiglipVisionTransformer):
         self.encoder = ModernVBertEncoderVision(config)
         self.post_init()
 
+
 @auto_docstring
 class ModernVBertVisionModel(SiglipVisionModel):
     pass
+
 
 @auto_docstring(
     custom_intro="""
@@ -575,7 +596,8 @@ class ModernVBertModel(ModernVBertPreTrainedModel, SmolVLMModel):
         self.vision_model = ModernVBertVisionModel(config.vision_config)
 
         self.image_seq_len = int(
-            ((config.vision_config.image_size // config.vision_config.patch_size) ** 2) / (config.pixel_shuffle_factor**2)
+            ((config.vision_config.image_size // config.vision_config.patch_size) ** 2)
+            / (config.pixel_shuffle_factor**2)
         )
 
         # initialize weights and apply final processing

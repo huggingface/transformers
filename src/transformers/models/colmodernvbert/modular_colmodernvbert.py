@@ -1,6 +1,6 @@
 # coding=utf-8
 # MIT License
-# 
+#
 # Copyright 2026 Illuin Technology, and contributors, and The HuggingFace Inc. team.
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy
@@ -22,41 +22,42 @@
 # SOFTWARE.
 
 import re
-from itertools import accumulate
 from dataclasses import dataclass
+from itertools import accumulate
 from typing import Any, Optional, Union
 
-from torch import nn
 import numpy as np
 
-from ... import initialization as init
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image, load_image
-from ..auto.modeling_auto import AutoModel
-from ...processing_utils import ProcessingKwargs, Unpack, MultiModalData, ProcessorMixin
-from ...tokenization_utils_base import PreTokenizedInput, TextInput, AddedToken, BatchEncoding
+from ...processing_utils import ProcessingKwargs, Unpack
+from ...tokenization_utils_base import AddedToken, BatchEncoding, PreTokenizedInput, TextInput
 from ...utils import ModelOutput, auto_docstring, can_return_tuple, is_torch_available, logging
+from ..auto.modeling_auto import AutoModel
+from ..colpali.modeling_colpali import ColPaliForRetrieval, ColPaliPreTrainedModel
 from ..colqwen2.configuration_colqwen2 import ColQwen2Config
 from ..colqwen2.processing_colqwen2 import ColQwen2Processor
 from ..modernvbert.configuration_modernvbert import ModernVBertConfig, ModernVBertTextConfig, ModernVBertVisionConfig
-from ..modernvbert.modeling_modernvbert import ModernVBertModel
-from ..modernvbert.processing_modernvbert import ModernVBertProcessor
-from ..colpali.modeling_colpali import ColPaliPreTrainedModel, ColPaliForRetrieval
+
 
 if is_torch_available():
     import torch
 
 logger = logging.get_logger(__name__)
 
+
 class ModernVBertTextConfig(ModernVBertTextConfig):
     pass
+
 
 class ModernVBertVisionConfig(ModernVBertVisionConfig):
     pass
 
+
 class ModernVBertConfig(ModernVBertConfig):
     model_type = "modernvbert"
     sub_configs: dict[str, Any] = {"text_config": ModernVBertTextConfig, "vision_config": ModernVBertVisionConfig}
+
 
 class ColModernVBertConfig(ColQwen2Config):
     r"""
@@ -90,6 +91,7 @@ class ColModernVBertConfig(ColQwen2Config):
     model_type = "colmodernvbert"
     default_vlm_config_class = ModernVBertConfig
 
+
 class ColModernVBertProcessorKwargs(ProcessingKwargs, total=False):
     _defaults = {
         "text_kwargs": {
@@ -105,6 +107,7 @@ class ColModernVBertProcessorKwargs(ProcessingKwargs, total=False):
         },
         "common_kwargs": {"return_tensors": "pt"},
     }
+
 
 def is_url(val) -> bool:
     return isinstance(val, str) and val.startswith("http")
@@ -175,22 +178,28 @@ class ColModernVBertProcessor(ColQwen2Processor):
     """
 
     def __init__(
-        self, 
-        image_processor, 
-        tokenizer=None, 
+        self,
+        image_processor,
+        tokenizer=None,
         chat_template=None,
-        image_seq_len: int = 64, 
+        image_seq_len: int = 64,
         visual_prompt_prefix: Optional[str] = None,
         query_prefix: Optional[str] = None,
-        **kwargs
+        **kwargs,
     ):
+        super().__init__(
+            image_processor,
+            tokenizer,
+            chat_template=chat_template,
+            visual_prompt_prefix=visual_prompt_prefix,
+            query_prefix=query_prefix,
+            **kwargs,
+        )
 
-        super().__init__(image_processor, tokenizer, chat_template=chat_template, visual_prompt_prefix=visual_prompt_prefix, query_prefix=query_prefix, **kwargs)
-
-        self.chat_template = None # ColModernVBert does not use chat templates
+        self.chat_template = None  # ColModernVBert does not use chat templates
         self.fake_image_token = AddedToken("<fake_token_around_image>", normalized=False, special=True).content
         self.image_token = AddedToken("<image>", normalized=False, special=True).content
-        self.video_token = None #    ColModernVBert does not process video inputs
+        self.video_token = None  #    ColModernVBert does not process video inputs
         self.end_of_utterance_token = AddedToken("<end_of_utterance>", normalized=False, special=True).content
         self.global_image_tag = "<global-img>"  # https://github.com/huggingface/transformers/pull/32473/files/8063e5e17362571b693f1db95167f5443a3be1b2#r1734825341
         self.image_seq_len = image_seq_len
@@ -217,7 +226,7 @@ class ColModernVBertProcessor(ColQwen2Processor):
         self.visual_prompt_prefix = visual_prompt_prefix or (
             f"<|begin_of_text|>User:{self.image_token}Describe the image.<end_of_utterance>\nAssistant:"
         )
-        
+
         self.query_prefix = query_prefix or ""
 
     @property
@@ -482,10 +491,12 @@ class ColModernVBertProcessor(ColQwen2Processor):
 
             return batch_query
 
+
 @auto_docstring
 class ColModernVBertPreTrainedModel(ColPaliPreTrainedModel):
     config: ColModernVBertConfig
     _no_split_modules = ["ModernVBertEncoderLayer", "ModernVBertEncoderLayerVision"]
+
 
 @dataclass
 @auto_docstring(

@@ -33,7 +33,7 @@ from typing import TYPE_CHECKING, Optional, Union
 
 import numpy as np
 
-from ...feature_extraction_utils import BatchFeature
+from ...image_processing_utils import BatchFeature
 from ...image_utils import ImageInput, is_valid_image, load_image
 from ...processing_utils import MultiModalData, ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import AddedToken, BatchEncoding, TextInput

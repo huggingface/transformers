@@ -33,7 +33,7 @@ from typing import Optional, Union
 import torch
 import torch.nn.functional as F
 
-from ...feature_extraction_utils import BatchFeature
+from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import BaseImageProcessorFast, SizeDict, group_images_by_shape, reorder_images
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,

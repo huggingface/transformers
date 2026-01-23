@@ -33,8 +33,7 @@ from typing import Optional, Union
 
 import numpy as np
 
-from ...feature_extraction_utils import BatchFeature
-from ...image_processing_utils import BaseImageProcessor
+from ...image_processing_utils import BaseImageProcessor, BatchFeature
 from ...image_transforms import PaddingMode, pad, to_channel_dimension_format, to_pil_image
 from ...image_utils import (
     IMAGENET_STANDARD_MEAN,
