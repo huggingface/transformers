@@ -2198,7 +2198,7 @@ class GenerationMixin(ContinuousMixin):
     @contextmanager
     def _optimize_model_for_decode(self):
         original_experts_implementation = self.config._experts_implementation
-        if original_experts_implementation == "grouped_mm":
+        if original_experts_implementation == "grouped_mm" and self.device.type != "cpu":
             logger.info_once(
                 "We will be switching to 'batched_mm' for the decoding stage as it is much more performant than 'grouped_mm' on smaller inputs. "
                 "If you experience any issues with this, please open an issue on the Hugging Face Transformers GitHub repository.",
@@ -2208,7 +2208,7 @@ class GenerationMixin(ContinuousMixin):
         try:
             yield
         finally:
-            if original_experts_implementation == "grouped_mm":
+            if original_experts_implementation == "grouped_mm" and self.device.type != "cpu":
                 self.set_experts_implementation(original_experts_implementation)
 
     def _get_deprecated_gen_repo(
