@@ -275,6 +275,7 @@ class T5GemmaConfig(PreTrainedConfig):
         super().__init__(**kwargs)
 
         self.is_encoder_decoder = is_encoder_decoder
+        self.num_hidden_layers = kwargs.get("num_hidden_layers", decoder.num_hidden_layers)
         self.use_cache = kwargs.get("use_cache", decoder.use_cache)
         self.initializer_range = kwargs.get("initializer_range", decoder.initializer_range)
         self.dropout_rate = dropout_rate
