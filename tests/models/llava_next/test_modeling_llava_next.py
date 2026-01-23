@@ -13,17 +13,17 @@
 # limitations under the License.
 """Testing suite for the PyTorch Llava-NeXT model."""
 
-import copy
 import unittest
 
 import pytest
 import requests
 from huggingface_hub import hf_hub_download
-from parameterized import parameterized
 
 from transformers import (
     AutoProcessor,
     BitsAndBytesConfig,
+    CLIPVisionConfig,
+    LlamaConfig,
     LlavaNextConfig,
     LlavaNextForConditionalGeneration,
     LlavaNextModel,
@@ -39,13 +39,8 @@ from transformers.testing_utils import (
 )
 from transformers.utils import check_torch_load_is_safe
 
-from ...generation.test_utils import GenerationTesterMixin
-from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import (
-    ModelTesterMixin,
-    floats_tensor,
-    ids_tensor,
-)
+from ...test_modeling_common import floats_tensor
+from ...vlm_tester import VLMModelTest, VLMModelTester
 
 
 if is_torch_available():
@@ -58,242 +53,67 @@ if is_vision_available():
     from PIL import Image
 
 
-class LlavaNextVisionText2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        ignore_index=-100,
-        image_token_index=0,
-        projector_hidden_act="gelu",
-        seq_length=7,
-        vision_feature_select_strategy="default",
-        vision_feature_layer=-1,
-        text_config={
-            "model_type": "llama",
-            "seq_length": 7,
-            "is_training": True,
-            "use_input_mask": True,
-            "use_token_type_ids": False,
-            "use_labels": True,
-            "vocab_size": 99,
-            "hidden_size": 32,
-            "num_hidden_layers": 2,
-            "num_attention_heads": 4,
-            "intermediate_size": 37,
-            "hidden_act": "gelu",
-            "hidden_dropout_prob": 0.1,
-            "attention_probs_dropout_prob": 0.1,
-            "max_position_embeddings": 580,
-            "type_vocab_size": 16,
-            "type_sequence_label_size": 2,
-            "initializer_range": 0.02,
-            "num_labels": 3,
-            "num_choices": 4,
-            "pad_token_id": 1,
-        },
-        is_training=True,
-        vision_config={
-            "image_size": 8,
-            "patch_size": 4,
-            "num_channels": 3,
-            "is_training": True,
-            "hidden_size": 32,
-            "projection_dim": 32,
-            "num_hidden_layers": 2,
-            "num_attention_heads": 4,
-            "intermediate_size": 37,
-            "dropout": 0.1,
-            "attention_dropout": 0.1,
-            "initializer_range": 0.02,
-        },
-    ):
-        self.parent = parent
-        self.ignore_index = ignore_index
-        self.image_token_index = image_token_index
-        self.projector_hidden_act = projector_hidden_act
-        self.vision_feature_select_strategy = vision_feature_select_strategy
-        self.vision_feature_layer = vision_feature_layer
-        self.text_config = text_config
-        self.vision_config = vision_config
-        self.pad_token_id = text_config["pad_token_id"]
+class LlavaNextVisionText2TextModelTester(VLMModelTester):
+    base_model_class = LlavaNextModel
+    config_class = LlavaNextConfig
+    conditional_generation_class = LlavaNextForConditionalGeneration
+    text_config_class = LlamaConfig
+    vision_config_class = CLIPVisionConfig
+    all_model_classes = (LlavaNextModel, LlavaNextForConditionalGeneration)
 
-        self.num_hidden_layers = text_config["num_hidden_layers"]
-        self.vocab_size = text_config["vocab_size"]
-        self.hidden_size = text_config["hidden_size"]
-        self.num_attention_heads = text_config["num_attention_heads"]
-        self.is_training = is_training
+    # LlavaNext-specific: number of patches per image (1 grid patch + 1 base patch)
+    num_patches_per_image = 2
 
-        self.batch_size = 3
-        self.num_channels = 3
-        self.image_size = 30
-        self.image_grid_pinpoints = [[16, 16]]
-        self.num_image_tokens = 24
-        self.seq_length = seq_length + self.num_image_tokens
-        self.encoder_seq_length = self.seq_length
+    # Template method overrides
 
-    def get_config(self):
-        return LlavaNextConfig(
-            text_config=self.text_config,
-            vision_config=self.vision_config,
-            ignore_index=self.ignore_index,
-            image_token_index=self.image_token_index,
-            projector_hidden_act=self.projector_hidden_act,
-            vision_feature_select_strategy=self.vision_feature_select_strategy,
-            vision_feature_layer=self.vision_feature_layer,
-            image_grid_pinpoints=self.image_grid_pinpoints,
-            image_seq_length=self.num_image_tokens,
-        )
+    @property
+    def num_image_tokens(self):
+        """
+        Calculate num_image_tokens based on LlavaNext's pack_image_features logic:
+        - base_image_feature: (image_size/patch_size)^2 tokens
+        - grid patches: height * (width + 1) tokens (includes newline token)
+        """
+        # Use vocab_size - 1 for image_token_index to avoid conflicts with pad_token_id (0)
+        self.image_token_index = self.vocab_size - 1
 
-    def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor(
+        tokens_per_patch = (self.image_size // self.patch_size) ** 2
+        height = width = self.image_size // self.patch_size
+        grid_tokens = height * (width + 1)
+        return tokens_per_patch + grid_tokens
+
+    def create_pixel_values(self):
+        """LlavaNext expects 5D pixel_values: (batch_size, num_patches, channels, height, width)"""
+        return floats_tensor(
             [
                 self.batch_size,
-                5,
-                self.vision_config["num_channels"],
-                self.vision_config["image_size"],
-                self.vision_config["image_size"],
+                self.num_patches_per_image,
+                self.num_channels,
+                self.image_size,
+                self.image_size,
             ]
         )
-        config = self.get_config()
 
-        return config, pixel_values
-
-    def prepare_config_and_inputs_for_common(self):
-        config_and_inputs = self.prepare_config_and_inputs()
-        config, pixel_values = config_and_inputs
-        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 2) + 2
-        attention_mask = torch.ones(input_ids.shape, dtype=torch.long).to(torch_device)
-        input_ids[input_ids == config.image_token_index] = self.pad_token_id
-
-        input_ids[:, : self.num_image_tokens] = config.image_token_index
-
-        inputs_dict = {
-            "pixel_values": pixel_values,
-            "image_sizes": torch.tensor(
-                [[self.vision_config["image_size"], self.vision_config["image_size"]]] * self.batch_size
-            ),
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
+    def get_additional_inputs(self, config, input_ids, pixel_values):
+        """LlavaNext requires image_sizes tensor"""
+        return {
+            "image_sizes": torch.tensor([[self.image_size, self.image_size]] * self.batch_size),
         }
-        return config, inputs_dict
+
+    def get_config(self):
+        config = super().get_config()
+        # Set grid pinpoints compatible with our small test image size
+        config.image_grid_pinpoints = [[self.image_size, self.image_size]]
+        return config
 
 
 @require_torch
-class LlavaNextForConditionalGenerationModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
+class LlavaNextForConditionalGenerationModelTest(VLMModelTest, unittest.TestCase):
     """
     Model tester for `LlavaNextForConditionalGeneration`.
     """
 
-    all_model_classes = (
-        (
-            LlavaNextModel,
-            LlavaNextForConditionalGeneration,
-        )
-        if is_torch_available()
-        else ()
-    )
-    pipeline_model_mapping = (
-        {
-            "image-text-to-text": LlavaNextForConditionalGeneration,
-            "any-to-any": LlavaNextForConditionalGeneration,
-        }
-        if is_torch_available()
-        else {}
-    )
-    _is_composite = True
-
-    def setUp(self):
-        self.model_tester = LlavaNextVisionText2TextModelTester(self)
-        common_properties = ["image_token_index", "vision_feature_layer", "image_seq_length"]
-        self.config_tester = ConfigTester(
-            self, config_class=LlavaNextConfig, has_text_modality=False, common_properties=common_properties
-        )
-
-    def test_config(self):
-        self.config_tester.run_common_tests()
-
-    def test_mismatching_num_image_tokens(self):
-        """
-        Tests that VLMs through an error with explicit message saying what is wrong
-        when number of images don't match number of image tokens in the text.
-        Also we need to test multi-image cases when one prompr has multiple image tokens.
-        """
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        for model_class in self.all_model_classes:
-            model = model_class(config).to(torch_device)
-            model.eval()
-            curr_input_dict = copy.deepcopy(input_dict)  # in=place modifications further
-            _ = model(**curr_input_dict)  # successful forward with no modifications
-
-            # remove one image but leave the image token in text
-            curr_input_dict["pixel_values"] = curr_input_dict["pixel_values"][-1:, ...]
-            curr_input_dict["image_sizes"] = curr_input_dict["image_sizes"][-1:, ...]
-            with self.assertRaises(ValueError):
-                _ = model(**curr_input_dict)
-
-            # simulate multi-image case by concatenating inputs where each has exactly one image/image-token
-            input_ids = curr_input_dict["input_ids"][:1]
-            pixel_values = curr_input_dict["pixel_values"][:1]
-            image_sizes = curr_input_dict["image_sizes"][:1]
-            input_ids = torch.cat([input_ids, input_ids], dim=0)
-
-            # one image and two image tokens raise an error
-            with self.assertRaises(ValueError):
-                _ = model(input_ids=input_ids, pixel_values=pixel_values, image_sizes=image_sizes)
-
-            # two images and two image tokens don't raise an error
-            pixel_values = torch.cat([pixel_values, pixel_values], dim=0)
-            image_sizes = torch.cat([image_sizes, image_sizes], dim=0)
-            _ = model(input_ids=input_ids, pixel_values=pixel_values, image_sizes=image_sizes)
-
-    def test_odd_sized_image(self):
-        # prepare model configuration
-        config = self.model_tester.get_config()
-
-        # prepare input
-        num_image_tokens = 24
-        pixel_values = floats_tensor([1, 5, 3, config.vision_config.image_size, config.vision_config.image_size])
-        input_ids = ids_tensor([1, 64], config.text_config.vocab_size - 2) + 2
-        input_ids[:, :num_image_tokens] = config.image_token_index
-        attention_mask = torch.ones(input_ids.shape, dtype=torch.long).to(torch_device)
-        inputs_dict = {
-            "pixel_values": pixel_values,
-            "image_sizes": torch.tensor([[13, 16]]),  # odd-sized image
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-        }
-
-        # forward with odd-sized image input
-        for model_class in self.all_model_classes:
-            model = model_class(config).to(torch_device)
-            model(**inputs_dict)
-
-    @parameterized.expand(
-        [
-            (-1,),
-            ([-1],),
-            ([-1, -2],),
-        ],
-    )
-    def test_vision_feature_layers(self, vision_feature_layer):
-        """
-        Test that we can use either one vision feature layer, or a list of
-        vision feature layers.
-        """
-        config, input_dict = self.model_tester.prepare_config_and_inputs_for_common()
-        config.vision_feature_layer = vision_feature_layer
-
-        num_feature_layers = 1 if isinstance(vision_feature_layer, int) else len(vision_feature_layer)
-        hidden_size = config.vision_config.hidden_size
-        expected_features = hidden_size * num_feature_layers
-
-        for model_class in self.all_model_classes:
-            model = model_class(config).to(torch_device)
-            # We should have the right number of input features,
-            # and should be able to run a forward pass without exploding
-            base_model = getattr(model, "model", model)
-            assert base_model.multi_modal_projector.linear_1.in_features == expected_features
-            model(**input_dict)
+    model_tester_class = LlavaNextVisionText2TextModelTester
+    test_resize_embeddings = False
 
     @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing(self):

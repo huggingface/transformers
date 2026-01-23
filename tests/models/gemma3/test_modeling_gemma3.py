@@ -26,6 +26,7 @@ from transformers import (
     AutoTokenizer,
     Gemma3Config,
     Gemma3TextConfig,
+    SiglipVisionConfig,
     is_torch_available,
 )
 from transformers.testing_utils import (
@@ -42,11 +43,11 @@ from transformers.testing_utils import (
     slow,
     torch_device,
 )
+from transformers.trainer_utils import set_seed
 
 from ...causal_lm_tester import CausalLMModelTest, CausalLMModelTester
-from ...generation.test_utils import GenerationTesterMixin
 from ...test_configuration_common import ConfigTester
-from ...test_modeling_common import ModelTesterMixin, floats_tensor, ids_tensor
+from ...vlm_tester import VLMModelTest, VLMModelTester
 
 
 if is_torch_available():
@@ -246,115 +247,47 @@ class Gemma3TextModelTest(CausalLMModelTest, unittest.TestCase):
             torch.testing.assert_close(yarn_sin_long, original_sin_long)
 
 
-class Gemma3Vision2TextModelTester:
-    def __init__(
-        self,
-        parent,
-        mm_tokens_per_image=2,
-        image_token_index=4,
-        boi_token_index=5,
-        eoi_token_index=6,
-        seq_length=25,
-        is_training=True,
-        vision_config={
-            "use_labels": True,
-            "image_size": 20,
-            "patch_size": 5,
-            "num_channels": 3,
-            "is_training": True,
-            "hidden_size": 32,
-            "num_key_value_heads": 1,
-            "num_hidden_layers": 2,
-            "num_attention_heads": 4,
-            "intermediate_size": 37,
-            "dropout": 0.1,
-            "attention_dropout": 0.1,
-            "initializer_range": 0.02,
-        },
-        use_cache=False,
-    ):
-        self.parent = parent
-        # `image_token_index` is set to 0 to pass "resize_embeddings" test, do not modify
+class Gemma3Vision2TextModelTester(VLMModelTester):
+    if is_torch_available():
+        base_model_class = Gemma3Model
+        config_class = Gemma3Config
+        text_config_class = Gemma3TextConfig
+        vision_config_class = SiglipVisionConfig
+        conditional_generation_class = Gemma3ForConditionalGeneration
+        sequence_classification_class = Gemma3ForSequenceClassification
+        all_model_classes = (Gemma3Model, Gemma3ForConditionalGeneration, Gemma3ForSequenceClassification)
+
+    def __init__(self, parent, mm_tokens_per_image=2, **kwargs):
+        kwargs.setdefault("image_size", 20)
+        kwargs.setdefault("patch_size", 5)
+        kwargs.setdefault("num_key_value_heads", 1)
+        kwargs.setdefault("image_token_index", 4)
+        kwargs.setdefault("seq_length", 24)  # Need seq_length >= 10 for bidirectional attention test
+        super().__init__(parent, **kwargs)
+
         self.mm_tokens_per_image = mm_tokens_per_image
-        self.image_token_index = image_token_index
-        self.boi_token_index = boi_token_index
-        self.eoi_token_index = eoi_token_index
-        self.llm_tester = Gemma3TextModelTester(self.parent)
-        self.text_config = self.llm_tester.get_config()
-        self.vision_config = vision_config
-        self.seq_length = seq_length
-        self.pad_token_id = self.text_config.pad_token_id
 
-        self.num_hidden_layers = self.text_config.num_hidden_layers
-        self.vocab_size = self.text_config.vocab_size
-        self.hidden_size = self.text_config.hidden_size
-        self.num_attention_heads = self.text_config.num_attention_heads
-        self.is_training = is_training
+    @property
+    def num_image_tokens(self):
+        # Gemma3 pools image tokens: int(sqrt(mm_tokens_per_image))^2
+        tokens_per_side = int(self.mm_tokens_per_image**0.5)
+        return tokens_per_side * tokens_per_side
 
-        self.batch_size = 3
-        self.num_channels = vision_config["num_channels"]
-        self.image_size = vision_config["image_size"]
-        self.encoder_seq_length = seq_length
-        self.use_cache = use_cache
+    def create_attention_mask(self, input_ids):
+        # Gemma3 uses padding mask for bidirectional attention on image tokens
+        return input_ids.ne(self.pad_token_id).to(torch_device)
 
-    def get_config(self):
-        return Gemma3Config(
-            text_config=self.text_config,
-            vision_config=self.vision_config,
-            image_token_index=self.image_token_index,
-            boi_token_index=self.boi_token_index,
-            eoi_token_index=self.eoi_token_index,
-            mm_tokens_per_image=self.mm_tokens_per_image,
-        )
-
-    def prepare_config_and_inputs(self):
-        pixel_values = floats_tensor(
-            [
-                self.batch_size,
-                self.vision_config["num_channels"],
-                self.vision_config["image_size"],
-                self.vision_config["image_size"],
-            ]
-        )
-        config = self.get_config()
-
-        return config, pixel_values
-
-    def prepare_config_and_inputs_for_common(self):
-        config_and_inputs = self.prepare_config_and_inputs()
-        config, pixel_values = config_and_inputs
-        input_ids = ids_tensor([self.batch_size, self.seq_length], config.text_config.vocab_size - 1) + 1
-        attention_mask = input_ids.ne(self.pad_token_id).to(torch_device)
-
-        # set the 3 first tokens to be image, and ensure that no other tokens are image tokens
-        # do not change this unless you modified image size or patch size
-        input_ids[input_ids == config.image_token_index] = self.pad_token_id
-        input_ids[:, :1] = config.image_token_index
-
+    def get_additional_inputs(self, config, input_ids, pixel_values):
+        # Gemma3 requires specific token_type_ids for bidirectional attention on image tokens
         token_type_ids = torch.zeros_like(input_ids)
         token_type_ids[input_ids == config.image_token_index] = 1
-
-        inputs_dict = {
-            "pixel_values": pixel_values,
-            "input_ids": input_ids,
-            "attention_mask": attention_mask,
-            "token_type_ids": token_type_ids,
-        }
-        return config, inputs_dict
+        return {"token_type_ids": token_type_ids}
 
 
 @require_torch
-class Gemma3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unittest.TestCase):
-    all_model_classes = (
-        (
-            Gemma3Model,
-            Gemma3ForConditionalGeneration,
-            Gemma3ForSequenceClassification,
-        )
-        if is_torch_available()
-        else ()
-    )
-    all_generative_model_classes = (Gemma3ForConditionalGeneration,) if is_torch_available() else ()
+class Gemma3Vision2TextModelTest(VLMModelTest, unittest.TestCase):
+    model_tester_class = Gemma3Vision2TextModelTester
+    config_tester = ConfigTester
 
     test_missing_keys = False
     _is_stateful = True
@@ -368,15 +301,28 @@ class Gemma3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, unitte
     test_disk_offload_safetensors = False
     test_disk_offload_bin = False
 
-    def setUp(self):
-        self.model_tester = Gemma3Vision2TextModelTester(self)
-        self.config_tester = ConfigTester(self, config_class=Gemma3Config, hidden_size=37)
+    @unittest.skip("Gemma3 applies key/query norm which doesn't work with packing")
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("Gemma3 applies key/query norm which doesn't work with packing")
+    def test_flash_attention_2_padding_matches_padding_free_with_position_ids_and_fa_kwargs(self):
+        pass
+
+    @unittest.skip("Gemma3 applies key/query norm which doesn't work with packing")
+    def test_eager_padding_matches_padding_free_with_position_ids(self):
+        pass
+
+    @unittest.skip("Gemma3 applies key/query norm which doesn't work with packing")
+    def test_sdpa_padding_matches_padding_free_with_position_ids(self):
+        pass
 
     def test_bidirectional_image_attention(self):
         """
         Tests that each image can attend to itself bidirectionally. However an image
         cannot attend to future images, even within the same batch.
         """
+        set_seed(42)
         config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
         config._attn_implementation = "eager"
         model = Gemma3Model(config).to(torch_device)
