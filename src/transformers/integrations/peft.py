@@ -23,6 +23,7 @@ from ..core_model_loading import (
     Concatenate,
     ConversionOps,
     MergeModulelist,
+    Transpose,
     WeightConverter,
     WeightRenaming,
 )
@@ -119,6 +120,7 @@ class PeftConcatenate(Concatenate):
             out = _block_diag_3d(*input_dict.values())  # shape = experts, 2*out_feat, 2*r
             out = torch.permute(out, (2, 0, 1))  # shape = 2*r, experts, 2*out_feat
             out = out.flatten(0, 1)  # shape = 2*r * experts, 2*out_feat
+            out = out.T
             output_dict = {full_layer_name: out}
         return output_dict
 
@@ -254,6 +256,7 @@ def _build_peft_weight_mapping(
                         else:
                             peft_weight_operations.append(PermuteDims(dims=(2, 0, 1)))
                             peft_weight_operations.append(FlattenDims(dims=(0, 1)))
+                            peft_weight_operations.append(Transpose(dim0=0, dim1=1))
                 conversion.operations = peft_weight_operations
 
                 # TODO: this assumption may not hold for models != mixtral
@@ -274,6 +277,30 @@ def _build_peft_weight_mapping(
                 new_weight_conversions.append(conversion)
 
     return new_weight_conversions
+
+
+def patch_mixtral_moe_parameter_targeting(model, peft_config):
+    """PEFT currently assumes that expert layers are of shape
+        (expert, in, out)
+    but with Mixtral in transformers v5 this is not true anymore.
+    This will be addressed in PEFT >0.19 until then we need to handle
+    it here for now.
+    """
+    from functools import wraps
+
+    import peft
+
+    if model.config.model_type == "mixtral":
+        get_in_out_features = peft.tuners.lora.layer.ParamWrapper._get_in_out_features
+
+        @wraps(get_in_out_features)
+        def new_get_in_out_features(layer, module):
+            if layer.parameter_name in ("down_proj", "gate_up_proj"):
+                in_features, out_features = get_in_out_features(layer, module)
+                return out_features, in_features
+            return get_in_out_features(layer, module)
+
+        peft.tuners.lora.layer.ParamWrapper._get_in_out_features = new_get_in_out_features
 
 
 class PeftAdapterMixin:
@@ -441,6 +468,8 @@ class PeftAdapterMixin:
             peft_config.inference_mode = not is_trainable
 
         peft_config = convert_peft_config_for_transformers(peft_config, model=self, conversions=weight_conversions)
+
+        patch_mixtral_moe_parameter_targeting(model=self, peft_config=peft_config)
 
         if not hotswap:
             # Create and add fresh new adapters into the model, unless the weights are hotswapped
@@ -905,13 +934,19 @@ def _convert_peft_config_mixtral(peft_config):
 
     # add expert layers: w1 & w3 => gate_up_proj, ModuleList of layers is now a stacked parameter.
     for target in peft_config.target_modules:
+        msg_no_conversion_fused = (
+            f"Cannot convert {target} because these weights are now fused and "
+            "converting a single adapter into a fused weight is not supported "
+            "right now."
+        )
+
         # if only w1 or only w3 are targeted, conversion is not possible
         if (target == "w1") or target.endswith(".w1"):
             if target.replace("w1", "w3") not in peft_config.target_modules:
-                raise ValueError("Cannot convert because blabla")  # FIXME
+                raise ValueError(msg_no_conversion_fused)
         if (target == "w3") or target.endswith(".w3"):
             if target.replace("w3", "w1") not in peft_config.target_modules:
-                raise ValueError("Cannot convert because blabla")  # FIXME
+                raise ValueError(msg_no_conversion_fused)
 
         if (target == "w1") or target.endswith(".w1"):
             # FIXME: what if only specific layers are targeted, e.g. '0.w1'
@@ -933,6 +968,11 @@ def _convert_peft_config_mixtral(peft_config):
     peft_config.target_modules = {
         key for key in peft_config.target_modules if not ((key == "w2") or (key.endswith(".w2")))
     }
+
+    if "gate_up_proj" in peft_config.target_parameters:
+        # this weight is a fusion of two adapters so the internal representation is r*2
+        peft_config.rank_pattern[r".*\.experts\.gate_up_proj"] = peft_config.r * 2
+
     return peft_config
 
 
