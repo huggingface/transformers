@@ -1412,41 +1412,36 @@ class GlmImageProcessor(ProcessorMixin):
                     index += 1
                 text[i] = text[i].replace("<|placeholder|>", self.image_token)
 
-        # Build prompt with target shape for each sample
-        all_target_grids = []
+        # Build prompt with target shape and combine grids in a single loop
+        # Format: [sample0_source_grids..., sample0_target_grids, sample1_source_grids..., sample1_target_grids, ...]
+        # Note: In i2i mode, batches are homogeneous (same number of source images per sample)
+        num_source_images = images_per_sample[0] if images_per_sample else 0
+        all_grids = []
         for i in range(batch_size):
             text[i], token_h, token_w, prev_h, prev_w = self._build_prompt_with_target_shape(
                 text[i], height=target_h, width=target_w, is_text_to_image=is_text_to_image
             )
-            # Build target grid for this sample
-            target_grid = self._build_target_image_grid_thw(
-                token_h=token_h,
-                token_w=token_w,
-                prev_token_h=prev_h,
-                prev_token_w=prev_w,
-                is_text_to_image=is_text_to_image,
+            # Add source grids for this sample (i2i mode only)
+            if not is_text_to_image and num_source_images > 0:
+                start_idx = i * num_source_images
+                all_grids.append(image_grid_thw[start_idx : start_idx + num_source_images])
+            # Add target grid for this sample
+            all_grids.append(
+                self._build_target_image_grid_thw(
+                    token_h=token_h,
+                    token_w=token_w,
+                    prev_token_h=prev_h,
+                    prev_token_w=prev_w,
+                    is_text_to_image=is_text_to_image,
+                )
             )
-            all_target_grids.append(target_grid)
-
-        # Combine source image grids (if any) with target grids
-        # Format: [sample0_source_grids..., sample0_target_grids, sample1_source_grids..., sample1_target_grids, ...]
-        if not is_text_to_image and image_grid_thw is not None:
-            # Split source grids by sample
-            source_grids_list = torch.split(image_grid_thw, images_per_sample)
-            combined_grids = []
-            for i in range(batch_size):
-                if images_per_sample[i] > 0:
-                    combined_grids.append(source_grids_list[i])
-                combined_grids.append(all_target_grids[i])
-            image_inputs["image_grid_thw"] = torch.cat(combined_grids, dim=0)
-        else:
-            image_inputs["image_grid_thw"] = torch.cat(all_target_grids, dim=0)
+        image_inputs["image_grid_thw"] = torch.cat(all_grids, dim=0)
 
         # Store images_per_sample for later use (add target images count)
-        # Each sample will have: source_images + target_images (typically 2 for text-to-image, 1 for image-to-image)
-        num_target_grids = all_target_grids[0].shape[0]
+        # Each sample will have: source_images + target_images (typically 2 for t2i, 1 for i2i)
+        num_target_grids = 2 if is_text_to_image else 1
         image_inputs["images_per_sample"] = torch.tensor(
-            [n + num_target_grids for n in images_per_sample], dtype=torch.long
+            [num_source_images + num_target_grids] * batch_size, dtype=torch.long
         )
 
         return_tensors = output_kwargs["text_kwargs"].pop("return_tensors", None)
