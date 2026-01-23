@@ -68,7 +68,7 @@ def _iter_python_files(root: str) -> Iterable[str]:
 
 
 def _decorator_name(node: ast.expr) -> str | None:
-    """Return the simple name of a decorator, if it matches a target.
+    """Return the simple name of a decorator
 
     Handles forms like:
     - @can_return_tuple
@@ -77,19 +77,12 @@ def _decorator_name(node: ast.expr) -> str | None:
     - @utils.check_model_inputs(...)
     """
 
-    target = node
-    if isinstance(target, ast.Call):
-        target = target.func
+    target = node.func if isinstance(node, ast.Call) else node
 
     if isinstance(target, ast.Name):
-        name = target.id
+        return target.id
     elif isinstance(target, ast.Attribute):
-        name = target.attr
-    else:
-        return None
-
-    if name in TARGET_DECORATORS:
-        return name
+        return target.attr
     return None
 
 
@@ -207,7 +200,7 @@ def _collect_decorated_functions(tree: ast.AST) -> list[tuple[ast.AST, str]]:
             continue
         for deco in node.decorator_list:
             name = _decorator_name(deco)
-            if name is not None:
+            if name in TARGET_DECORATORS:
                 functions.append((node, name))
                 break
     return functions
