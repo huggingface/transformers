@@ -1221,6 +1221,7 @@ class ModelUtilsTest(TestCasePlus):
         transform_a._dynamic_tied_weights_keys = ["weight"]
         transform_b = torch.nn.Linear(1, 1, bias=False)
         transform_b._dynamic_tied_weights_keys = ["weight"]
+        transform_a.weight = transform_b.weight
 
         model.linear.register_module("transform_a", transform_a)
         model.linear.register_module("transform_b", transform_b)
