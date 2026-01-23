@@ -165,6 +165,7 @@ jobs:
           cp utils/check_pipeline_typing.py pr-repo/utils/check_pipeline_typing.py
           cp utils/check_doctest_list.py pr-repo/utils/check_doctest_list.py
           cp utils/check_docstrings.py pr-repo/utils/check_docstrings.py
+          cp utils/check_decorator_return_types.py pr-repo/utils/check_decorator_return_types.py
           cp utils/add_dates.py pr-repo/utils/add_dates.py
           
           # Run commands in PR directory (with the copied trusted scripts)
@@ -185,6 +186,7 @@ jobs:
           python utils/check_pipeline_typing.py --fix_and_overwrite
           python utils/check_doctest_list.py --fix_and_overwrite
           python utils/check_docstrings.py --fix_and_overwrite
+          python utils/check_decorator_return_types.py --fix_and_overwrite
           python utils/add_dates.py
           
           # Check if there are changes

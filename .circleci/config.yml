@@ -189,6 +189,7 @@ jobs:
             - run: python utils/check_config_docstrings.py
             - run: python utils/check_config_attributes.py
             - run: python utils/check_doctest_list.py
+            - run: python utils/check_decorator_return_types.py
             - run: python utils/update_metadata.py --check-only
             - run: python utils/add_dates.py --check-only
             - run: > 
