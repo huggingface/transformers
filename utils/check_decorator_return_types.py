@@ -89,8 +89,10 @@ def _decorator_name(node: ast.expr) -> str | None:
 def _is_none_annotation(returns: ast.expr | None) -> bool:
     return (
         returns is None
-        or isinstance(returns, ast.Constant) and returns.value is None
-        or isinstance(returns, ast.Name) and returns.id == "None"
+        or isinstance(returns, ast.Constant)
+        and returns.value is None
+        or isinstance(returns, ast.Name)
+        and returns.id == "None"
     )
 
 
