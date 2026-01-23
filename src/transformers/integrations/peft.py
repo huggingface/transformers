@@ -147,10 +147,6 @@ class FlattenDims(ConversionOps):
         **kwargs,
     ) -> dict[str, list[torch.Tensor]]:
         output_dict = {k: v.flatten(*self.dims) for k, v in input_dict.items()}
-        # FIXME
-        print("=" * 50, "FLATTEN")
-        print(input_dict.keys())
-        print([v.shape for v in input_dict.values()], "=>", [v.shape for v in output_dict.values()])
         return output_dict
 
     @property
@@ -202,6 +198,7 @@ def _build_peft_weight_mapping(
         WeightRenaming("base_model.model.model", "model"),
         WeightRenaming("lora_A.weight", f"lora_A.{adapter_name}.weight"),
         WeightRenaming("lora_B.weight", f"lora_B.{adapter_name}.weight"),
+        WeightRenaming(".(.+)$", r"m\1."+adapter_name), # TODO this is very very very weird but fixes test_non_lora_load_adapter
         # TODO: lora_embedding_A and B
     ]
 
@@ -447,7 +444,7 @@ class PeftAdapterMixin:
 
         if not hotswap:
             # Create and add fresh new adapters into the model, unless the weights are hotswapped
-            inject_adapter_in_model(peft_config, self, adapter_name, state_dict=adapter_state_dict)
+            inject_adapter_in_model(peft_config, self, adapter_name)
 
         if not self._hf_peft_config_loaded:
             self._hf_peft_config_loaded = True
