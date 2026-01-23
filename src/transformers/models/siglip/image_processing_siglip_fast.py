@@ -15,8 +15,8 @@
 
 from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...image_utils import (
-    IMAGENET_STANDARD_MEAN,
-    IMAGENET_STANDARD_STD,
+    IMAGENET_DEFAULT_MEAN,
+    IMAGENET_DEFAULT_STD,
     PILImageResampling,
 )
 from ...utils import auto_docstring
@@ -25,8 +25,8 @@ from ...utils import auto_docstring
 @auto_docstring
 class SiglipImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BICUBIC
-    image_mean = IMAGENET_STANDARD_MEAN
-    image_std = IMAGENET_STANDARD_STD
+    image_mean = IMAGENET_DEFAULT_MEAN
+    image_std = IMAGENET_DEFAULT_STD
     size = {"height": 224, "width": 224}
     default_to_square = False
     do_resize = True

@@ -20,8 +20,8 @@ from ...image_transforms import (
     to_channel_dimension_format,
 )
 from ...image_utils import (
-    IMAGENET_STANDARD_MEAN,
-    IMAGENET_STANDARD_STD,
+    IMAGENET_DEFAULT_MEAN,
+    IMAGENET_DEFAULT_STD,
     ChannelDimension,
     ImageInput,
     PILImageResampling,
@@ -91,8 +91,8 @@ class SiglipImageProcessor(BaseImageProcessor):
     ) -> None:
         super().__init__(**kwargs)
         size = size if size is not None else {"height": 224, "width": 224}
-        image_mean = image_mean if image_mean is not None else IMAGENET_STANDARD_MEAN
-        image_std = image_std if image_std is not None else IMAGENET_STANDARD_STD
+        image_mean = image_mean if image_mean is not None else IMAGENET_DEFAULT_MEAN
+        image_std = image_std if image_std is not None else IMAGENET_DEFAULT_STD
 
         self.do_resize = do_resize
         self.size = size
