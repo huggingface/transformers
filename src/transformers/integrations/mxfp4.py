@@ -128,20 +128,19 @@ class Mxfp4Dequantize(ConversionOps):
         missing_keys=None,
         **kwargs,
     ) -> dict[str, torch.Tensor]:
-        param_data = {}
         if "_blocks" in input_dict.keys():
             if isinstance(input_dict["_blocks"], list):
-                param_data["_blocks"] = input_dict["_blocks"][0]
+                blocks = input_dict["_blocks"][0]
             else:
-                param_data["_blocks"] = input_dict["_blocks"]
+                blocks = input_dict["_blocks"]
         if "_scales" in input_dict.keys():
             if isinstance(input_dict["_scales"], list):
-                param_data["_scales"] = input_dict["_scales"][0]
+                scales = input_dict["_scales"][0]
             else:
-                param_data["_scales"] = input_dict["_scales"]
+                scales = input_dict["_scales"]
 
         # Here we are dequantizing the weights
-        dequantized = dequantize_convertops(param_data["_blocks"], param_data["_scales"])
+        dequantized = dequantize_convertops(blocks, scales)
         return {full_layer_name: dequantized}
 
 
@@ -213,9 +212,9 @@ def swizzle_mxfp4(w, w_scale, triton_kernels_hub):
     return w, w_scale
 
 
-# Copied from GPT_OSS repo
+# Mostly copied from GPT_OSS repo
 # TODO: Add absolute link when the repo is public
-def convert_moe_packed_tensors(
+def _convert_moe_packed_tensors(
     blocks,
     scales,
     *,
@@ -267,6 +266,35 @@ def convert_moe_packed_tensors(
     out = out.reshape(*prefix_shape, G, B * 2).view(*prefix_shape, G * B * 2)
 
     return out.transpose(1, 2).contiguous()
+
+
+def convert_moe_packed_tensors(
+    blocks,
+    scales,
+    *,
+    dtype: torch.dtype = torch.bfloat16,
+    rows_per_chunk: int = 32768 * 1024,  # TODO these values are not here by mistake ;)
+) -> torch.Tensor:
+    """
+    Convert the mxfp4 weights again, dequantizing and makes them compatible with the forward
+    pass of GPT_OSS.
+    """
+    # Since the intermediate ops requite A LOT of memory, in very constrained device_map="auto" settings
+    # it may OOM, hence this wrapper and move back to cpu if needed
+    # This is the only accurate way to know if we will have enough memory later, as torch statistics are not
+    # accurate enough with fragmentation and in-place operation on non-contiguous tensors (may sometimes require
+    # more temporary copies)
+    if blocks.device.type in ("cuda", "xpu"):
+        try:
+            return _convert_moe_packed_tensors(blocks, scales, dtype=dtype, rows_per_chunk=rows_per_chunk)
+        # In the case of OOM due to very tight device_map, we convert and return on cpu - it will then be put back on correct
+        # devide with the accelerate dispatch (doing it right away may still lead to OOM, but more memory is available later)
+        except torch.OutOfMemoryError:
+            blocks = blocks.to("cpu")
+            scales = scales.to("cpu")
+            return _convert_moe_packed_tensors(blocks, scales, dtype=dtype, rows_per_chunk=rows_per_chunk)
+
+    return _convert_moe_packed_tensors(blocks, scales, dtype=dtype, rows_per_chunk=rows_per_chunk)
 
 
 class Mxfp4GptOssExperts(nn.Module):
