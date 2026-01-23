@@ -28,6 +28,7 @@ from transformers import (
     pipeline,
 )
 from transformers.testing_utils import Expectations, cleanup, require_torch, slow, torch_device
+from transformers.trainer_utils import set_seed
 from transformers.utils import is_torch_available, is_vision_available
 
 from ...test_configuration_common import ConfigTester
@@ -765,6 +766,11 @@ def prepare_dog_img():
 
 @slow
 class SamHQModelIntegrationTest(unittest.TestCase):
+    def setUp(self):
+        super().setUp()
+        # Set seed for deterministic positional embeddings (randomly initialized via torch.randn)
+        set_seed(0)
+
     def tearDown(self):
         super().tearDown()
         # clean-up as much as possible GPU memory occupied by PyTorch
