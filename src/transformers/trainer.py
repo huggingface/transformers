@@ -2420,6 +2420,12 @@ class Trainer:
                     f" {steps_trained_in_current_epoch} batches in the first epoch."
                 )
 
+            # Reset timer and token counters for local run metrics
+            start_time = time.time()
+            if hasattr(self.state, "num_input_tokens_seen"):
+                self.state.num_input_tokens_seen = 0
+            # Add more resets here if other counters are used for speed metrics
+
         # Update the references
         for attr in ("model", "optimizer", "lr_scheduler"):
             setattr(self.callback_handler, attr, getattr(self, attr))
