@@ -313,6 +313,11 @@ class PerceptionLMModel(PerceptionLMPreTrainedModel):
         )
 
 
+# Backward-compatibility alias expected by Auto mappings
+# Auto MODEL_MAPPING may expect a base class named `PerceptionEncoder`.
+# Provide a thin alias so lazy auto-mapping can resolve the symbol.
+PerceptionEncoder = PerceptionLMModel
+
 @auto_docstring
 class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, GenerationMixin):
     _checkpoint_conversion_mapping = {}
@@ -476,4 +481,9 @@ class PerceptionLMForConditionalGeneration(PerceptionLMPreTrainedModel, Generati
         return model_inputs
 
 
-__all__ = ["PerceptionLMForConditionalGeneration", "PerceptionLMPreTrainedModel", "PerceptionLMModel"]
+__all__ = [
+    "PerceptionLMForConditionalGeneration",
+    "PerceptionLMPreTrainedModel",
+    "PerceptionLMModel",
+    "PerceptionEncoder",
+]

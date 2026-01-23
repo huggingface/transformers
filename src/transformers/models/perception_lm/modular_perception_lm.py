@@ -424,8 +424,15 @@ class PerceptionLMForConditionalGeneration(LlavaForConditionalGeneration):
         raise AttributeError("Not needed for PerceptionLM")
 
 
+# Backward-compatibility alias expected by Auto mappings.
+# Auto MODEL_MAPPING may expect a base class named `PerceptionEncoder`.
+# Provide a thin alias so lazy auto-mapping can resolve the symbol.
+PerceptionEncoder = PerceptionLMModel
+
+
 __all__ = [
     "PerceptionLMForConditionalGeneration",
     "PerceptionLMPreTrainedModel",
     "PerceptionLMModel",
+    "PerceptionEncoder",
 ]
