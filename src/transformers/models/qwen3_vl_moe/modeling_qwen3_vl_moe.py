@@ -923,6 +923,9 @@ class Qwen3VLMoeTextModel(Qwen3VLMoePreTrainedModel):
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
+        if use_cache is None:
+            use_cache = self.config.use_cache
+
         # torch.jit.trace() doesn't support cache objects in the output
         if use_cache and past_key_values is None and not torch.jit.is_tracing():
             past_key_values = DynamicCache(config=self.config)
@@ -969,6 +972,7 @@ class Qwen3VLMoeTextModel(Qwen3VLMoePreTrainedModel):
                 attention_mask=attention_mask,
                 position_ids=text_position_ids,
                 past_key_values=past_key_values,
+                use_cache=use_cache,
                 cache_position=cache_position,
                 position_embeddings=position_embeddings,
                 **kwargs,
