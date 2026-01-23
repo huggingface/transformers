@@ -39,7 +39,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 
 
-PATH_TO_TRANSFORMERS = "src/transformers/models"
+PATH_TO_TRANSFORMERS = "src/transformers"
 
 
 TARGET_DECORATORS = {"can_return_tuple", "check_model_inputs"}
@@ -255,8 +255,8 @@ def check_decorator_return_types(overwrite: bool = False):
 
         for func_node, decorator_name in functions:
             # Ignore trivial delegations like `return super(...` or `super(...`.
-            # if _is_delegating_to_super(func_node):
-            #     continue
+            if _is_delegating_to_super(func_node):
+                continue
 
             returns = func_node.returns
 
