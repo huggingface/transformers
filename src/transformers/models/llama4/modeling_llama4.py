@@ -97,7 +97,7 @@ class Llama4TextMLP(nn.Module):
         return self.down_proj(down_proj)
 
 
-class Llama4TextL2Norm(torch.nn.Module):
+class Llama4TextL2Norm(torch.nn.Module): # Does the LLAMA4 specification require RMSNorm or L2Norm? Because this is RMSnorm, not L2Norm, despite its naming.
     def __init__(self, eps: float = 1e-6):
         super().__init__()
         self.eps = eps
