@@ -677,6 +677,8 @@
         title: OLMoE
       - local: model_doc/opt
         title: OPT
+      - local: model_doc/openpangu_dense
+        title: openPangu-Embedded
       - local: model_doc/pegasus
         title: Pegasus
       - local: model_doc/pegasus_x
