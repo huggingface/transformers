@@ -882,6 +882,9 @@ class ContinuousBatchingManager:
         # If use_cuda_graph is specified, we follow the user's choice
         if use_cuda_graph is not None:
             return use_cuda_graph
+
+        if self.model.device.type != "cuda":
+            return False
         # If a number of padding intervals was specified for either Q or KV, we activate cuda graphs
         if num_q_padding_intervals > 0 or num_kv_padding_intervals > 0:
             return True

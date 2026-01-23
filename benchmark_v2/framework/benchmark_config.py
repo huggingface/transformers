@@ -40,13 +40,14 @@ def is_fa2_or_kernel_available() -> bool:
     try:
         from kernels import get_kernel
 
-        get_kernel("kernels-community/flash-attn")
+        get_kernel("kernels-community/flash-attn2")
     except Exception as _:
         logger.warning(
             "flash_attention_2 is not available. kernels is installed, but the flash_attn kernel is not available."
             "Benchmarking flash_attention_2 will not be possible."
         )
         return False
+    return True
 
 
 class BenchmarkConfig:
@@ -114,7 +115,6 @@ class BenchmarkConfig:
                 "The combination of flash_attention_2, compile and generate is not supported. Turning off compile."
             )
             self.compile_config = None
-
         # Continuous batching does not support flex attention as an attention implementation # FIXME: support it
         if self.attn_implementation == "flex_attention" and self.continuous_batching:
             logger.error(
