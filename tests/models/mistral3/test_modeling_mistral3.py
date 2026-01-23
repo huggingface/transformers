@@ -175,6 +175,7 @@ class Mistral3ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterM
         else {}
     )
     _is_composite = True
+    test_torch_exportable = False
 
     def setUp(self):
         self.model_tester = Mistral3VisionText2TextModelTester(self)

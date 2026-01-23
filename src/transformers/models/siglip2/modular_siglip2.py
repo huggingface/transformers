@@ -183,8 +183,7 @@ class Siglip2VisionEmbeddings(nn.Module):
 
         for i in range(batch_size):
             # (1, dim, height, width) -> (1, dim, target_height, target_width)
-            height, width = spatial_shapes[i]
-            height, width = height.item(), width.item()
+            height, width = spatial_shapes[i].tolist()  # will be itemized in F.interpolate either way
             torch_compilable_check((width > 0), "Width of resized positional embeddings must be positive.")
             torch_compilable_check((height > 0), "Height of resized positional embeddings must be positive.")
             torch_compilable_check((height * width) <= max_length, "Resized positional embeddings exceed max_length.")

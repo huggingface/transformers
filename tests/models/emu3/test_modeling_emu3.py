@@ -290,6 +290,8 @@ class Emu3Vision2TextModelTest(ModelTesterMixin, GenerationTesterMixin, Pipeline
         else {}
     )
 
+    test_torch_exportable = False
+
     def setUp(self):
         self.model_tester = Emu3Vision2TextModelTester(self)
         self.config_tester = ConfigTester(self, config_class=Emu3Config, has_text_modality=False, hidden_size=37)

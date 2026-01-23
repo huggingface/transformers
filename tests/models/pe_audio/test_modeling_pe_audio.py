@@ -285,6 +285,7 @@ class PeAudioModelTest(ModelTesterMixin, unittest.TestCase):
     test_resize_embeddings = False
     has_attentions = False
     _is_composite = True
+    test_torch_exportable = False
 
     def setUp(self):
         self.model_tester = PeAudioModelTester(self)

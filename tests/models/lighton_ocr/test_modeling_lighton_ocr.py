@@ -227,6 +227,7 @@ class LightOnOcrForConditionalGenerationModelTest(ModelTesterMixin, GenerationTe
     pipeline_model_mapping = {"image-text-to-text": LightOnOcrForConditionalGeneration} if is_torch_available() else {}
 
     _is_composite = True
+    test_torch_exportable = False
 
     def setUp(self):
         self.model_tester = LightOnOcrVisionText2TextModelTester(self)

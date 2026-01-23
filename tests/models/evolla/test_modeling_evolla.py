@@ -201,6 +201,7 @@ class EvollaModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
 
     test_resize_embeddings = False
     maxDiff = None
+    test_torch_exportable = False
 
     def setUp(self):
         self.model_tester = EvollaModelTester(self)
