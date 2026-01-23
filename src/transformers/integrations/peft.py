@@ -919,13 +919,19 @@ def _convert_peft_config_mixtral(peft_config):
 
     # add expert layers: w1 & w3 => gate_up_proj, ModuleList of layers is now a stacked parameter.
     for target in peft_config.target_modules:
+        msg_no_conversion_fused = (
+            f"Cannot convert {target} because these weights are now fused and "
+            "converting a single adapter into a fused weight is not supported "
+            "right now."
+        )
+
         # if only w1 or only w3 are targeted, conversion is not possible
         if (target == "w1") or target.endswith(".w1"):
             if target.replace("w1", "w3") not in peft_config.target_modules:
-                raise ValueError("Cannot convert because blabla")  # FIXME
+                raise ValueError(msg_no_conversion_fused)
         if (target == "w3") or target.endswith(".w3"):
             if target.replace("w3", "w1") not in peft_config.target_modules:
-                raise ValueError("Cannot convert because blabla")  # FIXME
+                raise ValueError(msg_no_conversion_fused)
 
         if (target == "w1") or target.endswith(".w1"):
             # FIXME: what if only specific layers are targeted, e.g. '0.w1'
