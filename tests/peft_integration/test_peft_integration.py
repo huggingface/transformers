@@ -675,9 +675,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                 dummy_state_dict["foobar"] = next(iter(dummy_state_dict.values()))
 
                 with CaptureLogger(logger) as cl:
-                    model.load_adapter(
-                        adapter_state_dict=dummy_state_dict, peft_config=peft_config
-                    )
+                    model.load_adapter(adapter_state_dict=dummy_state_dict, peft_config=peft_config)
 
                 msg = "Loading adapter weights from state_dict led to unexpected keys not found in the model: foobar"
                 self.assertIn(msg, cl.out)
