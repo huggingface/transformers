@@ -517,24 +517,5 @@ class Mistral3ForConditionalGeneration(Mistral3PreTrainedModel, GenerationMixin)
 
         return model_inputs
 
-    def tie_weights(self, missing_keys: set[str] | None = None, recompute_mapping: bool = True):
-        """
-        Tie the weights between the input embeddings and the output embeddings.
-        """
-        super().tie_weights(missing_keys=missing_keys, recompute_mapping=recompute_mapping)
-
-        # Check for tie_word_embeddings in text_config (for VLMs) or top-level
-        should_tie = getattr(self.config, "tie_word_embeddings", False)
-        if hasattr(self.config, "text_config"):
-            should_tie = getattr(self.config.text_config, "tie_word_embeddings", should_tie)
-
-        if (
-            should_tie
-            and hasattr(self.model, "language_model")
-            and hasattr(self.model.language_model, "embed_tokens")
-        ):
-            # Tie lm_head weight to embed_tokens weight
-            self.lm_head.weight = self.model.language_model.embed_tokens.weight
-
 
 __all__ = ["Mistral3Model", "Mistral3PreTrainedModel", "Mistral3ForConditionalGeneration"]
