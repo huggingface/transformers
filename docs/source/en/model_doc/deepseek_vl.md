@@ -223,6 +223,7 @@ model = DeepseekVLForConditionalGeneration.from_pretrained(
 
 [[autodoc]] DeepseekVLModel
     - forward
+    - get_image_features
 
 ## DeepseekVLForConditionalGeneration
 

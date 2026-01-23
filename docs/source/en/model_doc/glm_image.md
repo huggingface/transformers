@@ -16,7 +16,7 @@ limitations under the License.
 ⚠️ Note that this file is in Markdown but contain specific syntax for our doc-builder (similar to MDX) that may not be rendered properly in your Markdown viewer.
 
 -->
-*This model was released on 2026-01-10 and added to Hugging Face Transformers on 2026-01-10.*
+*This model was released on 2026-01-10 and added to Hugging Face Transformers on 2026-01-13.*
 
 # GlmImage
 
@@ -199,8 +199,10 @@ print(f"Output tokens: {output_tokens}")
 
 [[autodoc]] GlmImageModel
     - forward
+    - get_image_features
 
 ## GlmImageForConditionalGeneration
 
 [[autodoc]] GlmImageForConditionalGeneration
     - forward
+    - get_image_features

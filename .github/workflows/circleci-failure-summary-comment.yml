@@ -23,7 +23,7 @@ jobs:
           python-version: "3.13"
 
       - name: Install dependencies
-        run: python -m pip install requests huggingface_hub
+        run: python -m pip install huggingface_hub
 
       - name: Wait for CircleCI check suite completion
         env:
