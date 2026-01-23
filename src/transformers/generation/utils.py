@@ -3098,9 +3098,17 @@ class GenerationMixin(ContinuousMixin):
 
         # Gather the top K scores from _all_ beams.
         if do_sample:
-            topk_indices = torch.multinomial(
-                nn.functional.softmax(accumulated_log_probs, dim=-1), num_samples=beams_to_keep
-            )
+            # Handle potential NaN values in accumulated_log_probs
+            probs = nn.functional.softmax(accumulated_log_probs, dim=-1)
+            # Replace NaN values with uniform distribution
+            if torch.isnan(probs).any():
+                # Create a mask for NaN positions
+                nan_mask = torch.isnan(probs)
+                # Replace NaN with a small uniform probability
+                probs = torch.where(nan_mask, torch.ones_like(probs) / probs.shape[-1], probs)
+                # Renormalize to ensure probabilities sum to 1
+                probs = probs / probs.sum(dim=-1, keepdim=True)
+            topk_indices = torch.multinomial(probs, num_samples=beams_to_keep)
             topk_log_probs = torch.gather(input=accumulated_log_probs, dim=1, index=topk_indices)
         else:
             topk_log_probs, topk_indices = torch.topk(accumulated_log_probs, k=beams_to_keep)
