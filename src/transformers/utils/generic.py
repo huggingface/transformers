@@ -827,6 +827,9 @@ def can_return_tuple(func: Callable[P, T]) -> Callable[P, tuple | T]:
     Decorator to wrap model method, to call output.to_tuple() if return_dict=False passed as a kwarg or
     use_return_dict=False is set in the config.
 
+    The wrapped method or function should not be typed like `tuple | X`, but instead just `X`, where `X` is the
+    original return type. This decorator's typing ensures that the return type is correctly represented as `tuple | X`.
+
     Note:
         output.to_tuple() convert output to tuple skipping all `None` values.
     """
@@ -871,6 +874,9 @@ def check_model_inputs(
     """
     Decorator to intercept specific layer outputs without using hooks.
     Compatible with torch.compile (Dynamo tracing).
+
+    The wrapped method or function should not be typed like `tuple | X`, but instead just `X`, where `X` is the
+    original return type. This decorator's typing ensures that the return type is correctly represented as `tuple | X`.
 
     Args:
         tie_last_hidden_states (`bool`, *optional*, defaults to `True`):
