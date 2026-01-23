@@ -21,6 +21,7 @@ from typing import Any
 
 import numpy as np
 
+from ..feature_extraction_utils import BatchFeature
 from ..tokenization_utils_base import PreTrainedTokenizerBase
 from ..utils import PaddingStrategy
 
@@ -39,11 +40,16 @@ class DataCollatorMixin:
         if return_tensors is None:
             return_tensors = self.return_tensors
         if return_tensors == "pt":
-            return self.torch_call(features)
+            batch = self.torch_call(features)
         elif return_tensors == "np":
-            return self.numpy_call(features)
+            batch = self.numpy_call(features)
         else:
             raise ValueError(f"Framework '{return_tensors}' not recognized!")
+
+        if not isinstance(batch, BatchFeature):
+            batch = BatchFeature(batch, return_tensors)
+
+        return batch
 
 
 def pad_without_fast_tokenizer_warning(tokenizer, *pad_args, **pad_kwargs):
