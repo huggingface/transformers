@@ -361,7 +361,7 @@ def _apply_weight_conversions_to_state_dict(model, state_dict, weight_mapping):
                 param = param[0] if isinstance(param, list) else param
                 new_state_dict[target_name] = param
             # Free memory by clearing source tensors (only WeightConverter has this)
-            if hasattr(mapping, 'source_tensors'):
+            if hasattr(mapping, "source_tensors"):
                 mapping.source_tensors = {}
         except Exception as e:
             raise RuntimeError(
