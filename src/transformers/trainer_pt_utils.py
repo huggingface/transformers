@@ -363,16 +363,16 @@ def expand_like(arrays, new_seq_length, padding_index=-100):
 def nested_truncate(tensors, limit):
     """Truncate `tensors` at `limit` (even if it's a nested list/tuple/dict of tensors)."""
 
-    # Special case: per-sample nested labels like tuple[list[Tensor], ...]
-    # Truncate at the sample level, not tensor dimensions or tuple structure.
-    # We strictly check for list of Tensors to avoid applying this to other structures
-    # (like list of images in LLaVA processor or list of token IDs) that rely on recursive behavior.
+    # Special case for per-sample nested labels like tuple[list[Tensor], ...]
+    # Used by models such as Mask2Former.
     if (
         isinstance(tensors, tuple)
         and tensors
         and all(isinstance(x, list) and len(x) > 0 for x in tensors)
         and all(len(x) == len(tensors[0]) for x in tensors)
-        and all(isinstance(item, torch.Tensor) for x in tensors for item in x)
+        and all(isinstance(item, (torch.Tensor, np.ndarray)) for x in tensors for item in x)
+        and limit < len(tensors[0])
+        and all(not isinstance(item, torch.Tensor) or not item.is_cuda for x in tensors for item in x)
     ):
         return tuple(x[:limit] for x in tensors)
 
