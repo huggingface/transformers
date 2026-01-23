@@ -11,7 +11,12 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-
+import os
+import glob
+import shutil
+import unittest
+from transformers import Trainer, TrainingArguments, AutoModelForSequenceClassification
+from datasets import load_dataset
 import dataclasses
 import gc
 import json
@@ -210,6 +215,36 @@ class MockCudaOOMCallback(TrainerCallback):
         if state.train_batch_size >= self.batch_size_limit:
             raise RuntimeError("CUDA out of memory.")
 
+def test_separate_checkpoint_limits():
+    """Test if Trainer respects separate save limits for full checkpoints and model weights."""
+    
+    output_dir = "./test_output"
+    model = AutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased")
+    dataset = load_dataset("glue", "sst2", split="train[:10]")  # Small dataset for testing
+
+    args = TrainingArguments(
+        output_dir=output_dir,
+        save_strategy="steps",
+        save_steps=2,  # Save every 2 steps
+        save_checkpoint_limit=2,  # Keep only 2 full checkpoints
+        save_model_limit=5,  # Keep 5 model weights
+    )
+
+    trainer = Trainer(
+        model=model,
+        args=args,
+        train_dataset=dataset
+    )
+
+    trainer.train()
+
+    checkpoint_dirs = glob.glob(os.path.join(output_dir, "checkpoint-*"))
+    assert len(checkpoint_dirs) <= 2, f"Expected at most 2 checkpoints, found {len(checkpoint_dirs)}"
+
+    model_files = glob.glob(os.path.join(output_dir, "checkpoint-*/pytorch_model.bin"))
+    assert len(model_files) <= 5, f"Expected at most 5 model weight files, found {len(model_files)}"
+
+    shutil.rmtree(output_dir, ignore_errors=True)
 
 def ForCausalLMLoss(logits, labels, vocab_size, num_items_in_batch, disable_num_items_in_batch=False):
     # Upcast to float if we need to compute the loss to avoid potential precision issues
