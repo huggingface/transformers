@@ -175,3 +175,4 @@ print(response)
 
 [[autodoc]] AriaForConditionalGeneration
     - forward
+    - get_image_features
