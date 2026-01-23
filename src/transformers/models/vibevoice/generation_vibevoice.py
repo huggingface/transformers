@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2026 The Microsoft Team and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -27,7 +26,7 @@ from ...generation import (
     LogitsProcessorList,
 )
 from ...generation.stopping_criteria import StoppingCriteriaList
-from ...generation.utils import GenerateNonBeamOutput, ALL_CACHE_NAMES
+from ...generation.utils import ALL_CACHE_NAMES, GenerateNonBeamOutput
 from ...utils import logging
 
 
@@ -48,7 +47,7 @@ class VibeVoiceGenerateOutput(GenerateDecoderOnlyOutput):
             The generated audio.
     """
 
-    audio: Optional[list[torch.FloatTensor]] = None
+    audio: list[torch.FloatTensor] | None = None
 
 
 class VibeVoiceTokenConstraintProcessor(LogitsProcessor):
@@ -58,7 +57,6 @@ class VibeVoiceTokenConstraintProcessor(LogitsProcessor):
         self.valid_token_ids = torch.tensor(valid_token_ids, dtype=torch.long, device=device)
 
     def __call__(self, input_ids: torch.LongTensor, scores: torch.FloatTensor) -> torch.FloatTensor:
-        # Create and apply mask for valid tokens
         mask = torch.full_like(scores, float("-inf"))
         mask[:, self.valid_token_ids] = 0
         scores = scores + mask
@@ -67,7 +65,7 @@ class VibeVoiceTokenConstraintProcessor(LogitsProcessor):
 
 class VibeVoiceGenerationMixin(GenerationMixin):
 
-    def _prepare_generation_config(self, generation_config: Optional[GenerationConfig], **kwargs):
+    def _prepare_generation_config(self, generation_config: GenerationConfig | None, **kwargs):
         """
         This method overrides [~generation.utils.GenerationMixin._prepare_generation_config].
 
@@ -86,8 +84,10 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         # Call the base class method to load from default generation_config.json
         generation_config, model_kwargs = super()._prepare_generation_config(generation_config, **kwargs)
 
-        # try creating VibeVoice noise scheduler if not provided
+        # try creating VibeVoice noise scheduler if not provided or not already in generation_config
         noise_scheduler = model_kwargs.pop("noise_scheduler", kwargs.pop("noise_scheduler", None))
+        if noise_scheduler is None and hasattr(generation_config, "noise_scheduler"):
+            noise_scheduler = generation_config.noise_scheduler
         # TODO (ebezzam) ok with this? so user doesn't need to define noise scheduler each time?
         # Alternatively, require user to create noise scheduler outside
         if noise_scheduler is None:
@@ -133,12 +133,6 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         """
         This method overrides [~generation.utils.GenerationMixin._sample].
         To ease maintenance, modifications are marked with the comment "VibeVoice specific".
-
-        Indeed, VibeVoice model requires a custom generation sampling step:
-        1. Extract VibeVoice-specific parameters and setup diffusion components
-        2. Setup negative generation for classifier-free guidance
-        3. Generate tokens with diffusion-based synthesis for audio tokens
-        4. Apply stopping criteria (EOS token and max length)
         """
         # init values
         pad_token_id = generation_config._pad_token_tensor
@@ -182,6 +176,11 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         cfg_scale = generation_config.cfg_scale
         n_diffusion_steps = generation_config.n_diffusion_steps
         diffusion_head_device = next(self.model.diffusion_head.parameters()).device
+        if do_sample:
+            logger.warning(
+                "VibeVoice generation does not support sampling-based token selection. "
+                "Tokens will be selected using argmax regardless of do_sample=True."
+            )
 
         # State tracking
         acoustic_cache = None
@@ -208,18 +207,17 @@ class VibeVoiceGenerationMixin(GenerationMixin):
             ),
             "attention_mask": torch.ones((batch_size, 1), dtype=torch.long, device=input_ids.device),
             "max_new_tokens": generation_config.max_new_tokens,
-            "noise_scheduler": noise_scheduler,
         }
         negative_generation_config, negative_model_kwargs = self._prepare_generation_config(
             generation_config, **negative_kwargs
         )
-        _, negative_model_input_name, negative_model_kwargs = self._prepare_model_inputs(
+        _, _, negative_model_kwargs = self._prepare_model_inputs(
             None, negative_generation_config.bos_token_id, negative_model_kwargs
         )
         self._prepare_special_tokens(negative_generation_config, True, device=input_ids.device)
         negative_generation_config.use_cache = self.config.use_cache
         negative_model_kwargs["use_cache"] = self.config.use_cache
-        negative_input_ids = negative_kwargs["input_ids"].to(input_ids.device)
+        negative_input_ids = negative_kwargs["input_ids"]
 
         negative_input_ids_length = negative_input_ids.shape[1]
         negative_has_default_max_length = (
@@ -232,41 +230,38 @@ class VibeVoiceGenerationMixin(GenerationMixin):
             generation_config=negative_generation_config,
             has_default_max_length=negative_has_default_max_length,
             has_default_min_length=negative_has_default_min_length,
-            model_input_name=negative_model_input_name,
+            model_input_name="input_ids",
             inputs_tensor=negative_kwargs["input_ids"],
             input_ids_length=negative_input_ids_length,
         )
-
         negative_max_cache_length = negative_generation_config.max_length - 1
-        negative_batch_size = negative_kwargs["input_ids"].shape[0]
         self._prepare_cache_for_generation(
-            negative_generation_config, negative_model_kwargs, None, negative_batch_size, negative_max_cache_length
+            negative_generation_config, negative_model_kwargs, None, batch_size, negative_max_cache_length
         )
         negative_model_kwargs["cache_position"] = torch.arange(
             negative_input_ids_length, device=input_ids.device, dtype=torch.long
         )
-        for k, v in negative_model_kwargs.items():
-            if isinstance(v, torch.Tensor):
-                negative_model_kwargs[k] = v.to(device=input_ids.device)
 
-        # Calculate generation limits for progress tracking
+        # Generation limits for progress tracking
         initial_length = input_ids.shape[-1]
         initial_length_per_sample = model_kwargs["attention_mask"].sum(dim=-1)
-        max_steps = generation_config.max_length - initial_length
         max_step_per_sample = torch.min(
             generation_config.max_length - initial_length_per_sample,
-            torch.full_like(initial_length_per_sample, max_steps),
+            torch.full_like(initial_length_per_sample, generation_config.max_length - initial_length),
         )
         # ============================================
 
         while self._has_unfinished_sequences(this_peer_finished, synced_gpus, device=input_ids.device):
             # *************** VibeVoice specific ***************
             if monitor_progress is not None:
-                current_steps = torch.full((batch_size,), cur_len - initial_length, dtype=torch.long, device=input_ids.device)
-                progress_tensor = torch.stack((current_steps, max_step_per_sample), dim=1)
-                monitor_progress(progress_tensor)
+                monitor_progress(
+                    torch.stack((
+                        torch.full((batch_size,), cur_len - initial_length, dtype=torch.long, device=input_ids.device),
+                        max_step_per_sample
+                    ), dim=1)
+                )
             # ============================================
-            
+
             if prefill_consumed:
                 model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
                 # *************** VibeVoice specific ***************
@@ -279,9 +274,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                     outputs = model_forward(**model_inputs, return_dict=True)
             prefill_consumed = True
             model_kwargs = self._update_model_kwargs_for_generation(
-                outputs,
-                model_kwargs,
-                is_encoder_decoder=self.config.is_encoder_decoder,
+                outputs, model_kwargs, is_encoder_decoder=self.config.is_encoder_decoder,
             )
             if synced_gpus and this_peer_finished:
                 continue
@@ -306,13 +299,6 @@ class VibeVoiceGenerationMixin(GenerationMixin):
 
             # token selection
             # *************** VibeVoice specific ***************
-            # NOTE (ebezzam): For VibeVoice, we always use deterministic token selection regardless of `do_sample`
-            # setting. Sampling instead happens in the diffusion process rather than in the token selection.
-            if do_sample:
-                logger.warning(
-                    "VibeVoice generation does not support sampling-based token selection. "
-                    "Tokens will be selected using argmax regardless of do_sample=True."
-                )
             next_tokens = torch.argmax(next_token_scores, dim=-1)
             # ============================================
 
@@ -326,77 +312,58 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                 streamer.put(next_tokens.cpu())
 
             # *************** VibeVoice specific ***************
-            # Perform audio generation with diffusion head
-            diffusion_start_mask = unfinished_sequences.bool() & (next_tokens == self.config.audio_bos_token_id)
-            if diffusion_start_mask.any():
-                diffusion_start_indices = diffusion_start_mask.nonzero(as_tuple=False).squeeze(1)
-                # Update negative generation state
-                for sample_idx in diffusion_start_indices.tolist():
-                    negative_model_kwargs["attention_mask"][sample_idx, :] = 0
-                    negative_model_kwargs["attention_mask"][sample_idx, -1] = 1
-                if "past_key_values" in negative_model_kwargs and negative_model_kwargs["past_key_values"] is not None:
-                    for layer_idx in range(len(negative_model_kwargs["past_key_values"])):
-                        k_cache = negative_model_kwargs["past_key_values"].layers[layer_idx].keys
-                        v_cache = negative_model_kwargs["past_key_values"].layers[layer_idx].values
-                        for sample_idx in diffusion_start_indices.tolist():
-                            k_cache[sample_idx, :, -1, :] = k_cache[sample_idx, :, 0, :].clone()
-                            v_cache[sample_idx, :, -1, :] = v_cache[sample_idx, :, 0, :].clone()
-                for sample_idx in diffusion_start_indices.tolist():
-                    negative_input_ids[sample_idx, -1] = self.config.audio_bos_token_id
-
-            # Prepare embeddings for next iteration
             next_inputs_embeds = self.get_input_embeddings()(next_tokens).unsqueeze(1)
 
-            # Handle diffusion tokens
-            diffusion_mask = unfinished_sequences.bool() & (next_tokens == self.config.audio_diffusion_token_id)
-            negative_outputs = None
-            if diffusion_mask.any():
-                diffusion_indices = diffusion_mask.nonzero(as_tuple=False).squeeze(1)
+            # Perform audio generation with diffusion head
+            diffusion_start_mask = unfinished_sequences.bool() & (next_tokens == self.config.audio_bos_token_id)
+            diffusion_start_idx = diffusion_start_mask.nonzero(as_tuple=True)[0]
+            if diffusion_start_idx.numel() > 0:
+                negative_model_kwargs["attention_mask"][diffusion_start_idx, :] = 0
+                negative_model_kwargs["attention_mask"][diffusion_start_idx, -1] = 1
+                negative_input_ids[diffusion_start_idx, -1] = self.config.audio_bos_token_id
+                if negative_model_kwargs.get("past_key_values") is not None:
+                    for layer in negative_model_kwargs["past_key_values"].layers:
+                        k_cache = layer.keys
+                        v_cache = layer.values
+                        k_cache[diffusion_start_idx, :, -1, :] = k_cache[diffusion_start_idx, :, 0, :].clone()
+                        v_cache[diffusion_start_idx, :, -1, :] = v_cache[diffusion_start_idx, :, 0, :].clone()
 
+            diffusion_mask = unfinished_sequences.bool() & (next_tokens == self.config.audio_diffusion_token_id)
+            diffusion_idx = diffusion_mask.nonzero(as_tuple=True)[0]
+            if diffusion_idx.numel() > 0:
                 # Negative pass for classifier-free guidance
                 negative_model_inputs = self.prepare_inputs_for_generation(negative_input_ids, **negative_model_kwargs)
                 if negative_model_inputs["inputs_embeds"] is None and inputs_embeds is not None:
                     negative_model_inputs["inputs_embeds"] = inputs_embeds
                     negative_model_inputs["input_ids"] = None
-
                 negative_outputs = model_forward(**negative_model_inputs, return_dict=True)
-                negative_model_kwargs = self._update_model_kwargs_for_generation(
-                    negative_outputs,
-                    negative_model_kwargs,
-                    is_encoder_decoder=False,
-                )
-                negative_input_ids = torch.cat([negative_input_ids, next_tokens[:, None]], dim=-1)
-
-                # Diffusion process with classifier-free guidance
-                positive_condition = outputs.last_hidden_state[diffusion_indices, -1, :]
-                negative_condition = negative_outputs.last_hidden_state[diffusion_indices, -1, :]
-
-                noise_scheduler.set_timesteps(num_inference_steps=n_diffusion_steps)
+                negative_condition = negative_outputs.last_hidden_state[diffusion_idx, -1, :]
+                positive_condition = outputs.last_hidden_state[diffusion_idx, -1, :]
                 condition = torch.cat([positive_condition, negative_condition], dim=0).to(diffusion_head_device)
-                noisy_audio_latent = torch.randn(condition.shape[0], self.config.acoustic_tokenizer_config.hidden_size).to(condition)
 
+                # Diffusion sampling
+                noisy_audio_latent = torch.randn(condition.shape[0], self.config.acoustic_tokenizer_config.hidden_size).to(condition)
+                noise_scheduler.set_timesteps(num_inference_steps=n_diffusion_steps)
+                half_noise_latent_length = len(noisy_audio_latent) // 2
                 for timestep in noise_scheduler.timesteps:
-                    half = noisy_audio_latent[: len(noisy_audio_latent) // 2]
+                    half = noisy_audio_latent[: half_noise_latent_length]
                     combined = torch.cat([half, half], dim=0)
                     eps = self.model.diffusion_head(
                         combined, timestep.repeat(combined.shape[0]).to(combined), condition=condition
                     )
-                    cond_eps, uncond_eps = torch.split(eps, len(eps) // 2, dim=0)
+                    cond_eps, uncond_eps = torch.split(eps, half_noise_latent_length, dim=0)
                     half_eps = uncond_eps + cfg_scale * (cond_eps - uncond_eps)
                     eps = torch.cat([half_eps, half_eps], dim=0)
                     noisy_audio_latent = noise_scheduler.step(eps, timestep, noisy_audio_latent).prev_sample
-                audio_latent = noisy_audio_latent[: len(noisy_audio_latent) // 2].unsqueeze(1)
+                audio_latent = noisy_audio_latent[: half_noise_latent_length].unsqueeze(1)
 
                 # Decode to audio
                 scaled_latent = audio_latent / self.latent_scaling_factor.to(
                     audio_latent.device
                 ) - self.latent_bias_factor.to(audio_latent.device)
-                if len(diffusion_indices) != batch_size:
-                    # pad non-diffusion samples with zeros
-                    padded_latent = torch.zeros(batch_size, scaled_latent.shape[1], scaled_latent.shape[2]).to(
-                        scaled_latent.device
-                    )
-                    padded_latent[diffusion_indices] = scaled_latent
+                if diffusion_idx.numel() < batch_size:
+                    padded_latent = torch.zeros(batch_size, *scaled_latent.shape[1:], device=scaled_latent.device)
+                    padded_latent[diffusion_idx] = scaled_latent
                 else:
                     padded_latent = scaled_latent
                 audio_output = self.model.acoustic_tokenizer.decode(
@@ -405,25 +372,26 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                     use_cache=self.config.use_cache,
                 )
                 audio_chunk = audio_output.audio
-                for i, sample_idx in enumerate(diffusion_indices):
-                    idx = sample_idx.item()
-                    audio_chunks[idx].append(audio_chunk[i])
+                for i, sample_idx in enumerate(diffusion_idx):
+                    audio_chunks[sample_idx.item()].append(audio_chunk[i])
                 acoustic_cache = audio_output.padding_cache
 
-                # Get semantic features for next step
-                semantic_outputs = self.model.semantic_tokenizer.encode(
-                    audio_chunk,
-                    padding_cache=semantic_cache,
-                    use_cache=self.config.use_cache,
+                # Prepare for next step
+                negative_model_kwargs = self._update_model_kwargs_for_generation(
+                    negative_outputs, negative_model_kwargs, is_encoder_decoder=False,
                 )
-                semantic_features = semantic_outputs.latents[diffusion_indices]
-                semantic_cache = semantic_outputs.padding_cache
+                negative_input_ids = torch.cat([negative_input_ids, next_tokens[:, None]], dim=-1)
+                del negative_outputs
 
-                # Combine features for next input
+                semantic_outputs = self.model.semantic_tokenizer.encode(
+                    audio_chunk, padding_cache=semantic_cache, use_cache=self.config.use_cache,
+                )
+                semantic_features = semantic_outputs.latents[diffusion_idx]
+                semantic_cache = semantic_outputs.padding_cache
                 acoustic_embed = self.model.acoustic_connector(audio_latent)
                 semantic_embed = self.model.semantic_connector(semantic_features)
                 diffusion_embeds = acoustic_embed + semantic_embed
-                next_inputs_embeds[diffusion_indices] = diffusion_embeds
+                next_inputs_embeds[diffusion_idx] = diffusion_embeds
 
             inputs_embeds = next_inputs_embeds
             # ============================================
@@ -435,10 +403,6 @@ class VibeVoiceGenerationMixin(GenerationMixin):
             # This is needed to properly delete outputs.logits which may be very large for first iteration
             # Otherwise a reference to outputs is kept which keeps the logits alive in the next iteration
             del outputs
-
-            # *************** VibeVoice specific ***************
-            del negative_outputs
-            # ============================================
 
         if streamer is not None:
             streamer.end()
@@ -463,7 +427,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                 audio=generated_audio,
             )
         else:
-            # NOTE (ebezzam): new tokens in input_ids are simply audio tokens (mainly `audio_diffusion_token_id`)
-            # so returning `input_ids` is insufficient for generating audio
+            # NOTE (ebezzam): new tokens in input_ids are simply audio tokens (mainly `audio_diffusion_token_id` to
+            # trigger generation) so returning `input_ids` is insufficient for generating audio
             return generated_audio
         # ============================================

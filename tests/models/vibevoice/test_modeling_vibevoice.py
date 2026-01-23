@@ -361,23 +361,14 @@ class VibeVoiceForConditionalGenerationTest(ModelTesterMixin, GenerationTesterMi
                 cfg_scale=1.3,
                 n_diffusion_steps=10,
             )
-
-        # Check that we get the expected output type
         self.assertIsNotNone(output.sequences)
-
-        # Check that sequences have the correct shape
-        # Should be [batch_size, original_length + max_new_tokens]
         self.assertEqual(output.sequences.shape[0], self.model_tester.batch_size)
         self.assertEqual(output.sequences.shape[1], expected_length)
-
-        # Verify that original input_ids are preserved at the beginning
         torch.testing.assert_close(
             output.sequences[:, :original_length],
             input_ids,
             msg="Original input_ids should be preserved at the beginning of sequences",
         )
-
-        # Check that we have speech_outputs (audio) as well
         self.assertIsNotNone(output.audio)
         self.assertEqual(len(output.audio), self.model_tester.batch_size)
 
