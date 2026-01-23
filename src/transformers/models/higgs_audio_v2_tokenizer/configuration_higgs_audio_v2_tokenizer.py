@@ -43,20 +43,30 @@ class HiggsAudioV2TokenizerConfig(PreTrainedConfig):
     documentation from [`PreTrainedConfig`] for more information.
 
     Args:
-            target_bandwidths (`<fill_type>`, *optional*): <fill_docstring>
-            sample_rate (`<fill_type>`, *optional*, defaults to 24000): <fill_docstring>
-            kernel_size (`<fill_type>`, *optional*, defaults to 3): <fill_docstring>
-            channel_ratios (`<fill_type>`, *optional*, defaults to `[1, 1]`): <fill_docstring>
-            strides (`<fill_type>`, *optional*, defaults to `[1, 1]`): <fill_docstring>
-            block_dilations (`<fill_type>`, *optional*, defaults to `[1, 1]`): <fill_docstring>
-            unit_kernel_size (`<fill_type>`, *optional*, defaults to 3): <fill_docstring>
-            codebook_size (`<fill_type>`, *optional*, defaults to 1024): <fill_docstring>
-            codebook_dim (`<fill_type>`, *optional*): <fill_docstring>
-            initializer_range (`<fill_type>`, *optional*, defaults to 0.02): <fill_docstring>
-            acoustic_model_config (`<fill_type>`, *optional*): <fill_docstring>
-            semantic_model_config (`<fill_type>`, *optional*): <fill_docstring>
-            semantic_sample_rate (`<fill_type>`, *optional*, defaults to 16000): <fill_docstring>
-            downsample_factor (`<fill_type>`, *optional*, defaults to 320): <fill_docstring>
+            target_bandwidths (`List[float]`, *optional*, defaults to `[0.5, 1, 1.5, 2, 4]`):
+                The range of different bandwidths (in kbps) the model can encode audio with.
+            sample_rate (`int`, *optional*, defaults to 16000):
+                The sampling rate at which the audio waveform should be digitalized, in hertz (Hz).
+            kernel_size (`int`, *optional*, defaults to 3):
+                Kernel size for the initial semantic convolution.
+            channel_ratios (`List[float]`, *optional*, defaults to `[1, 1]`):
+                Expansion factors for the number of output channels in each semantic block.
+            strides (`List[int]`, *optional*, defaults to `[1, 1]`):
+                Strides for each semantic encoder block.
+            block_dilations (`List[int]`, *optional*, defaults to `[1, 1]`):
+                Dilation factors for the residual units in semantic blocks.
+            unit_kernel_size (`int`, *optional*, defaults to 3):
+                Kernel size inside each ResidualUnit in semantic blocks.
+            codebook_size (`int`, *optional*, defaults to 1024):
+                Number of entries in each residual quantizer's codebook.
+            codebook_dim (`int`, *optional*):
+                Dimensionality of each codebook vector. Defaults to sum of hidden size of acoustic and semantic models.
+            initializer_range (`float`, *optional*, defaults to 0.02):
+                Standard deviation of the truncated normal initializer for all weight matrices.
+            acoustic_model_config (`Union[Dict, DacConfig]`, *optional*):
+                An instance of the configuration for the acoustic (DAC) model.
+            semantic_model_config (`Union[Dict, HubertConfig, WavLMConfig]`, *optional*):
+                An instance of the configuration object for the semantic (HuBERT) model.
 
     Example:
 
