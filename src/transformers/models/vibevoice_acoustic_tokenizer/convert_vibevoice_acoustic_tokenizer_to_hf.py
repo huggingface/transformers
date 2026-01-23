@@ -122,7 +122,6 @@ def convert_checkpoint(checkpoint, config_path, push_to_hub, bfloat16, processor
     feature_extractor = VibeVoiceAcousticTokenizerFeatureExtractor(**audio_config)
 
     # 3) Prepare model configuration
-    # -- Load
     with open(config_path, "r") as f:
         model_config = json.load(f)
 
@@ -199,11 +198,11 @@ def convert_checkpoint(checkpoint, config_path, push_to_hub, bfloat16, processor
 
 
 """
-Conversion script to convert extract acoustic tokenizer from the original VibeVoice model checkpoint
-and push a checkpoint for an `VibeVoiceAcousticTokenizerModel` object.
+Conversion script to extract the acoustic tokenizer from the original VibeVoice model checkpoint and push a checkpoint
+for an `VibeVoiceAcousticTokenizerModel` object.
 
 
-First download 1.5B model.
+1) download 1.5B model.
 ```bash
 # -- download checkpoint and configs
 # -- download script here: https://gist.github.com/ebezzam/507dfd544e0a0f12402966503cbc73e6#file-download_vibevoice_checkpoint-py
@@ -212,7 +211,7 @@ wget https://huggingface.co/microsoft/VibeVoice-1.5B/resolve/main/config.json -P
 wget https://huggingface.co/microsoft/VibeVoice-1.5B/resolve/main/preprocessor_config.json -P /raid/eric/vibevoice
 ```
 
-Then we can run conversion with:
+2) run conversion with:
 ```
 python src/transformers/models/vibevoice_acoustic_tokenizer/convert_vibevoice_acoustic_tokenizer_to_hf.py \
     --checkpoint /raid/eric/vibevoice/VibeVoice-1.5B-combined.safetensors \

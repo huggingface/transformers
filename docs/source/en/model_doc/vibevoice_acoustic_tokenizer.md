@@ -100,7 +100,7 @@ For streaming, the `use_cache` parameter can be used when decoding:
 ```python
 # `padding_cache` can be initialized after a first pass
 padding_cache = None
-decoded_outputs = model.decode(**encoded_outputs, padding_cache=paddingS_cache, use_cache=True)
+decoded_outputs = model.decode(**encoded_outputs, padding_cache=padding_cache, use_cache=True)
 
 # `padding_cache` can be extracted from `decoded_outputs` for subsequent passes
 padding_cache = decoded_outputs.padding_cache
@@ -108,17 +108,14 @@ print("Number of cached layers:", len(padding_cache.per_layer_in_channels))
 # Number of cached layers: 34
 ```
 
-
 ## VibeVoiceAcousticTokenizerConfig
 
 [[autodoc]] VibeVoiceAcousticTokenizerConfig
-
 
 ## VibeVoiceAcousticTokenizerFeatureExtractor
 
 [[autodoc]] VibeVoiceAcousticTokenizerFeatureExtractor
     - __call__
-
 
 ## VibeVoiceAcousticTokenizerModel
 
