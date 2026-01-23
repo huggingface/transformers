@@ -628,6 +628,7 @@ class ModernVBertForMaskedLMIntegrationTest(unittest.TestCase):
         self.text = "This [MASK] is on the wall."
 
     @slow
+    @unittest.skip(reason="Model not available on HF for the moment.")
     def test_masked_lm_inference(self):
         model = ModernVBertForMaskedLM.from_pretrained(
             self.model_name, torch_dtype=torch.float32, device_map=torch_device
