@@ -36,7 +36,14 @@ from ...modeling_layers import GradientCheckpointingLayer
 from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling, ImageClassifierOutput
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, filter_out_non_signature_kwargs
+from ...utils import (
+    ModelOutput,
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    filter_out_non_signature_kwargs,
+    torch_compilable_check,
+)
 from ...utils.generic import check_model_inputs, is_flash_attention_requested
 from .configuration_siglip2 import Siglip2Config, Siglip2TextConfig, Siglip2VisionConfig
 
@@ -169,7 +176,10 @@ class Siglip2VisionEmbeddings(nn.Module):
 
         for i in range(batch_size):
             # (1, dim, height, width) -> (1, dim, target_height, target_width)
-            height, width = spatial_shapes[i]
+            height, width = spatial_shapes[i].tolist()  # will be itemized in F.interpolate either way
+            torch_compilable_check((width > 0), "Width of resized positional embeddings must be positive.")
+            torch_compilable_check((height > 0), "Height of resized positional embeddings must be positive.")
+            torch_compilable_check((height * width) <= max_length, "Resized positional embeddings exceed max_length.")
             resized_embeddings = F.interpolate(
                 positional_embeddings,
                 size=(height, width),

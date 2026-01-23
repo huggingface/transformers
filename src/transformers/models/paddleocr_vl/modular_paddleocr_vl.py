@@ -54,7 +54,15 @@ from ...processing_utils import (
     Unpack,
 )
 from ...tokenization_utils_base import PreTokenizedInput, TextInput
-from ...utils import TensorType, TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_int
+from ...utils import (
+    TensorType,
+    TransformersKwargs,
+    auto_docstring,
+    can_return_tuple,
+    logging,
+    torch_compilable_check,
+    torch_int,
+)
 from ...utils.generic import check_model_inputs
 from ..ernie4_5.configuration_ernie4_5 import Ernie4_5Config
 from ..ernie4_5.modeling_ernie4_5 import (
@@ -1163,10 +1171,10 @@ class PaddleOCRVLModel(Qwen2VLModel):
         n_image_tokens = special_image_mask.sum()
         special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
         n_image_features = image_features.shape[0] * image_features.shape[1]
-        if inputs_embeds[special_image_mask].numel() != image_features.numel():
-            raise ValueError(
-                f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}"
-            )
+        torch_compilable_check(
+            inputs_embeds[special_image_mask].numel() == image_features.numel(),
+            f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {n_image_features}",
+        )
         return special_image_mask
 
     @can_return_tuple

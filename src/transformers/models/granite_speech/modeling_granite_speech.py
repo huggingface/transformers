@@ -24,7 +24,7 @@ from ...cache_utils import Cache
 from ...generation import GenerationMixin
 from ...modeling_outputs import ModelOutput
 from ...modeling_utils import PreTrainedModel
-from ...utils import auto_docstring, is_peft_available, logging
+from ...utils import auto_docstring, is_peft_available, logging, torch_compilable_check
 from ..auto import AutoModel, AutoModelForCausalLM
 from .configuration_granite_speech import GraniteSpeechConfig, GraniteSpeechEncoderConfig
 
@@ -515,9 +515,10 @@ class GraniteSpeechForConditionalGeneration(GraniteSpeechPreTrainedModel, Genera
         special_audio_mask = is_audio_index.unsqueeze(-1)
         audio_features = audio_features.to(inputs_embeds.device, inputs_embeds.dtype)
         if input_features_mask is not None:
-            if torch.all(is_audio_index.int().sum(dim=1) != input_features_mask.int().sum(dim=1)).item():
-                raise ValueError("Number of audio tokens does not match number of audio features")
-
+            torch_compilable_check(
+                not torch.all(is_audio_index.int().sum(dim=1) != input_features_mask.int().sum(dim=1)),
+                "Number of audio tokens does not match number of audio features",
+            )
             audio_features = audio_features[input_features_mask]
 
         inputs_embeds = inputs_embeds.masked_scatter(

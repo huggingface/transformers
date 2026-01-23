@@ -824,8 +824,11 @@ class EvollaModel(EvollaPreTrainedModel):
                 attention_mask=protein_attention_mask,
             )
             protein_feats = protein_outputs.sequence_compressor_output
-            protein_batch_mask = torch.tensor([True] * protein_input_ids.shape[0], device=protein_input_ids.device)
-
+            protein_batch_mask = torch.ones(
+                protein_input_ids.shape[0],
+                device=protein_input_ids.device,
+                dtype=torch.bool,
+            )
         causal_mask = create_causal_mask(
             config=self.config,
             input_embeds=inputs_embeds,
