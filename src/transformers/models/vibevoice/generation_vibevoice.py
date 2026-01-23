@@ -166,21 +166,17 @@ class VibeVoiceGenerationMixin(GenerationMixin):
             if self._valid_auto_compile_criteria(model_kwargs, generation_config)
             else self.__call__
         )
-        
-        # TODO (ebezzam) in original _sample
-        # # Assisted generation completes the prefill stage in candidate generator so that
-        # # we don't have several `prefill` calls in one generation loop. Skip `_prefill` for assistants
-        # if not generation_config.is_assistant:
-        #     outputs = self._prefill(input_ids, generation_config, model_kwargs)
-        #     prefill_consumed = False
-        # else:
-        #     model_kwargs = self._get_initial_cache_position(input_ids.shape[1], input_ids.device, model_kwargs)
-        #     prefill_consumed = True
+
+        # Assisted generation completes the prefill stage in candidate generator so that
+        # we don't have several `prefill` calls in one generation loop. Skip `_prefill` for assistants
+        if not generation_config.is_assistant:
+            outputs = self._prefill(input_ids, generation_config, model_kwargs)
+            prefill_consumed = False
+        else:
+            model_kwargs = self._get_initial_cache_position(input_ids.shape[1], input_ids.device, model_kwargs)
+            prefill_consumed = True
 
         # *************** VibeVoice specific ***************
-        model_kwargs = self._get_initial_cache_position(cur_len, input_ids.device, model_kwargs)
-        input_values = model_kwargs.pop("input_values", None)
-        padding_mask = model_kwargs.pop("padding_mask", None)
         noise_scheduler = generation_config.noise_scheduler
         monitor_progress = getattr(generation_config, "monitor_progress", None)
         cfg_scale = generation_config.cfg_scale
@@ -190,7 +186,6 @@ class VibeVoiceGenerationMixin(GenerationMixin):
         # State tracking
         acoustic_cache = None
         semantic_cache = None
-        is_prefill = True
         inputs_embeds = None
         audio_chunks = [[] for _ in range(batch_size)]
 
@@ -270,36 +265,19 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                 current_steps = torch.full((batch_size,), cur_len - initial_length, dtype=torch.long, device=input_ids.device)
                 progress_tensor = torch.stack((current_steps, max_step_per_sample), dim=1)
                 monitor_progress(progress_tensor)
-
-            model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
-
-            # Handle prefill vs normal generation
-            if is_prefill:
-                # First step: process audio inputs for conditioning
-                if input_values is not None and padding_mask is not None:
-                    model_inputs.update(
-                        {
-                            "input_values": input_values.to(device=input_ids.device),
-                            "padding_mask": padding_mask.to(input_ids.device),
-                        }
-                    )
-                is_prefill = False
-            else:
-                # Subsequent steps: use embeddings from previous step
-                model_inputs.pop("inputs_embeds", None)
-                model_inputs["inputs_embeds"] = inputs_embeds
-
-            # Set logits_to_keep for positive pass
-            model_inputs["logits_to_keep"] = 1
-            outputs = model_forward(**model_inputs, return_dict=True)
             # ============================================
-
-            # TODO (ebezzam) in original _sample
-            # if prefill_consumed:
-            #     model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
-            #     with self._optimize_model_for_decode():
-            #         outputs = model_forward(**model_inputs, return_dict=True)
-            # prefill_consumed = True
+            
+            if prefill_consumed:
+                model_inputs = self.prepare_inputs_for_generation(input_ids, **model_kwargs)
+                # *************** VibeVoice specific ***************
+                # Subsequent steps use embeddings from previous step
+                model_inputs.pop("input_values", None)
+                model_inputs.pop("padding_mask", None)
+                model_inputs["inputs_embeds"] = inputs_embeds
+                # ============================================
+                with self._optimize_model_for_decode():
+                    outputs = model_forward(**model_inputs, return_dict=True)
+            prefill_consumed = True
             model_kwargs = self._update_model_kwargs_for_generation(
                 outputs,
                 model_kwargs,
@@ -328,9 +306,8 @@ class VibeVoiceGenerationMixin(GenerationMixin):
 
             # token selection
             # *************** VibeVoice specific ***************
-            # NOTE (ebezzam): For VibeVoice, we always use deterministic token selection
-            # regardless of `do_sample` setting. Sampling instead happens in the diffusion
-            # process for audio generation, not in token selection.
+            # NOTE (ebezzam): For VibeVoice, we always use deterministic token selection regardless of `do_sample`
+            # setting. Sampling instead happens in the diffusion process rather than in the token selection.
             if do_sample:
                 logger.warning(
                     "VibeVoice generation does not support sampling-based token selection. "
@@ -381,7 +358,6 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                 if negative_model_inputs["inputs_embeds"] is None and inputs_embeds is not None:
                     negative_model_inputs["inputs_embeds"] = inputs_embeds
                     negative_model_inputs["input_ids"] = None
-                negative_model_inputs["logits_to_keep"] = 0
 
                 negative_outputs = model_forward(**negative_model_inputs, return_dict=True)
                 negative_model_kwargs = self._update_model_kwargs_for_generation(
