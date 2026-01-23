@@ -33,6 +33,11 @@
     sections:
     - local: tasks/asr
       title: 自动语音识别
+  - isExpanded: false
+    sections:
+    - local: kv_cache
+      title: 使用缓存进行生成的最佳实践
+    title: 生成
 - sections:
   - local: fast_tokenizers
     title: 使用 🤗 Tokenizers 中的分词器
