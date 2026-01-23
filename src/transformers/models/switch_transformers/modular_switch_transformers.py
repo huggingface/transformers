@@ -158,11 +158,19 @@ class SwitchTransformersTop1Router(nn.Module):
         # https://huggingface.co/papers/2101.03961.
         # We also store the previous dtype to cast back the output to the previous dtype
         self.input_dtype = hidden_states.dtype
-        hidden_states = hidden_states.to(self.dtype)
+
+        # Create a copy for applying jitter noise
+        routing_states = hidden_states.clone()
+        routing_states = routing_states.to(self.dtype)
+
         if self.training and self.jitter_noise > 0:
-            # Multiply the token inputs by the uniform distribution - adding some noise
-            hidden_states *= torch.empty_like(hidden_states).uniform_(1.0 - self.jitter_noise, 1.0 + self.jitter_noise)
-        router_logits = self.classifier(hidden_states)
+            # Apply jitter noise only to the routing copy
+            routing_states *= torch.empty_like(routing_states).uniform_(
+                1.0 - self.jitter_noise, 1.0 + self.jitter_noise
+            )
+
+        # Use jittered states for routing decisions
+        router_logits = self.classifier(routing_states)
 
         # Apply Softmax and cast back to the original `dtype`
         router_probs = nn.functional.softmax(router_logits, dim=-1, dtype=self.dtype).to(self.input_dtype)
@@ -350,7 +358,7 @@ class SwitchTransformersPreTrainedModel(PreTrainedModel):
             init.constant_(module.weight, factor * 1.0)
         elif isinstance(
             module,
-            (SwitchTransformersModel, SwitchTransformersForConditionalGeneration, SwitchTransformersEncoderModel),
+            SwitchTransformersModel | SwitchTransformersForConditionalGeneration | SwitchTransformersEncoderModel,
         ):
             init.normal_(module.shared.weight, mean=0.0, std=factor * 1.0)
             if hasattr(module, "lm_head") and not self.config.tie_word_embeddings:

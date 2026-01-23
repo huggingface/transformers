@@ -932,6 +932,50 @@ class SwitchTransformerRouterTest(unittest.TestCase):
 
         assert torch.sum(expert_index) <= batch_size * self.config.num_experts * self.config.expert_capacity
 
+    def test_jitter_noise_preserves_hidden_states(self):
+        r"""
+        Test that jitter noise is applied only to routing decisions and does not modify the original hidden states.
+        This tests the fix for the jitter noise issue where noise was corrupting the input hidden states.
+        """
+        # Create a config with jitter noise enabled
+        config = SwitchTransformersConfig(
+            num_experts=2,
+            hidden_size=4,
+            d_ff=8,
+            router_jitter_noise=0.1,  # Enable jitter noise
+            expert_capacity=4,
+        )
+
+        # Create router
+        router = SwitchTransformersTop1Router(config)
+        router.eval()  # Set to eval mode first to test training mode separately
+
+        # Create input hidden states
+        hidden_states = torch.tensor([[[0.5, 0.2, 0.1, 0.3], [0.4, 0.6, 0.2, 0.8]]], dtype=torch.float32)
+
+        # Test in eval mode - no jitter noise should be applied
+        original_hidden_states = hidden_states.clone()
+        with torch.no_grad():
+            router_probs, expert_index, router_logits = router(hidden_states)
+
+        # Hidden states should remain unchanged in eval mode
+        self.assertTrue(torch.equal(hidden_states, original_hidden_states))
+
+        # Test in training mode - jitter noise should be applied only internally
+        router.train()
+        torch.manual_seed(42)  # Set seed for reproducible results
+
+        original_hidden_states = hidden_states.clone()
+        with torch.no_grad():
+            router_probs_train, expert_index_train, router_logits_train = router(hidden_states)
+
+        # Hidden states should still remain unchanged after router call
+        self.assertTrue(torch.equal(hidden_states, original_hidden_states))
+
+        # Results should be different between eval and train mode due to jitter noise
+        # (though this might occasionally fail due to randomness, it's very unlikely with seed)
+        self.assertFalse(torch.allclose(router_logits, router_logits_train, atol=1e-5))
+
 
 @slow
 @require_torch
