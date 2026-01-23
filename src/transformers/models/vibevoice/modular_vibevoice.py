@@ -155,13 +155,17 @@ class VibeVoiceDiffusionHeadFinalLayer(nn.Module):
 class VibeVoiceDiffusionHead(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.noisy_images_proj = nn.Linear(config.acoustic_tokenizer_config.hidden_size, config.hidden_size, bias=False)
+        self.noisy_images_proj = nn.Linear(
+            config.acoustic_tokenizer_config.hidden_size, config.hidden_size, bias=False
+        )
         self.cond_proj = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
         self.timestep_embedder = VibeVoiceDiffusionHeadTimestepEmbedder(config)
         self.layers = nn.ModuleList(
             [VibeVoiceDiffusionHeadAdaLayerNorm(config) for _ in range(config.num_head_layers)]
         )
-        self.final_layer = VibeVoiceDiffusionHeadFinalLayer(config, output_size=config.acoustic_tokenizer_config.hidden_size)
+        self.final_layer = VibeVoiceDiffusionHeadFinalLayer(
+            config, output_size=config.acoustic_tokenizer_config.hidden_size
+        )
 
     def forward(self, noisy_images, timesteps, condition):
         """
@@ -386,7 +390,7 @@ class VibeVoiceModel(VibeVoicePreTrainedModel):
                 input_values, padding_mask, latent_scaling_factor, latent_bias_factor
             )
 
-           # replace text-audio token placeholders with audio embeddings
+            # replace text-audio token placeholders with audio embeddings
             audio_token_mask = (input_ids == self.config.audio_diffusion_token_id).unsqueeze(-1)
             inputs_embeds = inputs_embeds.masked_scatter(
                 audio_token_mask.to(inputs_embeds.device), audio_embeds.to(inputs_embeds.device)

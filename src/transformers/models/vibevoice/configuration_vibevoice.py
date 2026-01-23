@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The Microsoft Team and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -230,7 +229,7 @@ class VibeVoiceConfig(PretrainedConfig):
         self.mlp_bias = False
         self.intermediate_size = intermediate_size
 
-        kwargs.pop("tie_word_embeddings", None) # remove if present to take priority from text_config
+        kwargs.pop("tie_word_embeddings", None)  # remove if present to take priority from text_config
         super().__init__(
             pad_token_id=pad_token_id,
             eos_token_id=eos_token_id,

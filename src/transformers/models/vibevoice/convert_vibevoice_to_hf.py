@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -25,8 +24,8 @@ from safetensors.torch import load_file
 from transformers import (
     Qwen2TokenizerFast,
     VibeVoiceAcousticTokenizerConfig,
-    VibeVoiceConfig,
     VibeVoiceAcousticTokenizerFeatureExtractor,
+    VibeVoiceConfig,
     VibeVoiceForConditionalGeneration,
     VibeVoiceProcessor,
     VibeVoiceSemanticTokenizerConfig,
@@ -48,18 +47,20 @@ def update_state_dict_for_hf_model(state_dict):
                 new_key = new_key.replace("downsample_layers.0.0.conv.", "stem.conv.conv.")
             elif "stages.0." in key:
                 new_key = new_key.replace("stages.0.", "stem.stage.")
-            elif "downsample_layers." in key and not "downsample_layers.0" in key:
-                match = re.search(r'downsample_layers\.(\d+)', key)
+            elif "downsample_layers." in key and "downsample_layers.0" not in key:
+                match = re.search(r"downsample_layers\.(\d+)", key)
                 if match:
                     old_idx = int(match.group(1))
                     new_idx = old_idx - 1  # Shift down by 1 since downsample_layers[0] became stem
-                    new_key = re.sub(r'downsample_layers\.\d+\.0\.conv\.', f'conv_layers.{new_idx}.conv.conv.', new_key)
-            elif "stages." in key and not "stages.0." in key:
-                match = re.search(r'stages\.(\d+)', key)
+                    new_key = re.sub(
+                        r"downsample_layers\.\d+\.0\.conv\.", f"conv_layers.{new_idx}.conv.conv.", new_key
+                    )
+            elif "stages." in key and "stages.0." not in key:
+                match = re.search(r"stages\.(\d+)", key)
                 if match:
                     old_idx = int(match.group(1))
                     new_idx = old_idx - 1  # Shift down by 1 since stages[0] became stem
-                    new_key = re.sub(r'stages\.\d+\.', f'conv_layers.{new_idx}.stage.', new_key)
+                    new_key = re.sub(r"stages\.\d+\.", f"conv_layers.{new_idx}.stage.", new_key)
             if "mixer.conv.conv.conv." in key:
                 new_key = new_key.replace("mixer.conv.conv.conv.", "mixer.conv.")
             if ".conv.conv.conv." in new_key:
@@ -73,18 +74,20 @@ def update_state_dict_for_hf_model(state_dict):
                 new_key = new_key.replace("downsample_layers.0.0.conv.", "stem.conv.conv.")
             elif "stages.0." in key:
                 new_key = new_key.replace("stages.0.", "stem.stage.")
-            elif "downsample_layers." in key and not "downsample_layers.0" in key:
-                match = re.search(r'downsample_layers\.(\d+)', key)
+            elif "downsample_layers." in key and "downsample_layers.0" not in key:
+                match = re.search(r"downsample_layers\.(\d+)", key)
                 if match:
                     old_idx = int(match.group(1))
                     new_idx = old_idx - 1  # Shift down by 1 since downsample_layers[0] became stem
-                    new_key = re.sub(r'downsample_layers\.\d+\.0\.conv\.', f'conv_layers.{new_idx}.conv.conv.', new_key)
-            elif "stages." in key and not "stages.0." in key:
-                match = re.search(r'stages\.(\d+)', key)
+                    new_key = re.sub(
+                        r"downsample_layers\.\d+\.0\.conv\.", f"conv_layers.{new_idx}.conv.conv.", new_key
+                    )
+            elif "stages." in key and "stages.0." not in key:
+                match = re.search(r"stages\.(\d+)", key)
                 if match:
                     old_idx = int(match.group(1))
                     new_idx = old_idx - 1  # Shift down by 1 since stages[0] became stem
-                    new_key = re.sub(r'stages\.\d+\.', f'conv_layers.{new_idx}.stage.', new_key)
+                    new_key = re.sub(r"stages\.\d+\.", f"conv_layers.{new_idx}.stage.", new_key)
             if "mixer.conv.conv.conv." in key:
                 new_key = new_key.replace("mixer.conv.conv.conv.", "mixer.conv.")
             if ".conv.conv.conv." in new_key:
@@ -93,21 +96,26 @@ def update_state_dict_for_hf_model(state_dict):
                 new_key = new_key.replace(".conv.conv.", ".conv.")
         if "acoustic_tokenizer.decoder" in key:
             if "upsample_layers.0.0.conv.conv." in key:
-                new_key = new_key.replace("acoustic_tokenizer.decoder.upsample_layers.0.0.conv.conv.", "acoustic_tokenizer.decoder.stem.conv.conv.")
+                new_key = new_key.replace(
+                    "acoustic_tokenizer.decoder.upsample_layers.0.0.conv.conv.",
+                    "acoustic_tokenizer.decoder.stem.conv.conv.",
+                )
             elif "stages.0." in key:
                 new_key = new_key.replace("stages.0.", "stem.stage.")
-            elif "upsample_layers." in key and not "upsample_layers.0" in key:
-                match = re.search(r'upsample_layers\.(\d+)', key)
+            elif "upsample_layers." in key and "upsample_layers.0" not in key:
+                match = re.search(r"upsample_layers\.(\d+)", key)
                 if match:
                     old_idx = int(match.group(1))
                     new_idx = old_idx - 1  # Shift down by 1 since upsample_layers[0] became conv0
-                    new_key = re.sub(r'upsample_layers\.\d+\.0\.convtr\.convtr\.', f'conv_layers.{new_idx}.convtr.convtr.', new_key)
-            elif "stages." in key and not "stages.0." in key:
-                match = re.search(r'stages\.(\d+)', key)
+                    new_key = re.sub(
+                        r"upsample_layers\.\d+\.0\.convtr\.convtr\.", f"conv_layers.{new_idx}.convtr.convtr.", new_key
+                    )
+            elif "stages." in key and "stages.0." not in key:
+                match = re.search(r"stages\.(\d+)", key)
                 if match:
                     old_idx = int(match.group(1))
                     new_idx = old_idx - 1  # Shift down by 1 since stages[0] became stage0
-                    new_key = re.sub(r'stages\.\d+\.', f'conv_layers.{new_idx}.stage.', new_key)
+                    new_key = re.sub(r"stages\.\d+\.", f"conv_layers.{new_idx}.stage.", new_key)
             if "head.conv." in key:
                 new_key = new_key.replace("head.conv.", "head.")
             if "mixer.conv.conv.conv." in key:
@@ -144,9 +152,7 @@ def update_state_dict_for_hf_model(state_dict):
     return updated_state_dict
 
 
-def convert_checkpoint(
-    checkpoint, output_dir, config_path, push_to_hub, bfloat16, processor_config=None
-):
+def convert_checkpoint(checkpoint, output_dir, config_path, push_to_hub, bfloat16, processor_config=None):
     if bfloat16:
         dtype = torch.bfloat16
     else:
@@ -288,7 +294,8 @@ def convert_checkpoint(
 
     # clean up diffusion head config
     model_config["intermediate_size"] = int(
-        model_config["diffusion_head_config"].pop("head_ffn_ratio") * model_config["diffusion_head_config"]["hidden_size"]
+        model_config["diffusion_head_config"].pop("head_ffn_ratio")
+        * model_config["diffusion_head_config"]["hidden_size"]
     )
     model_config["diffusion_head_config"]["num_head_layers"] = model_config["diffusion_head_config"].pop("head_layers")
     if model_config["diffusion_head_config"]["ddpm_beta_schedule"] == "cosine":
@@ -296,8 +303,8 @@ def convert_checkpoint(
     model_config["diffusion_head_config"].pop("speech_vae_dim")
     model_config["diffusion_head_config"].pop("diffusion_type")
     model_config["diffusion_head_config"].pop("ddpm_batch_mul")
-    model_config["diffusion_head_config"].pop("latent_size")    # same as acoustic tokenizer hidden size
-    model_config["diffusion_head_config"].pop("hidden_size")    # same as text model hidden size
+    model_config["diffusion_head_config"].pop("latent_size")  # same as acoustic tokenizer hidden size
+    model_config["diffusion_head_config"].pop("hidden_size")  # same as text model hidden size
     # -- flatten diffusion head config
     for k, v in model_config["diffusion_head_config"].items():
         model_config[k] = v

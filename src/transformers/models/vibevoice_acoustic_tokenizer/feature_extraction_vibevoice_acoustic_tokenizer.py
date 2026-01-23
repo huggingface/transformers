@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional, Union
+
 import torch
 
 from ...audio_utils import AudioInput, make_list_of_audio
@@ -66,12 +65,12 @@ class VibeVoiceAcousticTokenizerFeatureExtractor(SequenceFeatureExtractor):
     def __call__(
         self,
         audio: AudioInput,
-        sampling_rate: Optional[int] = None,
-        padding: Optional[Union[bool, str, PaddingStrategy]] = True,
-        pad_to_multiple_of: Optional[int] = None,
-        max_length: Optional[int] = None,
-        return_attention_mask: Optional[bool] = True,
-        return_tensors: Optional[Union[str, type]] = None,
+        sampling_rate: int | None = None,
+        padding: bool | str | PaddingStrategy | None = True,
+        pad_to_multiple_of: int | None = None,
+        max_length: int | None = None,
+        return_attention_mask: bool | None = True,
+        return_tensors: str | type | None = None,
     ) -> BatchFeature:
         """
         Args:
@@ -93,7 +92,6 @@ class VibeVoiceAcousticTokenizerFeatureExtractor(SequenceFeatureExtractor):
                   lengths).
             pad_to_multiple_of (`int`, *optional*):
                 If set will pad the sequence to a multiple of the provided value.
-            
         """
         if sampling_rate is not None:
             if sampling_rate != self.sampling_rate:

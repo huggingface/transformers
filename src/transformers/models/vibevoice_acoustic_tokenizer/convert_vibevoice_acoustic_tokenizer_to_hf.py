@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,18 +15,17 @@
 import argparse
 import gc
 import json
-import os
 import re
 
 import torch
 from safetensors.torch import load_file
 
 from transformers import (
-    VibeVoiceAcousticTokenizerConfig,
-    VibeVoiceAcousticTokenizerModel,
-    VibeVoiceAcousticTokenizerFeatureExtractor,
     AutoFeatureExtractor,
     AutoModel,
+    VibeVoiceAcousticTokenizerConfig,
+    VibeVoiceAcousticTokenizerFeatureExtractor,
+    VibeVoiceAcousticTokenizerModel,
 )
 
 
@@ -46,18 +44,20 @@ def update_state_dict_for_hf_model(state_dict):
                 new_key = new_key.replace("downsample_layers.0.0.conv.", "stem.conv.conv.")
             elif "stages.0." in key:
                 new_key = new_key.replace("stages.0.", "stem.stage.")
-            elif "downsample_layers." in key and not "downsample_layers.0" in key:
-                match = re.search(r'downsample_layers\.(\d+)', key)
+            elif "downsample_layers." in key and "downsample_layers.0" not in key:
+                match = re.search(r"downsample_layers\.(\d+)", key)
                 if match:
                     old_idx = int(match.group(1))
                     new_idx = old_idx - 1  # Shift down by 1 since downsample_layers[0] became stem
-                    new_key = re.sub(r'downsample_layers\.\d+\.0\.conv\.', f'conv_layers.{new_idx}.conv.conv.', new_key)
-            elif "stages." in key and not "stages.0." in key:
-                match = re.search(r'stages\.(\d+)', key)
+                    new_key = re.sub(
+                        r"downsample_layers\.\d+\.0\.conv\.", f"conv_layers.{new_idx}.conv.conv.", new_key
+                    )
+            elif "stages." in key and "stages.0." not in key:
+                match = re.search(r"stages\.(\d+)", key)
                 if match:
                     old_idx = int(match.group(1))
                     new_idx = old_idx - 1  # Shift down by 1 since stages[0] became stem
-                    new_key = re.sub(r'stages\.\d+\.', f'conv_layers.{new_idx}.stage.', new_key)
+                    new_key = re.sub(r"stages\.\d+\.", f"conv_layers.{new_idx}.stage.", new_key)
             if "mixer.conv.conv.conv." in key:
                 new_key = new_key.replace("mixer.conv.conv.conv.", "mixer.conv.")
             if ".conv.conv.conv." in new_key:
@@ -66,21 +66,26 @@ def update_state_dict_for_hf_model(state_dict):
                 new_key = new_key.replace(".conv.conv.", ".conv.")
         if "acoustic_tokenizer.decoder" in key:
             if "upsample_layers.0.0.conv.conv." in key:
-                new_key = new_key.replace("acoustic_tokenizer.decoder.upsample_layers.0.0.conv.conv.", "acoustic_tokenizer.decoder.stem.conv.conv.")
+                new_key = new_key.replace(
+                    "acoustic_tokenizer.decoder.upsample_layers.0.0.conv.conv.",
+                    "acoustic_tokenizer.decoder.stem.conv.conv.",
+                )
             elif "stages.0." in key:
                 new_key = new_key.replace("stages.0.", "stem.stage.")
-            elif "upsample_layers." in key and not "upsample_layers.0" in key:
-                match = re.search(r'upsample_layers\.(\d+)', key)
+            elif "upsample_layers." in key and "upsample_layers.0" not in key:
+                match = re.search(r"upsample_layers\.(\d+)", key)
                 if match:
                     old_idx = int(match.group(1))
                     new_idx = old_idx - 1  # Shift down by 1 since upsample_layers[0] became conv0
-                    new_key = re.sub(r'upsample_layers\.\d+\.0\.convtr\.convtr\.', f'conv_layers.{new_idx}.convtr.convtr.', new_key)
-            elif "stages." in key and not "stages.0." in key:
-                match = re.search(r'stages\.(\d+)', key)
+                    new_key = re.sub(
+                        r"upsample_layers\.\d+\.0\.convtr\.convtr\.", f"conv_layers.{new_idx}.convtr.convtr.", new_key
+                    )
+            elif "stages." in key and "stages.0." not in key:
+                match = re.search(r"stages\.(\d+)", key)
                 if match:
                     old_idx = int(match.group(1))
                     new_idx = old_idx - 1  # Shift down by 1 since stages[0] became stage0
-                    new_key = re.sub(r'stages\.\d+\.', f'conv_layers.{new_idx}.stage.', new_key)
+                    new_key = re.sub(r"stages\.\d+\.", f"conv_layers.{new_idx}.stage.", new_key)
             if "head.conv." in key:
                 new_key = new_key.replace("head.conv.", "head.")
             if "mixer.conv.conv.conv." in key:
@@ -91,9 +96,7 @@ def update_state_dict_for_hf_model(state_dict):
     return updated_state_dict
 
 
-def convert_checkpoint(
-    checkpoint, config_path, push_to_hub, bfloat16, processor_config=None
-):
+def convert_checkpoint(checkpoint, config_path, push_to_hub, bfloat16, processor_config=None):
     if bfloat16:
         dtype = torch.bfloat16
     else:
@@ -119,7 +122,6 @@ def convert_checkpoint(
     feature_extractor = VibeVoiceAcousticTokenizerFeatureExtractor(**audio_config)
 
     # 3) Prepare model configuration
-    # -- Load
     with open(config_path, "r") as f:
         model_config = json.load(f)
 
@@ -127,7 +129,9 @@ def convert_checkpoint(
     model_config["acoustic_tokenizer_config"]["encoder_depths"] = list(
         map(int, model_config["acoustic_tokenizer_config"]["encoder_depths"].split("-"))
     )
-    model_config["acoustic_tokenizer_config"]["rms_norm_eps"] = model_config["acoustic_tokenizer_config"].pop("layernorm_eps")
+    model_config["acoustic_tokenizer_config"]["rms_norm_eps"] = model_config["acoustic_tokenizer_config"].pop(
+        "layernorm_eps"
+    )
     # -- reverse order of ratios here instead of in modeling (as done in original)
     model_config["acoustic_tokenizer_config"]["downsampling_ratios"] = list(
         reversed(model_config["acoustic_tokenizer_config"].pop("encoder_ratios"))
@@ -150,8 +154,8 @@ def convert_checkpoint(
     model_config["acoustic_tokenizer_config"].pop("decoder_ratios")
     # -- remove unused / constant parameters that lead to unused code paths removed in HF model
     model_config["acoustic_tokenizer_config"].pop("std_dist_type")  # always Gaussian
-    model_config["acoustic_tokenizer_config"].pop("pad_mode")   # always constant
-    model_config["acoustic_tokenizer_config"].pop("causal")     # always True
+    model_config["acoustic_tokenizer_config"].pop("pad_mode")  # always constant
+    model_config["acoustic_tokenizer_config"].pop("causal")  # always True
     model_config["acoustic_tokenizer_config"].pop("mixer_layer")
     model_config["acoustic_tokenizer_config"].pop("layernorm")
     model_config["acoustic_tokenizer_config"].pop("disable_last_norm")

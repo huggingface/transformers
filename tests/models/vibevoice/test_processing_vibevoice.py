@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import shutil
 import tempfile
 import unittest
 
@@ -48,7 +47,6 @@ class VibeVoiceProcessorTest(ProcessorTesterMixin, unittest.TestCase):
         cls.bos_token_id = processor.tokenizer.bos_token_id
         cls.tmpdirname = tempfile.mkdtemp()
         processor.save_pretrained(cls.tmpdirname)
-
 
     def prepare_processor_dict(self):
         return {

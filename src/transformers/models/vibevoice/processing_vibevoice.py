@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,7 +14,6 @@
 
 import os
 import re
-from typing import Optional, Union
 
 from ...audio_utils import AudioInput, make_list_of_audio
 from ...feature_extraction_utils import BatchFeature
@@ -98,8 +96,8 @@ class VibeVoiceProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]],
-        audio: Optional[AudioInput] = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None,
+        audio: AudioInput | None = None,
         **kwargs: Unpack[VibeVoiceProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -161,13 +159,15 @@ class VibeVoiceProcessor(ProcessorMixin):
             data = self.feature_extractor(audio, **audio_kwargs)
 
             # Expand audio tokens in text (note could be multiple audio per text)
-            num_audio_tokens = torch.ceil(
-                data["padding_mask"].sum(dim=-1) / audio_kwargs["pad_to_multiple_of"]
-            ).int().tolist()
+            num_audio_tokens = (
+                torch.ceil(data["padding_mask"].sum(dim=-1) / audio_kwargs["pad_to_multiple_of"]).int().tolist()
+            )
             audio_token_iter = iter(num_audio_tokens)
             for i, sample in enumerate(text):
+
                 def replace_fn(match):
                     return self.audio_diffusion_token * next(audio_token_iter)
+
                 text[i] = re.sub(re.escape(self.audio_diffusion_token), replace_fn, sample)
 
         encoding = self.tokenizer(text, **text_kwargs)
@@ -184,7 +184,7 @@ class VibeVoiceProcessor(ProcessorMixin):
     def save_audio(
         self,
         audio: AudioInput,
-        output_path: Optional[str] = None,
+        output_path: str | None = None,
     ) -> list[str]:
         """
         Save audio data to WAV file(s).
