@@ -725,6 +725,8 @@
         title: RWKV
       - local: model_doc/seed_oss
         title: Seed-Oss
+      - local: model_doc/solar_open
+        title: SolarOpen
       - local: model_doc/splinter
         title: Splinter
       - local: model_doc/squeezebert
