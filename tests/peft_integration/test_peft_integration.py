@@ -733,7 +733,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                     model = transformers_class.from_pretrained(peft_model.config._name_or_path)
                     model.load_adapter(tmpdirname)
                     assert not any(m.training for m in model.modules())
-                    grads = [n for n,p in model.named_parameters() if p.requires_grad]
+                    grads = [n for n, p in model.named_parameters() if p.requires_grad]
                     assert len(grads) == 0
                     del model
 

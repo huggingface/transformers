@@ -201,6 +201,7 @@ def _build_peft_weight_mapping(
 
     prefixes = set()
     from peft.mapping import PEFT_TYPE_TO_PREFIX_MAPPING
+
     peft_type = getattr(peft_config, "peft_type", None)
     if peft_type in PEFT_TYPE_TO_PREFIX_MAPPING:
         prefixes.add(PEFT_TYPE_TO_PREFIX_MAPPING[peft_type])
@@ -443,8 +444,6 @@ class PeftAdapterMixin:
         adapter_name = adapter_name if adapter_name is not None else "default"
         adapter_kwargs = adapter_kwargs or {}
 
-
-
         from peft import PeftConfig, inject_adapter_in_model
 
         if self._hf_peft_config_loaded and (not hotswap) and (adapter_name in self.peft_config):
@@ -483,9 +482,7 @@ class PeftAdapterMixin:
         if hasattr(peft_config, "inference_mode"):
             peft_config.inference_mode = not is_trainable
 
-        peft_weight_conversions = _build_peft_weight_mapping(
-            weight_conversions, adapter_name, peft_config=peft_config
-        )
+        peft_weight_conversions = _build_peft_weight_mapping(weight_conversions, adapter_name, peft_config=peft_config)
 
         patch_mixtral_moe_parameter_targeting(model=self, peft_config=peft_config)
 
@@ -499,7 +496,7 @@ class PeftAdapterMixin:
         if adapter_state_dict is None:
             adapter_filenames = ["adapter_model.safetensors", "adapter_model.bin"]
             if load_config.use_safetensors is False:
-                adapter_filenames = adapter_filenames[::-1]
+                adapter_filenames = adapter_filenames.reverse()
 
             checkpoint_files = sharded_metadata = None
             last_error = None
@@ -545,7 +542,12 @@ class PeftAdapterMixin:
 
         def is_adapter_key(key: str) -> bool:
             return any(marker in key for marker in adapter_key_markers)
-        load_info = replace(load_info, missing_keys=[k for k in load_info.missing_keys if is_adapter_key(k)], mismatched_keys=[item for item in load_info.mismatched_keys if is_adapter_key(item[0])])
+
+        load_info = replace(
+            load_info,
+            missing_keys=[k for k in load_info.missing_keys if is_adapter_key(k)],
+            mismatched_keys=[item for item in load_info.mismatched_keys if is_adapter_key(item[0])],
+        )
 
         log_state_dict_report(
             model=self,
