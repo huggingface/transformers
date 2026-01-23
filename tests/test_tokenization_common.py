@@ -1109,6 +1109,48 @@ Hey how are you doing"""  # noqa: W293
         self.assertEqual(len(strftime_output), 10)
         self.assertEqual(len(strftime_output.split("-")), 3)
 
+    @require_jinja
+    def test_jinja_fromjson(self):
+        # Test fromjson filter for parsing JSON strings in chat templates
+        fromjson_template = (
+            """{% set args = '{"name": "test_func", "value": 42}' | fromjson %}{{ args.name }}: {{ args.value }}"""
+        )
+
+        # Test with tool calls that have JSON string arguments
+        tool_call_template = """{% for message in messages %}{% if message.tool_calls %}{% for tc in message.tool_calls %}{% set args = tc.function.arguments | fromjson %}Function: {{ tc.function.name }}, Args: {% for k, v in args.items() %}{{ k }}={{ v }}{% if not loop.last %}, {% endif %}{% endfor %}{% endfor %}{% endif %}{% endfor %}"""
+
+        dummy_conversation = [{"role": "user", "content": "test"}]
+
+        tool_conversation = [
+            {
+                "role": "assistant",
+                "content": "I'll help with that.",
+                "tool_calls": [{"function": {"name": "search", "arguments": '{"query": "hello world", "limit": 10}'}}],
+            }
+        ]
+
+        tokenizers = self.get_tokenizers()
+        for tokenizer in tokenizers:
+            with self.subTest(f"{tokenizer.__class__.__name__}"):
+                # Test basic fromjson usage
+                fromjson_output = tokenizer.apply_chat_template(
+                    dummy_conversation, chat_template=fromjson_template, tokenize=False
+                )
+                self.assertEqual(fromjson_output, "test_func: 42")
+
+                # Test fromjson with tool calls
+                tool_output = tokenizer.apply_chat_template(
+                    tool_conversation, chat_template=tool_call_template, tokenize=False
+                )
+                self.assertEqual(tool_output, "Function: search, Args: query=hello world, limit=10")
+
+                # Test that fromjson handles non-string inputs gracefully
+                graceful_template = """{{ 123 | fromjson }}"""
+                graceful_output = tokenizer.apply_chat_template(
+                    dummy_conversation, chat_template=graceful_template, tokenize=False
+                )
+                self.assertEqual(graceful_output, "123")
+
     @require_torch
     @require_jinja
     def test_chat_template_return_assistant_tokens_mask(self):
