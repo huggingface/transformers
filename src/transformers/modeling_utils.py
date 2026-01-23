@@ -173,6 +173,7 @@ class LoadStateDictConfig:
     """
 
     pretrained_model_name_or_path: str | None = None
+    download_kwargs: DownloadKwargs | None = None
     ignore_mismatched_sizes: bool = False
     sharded_metadata: dict | None = None
     device_map: dict | None = None
@@ -514,15 +515,16 @@ def _get_resolved_checkpoint_files(
     variant: str | None,
     gguf_file: str | None,
     use_safetensors: bool | None,
-    download_kwargs: DownloadKwargs,
     user_agent: dict,
     is_remote_code: bool,  # Because we can't determine this inside this function, we need it to be passed in
     transformers_explicit_filename: str | None = None,
+    download_kwargs: DownloadKwargs | None = None,
 ) -> tuple[list[str] | None, dict | None]:
     """Get all the checkpoint filenames based on `pretrained_model_name_or_path`, and optional metadata if the
     checkpoints are sharded.
     This function will download the data if necessary.
     """
+    download_kwargs = download_kwargs or DownloadKwargs()
     cache_dir = download_kwargs.get("cache_dir")
     force_download = download_kwargs.get("force_download", False)
     proxies = download_kwargs.get("proxies")
@@ -4099,6 +4101,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
             device_mesh=device_mesh,
             weights_only=weights_only,
             weight_mapping=weight_conversions,
+            download_kwargs=download_kwargs,
         )
         load_info = cls._load_pretrained_model(model, state_dict, checkpoint_files, load_config)
         load_info = cls._finalize_load_state_dict(model, load_config, load_info)

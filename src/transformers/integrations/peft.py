@@ -403,7 +403,6 @@ class PeftAdapterMixin:
         base_load_config.update(kwargs)
         base_load_config.setdefault("pretrained_model_name_or_path", None)
         load_config = LoadStateDictConfig(**base_load_config)
-        download_kwargs = {}
         peft_model_id = peft_model_id or load_config.pretrained_model_name_or_path
 
         if hotswap == "auto":
@@ -445,7 +444,7 @@ class PeftAdapterMixin:
         if peft_config is None:
             adapter_config_file = find_adapter_config_file(
                 peft_model_id,
-                **download_kwargs,
+                **load_config.download_kwargs,
                 **adapter_kwargs,
             )
 
@@ -457,7 +456,7 @@ class PeftAdapterMixin:
 
             peft_config = PeftConfig.from_pretrained(
                 peft_model_id,
-                **download_kwargs,
+                **load_config.download_kwargs,
                 **adapter_kwargs,
             )
             peft_config.inference_mode = not is_trainable
@@ -479,7 +478,7 @@ class PeftAdapterMixin:
             user_agent={},
             is_remote_code=False,
             transformers_explicit_filename="adapter_model.safetensors",
-            download_kwargs=download_kwargs,
+            download_kwargs=load_config.download_kwargs,
         )
 
         load_config = replace(
