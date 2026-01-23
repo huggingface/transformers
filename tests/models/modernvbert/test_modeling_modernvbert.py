@@ -157,6 +157,12 @@ class ModernVBertModelTester:
 
         config = self.get_config()
 
+        # tie text-level args to top-level args for test purposes
+        config.pad_token_id = config.text_config.pad_token_id
+        config.bos_token_id = config.text_config.bos_token_id
+        config.eos_token_id = config.text_config.eos_token_id
+        config.tie_word_embeddings = config.text_config.tie_word_embeddings
+
         return config, input_ids, attention_mask, pixel_values, sequence_labels, token_labels, choice_labels
 
     def prepare_config_and_inputs_for_common(self):
@@ -547,6 +553,10 @@ class ModernVBertModelTest(ModelTesterMixin, unittest.TestCase):
 
     @unittest.skip(reason="Vision head's probe has no gradient.")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
+        pass
+
+    @unittest.skip(reason="Vision head's probe has no gradient.")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     def flash_attn_can_dispatch_composite_models(self, attn_implementation: str):
