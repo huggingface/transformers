@@ -233,7 +233,6 @@ class LwDetrConfig(PreTrainedConfig):
         bbox_cost=5,
         giou_cost=2,
         class_loss_coefficient=1,
-        mask_loss_coefficient=1,
         dice_loss_coefficient=1,
         bbox_loss_coefficient=5,
         giou_loss_coefficient=2,
