@@ -115,6 +115,7 @@ class BenchmarkConfig:
                 "The combination of flash_attention_2, compile and generate is not supported. Turning off compile."
             )
             self.compile_config = None
+
         # Continuous batching does not support flex attention as an attention implementation # FIXME: support it
         if self.attn_implementation == "flex_attention" and self.continuous_batching:
             logger.error(
