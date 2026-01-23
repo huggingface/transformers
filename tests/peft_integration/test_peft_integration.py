@@ -732,8 +732,9 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
                     peft_model.save_pretrained(tmpdirname)
                     model = transformers_class.from_pretrained(peft_model.config._name_or_path)
                     model.load_adapter(tmpdirname)
-                    assert not any(p.requires_grad for p in model.parameters())
                     assert not any(m.training for m in model.modules())
+                    grads = [n for n,p in model.named_parameters() if p.requires_grad]
+                    assert len(grads) == 0
                     del model
 
     def test_peft_load_adapter_training_inference_mode_false(self):

@@ -3358,7 +3358,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         state_dict = remove_tied_weights_from_state_dict(state_dict, model_to_save)
 
         # Revert all renaming and/or weight operations
-        if save_original_format:
+        if save_original_format and not _hf_peft_config_loaded:
             state_dict = revert_weight_conversion(model_to_save, state_dict)
 
         # Shard the model if it is too big.
