@@ -429,6 +429,8 @@ class EdgeTamVisionNeck(nn.Module):
 class EdgeTamVisionModel(EdgeTamPreTrainedModel):
     config_class = EdgeTamVisionConfig
     main_input_name = "pixel_values"
+    # TODO: TimmWrapper models aren't compatible with _can_record_outputs yet. We specifically set this to
+    # an empty dict to avoid the _can_record_outputs from Sam2VisionModel being inherited here.
     _can_record_outputs = {}
 
     def __init__(self, config: EdgeTamVisionConfig):
