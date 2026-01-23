@@ -21,7 +21,6 @@ import unittest
 
 from transformers.testing_utils import (
     require_torch,
-    require_torch_gpu,
     set_config_for_less_flaky_test,
     set_model_for_less_flaky_test,
     torch_device,
@@ -229,6 +228,10 @@ class VocosEncodecModelTest(ModelTesterMixin, unittest.TestCase):
     def test_torchscript_output_hidden_state(self):
         pass
 
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        pass
+
     def test_save_load_strict(self):
         config, _, _ = self.model_tester.prepare_config_and_inputs()
         model = VocosEncodecModel(config)
@@ -339,7 +342,6 @@ class VocosEncodecModelIntegrationTest(unittest.TestCase):
         with open("tests/fixtures/vocos/vocos_encodec_batch_integration.json", "r") as f:
             self.encodec_batch_expected = json.load(f)
 
-    @require_torch_gpu
     def test_inference(self):
         hf_repo_id = "Manel/vocos-encodec-24khz"
         model = VocosEncodecModel.from_pretrained(hf_repo_id).to(torch_device).eval()
@@ -381,7 +383,6 @@ class VocosEncodecModelIntegrationTest(unittest.TestCase):
                 atol=1e-5,
             )
 
-    @require_torch_gpu
     def test_batch(self):
         repo_id = "Manel/vocos-encodec-24khz"
         processor = VocosEncodecProcessor.from_pretrained(repo_id)
