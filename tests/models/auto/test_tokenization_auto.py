@@ -616,3 +616,70 @@ class NopConfig(PreTrainedConfig):
 
         tok = AutoTokenizer.from_pretrained("HuggingFaceTB/SmolLM2-135M-Instruct")
         self.assertTrue(tok.__class__ == TokenizersBackend)
+
+    def test_custom_tokenizer_with_mismatched_tokenizer_class(self):
+        nop_tokenizer_code = """
+import transformers
+
+class NopTokenizer(transformers.PreTrainedTokenizer):
+    special_attribute_present = True
+
+    def get_vocab(self):
+        return {}
+"""
+
+        nop_config_code = """
+from transformers import PreTrainedConfig
+
+class NopConfig(PreTrainedConfig):
+    model_type = "test_unregistered_dynamic"
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+"""
+
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            fake_model_id = "hf-internal-testing/test_unregistered_dynamic"
+            fake_repo = os.path.join(tmp_dir, fake_model_id)
+            os.makedirs(fake_repo)
+
+            tokenizer_src_file = os.path.join(fake_repo, "tokenizer.py")
+            with open(tokenizer_src_file, "w") as wfp:
+                wfp.write(nop_tokenizer_code)
+
+            model_config_src_file = os.path.join(fake_repo, "config.py")
+            with open(model_config_src_file, "w") as wfp:
+                wfp.write(nop_config_code)
+
+            config = {
+                "model_type": "test_unregistered_dynamic",
+                "auto_map": {"AutoConfig": f"{fake_model_id}--config.NopConfig"},
+            }
+
+            config_file = os.path.join(fake_repo, "config.json")
+            with open(config_file, "w") as wfp:
+                json.dump(config, wfp, indent=2)
+
+            tokenizer_config = {
+                "tokenizer_class": "NopTokenizer",
+                "auto_map": {
+                    "AutoTokenizer": [
+                        f"{fake_model_id}--tokenizer.NopTokenizer",
+                        None,
+                    ]
+                },
+            }
+
+            tokenizer_config_file = os.path.join(fake_repo, "tokenizer_config.json")
+            with open(tokenizer_config_file, "w") as wfp:
+                json.dump(tokenizer_config, wfp, indent=2)
+
+            prev_dir = os.getcwd()
+            try:
+                os.chdir(tmp_dir)
+
+                tokenizer = AutoTokenizer.from_pretrained(fake_model_id, local_files_only=True, trust_remote_code=True)
+                self.assertEqual(tokenizer.__class__.__name__, "NopTokenizer")
+                self.assertTrue(tokenizer.special_attribute_present)
+            finally:
+                os.chdir(prev_dir)
