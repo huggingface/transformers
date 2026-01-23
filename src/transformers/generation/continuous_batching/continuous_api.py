@@ -761,19 +761,44 @@ class ContinuousBatchProcessor:
 
     @traced(span_name="logit_processing")
     def _process_logit(self, batch_data: dict, logits: torch.Tensor, logit_processor: LogitsProcessor) -> torch.Tensor:
-        # Pass continuous batching context to logits processor if it supports it.
+        if isinstance(logit_processor, list) and len(logit_processor) == 0:
+            # No processors.
+            return logits
+
+        # Propagate CB context.
         if hasattr(logit_processor, "set_continuous_batching_context"):
             logit_processor.set_continuous_batching_context(batch_data["logits_indices"], batch_data["cu_seq_lens_q"])
-        # Handle shape compatibility: logit processors expect 2D tensors [batch_size, vocab_size]
-        # but continuous batching always produces 3D tensors [batch_size, seq_len, vocab_size]
-        batch_size, seq_len, vocab_size = logits.shape
-        # NOTE: to be an exact match with generate, we should also convert logits2d to float32 here, but it's not needed in practice
-        logits_2d = logits.view(batch_size * seq_len, vocab_size)
-        input_ids_2d = batch_data["input_ids"].view(batch_size * seq_len)
-        # Process with 2D tensors
-        processed_logits_2d = logit_processor(input_ids_2d, logits_2d)
-        # Reshape back to 3D
-        return processed_logits_2d.view(batch_size, seq_len, vocab_size)
+
+        # Packed batch layout.
+        logits_indices = batch_data["logits_indices"]
+        # -1 means prefill.
+        next_token_positions = logits_indices[logits_indices >= 0]
+        if next_token_positions.numel() == 0:
+            # Nothing to process.
+            return logits
+
+        # Decode-only states.
+        states_for_next_token = [state for state in self.requests_in_batch if len(state.remaining_prefill_tokens) == 0]
+        if len(states_for_next_token) != next_token_positions.numel():
+            # Defensive length match.
+            length = min(len(states_for_next_token), next_token_positions.numel())
+            states_for_next_token = states_for_next_token[:length]
+            next_token_positions = next_token_positions[:length]
+
+        for state, position in zip(states_for_next_token, next_token_positions):
+            position = position.item()
+            # Rebuild token history.
+            input_ids = torch.tensor(
+                state.initial_tokens + state.generated_tokens, device=logits.device, dtype=torch.long
+            ).unsqueeze(0)
+            # Slice next-token logits.
+            scores = logits[0, position].unsqueeze(0)
+            # Apply processor.
+            processed_scores = logit_processor(input_ids, scores)
+            # Write back in-place.
+            logits[0, position] = processed_scores[0]
+
+        return logits
 
     @traced(span_name="sampling")
     def _sample(self, probs: torch.Tensor, do_sample: bool) -> None:
@@ -853,6 +878,20 @@ class ContinuousBatchingManager:
             num_kv_padding_intervals=num_kv_padding_intervals,
             compile_config=getattr(generation_config, "compile_config", None),
         )
+        if isinstance(self.logit_processor, list) and len(self.logit_processor) > 0:
+            # Processors need eager.
+            if self.use_cuda_graph:
+                logger.warning(
+                    "Logits processors are enabled; disabling cuda graphs for continuous batching to ensure correct "
+                    "logits processing."
+                )
+                self.use_cuda_graph = False
+            if getattr(self.generation_config, "compile_config", None) is not None:
+                logger.warning(
+                    "Logits processors are enabled; disabling torch.compile for continuous batching to ensure correct "
+                    "logits processing."
+                )
+                self.generation_config.compile_config = None
 
         # We set the number of padding intervals for Q and KV
         self.q_padding_intervals = num_q_padding_intervals if num_q_padding_intervals > 0 else NUM_Q_PADDING_INTERVALS

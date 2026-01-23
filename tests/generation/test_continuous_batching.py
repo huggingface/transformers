@@ -35,6 +35,8 @@ from transformers.generation.continuous_batching.cache import (
     group_layers_by_attn_type,
 )
 from transformers.generation.continuous_batching.continuous_api import ContinuousBatchProcessor, build_attention_mask
+from transformers.generation.continuous_batching.requests import RequestState
+from transformers.generation.logits_process import MinLengthLogitsProcessor, RepetitionPenaltyLogitsProcessor
 from transformers.testing_utils import (
     Expectations,
     require_deterministic_for_xpu,
@@ -136,6 +138,94 @@ class ContinuousBatchingNonGenerationTest(unittest.TestCase):
                     expected_group_type,
                     f"Test failed for: {layer_types_str = }, {sliding_window = }, {group_types = }",
                 )
+
+    def test_logits_processors_apply_to_next_token_logits(self) -> None:
+        vocab_size = 10
+        logits = torch.ones((1, 4, vocab_size), device=torch_device, dtype=torch.float)
+
+        # Req0 next-token @2.
+        logits[0, 2, 1] = -2.0
+        logits[0, 2, 2] = 3.0
+        logits[0, 2, 3] = 4.0
+
+        # Req1 next-token @3.
+        logits[0, 3, 4] = -5.0
+        logits[0, 3, 5] = 6.0
+        logits[0, 3, 6] = 7.0
+
+        # Enable repetition penalty.
+        rep_penalty = RepetitionPenaltyLogitsProcessor(penalty=2.0)
+        logit_processor = LogitsProcessorList([rep_penalty])
+
+        batch_processor = ContinuousBatchProcessor.__new__(ContinuousBatchProcessor)
+        # Two decoding states.
+        batch_processor.requests_in_batch = [
+            RequestState(request_id="req_0", initial_tokens=[1, 2, 3], tokens_to_process=[1, 2, 3]),
+            RequestState(request_id="req_1", initial_tokens=[4, 5], tokens_to_process=[6], generated_tokens=[6]),
+        ]
+
+        # Packed metadata.
+        batch_data = {
+            "logits_indices": torch.tensor([2, 3, -1, -1], device=logits.device, dtype=torch.long),
+            "cu_seq_lens_q": torch.tensor([0, 3, 4], device=logits.device, dtype=torch.long),
+        }
+
+        # Apply processing.
+        processed_logits = batch_processor._process_logit(batch_data, logits, logit_processor)
+
+        # Context propagated.
+        self.assertTrue(torch.equal(rep_penalty.logits_indices, batch_data["logits_indices"]))
+
+        # Req0 token penalties.
+        self.assertAlmostEqual(processed_logits[0, 2, 1].item(), -4.0)
+        self.assertAlmostEqual(processed_logits[0, 2, 2].item(), 1.5)
+        self.assertAlmostEqual(processed_logits[0, 2, 3].item(), 2.0)
+
+        # Req1 token penalties.
+        self.assertAlmostEqual(processed_logits[0, 3, 4].item(), -10.0)
+        self.assertAlmostEqual(processed_logits[0, 3, 5].item(), 3.0)
+        self.assertAlmostEqual(processed_logits[0, 3, 6].item(), 3.5)
+
+    def test_min_length_logits_processor_applies_in_continuous_batching(self) -> None:
+        vocab_size = 10
+        eos_token_id = 9
+        logits = torch.zeros((1, 4, vocab_size), device=torch_device, dtype=torch.float)
+
+        # Req0 next-token @2.
+        logits[0, 2, eos_token_id] = 123.0
+        logits[0, 2, 1] = 1.0
+
+        # Req1 next-token @3.
+        logits[0, 3, eos_token_id] = 456.0
+        logits[0, 3, 2] = 2.0
+
+        # Enable min-length.
+        logit_processor = LogitsProcessorList([MinLengthLogitsProcessor(min_length=5, eos_token_id=eos_token_id)])
+
+        batch_processor = ContinuousBatchProcessor.__new__(ContinuousBatchProcessor)
+        # Two decoding states.
+        batch_processor.requests_in_batch = [
+            RequestState(request_id="req_0", initial_tokens=[1, 2, 3], tokens_to_process=[0]),
+            RequestState(request_id="req_1", initial_tokens=[4, 5, 6, 7, 8], tokens_to_process=[0]),
+        ]
+
+        # Packed metadata.
+        batch_data = {
+            "logits_indices": torch.tensor([2, 3, -1, -1], device=logits.device, dtype=torch.long),
+            "cu_seq_lens_q": torch.tensor([0, 1, 2], device=logits.device, dtype=torch.long),
+        }
+
+        # Apply processing.
+        processed_logits = batch_processor._process_logit(batch_data, logits, logit_processor)
+
+        # Req0 blocks EOS.
+        self.assertTrue(torch.isinf(processed_logits[0, 2, eos_token_id]).item())
+        self.assertLess(processed_logits[0, 2, eos_token_id].item(), 0.0)
+        self.assertAlmostEqual(processed_logits[0, 2, 1].item(), 1.0)
+
+        # Req1 keeps EOS.
+        self.assertAlmostEqual(processed_logits[0, 3, eos_token_id].item(), 456.0)
+        self.assertAlmostEqual(processed_logits[0, 3, 2].item(), 2.0)
 
     @parameterized.expand(
         [
@@ -442,7 +532,6 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
 
         model = AutoModelForCausalLM.from_pretrained(model_id)
         manager = model.init_continuous_batching()
-        manager.logit_processor = LogitsProcessorList()
         manager.start()
 
         tokenizer = AutoTokenizer.from_pretrained(model_id)
@@ -498,8 +587,6 @@ class ContinuousBatchingGenerationTest(unittest.TestCase):
 
         generation_config = GenerationConfig(do_sample=False, block_size=32)
         with model.continuous_batching_context_manager(generation_config=generation_config) as manager:
-            manager.logit_processor = LogitsProcessorList()
-
             # Create a request with at least 32 tokens but less than 64 so prefill only generates one complete block
             messages = [{"content": input_msg, "role": "user"}]
             inputs = tokenizer.apply_chat_template(

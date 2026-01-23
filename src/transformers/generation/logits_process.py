@@ -93,6 +93,12 @@ class LogitsProcessorList(list):
 
         return scores
 
+    def set_continuous_batching_context(self, logits_indices: torch.Tensor, cu_seq_lens_q: torch.Tensor) -> None:
+        # Forward CB metadata.
+        for processor in self:
+            if hasattr(processor, "set_continuous_batching_context"):
+                processor.set_continuous_batching_context(logits_indices, cu_seq_lens_q)
+
 
 class MinLengthLogitsProcessor(LogitsProcessor):
     r"""
