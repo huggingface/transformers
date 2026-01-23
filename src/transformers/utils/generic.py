@@ -33,6 +33,9 @@ from ..utils import logging
 from .import_utils import is_mlx_available, is_torch_available, is_torch_fx_proxy, requires
 
 
+# See https://docs.python.org/3/library/typing.html#typing.ParamSpec for documentation on how ParamSpec
+# should be used alongside TypeVar and ParamSpecArgs (P.args) and ParamSpecKwargs (P.kwargs) for type
+# hinting decorators.
 P = ParamSpec("P")
 T = TypeVar("T")
 
