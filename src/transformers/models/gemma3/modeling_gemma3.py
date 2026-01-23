@@ -33,7 +33,12 @@ from ...generation import GenerationMixin
 from ...integrations import use_kernel_func_from_hub, use_kernelized_func
 from ...masking_utils import create_causal_mask, create_masks_for_generate, create_sliding_window_causal_mask
 from ...modeling_layers import GenericForSequenceClassification, GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast, SequenceClassifierOutputWithPast
+from ...modeling_outputs import (
+    BaseModelOutputWithPast,
+    BaseModelOutputWithPooling,
+    CausalLMOutputWithPast,
+    SequenceClassifierOutputWithPast,
+)
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -834,19 +839,16 @@ class Gemma3Model(Gemma3PreTrainedModel):
     def set_input_embeddings(self, value):
         self.language_model.set_input_embeddings(value)
 
-    def get_image_features(self, pixel_values: torch.Tensor) -> torch.Tensor:
-        """
-        Projects the last hidden state from the vision model into language model space.
+    @can_return_tuple
+    @auto_docstring(custom_intro="Projects the last hidden state from the vision model into language model space.")
+    def get_image_features(
+        self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | BaseModelOutputWithPooling:
+        vision_outputs = self.vision_tower(pixel_values=pixel_values, return_dict=True, **kwargs)
+        last_hidden_state = vision_outputs.last_hidden_state
+        vision_outputs.pooler_output = self.multi_modal_projector(last_hidden_state)
 
-        Args:
-            pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`)
-               The tensors corresponding to the input images.
-        Returns:
-            image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
-        """
-        vision_outputs = self.vision_tower(pixel_values=pixel_values).last_hidden_state
-        image_features = self.multi_modal_projector(vision_outputs)
-        return image_features
+        return vision_outputs
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
@@ -937,7 +939,7 @@ class Gemma3Model(Gemma3PreTrainedModel):
 
         # Merge text and images
         if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values)
+            image_features = self.get_image_features(pixel_values, return_dict=True).pooler_output
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
@@ -1007,8 +1009,9 @@ class Gemma3ForConditionalGeneration(Gemma3PreTrainedModel, GenerationMixin):
     def set_input_embeddings(self, value):
         self.model.set_input_embeddings(value)
 
-    def get_image_features(self, pixel_values):
-        return self.model.get_image_features(pixel_values)
+    @auto_docstring
+    def get_image_features(self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]):
+        return self.model.get_image_features(pixel_values, **kwargs)
 
     @can_return_tuple
     @auto_docstring

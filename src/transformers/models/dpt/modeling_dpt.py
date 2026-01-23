@@ -990,11 +990,12 @@ class DPTForDepthEstimation(DPTPreTrainedModel):
         if labels is not None:
             raise NotImplementedError("Training is not implemented yet")
 
+        kwargs["output_hidden_states"] = True
         if self.backbone is not None:
-            outputs = self.backbone.forward_with_filtered_kwargs(pixel_values, output_hidden_states=True, **kwargs)
+            outputs = self.backbone.forward_with_filtered_kwargs(pixel_values, **kwargs)
             hidden_states = outputs.feature_maps
         else:
-            outputs = self.dpt(pixel_values, output_hidden_states=True, **kwargs)
+            outputs = self.dpt(pixel_values, **kwargs)
             hidden_states = outputs.hidden_states
             # only keep certain features based on config.backbone_out_indices
             # note that the hidden_states also include the initial embeddings
@@ -1123,9 +1124,8 @@ class DPTForSemanticSegmentation(DPTPreTrainedModel):
         if labels is not None and self.config.num_labels == 1:
             raise ValueError("The number of labels should be greater than one")
 
-        outputs: BaseModelOutputWithPoolingAndIntermediateActivations = self.dpt(
-            pixel_values, output_hidden_states=True, **kwargs
-        )
+        kwargs["output_hidden_states"] = True
+        outputs: BaseModelOutputWithPoolingAndIntermediateActivations = self.dpt(pixel_values, **kwargs)
         hidden_states = outputs.hidden_states
 
         # only keep certain features based on config.backbone_out_indices

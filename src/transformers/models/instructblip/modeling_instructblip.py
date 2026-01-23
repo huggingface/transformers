@@ -31,6 +31,8 @@ from ...modeling_outputs import (
     BaseModelOutputWithPastAndCrossAttentions,
     BaseModelOutputWithPooling,
     BaseModelOutputWithPoolingAndCrossAttentions,
+    CausalLMOutputWithPast,
+    Seq2SeqLMOutput,
 )
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -42,6 +44,20 @@ from .configuration_instructblip import InstructBlipConfig, InstructBlipQFormerC
 
 
 logger = logging.get_logger(__name__)
+
+
+@dataclass
+@auto_docstring
+class BaseModelOutputWithVisionQformerOutputs(BaseModelOutputWithPooling):
+    r"""
+    vision_outputs (`BaseModelOutputWithPooling`):
+        Outputs of the vision encoder.
+    qformer_outputs (`BaseModelOutputWithPoolingAndCrossAttentions`):
+        Outputs of the Q-Former (Querying Transformer).
+    """
+
+    vision_outputs: BaseModelOutputWithPooling | None = None
+    qformer_outputs: BaseModelOutputWithPoolingAndCrossAttentions | None = None
 
 
 @dataclass
@@ -67,9 +83,9 @@ class InstructBlipForConditionalGenerationModelOutput(ModelOutput):
 
     loss: tuple[torch.FloatTensor] | None = None
     logits: tuple[torch.FloatTensor] | None = None
-    vision_outputs: torch.FloatTensor | None = None
-    qformer_outputs: tuple[torch.FloatTensor] | None = None
-    language_model_outputs: tuple[torch.FloatTensor] | None = None
+    vision_outputs: BaseModelOutputWithPooling | None = None
+    qformer_outputs: BaseModelOutputWithPoolingAndCrossAttentions | None = None
+    language_model_outputs: CausalLMOutputWithPast | Seq2SeqLMOutput | None = None
 
     def to_tuple(self) -> tuple[Any]:
         return tuple(
@@ -371,7 +387,6 @@ class InstructBlipEncoder(nn.Module):
         return BaseModelOutput(last_hidden_state=hidden_states)
 
 
-# Copied from transformers.models.blip.modeling_blip.BlipVisionModel with Blip->InstructBlip, BLIP->INSTRUCTBLIP
 class InstructBlipVisionModel(InstructBlipPreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image",)
@@ -1173,28 +1188,44 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
         if hasattr(self.language_model, "_hf_hook"):
             self.language_model._hf_hook.io_same_device = True  # For `generate` compatibility
 
+    @can_return_tuple
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         qformer_input_ids: torch.LongTensor,
         qformer_attention_mask: torch.LongTensor | None = None,
         interpolate_pos_encoding: bool | None = False,
-        return_dict: bool | None = False,
-    ):
-        """
-        Encodes images into continuous embeddings that can be forwarded to the language model.
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithVisionQformerOutputs:
+        r"""
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input images.
+        qformer_input_ids (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Indices of input sequence tokens in the vocabulary of the Q-Former. Input tokens can optionally be provided
+            to serve as text prompt, which the Q-Former model will encode.
 
-        Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
-                The tensors corresponding to the input images.
+            Indices can be obtained using [`InstructBlipProcessor`]. See [`InstructBlipProcessor.__call__`] for
+            details.
+
+            [What are input IDs?](../glossary#input-ids)
+        qformer_attention_mask (`torch.Tensor` of shape `(batch_size, sequence_length)`, *optional*):
+            Mask to avoid performing attention on padding token indices. Mask values selected in `[0, 1]`:
+
+            - 1 for tokens that are **not masked**,
+            - 0 for tokens that are **masked**.
+
+            [What are attention masks?](../glossary#attention-mask)
         """
         # step 1: forward the images through the vision encoder,
         # to get image embeddings of shape (batch_size, seq_len, hidden_size)
-        vision_outputs = self.vision_model(
+        vision_outputs: BaseModelOutputWithPooling = self.vision_model(
             pixel_values=pixel_values,
             interpolate_pos_encoding=interpolate_pos_encoding,
             return_dict=True,
+            **kwargs,
         )
+        vision_outputs = BaseModelOutputWithVisionQformerOutputs(**vision_outputs, vision_outputs=vision_outputs)
         image_embeds = vision_outputs[0]
 
         # step 2: forward the query tokens through the QFormer, using the image embeddings for cross-attention
@@ -1206,21 +1237,23 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
         if qformer_attention_mask is None:
             qformer_attention_mask = torch.ones_like(qformer_input_ids)
         qformer_attention_mask = torch.cat([query_attention_mask, qformer_attention_mask], dim=1)
-        query_outputs = self.qformer(
+        qformer_outputs = self.qformer(
             input_ids=qformer_input_ids,
             attention_mask=qformer_attention_mask,
             query_embeds=query_tokens,
             encoder_hidden_states=image_embeds,
             encoder_attention_mask=image_attention_mask,
             return_dict=True,
+            **kwargs,
         )
-        query_output = query_outputs[0][:, : query_tokens.size(1), :]
+        vision_outputs.qformer_outputs = qformer_outputs
+        query_output = qformer_outputs[0][:, : query_tokens.size(1), :]
 
         # step 3: use the language model, conditioned on the query outputs and the prompt
-        language_model_inputs = self.language_projection(query_output)
-        if return_dict:
-            return language_model_inputs, vision_outputs, query_outputs
-        return language_model_inputs
+        image_features = self.language_projection(query_output)
+        vision_outputs.pooler_output = image_features
+
+        return vision_outputs
 
     def get_placeholder_mask(self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor):
         """
@@ -1314,13 +1347,16 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
         The unusual aspect of this image is that a man is ironing clothes on the back of a yellow SUV, which is parked in the middle of a busy city street. This is an unconventional approach to ironing clothes, as it requires the man to balance himself and his ironing equipment on top of the vehicle while navigating through traffic. Additionally, the presence of taxis and other vehicles in the scene further emphasizes the unusual nature of this situation.
         ```"""
 
-        language_model_inputs, vision_outputs, query_outputs = self.get_image_features(
+        image_features: BaseModelOutputWithVisionQformerOutputs = self.get_image_features(
             pixel_values,
             qformer_input_ids=qformer_input_ids,
             qformer_attention_mask=qformer_attention_mask,
             interpolate_pos_encoding=interpolate_pos_encoding,
             return_dict=True,
         )
+        language_model_inputs = image_features.pooler_output
+        qformer_outputs = image_features.qformer_outputs
+        vision_outputs = image_features.vision_outputs
 
         if inputs_embeds is None:
             inputs_embeds = self.get_input_embeddings()(input_ids)
@@ -1362,7 +1398,7 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
             loss=loss,
             logits=logits,
             vision_outputs=vision_outputs,
-            qformer_outputs=query_outputs,
+            qformer_outputs=qformer_outputs,
             language_model_outputs=outputs,
         )
 
@@ -1405,13 +1441,14 @@ class InstructBlipForConditionalGeneration(InstructBlipPreTrainedModel, Generati
             self._preprocess_accelerate()
 
         batch_size = pixel_values.shape[0]
-        language_model_inputs, vision_outputs, query_outputs = self.get_image_features(
+        image_features: BaseModelOutputWithVisionQformerOutputs = self.get_image_features(
             pixel_values,
             qformer_input_ids=qformer_input_ids,
             qformer_attention_mask=qformer_attention_mask,
             interpolate_pos_encoding=interpolate_pos_encoding,
             return_dict=True,
         )
+        language_model_inputs = image_features.pooler_output
 
         if inputs_embeds is None:
             if input_ids is None:

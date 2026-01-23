@@ -24,7 +24,11 @@ from ... import initialization as init
 from ...activations import ACT2FN
 from ...generation import GenerationMixin
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutput, BaseModelOutputWithPooling
+from ...modeling_outputs import (
+    BaseModelOutput,
+    BaseModelOutputWithPooling,
+    BaseModelOutputWithPoolingAndCrossAttentions,
+)
 from ...modeling_utils import PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import ModelOutput, TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_int
@@ -558,18 +562,16 @@ class BlipModel(BlipPreTrainedModel):
     def set_input_embeddings(self, value):
         self.text_model.set_input_embeddings(value)
 
+    @can_return_tuple
     @auto_docstring
     def get_text_features(
         self,
         input_ids: torch.Tensor | None = None,
         attention_mask: torch.Tensor | None = None,
         position_ids: torch.Tensor | None = None,
-    ) -> torch.FloatTensor:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        Returns:
-            text_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The text embeddings obtained by
-            applying the projection layer to the pooled output of [`BlipTextModel`].
-
         Examples:
 
         ```python
@@ -581,28 +583,27 @@ class BlipModel(BlipPreTrainedModel):
         >>> inputs = processor(text=["a photo of a cat", "a photo of a dog"], padding=True, return_tensors="pt")
         >>> text_features = model.get_text_features(**inputs)
         ```"""
-        text_outputs = self.text_model(
+        text_outputs: BaseModelOutputWithPoolingAndCrossAttentions = self.text_model(
             input_ids=input_ids,
             attention_mask=attention_mask,
             position_ids=position_ids,
+            return_dict=True,
+            **kwargs,
         )
+        pooled_output = text_outputs.pooler_output
+        text_outputs.pooler_output = self.text_projection(pooled_output)
 
-        pooled_output = text_outputs[1]
-        text_features = self.text_projection(pooled_output)
+        return text_outputs
 
-        return text_features
-
+    @can_return_tuple
     @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor | None = None,
         interpolate_pos_encoding: bool = False,
-    ) -> torch.FloatTensor:
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
         r"""
-        Returns:
-            image_features (`torch.FloatTensor` of shape `(batch_size, output_dim`): The image embeddings obtained by
-            applying the projection layer to the pooled output of [`BlipVisionModel`].
-
         Examples:
 
         ```python
@@ -621,15 +622,16 @@ class BlipModel(BlipPreTrainedModel):
         >>> image_features = model.get_image_features(**inputs)
         ```"""
 
-        vision_outputs = self.vision_model(
+        vision_outputs: BaseModelOutputWithPooling = self.vision_model(
             pixel_values=pixel_values,
             interpolate_pos_encoding=interpolate_pos_encoding,
+            return_dict=True,
+            **kwargs,
         )
+        pooled_output = vision_outputs.pooler_output
+        vision_outputs.pooler_output = self.visual_projection(pooled_output)
 
-        pooled_output = vision_outputs[1]  # pooled_output
-        image_features = self.visual_projection(pooled_output)
-
-        return image_features
+        return vision_outputs
 
     @auto_docstring
     def get_multimodal_features(

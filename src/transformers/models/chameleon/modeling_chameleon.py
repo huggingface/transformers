@@ -14,6 +14,7 @@
 """PyTorch Chameleon model."""
 
 from collections.abc import Callable
+from dataclasses import dataclass
 from functools import cached_property
 from typing import Optional
 
@@ -27,7 +28,7 @@ from ...generation import GenerationMixin
 from ...masking_utils import create_causal_mask
 from ...modeling_flash_attention_utils import FlashAttentionKwargs
 from ...modeling_layers import GradientCheckpointingLayer
-from ...modeling_outputs import BaseModelOutputWithPast, CausalLMOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling, CausalLMOutputWithPast
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
@@ -38,11 +39,28 @@ from ...utils import (
     logging,
     torch_compilable_check,
 )
-from ...utils.generic import maybe_autocast
+from ...utils.generic import check_model_inputs, maybe_autocast
 from .configuration_chameleon import ChameleonConfig, ChameleonVQVAEConfig
 
 
 logger = logging.get_logger(__name__)
+
+
+@dataclass
+@auto_docstring
+class ChameleonVQVAEModelOutput(BaseModelOutputWithPooling):
+    r"""
+    quantized_last_hidden_state (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+        Quantized last hidden state from the VQ-VAE model.
+    image_tokens (`torch.FloatTensor` of shape `(batch_size, config.vocab_size`):
+        Indices of the image tokens predicted by the VQ-VAE model.
+    embedding_loss (`torch.FloatTensor`):
+        The embedding loss computed during quantization.
+    """
+
+    quantized_last_hidden_state: torch.FloatTensor | None = None
+    image_tokens: torch.FloatTensor | None = None
+    embedding_loss: torch.FloatTensor | None = None
 
 
 # Copied from transformers.models.llama.modeling_llama.LlamaRMSNorm with Llama->Chameleon
@@ -781,6 +799,10 @@ class ChameleonPreTrainedModel(PreTrainedModel):
     _can_compile_fullgraph = True
     _supports_flex_attn = True
     _supports_attention_backend = True
+    _can_record_outputs = {
+        "hidden_states": [ChameleonDecoderLayer, ChameleonSwinDecoderLayer],
+        "attentions": ChameleonAttention,
+    }
 
 
 @auto_docstring(
@@ -798,6 +820,10 @@ class ChameleonVQVAE(ChameleonPreTrainedModel):
         "ChameleonVQVAEEncoderAttnBlock",
         "ChameleonVQVAEEncoderResnetBlock",
     ]
+    _can_record_outputs = {
+        "hidden_states": ChameleonVQVAEEncoderResnetBlock,
+        "attentions": ChameleonVQVAEEncoderAttnBlock,
+    }
 
     def __init__(self, config: ChameleonVQVAEConfig):
         super().__init__(config)
@@ -809,11 +835,19 @@ class ChameleonVQVAE(ChameleonPreTrainedModel):
         self.eval()  # Chameleon's VQ model is frozen
         self.post_init()
 
-    def encode(self, pixel_values: torch.LongTensor):
+    @check_model_inputs
+    def encode(
+        self, pixel_values: torch.LongTensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> ChameleonVQVAEModelOutput:
         hidden_states = self.encoder(pixel_values)
-        hidden_states = self.quant_conv(hidden_states)
-        quant, emb_loss, indices = self.quantize(hidden_states)
-        return quant, emb_loss, indices
+        conv_hidden_states = self.quant_conv(hidden_states)
+        quantized_last_hidden_state, emb_loss, indices = self.quantize(conv_hidden_states)
+        return ChameleonVQVAEModelOutput(
+            last_hidden_state=hidden_states,
+            quantized_last_hidden_state=quantized_last_hidden_state,
+            image_tokens=indices,
+            embedding_loss=emb_loss,
+        )
 
 
 @auto_docstring
@@ -848,23 +882,25 @@ class ChameleonModel(ChameleonPreTrainedModel):
                 The tensors corresponding to the input images.
         """
         batch_size = pixel_values.shape[0]
-        _, _, image_toks = self.vqmodel.encode(pixel_values)
-        bpe_toks = self.vocabulary_mapping.convert_img2bpe(image_toks)
+        vqmodel_outputs: ChameleonVQVAEModelOutput = self.vqmodel.encode(pixel_values, return_dict=True)
+        bpe_toks = self.vocabulary_mapping.convert_img2bpe(vqmodel_outputs.image_tokens)
         bpe_toks = bpe_toks.view(batch_size, -1)
         return bpe_toks
 
-    def get_image_features(self, pixel_values: torch.FloatTensor):
+    @can_return_tuple
+    @auto_docstring(
+        custom_intro="Tokenizes images into discrete tokens with VQGAN module and embeds them with text embeddings layer."
+    )
+    def get_image_features(
+        self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | BaseModelOutputWithPooling:
+        r"""
+        pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)`):
+            The tensors corresponding to the input images.
         """
-        Tokenizes images into discrete tokens with VQGAN module and embeds
-        them with text embeddings layer
-
-        Args:
-            pixel_values (`torch.FloatTensor` of shape `(batch_size, num_channels, image_size, image_size)):
-                The tensors corresponding to the input images.
-        """
-        image_tokens = self.get_image_tokens(pixel_values)
-        vision_embeddings = self.get_input_embeddings()(image_tokens)
-        return vision_embeddings
+        vqmodel_outputs: ChameleonVQVAEModelOutput = self.vqmodel.encode(pixel_values, return_dict=True, **kwargs)
+        vqmodel_outputs.pooler_output = self.get_input_embeddings()(vqmodel_outputs.image_tokens)
+        return vqmodel_outputs
 
     def get_placeholder_mask(
         self, input_ids: torch.LongTensor, inputs_embeds: torch.FloatTensor, image_features: torch.FloatTensor
@@ -926,11 +962,11 @@ class ChameleonModel(ChameleonPreTrainedModel):
             inputs_embeds = self.embed_tokens(input_ids)
 
         if pixel_values is not None:
-            image_embeds = self.get_image_features(pixel_values)
+            image_features = self.get_image_features(pixel_values, return_dict=True).pooler_output
             special_image_mask = self.get_placeholder_mask(
-                input_ids, inputs_embeds=inputs_embeds, image_features=image_embeds
+                input_ids, inputs_embeds=inputs_embeds, image_features=image_features
             )
-            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_embeds)
+            inputs_embeds = inputs_embeds.masked_scatter(special_image_mask, image_features)
 
         # torch.jit.trace() doesn't support cache objects in the output
         if use_cache and past_key_values is None and not torch.jit.is_tracing():
@@ -1022,8 +1058,11 @@ class ChameleonForConditionalGeneration(ChameleonPreTrainedModel, GenerationMixi
     def get_image_tokens(self, pixel_values):
         return self.model.get_image_tokens(pixel_values)
 
-    def get_image_features(self, pixel_values):
-        return self.model.get_image_features(pixel_values)
+    @auto_docstring
+    def get_image_features(
+        self, pixel_values: torch.FloatTensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | BaseModelOutputWithPooling:
+        return self.model.get_image_features(pixel_values, **kwargs)
 
     @can_return_tuple
     @auto_docstring
