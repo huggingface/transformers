@@ -261,17 +261,18 @@ class ConditionalDetrConvEncoder(nn.Module):
 
         self.config = config
 
-        # We used to load with timm library directly instead of the AutoBackbone API
-        # so we need to unwrap the `backbone._backbone` module to load weights without mismatch
         backbone = load_backbone(config)
-        if hasattr(backbone, "_backbone"):
-            backbone = backbone._backbone
 
         # replace batch norm by frozen batch norm
         with torch.no_grad():
             replace_batch_norm(backbone)
+        self.intermediate_channel_sizes = backbone.channels
+
+        # We used to load with timm library directly instead of the AutoBackbone API
+        # so we need to unwrap the `backbone._backbone` module to load weights without mismatch
+        if hasattr(backbone, "_backbone"):
+            backbone = backbone._backbone
         self.model = backbone
-        self.intermediate_channel_sizes = self.model.channels
 
         backbone_model_type = None
         if config.backbone is not None:
@@ -292,7 +293,9 @@ class ConditionalDetrConvEncoder(nn.Module):
 
     def forward(self, pixel_values: torch.Tensor, pixel_mask: torch.Tensor):
         # send pixel_values through the model to get list of feature maps
-        features = self.model(pixel_values, return_dict=True).feature_maps
+        features = self.model(pixel_values)
+        if isinstance(features, dict):
+            features = features.feature_maps
 
         out = []
         for feature_map in features:

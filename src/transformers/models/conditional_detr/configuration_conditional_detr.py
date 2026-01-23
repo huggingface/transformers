@@ -185,6 +185,15 @@ class ConditionalDetrConfig(PreTrainedConfig):
             if dilation:
                 backbone_config.output_stride = backbone_kwargs.get("output_stride", 16)
             backbone = None
+        elif backbone_kwargs and backbone is not None:
+            try:
+                config_dict, _ = PreTrainedConfig.get_config_dict(backbone)
+                config_class = CONFIG_MAPPING[config_dict["model_type"]]
+                config_dict.update(backbone_kwargs)
+                backbone_config = config_class(**config_dict)
+            except Exception:
+                backbone_config = CONFIG_MAPPING["timm_backbone"](backbone=backbone, **backbone_kwargs)
+            backbone = None
         else:
             if backbone_config is None:
                 logger.info("`backbone_config` is `None`. Initializing the config with the default `ResNet` backbone.")

@@ -181,7 +181,13 @@ class Mask2FormerConfig(PreTrainedConfig):
             backbone_config = config_class.from_dict(backbone_config)
         elif kwargs.get("backbone_kwargs") and backbone is not None:
             backbone_kwargs = kwargs.pop("backbone_kwargs")
-            backbone_config = CONFIG_MAPPING["timm_backbone"](backbone=backbone, **backbone_kwargs)
+            try:
+                config_dict, _ = PreTrainedConfig.get_config_dict(backbone)
+                config_class = CONFIG_MAPPING[config_dict["model_type"]]
+                config_dict.update(backbone_kwargs)
+                backbone_config = config_class(**config_dict)
+            except Exception:
+                backbone_config = CONFIG_MAPPING["timm_backbone"](backbone=backbone, **backbone_kwargs)
             backbone = None
         elif backbone is not None and backbone_config is not None:
             raise ValueError("You can't specify both `backbone` and `backbone_config`.")
