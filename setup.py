@@ -159,7 +159,10 @@ _deps = [
 ]
 
 if PYTHON_MINOR_VERSION < 14:
-    _deps += ["sudachipy>=0.6.6", "sudachidict_core>=20220729", "ray[tune]>=2.7.0", "kenlm"]
+    _deps += ["sudachipy>=0.6.6", "sudachidict_core>=20220729", "ray[tune]>=2.7.0"]
+
+if PYTHON_MINOR_VERSION < 13:
+    _deps += ["kenlm"]
 
 # this is a lookup table with items like:
 #
@@ -258,7 +261,7 @@ extras["audio"] = deps_list(
     "pyctcdecode",
     "phonemizer",
 )
-if PYTHON_MINOR_VERSION < 14:
+if PYTHON_MINOR_VERSION < 13:
     extras["audio"] += deps_list("kenlm")
 
 # `pip install ".[speech]"` is deprecated and `pip install ".[torch-speech]"` should be used instead
