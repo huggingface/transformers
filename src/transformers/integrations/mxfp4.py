@@ -281,20 +281,16 @@ def convert_moe_packed_tensors(
     """
     # Since the intermediate ops requite A LOT of memory, in very constrained device_map="auto" settings
     # it may OOM, hence this wrapper and move back to cpu if needed
-    # This is the only accurate way to know if we will have enough memory later, as torch statistics are not
-    # accurate enough with fragmentation and in-place operation on non-contiguous tensors (may sometimes require
-    # more temporary copies)
-    if blocks.device.type in ("cuda", "xpu"):
-        try:
-            return _convert_moe_packed_tensors(blocks, scales, dtype=dtype, rows_per_chunk=rows_per_chunk)
-        # In the case of OOM due to very tight device_map, we convert and return on cpu - it will then be put back on correct
-        # devide with the accelerate dispatch (doing it right away may still lead to OOM, but more memory is available later)
-        except torch.OutOfMemoryError:
-            blocks = blocks.to("cpu")
-            scales = scales.to("cpu")
-            return _convert_moe_packed_tensors(blocks, scales, dtype=dtype, rows_per_chunk=rows_per_chunk)
-
-    return _convert_moe_packed_tensors(blocks, scales, dtype=dtype, rows_per_chunk=rows_per_chunk)
+    # torch statistics are not accurate enough to estimate if we will have enough memory due to fragmentation and
+    # in-place operation on non-contiguous tensors (may sometimes require more temporary copies)
+    try:
+        return _convert_moe_packed_tensors(blocks, scales, dtype=dtype, rows_per_chunk=rows_per_chunk)
+    # In the case of OOM due to very tight device_map, we convert and return on cpu - it will then be put back on correct
+    # devide with the accelerate dispatch (doing it right away may still lead to OOM, but more memory is available later)
+    except torch.OutOfMemoryError:
+        blocks = blocks.to("cpu")
+        scales = scales.to("cpu")
+        return _convert_moe_packed_tensors(blocks, scales, dtype=dtype, rows_per_chunk=rows_per_chunk)
 
 
 class Mxfp4GptOssExperts(nn.Module):
