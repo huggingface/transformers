@@ -59,13 +59,13 @@ audio_values = model(**inputs).audio_values
 
 ```
 
-## XcodecConfig
+## HiggsAudioV2TokenizerConfig
 
-[[autodoc]] XcodecConfig
+[[autodoc]] HiggsAudioV2TokenizerConfig
 
-## XcodecModel
+## HiggsAudioV2TokenizerModel
 
-[[autodoc]] XcodecModel
+[[autodoc]] HiggsAudioV2TokenizerModel
     - decode
     - encode
     - forward

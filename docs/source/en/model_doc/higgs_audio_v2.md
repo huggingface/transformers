@@ -540,23 +540,23 @@ outputs.loss.backward()
 This model was contributed by [Shuai Zheng](https://huggingface.co/szhengac) and [Eustache Le Bihan](https://huggingface.co/eustlb). The original code can be found [here](https://github.com/boson-ai/higgs-audio).
 
 
-## HiggsAudioConfig
+## HiggsAudioV2Config
 
-[[autodoc]] HiggsAudioConfig
+[[autodoc]] HiggsAudioV2Config
 
-## HiggsAudioProcessor
+## HiggsAudioV2Processor
 
-[[autodoc]] HiggsAudioProcessor
+[[autodoc]] HiggsAudioV2Processor
     - __call__
     - decode
 
-## HiggsAudioModel
+## HiggsAudioV2Model
 
-[[autodoc]] HiggsAudioModel
+[[autodoc]] HiggsAudioV2Model
     - forward
 
-## HiggsAudioForConditionalGeneration
+## HiggsAudioV2ForConditionalGeneration
 
-[[autodoc]] HiggsAudioForConditionalGeneration
+[[autodoc]] HiggsAudioV2ForConditionalGeneration
     - forward
     - generate
