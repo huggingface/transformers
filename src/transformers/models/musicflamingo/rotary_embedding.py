@@ -16,9 +16,6 @@
 from math import pi
 
 import torch
-from beartype import beartype
-from beartype.typing import Optional
-from einops import rearrange, repeat
 from torch import Tensor, broadcast_tensors, einsum, nn
 from torch.amp import autocast
 from torch.nn import Module
@@ -41,10 +38,10 @@ def broadcat(tensors, dim=-1):
 
 # rotary embedding helper functions
 def rotate_half(x):
-    x = rearrange(x, "... (d r) -> ... d r", r=2)
+    x = x.reshape(*x.shape[:-1], -1, 2)
     x1, x2 = x.unbind(dim=-1)
     x = torch.stack((-x2, x1), dim=-1)
-    return rearrange(x, "... d r -> ... (d r)")
+    return x.flatten(-2)
 
 
 @autocast("cuda", enabled=False)
@@ -75,19 +72,18 @@ def apply_rotary_emb(freqs, t, start_index=0, scale=1.0, seq_dim=-2):
 def apply_learned_rotations(rotations, t, start_index=0, freq_ranges=None):
     if exists(freq_ranges):
         rotations = einsum("..., f -> ... f", rotations, freq_ranges)
-        rotations = rearrange(rotations, "... r f -> ... (r f)")
+        rotations = rotations.flatten(-2)
 
-    rotations = repeat(rotations, "... n -> ... (n r)", r=2)
+    rotations = torch.repeat_interleave(rotations, 2, dim=-1)
     return apply_rotary_emb(rotations, t, start_index=start_index)
 
 
 # classes
 class RotaryEmbedding(Module):
-    @beartype
     def __init__(
         self,
         dim,
-        custom_freqs: Optional[Tensor] = None,
+        custom_freqs: Tensor | None = None,
         freqs_for="lang",
         theta=50000,
         max_freq=10,
@@ -193,7 +189,7 @@ class RotaryEmbedding(Module):
         )
 
         if seq_dim == -3:
-            freqs = rearrange(freqs, "n d -> n 1 d")
+            freqs = freqs.unsqueeze(1)
 
         return apply_rotary_emb(freqs, t, seq_dim=seq_dim)
 
@@ -223,8 +219,8 @@ class RotaryEmbedding(Module):
         scale = self.get_scale(seq, seq_len=seq_len).to(dtype)
 
         if seq_dim == -3:
-            freqs = rearrange(freqs, "n d -> n 1 d")
-            scale = rearrange(scale, "n d -> n 1 d")
+            freqs = freqs.unsqueeze(1)
+            scale = scale.unsqueeze(1)
 
         rotated_q = apply_rotary_emb(freqs, q, scale=scale, seq_dim=seq_dim)
         rotated_k = apply_rotary_emb(freqs, k, scale=scale**-1, seq_dim=seq_dim)
@@ -234,8 +230,7 @@ class RotaryEmbedding(Module):
 
         return rotated_q, rotated_k
 
-    @beartype
-    def get_scale(self, t: Tensor, seq_len: Optional[int] = None, offset=0):
+    def get_scale(self, t: Tensor, seq_len: int | None = None, offset=0):
         assert self.use_xpos
 
         should_cache = self.cache_if_possible and exists(seq_len)
@@ -246,7 +241,7 @@ class RotaryEmbedding(Module):
         scale = 1.0
         if self.use_xpos:
             power = (t - len(t) // 2) / self.scale_base
-            scale = self.scale ** rearrange(power, "n -> n 1")
+            scale = self.scale ** power.unsqueeze(-1)
             scale = torch.cat((scale, scale), dim=-1)
 
         if should_cache:
@@ -291,7 +286,7 @@ class RotaryEmbedding(Module):
             t = t / self.max_time * (2 * pi)
 
         freqs = einsum("..., f -> ... f", t.type(freqs.dtype), freqs)
-        freqs = repeat(freqs, "... n -> ... (n r)", r=2)
+        freqs = torch.repeat_interleave(freqs, 2, dim=-1)
 
         if should_cache:
             self.tmp_store("cached_freqs", freqs.detach())
