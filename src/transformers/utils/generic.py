@@ -25,12 +25,17 @@ from contextlib import AbstractContextManager, ExitStack, nullcontext
 from dataclasses import dataclass, fields, is_dataclass
 from enum import Enum
 from functools import partial, wraps
-from typing import Any, Optional, TypedDict
+from typing import Any, Optional, TypedDict, TypeVar
 
 import numpy as np
+from typing_extensions import ParamSpec
 
 from ..utils import logging
 from .import_utils import is_mlx_available, is_torch_available, is_torch_fx_proxy, requires
+
+
+P = ParamSpec("P")
+T = TypeVar("T")
 
 
 _CAN_RECORD_REGISTRY = {}
@@ -817,7 +822,7 @@ def del_attribute_from_modules(module: "torch.nn.Module", key: str):
         del_attribute_from_modules(submodule, key)
 
 
-def can_return_tuple(func):
+def can_return_tuple(func: Callable[P, T]) -> Callable[P, tuple | T]:
     """
     Decorator to wrap model method, to call output.to_tuple() if return_dict=False passed as a kwarg or
     use_return_dict=False is set in the config.
@@ -827,12 +832,13 @@ def can_return_tuple(func):
     """
 
     @wraps(func)
-    def wrapper(self, *args, **kwargs):
+    def wrapper(*args: P.args, **kwargs: P.kwargs) -> tuple | T:
+        self = args[0]
         return_dict = self.config.return_dict if hasattr(self, "config") else True
         return_dict_passed = kwargs.pop("return_dict", return_dict)
         if return_dict_passed is not None:
             return_dict = return_dict_passed
-        output = func(self, *args, **kwargs)
+        output = func(*args, **kwargs)
         if not return_dict and not isinstance(output, tuple):
             output = output.to_tuple()
         return output
@@ -859,7 +865,9 @@ class OutputRecorder:
     class_name: str | None = None
 
 
-def check_model_inputs(func=None, *, tie_last_hidden_states=True):
+def check_model_inputs(
+    func: Callable[P, T] | None = None, *, tie_last_hidden_states: bool = True
+) -> Callable[P, tuple | T]:
     """
     Decorator to intercept specific layer outputs without using hooks.
     Compatible with torch.compile (Dynamo tracing).
@@ -872,9 +880,10 @@ def check_model_inputs(func=None, *, tie_last_hidden_states=True):
             is needed for some vision models (e.g. CLIP, SigLIP)
     """
 
-    def wrapped_fn(func):
+    def wrapped_fn(func: Callable[P, T]) -> Callable[P, tuple | T]:
         @wraps(func)
-        def wrapper(self, *args, **kwargs):
+        def wrapper(*args: P.args, **kwargs: P.kwargs) -> tuple | T:
+            self, *args = args
             args_with_config_defaults = [
                 "use_cache",
                 "vision_feature_layer",
