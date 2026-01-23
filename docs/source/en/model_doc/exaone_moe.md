@@ -183,18 +183,3 @@ print(tokenizer.decode(output_ids, skip_special_tokens=True))
 
 [[autodoc]] ExaoneMoeForCausalLM
     - forward
-
-## ExaoneMoeForSequenceClassification
-
-[[autodoc]] ExaoneMoeForSequenceClassification
-    - forward
-
-## ExaoneMoeForTokenClassification
-
-[[autodoc]] ExaoneMoeForTokenClassification
-    - forward
-
-## ExaoneMoeForQuestionAnswering
-
-[[autodoc]] ExaoneMoeForQuestionAnswering
-    - forward

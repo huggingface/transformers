@@ -5,7 +5,7 @@
 #                          modular_exaone_moe.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 # coding=utf-8
-# Copyright 2025 The LG AI Research and HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The LG AI Research and HuggingFace Inc. team. All rights reserved.
 #
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,6 +19,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
 
 
@@ -144,8 +145,8 @@ class ExaoneMoeConfig(PreTrainedConfig):
         attention_dropout=0.0,
         sliding_window=4096,
         sliding_window_pattern=4,
-        is_moe_layer=None,
         layer_types=None,
+        mlp_layer_types=None,
         first_k_dense_replace=1,
         moe_intermediate_size=1024,
         num_experts=64,
@@ -180,13 +181,6 @@ class ExaoneMoeConfig(PreTrainedConfig):
         self.routed_scaling_factor = routed_scaling_factor
         self.n_group = n_group
         self.topk_group = topk_group
-        self.layer_types = layer_types
-
-        self.is_moe_layer = is_moe_layer
-        if self.is_moe_layer is None:
-            self.is_moe_layer = [0] * self.first_k_dense_replace + [1] * (
-                self.num_hidden_layers - self.first_k_dense_replace
-            )
 
         self.layer_types = layer_types
         if self.sliding_window is None:
@@ -198,25 +192,18 @@ class ExaoneMoeConfig(PreTrainedConfig):
                 else "full_attention"
                 for i in range(self.num_hidden_layers)
             ]
-        if "sliding_attention" in self.layer_types:
-            self.cache_implementation = "hybrid"
         layer_type_validation(self.layer_types)
+
+        self.mlp_layer_types = mlp_layer_types
+        if self.mlp_layer_types is None:
+            self.mlp_layer_types = [
+                "dense" if i < self.first_k_dense_replace else "sparse" for i in range(self.num_hidden_layers)
+            ]
+        layer_type_validation(self.mlp_layer_types, self.num_hidden_layers, attention=False)
 
         super().__init__(
             bos_token_id=bos_token_id, eos_token_id=eos_token_id, tie_word_embeddings=tie_word_embeddings, **kwargs
         )
-
-
-# class ExaoneMoeForSequenceClassification(Exaone4ForSequenceClassification):
-#     pass
-
-
-# class ExaoneMoeForTokenClassification(Exaone4ForTokenClassification):
-#     pass
-
-
-# class ExaoneMoeForQuestionAnswering(Exaone4ForQuestionAnswering):
-#     pass
 
 
 __all__ = ["ExaoneMoeConfig"]

@@ -289,9 +289,7 @@ def _build_checkpoint_conversion_mapping():
         WeightRenaming(".block_sparse_moe.e_score_correction_bias", ".mlp.e_score_correction_bias"),
     ]
     mapping["exaone_moe"] = mapping["qwen2_moe"].copy()
-    mapping["exaone_moe"] += [
-        WeightRenaming("mlp.e_score_correction_bias", "mlp.gate.e_score_correction_bias")
-    ]
+    mapping["exaone_moe"] += [WeightRenaming("mlp.e_score_correction_bias", "mlp.gate.e_score_correction_bias")]
 
     for model_type, base_pattern in _MODEL_TO_CONVERSION_PATTERN.items():
         if model_type in mapping:

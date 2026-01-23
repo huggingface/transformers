@@ -1,5 +1,4 @@
-# coding=utf-8
-# Copyright 2025 The LG AI Research and HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The LG AI Research and HuggingFace Inc. team. All rights reserved.
 #
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,18 +14,11 @@
 # limitations under the License.
 """LG AI Research EXAONE Lab"""
 
-from typing import Optional
-
 import torch
 import torch.nn as nn
 
-from ...activations import ACT2FN
-from ...cache_utils import Cache
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
-from ...processing_utils import Unpack
-from ...utils import (
-    TransformersKwargs,
-)
+from ...utils import is_grouped_mm_available
 from ..deepseek_v3.modeling_deepseek_v3 import (
     DeepseekV3MoE,
     DeepseekV3NaiveMoe,
@@ -36,19 +28,13 @@ from ..exaone4.configuration_exaone4 import Exaone4Config
 from ..exaone4.modeling_exaone4 import (
     Exaone4Attention,
     Exaone4ForCausalLM,
-    Exaone4ForQuestionAnswering,
-    Exaone4ForSequenceClassification,
-    Exaone4ForTokenClassification,
-    Exaone4MLP,
     Exaone4Model,
     Exaone4PreTrainedModel,
 )
 from ..olmoe.modeling_olmoe import (
     OlmoeDecoderLayer,
 )
-from ..qwen2_moe.modeling_qwen2_moe import (
-    Qwen2MoeMLP
-)
+from ..qwen2_moe.modeling_qwen2_moe import Qwen2MoeMLP
 
 
 class ExaoneMoeConfig(Exaone4Config):
@@ -74,8 +60,8 @@ class ExaoneMoeConfig(Exaone4Config):
         attention_dropout=0.0,
         sliding_window=4096,
         sliding_window_pattern=4,
-        is_moe_layer=None,
         layer_types=None,
+        mlp_layer_types=None,
         first_k_dense_replace=1,
         moe_intermediate_size=1024,
         num_experts=64,
@@ -110,13 +96,6 @@ class ExaoneMoeConfig(Exaone4Config):
         self.routed_scaling_factor = routed_scaling_factor
         self.n_group = n_group
         self.topk_group = topk_group
-        self.layer_types = layer_types
-
-        self.is_moe_layer = is_moe_layer
-        if self.is_moe_layer is None:
-            self.is_moe_layer = [0] * self.first_k_dense_replace + [1] * (
-                self.num_hidden_layers - self.first_k_dense_replace
-            )
 
         self.layer_types = layer_types
         if self.sliding_window is None:
@@ -128,9 +107,14 @@ class ExaoneMoeConfig(Exaone4Config):
                 else "full_attention"
                 for i in range(self.num_hidden_layers)
             ]
-        if "sliding_attention" in self.layer_types:
-            self.cache_implementation = "hybrid"
         layer_type_validation(self.layer_types)
+
+        self.mlp_layer_types = mlp_layer_types
+        if self.mlp_layer_types is None:
+            self.mlp_layer_types = [
+                "dense" if i < self.first_k_dense_replace else "sparse" for i in range(self.num_hidden_layers)
+            ]
+        layer_type_validation(self.mlp_layer_types, self.num_hidden_layers, attention=False)
 
         PreTrainedConfig.__init__(
             bos_token_id=bos_token_id, eos_token_id=eos_token_id, tie_word_embeddings=tie_word_embeddings, **kwargs
@@ -167,8 +151,9 @@ class ExaoneMoeSparseMoEBlock(DeepseekV3MoE):
 class ExaoneMoeDecoderLayer(OlmoeDecoderLayer):
     def __init__(self, config: ExaoneMoeConfig, layer_idx: int):
         super().__init__(config, layer_idx)
-        self.self_attn = ExaoneMoeAttention(config=config, layer_idx=layer_idx)
-        self.mlp = ExaoneMoeSparseMoEBlock(config) if config.mlp_layer_types[layer_idx] == "sparse" else ExaoneMoeMLP(config)
+        self.mlp = (
+            ExaoneMoeSparseMoEBlock(config) if config.mlp_layer_types[layer_idx] == "sparse" else ExaoneMoeMLP(config)
+        )
 
 
 class ExaoneMoePreTrainedModel(Exaone4PreTrainedModel):
@@ -179,7 +164,9 @@ class ExaoneMoePreTrainedModel(Exaone4PreTrainedModel):
         "attentions": ExaoneMoeAttention,
         "router_logits": ExaoneMoeSparseMoEBlock,
     }
-    _can_compile_fullgraph = False
+    _can_compile_fullgraph = (
+        is_grouped_mm_available()
+    )  # https://huggingface.co/docs/transformers/experts_interface#torchcompile
     _keep_in_fp32_modules_strict = ["e_score_correction_bias"]
     _keys_to_ignore_on_load_unexpected = [r"mtp.*"]
 
@@ -192,24 +179,9 @@ class ExaoneMoeForCausalLM(Exaone4ForCausalLM):
     pass
 
 
-# class ExaoneMoeForSequenceClassification(Exaone4ForSequenceClassification):
-#     pass
-
-
-# class ExaoneMoeForTokenClassification(Exaone4ForTokenClassification):
-#     pass
-
-
-# class ExaoneMoeForQuestionAnswering(Exaone4ForQuestionAnswering):
-#     pass
-
-
 __all__ = [
     "ExaoneMoeConfig",
     "ExaoneMoePreTrainedModel",
     "ExaoneMoeModel",
     "ExaoneMoeForCausalLM",
-    "ExaoneMoeForSequenceClassification",
-    "ExaoneMoeForTokenClassification",
-    "ExaoneMoeForQuestionAnswering",
 ]
