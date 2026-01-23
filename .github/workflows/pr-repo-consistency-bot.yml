@@ -133,6 +133,7 @@ jobs:
       - name: Fetch and checkout PR code manually
         env:
           PR_HEAD_REPO_FULL_NAME: ${{ needs.get-pr-info.outputs.PR_HEAD_REPO_FULL_NAME }}
+          PR_HEAD_REF: ${{ needs.get-pr-info.outputs.PR_HEAD_REF }}
           PR_HEAD_SHA: ${{ needs.check-timestamps.outputs.VERIFIED_PR_HEAD_SHA }}
         run: |
           # Create separate directory for PR code
@@ -142,7 +143,7 @@ jobs:
           # Initialize git and fetch with full history
           git init
           git remote add pr-origin https://github.com/${PR_HEAD_REPO_FULL_NAME}.git
-          git fetch pr-origin ${PR_HEAD_SHA}
+          git fetch pr-origin ${PR_HEAD_REF}
           git checkout ${PR_HEAD_SHA}
 
           # Also fetch main branch from upstream for comparison (required by `check_modular_conversion`)
