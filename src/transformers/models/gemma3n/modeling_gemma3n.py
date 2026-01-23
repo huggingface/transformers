@@ -53,7 +53,7 @@ from .configuration_gemma3n import Gemma3nAudioConfig, Gemma3nConfig, Gemma3nTex
 @dataclass
 @auto_docstring
 class Gemma3nAudioEncoderModelOutput(BaseModelOutputWithPooling):
-    r"""
+    """
     audio_mel_mask (`torch.FloatTensor`, *optional*):
         A torch.BoolTensor of shape `(batch_size, num_frames)`
     """
