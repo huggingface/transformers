@@ -197,7 +197,7 @@ def _build_peft_weight_mapping(
         return []
 
     # strip "base_model.model" and add adapter name
-    new_weight_conversions = [WeightRenaming("base_model.model.model", "model")]
+    new_weight_conversions = [WeightRenaming("base_model.model.model.", "model.")]
 
     prefixes = set()
     from peft.mapping import PEFT_TYPE_TO_PREFIX_MAPPING
@@ -443,7 +443,7 @@ class PeftAdapterMixin:
         adapter_name = adapter_name if adapter_name is not None else "default"
         adapter_kwargs = adapter_kwargs or {}
 
-        weight_conversions = get_model_conversion_mapping(self)
+
 
         from peft import PeftConfig, inject_adapter_in_model
 
@@ -477,6 +477,7 @@ class PeftAdapterMixin:
                 **load_config.download_kwargs,
             )
 
+        weight_conversions = get_model_conversion_mapping(self)
         peft_config = convert_peft_config_for_transformers(peft_config, model=self, conversions=weight_conversions)
 
         if hasattr(peft_config, "inference_mode"):
@@ -544,22 +545,20 @@ class PeftAdapterMixin:
 
         def is_adapter_key(key: str) -> bool:
             return any(marker in key for marker in adapter_key_markers)
-
-        unexpected_keys = load_info.unexpected_keys
-        missing_keys = [key for key in load_info.missing_keys if is_adapter_key(key)]
-        mismatched_keys = [item for item in load_info.mismatched_keys if is_adapter_key(item[0])]
+        load_info = replace(load_info, missing_keys=[k for k in load_info.missing_keys if is_adapter_key(k)], mismatched_keys=[item for item in load_info.mismatched_keys if is_adapter_key(item[0])])
 
         log_state_dict_report(
             model=self,
             load_config=load_config,
             logger=logger,
             error_msgs=load_info.error_msgs,
-            unexpected_keys=unexpected_keys,
-            missing_keys=missing_keys,
-            mismatched_keys=mismatched_keys,
-            mismatched_shapes=mismatched_keys,
+            unexpected_keys=load_info.unexpected_keys,
+            missing_keys=load_info.missing_keys,
+            mismatched_keys=load_info.mismatched_keys,
+            mismatched_shapes=load_info.mismatched_keys,
             conversion_errors=load_info.conversion_errors,
         )
+        return load_info
 
     def enable_peft_hotswap(
         self, target_rank: int = 128, check_compiled: Literal["error", "warn", "ignore"] = "error"

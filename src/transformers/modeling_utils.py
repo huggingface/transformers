@@ -4139,7 +4139,7 @@ class PreTrainedModel(nn.Module, EmbeddingAccessMixin, ModuleUtilsMixin, PushToH
         if _adapter_model_path is not None:
             if token is not None:
                 adapter_kwargs["token"] = token
-            model.load_adapter(
+            load_info = model.load_adapter(
                 _adapter_model_path,
                 adapter_name=adapter_name,
                 load_config=load_config,
