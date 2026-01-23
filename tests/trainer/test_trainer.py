@@ -3254,12 +3254,12 @@ class TrainerIntegrationTest(TestCasePlus, TrainerIntegrationCommon):
             trainer.train(resume_from_checkpoint=f"{checkpoint}-bogus")
         self.assertTrue("Can't find a valid checkpoint at" in str(context.exception))
 
-        # 2. fail to find any checkpoint - due a fresh output_dir
+        # 2. warning when find no checkpoint - due a fresh output_dir
         tmp_dir = self.get_auto_remove_tmp_dir()
         trainer = get_regression_trainer(output_dir=tmp_dir)
-        with self.assertRaises(Exception) as context:
+        with self.assertLogs("transformers.trainer", level="WARNING") as context:
             trainer.train(resume_from_checkpoint=True)
-        self.assertTrue("No valid checkpoint found in output directory" in str(context.exception))
+        self.assertIn("No valid checkpoint found in output directory", str(context.output))
 
     # require_torch_non_multi_accelerator is necessary because this worker blocks runs when using multiple GPUs, making
     # the test slower.
