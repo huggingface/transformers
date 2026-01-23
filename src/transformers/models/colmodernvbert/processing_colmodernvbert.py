@@ -135,8 +135,8 @@ class ColModernVBertProcessor(ProcessorMixin):
         tokenizer=None,
         chat_template=None,
         image_seq_len: int = 64,
-        visual_prompt_prefix: Optional[str] = None,
-        query_prefix: Optional[str] = None,
+        visual_prompt_prefix: str | None = None,
+        query_prefix: str | None = None,
         **kwargs,
     ):
         super().__init__(image_processor, tokenizer, chat_template=chat_template)
@@ -176,8 +176,8 @@ class ColModernVBertProcessor(ProcessorMixin):
 
     def __call__(
         self,
-        images: Optional[ImageInput] = None,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         **kwargs: Unpack[ColModernVBertProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -324,7 +324,7 @@ class ColModernVBertProcessor(ProcessorMixin):
 
     def process_images(
         self,
-        images: Optional[ImageInput] = None,
+        images: ImageInput | None = None,
         **kwargs: Unpack[ColModernVBertProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -357,7 +357,7 @@ class ColModernVBertProcessor(ProcessorMixin):
 
     def process_queries(
         self,
-        text: Union[TextInput, list[TextInput]],
+        text: TextInput | list[TextInput],
         **kwargs: Unpack[ColModernVBertProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -465,9 +465,9 @@ class ColModernVBertProcessor(ProcessorMixin):
 
     def _process_elements(
         self,
-        images: Union[ImageInput, list[ImageInput], list[list[ImageInput]]] = None,
+        images: ImageInput | list[ImageInput] | list[list[ImageInput]] = None,
         text: Union[TextInput, "PreTokenizedInput", list[TextInput], list["PreTokenizedInput"]] = None,
-        image_seq_len: Optional[int] = None,
+        image_seq_len: int | None = None,
         **kwargs: Unpack[ColModernVBertProcessorKwargs],
     ) -> BatchEncoding:
         """Processes the input prompts and returns a BatchEncoding."""

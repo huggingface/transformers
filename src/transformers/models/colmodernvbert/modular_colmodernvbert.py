@@ -1,4 +1,3 @@
-# coding=utf-8
 # MIT License
 #
 # Copyright 2026 Illuin Technology, and contributors, and The HuggingFace Inc. team.
@@ -24,7 +23,7 @@
 import re
 from dataclasses import dataclass
 from itertools import accumulate
-from typing import Any, Optional, Union
+from typing import Any, Union
 
 import numpy as np
 
@@ -183,8 +182,8 @@ class ColModernVBertProcessor(ColQwen2Processor):
         tokenizer=None,
         chat_template=None,
         image_seq_len: int = 64,
-        visual_prompt_prefix: Optional[str] = None,
-        query_prefix: Optional[str] = None,
+        visual_prompt_prefix: str | None = None,
+        query_prefix: str | None = None,
         **kwargs,
     ):
         super().__init__(
@@ -252,9 +251,9 @@ class ColModernVBertProcessor(ColQwen2Processor):
 
     def _process_elements(
         self,
-        images: Union[ImageInput, list[ImageInput], list[list[ImageInput]]] = None,
+        images: ImageInput | list[ImageInput] | list[list[ImageInput]] = None,
         text: Union[TextInput, "PreTokenizedInput", list[TextInput], list["PreTokenizedInput"]] = None,
-        image_seq_len: Optional[int] = None,
+        image_seq_len: int | None = None,
         **kwargs: Unpack[ColModernVBertProcessorKwargs],
     ) -> BatchEncoding:
         """Processes the input prompts and returns a BatchEncoding."""
@@ -392,8 +391,8 @@ class ColModernVBertProcessor(ColQwen2Processor):
 
     def __call__(
         self,
-        images: Optional[ImageInput] = None,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
         **kwargs: Unpack[ColModernVBertProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -523,11 +522,11 @@ class ColModernVBertForRetrievalOutput(ModelOutput):
         Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    embeddings: Optional[torch.Tensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    image_hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
+    loss: torch.FloatTensor | None = None
+    embeddings: torch.Tensor | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    image_hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
 
 
 @auto_docstring(
@@ -558,9 +557,9 @@ class ColModernVBertForRetrieval(ColPaliForRetrieval):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs,
     ) -> ColModernVBertForRetrievalOutput:
         output_attentions = kwargs.pop("output_attentions", self.config.output_attentions)

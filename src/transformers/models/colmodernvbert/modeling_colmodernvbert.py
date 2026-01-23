@@ -28,7 +28,6 @@
 # SOFTWARE.
 
 from dataclasses import dataclass
-from typing import Optional
 
 from torch import nn
 
@@ -97,11 +96,11 @@ class ColModernVBertForRetrievalOutput(ModelOutput):
         Attentions weights after the attention softmax, used to compute the weighted average in the self-attention heads.
     """
 
-    loss: Optional[torch.FloatTensor] = None
-    embeddings: Optional[torch.Tensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    image_hidden_states: Optional[tuple[torch.FloatTensor]] = None
-    attentions: Optional[tuple[torch.FloatTensor]] = None
+    loss: torch.FloatTensor | None = None
+    embeddings: torch.Tensor | None = None
+    hidden_states: tuple[torch.FloatTensor] | None = None
+    image_hidden_states: tuple[torch.FloatTensor] | None = None
+    attentions: tuple[torch.FloatTensor] | None = None
 
 
 @auto_docstring(
@@ -147,9 +146,9 @@ class ColModernVBertForRetrieval(ColModernVBertPreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        input_ids: Optional[torch.LongTensor] = None,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        attention_mask: Optional[torch.Tensor] = None,
+        input_ids: torch.LongTensor | None = None,
+        pixel_values: torch.FloatTensor | None = None,
+        attention_mask: torch.Tensor | None = None,
         **kwargs,
     ) -> ColModernVBertForRetrievalOutput:
         output_attentions = kwargs.pop("output_attentions", self.config.output_attentions)
@@ -199,8 +198,8 @@ class ColModernVBertForRetrieval(ColModernVBertPreTrainedModel):
 
     def resize_token_embeddings(
         self,
-        new_num_tokens: Optional[int] = None,
-        pad_to_multiple_of: Optional[int] = None,
+        new_num_tokens: int | None = None,
+        pad_to_multiple_of: int | None = None,
         mean_resizing: bool = True,
     ) -> nn.Embedding:
         model_embeds = self.vlm.resize_token_embeddings(
