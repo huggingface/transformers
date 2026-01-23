@@ -681,6 +681,12 @@ class AutoTokenizer:
                 trust_remote_code, pretrained_model_name_or_path, has_local_code, has_remote_code, upstream_repo
             )
 
+        # Detect missing dependency for Voxtral early and provide a clear error message
+        if getattr(config, "model_type", None) == "voxtral" and not is_mistral_common_available():
+            raise ImportError(
+                "The Voxtral tokenizer requires the 'mistral-common' package. Please install it using `pip install mistral-common`."
+            )
+
         if has_remote_code and trust_remote_code:
             tokenizer_class = get_class_from_dynamic_module(class_ref, pretrained_model_name_or_path, **kwargs)
             _ = kwargs.pop("code_revision", None)
