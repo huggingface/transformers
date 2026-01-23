@@ -174,6 +174,7 @@ class LoadStateDictConfig:
 
     pretrained_model_name_or_path: str | None = None
     download_kwargs: DownloadKwargs | None = None
+    use_safetensors: bool = True
     ignore_mismatched_sizes: bool = False
     sharded_metadata: dict | None = None
     device_map: dict | None = None

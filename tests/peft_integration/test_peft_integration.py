@@ -94,7 +94,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
         for model_id in self.peft_test_model_ids:
             for transformers_class in self.transformers_test_model_classes:
                 with CaptureLogger(logger) as cl:
-                    peft_model = transformers_class.from_pretrained(model_id).to(torch_device)
+                    peft_model = transformers_class.from_pretrained(model_id, use_safetensors=False).to(torch_device)
                 # ensure that under normal circumstances, there  are no warnings about keys
                 self.assertNotIn("unexpected keys", cl.out)
                 self.assertNotIn("missing keys", cl.out)
@@ -676,7 +676,7 @@ class PeftIntegrationTester(unittest.TestCase, PeftTesterMixin):
 
                 with CaptureLogger(logger) as cl:
                     model.load_adapter(
-                        adapter_state_dict=dummy_state_dict, peft_config=peft_config, low_cpu_mem_usage=False
+                        adapter_state_dict=dummy_state_dict, peft_config=peft_config
                     )
 
                 msg = "Loading adapter weights from state_dict led to unexpected keys not found in the model: foobar"

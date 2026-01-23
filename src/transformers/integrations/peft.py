@@ -474,10 +474,10 @@ class PeftAdapterMixin:
             pretrained_model_name_or_path=peft_model_id,
             variant=None,
             gguf_file=None,
-            use_safetensors=True,
+            use_safetensors=load_config.use_safetensors,
             user_agent={},
             is_remote_code=False,
-            transformers_explicit_filename="adapter_model.safetensors",
+            transformers_explicit_filename="adapter_model.safetensors" if load_config.use_safetensors else "adapter_model.bin",
             download_kwargs=load_config.download_kwargs,
         )
 
