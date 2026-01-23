@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_exaone_moe.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2026 The LG AI Research and HuggingFace Inc. team. All rights reserved.
 #
 #
@@ -233,7 +232,7 @@ class ExaoneMoeTopkRouter(nn.Module):
         super().__init__()
         self.config = config
         self.weight = nn.Parameter(torch.empty((config.num_experts, config.hidden_size)))
-        self.register_buffer("e_score_correction_bias", torch.zeros(self.n_routed_experts))
+        self.register_buffer("e_score_correction_bias", torch.zeros(config.num_experts))
 
     def forward(self, hidden_states):
         hidden_states = hidden_states.view(-1, self.config.hidden_size)
@@ -281,46 +280,6 @@ class ExaoneMoeExperts(nn.Module):
         return final_hidden_states
 
 
-@use_experts_implementation
-class ExaoneMoeNaiveMoe(nn.Module):
-    """Collection of expert weights stored as 3D tensors."""
-
-    def __init__(self, config):
-        super().__init__()
-        self.num_experts = config.num_local_experts
-        self.hidden_dim = config.hidden_size
-        self.intermediate_dim = config.moe_intermediate_size
-        self.gate_up_proj = nn.Parameter(torch.empty(self.num_experts, 2 * self.intermediate_dim, self.hidden_dim))
-        self.down_proj = nn.Parameter(torch.empty(self.num_experts, self.hidden_dim, self.intermediate_dim))
-        self.act_fn = ACT2FN[config.hidden_act]
-
-    def forward(
-        self,
-        hidden_states: torch.Tensor,
-        top_k_index: torch.Tensor,
-        top_k_weights: torch.Tensor,
-    ) -> torch.Tensor:
-        final_hidden_states = torch.zeros_like(hidden_states)
-        with torch.no_grad():
-            expert_mask = torch.nn.functional.one_hot(top_k_index, num_classes=self.num_experts)
-            expert_mask = expert_mask.permute(2, 1, 0)
-            expert_hit = torch.greater(expert_mask.sum(dim=(-1, -2)), 0).nonzero()
-
-        for expert_idx in expert_hit:
-            expert_idx = expert_idx[0]
-            if expert_idx == self.num_experts:
-                continue
-            top_k_pos, token_idx = torch.where(expert_mask[expert_idx])
-            current_state = hidden_states[token_idx]
-            gate, up = nn.functional.linear(current_state, self.gate_up_proj[expert_idx]).chunk(2, dim=-1)
-            current_hidden_states = self.act_fn(gate) * up
-            current_hidden_states = nn.functional.linear(current_hidden_states, self.down_proj[expert_idx])
-            current_hidden_states = current_hidden_states * top_k_weights[token_idx, top_k_pos, None]
-            final_hidden_states.index_add_(0, token_idx, current_hidden_states.to(final_hidden_states.dtype))
-
-        return final_hidden_states
-
-
 class ExaoneMoeSparseMoEBlock(nn.Module):
     """
     A mixed expert module containing shared experts.
@@ -329,10 +288,10 @@ class ExaoneMoeSparseMoEBlock(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        self.experts = ExaoneMoeNaiveMoe(config)
+        self.experts = ExaoneMoeExperts(config)
         self.gate = ExaoneMoeTopkRouter(config)
         self.shared_experts = ExaoneMoeMLP(
-            config=config, intermediate_size=config.moe_intermediate_size * config.n_shared_experts
+            config=config, intermediate_size=config.moe_intermediate_size * config.num_shared_experts
         )
         self.n_routed_experts = config.num_experts
         self.n_group = config.n_group

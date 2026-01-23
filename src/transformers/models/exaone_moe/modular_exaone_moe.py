@@ -96,6 +96,7 @@ class ExaoneMoeConfig(Exaone4Config):
         self.routed_scaling_factor = routed_scaling_factor
         self.n_group = n_group
         self.topk_group = topk_group
+        self.rope_parameters = rope_parameters
 
         self.layer_types = layer_types
         if self.sliding_window is None:
@@ -131,9 +132,10 @@ class ExaoneMoeMLP(Qwen2MoeMLP):
 
 class ExaoneMoeTopkRouter(DeepseekV3TopkRouter):
     def __init__(self, config):
-        super().__init__()
-        del self.n_routed_experts
+        nn.Module.__init__()
+        self.config = config
         self.weight = nn.Parameter(torch.empty((config.num_experts, config.hidden_size)))
+        self.register_buffer("e_score_correction_bias", torch.zeros(config.num_experts))
 
 
 class ExaoneMoeExperts(DeepseekV3NaiveMoe):
@@ -145,6 +147,10 @@ class ExaoneMoeExperts(DeepseekV3NaiveMoe):
 class ExaoneMoeSparseMoEBlock(DeepseekV3MoE):
     def __init__(self, config):
         super().__init__()
+        self.experts = ExaoneMoeExperts(config)
+        self.shared_experts = ExaoneMoeMLP(
+            config=config, intermediate_size=config.moe_intermediate_size * config.num_shared_experts
+        )
         self.n_routed_experts = config.num_experts
 
 
