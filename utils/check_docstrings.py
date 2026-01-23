@@ -247,6 +247,7 @@ OBJECTS_TO_IGNORE = {
     "FNetTokenizerFast",
     "FSMTConfig",
     "TextEmbeddingPipeline",
+    "FillMaskPipeline",
     "FlaubertConfig",
     "FlavaConfig",
     "FlavaForPreTraining",

@@ -695,6 +695,7 @@ src/transformers/pipelines/automatic_speech_recognition.py
 src/transformers/pipelines/base.py
 src/transformers/pipelines/depth_estimation.py
 src/transformers/pipelines/document_question_answering.py
+src/transformers/pipelines/fill_mask.py
 src/transformers/pipelines/image_classification.py
 src/transformers/pipelines/image_segmentation.py
 src/transformers/pipelines/mask_generation.py
