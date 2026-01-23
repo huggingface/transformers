@@ -248,6 +248,9 @@ def check_decorator_return_types(overwrite: bool = False):
 
         for func_node, decorator_name in functions:
             # Ignore trivial delegations like `return super(...` or `super(...`.
+            # We skip these as this happens sometimes in modular files with methods that inherit their return
+            # type from another architecture. Then they'll have no explicit return type, but we'll test via
+            # the generated modeling file instead.
             if _is_delegating_to_super(func_node):
                 continue
 
