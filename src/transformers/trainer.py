@@ -2067,6 +2067,15 @@ class Trainer:
             if self.args.ddp_broadcast_buffers is not None:
                 kwargs["broadcast_buffers"] = self.args.ddp_broadcast_buffers
 
+            if self.args.ddp_check_reduction is not None:
+                kwargs["check_reduction"] = self.args.ddp_check_reduction
+
+            if self.args.ddp_gradient_as_bucket_view is not None:
+                kwargs["gradient_as_bucket_view"] = self.args.ddp_gradient_as_bucket_view
+
+            if self.args.ddp_static_graph is not None:
+                kwargs["static_graph"] = self.args.ddp_static_graph
+
             self.accelerator.ddp_handler = DistributedDataParallelKwargs(**kwargs)
 
         return model
