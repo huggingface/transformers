@@ -996,6 +996,7 @@ def convert_to_localized_md(model_list: str, localized_model_list: str, format_s
 SPECIAL_MODEL_NAMES = {
     "Bert Generation": "BERT For Sequence Generation",
     "BigBird": "BigBird-RoBERTa",
+    "Beit3": "BEiT-3",
     "Data2VecAudio": "Data2Vec",
     "Data2VecText": "Data2Vec",
     "Data2VecVision": "Data2Vec",

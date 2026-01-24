@@ -779,6 +779,8 @@
         title: Aimv2
       - local: model_doc/beit
         title: BEiT
+      - local: model_doc/beit3
+        title: BEiT3
       - local: model_doc/bit
         title: BiT
       - local: model_doc/conditional_detr

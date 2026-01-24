@@ -70,6 +70,7 @@ else:
             ("aria", ("AriaImageProcessor", None)),
             ("aya_vision", ("GotOcr2ImageProcessor", "GotOcr2ImageProcessorFast")),
             ("beit", ("BeitImageProcessor", "BeitImageProcessorFast")),
+            ("beit3", ("BeitImageProcessor", "BeitImageProcessorFast")),
             ("bit", ("BitImageProcessor", "BitImageProcessorFast")),
             ("blip", ("BlipImageProcessor", "BlipImageProcessorFast")),
             ("blip-2", ("BlipImageProcessor", "BlipImageProcessorFast")),
