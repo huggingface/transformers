@@ -516,7 +516,7 @@ def _get_resolved_checkpoint_files(
     variant: str | None,
     gguf_file: str | None,
     use_safetensors: bool | None,
-    user_agent: dict,
+    user_agent: dict | None,
     is_remote_code: bool,  # Because we can't determine this inside this function, we need it to be passed in
     transformers_explicit_filename: str | None = None,
     download_kwargs: DownloadKwargs | None = None,

@@ -540,7 +540,7 @@ class PeftAdapterMixin:
                         use_safetensors=(
                             load_config.use_safetensors if adapter_filename.endswith(".safetensors") else False
                         ),
-                        user_agent={},
+                        user_agent=None,
                         is_remote_code=False,
                         transformers_explicit_filename=adapter_filename,
                         download_kwargs=load_config.download_kwargs,
