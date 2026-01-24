@@ -12,7 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 import math
-from typing import Optional, Union
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput, make_nested_list_of_images
@@ -37,7 +36,7 @@ class Lfm2VlTextKwargs(TextKwargs, total=False):
         When disabled, only the image token itself is used without delimiters.
     """
 
-    use_image_special_tokens: Optional[bool]
+    use_image_special_tokens: bool | None
 
 
 class Lfm2VlProcessorKwargs(ProcessingKwargs, total=False):
@@ -61,7 +60,7 @@ class Lfm2VlProcessor(ProcessorMixin):
         self,
         image_processor,
         tokenizer,
-        chat_template: Optional[str] = None,
+        chat_template: str | None = None,
         **kwargs,
     ):
         self.image_token = getattr(tokenizer, "image_token", "<image>")
@@ -78,8 +77,8 @@ class Lfm2VlProcessor(ProcessorMixin):
     @auto_docstring
     def __call__(
         self,
-        images: Optional[Union[ImageInput, list[ImageInput], list[list[ImageInput]]]] = None,
-        text: Optional[Union[TextInput, list[TextInput]]] = None,
+        images: ImageInput | list[ImageInput] | list[list[ImageInput]] | None = None,
+        text: TextInput | list[TextInput] | None = None,
         **kwargs: Unpack[Lfm2VlProcessorKwargs],
     ) -> BatchEncoding:
         if text is None and images is None:

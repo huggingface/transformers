@@ -201,10 +201,6 @@ class CTRLModel(CTRLPreTrainedModel):
         self.d_model_size = config.n_embd
         self.num_layers = config.n_layer
 
-        self.register_buffer(
-            "pos_encoding", positional_encoding(config.n_positions, self.d_model_size, torch.float), persistent=False
-        )
-
         self.w = nn.Embedding(config.vocab_size, config.n_embd)
 
         self.dropout = nn.Dropout(config.embd_pdrop)
@@ -215,6 +211,10 @@ class CTRLModel(CTRLPreTrainedModel):
             ]
         )
         self.layernorm = nn.LayerNorm(config.n_embd, eps=config.layer_norm_epsilon)
+
+        self.register_buffer(
+            "pos_encoding", positional_encoding(config.n_positions, self.d_model_size, torch.float), persistent=False
+        )
 
         # Initialize weights and apply final processing
         self.post_init()

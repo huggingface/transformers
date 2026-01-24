@@ -16,7 +16,6 @@ Processor class for SAM3.
 """
 
 from copy import deepcopy
-from typing import Optional, Union
 
 import numpy as np
 
@@ -87,7 +86,7 @@ def box_area(boxes):
 @auto_docstring
 class Sam3Processor(ProcessorMixin):
     def __init__(
-        self, image_processor, tokenizer, target_size: Optional[int] = None, point_pad_value: int = -10, **kwargs
+        self, image_processor, tokenizer, target_size: int | None = None, point_pad_value: int = -10, **kwargs
     ):
         r"""
         target_size (`int`, *optional*):
@@ -102,13 +101,13 @@ class Sam3Processor(ProcessorMixin):
     @auto_docstring
     def __call__(
         self,
-        images: Optional[ImageInput] = None,
-        text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
-        segmentation_maps: Optional[ImageInput] = None,
-        input_boxes: Optional[Union[list[list[list[float]]], torch.Tensor]] = None,
-        input_boxes_labels: Optional[Union[list[list[list[int]]], torch.Tensor]] = None,
-        original_sizes: Optional[Union[list[list[float]], torch.Tensor]] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
+        segmentation_maps: ImageInput | None = None,
+        input_boxes: list[list[list[float]]] | torch.Tensor | None = None,
+        input_boxes_labels: list[list[list[int]]] | torch.Tensor | None = None,
+        original_sizes: list[list[float]] | torch.Tensor | None = None,
+        return_tensors: str | TensorType | None = None,
         **kwargs,
     ) -> BatchEncoding:
         r"""
@@ -445,11 +444,11 @@ class Sam3Processor(ProcessorMixin):
 
     def _validate_single_input(
         self,
-        data: Union[torch.Tensor, np.ndarray, list],
+        data: torch.Tensor | np.ndarray | list,
         expected_depth: int,
         input_name: str,
         expected_format: str,
-        expected_coord_size: Optional[int] = None,
+        expected_coord_size: int | None = None,
     ) -> list:
         """
                 Validate a single input by ensuring proper nesting and raising an error if the input is not valid.
@@ -573,13 +572,15 @@ class Sam3Processor(ProcessorMixin):
         ```python
         >>> from transformers import AutoModel, AutoProcessor
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> model = AutoModel.from_pretrained("facebook/sam3-base")
         >>> processor = AutoProcessor.from_pretrained("facebook/sam3-base")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
         >>> inputs = processor(images=image, text="cat", return_tensors="pt")
         >>> outputs = model(**inputs)
 
@@ -627,13 +628,15 @@ class Sam3Processor(ProcessorMixin):
         ```python
         >>> from transformers import AutoModel, AutoProcessor
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
 
         >>> model = AutoModel.from_pretrained("facebook/sam3-base")
         >>> processor = AutoProcessor.from_pretrained("facebook/sam3-base")
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
         >>> inputs = processor(images=image, text="cat", return_tensors="pt")
         >>> outputs = model(**inputs)
 

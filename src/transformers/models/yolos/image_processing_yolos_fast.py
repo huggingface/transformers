@@ -5,11 +5,11 @@
 #                          modular_yolos.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
 import pathlib
-from typing import Any, Optional, Union
+from typing import Any, Optional
 
 import torch
+import torchvision.transforms.v2.functional as tvF
 from torchvision.io import read_image
-from torchvision.transforms.v2 import functional as F
 
 from ...image_processing_utils import BatchFeature, get_size_dict
 from ...image_processing_utils_fast import (
@@ -31,10 +31,13 @@ from ...image_utils import (
     validate_annotations,
 )
 from ...processing_utils import Unpack
-from ...utils import TensorType, auto_docstring
+from ...utils import TensorType, auto_docstring, is_torch_available
 from ...utils.import_utils import requires
 from .image_processing_yolos import YolosImageProcessorKwargs
 
+
+if is_torch_available():
+    from torch import nn
 
 SUPPORTED_ANNOTATION_FORMATS = (AnnotationFormat.COCO_DETECTION, AnnotationFormat.COCO_PANOPTIC)
 
@@ -79,7 +82,7 @@ def prepare_coco_detection_annotation(
     image,
     target,
     return_segmentation_masks: bool = False,
-    input_data_format: Optional[Union[ChannelDimension, str]] = None,
+    input_data_format: ChannelDimension | str | None = None,
 ):
     """
     Convert the target in COCO format into the format expected by YOLOS.
@@ -190,9 +193,9 @@ def rgb_to_id(color):
 def prepare_coco_panoptic_annotation(
     image: torch.Tensor,
     target: dict,
-    masks_path: Union[str, pathlib.Path],
+    masks_path: str | pathlib.Path,
     return_masks: bool = True,
-    input_data_format: Union[ChannelDimension, str] = None,
+    input_data_format: ChannelDimension | str = None,
 ) -> dict:
     """
     Prepare a coco panoptic annotation for YOLOS.
@@ -321,10 +324,10 @@ class YolosImageProcessorFast(BaseImageProcessorFast):
         self,
         image: torch.Tensor,
         target: dict,
-        format: Optional[AnnotationFormat] = None,
-        return_segmentation_masks: Optional[bool] = None,
-        masks_path: Optional[Union[str, pathlib.Path]] = None,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
+        format: AnnotationFormat | None = None,
+        return_segmentation_masks: bool | None = None,
+        masks_path: str | pathlib.Path | None = None,
+        input_data_format: str | ChannelDimension | None = None,
     ) -> dict:
         """
         Prepare an annotation for feeding into YOLOS model.
@@ -353,7 +356,7 @@ class YolosImageProcessorFast(BaseImageProcessorFast):
         self,
         image: torch.Tensor,
         size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"] = None,
+        interpolation: Optional["tvF.InterpolationMode"] = None,
         **kwargs,
     ) -> torch.Tensor:
         """
@@ -376,7 +379,7 @@ class YolosImageProcessorFast(BaseImageProcessorFast):
             interpolation (`InterpolationMode`, *optional*, defaults to `InterpolationMode.BILINEAR`):
                 Resampling filter to use if resizing the image.
         """
-        interpolation = interpolation if interpolation is not None else F.InterpolationMode.BILINEAR
+        interpolation = interpolation if interpolation is not None else tvF.InterpolationMode.BILINEAR
         if size.shortest_edge and size.longest_edge:
             # Resize the image so that the shortest edge or the longest edge is of the given size
             # while maintaining the aspect ratio of the original image.
@@ -395,7 +398,7 @@ class YolosImageProcessorFast(BaseImageProcessorFast):
                 f" {size.keys()}."
             )
 
-        image = F.resize(
+        image = tvF.resize(
             image,
             size=new_size,
             interpolation=interpolation,
@@ -409,7 +412,7 @@ class YolosImageProcessorFast(BaseImageProcessorFast):
         orig_size: tuple[int, int],
         target_size: tuple[int, int],
         threshold: float = 0.5,
-        interpolation: Optional["F.InterpolationMode"] = None,
+        interpolation: Optional["tvF.InterpolationMode"] = None,
     ):
         """
         Resizes an annotation to a target size.
@@ -423,10 +426,10 @@ class YolosImageProcessorFast(BaseImageProcessorFast):
                 The target size of the image, as returned by the preprocessing `resize` step.
             threshold (`float`, *optional*, defaults to 0.5):
                 The threshold used to binarize the segmentation masks.
-            resample (`InterpolationMode`, defaults to `F.InterpolationMode.NEAREST_EXACT`):
+            resample (`InterpolationMode`, defaults to `tvF.InterpolationMode.NEAREST_EXACT`):
                 The resampling filter to use when resizing the masks.
         """
-        interpolation = interpolation if interpolation is not None else F.InterpolationMode.NEAREST_EXACT
+        interpolation = interpolation if interpolation is not None else tvF.InterpolationMode.NEAREST_EXACT
         ratio_height, ratio_width = [target / orig for target, orig in zip(target_size, orig_size)]
 
         new_annotation = {}
@@ -445,7 +448,7 @@ class YolosImageProcessorFast(BaseImageProcessorFast):
                 new_annotation["area"] = scaled_area
             elif key == "masks":
                 masks = value[:, None]
-                masks = [F.resize(mask, target_size, interpolation=interpolation) for mask in masks]
+                masks = [tvF.resize(mask, target_size, interpolation=interpolation) for mask in masks]
                 masks = torch.stack(masks).to(torch.float32)
                 masks = masks[:, 0] > threshold
                 new_annotation["masks"] = masks
@@ -489,7 +492,7 @@ class YolosImageProcessorFast(BaseImageProcessorFast):
         for key, value in annotation.items():
             if key == "masks":
                 masks = value
-                masks = F.pad(
+                masks = tvF.pad(
                     masks,
                     padding,
                     fill=0,
@@ -510,7 +513,7 @@ class YolosImageProcessorFast(BaseImageProcessorFast):
         self,
         image: torch.Tensor,
         padded_size: tuple[int, int],
-        annotation: Optional[dict[str, Any]] = None,
+        annotation: dict[str, Any] | None = None,
         update_bboxes: bool = True,
         fill: int = 0,
     ):
@@ -524,7 +527,7 @@ class YolosImageProcessorFast(BaseImageProcessorFast):
             )
         if original_size != padded_size:
             padding = [0, 0, padding_right, padding_bottom]
-            image = F.pad(image, padding, fill=fill)
+            image = tvF.pad(image, padding, fill=fill)
             if annotation is not None:
                 annotation = self._update_annotation_for_padded_image(
                     annotation, original_size, padded_size, padding, update_bboxes
@@ -539,22 +542,22 @@ class YolosImageProcessorFast(BaseImageProcessorFast):
     def _preprocess(
         self,
         images: list["torch.Tensor"],
-        annotations: Optional[Union[AnnotationType, list[AnnotationType]]],
-        masks_path: Optional[Union[str, pathlib.Path]],
+        annotations: AnnotationType | list[AnnotationType] | None,
+        masks_path: str | pathlib.Path | None,
         return_segmentation_masks: bool,
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
         do_convert_annotations: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
         do_pad: bool,
-        pad_size: Optional[SizeDict],
-        format: Optional[Union[str, AnnotationFormat]],
-        return_tensors: Optional[Union[str, TensorType]],
+        pad_size: SizeDict | None,
+        format: str | AnnotationFormat | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -653,11 +656,11 @@ class YolosImageProcessorFast(BaseImageProcessorFast):
         return encoded_inputs
 
     def post_process_object_detection(
-        self, outputs, threshold: float = 0.5, target_sizes: TensorType | list[tuple] = None, top_k: int = 100
+        self, outputs, threshold: float = 0.5, target_sizes: TensorType | list[tuple] = None
     ):
         """
-        Converts the raw output of [`YolosForObjectDetection`] into final bounding boxes in (top_left_x,
-        top_left_y, bottom_right_x, bottom_right_y) format. Only supports PyTorch.
+        Converts the raw output of [`YolosForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
+        bottom_right_x, bottom_right_y) format. Only supports PyTorch.
 
         Args:
             outputs ([`YolosObjectDetectionOutput`]):
@@ -666,10 +669,7 @@ class YolosImageProcessorFast(BaseImageProcessorFast):
                 Score threshold to keep object detection predictions.
             target_sizes (`torch.Tensor` or `list[tuple[int, int]]`, *optional*):
                 Tensor of shape `(batch_size, 2)` or list of tuples (`tuple[int, int]`) containing the target size
-                (height, width) of each image in the batch. If left to None, predictions will not be resized.
-            top_k (`int`, *optional*, defaults to 100):
-                Keep only top k bounding boxes before filtering by thresholding.
-
+                `(height, width)` of each image in the batch. If unset, predictions will not be resized.
         Returns:
             `list[Dict]`: A list of dictionaries, each dictionary containing the scores, labels and boxes for an image
             in the batch as predicted by the model.
@@ -682,23 +682,20 @@ class YolosImageProcessorFast(BaseImageProcessorFast):
                     "Make sure that you pass in as many target sizes as the batch dimension of the logits"
                 )
 
-        prob = out_logits.sigmoid()
-        prob = prob.view(out_logits.shape[0], -1)
-        k_value = min(top_k, prob.size(1))
-        topk_values, topk_indexes = torch.topk(prob, k_value, dim=1)
-        scores = topk_values
-        topk_boxes = torch.div(topk_indexes, out_logits.shape[2], rounding_mode="floor")
-        labels = topk_indexes % out_logits.shape[2]
-        boxes = center_to_corners_format(out_bbox)
-        boxes = torch.gather(boxes, 1, topk_boxes.unsqueeze(-1).repeat(1, 1, 4))
+        prob = nn.functional.softmax(out_logits, -1)
+        scores, labels = prob[..., :-1].max(-1)
 
-        # and from relative [0, 1] to absolute [0, height] coordinates
+        # Convert to [x0, y0, x1, y1] format
+        boxes = center_to_corners_format(out_bbox)
+
+        # Convert from relative [0, 1] to absolute [0, height] coordinates
         if target_sizes is not None:
             if isinstance(target_sizes, list):
                 img_h = torch.Tensor([i[0] for i in target_sizes])
                 img_w = torch.Tensor([i[1] for i in target_sizes])
             else:
                 img_h, img_w = target_sizes.unbind(1)
+
             scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(boxes.device)
             boxes = boxes * scale_fct[:, None, :]
 

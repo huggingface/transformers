@@ -174,7 +174,7 @@ class MinistralIntegrationTest(unittest.TestCase):
             ),
         )
 
-        # Export + HybridCache
+        # Export
         model.eval()
         exportable_module = TorchExportableModuleForDecoderOnlyLM(model)
         exported_program = exportable_module.export(

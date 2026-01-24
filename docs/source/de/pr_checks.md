@@ -95,13 +95,13 @@ make style
 Das CI prüft, ob diese innerhalb der Prüfung `ci/circleci: check_code_quality` angewendet wurden. Es führt auch `ruff` aus, das einen grundlegenden Blick auf Ihren Code wirft und sich beschwert, wenn es eine undefinierte Variable findet oder eine, die nicht verwendet wird. Um diese Prüfung lokal auszuführen, verwenden Sie
 
 ```bash
-make quality
+make check-repo
 ```
 
 Dies kann sehr viel Zeit in Anspruch nehmen. Um dasselbe nur für die Dateien zu tun, die Sie im aktuellen Zweig geändert haben, führen Sie
 
 ```bash
-make fixup
+make style
 ```
 
 Dieser letzte Befehl führt auch alle zusätzlichen Prüfungen für die Konsistenz des Repositorys durch. Schauen wir uns diese an.
@@ -111,7 +111,7 @@ Dieser letzte Befehl führt auch alle zusätzlichen Prüfungen für die Konsiste
 Dies fasst alle Tests zusammen, die sicherstellen, dass Ihr PR das Repository in einem guten Zustand verlässt. Sie können diese Prüfung lokal durchführen, indem Sie Folgendes ausführen:
 
 ```bash
-make repo-consistency
+make check-repo
 ```
 
 Dies überprüft, ob:
@@ -128,7 +128,7 @@ Dies überprüft, ob:
 Sollte diese Prüfung fehlschlagen, müssen die ersten beiden Punkte manuell korrigiert werden, die letzten vier können automatisch für Sie korrigiert werden, indem Sie den Befehl
 
 ```bash
-make fix-copies
+make fix-repo
 ```
 
 Zusätzliche Prüfungen betreffen PRs, die neue Modelle hinzufügen, vor allem, dass:

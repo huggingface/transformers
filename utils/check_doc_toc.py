@@ -12,18 +12,18 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """
-This script is responsible for cleaning the model section of the table of content by removing duplicates and sorting
-the entries in alphabetical order.
+This script is responsible for ensuring that all model docs are part of the `_toctree.yml` and cleaning the model
+section of the table of content by removing duplicates and sorting the entries in alphabetical order.
 
 Usage (from the root of the repo):
 
-Check that the table of content is properly sorted (used in `make quality`):
+Check that the table of content is properly sorted (used in `make check-repo`):
 
 ```bash
 python utils/check_doc_toc.py
 ```
 
-Auto-sort the table of content if it is not properly sorted (used in `make style`):
+Auto-sort the table of content if it is not properly sorted (used in `make fix-repo`):
 
 ```bash
 python utils/check_doc_toc.py --fix_and_overwrite
@@ -31,12 +31,15 @@ python utils/check_doc_toc.py --fix_and_overwrite
 """
 
 import argparse
+import os
 from collections import defaultdict
 
 import yaml
 
 
-PATH_TO_TOC = "docs/source/en/_toctree.yml"
+ROOT = os.path.dirname(os.path.dirname(__file__))
+TOCTREE_PATH = os.path.join(ROOT, "docs", "source", "en", "_toctree.yml")
+DOC_PATH = os.path.join(ROOT, "docs", "source", "en", "model_doc")
 
 
 def clean_model_doc_toc(model_doc: list[dict]) -> list[dict]:
@@ -75,16 +78,48 @@ def clean_model_doc_toc(model_doc: list[dict]) -> list[dict]:
     return sorted(new_doc, key=lambda s: s["title"].lower())
 
 
+def ensure_all_models_in_toctree(model_doc: list[dict]):
+    """Make sure that all models in `model_doc` folder are also part of the `_toctree.yml`. Raise if it's not
+    the case."""
+    all_documented_models = {model_doc_file.removesuffix(".md") for model_doc_file in os.listdir(DOC_PATH)} - {"auto"}
+    all_models_in_toctree = {
+        model_entry["local"].removeprefix("model_doc/") for section in model_doc for model_entry in section["sections"]
+    }
+
+    # everything alright
+    if all_documented_models == all_models_in_toctree:
+        return
+
+    documented_but_not_in_toctree = all_documented_models - all_models_in_toctree
+    in_toctree_but_not_documented = all_models_in_toctree - all_documented_models
+
+    error_msg = ""
+    if len(documented_but_not_in_toctree) > 0:
+        error_msg += (
+            f"{documented_but_not_in_toctree} appear(s) inside the folder `model_doc`, but not in the `_toctree.yml`. "
+            "Please add it/them in their corresponding section inside the `_toctree.yml`."
+        )
+    if len(in_toctree_but_not_documented) > 0:
+        if len(error_msg) > 0:
+            error_msg += "\n"
+        error_msg += (
+            f"{in_toctree_but_not_documented} appear(s) in the `_toctree.yml`, but not inside the folder `model_doc`. "
+            "Please add a corresponding `model.md` in `model_doc`."
+        )
+
+    raise ValueError(error_msg)
+
+
 def check_model_doc(overwrite: bool = False):
     """
-    Check that the content of the table of content in `_toctree.yml` is clean (no duplicates and sorted for the model
-    API doc) and potentially auto-cleans it.
+    Check that the content of the table of content in `_toctree.yml` is up-to-date (i.e. it contains all models) and
+    clean (no duplicates and sorted for the model API doc) and potentially auto-cleans it.
 
     Args:
         overwrite (`bool`, *optional*, defaults to `False`):
             Whether to just check if the TOC is clean or to auto-clean it (when `overwrite=True`).
     """
-    with open(PATH_TO_TOC, encoding="utf-8") as f:
+    with open(TOCTREE_PATH, encoding="utf-8") as f:
         content = yaml.safe_load(f.read())
 
     # Get to the API doc
@@ -99,6 +134,9 @@ def check_model_doc(overwrite: bool = False):
         model_idx += 1
 
     model_doc = api_doc[model_idx]["sections"]
+
+    # Make sure the toctree contains all models
+    ensure_all_models_in_toctree(model_doc)
 
     # Extract the modalities and clean them one by one.
     modalities_docs = [(idx, section) for idx, section in enumerate(model_doc) if "sections" in section]
@@ -116,11 +154,11 @@ def check_model_doc(overwrite: bool = False):
         if overwrite:
             api_doc[model_idx]["sections"] = model_doc
             content[api_idx]["sections"] = api_doc
-            with open(PATH_TO_TOC, "w", encoding="utf-8") as f:
+            with open(TOCTREE_PATH, "w", encoding="utf-8") as f:
                 f.write(yaml.dump(content, allow_unicode=True))
         else:
             raise ValueError(
-                "The model doc part of the table of content is not properly sorted, run `make style` to fix this."
+                "The model doc part of the table of content is not properly sorted, run `make fix-repo` to fix this."
             )
 
 

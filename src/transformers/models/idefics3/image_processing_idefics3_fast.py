@@ -14,7 +14,7 @@
 
 
 import math
-from typing import Optional, Union
+from typing import Optional
 
 import torch
 
@@ -47,7 +47,7 @@ MAX_IMAGE_SIZE = 4096  # 4k resolution as absolute maximum
 
 
 def _resize_output_size_rescale_to_max_len(
-    height: int, width: int, min_len: Optional[int] = 1, max_len: Optional[int] = None
+    height: int, width: int, min_len: int | None = 1, max_len: int | None = None
 ) -> tuple[int, int]:
     """
     Get the output size of the image after resizing given a dictionary specifying the max and min sizes.
@@ -84,7 +84,7 @@ def _resize_output_size_rescale_to_max_len(
 
 
 def _resize_output_size_scale_below_upper_bound(
-    height: int, width: int, max_len: Optional[dict[str, int]] = None
+    height: int, width: int, max_len: dict[str, int] | None = None
 ) -> tuple[int, int]:
     """
     Get the output size of the image after resizing given a dictionary specifying the max and min sizes.
@@ -152,6 +152,27 @@ def get_max_height_width(images_list: list[list["torch.Tensor"]]) -> tuple[int, 
     return (max_height, max_width)
 
 
+def get_num_channels(images_list: list[list["torch.Tensor"]]) -> int:
+    """
+    Get the number of channels across all images in a batch. Handle empty sublists like in [[], [image]].
+    """
+    for images in images_list:
+        if images:
+            return images[0].shape[0]
+
+    raise ValueError("No images found in the batch.")
+
+
+def get_device_from_images(images_list: list[list["torch.Tensor"]]) -> "torch.device":
+    """
+    Get the device from the first non-empty element in a nested list of images.
+    Handle empty sublists like in [[], [image]].
+    """
+    for images in images_list:
+        if images:
+            return images[0].device
+
+
 def make_pixel_mask(image: "torch.Tensor", output_size: tuple[int, int]) -> "torch.Tensor":
     """
     Make a pixel mask for the image, where 1 indicates a valid pixel and 0 indicates padding.
@@ -183,11 +204,14 @@ class Idefics3ImageProcessorFast(BaseImageProcessorFast):
     do_pad = True
     return_row_col_info = False
     valid_kwargs = Idefics3ImageProcessorKwargs
+    model_input_names = ["pixel_values", "pixel_attention_mask"]
 
     def _prepare_images_structure(self, images: ImageInput, expected_ndims: int = 3) -> ImageInput:
         """
         Prepare a nested images structure for processing.
         """
+        # Checks for `str` in case of URL/local path and optionally loads images
+        images = self.fetch_images(images)
         return make_nested_list_of_images(images, expected_ndims=expected_ndims)
 
     def resize(
@@ -362,14 +386,14 @@ class Idefics3ImageProcessorFast(BaseImageProcessorFast):
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        do_pad: Optional[bool],
-        do_image_splitting: Optional[bool],
-        max_image_size: Optional[dict[str, int]],
-        return_row_col_info: Optional[bool],
-        disable_grouping: Optional[bool],
-        return_tensors: Optional[Union[str, TensorType]],
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        do_pad: bool | None,
+        do_image_splitting: bool | None,
+        max_image_size: dict[str, int] | None,
+        return_row_col_info: bool | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> BatchFeature:
         """
@@ -438,18 +462,20 @@ class Idefics3ImageProcessorFast(BaseImageProcessorFast):
             # Get max images per batch
             max_num_images = max(len(images_) for images_ in processed_images)
             max_height, max_width = get_max_height_width(processed_images)
+            num_channels = get_num_channels(processed_images)
+            device = get_device_from_images(processed_images)
 
             processed_images_padded = torch.zeros(
                 len(processed_images),
                 max_num_images,
-                *(processed_images[0][0].shape[0], max_height, max_width),
-                device=processed_images[0][0].device,
+                *(num_channels, max_height, max_width),
+                device=device,
             )
             pixel_attention_masks = torch.zeros(
                 len(processed_images),
                 max_num_images,
                 *(max_height, max_width),
-                device=processed_images[0][0].device,
+                device=device,
             )
             for i, images in enumerate(processed_images):
                 for j, image in enumerate(images):

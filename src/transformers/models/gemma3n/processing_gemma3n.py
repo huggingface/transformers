@@ -12,7 +12,6 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Optional, Union
 
 import numpy as np
 
@@ -72,9 +71,9 @@ class Gemma3nProcessor(ProcessorMixin):
     @auto_docstring
     def __call__(
         self,
-        images: Optional[ImageInput] = None,
-        text: Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]] = None,
-        audio: Optional[Union[np.ndarray, list[float], list[np.ndarray], list[list[float]]]] = None,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] = None,
+        audio: np.ndarray | list[float] | list[np.ndarray] | list[list[float]] | None = None,
         **kwargs: Unpack[Gemma3nProcessorKwargs],
     ) -> BatchFeature:
         if text is None and images is None and audio is None:

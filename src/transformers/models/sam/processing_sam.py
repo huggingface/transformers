@@ -16,7 +16,7 @@ Processor class for SAM.
 """
 
 from copy import deepcopy
-from typing import Optional, Union
+from typing import Union
 
 import numpy as np
 
@@ -29,7 +29,7 @@ from ...utils import auto_docstring, is_torch_available
 if is_torch_available():
     import torch
 
-NestedList = list[Union[Optional[float | int], "NestedList"]]
+NestedList = list[Union[float | int | None, "NestedList"]]
 
 
 class SamImagesKwargs(ImagesKwargs, total=False):
@@ -60,11 +60,11 @@ class SamImagesKwargs(ImagesKwargs, total=False):
         batching masks of different sizes to ensure consistent dimensions.
     """
 
-    segmentation_maps: Optional[ImageInput]
-    input_points: Optional[NestedList]
-    input_labels: Optional[NestedList]
-    input_boxes: Optional[NestedList]
-    point_pad_value: Optional[int]
+    segmentation_maps: ImageInput | None
+    input_points: NestedList | torch.Tensor | None
+    input_labels: NestedList | int | torch.Tensor | None
+    input_boxes: NestedList | torch.Tensor | None
+    point_pad_value: int | None
     mask_size: dict[str, int]
     mask_pad_size: dict[str, int]
 
@@ -87,8 +87,8 @@ class SamProcessor(ProcessorMixin):
     @auto_docstring
     def __call__(
         self,
-        images: Optional[ImageInput] = None,
-        text: Optional[Union[TextInput, PreTokenizedInput, list[TextInput], list[PreTokenizedInput]]] = None,
+        images: ImageInput | None = None,
+        text: TextInput | PreTokenizedInput | list[TextInput] | list[PreTokenizedInput] | None = None,
         **kwargs,
     ) -> BatchEncoding:
         output_kwargs = self._merge_kwargs(

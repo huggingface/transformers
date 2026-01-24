@@ -15,8 +15,6 @@
 Speech processor class for Wav2Vec2-BERT
 """
 
-from typing import Optional, Union
-
 from ...processing_utils import ProcessingKwargs, ProcessorMixin, Unpack
 from ...tokenization_utils_base import AudioInput, PreTokenizedInput, TextInput
 from ...utils import auto_docstring
@@ -34,8 +32,8 @@ class Wav2Vec2BertProcessor(ProcessorMixin):
     @auto_docstring
     def __call__(
         self,
-        audio: Optional[AudioInput] = None,
-        text: Optional[Union[str, list[str], TextInput, PreTokenizedInput]] = None,
+        audio: AudioInput | None = None,
+        text: str | list[str] | TextInput | PreTokenizedInput | None = None,
         **kwargs: Unpack[Wav2Vec2BertProcessorKwargs],
     ):
         r"""

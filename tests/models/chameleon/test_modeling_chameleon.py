@@ -17,12 +17,12 @@ import copy
 import unittest
 
 import requests
+from parameterized import parameterized
 
 from transformers import BitsAndBytesConfig, ChameleonConfig, is_torch_available, is_vision_available
 from transformers.testing_utils import (
     Expectations,
     require_bitsandbytes,
-    require_read_token,
     require_torch,
     slow,
     torch_device,
@@ -75,7 +75,11 @@ class ChameleonModelTester:
         pad_token_id=0,
         vq_num_embeds=5,
         vq_embed_dim=5,
+        vq_resolution=512,
         vq_channel_multiplier=[1, 2],
+        vq_num_res_blocks=2,
+        vq_attn_resolutions=None,
+        vq_attn_type="vanilla",
         vq_img_token_start_id=10,  # has to be less than vocab size when added with vq_num_embeds
         scope=None,
     ):
@@ -105,7 +109,11 @@ class ChameleonModelTester:
         self.scope = scope
         self.vq_num_embeds = vq_num_embeds
         self.vq_embed_dim = vq_embed_dim
+        self.vq_resolution = vq_resolution
         self.vq_channel_multiplier = vq_channel_multiplier
+        self.vq_num_res_blocks = vq_num_res_blocks
+        self.vq_attn_resolutions = vq_attn_resolutions
+        self.vq_attn_type = vq_attn_type
         self.vq_img_token_start_id = vq_img_token_start_id
 
     def prepare_config_and_inputs(self):
@@ -166,9 +174,13 @@ class ChameleonModelTester:
             "embed_dim": self.vq_embed_dim,
             "num_embeddings": self.vq_num_embeds,
             "latent_channels": self.vq_embed_dim,
+            "resolution": self.vq_resolution,
             "in_channels": 3,
             "base_channels": 32,  # we have a GroupNorm of 32 groups, so can't do less
             "channel_multiplier": self.vq_channel_multiplier,
+            "num_res_blocks": self.vq_num_res_blocks,
+            "attn_resolutions": self.vq_attn_resolutions,
+            "attn_type": self.vq_attn_type,
         }
 
     def create_and_check_model(self, config, input_ids, input_mask, sequence_labels, token_labels, choice_labels):
@@ -218,6 +230,19 @@ class ChameleonModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTester
 
     @unittest.skip("Chameleon forces some token ids to be -inf!")
     def test_batching_equivalence(self):
+        pass
+
+    @unittest.skip("Skip get_image_features tests as those are tested via ChameleonVision2SeqModelTest instead")
+    @parameterized.expand([True, False, None])
+    def test_get_image_features_output(self, return_dict: bool | None):
+        pass
+
+    @unittest.skip("Skip get_image_features tests as those are tested via ChameleonVision2SeqModelTest instead")
+    def test_get_image_features_hidden_states(self):
+        pass
+
+    @unittest.skip("Skip get_image_features tests as those are tested via ChameleonVision2SeqModelTest instead")
+    def test_get_image_features_attentions(self):
         pass
 
 
@@ -323,12 +348,29 @@ class ChameleonVision2SeqModelTest(ModelTesterMixin, GenerationTesterMixin, Pipe
             pixel_values = torch.cat([pixel_values, pixel_values], dim=0)
             _ = model(input_ids=input_ids, pixel_values=pixel_values)
 
+    def _image_features_get_expected_num_hidden_states(self, model_tester=None):
+        if model_tester is None:
+            model_tester = self.model_tester
+        # The number of ChameleonVQVAEEncoderResnetBlock instances, plus 1 for before the block
+        return len(model_tester.vq_channel_multiplier) * model_tester.vq_num_res_blocks + 3
+
+    def _image_features_get_expected_num_attentions(self, model_tester=None):
+        if model_tester is None:
+            model_tester = self.model_tester
+        # The number of ChameleonVQVAEEncoderAttnBlock instances
+        if (
+            model_tester.vq_attn_resolutions
+            and model_tester.vq_resolution in model_tester.vq_attn_resolutions
+            and model_tester.vq_attn_type == "vanilla"
+        ):
+            return len(model_tester.vq_channel_multiplier) * model_tester.vq_num_res_blocks + 1
+        return 1
+
 
 @require_torch
 class ChameleonIntegrationTest(unittest.TestCase):
     @slow
     @require_bitsandbytes
-    @require_read_token
     def test_model_7b(self):
         model = ChameleonForConditionalGeneration.from_pretrained(
             "facebook/chameleon-7b", quantization_config=BitsAndBytesConfig(load_in_4bit=True), device_map="auto"
@@ -340,7 +382,7 @@ class ChameleonIntegrationTest(unittest.TestCase):
         )
         prompt = "<image>Describe what do you see here and tell me about the history behind it?"
 
-        inputs = processor(images=image, text=prompt, return_tensors="pt").to(model.device, torch.float16)
+        inputs = processor(images=image, text=prompt, return_tensors="pt").to(model.device, torch.bfloat16)
 
         # greedy generation outputs
         EXPECTED_TEXT_COMPLETIONS = Expectations(
@@ -358,7 +400,6 @@ class ChameleonIntegrationTest(unittest.TestCase):
 
     @slow
     @require_bitsandbytes
-    @require_read_token
     def test_model_7b_batched(self):
         model = ChameleonForConditionalGeneration.from_pretrained(
             "facebook/chameleon-7b", quantization_config=BitsAndBytesConfig(load_in_4bit=True), device_map="auto"
@@ -377,7 +418,7 @@ class ChameleonIntegrationTest(unittest.TestCase):
         ]
 
         inputs = processor(images=[image, image_2], text=prompts, padding=True, return_tensors="pt").to(
-            model.device, torch.float16
+            model.device, torch.bfloat16
         )
 
         # greedy generation outputs
@@ -405,7 +446,6 @@ class ChameleonIntegrationTest(unittest.TestCase):
 
     @slow
     @require_bitsandbytes
-    @require_read_token
     def test_model_7b_multi_image(self):
         model = ChameleonForConditionalGeneration.from_pretrained(
             "facebook/chameleon-7b", quantization_config=BitsAndBytesConfig(load_in_4bit=True), device_map="auto"
@@ -420,7 +460,7 @@ class ChameleonIntegrationTest(unittest.TestCase):
         )
         prompt = "What do these two images have in common?<image><image>"
 
-        inputs = processor(images=[image, image_2], text=prompt, return_tensors="pt").to(model.device, torch.float16)
+        inputs = processor(images=[image, image_2], text=prompt, return_tensors="pt").to(model.device, torch.bfloat16)
 
         # greedy generation outputs
         EXPECTED_TEXT_COMPLETION = ['What do these two images have in common?The two images show a connection between the night sky and the internet. The first image shows a starry night sky, with the stars arranged in a pattern that resembles the structure of the internet. The']  # fmt: skip

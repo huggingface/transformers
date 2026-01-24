@@ -14,7 +14,7 @@
 """Fast Image processor class for Fuyu."""
 
 import math
-from typing import Optional, Union
+from typing import Optional
 
 import torch
 
@@ -40,7 +40,7 @@ from .image_processing_fuyu import FuyuBatchFeature, FuyuImagesKwargs, make_list
 
 
 if is_torchvision_available():
-    from torchvision.transforms.v2 import functional as F
+    import torchvision.transforms.v2.functional as tvF
 
 
 logger = logging.get_logger(__name__)
@@ -50,6 +50,7 @@ logger = logging.get_logger(__name__)
 class FuyuImageProcessorFast(BaseImageProcessorFast):
     do_resize = True
     size = {"height": 1080, "width": 1920}
+    patch_size = {"height": 30, "width": 30}
     resample = PILImageResampling.BILINEAR
     do_pad = True
     padding_value = 1.0
@@ -80,7 +81,7 @@ class FuyuImageProcessorFast(BaseImageProcessorFast):
         self,
         image: torch.Tensor,
         size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"] = None,
+        interpolation: Optional["tvF.InterpolationMode"] = None,
         antialias: bool = True,
         **kwargs,
     ) -> torch.Tensor:
@@ -97,7 +98,7 @@ class FuyuImageProcessorFast(BaseImageProcessorFast):
             antialias (`bool`, *optional*, defaults to `True`):
                 Whether to apply antialiasing when resizing.
         """
-        interpolation = interpolation if interpolation is not None else F.InterpolationMode.BILINEAR
+        interpolation = interpolation if interpolation is not None else tvF.InterpolationMode.BILINEAR
         image_height, image_width = image.shape[-2:]
         target_height, target_width = size.height, size.width
         # Only resize if image is larger than target
@@ -120,17 +121,17 @@ class FuyuImageProcessorFast(BaseImageProcessorFast):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        do_pad: Optional[bool],
-        padding_value: Optional[float],
-        padding_mode: Optional[str],
-        disable_grouping: Optional[bool],
-        return_tensors: Optional[Union[str, TensorType]],
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        do_pad: bool | None,
+        padding_value: float | None,
+        padding_mode: str | None,
+        disable_grouping: bool | None,
+        return_tensors: str | TensorType | None,
         **kwargs,
     ) -> FuyuBatchFeature:
         # Group images by size for batched resizing
@@ -185,7 +186,7 @@ class FuyuImageProcessorFast(BaseImageProcessorFast):
             tensor_type=return_tensors,
         )
 
-    def get_num_patches(self, image_height: int, image_width: int, patch_size: Optional[SizeDict] = None) -> int:
+    def get_num_patches(self, image_height: int, image_width: int, patch_size: SizeDict | None = None) -> int:
         """
         Calculate number of patches required to encode an image.
         Args:
@@ -208,7 +209,7 @@ class FuyuImageProcessorFast(BaseImageProcessorFast):
         num_patches = num_patches_per_dim_h * num_patches_per_dim_w
         return num_patches
 
-    def patchify_image(self, image: torch.Tensor, patch_size: Optional[SizeDict] = None) -> torch.Tensor:
+    def patchify_image(self, image: torch.Tensor, patch_size: SizeDict | None = None) -> torch.Tensor:
         """
         Convert an image into a tensor of patches using PyTorch's unfold operation.
         Args:
@@ -241,7 +242,7 @@ class FuyuImageProcessorFast(BaseImageProcessorFast):
         image_placeholder_id: int,
         image_newline_id: int,
         variable_sized: bool,
-        patch_size: Optional[dict[str, int]] = None,
+        patch_size: dict[str, int] | None = None,
     ) -> FuyuBatchFeature:
         """
         Process images for model input. In particular, variable-sized images are handled here.
@@ -365,7 +366,7 @@ class FuyuImageProcessorFast(BaseImageProcessorFast):
 
     def _further_process_kwargs(
         self,
-        patch_size: Optional[dict[str, int]] = None,
+        patch_size: dict[str, int] | None = None,
         **kwargs,
     ) -> dict:
         """

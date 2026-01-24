@@ -23,7 +23,7 @@ from ...processing_utils import Unpack
 if TYPE_CHECKING:
     from ...modeling_outputs import DepthEstimatorOutput
 import torch
-from torchvision.transforms.v2 import functional as F
+import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
@@ -113,7 +113,7 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
     def preprocess(
         self,
         images: ImageInput,
-        prompt_depth: Optional[ImageInput] = None,
+        prompt_depth: ImageInput | None = None,
         **kwargs: Unpack[PromptDepthAnythingImageProcessorKwargs],
     ) -> BatchFeature:
         r"""
@@ -128,14 +128,14 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
         size: SizeDict,
         keep_aspect_ratio: bool = False,
         ensure_multiple_of: int = 1,
-        interpolation: Optional["F.InterpolationMode"] = None,
+        interpolation: Optional["tvF.InterpolationMode"] = None,
     ) -> "torch.Tensor":
         """
         Resize an image to target size while optionally maintaining aspect ratio and ensuring dimensions are multiples.
         """
         # Set default interpolation to BICUBIC to match the slow processor (causes slight numerical differences otherwise)
         if interpolation is None:
-            interpolation = F.InterpolationMode.BICUBIC
+            interpolation = tvF.InterpolationMode.BICUBIC
 
         # Custom resize with aspect ratio preservation and ensure_multiple_of constraint
         output_size = _get_resize_output_image_size(
@@ -175,22 +175,22 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
         pad_size_top, pad_size_bottom = _get_pad(height, size_divisor)
 
         # Use torchvision padding for fast processing
-        # /!\ NB: torchvision F.pad expects (left, top, right, bottom) for the last two dims (W then H)
+        # /!\ NB: torchvision tvF.pad expects (left, top, right, bottom) for the last two dims (W then H)
         # Source: https://docs.pytorch.org/vision/main/generated/torchvision.transforms.Pad.html
         # So: (left=width_pad, top=height_pad, right=width_pad, bottom=height_pad)
         padding = [pad_size_left, pad_size_top, pad_size_right, pad_size_bottom]
-        padded_image = F.pad(image, padding=padding)
+        padded_image = tvF.pad(image, padding=padding)
 
         return padded_image
 
     def _preprocess_image_like_inputs(
         self,
         images: ImageInput,
-        prompt_depth: Optional[ImageInput],
+        prompt_depth: ImageInput | None,
         input_data_format: ChannelDimension,
-        device: Optional[Union[str, "torch.device"]] = None,
-        prompt_scale_to_meter: Optional[float] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
+        device: Union[str, "torch.device"] | None = None,
+        prompt_scale_to_meter: float | None = None,
+        return_tensors: str | TensorType | None = None,
         **kwargs: Unpack[PromptDepthAnythingImageProcessorKwargs],
     ) -> BatchFeature:
         """
@@ -248,18 +248,18 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
         images: list["torch.Tensor"],
         do_resize: bool,
         size: SizeDict,
-        keep_aspect_ratio: Optional[bool],
-        interpolation: Optional["F.InterpolationMode"],
+        keep_aspect_ratio: bool | None,
+        interpolation: Optional["tvF.InterpolationMode"],
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        do_pad: Optional[bool],
-        disable_grouping: Optional[bool],
-        ensure_multiple_of: Optional[int] = None,
-        return_tensors: Optional[Union[str, TensorType]] = None,
-        size_divisor: Optional[int] = None,
+        image_mean: float | list[float] | None,
+        image_std: float | list[float] | None,
+        do_pad: bool | None,
+        disable_grouping: bool | None,
+        ensure_multiple_of: int | None = None,
+        return_tensors: str | TensorType | None = None,
+        size_divisor: int | None = None,
         **kwargs,
     ) -> "torch.Tensor":
         """
@@ -305,7 +305,7 @@ class PromptDepthAnythingImageProcessorFast(BaseImageProcessorFast):
     def post_process_depth_estimation(
         self,
         outputs: "DepthEstimatorOutput",
-        target_sizes: Optional[Union[TensorType, list[tuple[int, int]], None]] = None,
+        target_sizes: TensorType | list[tuple[int, int]] | None | None = None,
     ) -> list[dict[str, TensorType]]:
         """
         Converts the raw output of [`DepthEstimatorOutput`] into final depth predictions and depth PIL images.

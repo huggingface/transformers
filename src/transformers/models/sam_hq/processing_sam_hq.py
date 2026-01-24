@@ -16,20 +16,20 @@ Processor class for SAMHQ.
 """
 
 from copy import deepcopy
-from typing import Optional, Union
+from typing import Union
 
 import numpy as np
 
+from ...feature_extraction_utils import BatchFeature
 from ...image_utils import ImageInput
 from ...processing_utils import ImagesKwargs, ProcessingKwargs, ProcessorMixin, Unpack
-from ...tokenization_utils_base import BatchEncoding
 from ...utils import auto_docstring, is_torch_available
 
 
 if is_torch_available():
     import torch
 
-NestedList = list[Union[Optional[float | int], "NestedList"]]
+NestedList = list[Union[float | int | None, "NestedList"]]
 
 
 class SamHQImagesKwargs(ImagesKwargs, total=False):
@@ -61,11 +61,11 @@ class SamHQImagesKwargs(ImagesKwargs, total=False):
         batching masks of different sizes to ensure consistent dimensions.
     """
 
-    segmentation_maps: Optional[ImageInput]
-    input_points: Optional[NestedList]
-    input_labels: Optional[NestedList]
-    input_boxes: Optional[NestedList]
-    point_pad_value: Optional[int]
+    segmentation_maps: ImageInput | None
+    input_points: NestedList | torch.Tensor | None
+    input_labels: NestedList | int | torch.Tensor | None
+    input_boxes: NestedList | torch.Tensor | None
+    point_pad_value: int | None
     mask_size: dict[str, int]
     mask_pad_size: dict[str, int]
 
@@ -93,9 +93,9 @@ class SamHQProcessor(ProcessorMixin):
     @auto_docstring
     def __call__(
         self,
-        images: Optional[ImageInput] = None,
+        images: ImageInput | None = None,
         **kwargs: Unpack[SamHQProcessorKwargs],
-    ) -> BatchEncoding:
+    ) -> BatchFeature:
         output_kwargs = self._merge_kwargs(
             SamHQProcessorKwargs,
             tokenizer_init_kwargs={},

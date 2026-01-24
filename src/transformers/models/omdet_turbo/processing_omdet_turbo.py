@@ -15,8 +15,7 @@
 Processor class for OmDet-Turbo.
 """
 
-import warnings
-from typing import TYPE_CHECKING, Optional, Union
+from typing import TYPE_CHECKING
 
 from ...feature_extraction_utils import BatchFeature
 from ...image_transforms import center_to_corners_format
@@ -44,7 +43,7 @@ class OmDetTurboTextKwargs(TextKwargs, total=False):
         or pre-tokenized input. The task description guides the model on what objects to detect in the images.
     """
 
-    task: Optional[Union[str, list[str], TextInput, PreTokenizedInput]]
+    task: str | list[str] | TextInput | PreTokenizedInput | None
 
 
 if is_torch_available():
@@ -73,25 +72,6 @@ class OmDetTurboProcessorKwargs(ProcessingKwargs, total=False):
             "task": None,
         },
     }
-
-
-class DictWithDeprecationWarning(dict):
-    message = (
-        "The `classes` key is deprecated for `OmDetTurboProcessor.post_process_grounded_object_detection` "
-        "output dict and will be removed in a 4.51.0 version. Please use `text_labels` instead."
-    )
-
-    def __getitem__(self, key):
-        if key == "classes":
-            warnings.warn(self.message, FutureWarning)
-            return super().__getitem__("text_labels")
-        return super().__getitem__(key)
-
-    def get(self, key, *args, **kwargs):
-        if key == "classes":
-            warnings.warn(self.message, FutureWarning)
-            return super().get("text_labels", *args, **kwargs)
-        return super().get(key, *args, **kwargs)
 
 
 def clip_boxes(box, box_size: tuple[int, int]):
@@ -136,7 +116,7 @@ def _post_process_boxes_for_image(
     image_size: tuple[int, int],
     threshold: float,
     nms_threshold: float,
-    max_num_det: Optional[int] = None,
+    max_num_det: int | None = None,
 ) -> tuple["torch.Tensor", "torch.Tensor", "torch.Tensor"]:
     """
     Filter predicted results using given thresholds and NMS.
@@ -214,8 +194,8 @@ class OmDetTurboProcessor(ProcessorMixin):
     @auto_docstring
     def __call__(
         self,
-        images: Optional[ImageInput] = None,
-        text: Optional[Union[list[str], list[list[str]]]] = None,
+        images: ImageInput | None = None,
+        text: list[str] | list[list[str]] | None = None,
         **kwargs: Unpack[OmDetTurboProcessorKwargs],
     ) -> BatchFeature:
         if images is None or text is None:
@@ -284,11 +264,11 @@ class OmDetTurboProcessor(ProcessorMixin):
     def post_process_grounded_object_detection(
         self,
         outputs: "OmDetTurboObjectDetectionOutput",
-        text_labels: Optional[Union[list[str], list[list[str]]]] = None,
+        text_labels: list[str] | list[list[str]] | None = None,
         threshold: float = 0.3,
         nms_threshold: float = 0.5,
-        target_sizes: Optional[Union[TensorType, list[tuple]]] = None,
-        max_num_det: Optional[int] = None,
+        target_sizes: TensorType | list[tuple] | None = None,
+        max_num_det: int | None = None,
     ):
         """
         Converts the raw output of [`OmDetTurboForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
@@ -359,9 +339,7 @@ class OmDetTurboProcessor(ProcessorMixin):
                 nms_threshold=nms_threshold,
                 max_num_det=max_num_det,
             )
-            result = DictWithDeprecationWarning(
-                {"boxes": boxes, "scores": scores, "labels": labels, "text_labels": None}
-            )
+            result = {"boxes": boxes, "scores": scores, "labels": labels, "text_labels": None}
             results.append(result)
 
         # Add text labels

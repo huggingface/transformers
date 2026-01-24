@@ -21,7 +21,7 @@ python utils/update_metadata.py --token <token> --commit_sha <commit_sha>
 ```
 
 Usage to check all pipelines are properly defined in the constant `PIPELINE_TAGS_AND_AUTO_MODELS` of this script, so
-that new pipelines are properly added as metadata (as used in `make repo-consistency`):
+that new pipelines are properly added as metadata (as used in `make check-repo`):
 
 ```bash
 python utils/update_metadata.py --check-only
@@ -106,7 +106,7 @@ PIPELINE_TAGS_AND_AUTO_MODELS = [
         "MODEL_FOR_VISUAL_QUESTION_ANSWERING_MAPPING_NAMES",
         "AutoModelForVisualQuestionAnswering",
     ),
-    ("image-to-text", "MODEL_FOR_VISION_2_SEQ_MAPPING_NAMES", "AutoModelForVision2Seq"),
+    ("image-to-text", "MODEL_FOR_IMAGE_TEXT_TO_TEXT_MAPPING_NAMES", "AutoModelForImageTextToText"),
     (
         "zero-shot-image-classification",
         "MODEL_FOR_ZERO_SHOT_IMAGE_CLASSIFICATION_MAPPING_NAMES",
