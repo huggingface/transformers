@@ -440,6 +440,10 @@ class SamHQVisionModel(SamVisionModel):
     """
 )
 class SamHQModel(SamModel):
+    _tied_weights_keys = {
+        "prompt_encoder.shared_embedding.positional_embedding": "shared_image_embedding.positional_embedding"
+    }
+
     def __init__(self, config):
         super().__init__(config)
         self.vision_encoder = SamHQVisionEncoder(config.vision_config)
