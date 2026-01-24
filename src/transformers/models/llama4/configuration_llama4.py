@@ -56,22 +56,22 @@ class Llama4VisionConfig(PreTrainedConfig):
             The size (resolution) of each patch.
         norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization layers.
-        vision_feature_select_strategy (`int`, *optional*, defaults to `"default"`):
+        vision_feature_select_strategy (`str`, *optional*, defaults to `"default"`):
             The feature selection strategy used to select the vision features from the vision model.
             Should be same as in model's config
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-        pixel_shuffle_ratio (`int`, *optional*, defaults to 0.5):
+        pixel_shuffle_ratio (`float`, *optional*, defaults to 0.5):
             The ratio used for the pixel shuffle operation in the multi-modal projector.
         projector_input_dim (`int`, *optional*, defaults to 4096):
             Dimensionality of the input to the multi-modal projector.
         projector_output_dim (`int`, *optional*, defaults to 4096):
             Dimensionality of the output of the multi-modal projector.
-        multi_modal_projector_bias (`int`, *optional*, defaults to `False`):
+        multi_modal_projector_bias (`bool`, *optional*, defaults to `False`):
             Whether to use bias in the multi-modal projector layers.
-        projector_dropout (`int`, *optional*, defaults to 0.0):
+        projector_dropout (`float`, *optional*, defaults to 0.0):
             The dropout probability for the multi-modal projector.
-        attention_dropout (`int`, *optional*, defaults to 0.0):
+        attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         rope_parameters (`RopeParameters`, *optional*):
             RoPE Parameters
@@ -184,23 +184,23 @@ class Llama4TextConfig(PreTrainedConfig):
             The id of the end of sentence token.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`):
             Whether to tie weight embeddings
-        attention_dropout (`int`, *optional*, defaults to 0.0):
+        attention_dropout (`float`, *optional*, defaults to 0.0):
             The dropout ratio for the attention probabilities.
         num_experts_per_tok (`int`, *optional*, defaults to 1):
             Number of experts to route each token to. This is the top-k value for the token-choice routing.
         num_local_experts (`int`, *optional*, defaults to 16):
             Number of experts for each Softmax router.
-        moe_layers (`int`, *optional*):
+        moe_layers (`list[int]`, *optional*):
             Indices of the layers that are MoE layers. If not specified, will be calculated using `interleave_moe_layer_step`.
         interleave_moe_layer_step (`int`, *optional*, defaults to 1):
             The frequency of MoE layers in the model. For example, setting it to 2 means every 2nd layer is an MoE layer.
-        use_qk_norm (`int`, *optional*, defaults to `True`):
+        use_qk_norm (`bool`, *optional*, defaults to `True`):
             Whether to normalize the Query and Key matrices in the attention layer.
-        output_router_logits (`int`, *optional*, defaults to `False`):
+        output_router_logits (`bool`, *optional*, defaults to `False`):
             Whether or not to return the router logits of all MoE layers.
-        router_aux_loss_coef (`int`, *optional*, defaults to 0.001):
+        router_aux_loss_coef (`float`, *optional*, defaults to 0.001):
             The aux loss factor for the total loss.
-        router_jitter_noise (`int`, *optional*, defaults to 0.0):
+        router_jitter_noise (`float`, *optional*, defaults to 0.0):
             The amount of noise to add to the router logits.
         rope_parameters (`RopeParameters`, *optional*):
             Dictionary containing the configuration parameters for the RoPE embeddings. The dictionary should contain
@@ -222,7 +222,7 @@ class Llama4TextConfig(PreTrainedConfig):
             Recommended for long sequences (e.g., >32k tokens) to maintain stable output results.
         floor_scale (`int`, *optional*, defaults to 8192):
             Scaling factor for the floor operation in the attention mechanism.
-        attn_scale (`int`, *optional*, defaults to 0.1):
+        attn_scale (`float`, *optional*, defaults to 0.1):
             Scaling factor for the attention scores.
 
     Example:
