@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_mm_grounding_dino.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -128,6 +127,8 @@ class MMGroundingDinoConfig(PreTrainedConfig):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
         layer_norm_eps (`float`, *optional*, defaults to 1e-05):
             The epsilon used by the layer normalization layers.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
     Examples:
 
@@ -195,6 +196,7 @@ class MMGroundingDinoConfig(PreTrainedConfig):
         positional_embedding_temperature=20,
         init_std=0.02,
         layer_norm_eps=1e-5,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         if backbone_config is None and backbone is None:
@@ -278,6 +280,7 @@ class MMGroundingDinoConfig(PreTrainedConfig):
         self.positional_embedding_temperature = positional_embedding_temperature
         self.init_std = init_std
         self.layer_norm_eps = layer_norm_eps
+        self.tie_word_embeddings = tie_word_embeddings
 
         super().__init__(is_encoder_decoder=is_encoder_decoder, **kwargs)
 

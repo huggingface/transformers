@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2023 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,8 +15,9 @@
 
 import argparse
 import json
+from io import BytesIO
 
-import requests
+import httpx
 import torch
 from huggingface_hub import hf_hub_download
 from PIL import Image
@@ -155,6 +155,9 @@ def convert_focalnet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hu
     # verify conversion
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
 
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
+
     processor = BitImageProcessor(
         do_resize=True,
         size={"shortest_edge": 256},
@@ -165,7 +168,6 @@ def convert_focalnet_checkpoint(model_name, pytorch_dump_folder_path, push_to_hu
         image_mean=IMAGENET_DEFAULT_MEAN,
         image_std=IMAGENET_DEFAULT_STD,
     )
-    image = Image.open(requests.get(url, stream=True).raw)
     inputs = processor(images=image, return_tensors="pt")
 
     image_transforms = transforms.Compose(

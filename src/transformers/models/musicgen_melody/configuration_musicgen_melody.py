@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 Meta AI and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -75,6 +74,11 @@ class MusicgenMelodyDecoderConfig(PreTrainedConfig):
         bos_token_id (`int`, *optional*, defaults to 2048): The id of the *beginning-of-sequence* token.
         eos_token_id (`int`, *optional*): The id of the *end-of-sequence* token.
         tie_word_embeddings (`bool`, *optional*, defaults to `False`): Whether to tie word embeddings with the text encoder.
+        is_decoder (`bool`, *optional*, defaults to `False`):
+            Whether to only use the decoder in an encoder-decoder architecture, otherwise it has no effect on
+            decoder-only or encoder-only architectures.
+        add_cross_attention (`bool`, *optional*, defaults to `False`):
+            Whether cross-attention layers should be added to the model.
     """
 
     model_type = "musicgen_melody_decoder"
@@ -103,8 +107,12 @@ class MusicgenMelodyDecoderConfig(PreTrainedConfig):
         bos_token_id=2048,
         eos_token_id=None,
         tie_word_embeddings=False,
+        is_decoder=False,
+        add_cross_attention=False,
         **kwargs,
     ):
+        self.is_decoder = is_decoder
+        self.add_cross_attention = add_cross_attention
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -125,13 +133,11 @@ class MusicgenMelodyDecoderConfig(PreTrainedConfig):
             raise ValueError(f"Expected 1 (mono) or 2 (stereo) audio channels, got {audio_channels} channels.")
         self.audio_channels = audio_channels
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        super().__init__(**kwargs)
 
 
 class MusicgenMelodyConfig(PreTrainedConfig):
@@ -226,6 +232,7 @@ class MusicgenMelodyConfig(PreTrainedConfig):
         self.decoder = decoder
         self.num_chroma = num_chroma
         self.chroma_length = chroma_length
+        self.tie_encoder_decoder = kwargs.get("tie_encoder_decoder", False)
         kwargs["is_encoder_decoder"] = False
         super().__init__(**kwargs)
 

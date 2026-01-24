@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright The HuggingFace Team and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """Tokenization classes for XGLM."""
-
-from typing import Optional, Union
 
 from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import Unigram
@@ -64,7 +61,7 @@ class XGLMTokenizer(TokenizersBackend):
 
     def __init__(
         self,
-        vocab: Optional[Union[str, list[tuple[str, float]]]] = None,
+        vocab: str | list[tuple[str, float]] | None = None,
         bos_token: str = "<s>",
         eos_token: str = "</s>",
         sep_token: str = "</s>",

@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_hgnet_v2.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 Baidu Inc and The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -19,8 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
-from typing import Optional
 
 import torch
 import torch.nn.functional as F
@@ -359,8 +356,8 @@ class HGNetV2Backbone(HGNetV2PreTrainedModel, BackboneMixin):
     def forward(
         self,
         pixel_values: Tensor,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
     ) -> BackboneOutput:
         r"""
@@ -436,10 +433,10 @@ class HGNetV2ForImageClassification(HGNetV2PreTrainedModel):
     @auto_docstring
     def forward(
         self,
-        pixel_values: Optional[torch.FloatTensor] = None,
-        labels: Optional[torch.LongTensor] = None,
-        output_hidden_states: Optional[bool] = None,
-        return_dict: Optional[bool] = None,
+        pixel_values: torch.FloatTensor | None = None,
+        labels: torch.LongTensor | None = None,
+        output_hidden_states: bool | None = None,
+        return_dict: bool | None = None,
         **kwargs,
     ) -> ImageClassifierOutputWithNoAttention:
         r"""
@@ -451,12 +448,14 @@ class HGNetV2ForImageClassification(HGNetV2PreTrainedModel):
         Examples:
         ```python
         >>> import torch
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import HGNetV2ForImageClassification, AutoImageProcessor
         >>> from PIL import Image
 
         >>> url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> model = HGNetV2ForImageClassification.from_pretrained("ustc-community/hgnet-v2")
         >>> processor = AutoImageProcessor.from_pretrained("ustc-community/hgnet-v2")

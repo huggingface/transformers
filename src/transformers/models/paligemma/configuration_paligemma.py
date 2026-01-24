@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 Microsoft Research & University of Wisconsin-Madison and the HuggingFace Inc. team. All rights reserved.
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -46,6 +45,8 @@ class PaliGemmaConfig(PreTrainedConfig):
             Dimension of the multimodal projection space.
         hidden_size (`int`, *optional*, defaults to 2048):
             Dimension of the hidden layer of the Language model.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
     Example:
 
@@ -83,12 +84,14 @@ class PaliGemmaConfig(PreTrainedConfig):
         vocab_size=257152,
         projection_dim=2048,
         hidden_size=2048,
+        tie_word_embeddings: bool | None = True,
         **kwargs,
     ):
         self.image_token_index = image_token_index
         self.projection_dim = projection_dim
         self.hidden_size = hidden_size
         self.vision_config = vision_config
+        self.tie_word_embeddings = tie_word_embeddings
         self.is_encoder_decoder = False
 
         if isinstance(self.vision_config, dict):

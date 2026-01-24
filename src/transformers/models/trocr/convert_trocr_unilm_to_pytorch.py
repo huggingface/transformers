@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2021 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -15,9 +14,10 @@
 """Convert TrOCR checkpoints from the unilm repository."""
 
 import argparse
+from io import BytesIO
 from pathlib import Path
 
-import requests
+import httpx
 import torch
 from PIL import Image
 
@@ -115,8 +115,9 @@ def prepare_img(checkpoint_url):
         # url = "https://fki.tic.heia-fr.ch/static/img/a01-122.jpg"
     elif "printed" in checkpoint_url or "stage1" in checkpoint_url:
         url = "https://www.researchgate.net/profile/Dinh-Sang/publication/338099565/figure/fig8/AS:840413229350922@1577381536857/An-receipt-example-in-the-SROIE-2019-dataset_Q640.jpg"
-    im = Image.open(requests.get(url, stream=True).raw).convert("RGB")
-    return im
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read())).convert("RGB")
+    return image
 
 
 @torch.no_grad()

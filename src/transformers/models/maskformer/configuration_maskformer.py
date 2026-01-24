@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 Meta Platforms, Inc.and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 """MaskFormer model configuration"""
-
-from typing import Optional, Union
 
 from ...configuration_utils import PreTrainedConfig
 from ...utils import logging
@@ -114,18 +111,18 @@ class MaskFormerConfig(PreTrainedConfig):
         mask_feature_size: int = 256,
         no_object_weight: float = 0.1,
         use_auxiliary_loss: bool = False,
-        backbone_config: Optional[Union[dict, PreTrainedConfig]] = None,
-        decoder_config: Optional[dict] = None,
+        backbone_config: dict | PreTrainedConfig | None = None,
+        decoder_config: dict | None = None,
         init_std: float = 0.02,
         init_xavier_std: float = 1.0,
         dice_weight: float = 1.0,
         cross_entropy_weight: float = 1.0,
         mask_weight: float = 20.0,
-        output_auxiliary_logits: Optional[bool] = None,
-        backbone: Optional[str] = None,
+        output_auxiliary_logits: bool | None = None,
+        backbone: str | None = None,
         use_pretrained_backbone: bool = False,
         use_timm_backbone: bool = False,
-        backbone_kwargs: Optional[dict] = None,
+        backbone_kwargs: dict | None = None,
         **kwargs,
     ):
         if backbone_config is None and backbone is None:

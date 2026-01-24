@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2024 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -14,7 +13,6 @@
 # limitations under the License.
 
 from dataclasses import dataclass
-from typing import Optional, Union
 
 import torch
 from torch import Tensor, nn
@@ -28,8 +26,6 @@ from .configuration_timm_wrapper import TimmWrapperConfig
 
 if is_timm_available():
     import timm
-
-    from ...integrations.timm import _maybe_reinit_non_persistent_buffer
 
 
 @dataclass
@@ -53,9 +49,9 @@ class TimmWrapperModelOutput(ModelOutput):
     """
 
     last_hidden_state: torch.FloatTensor
-    pooler_output: Optional[torch.FloatTensor] = None
-    hidden_states: Optional[tuple[torch.FloatTensor, ...]] = None
-    attentions: Optional[tuple[torch.FloatTensor, ...]] = None
+    pooler_output: torch.FloatTensor | None = None
+    hidden_states: tuple[torch.FloatTensor, ...] | None = None
+    attentions: tuple[torch.FloatTensor, ...] | None = None
 
 
 def _create_timm_model_with_error_handling(config: "TimmWrapperConfig", **model_kwargs):
@@ -117,7 +113,12 @@ class TimmWrapperPreTrainedModel(PreTrainedModel):
             if module.bias is not None:
                 init.zeros_(module.bias)
         # Also, reinit all non-persistemt buffers if any!
-        _maybe_reinit_non_persistent_buffer(module)
+        if hasattr(module, "init_non_persistent_buffers"):
+            module.init_non_persistent_buffers()
+        elif isinstance(module, nn.BatchNorm2d) and getattr(module, "running_mean", None) is not None:
+            init.zeros_(module.running_mean)
+            init.ones_(module.running_var)
+            init.zeros_(module.num_batches_tracked)
 
     def _timm_model_supports_gradient_checkpointing(self):
         """
@@ -163,12 +164,13 @@ class TimmWrapperModel(TimmWrapperPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[Union[bool, list[int]]] = None,
-        return_dict: Optional[bool] = None,
-        do_pooling: Optional[bool] = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | list[int] | None = None,
+        return_dict: bool | None = None,
+        do_pooling: bool | None = None,
+        use_cache: bool | None = None,
         **kwargs,
-    ) -> Union[TimmWrapperModelOutput, tuple[Tensor, ...]]:
+    ) -> TimmWrapperModelOutput | tuple[Tensor, ...]:
         r"""
         output_attentions (`bool`, *optional*):
             Whether or not to return the attentions tensors of all attention layers. Not compatible with timm wrapped models.
@@ -288,12 +290,12 @@ class TimmWrapperForImageClassification(TimmWrapperPreTrainedModel):
     def forward(
         self,
         pixel_values: torch.FloatTensor,
-        labels: Optional[torch.LongTensor] = None,
-        output_attentions: Optional[bool] = None,
-        output_hidden_states: Optional[Union[bool, list[int]]] = None,
-        return_dict: Optional[bool] = None,
+        labels: torch.LongTensor | None = None,
+        output_attentions: bool | None = None,
+        output_hidden_states: bool | list[int] | None = None,
+        return_dict: bool | None = None,
         **kwargs,
-    ) -> Union[ImageClassifierOutput, tuple[Tensor, ...]]:
+    ) -> ImageClassifierOutput | tuple[Tensor, ...]:
         r"""
         labels (`torch.LongTensor` of shape `(batch_size,)`, *optional*):
             Labels for computing the image classification/regression loss. Indices should be in `[0, ...,

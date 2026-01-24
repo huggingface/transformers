@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2025 the HuggingFace Team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,13 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from typing import Optional
 
 import torch
 
 from ...configuration_utils import PreTrainedConfig
 from ...processing_utils import Unpack
-from ...utils.generic import TransformersKwargs
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple
 from ..auto import CONFIG_MAPPING, AutoConfig, AutoModel
 from ..sam2_video.configuration_sam2_video import Sam2VideoMaskDecoderConfig, Sam2VideoPromptEncoderConfig
 from ..sam2_video.modeling_sam2_video import (
@@ -546,33 +544,19 @@ class Sam3TrackerVideoModel(Sam2VideoModel):
 
         self.post_init()
 
+    @can_return_tuple
+    @auto_docstring
     def get_image_features(
         self,
         pixel_values: torch.FloatTensor,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> tuple[
-        list[torch.Tensor],
-        list[torch.Tensor],
-        Optional[tuple[torch.FloatTensor, ...]],
-        Optional[tuple[torch.FloatTensor, ...]],
-    ]:
+    ) -> tuple | Sam3TrackerVideoVisionEncoderOutput:
         r"""
-        Extract and preprocess image features using the vision encoder.
-
-        Args:
-            pixel_values (`torch.FloatTensor`):
-                Input pixel values of shape `(batch_size, num_channels, height, width)`.
-
-        Returns:
-            `tuple`: A tuple containing:
-                - feature_maps (`list[torch.Tensor]`): List of feature maps from different levels.
-                - feature_maps_position_embeddings (`list[torch.Tensor]`): List of positional embeddings for each feature level.
-                - vision_hidden_states (`tuple[torch.FloatTensor]`, *optional*): Hidden states from the vision encoder.
-                - vision_attentions (`tuple[torch.FloatTensor]`, *optional*): Attention weights from the vision encoder.
+        pixel_values (`torch.FloatTensor`):
+            Input pixel values of shape `(batch_size, num_channels, height, width)`.
         """
         vision_outputs: Sam3TrackerVideoVisionEncoderOutput = self.vision_encoder(
-            pixel_values,
-            **kwargs,
+            pixel_values, return_dict=True, **kwargs
         )
 
         feature_maps = vision_outputs.fpn_hidden_states
@@ -590,8 +574,10 @@ class Sam3TrackerVideoModel(Sam2VideoModel):
             feature_map_position_embedding.flatten(2).permute(2, 0, 1)
             for feature_map_position_embedding in feature_maps_position_embeddings[:-1]
         ]
+        vision_outputs.fpn_hidden_states = feature_maps
+        vision_outputs.fpn_position_encoding = feature_maps_position_embeddings
 
-        return feature_maps, feature_maps_position_embeddings, vision_outputs.hidden_states, vision_outputs.attentions
+        return vision_outputs
 
 
 __all__ = [

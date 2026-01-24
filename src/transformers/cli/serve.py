@@ -387,7 +387,7 @@ class Serve:
             ),
         ] = None,
         quantization: Annotated[
-            Optional[str],
+            str | None,
             typer.Option(help="Which quantization method to use. choices: 'bnb-4bit', 'bnb-8bit'"),
         ] = None,
         host: Annotated[str, typer.Option(help="Interface the server will listen to.")] = "localhost",
@@ -1728,7 +1728,7 @@ class Serve:
         self.last_messages = messages
         return req_continues_last_messages
 
-    def get_quantization_config(self) -> Optional[BitsAndBytesConfig]:
+    def get_quantization_config(self) -> BitsAndBytesConfig | None:
         """
         Returns the quantization config for the given CLI arguments.
 

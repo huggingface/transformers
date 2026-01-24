@@ -22,7 +22,6 @@ from transformers.testing_utils import (
     backend_empty_cache,
     require_accelerate,
     require_deterministic_for_xpu,
-    require_read_token,
     require_torch_accelerator,
     require_torch_multi_accelerator,
     slow,
@@ -70,7 +69,6 @@ class FbgemmFp8ConfigTest(unittest.TestCase):
 @require_torch_accelerator
 @unittest.skipIf(not is_torch_xpu_available() and not is_fbgemm_gpu_available(), "test requires fbgemm-gpu or xpu")
 @require_accelerate
-@require_read_token
 class FbgemmFp8Test(unittest.TestCase):
     model_name = "meta-llama/Meta-Llama-3-8B"
 

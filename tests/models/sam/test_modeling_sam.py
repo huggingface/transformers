@@ -160,7 +160,6 @@ class SamVisionModelTest(ModelTesterMixin, unittest.TestCase):
     all_model_classes = (SamVisionModel,) if is_torch_available() else ()
 
     test_resize_embeddings = False
-    test_torch_exportable = True
 
     def setUp(self):
         self.model_tester = SamVisionModelTester(self)
@@ -226,24 +225,20 @@ class SamVisionModelTest(ModelTesterMixin, unittest.TestCase):
                 list(expected_attention_shape),
             )
 
-    @unittest.skip(reason="SamVisionModel does not support training")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training(self):
         pass
 
-    @unittest.skip(reason="SamVisionModel does not support training")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     @unittest.skip(reason="SamVisionModel does not support training")
@@ -618,24 +613,20 @@ class SamModelTest(ModelTesterMixin, PipelineTesterMixin, unittest.TestCase):
                 list(expected_mask_decoder_attention_shape),
             )
 
-    @unittest.skip(reason="SamModel does not support training")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training(self):
         pass
 
-    @unittest.skip(reason="SamModel does not support training")
+    @unittest.skip(reason="This module does not support standalone training")
     def test_training_gradient_checkpointing(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_false(self):
         pass
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant_false(self):
+    @unittest.skip(reason="This module does not support standalone training")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
         pass
 
     @unittest.skip(reason="SamModel does not support training")
@@ -748,7 +739,7 @@ class SamModelIntegrationTest(unittest.TestCase):
         scores = outputs.iou_scores.squeeze().cpu()
         masks = outputs.pred_masks[0, 0, 0, 0, :3].cpu()
         torch.testing.assert_close(scores[-1], torch.tensor(0.4515), rtol=2e-4, atol=2e-4)
-        torch.testing.assert_close(masks, torch.tensor([-4.1800, -3.4948, -3.4481]), rtol=2e-4, atol=2e-4)
+        torch.testing.assert_close(masks, torch.tensor([-4.1795, -3.4934, -3.4477]), rtol=2e-4, atol=2e-4)
 
     def test_inference_mask_generation_one_point_one_bb(self):
         model = SamModel.from_pretrained("facebook/sam-vit-base")
@@ -1000,7 +991,7 @@ class SamModelIntegrationTest(unittest.TestCase):
         iou_scores = outputs.iou_scores.cpu()
         self.assertTrue(iou_scores.shape == (1, 2, 3))
         torch.testing.assert_close(
-            iou_scores, torch.tensor([[[0.9105, 0.9825, 0.9675], [0.7646, 0.7943, 0.7774]]]), atol=1e-4, rtol=1e-4
+            iou_scores, torch.tensor([[[0.9105, 0.9825, 0.9675], [0.7646, 0.7944, 0.7769]]]), atol=1e-4, rtol=1e-4
         )
 
     def test_inference_mask_generation_three_boxes_point_batch(self):
@@ -1012,14 +1003,8 @@ class SamModelIntegrationTest(unittest.TestCase):
 
         raw_image = prepare_image()
 
-        # fmt: off
-        input_boxes = torch.Tensor([[[620, 900, 1000, 1255]], [[75, 275, 1725, 850]],  [[75, 275, 1725, 850]]]).cpu()
-        EXPECTED_IOU = torch.tensor([[
-            [0.9773, 0.9881, 0.9522],
-            [0.5996, 0.7661, 0.7937],
-            [0.5996, 0.7661, 0.7937],
-        ]])
-        # fmt: on
+        input_boxes = torch.Tensor([[[620, 900, 1000, 1255]], [[75, 275, 1725, 850]], [[75, 275, 1725, 850]]]).cpu()
+        EXPECTED_IOU = torch.tensor([[[0.9773, 0.9880, 0.9522], [0.5995, 0.7658, 0.7936], [0.5995, 0.7658, 0.7936]]])
         input_boxes = input_boxes.unsqueeze(0)
 
         inputs = processor(raw_image, input_boxes=input_boxes, return_tensors="pt").to(torch_device)

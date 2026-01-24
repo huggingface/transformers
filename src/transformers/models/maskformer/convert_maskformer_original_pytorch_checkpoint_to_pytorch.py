@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2022 Meta Platforms, Inc. and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -16,11 +15,12 @@ import sys
 from argparse import ArgumentParser
 from collections.abc import Iterator
 from dataclasses import dataclass
+from io import BytesIO
 from pathlib import Path
 from pprint import pformat
 from typing import Any
 
-import requests
+import httpx
 import torch
 import torchvision.transforms as T
 from detectron2.checkpoint import DetectionCheckpointer
@@ -83,9 +83,9 @@ class TrackedStateDict:
 # We will verify our results on an image of cute cats
 def prepare_img():
     url = "http://images.cocodataset.org/val2017/000000039769.jpg"
-    img_data = requests.get(url, stream=True).raw
-    im = Image.open(img_data)
-    return im
+    with httpx.stream("GET", url) as response:
+        image = Image.open(BytesIO(response.read()))
+    return image
 
 
 @dataclass

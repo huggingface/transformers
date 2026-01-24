@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 Google AI, Google Brain and Carnegie Mellon University Authors and the HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -13,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License
 """Tokenization classes for Camembert model."""
-
-from typing import Optional, Union
 
 from tokenizers import Regex, Tokenizer, decoders, normalizers, pre_tokenizers, processors
 from tokenizers.models import Unigram
@@ -105,7 +102,7 @@ class CamembertTokenizer(TokenizersBackend):
         additional_special_tokens=None,
         add_prefix_space=True,
         vocab_file=None,
-        vocab: Optional[Union[str, dict, list]] = None,
+        vocab: str | dict | list | None = None,
         **kwargs,
     ):
         self.vocab_file = vocab_file

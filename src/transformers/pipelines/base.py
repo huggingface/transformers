@@ -1,4 +1,3 @@
-# coding=utf-8
 # Copyright 2018 The HuggingFace Inc. team.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,6 +11,8 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+from __future__ import annotations
+
 import collections
 import copy
 import csv
@@ -26,13 +27,12 @@ from abc import ABC, abstractmethod
 from collections import UserDict
 from contextlib import contextmanager
 from os.path import abspath, exists
-from typing import TYPE_CHECKING, Any, Optional, Union
+from typing import TYPE_CHECKING, Any, Union
 
 from ..dynamic_module_utils import custom_object_save
 from ..feature_extraction_utils import PreTrainedFeatureExtractor
 from ..generation import GenerationConfig
 from ..image_processing_utils import BaseImageProcessor
-from ..modelcard import ModelCard
 from ..models.auto import AutoConfig, AutoTokenizer
 from ..processing_utils import ProcessorMixin
 from ..tokenization_python import PreTrainedTokenizer
@@ -306,10 +306,10 @@ def get_default_model_and_revision(targeted_task: dict, task_options: Any | None
 
 
 def load_assistant_model(
-    model: "PreTrainedModel",
-    assistant_model: Union[str, "PreTrainedModel"] | None,
+    model: PreTrainedModel,
+    assistant_model: str | PreTrainedModel | None,
     assistant_tokenizer: PreTrainedTokenizer | None,
-) -> tuple[Optional["PreTrainedModel"], PreTrainedTokenizer | None]:
+) -> tuple[PreTrainedModel | None, PreTrainedTokenizer | None]:
     """
     Prepares the assistant model and the assistant tokenizer for a pipeline whose model that can call `generate`.
 
@@ -466,7 +466,7 @@ class PipelineDataFormat:
         input_path: str | None,
         column: str | None,
         overwrite=False,
-    ) -> "PipelineDataFormat":
+    ) -> PipelineDataFormat:
         """
         Creates an instance of the right subclass of [`~pipelines.PipelineDataFormat`] depending on `format`.
 
@@ -677,8 +677,6 @@ def build_pipeline_init_args(
             [`ProcessorMixin`]. Processor is a composite object that might contain `tokenizer`, `feature_extractor`, and
             `image_processor`."""
     docstring += r"""
-        modelcard (`str` or [`ModelCard`], *optional*):
-            Model card attributed to the model for this pipeline.
         task (`str`, defaults to `""`):
             A task-identifier for the pipeline.
         num_workers (`int`, *optional*, defaults to 8):
@@ -777,14 +775,13 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
 
     def __init__(
         self,
-        model: "PreTrainedModel",
+        model: PreTrainedModel,
         tokenizer: PreTrainedTokenizer | None = None,
-        feature_extractor: Optional[PreTrainedFeatureExtractor] = None,
+        feature_extractor: PreTrainedFeatureExtractor | None = None,
         image_processor: BaseImageProcessor | None = None,
         processor: ProcessorMixin | None = None,
-        modelcard: ModelCard | None = None,
         task: str = "",
-        device: Union[int, "torch.device"] | None = None,
+        device: int | torch.device | None = None,
         binary_output: bool = False,
         **kwargs,
     ):
@@ -797,7 +794,6 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         self.feature_extractor = feature_extractor
         self.image_processor = image_processor
         self.processor = processor
-        self.modelcard = modelcard
 
         # `accelerate` device map
         hf_device_map = getattr(self.model, "hf_device_map", None)
@@ -905,7 +901,7 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
             # Update the generation config with task specific params if they exist.
             # NOTE: 1. `prefix` is pipeline-specific and doesn't exist in the generation config.
             #       2. `task_specific_params` is a legacy feature and should be removed in a future version.
-            task_specific_params = self.model.config.task_specific_params
+            task_specific_params = getattr(self.model.config, "task_specific_params", None)
             if task_specific_params is not None and task in task_specific_params:
                 this_task_params = task_specific_params.get(task)
                 if "prefix" in this_task_params:
@@ -1012,14 +1008,14 @@ class Pipeline(_ScikitCompat, PushToHubMixin):
         return self(X)
 
     @property
-    def dtype(self) -> Optional["torch.dtype"]:
+    def dtype(self) -> torch.dtype | None:
         """
         Dtype of the model (if it's Pytorch model), `None` otherwise.
         """
         return getattr(self.model, "dtype", None)
 
     @property
-    def torch_dtype(self) -> Optional["torch.dtype"]:
+    def torch_dtype(self) -> torch.dtype | None:
         """
         Torch dtype of the model (if it's Pytorch model), `None` otherwise.
         """

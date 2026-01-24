@@ -176,6 +176,7 @@ class FastVlmForConditionalGenerationModelTest(ModelTesterMixin, GenerationTeste
         if is_torch_available()
         else {}
     )
+    skip_test_image_features_output_shape = True  # FastVLM uses index -3 for hidden_size instead of -1
 
     _is_composite = True
 
@@ -227,6 +228,15 @@ class FastVlmForConditionalGenerationModelTest(ModelTesterMixin, GenerationTeste
     def test_can_be_initialized_on_meta(self):
         pass
 
+    @unittest.skip("Cannot set output_attentions on timm models.")
+    def test_get_image_features_attentions(self):
+        pass
+
+    def _image_features_get_expected_num_hidden_states(self, model_tester=None):
+        # For models that rely on timm for their vision backend, it's hard to infer how many layers the model has
+        # from the timm config alone. So, we're just hardcoding the expected number of hidden states here.
+        return 2
+
 
 @require_torch
 @slow
@@ -246,7 +256,7 @@ class FastVlmForConditionalGenerationIntegrationTest(unittest.TestCase):
         prompt = "user\n<image>\nWhat are the things I should be cautious about when I visit this place?\nassistant"
         image_file = "https://llava-vl.github.io/static/images/view.jpg"
         raw_image = Image.open(requests.get(image_file, stream=True).raw)
-        inputs = self.processor(images=raw_image, text=prompt, return_tensors="pt").to(torch_device)
+        inputs = self.processor(images=raw_image, text=prompt, return_tensors="pt").to(torch_device, dtype=model.dtype)
 
         output = model.generate(**inputs, max_new_tokens=20)
         expected_decoded_texts = "user\n\nWhat are the things I should be cautious about when I visit this place?\nassistant\n\nWhen visiting this place, there are a few things you should be cautious about:\n\n1. **"  # fmt: skip
@@ -272,7 +282,8 @@ class FastVlmForConditionalGenerationIntegrationTest(unittest.TestCase):
         image2 = Image.open(requests.get("http://images.cocodataset.org/val2017/000000039769.jpg", stream=True).raw)
 
         inputs = self.processor(images=[image1, image2], text=prompts, return_tensors="pt", padding=True).to(
-            torch_device
+            torch_device,
+            dtype=model.dtype,
         )
 
         output = model.generate(**inputs, max_new_tokens=20)

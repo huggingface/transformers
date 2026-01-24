@@ -23,8 +23,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+
 import inspect
-from typing import Optional
 
 from ...configuration_utils import PreTrainedConfig
 from ...modeling_rope_utils import RopeParameters
@@ -206,24 +206,24 @@ class PaddleOCRTextConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 103424,
-        hidden_size: Optional[int] = 1024,
-        intermediate_size: Optional[int] = 3072,
-        num_hidden_layers: Optional[int] = 18,
-        num_attention_heads: Optional[int] = 16,
-        num_key_value_heads: Optional[int] = 2,
-        hidden_act: Optional[str] = "silu",
-        max_position_embeddings: Optional[int] = 131072,
-        initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[int] = 1e-05,
-        use_cache: Optional[int] = True,
-        pad_token_id: Optional[int] = 0,
-        bos_token_id: Optional[int] = 1,
-        eos_token_id: Optional[int] = 2,
-        tie_word_embeddings: Optional[bool] = True,
-        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        use_bias: Optional[bool] = False,
-        head_dim: Optional[int] = 128,
+        vocab_size: int | None = 103424,
+        hidden_size: int | None = 1024,
+        intermediate_size: int | None = 3072,
+        num_hidden_layers: int | None = 18,
+        num_attention_heads: int | None = 16,
+        num_key_value_heads: int | None = 2,
+        hidden_act: str | None = "silu",
+        max_position_embeddings: int | None = 131072,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: int | None = 1e-05,
+        use_cache: int | None = True,
+        pad_token_id: int | None = 0,
+        bos_token_id: int | None = 1,
+        eos_token_id: int | None = 2,
+        tie_word_embeddings: bool | None = True,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        use_bias: bool | None = False,
+        head_dim: int | None = 128,
         **kwargs,
     ):
         self.vocab_size = vocab_size
@@ -246,13 +246,11 @@ class PaddleOCRTextConfig(PreTrainedConfig):
         self.head_dim = head_dim if head_dim is not None else self.hidden_size // self.num_attention_heads
         self.rope_parameters = rope_parameters
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        self.tie_word_embeddings = tie_word_embeddings
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        super().__init__(**kwargs)
 
 
 class PaddleOCRVLConfig(PreTrainedConfig):
@@ -279,6 +277,8 @@ class PaddleOCRVLConfig(PreTrainedConfig):
             The token index to denote start of vision input.
         vision_end_token_id (`int`, *optional*, defaults to 101306):
             The token index to denote end of vision input.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether the model's input and output word embeddings should be tied.
 
     ```python
     >>> from transformers import PaddleOCRVLForConditionalGeneration, PaddleOCRVLConfig
@@ -306,6 +306,7 @@ class PaddleOCRVLConfig(PreTrainedConfig):
         video_token_id=100296,
         vision_start_token_id=101305,
         vision_end_token_id=101306,
+        tie_word_embeddings=True,
         **kwargs,
     ):
         if isinstance(vision_config, dict):
@@ -327,9 +328,7 @@ class PaddleOCRVLConfig(PreTrainedConfig):
         self.video_token_id = video_token_id
         self.vision_start_token_id = vision_start_token_id
         self.vision_end_token_id = vision_end_token_id
-
-        # FIXME: arthur/cyril - tying has to be used from the text config
-        kwargs["tie_word_embeddings"] = self.text_config.tie_word_embeddings
+        self.tie_word_embeddings = tie_word_embeddings
         super().__init__(**kwargs)
 
 

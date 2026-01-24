@@ -4,7 +4,6 @@
 #             the file from the modular. If any change should be done, please apply the change to the
 #                          modular_t5gemma.py file directly. One of our CI enforces this.
 #                🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨🚨
-# coding=utf-8
 # Copyright 2025 Google Inc. HuggingFace Inc. team. All rights reserved.
 #
 #
@@ -19,7 +18,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-from typing import Any, Optional, Union
+from typing import Any
 
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...modeling_rope_utils import RopeParameters
@@ -94,6 +93,9 @@ class T5GemmaModuleConfig(PreTrainedConfig):
             scaling factor when applying tanh softcapping on the logits.
         attn_logit_softcapping (`float`, *optional*, defaults to 50.0):
             scaling factor when applying tanh softcapping on the attention scores.
+        is_decoder (`bool`, *optional*, defaults to `False`):
+            Whether to only use the decoder in an encoder-decoder architecture, otherwise it has no effect on
+            decoder-only or encoder-only architectures.
 
     ```python
     >>> from transformers import T5GemmaModuleModel, T5GemmaModuleConfig
@@ -124,32 +126,38 @@ class T5GemmaModuleConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        vocab_size: Optional[int] = 256000,
-        hidden_size: Optional[int] = 2304,
-        intermediate_size: Optional[int] = 9216,
-        num_hidden_layers: Optional[int] = 26,
-        num_attention_heads: Optional[int] = 8,
-        num_key_value_heads: Optional[int] = 4,
-        head_dim: Optional[int] = 256,
-        hidden_activation: Optional[str] = "gelu_pytorch_tanh",
-        max_position_embeddings: Optional[int] = 8192,
-        initializer_range: Optional[float] = 0.02,
-        rms_norm_eps: Optional[int] = 1e-6,
-        use_cache: Optional[bool] = True,
-        pad_token_id: Optional[int] = 0,
-        eos_token_id: Optional[int] = 1,
-        bos_token_id: Optional[int] = 2,
-        tie_word_embeddings: Optional[bool] = True,
-        rope_parameters: Optional[RopeParameters | dict[str, RopeParameters]] = None,
-        attention_bias: Optional[bool] = False,
-        attention_dropout: Optional[float] = 0.0,
-        query_pre_attn_scalar: Optional[int] = 256,
-        sliding_window: Optional[int] = 4096,
-        layer_types: Optional[list[str]] = None,
-        final_logit_softcapping: Optional[float] = 30.0,
-        attn_logit_softcapping: Optional[float] = 50.0,
+        vocab_size: int | None = 256000,
+        hidden_size: int | None = 2304,
+        intermediate_size: int | None = 9216,
+        num_hidden_layers: int | None = 26,
+        num_attention_heads: int | None = 8,
+        num_key_value_heads: int | None = 4,
+        head_dim: int | None = 256,
+        hidden_activation: str | None = "gelu_pytorch_tanh",
+        max_position_embeddings: int | None = 8192,
+        initializer_range: float | None = 0.02,
+        rms_norm_eps: int | None = 1e-6,
+        use_cache: bool | None = True,
+        pad_token_id: int | None = 0,
+        eos_token_id: int | None = 1,
+        bos_token_id: int | None = 2,
+        tie_word_embeddings: bool | None = True,
+        rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
+        attention_bias: bool | None = False,
+        attention_dropout: float | None = 0.0,
+        query_pre_attn_scalar: int | None = 256,
+        sliding_window: int | None = 4096,
+        layer_types: list[str] | None = None,
+        final_logit_softcapping: float | None = 30.0,
+        attn_logit_softcapping: float | None = 50.0,
+        is_decoder: bool | None = False,
         **kwargs,
     ):
+        self.is_decoder = is_decoder
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -178,13 +186,7 @@ class T5GemmaModuleConfig(PreTrainedConfig):
 
         self.rope_parameters = rope_parameters
 
-        super().__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            tie_word_embeddings=tie_word_embeddings,
-            **kwargs,
-        )
+        super().__init__(**kwargs)
 
 
 class T5GemmaConfig(PreTrainedConfig):
@@ -227,14 +229,14 @@ class T5GemmaConfig(PreTrainedConfig):
 
     def __init__(
         self,
-        encoder: Optional[Union[T5GemmaModuleConfig, dict[Any, Any]]] = None,
-        decoder: Optional[Union[T5GemmaModuleConfig, dict[Any, Any]]] = None,
-        is_encoder_decoder: Optional[bool] = True,
-        dropout_rate: Optional[float] = 0.0,
-        classifier_dropout_rate: Optional[float] = 0.0,
-        attention_dropout: Optional[float] = 0.0,
-        tie_word_embeddings: Optional[bool] = True,
-        vocab_size: Optional[int] = 256000,
+        encoder: T5GemmaModuleConfig | dict[Any, Any] | None = None,
+        decoder: T5GemmaModuleConfig | dict[Any, Any] | None = None,
+        is_encoder_decoder: bool | None = True,
+        dropout_rate: float | None = 0.0,
+        classifier_dropout_rate: float | None = 0.0,
+        attention_dropout: float | None = 0.0,
+        tie_word_embeddings: bool | None = True,
+        vocab_size: int | None = 256000,
         **kwargs,
     ):
         if isinstance(encoder, dict):

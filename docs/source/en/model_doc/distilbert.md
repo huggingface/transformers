@@ -39,6 +39,7 @@ The example below demonstrates how to classify text with [`Pipeline`], [`AutoMod
 <hfoption id="Pipeline">
 
 ```py
+import torch
 from transformers import pipeline
 
 classifier = pipeline(
