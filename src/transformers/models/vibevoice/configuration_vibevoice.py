@@ -1,4 +1,4 @@
-# Copyright 2025 The Microsoft Team and The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The Microsoft Team and The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -112,18 +112,16 @@ class VibeVoiceConfig(PretrainedConfig):
             The config object or dictionary of the semantic tokenizer.
         text_config (`Union[AutoConfig, dict]`, *optional*):
             The config object or dictionary of the text model.
-        use_cache (`bool`, *optional*, defaults to `True`):
-            Whether the model should return the last key/values attentions (not used by all models).
         pad_token_id (`int`, *optional*, defaults to 151643):
             The token ID for padding.
         eos_token_id (`int`, *optional*, defaults to 151643):
             The token ID for the end of sequence.
-        speech_start_id (`int`, *optional*, defaults to 151652):
-            The token ID indicating the start of speech tokens.
-        speech_end_id (`int`, *optional*, defaults to 151653):
-            The token ID indicating the end of speech tokens.
-        speech_diffusion_id (`int`, *optional*, defaults to 151654):
-            The token ID indicating the start of speech diffusion tokens.
+        audio_bos_token_id (`int`, *optional*, defaults to 151652):
+            The token ID indicating the start of audio tokens.
+        audio_eos_token_id (`int`, *optional*, defaults to 151653):
+            The token ID indicating the end of audio tokens.
+        audio_diffusion_token_id (`int`, *optional*, defaults to 151654):
+            The token ID indicating the start of audio diffusion tokens.
         num_head_layers (`int`, *optional*, defaults to 4):
             Number of layers in the diffusion head.
         intermediate_size (`int`, *optional*, defaults to 4608):
@@ -173,7 +171,6 @@ class VibeVoiceConfig(PretrainedConfig):
         acoustic_tokenizer_config=None,
         semantic_tokenizer_config=None,
         text_config=None,
-        use_cache=True,
         pad_token_id=151643,
         eos_token_id=151643,
         audio_bos_token_id=151652,
@@ -216,7 +213,6 @@ class VibeVoiceConfig(PretrainedConfig):
         self.text_config = text_config
 
         self.vocab_size = text_config.vocab_size
-        self.use_cache = use_cache
         self.audio_bos_token_id = audio_bos_token_id
         self.audio_eos_token_id = audio_eos_token_id
         self.audio_diffusion_token_id = audio_diffusion_token_id

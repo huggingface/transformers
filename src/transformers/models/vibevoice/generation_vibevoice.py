@@ -214,8 +214,6 @@ class VibeVoiceGenerationMixin(GenerationMixin):
             None, negative_generation_config.bos_token_id, negative_model_kwargs
         )
         self._prepare_special_tokens(negative_generation_config, True, device=input_ids.device)
-        negative_generation_config.use_cache = self.config.use_cache
-        negative_model_kwargs["use_cache"] = self.config.use_cache
         negative_input_ids = negative_kwargs["input_ids"]
 
         negative_input_ids_length = negative_input_ids.shape[1]
@@ -377,7 +375,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                 audio_output = self.model.acoustic_tokenizer.decode(
                     padded_latent.to(self.model.acoustic_tokenizer.device),
                     padding_cache=acoustic_cache,
-                    use_cache=self.config.use_cache,
+                    use_cache=True,
                 )
                 audio_chunk = audio_output.audio
                 for i, sample_idx in enumerate(diffusion_idx):
@@ -396,7 +394,7 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                 semantic_outputs = self.model.semantic_tokenizer.encode(
                     audio_chunk,
                     padding_cache=semantic_cache,
-                    use_cache=self.config.use_cache,
+                    use_cache=True,
                 )
                 semantic_features = semantic_outputs.latents[diffusion_idx]
                 semantic_cache = semantic_outputs.padding_cache
