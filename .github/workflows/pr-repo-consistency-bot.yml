@@ -58,7 +58,7 @@ jobs:
       - name: Delete existing bot comment if it exists
         env:
           PR_NUMBER: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
-        uses: actions/github-script@v6
+        uses: actions/github-script@v8
         with:
           script: |
             const PR_NUMBER = parseInt(process.env.PR_NUMBER, 10);
@@ -93,7 +93,7 @@ jobs:
         id: init_comment
         env:
           PR_NUMBER: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
-        uses: actions/github-script@v6
+        uses: actions/github-script@v8
         with:
           script: |
             const PR_NUMBER = parseInt(process.env.PR_NUMBER, 10);
@@ -115,12 +115,12 @@ jobs:
     steps:
       # Checkout the trusted base repository (main branch) - this is safe
       - name: Checkout base repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: main
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v6
         with:
           python-version: "3.10"
 
@@ -211,7 +211,7 @@ jobs:
 
       - name: Upload modified files
         if: steps.run_checks.outputs.changes_detected == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: modified-files
           path: artifact-staging/
@@ -225,13 +225,13 @@ jobs:
     steps:
       - name: Download modified files
         if: needs.run-repo-consistency-checks.outputs.changes_detected == 'true'
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v7
         with:
           name: modified-files
 
       - name: Push changes via GitHub API (no checkout)
         if: needs.run-repo-consistency-checks.outputs.changes_detected == 'true'
-        uses: actions/github-script@v6
+        uses: actions/github-script@v8
         env:
           PR_HEAD_REF: ${{ needs.get-pr-info.outputs.PR_HEAD_REF }}
           PR_HEAD_SHA: ${{ needs.check-timestamps.outputs.VERIFIED_PR_HEAD_SHA }}
@@ -335,7 +335,7 @@ jobs:
 
       - name: Comment on PR
         if: needs.init_comment_with_url.result == 'success'
-        uses: actions/github-script@v6
+        uses: actions/github-script@v8
         env:
           PR_NUMBER: ${{ needs.get-pr-number.outputs.PR_NUMBER }}
         with:

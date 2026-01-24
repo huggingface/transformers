@@ -46,13 +46,13 @@ jobs:
         run: |
           echo "Setup status: $setup_status"
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 2
           # Security: checkout to the `main` branch for untrusted triggers (issue_comment, pull_request_target), otherwise use the specified ref
           ref: ${{ (github.event_name == 'issue_comment' || github.event_name == 'pull_request_target') && 'main' || (inputs.commit_sha || github.sha) }}
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v7
 
       - name: Prepare some setup values
         run: |
@@ -102,7 +102,7 @@ jobs:
 
       # Upload complete failure tables, as they might be big and only truncated versions could be sent to Slack.
       - name: Failure table artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: ci_results_${{ inputs.job }}
           path: ci_results_${{ inputs.job }}
