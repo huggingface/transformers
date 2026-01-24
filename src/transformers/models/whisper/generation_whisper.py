@@ -13,7 +13,6 @@
 # limitations under the License.
 import copy
 import math
-import warnings
 import zlib
 from collections.abc import Callable, Iterator
 
@@ -647,16 +646,7 @@ class WhisperGenerationMixin(GenerationMixin):
         ```
 
         """
-        # 0. deprecate old inputs
-        if "inputs" in kwargs:
-            input_features = kwargs.pop("inputs")
-            warnings.warn(
-                "The input name `inputs` is deprecated. Please make sure to use `input_features` instead.",
-                FutureWarning,
-            )
-
         # 1. prepare generation config
-        generation_config = self.generation_config if generation_config is None else generation_config
         generation_config, kwargs = self._prepare_generation_config(generation_config, **kwargs)
 
         # 2. set global generate variables
@@ -1701,18 +1691,7 @@ class WhisperGenerationMixin(GenerationMixin):
                     "Model generation config has no `alignment_heads`, token-level timestamps not available. "
                     "See https://gist.github.com/hollance/42e32852f24243b748ae6bc1f985b13a on how to add this property to the generation config."
                 )
-            if "num_frames" in kwargs:
-                generation_config.num_frames = kwargs.pop("num_frames")
-                if isinstance(generation_config.num_frames, torch.Tensor):
-                    generation_config.num_frames = generation_config.num_frames.cpu()
-                else:
-                    generation_config.num_frames = torch.tensor(generation_config.num_frames)
-
-                logger.warning_once(
-                    "`num_frames` is deprecated and will be removed in Transformers v5. Use `attention_mask` instead, as it can be used to infer the number of frames. "
-                    "You can retrieve the `attention_mask` by doing `processor(audio, ..., return_attention_mask=True"
-                )
-            elif attention_mask is not None:
+            if attention_mask is not None:
                 generation_config.num_frames = attention_mask.sum(-1).cpu()
             else:
                 logger.warning_once(

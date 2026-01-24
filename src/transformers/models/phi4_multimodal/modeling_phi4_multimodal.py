@@ -47,7 +47,7 @@ from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, dynamic_rope_update
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
 from ...utils import auto_docstring, can_return_tuple, torch_int
-from ...utils.generic import TransformersKwargs, check_model_inputs, maybe_autocast
+from ...utils.generic import TransformersKwargs, check_model_inputs, is_flash_attention_requested, maybe_autocast
 from .configuration_phi4_multimodal import Phi4MultimodalAudioConfig, Phi4MultimodalConfig, Phi4MultimodalVisionConfig
 
 
@@ -351,30 +351,46 @@ class Phi4MultimodalVisionEmbeddings(nn.Module):
         return patch_pos_embed
 
     def forward(self, pixel_values: torch.FloatTensor, patch_attention_mask: torch.BoolTensor) -> torch.Tensor:
-        batch_size = pixel_values.size(0)
+        batch_size, _, max_im_h, max_im_w = pixel_values.shape
 
         patch_embeds = self.patch_embedding(pixel_values)
         embeddings = patch_embeds.flatten(2).transpose(1, 2)
 
-        max_im_h, max_im_w = pixel_values.size(2), pixel_values.size(3)
         max_nb_patches_h, max_nb_patches_w = max_im_h // self.patch_size, max_im_w // self.patch_size
-        boundaries = torch.arange(1 / self.num_patches_per_side, 1.0, 1 / self.num_patches_per_side)
-        position_ids = torch.full((batch_size, max_nb_patches_h * max_nb_patches_w), fill_value=0)
+        boundaries = torch.arange(
+            1 / self.num_patches_per_side, 1.0, 1 / self.num_patches_per_side, device=pixel_values.device
+        )
+        position_ids = torch.full(
+            size=(batch_size, max_nb_patches_h * max_nb_patches_w), fill_value=0, device=pixel_values.device
+        )
 
-        for batch_idx, p_attn_mask in enumerate(patch_attention_mask):
-            nb_patches_h = p_attn_mask[:, 0].sum()
-            nb_patches_w = p_attn_mask[0].sum()
+        nb_patches_h = patch_attention_mask[:, :, 0].sum(dim=1)  # (batch_size,)
+        nb_patches_w = patch_attention_mask[:, 0, :].sum(dim=1)  # (batch_size,)
 
-            fractional_coords_h = torch.arange(0, 1 - 1e-6, 1 / nb_patches_h)
-            fractional_coords_w = torch.arange(0, 1 - 1e-6, 1 / nb_patches_w)
+        step_h = 1.0 / nb_patches_h  # (batch_size,)
+        step_w = 1.0 / nb_patches_w  # (batch_size,)
 
-            bucket_coords_h = torch.bucketize(fractional_coords_h, boundaries, right=True)
-            bucket_coords_w = torch.bucketize(fractional_coords_w, boundaries, right=True)
+        max_patches_h = patch_attention_mask.size(1)
+        max_patches_w = patch_attention_mask.size(2)
+        h_indices = torch.arange(max_patches_h, device=position_ids.device, dtype=torch.float32)
+        w_indices = torch.arange(max_patches_w, device=position_ids.device, dtype=torch.float32)
 
-            pos_ids = (bucket_coords_h[:, None] * self.num_patches_per_side + bucket_coords_w).flatten()
-            position_ids[batch_idx][p_attn_mask.view(-1).cpu()] = pos_ids
+        fractional_coords_h = h_indices[None, :] * step_h[:, None]
+        fractional_coords_w = w_indices[None, :] * step_w[:, None]
 
-        position_ids = position_ids.to(self.position_embedding.weight.device)
+        fractional_coords_h = torch.clamp(fractional_coords_h, max=(1.0 - 1e-6))
+        fractional_coords_w = torch.clamp(fractional_coords_w, max=(1.0 - 1e-6))
+
+        fractional_coords_h = fractional_coords_h.to(pixel_values.dtype)
+        fractional_coords_w = fractional_coords_w.to(pixel_values.dtype)
+
+        bucket_coords_h = torch.bucketize(fractional_coords_h, boundaries, right=True)
+        bucket_coords_w = torch.bucketize(fractional_coords_w, boundaries, right=True)
+
+        pos_ids = bucket_coords_h[:, :, None] * self.num_patches_per_side + bucket_coords_w[:, None, :]
+        pos_ids = pos_ids.reshape(batch_size, -1)
+
+        position_ids[patch_attention_mask.view(batch_size, -1)] = pos_ids[patch_attention_mask.view(batch_size, -1)]
 
         embeddings = embeddings + self.position_embedding(position_ids)
         return embeddings
@@ -431,7 +447,7 @@ class Phi4MultimodalVisionModel(Phi4MultimodalVisionPreTrainedModel):
         pixel_values,
         patch_attention_mask: torch.BoolTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPooling:
+    ) -> tuple | BaseModelOutputWithPooling:
         batch_size = pixel_values.size(0)
         if patch_attention_mask is None:
             patch_attention_mask = torch.ones(
@@ -455,7 +471,7 @@ class Phi4MultimodalVisionModel(Phi4MultimodalVisionPreTrainedModel):
         else:
             attention_mask = (
                 _prepare_4d_attention_mask(patch_attention_mask, hidden_states.dtype)
-                if self.config._attn_implementation != "flash_attention_2"
+                if not is_flash_attention_requested(self.config)
                 else patch_attention_mask
             )
 
@@ -1213,7 +1229,7 @@ def eager_attention_forward(
     return attn_output, attn_weights
 
 
-def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
+def apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
     Args:
@@ -1221,8 +1237,6 @@ def apply_rotary_pos_emb(q, k, cos, sin, position_ids=None, unsqueeze_dim=1):
         k (`torch.Tensor`): The key tensor.
         cos (`torch.Tensor`): The cosine part of the rotary embedding.
         sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`, *optional*):
-            Deprecated and unused.
         unsqueeze_dim (`int`, *optional*, defaults to 1):
             The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
             sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
@@ -1554,7 +1568,7 @@ class Phi4MultimodalModel(Phi4MultimodalPreTrainedModel):
         output_hidden_states: bool | None = None,
         cache_position: torch.LongTensor | None = None,
         **kwargs,
-    ) -> BaseModelOutputWithPast:
+    ) -> tuple | BaseModelOutputWithPast:
         r"""
         image_pixel_values (`torch.FloatTensor`, *optional*):
             If the input contains images, these correspond to the pixel values after transformations (as returned by

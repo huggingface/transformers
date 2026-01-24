@@ -14,6 +14,7 @@
 # limitations under the License.
 import math
 from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from typing import Any
 
 import torch
@@ -25,11 +26,11 @@ from ...activations import ACT2FN
 from ...cache_utils import Cache, DynamicCache
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
 from ...masking_utils import create_causal_mask, create_sliding_window_causal_mask
-from ...modeling_outputs import BaseModelOutputWithPast
+from ...modeling_outputs import BaseModelOutputWithPast, BaseModelOutputWithPooling
 from ...modeling_rope_utils import ROPE_INIT_FUNCTIONS, RopeParameters
 from ...modeling_utils import ALL_ATTENTION_FUNCTIONS, PreTrainedModel
 from ...processing_utils import Unpack
-from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging
+from ...utils import TransformersKwargs, auto_docstring, can_return_tuple, logging, torch_compilable_check
 from ...utils.generic import check_model_inputs
 from ..auto import AutoModel
 from ..gemma2.configuration_gemma2 import Gemma2Config
@@ -152,6 +153,8 @@ class Gemma3nTextConfig(Gemma2Config, PreTrainedConfig):
             The sparsity factor used to extract the top-k activations for a given layer. The provided Sequence must
             explicitly provide a sparsity value for each layer in the model. By default, the first 10 layers are
             sparse with a sparsity factor of 0.95 and the rest are dense.
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
     ```python
     >>> from transformers import Gemma3nTextModel, Gemma3nTextConfig
@@ -202,6 +205,7 @@ class Gemma3nTextConfig(Gemma2Config, PreTrainedConfig):
         num_kv_shared_layers: int = 15,
         laurel_rank: int = 64,
         activation_sparsity_pattern: float | Sequence[float] | None = None,
+        tie_word_embeddings: bool | None = True,
         **kwargs,
     ):
         if isinstance(intermediate_size, Sequence) and (intsize_len := len(intermediate_size)) != num_hidden_layers:
@@ -212,6 +216,9 @@ class Gemma3nTextConfig(Gemma2Config, PreTrainedConfig):
         elif not isinstance(intermediate_size, Sequence):
             intermediate_size = [intermediate_size] * num_hidden_layers
 
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
         self.vocab_size = vocab_size
         self.vocab_size_per_layer_input = vocab_size_per_layer_input
         self.max_position_embeddings = max_position_embeddings
@@ -261,12 +268,11 @@ class Gemma3nTextConfig(Gemma2Config, PreTrainedConfig):
             )
         self.activation_sparsity_pattern = activation_sparsity_pattern
         self.rope_parameters = rope_parameters
-        PreTrainedConfig.__init__(
-            pad_token_id=pad_token_id,
-            bos_token_id=bos_token_id,
-            eos_token_id=eos_token_id,
-            **kwargs,
-        )
+        self.pad_token_id = pad_token_id
+        self.bos_token_id = bos_token_id
+        self.eos_token_id = eos_token_id
+        self.tie_word_embeddings = tie_word_embeddings
+        PreTrainedConfig.__init__(**kwargs)
 
     def convert_rope_params_to_dict(self, ignore_keys_at_rope_validation=None, **kwargs):
         rope_scaling = kwargs.pop("rope_scaling", None)
@@ -538,7 +544,8 @@ class Gemma3nConfig(PreTrainedConfig):
             The audio token index to encode the audio prompt.
         initializer_range (`float`, *optional*, defaults to 0.02):
             The standard deviation of the truncated_normal_initializer for initializing all weight matrices.
-
+        tie_word_embeddings (`bool`, *optional*, defaults to `True`):
+            Whether to tie weight embeddings
 
     Example:
 
@@ -576,15 +583,16 @@ class Gemma3nConfig(PreTrainedConfig):
         text_config: Gemma3nTextConfig | dict[str, Any] | None = None,
         vision_config: Gemma3nVisionConfig | dict[str, Any] | None = None,
         audio_config: Gemma3nAudioConfig | dict[str, Any] | None = None,
-        audio_soft_tokens_per_image: int = 188,
-        vision_soft_tokens_per_image: int = 256,
-        boi_token_id: int = 255_999,
-        eoi_token_id: int = 262_144,
-        image_token_id: int = 262_145,
-        boa_token_id: int = 256_000,
-        eoa_token_id: int = 262_272,
-        audio_token_id: int = 262_273,
-        initializer_range: float = 0.02,
+        audio_soft_tokens_per_image: int | None = 188,
+        vision_soft_tokens_per_image: int | None = 256,
+        boi_token_id: int | None = 255_999,
+        eoi_token_id: int | None = 262_144,
+        image_token_id: int | None = 262_145,
+        boa_token_id: int | None = 256_000,
+        eoa_token_id: int | None = 262_272,
+        audio_token_id: int | None = 262_273,
+        initializer_range: float | None = 0.02,
+        tie_word_embeddings: bool | None = True,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -620,6 +628,18 @@ class Gemma3nConfig(PreTrainedConfig):
         self.eoa_token_id = eoa_token_id
         self.audio_token_id = audio_token_id
         self.initializer_range = initializer_range
+        self.tie_word_embeddings = tie_word_embeddings
+
+
+@dataclass
+@auto_docstring
+class Gemma3nAudioEncoderModelOutput(BaseModelOutputWithPooling):
+    r"""
+    audio_mel_mask (`torch.FloatTensor`, *optional*):
+        A torch.BoolTensor of shape `(batch_size, num_frames)`
+    """
+
+    audio_mel_mask: torch.BoolTensor | None = None
 
 
 class Gemma3nModelOutputWithPast(PaligemmaModelOutputWithPast):
@@ -1478,9 +1498,10 @@ class Gemma3nAudioEncoder(PreTrainedModel):
         )
         self.post_init()
 
+    @check_model_inputs
     def forward(
-        self, audio_mel: torch.Tensor, audio_mel_mask: torch.BoolTensor, **kwargs
-    ) -> tuple[torch.Tensor, torch.BoolTensor]:
+        self, audio_mel: torch.Tensor, audio_mel_mask: torch.BoolTensor, **kwargs: Unpack[TransformersKwargs]
+    ) -> tuple | Gemma3nAudioEncoderModelOutput:
         """Encodes a batch of MELs.
 
         Args:
@@ -1531,7 +1552,10 @@ class Gemma3nAudioEncoder(PreTrainedModel):
             current_mask = current_mask[:, :: self.config.conf_reduction_factor]
 
         audio_encodings = audio_encodings.masked_fill(current_mask.unsqueeze(-1), 0.0)
-        return audio_encodings, current_mask
+        return Gemma3nAudioEncoderModelOutput(
+            last_hidden_state=audio_encodings,
+            audio_mel_mask=current_mask,
+        )
 
 
 # ==== Language Model ====
@@ -1662,7 +1686,7 @@ class Gemma3nTextAltUp(nn.Module):
         innovation = activated - predictions[self.config.altup_active_idx]  # (batch, num_tokens, hidden_size)
         innovation = innovation.repeat(self.config.altup_num_inputs, 1, 1, 1)  # Repeat on dim0 to match predictions
 
-        if self.config.altup_coef_clip is not None:
+        if self.training and self.config.altup_coef_clip is not None:
             self.correction_coefs.weight.data.clamp_(-self.config.altup_coef_clip, self.config.altup_coef_clip)
 
         # all_coefs adapted from jax.numpy.einsum("...p,pi->...i", ...)
@@ -1688,21 +1712,13 @@ class Gemma3nTextAltUp(nn.Module):
         return self.forward(corrected)
 
 
-def apply_rotary_pos_emb(
-    x: torch.Tensor,
-    cos: torch.Tensor,
-    sin: torch.Tensor,
-    position_ids: torch.Tensor | None = None,
-    unsqueeze_dim: int = 1,
-):
+def apply_rotary_pos_emb(x: torch.Tensor, cos: torch.Tensor, sin: torch.Tensor, unsqueeze_dim: int = 1):
     """Applies Rotary Position Embedding to the query and key tensors.
 
     Args:
         x (`torch.Tensor`): The tensor to embed.
         cos (`torch.Tensor`): The cosine part of the rotary embedding.
         sin (`torch.Tensor`): The sine part of the rotary embedding.
-        position_ids (`torch.Tensor`, *optional*):
-            Deprecated and unused.
         unsqueeze_dim (`int`, *optional*, defaults to 1):
             The 'unsqueeze_dim' argument specifies the dimension along which to unsqueeze cos[position_ids] and
             sin[position_ids] so that they can be properly broadcasted to the dimensions of q and k. For example, note
@@ -2197,30 +2213,27 @@ class Gemma3nModel(PaliGemmaModel):
         self.embed_vision = Gemma3nMultimodalEmbedder(config.vision_config, config.text_config)
         self.embed_audio = Gemma3nMultimodalEmbedder(config.audio_config, config.text_config)
 
-    def get_image_features(self, pixel_values: torch.Tensor) -> torch.Tensor:
-        """
-        Projects the last hidden state from the vision model into language model space.
-
-        Args:
-            pixel_values (`torch.FloatTensor]` of shape `(batch_size, channels, height, width)`)
-               The tensors corresponding to the input images.
-
-        Returns:
-            image_features (`torch.Tensor`): Image feature tensor of shape `(num_images, image_length, embed_dim)`).
-        """
-        vision_outputs = self.vision_tower(
-            pixel_values=pixel_values, do_pooling=False, return_dict=True
-        ).last_hidden_state
+    @can_return_tuple
+    @auto_docstring(custom_intro="Projects the last hidden state from the vision model into language model space.")
+    def get_image_features(
+        self,
+        pixel_values: torch.FloatTensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | BaseModelOutputWithPooling:
+        vision_outputs = self.vision_tower(pixel_values=pixel_values, do_pooling=False, return_dict=True, **kwargs)
+        last_hidden_state = vision_outputs.last_hidden_state
         # Convert from (batch, channels, height, width) to (batch, height * width, channels) where:
         # height == width and height * width == Gemma3nConfig.vision_soft_tokens_per_image.
-        vision_outputs = vision_outputs.reshape(
-            vision_outputs.shape[0],
+        last_hidden_state = last_hidden_state.reshape(
+            last_hidden_state.shape[0],
             self.config.vision_config.hidden_size,
             self.config.vision_soft_tokens_per_image,
         ).permute(0, 2, 1)
         # Normalize and embed the soft tokens into language model space.
-        vision_outputs *= self.config.vision_config.hidden_size**0.5
-        return self.embed_vision(inputs_embeds=vision_outputs)
+        last_hidden_state *= self.config.vision_config.hidden_size**0.5
+        vision_outputs.pooler_output = self.embed_vision(inputs_embeds=last_hidden_state)
+
+        return vision_outputs
 
     def get_placeholder_mask(
         self,
@@ -2250,16 +2263,18 @@ class Gemma3nModel(PaliGemmaModel):
 
         n_image_tokens = special_image_mask.sum()
         special_image_mask = special_image_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-        if image_features is not None and inputs_embeds[special_image_mask].numel() != image_features.numel():
-            raise ValueError(
-                f"Image features and image tokens do not match: tokens: {n_image_tokens}, features {image_features.shape[0] * image_features.shape[1]}"
+        if image_features is not None:
+            torch_compilable_check(
+                inputs_embeds[special_image_mask].numel() == image_features.numel(),
+                f"Image features and image tokens do not match, tokens: {n_image_tokens}, features: {image_features.shape[0] * image_features.shape[1]}",
             )
 
         n_audio_tokens = special_audio_mask.sum()
         special_audio_mask = special_audio_mask.unsqueeze(-1).expand_as(inputs_embeds).to(inputs_embeds.device)
-        if audio_features is not None and inputs_embeds[special_audio_mask].numel() != audio_features.numel():
-            raise ValueError(
-                f"Audio features and image tokens do not match: tokens: {n_audio_tokens}, features {audio_features.shape[0] * audio_features.shape[1]}"
+        if audio_features is not None:
+            torch_compilable_check(
+                inputs_embeds[special_audio_mask].numel() == audio_features.numel(),
+                f"Audio features and audio tokens do not match, tokens: {n_audio_tokens}, features: {audio_features.shape[0] * audio_features.shape[1]}",
             )
 
         return special_image_mask, special_audio_mask
@@ -2293,7 +2308,8 @@ class Gemma3nModel(PaliGemmaModel):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Gemma3nForConditionalGeneration
 
         >>> model = Gemma3nForConditionalGeneration.from_pretrained("google/gemma3n2-3b-mix-224")
@@ -2301,7 +2317,8 @@ class Gemma3nModel(PaliGemmaModel):
 
         >>> prompt = "Where is the cat standing?"
         >>> url = "https://huggingface.co/datasets/huggingface/documentation-images/resolve/main/pipeline-cat-chonk.jpeg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> inputs = processor(images=image, text=prompt,  return_tensors="pt")
 
@@ -2351,7 +2368,7 @@ class Gemma3nModel(PaliGemmaModel):
 
         # Merge text and images
         if pixel_values is not None:
-            image_features = self.get_image_features(pixel_values)
+            image_features = self.get_image_features(pixel_values, return_dict=True).pooler_output
             image_features = image_features.to(inputs_embeds.device, inputs_embeds.dtype)
             special_image_mask, _ = self.get_placeholder_mask(
                 input_ids, inputs_embeds=inputs_embeds, image_features=image_features
@@ -2360,7 +2377,9 @@ class Gemma3nModel(PaliGemmaModel):
 
         # Merge text and audio
         if input_features is not None and input_features_mask is not None:
-            audio_features, audio_mask = self.get_audio_features(input_features, ~input_features_mask)
+            audio_features = self.get_audio_features(input_features, ~input_features_mask, return_dict=True)
+            audio_features = audio_features.pooler_output
+            audio_mask = audio_features.audio_mel_mask
 
             # The Gemma3nProcessor expects all audio will be 30s in length and inserts 188 audio soft tokens into the
             # text to account for this. However, the audio preprocessing and encoder do not gurarantee they will
@@ -2406,23 +2425,27 @@ class Gemma3nModel(PaliGemmaModel):
             audio_hidden_states=audio_features if input_features is not None else None,
         )
 
+    @can_return_tuple
+    @auto_docstring(custom_intro="Projects the last hidden state from the audio encoder into language model space.")
     def get_audio_features(
-        self, input_features: torch.Tensor, input_features_mask: torch.Tensor
-    ) -> tuple[torch.Tensor, torch.Tensor]:
+        self,
+        input_features: torch.Tensor,
+        input_features_mask: torch.Tensor,
+        **kwargs: Unpack[TransformersKwargs],
+    ) -> tuple | Gemma3nAudioEncoderModelOutput:
+        r"""
+        input_features (`torch.FloatTensor]` of shape `(num_images, seq_length, num_features)`):
+            The tensors corresponding to the input audio.
+        input_features_mask (`torch.FloatTensor]` of shape `(num_images, seq_length)`):
+            The attention mask for the input audio.
         """
-        Projects the last hidden state from the audio encoder into language model space.
+        audio_outputs: Gemma3nAudioEncoderModelOutput = self.audio_tower(
+            input_features, input_features_mask, return_dict=True, **kwargs
+        )
+        audio_embeds = self.embed_audio(inputs_embeds=audio_outputs.last_hidden_state)
+        audio_outputs.pooler_output = audio_embeds
 
-        Args:
-            input_features (`torch.FloatTensor]` of shape `(num_images, seq_length, num_features)`):
-               The tensors corresponding to the input audio.
-            input_features_mask (`torch.FloatTensor]` of shape `(num_images, seq_length)`):
-               The attention mask for the input audio.
-
-        Returns:
-            audio_features (`torch.Tensor`): Audio feature tensor of shape `(num_images, audio_length, embed_dim)`).
-        """
-        audio_outputs, audio_mask = self.audio_tower(input_features, input_features_mask)
-        return self.embed_audio(inputs_embeds=audio_outputs), audio_mask
+        return audio_outputs
 
 
 @auto_docstring(
@@ -2468,7 +2491,8 @@ class Gemma3nForConditionalGeneration(PaliGemmaForConditionalGeneration):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Gemma3ForConditionalGeneration
 
         >>> model = Gemma3ForConditionalGeneration.from_pretrained("google/gemma-3-4b-it")

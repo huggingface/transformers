@@ -1193,7 +1193,7 @@ class GenerationConfig(PushToHubMixin):
         generation_config._original_object_hash = hash(generation_config)
         return generation_config
 
-    def update(self, defaults_only=False, **kwargs):
+    def update(self, defaults_only=False, allow_custom_entries=False, **kwargs):
         """
         Updates attributes of this class instance with attributes from `kwargs` if they match existing attributes,
         returning all the unused kwargs.
@@ -1201,6 +1201,8 @@ class GenerationConfig(PushToHubMixin):
         Args:
             defaults_only (`bool`, *optional*, defaults to `False`):
                 Whether to update all keys in config with `kwargs` or only those that are set to `None` (i.e. default value).
+            allow_custom_entries (`bool`, *optional*, defaults to `False`):
+                Whether to allow updating custom entries into the config with `kwargs` if not present in the current config.
             kwargs (`dict[str, Any]`):
                 Dictionary of attributes to tentatively update this class.
 
@@ -1209,7 +1211,10 @@ class GenerationConfig(PushToHubMixin):
         """
         to_remove = []
         for key, value in kwargs.items():
-            if hasattr(self, key):
+            if allow_custom_entries and not hasattr(self, key):
+                setattr(self, key, value)
+                to_remove.append(key)
+            elif hasattr(self, key):
                 if not defaults_only or getattr(self, key) is None:
                     setattr(self, key, value)
                     to_remove.append(key)

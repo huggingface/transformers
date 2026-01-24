@@ -271,7 +271,7 @@ class EdgeTamConfig(PreTrainedConfig):
     ... )
 
     >>> # Initializing a EdgeTamConfig with `"facebook/edgetam.1_hiera_tiny"` style configuration
-    >>> configuration = EdgeTamconfig()
+    >>> configuration = EdgeTamConfig()
 
     >>> # Initializing a EdgeTamModel (with random weights) from the `"facebook/edgetam.1_hiera_tiny"` style configuration
     >>> model = EdgeTamModel(configuration)

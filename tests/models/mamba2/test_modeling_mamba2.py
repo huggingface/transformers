@@ -18,7 +18,6 @@ import unittest
 from transformers import AutoTokenizer, Mamba2Config, is_torch_available
 from transformers.testing_utils import (
     Expectations,
-    require_read_token,
     require_torch,
     require_torch_accelerator,
     slow,
@@ -239,6 +238,7 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
     all_model_classes = (Mamba2Model, Mamba2ForCausalLM) if is_torch_available() else ()
     has_attentions = False  # Mamba does not support attentions
     test_missing_keys = False
+    test_torch_exportable = False  # uses custom kernels by default, not compatible with torch.export
 
     pipeline_model_mapping = (
         {"feature-extraction": Mamba2Model, "text-generation": Mamba2ForCausalLM} if is_torch_available() else {}
@@ -341,17 +341,35 @@ class Mamba2ModelTest(ModelTesterMixin, GenerationTesterMixin, PipelineTesterMix
             dict_inputs = self._prepare_for_class(inputs_dict, model_class, return_labels=True)
             check_equivalence(model, tuple_inputs, dict_inputs, {"output_hidden_states": True})
 
+    def test_tied_weight_embeddings(self):
+        """Regression test for https://github.com/huggingface/transformers/issues/43206."""
+        config = self.model_tester.get_config()
+
+        config.tie_word_embeddings = True
+        model = Mamba2ForCausalLM(config)
+
+        self.assertEqual(
+            model.lm_head.weight.data_ptr(),
+            model.backbone.embeddings.weight.data_ptr(),
+        )
+
+        config.tie_word_embeddings = False
+        model = Mamba2ForCausalLM(config)
+
+        self.assertNotEqual(
+            model.lm_head.weight.data_ptr(),
+            model.backbone.embeddings.weight.data_ptr(),
+        )
+
 
 @require_torch
 @slow
-@require_read_token
 class Mamba2IntegrationTest(unittest.TestCase):
     def setUp(self):
         self.model_id = "mistralai/Mamba-Codestral-7B-v0.1"
         self.tokenizer = AutoTokenizer.from_pretrained(self.model_id, from_slow=True, legacy=False)
         self.prompt = ("[INST]Write a hello world program in C++.",)
 
-    @require_read_token
     @slow
     @require_torch
     def test_simple_generate(self):
@@ -381,7 +399,6 @@ class Mamba2IntegrationTest(unittest.TestCase):
         ground_truth_sentence = ground_truth_sentences.get_expectation()
         self.assertEqual(output_sentence, ground_truth_sentence)
 
-    @require_read_token
     @slow
     @require_torch_accelerator
     def test_batched_equivalence_with_cache(self):
@@ -412,7 +429,6 @@ class Mamba2IntegrationTest(unittest.TestCase):
             individual_output = tokenizer.batch_decode(individual_gen, skip_special_tokens=True)[0]
             self.assertEqual(individual_output[:100], batched_output[index_gen][:100])
 
-    @require_read_token
     @slow
     @require_torch_accelerator
     def test_batched_equivalence_without_cache(self):

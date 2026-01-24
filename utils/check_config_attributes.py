@@ -124,6 +124,7 @@ SPECIAL_CASES_TO_ALLOW = {
     "IdeficsVisionConfig": True,
     "IdeficsPerceiverConfig": True,
     "GptOssConfig": True,
+    "LwDetrConfig": True,
 }
 
 # Common and important attributes, even if they do not always appear in the modeling files (can be a regex pattern)
@@ -163,6 +164,10 @@ ATTRIBUTES_TO_ALLOW = (
     "pretraining_tp",
     "use_sliding_window",
     "max_window_layers",
+    # vision attributes that may be used indirectly via check_model_inputs
+    "vision_feature_layer",
+    "vision_feature_select_strategy",
+    "vision_aspect_ratio",
 )
 
 
@@ -207,9 +212,7 @@ def check_attribute_being_used(config_class, attributes, default_value, source_s
     # Special cases to be allowed even if not found as used
     for attribute in attributes:
         # Allow if the default value in the configuration class is different from the one in `PreTrainedConfig`
-        if (attribute == "is_encoder_decoder" and default_value is True) or (
-            attribute == "tie_word_embeddings" and default_value is False
-        ):
+        if (attribute == "is_encoder_decoder" and default_value is True) or attribute == "tie_word_embeddings":
             return True
         # General exceptions for all models
         elif any(re.search(exception, attribute) for exception in ATTRIBUTES_TO_ALLOW):

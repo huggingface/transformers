@@ -17,6 +17,7 @@ import copy
 import unittest
 
 import numpy as np
+import pytest
 from huggingface_hub import hf_hub_download
 from parameterized import parameterized
 
@@ -205,6 +206,10 @@ class LlavaNextVideoForConditionalGenerationModelTest(ModelTesterMixin, Generati
         if is_torch_available()
         else ()
     )
+    # LlavaNextVideo merges batch_size and num_patches in the first output dimension
+    skip_test_image_features_output_shape = True
+    # LlavaNextVideo merges batch_size and num_frames in the first output dimension
+    skip_test_video_features_output_shape = True
 
     _is_composite = True
 
@@ -301,23 +306,17 @@ class LlavaNextVideoForConditionalGenerationModelTest(ModelTesterMixin, Generati
             assert base_model.multi_modal_projector.linear_1.in_features == expected_features
             model(**input_dict)
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing(self):
-        pass
+        super().test_training_gradient_checkpointing()
 
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
-    def test_training_gradient_checkpointing_use_reentrant(self):
-        pass
-
-    @unittest.skip(
-        reason="This architecture seem to not compute gradients properly when using GC, check: https://github.com/huggingface/transformers/pull/27124"
-    )
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
     def test_training_gradient_checkpointing_use_reentrant_false(self):
-        pass
+        super().test_training_gradient_checkpointing_use_reentrant_false()
+
+    @pytest.mark.xfail(reason="This architecture seems to not compute gradients for some layer.")
+    def test_training_gradient_checkpointing_use_reentrant_true(self):
+        super().test_training_gradient_checkpointing_use_reentrant_true()
 
     @unittest.skip("FlashAttention only support fp16 and bf16 data type")
     def test_flash_attn_2_fp32_ln(self):
@@ -328,6 +327,17 @@ class LlavaNextVideoForConditionalGenerationModelTest(ModelTesterMixin, Generati
     )
     def test_flash_attention_2_padding_matches_padding_free_with_position_ids(self):
         pass
+
+    def _video_features_prepare_config_and_inputs(self):
+        """
+        Helper method to extract only image-related inputs from the full set of inputs, for testing `get_image_features`.
+
+        Despite using `pixel_values_videos` in forward, LlavaNextVideo's `get_video_features` method
+        instead uses `pixel_values` as input, so we need to override the inputs accordingly.
+        """
+        config, inputs_dict = self.model_tester.prepare_config_and_inputs_for_common()
+        inputs_dict = {"pixel_values": inputs_dict["pixel_values_videos"]}
+        return config, inputs_dict
 
 
 @require_torch

@@ -344,7 +344,7 @@ class FalconMambaMixer(nn.Module):
 
             # In case the model has been quantized, we need a hack to properly call the `nn.Linear` module
             # at the price of a small overhead.
-            if hasattr(self.config, "quantization_config"):
+            if hasattr(self.config, "_is_quantized"):
                 discrete_time_step = (self.dt_proj(time_step) - self.dt_proj.bias).transpose(1, 2)
             else:
                 discrete_time_step = self.dt_proj.weight @ time_step.transpose(1, 2)

@@ -53,6 +53,7 @@ from ..utils import (
     is_torchdynamo_exporting,
     logging,
 )
+from ..utils.generic import is_flash_attention_requested
 from .candidate_generator import (
     AssistantVocabTranslatorCache,
     AssistedCandidateGenerator,
@@ -1772,9 +1773,9 @@ class GenerationMixin(ContinuousMixin):
         """
         # parameterization priority:
         # user-defined kwargs or `generation_config` > `self.generation_config` > global default values
-        # TODO: (raushan) doesn't make sense to allow kwargs and `generation_config`. Should be mutually exclusive!
         # TODO (joao): per-model generation config classes.
 
+        generation_config_provided = generation_config is not None
         if generation_config is None:
             # Users may modify `model.config` to control generation. This is a legacy behavior and is not supported anymore
             if len(self.config._get_generation_parameters()) > 0:
@@ -1791,10 +1792,13 @@ class GenerationMixin(ContinuousMixin):
         generation_config = copy.deepcopy(generation_config)
 
         # First set values from the loaded `self.generation_config`, then set default values (BC)
-        # Do not update any values that aren't `None`, i.e. if set by users explicitly and passed
-        # to `generate()`. Thus the `defaults_only=True` is used
+        #
+        # Only update values that are `None`, i.e. these values were not explicitly set by users to `generate()`,
+        # or values that are not present in the current config, i.e. custom entries that were set via `**kwargs`.
+        # Thus we use the specific kwargs `defaults_only=True` (`None` values only) and `allow_custom_entries=True`
+        # (custom entries are carried over).
         global_defaults = self.generation_config._get_default_generation_params()
-        generation_config.update(**self.generation_config.to_dict(), defaults_only=True)
+        generation_config.update(**self.generation_config.to_dict(), defaults_only=True, allow_custom_entries=True)
         generation_config.update(**global_defaults, defaults_only=True)
 
         # Finally, if there are any kwargs, update config with it -> highest priority at the end
@@ -1806,6 +1810,16 @@ class GenerationMixin(ContinuousMixin):
         # (if we're inside this branch, then it is because we're using default values from the Hub)
         if generation_config.cache_implementation == "hybrid":
             generation_config.cache_implementation = None
+
+        # It doesn't make sense to allow kwargs and `generation_config`, that should be mutually exclusive
+        if generation_config_provided and set(kwargs.keys()) - set(model_kwargs.keys()):
+            generation_kwargs = set(kwargs.keys()) - set(model_kwargs.keys())
+            logger.warning_once(
+                f"Passing `generation_config` together with generation-related "
+                f"arguments=({generation_kwargs}) is deprecated and will be removed in future versions. "
+                "Please pass either a `generation_config` object OR all generation "
+                "parameters explicitly, but not both.",
+            )
 
         # Finally keep output_xxx args in `model_kwargs` so it can be passed to `forward`
         output_attentions = generation_config.output_attentions
@@ -2169,13 +2183,13 @@ class GenerationMixin(ContinuousMixin):
             # Finally: if we can compile, disable tokenizers parallelism
             os.environ["TOKENIZERS_PARALLELISM"] = "0"
 
-            # If we use FA2 and a static cache, we cannot compile with fullgraph
-            if self.config._attn_implementation == "flash_attention_2":
+            # If we use FA and a static cache, we cannot compile with fullgraph
+            if is_flash_attention_requested(self.config):
                 # only raise warning if the user passed an explicit compile-config
                 if generation_config.compile_config is not None and generation_config.compile_config.fullgraph:
                     logger.warning_once(
-                        "When using Flash Attention 2 and a static cache, you cannot use the option `CompileConfig(fullgraph=True)` as "
-                        "FA2 introduces graph breaks. We overrode the option with `fullgraph=False`."
+                        "When using Flash Attention and a static cache, you cannot use the option `CompileConfig(fullgraph=True)` as "
+                        "FA introduces graph breaks. We overrode the option with `fullgraph=False`."
                     )
                     generation_config.compile_config.fullgraph = False
 

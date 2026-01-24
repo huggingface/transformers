@@ -15,7 +15,6 @@
 Processor class for OmDet-Turbo.
 """
 
-import warnings
 from typing import TYPE_CHECKING
 
 from ...feature_extraction_utils import BatchFeature
@@ -73,25 +72,6 @@ class OmDetTurboProcessorKwargs(ProcessingKwargs, total=False):
             "task": None,
         },
     }
-
-
-class DictWithDeprecationWarning(dict):
-    message = (
-        "The `classes` key is deprecated for `OmDetTurboProcessor.post_process_grounded_object_detection` "
-        "output dict and will be removed in a 4.51.0 version. Please use `text_labels` instead."
-    )
-
-    def __getitem__(self, key):
-        if key == "classes":
-            warnings.warn(self.message, FutureWarning)
-            return super().__getitem__("text_labels")
-        return super().__getitem__(key)
-
-    def get(self, key, *args, **kwargs):
-        if key == "classes":
-            warnings.warn(self.message, FutureWarning)
-            return super().get("text_labels", *args, **kwargs)
-        return super().get(key, *args, **kwargs)
 
 
 def clip_boxes(box, box_size: tuple[int, int]):
@@ -359,9 +339,7 @@ class OmDetTurboProcessor(ProcessorMixin):
                 nms_threshold=nms_threshold,
                 max_num_det=max_num_det,
             )
-            result = DictWithDeprecationWarning(
-                {"boxes": boxes, "scores": scores, "labels": labels, "text_labels": None}
-            )
+            result = {"boxes": boxes, "scores": scores, "labels": labels, "text_labels": None}
             results.append(result)
 
         # Add text labels

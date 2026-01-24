@@ -44,7 +44,6 @@ from .utils import (
 
 if is_vision_available():
     import PIL.Image
-    import PIL.ImageOps
 
     if is_torchvision_available():
         from torchvision import io as torchvision_io
