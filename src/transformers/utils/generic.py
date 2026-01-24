@@ -796,27 +796,6 @@ def is_timm_local_checkpoint(pretrained_model_path: str) -> bool:
     return False
 
 
-def set_attribute_for_modules(module: "torch.nn.Module", key: str, value: Any):
-    """
-    Set a value to a module and all submodules.
-    """
-    setattr(module, key, value)
-    for submodule in module.children():
-        set_attribute_for_modules(submodule, key, value)
-
-
-def del_attribute_from_modules(module: "torch.nn.Module", key: str):
-    """
-    Delete a value from a module and all submodules.
-    """
-    # because we might remove it previously in case it's a shared module, e.g. activation function
-    if hasattr(module, key):
-        delattr(module, key)
-
-    for submodule in module.children():
-        del_attribute_from_modules(submodule, key)
-
-
 def can_return_tuple(func):
     """
     Decorator to wrap model method, to call output.to_tuple() if return_dict=False passed as a kwarg or
@@ -832,7 +811,7 @@ def can_return_tuple(func):
         return_dict_passed = kwargs.pop("return_dict", return_dict)
         if return_dict_passed is not None:
             return_dict = return_dict_passed
-        output = func(self, *args, **kwargs)
+        output = func(self, *args, **kwargs, return_dict=True)
         if not return_dict and not isinstance(output, tuple):
             output = output.to_tuple()
         return output
