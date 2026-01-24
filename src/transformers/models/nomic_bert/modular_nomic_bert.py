@@ -83,6 +83,8 @@ class NomicBertConfig(BertConfig):
             Number of attention heads for each attention layer in the Transformer encoder.
         intermediate_size (`int`, *optional*, defaults to 3072):
             Dimensionality of the "intermediate" (often named feed-forward) layer in the Transformer encoder.
+        is_decoder (`bool`, *optional*, defaults to `False`):
+            Whether the model is used as a decoder or not. If `False`, the model is used as an encoder.
         hidden_act (`str` or `Callable`, *optional*, defaults to `"gelu"`):
             The non-linear activation function (function or string) in the encoder and pooler. If string, `"gelu"`,
             `"relu"`, `"silu"` and `"gelu_new"` are supported.
@@ -148,6 +150,7 @@ class NomicBertConfig(BertConfig):
         num_hidden_layers=12,
         num_attention_heads=12,
         intermediate_size=3072,
+        is_decoder=False,
         hidden_act="gelu",
         hidden_dropout_prob=0.1,
         attention_probs_dropout_prob=0.1,
@@ -161,6 +164,9 @@ class NomicBertConfig(BertConfig):
         rotary_emb_interleaved=False,
         type_vocab_size=2,
         pad_vocab_size_multiple=1,
+        add_cross_attention=False,
+        bos_token_id=None,
+        eos_token_id=None,
         tie_word_embeddings=True,
         rope_parameters: RopeParameters | dict[str, RopeParameters] | None = None,
         max_position_embeddings=2048,
@@ -178,19 +184,21 @@ class NomicBertConfig(BertConfig):
             attention_probs_dropout_prob=attention_probs_dropout_prob,
             initializer_range=initializer_range,
             layer_norm_eps=layer_norm_eps,
+            use_cache=use_cache,
             classifier_dropout=classifier_dropout,
+            is_decoder=is_decoder,
             type_vocab_size=type_vocab_size,
             max_position_embeddings=max_position_embeddings,
             pad_token_id=pad_token_id,
             tie_word_embeddings=tie_word_embeddings,
+            add_cross_attention=add_cross_attention,
+            bos_token_id=bos_token_id,
+            eos_token_id=eos_token_id,
             **kwargs,
         )
 
         self.rotary_emb_fraction = rotary_emb_fraction
-        if isinstance(rotary_emb_base, (int, float)):
-            self.rotary_emb_base = rotary_emb_base
-        else:
-            self.rotary_emb_base = 10_000
+        self.rotary_emb_base = rotary_emb_base
 
         self.rotary_emb_scale_base = rotary_emb_scale_base
         self.rotary_emb_interleaved = rotary_emb_interleaved
@@ -200,7 +208,7 @@ class NomicBertConfig(BertConfig):
         if rope_parameters is None:
             self.rope_parameters = {
                 "rope_type": "default",
-                "rope_theta": self.rotary_emb_base,
+                "rope_theta": rotary_emb_base,
             }
         else:
             self.rope_parameters = rope_parameters
@@ -440,6 +448,8 @@ class NomicBertAttention(BertAttention):
         output_attentions=False,
         position_embeddings=None,
         position_ids=None,
+        cache_position=None,
+        **kwargs,
     ):
         """
         Forward pass for the NomicBERT Attention layer.
@@ -472,19 +482,19 @@ class NomicBertAttention(BertAttention):
                 - **attention_probs** (`torch.Tensor`, *optional*): Returned if `output_attentions=True`.
                 - **past_key_values** (`Cache`, *optional*): Returned if `is_decoder=True` or `past_key_values` were passed.
         """
-        # Call SelfAttention
         self_outputs = self.self(
             hidden_states,
-            attention_mask,
-            head_mask,
-            encoder_hidden_states,
-            encoder_attention_mask,
-            past_key_values,
-            output_attentions,
-            position_embeddings=position_embeddings,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
             position_ids=position_ids,
+            position_embeddings=position_embeddings,
+            cache_position=cache_position,
+            output_attentions=output_attentions,
+            head_mask=head_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            **kwargs,
         )
-
         # Process context layer (always index 0)
         attention_output = self.output(self_outputs[0], hidden_states)
 
@@ -548,7 +558,7 @@ class NomicBertLayer(BertLayer):
             past_key_values=past_key_values,
             cache_position=cache_position,
             position_embeddings=position_embeddings,
-            position_ids=position_ids
+            position_ids=position_ids,
             **kwargs,
         )
         attention_output = self_attention_outputs[0]

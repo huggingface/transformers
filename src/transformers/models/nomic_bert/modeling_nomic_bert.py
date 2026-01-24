@@ -458,6 +458,8 @@ class NomicBertAttention(nn.Module):
         output_attentions=False,
         position_embeddings=None,
         position_ids=None,
+        cache_position=None,
+        **kwargs,
     ) -> tuple[torch.Tensor]:
         """
         Forward pass for the NomicBERT Attention layer.
@@ -490,19 +492,19 @@ class NomicBertAttention(nn.Module):
                 - **attention_probs** (`torch.Tensor`, *optional*): Returned if `output_attentions=True`.
                 - **past_key_values** (`Cache`, *optional*): Returned if `is_decoder=True` or `past_key_values` were passed.
         """
-        # Call SelfAttention
         self_outputs = self.self(
             hidden_states,
-            attention_mask,
-            head_mask,
-            encoder_hidden_states,
-            encoder_attention_mask,
-            past_key_values,
-            output_attentions,
-            position_embeddings=position_embeddings,
+            attention_mask=attention_mask,
+            past_key_values=past_key_values,
             position_ids=position_ids,
+            position_embeddings=position_embeddings,
+            cache_position=cache_position,
+            output_attentions=output_attentions,
+            head_mask=head_mask,
+            encoder_hidden_states=encoder_hidden_states,
+            encoder_attention_mask=encoder_attention_mask,
+            **kwargs,
         )
-
         # Process context layer (always index 0)
         attention_output = self.output(self_outputs[0], hidden_states)
 
@@ -595,7 +597,8 @@ class NomicBertLayer(GradientCheckpointingLayer):
             past_key_values=past_key_values,
             cache_position=cache_position,
             position_embeddings=position_embeddings,
-            position_ids=position_ids**kwargs,
+            position_ids=position_ids,
+            **kwargs,
         )
         attention_output = self_attention_outputs[0]
         outputs = self_attention_outputs[1:]
