@@ -273,7 +273,6 @@ class VibeVoiceDiffusionHead(nn.Module):
         condition = condition + embedded_timesteps
         for layer in self.layers:
             hidden_states = layer(hidden_states, condition)
-
         hidden_states = self.final_layer(hidden_states, condition)
         return hidden_states
 
@@ -658,7 +657,7 @@ class VibeVoiceModel(VibeVoicePreTrainedModel):
 
 @auto_docstring(
     custom_intro="""
-    The VibeVoice model, which consists of a language model, speech tokenizers, connectors, and a diffusion head.
+    The VibeVoice model, which consists of a language model, audio tokenizers, connectors, and a diffusion head.
     """
 )
 class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGenerationMixin):
@@ -688,7 +687,7 @@ class VibeVoiceForConditionalGeneration(VibeVoicePreTrainedModel, VibeVoiceGener
     ) -> tuple | VibeVoiceCausalLMOutputWithPast:
         r"""
         input_values (`torch.FloatTensor`, *optional*):
-            Preprocessed audio waveform for voice cloning or speech understanding.
+            Preprocessed audio waveform for voice cloning.
         padding_mask (`torch.BoolTensor`, *optional*):
             Masks indicating valid input frames.
         acoustic_loss_mask (`torch.BoolTensor`, *optional*):

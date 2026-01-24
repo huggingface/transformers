@@ -1,4 +1,4 @@
-# Copyright 2025 The HuggingFace Inc. team. All rights reserved.
+# Copyright 2026 The HuggingFace Inc. team. All rights reserved.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -104,13 +104,13 @@ class VibeVoiceProcessor(ProcessorMixin):
         Main method to process text inputs with optional voice samples.
 
         This method processes text inputs (typically prepared by apply_chat_template) and optional voice samples for
-        voice cloning. It expands speech diffusion tokens based on the actual audio length.
+        voice cloning. It expands audio diffusion tokens based on the actual audio length.
 
         Args:
             text (`str`, `List[str]`):
-                The input text(s) to process, typically prepared by apply_chat_template with speech token placeholders.
+                The input text(s) to process, typically prepared by apply_chat_template with audio token placeholders.
             audio (`List[Union[str, np.ndarray]]`, *optional*):
-                Audio samples for speaker voice cloning. Should match the number of speech token placeholders in text.
+                Audio samples for speaker voice cloning. Should match the number of audio token placeholders in text.
             **kwargs:
                 Additional keyword arguments passed to the tokenizer and feature extractor.
 
@@ -119,7 +119,7 @@ class VibeVoiceProcessor(ProcessorMixin):
                 - **input_ids** -- Token ID sequences ready for the model
                 - **attention_mask** -- Attention masks for the sequences
                 - **input_values** -- Processed audio tensors (if audio provided)
-                - **padding_mask** -- Masks for valid speech tokens (if audio provided)
+                - **padding_mask** -- Masks for valid audio tokens (if audio provided)
         """
         output_kwargs = self._merge_kwargs(
             VibeVoiceProcessorKwargs,
@@ -164,22 +164,16 @@ class VibeVoiceProcessor(ProcessorMixin):
             )
             audio_token_iter = iter(num_audio_tokens)
             for i, sample in enumerate(text):
-
-                def replace_fn(match):
-                    return self.audio_diffusion_token * next(audio_token_iter)
-
-                text[i] = re.sub(re.escape(self.audio_diffusion_token), replace_fn, sample)
+                text[i] = re.sub(
+                    re.escape(self.audio_diffusion_token),
+                    lambda m: self.audio_diffusion_token * next(audio_token_iter),
+                    sample,
+                )
 
         encoding = self.tokenizer(text, **text_kwargs)
         data.update(encoding)
 
         return BatchFeature(data=data, tensor_type=return_tensors)
-
-    @property
-    def model_input_names(self):
-        tokenizer_input_names = self.tokenizer.model_input_names
-        feature_extractor_input_names = self.feature_extractor.model_input_names
-        return list(dict.fromkeys(tokenizer_input_names + feature_extractor_input_names))
 
     def save_audio(
         self,
@@ -197,7 +191,6 @@ class VibeVoiceProcessor(ProcessorMixin):
         Returns:
             List[str]: Paths to the saved audio files.
         """
-        sampling_rate = self.feature_extractor.sampling_rate
 
         if not is_soundfile_available():
             raise ImportError("Please install `soundfile` to save audio files.")
@@ -209,7 +202,7 @@ class VibeVoiceProcessor(ProcessorMixin):
         if len(audio) == 1:
             if output_path is None:
                 output_path = "vibevoice_output.wav"
-            sf.write(output_path, audio[0], sampling_rate)
+            sf.write(output_path, audio[0], self.feature_extractor.sampling_rate)
             return [output_path]
         else:
             if output_path is None:
@@ -218,7 +211,7 @@ class VibeVoiceProcessor(ProcessorMixin):
             saved_paths = []
             for i, audio_array in enumerate(audio):
                 file_path = os.path.join(output_path, f"audio_{i}.wav")
-                sf.write(file_path, audio_array, sampling_rate)
+                sf.write(file_path, audio_array, self.feature_extractor.sampling_rate)
                 saved_paths.append(file_path)
         return saved_paths
 
