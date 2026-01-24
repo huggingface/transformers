@@ -31,7 +31,7 @@ if is_vision_available():
     from transformers.image_transforms import center_to_corners_format
 
 
-def dice_loss(inputs, targets, num_boxes):
+def dice_loss(inputs, targets, num_boxes, valid_mask=None):
     """
     Compute the DICE loss, similar to generalized IOU for masks
 
@@ -41,16 +41,25 @@ def dice_loss(inputs, targets, num_boxes):
         targets: A float tensor with the same shape as inputs. Stores the binary
                  classification label for each element in inputs (0 for the negative class and 1 for the positive
                  class).
+        valid_mask: Optional boolean tensor with the same shape as inputs.
+                    If provided, only valid (non-padding) areas are considered in the loss.
+                    True means valid, False means padding.
     """
     inputs = inputs.sigmoid()
     inputs = inputs.flatten(1)
+
+    if valid_mask is not None:
+        valid_mask = valid_mask.flatten(1).to(dtype=inputs.dtype)
+        inputs = inputs * valid_mask
+        targets = targets * valid_mask
+
     numerator = 2 * (inputs * targets).sum(1)
     denominator = inputs.sum(-1) + targets.sum(-1)
     loss = 1 - (numerator + 1) / (denominator + 1)
     return loss.sum() / num_boxes
 
 
-def sigmoid_focal_loss(inputs, targets, num_boxes, alpha: float = 0.25, gamma: float = 2):
+def sigmoid_focal_loss(inputs, targets, num_boxes, alpha: float = 0.25, gamma: float = 2, valid_mask=None):
     """
     Loss used in RetinaNet for dense detection: https://huggingface.co/papers/1708.02002.
 
@@ -64,6 +73,9 @@ def sigmoid_focal_loss(inputs, targets, num_boxes, alpha: float = 0.25, gamma: f
             Optional weighting factor in the range (0,1) to balance positive vs. negative examples.
         gamma (`int`, *optional*, defaults to `2`):
             Exponent of the modulating factor (1 - p_t) to balance easy vs hard examples.
+        valid_mask: Optional boolean tensor with the same shape as inputs.
+                    If provided, only valid (non-padding) areas are considered in the loss.
+                    True means valid, False means padding.
 
     Returns:
         Loss tensor
@@ -77,6 +89,13 @@ def sigmoid_focal_loss(inputs, targets, num_boxes, alpha: float = 0.25, gamma: f
     if alpha >= 0:
         alpha_t = alpha * targets + (1 - alpha) * (1 - targets)
         loss = alpha_t * loss
+
+    if valid_mask is not None:
+        valid_mask = valid_mask.flatten(1).to(dtype=loss.dtype)
+        loss = loss * valid_mask
+        # Average only over valid pixels per sample
+        valid_count = valid_mask.sum(1).clamp(min=1)
+        return (loss.sum(1) / valid_count).sum() / num_boxes
 
     return loss.mean(1).sum() / num_boxes
 
@@ -193,10 +212,15 @@ class ImageLoss(nn.Module):
         source_masks = outputs["pred_masks"]
         source_masks = source_masks[source_idx]
         masks = [t["masks"] for t in targets]
-        # TODO use valid to mask invalid areas due to padding in loss
         target_masks, valid = nested_tensor_from_tensor_list(masks).decompose()
         target_masks = target_masks.to(source_masks)
         target_masks = target_masks[target_idx]
+
+        # Get valid mask for selected targets (invert: True = valid, False = padding)
+        # valid has shape (batch, h, w), we need to index by batch indices only
+        batch_idx = target_idx[0]
+        valid_mask = ~valid
+        valid_mask = valid_mask[batch_idx]
 
         # upsample predictions to the target size
         source_masks = nn.functional.interpolate(
@@ -206,9 +230,12 @@ class ImageLoss(nn.Module):
 
         target_masks = target_masks.flatten(1)
         target_masks = target_masks.view(source_masks.shape)
+        valid_mask = valid_mask.flatten(1)
+        valid_mask = valid_mask.view(source_masks.shape)
+
         losses = {
-            "loss_mask": sigmoid_focal_loss(source_masks, target_masks, num_boxes),
-            "loss_dice": dice_loss(source_masks, target_masks, num_boxes),
+            "loss_mask": sigmoid_focal_loss(source_masks, target_masks, num_boxes, valid_mask=valid_mask),
+            "loss_dice": dice_loss(source_masks, target_masks, num_boxes, valid_mask=valid_mask),
         }
         return losses
 

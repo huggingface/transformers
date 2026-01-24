@@ -268,6 +268,12 @@ class RTDetrLoss(nn.Module):
         target_masks = target_masks.to(source_masks)
         target_masks = target_masks[target_idx]
 
+        # Get valid mask for selected targets (invert: True = valid, False = padding)
+        # valid has shape (batch, h, w), we need to index by batch indices only
+        batch_idx = target_idx[0]
+        valid_mask = ~valid
+        valid_mask = valid_mask[batch_idx]
+
         # upsample predictions to the target size
         source_masks = nn.functional.interpolate(
             source_masks[:, None], size=target_masks.shape[-2:], mode="bilinear", align_corners=False
@@ -276,9 +282,12 @@ class RTDetrLoss(nn.Module):
 
         target_masks = target_masks.flatten(1)
         target_masks = target_masks.view(source_masks.shape)
+        valid_mask = valid_mask.flatten(1)
+        valid_mask = valid_mask.view(source_masks.shape)
+
         losses = {
-            "loss_mask": sigmoid_focal_loss(source_masks, target_masks, num_boxes),
-            "loss_dice": dice_loss(source_masks, target_masks, num_boxes),
+            "loss_mask": sigmoid_focal_loss(source_masks, target_masks, num_boxes, valid_mask=valid_mask),
+            "loss_dice": dice_loss(source_masks, target_masks, num_boxes, valid_mask=valid_mask),
         }
         return losses
 
