@@ -353,7 +353,7 @@ def _apply_weight_conversions_to_state_dict(model, state_dict, weight_mapping):
         key_rename_cache[original_key] = renamed_key
 
         # Only process if the renamed key is in the model's state dict
-        if renamed_key in meta_model_state_dict:
+        if renamed_key in model_state_dict:
             if source_pattern is not None:
                 new_converter = copy.deepcopy(pattern_to_converter[source_pattern])
                 mapping = conversion_mapping.setdefault(renamed_key, new_converter)
