@@ -24,8 +24,9 @@ import tempfile
 import warnings
 
 from safetensors import safe_open
+
 from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer, is_torch_available
-from transformers.integrations.tensor_parallel import get_packed_weights, get_tensor_shard, repack_weights
+from transformers.integrations.tensor_parallel import get_packed_weights, repack_weights
 from transformers.testing_utils import (
     TestCasePlus,
     backend_device_count,
@@ -1004,8 +1005,12 @@ def _test_model_moe_forward_impl(rank, mode, dtype=torch.float32):
     debug_model_tp = DebugLogger(model_tp, name="TP", rank=rank, world_size=world_size, log_dir=log_dir)
 
     # Attach hooks to capture activations - focus on key layers including MoE-specific ones
-    debug_model.attach_hooks(include_patterns=["embed", "layers.0", "layers.1", "norm", "lm_head", "router", "experts"])
-    debug_model_tp.attach_hooks(include_patterns=["embed", "layers.0", "layers.1", "norm", "lm_head", "router", "experts"])
+    debug_model.attach_hooks(
+        include_patterns=["embed", "layers.0", "layers.1", "norm", "lm_head", "router", "experts"]
+    )
+    debug_model_tp.attach_hooks(
+        include_patterns=["embed", "layers.0", "layers.1", "norm", "lm_head", "router", "experts"]
+    )
 
     debug_model._log(f"\n{'=' * 80}")
     debug_model._log(f"MoE Test: mode={mode}, dtype={dtype}")
@@ -1120,7 +1125,6 @@ def _test_model_moe_backward_pass_impl(rank, dtype=torch.float32):
     loss_tp = outputs_tp.loss
     loss_tp.backward()
 
-
     assert torch.allclose(loss, loss_tp, atol=atol, rtol=rtol), (
         f"TP and non-TP MoE model losses differ (dtype={dtype}). Non-TP loss: {loss.item()}, TP loss: {loss_tp.item()}, Diff: {(loss - loss_tp).abs().item()}"
     )
@@ -1137,10 +1141,9 @@ def _test_model_moe_backward_pass_impl(rank, dtype=torch.float32):
 
     # Compare gradients for matching parameters
     world_size = dist.get_world_size()
-    
+
     def get_packed_grad_shard(grad, world_size, rank, dim):
         """Get the correct shard of a packed gradient (matching get_packed_weights interleaved logic).
-        
         Packed weights like gate_up_proj are sharded with interleaving:
         Original: [G0 G1 G2 G3 | U0 U1 U2 U3]  (gate | up)
         Rank 0:   [G0 G1 | U0 U1]
@@ -1150,7 +1153,7 @@ def _test_model_moe_backward_pass_impl(rank, dtype=torch.float32):
         # Packed weights have 2 blocks (gate and up)
         block_size = total_size // 2
         shard_block_size = block_size // world_size
-        
+
         # Build interleaved indices
         indices = []
         for block_idx in range(2):  # gate block, then up block
@@ -1158,27 +1161,27 @@ def _test_model_moe_backward_pass_impl(rank, dtype=torch.float32):
             start = block_offset + rank * shard_block_size
             stop = block_offset + (rank + 1) * shard_block_size
             indices.extend(range(start, stop))
-        
+
         # Select along the sharded dimension
         return grad.index_select(dim, torch.tensor(indices, device=grad.device))
-    
+
     for (name, param), (name_tp, param_tp) in zip(model.named_parameters(), model_tp.named_parameters()):
         if param.grad is not None and param_tp.grad is not None:
             grad = param.grad  # Full gradient from non-TP model
             grad_tp = param_tp.grad  # Gradient from TP model (may be sharded)
-            
+
             # Determine if this param is sharded by comparing shapes
             is_sharded = grad.shape != grad_tp.shape
             shard_dim = None
             grad_shard = grad
-            
+
             if is_sharded:
                 # Find which dimension is sharded
                 for dim in range(len(grad.shape)):
                     if grad.shape[dim] != grad_tp.shape[dim]:
                         shard_dim = dim
                         break
-                
+
                 if shard_dim is not None:
                     # Packed weights (gate_up_proj) use interleaved sharding
                     if "gate_up_proj" in name:
@@ -1196,7 +1199,7 @@ def _test_model_moe_backward_pass_impl(rank, dtype=torch.float32):
                 is_embed = "embed_tokens" in name
                 is_norm = "layernorm" in name or "norm" in name
                 is_lm_head = "lm_head" in name
-                
+
                 # Color-code by layer type
                 if is_moe:
                     layer_color, layer_type = MAGENTA, "MoE"
@@ -1210,17 +1213,19 @@ def _test_model_moe_backward_pass_impl(rank, dtype=torch.float32):
                     layer_color, layer_type = YELLOW, "Norm"
                 else:
                     layer_color, layer_type = RESET, "Other"
-                
+
                 # Check shapes match after sharding
                 if grad_shard.shape != grad_tp.shape:
                     print(f"\n{layer_color}{BOLD}[{layer_type}]{RESET} {name}")
-                    print(f"  {RED}SHAPE MISMATCH:{RESET} non-TP={grad.shape}, TP={grad_tp.shape}, shard={grad_shard.shape}")
+                    print(
+                        f"  {RED}SHAPE MISMATCH:{RESET} non-TP={grad.shape}, TP={grad_tp.shape}, shard={grad_shard.shape}"
+                    )
                     continue
-                
+
                 diff = (grad_shard.cpu() - grad_tp.cpu()).abs()
                 max_diff = diff.max().item()
                 mean_diff = diff.mean().item()
-                
+
                 # Color-code diff severity
                 if max_diff < 1e-5:
                     diff_color = GREEN
@@ -1231,12 +1236,18 @@ def _test_model_moe_backward_pass_impl(rank, dtype=torch.float32):
                 else:
                     diff_color = RED
                     status = "✗"
-                
+
                 shard_info = f" [sharded dim={shard_dim}]" if is_sharded else ""
                 print(f"\n{layer_color}{BOLD}[{layer_type}]{RESET} {name}{shard_info}")
-                print(f"  {GREEN}Non-TP:{RESET} min={grad_shard.min().item():.6e}, max={grad_shard.max().item():.6e}, mean={grad_shard.mean().item():.6e}")
-                print(f"  {MAGENTA}TP:{RESET}     min={grad_tp.min().item():.6e}, max={grad_tp.max().item():.6e}, mean={grad_tp.mean().item():.6e}")
-                print(f"  {diff_color}{BOLD}Diff [{status}]:{RESET} max={diff_color}{max_diff:.6e}{RESET}, mean={mean_diff:.6e}")
+                print(
+                    f"  {GREEN}Non-TP:{RESET} min={grad_shard.min().item():.6e}, max={grad_shard.max().item():.6e}, mean={grad_shard.mean().item():.6e}"
+                )
+                print(
+                    f"  {MAGENTA}TP:{RESET}     min={grad_tp.min().item():.6e}, max={grad_tp.max().item():.6e}, mean={grad_tp.mean().item():.6e}"
+                )
+                print(
+                    f"  {diff_color}{BOLD}Diff [{status}]:{RESET} max={diff_color}{max_diff:.6e}{RESET}, mean={mean_diff:.6e}"
+                )
 
             # Skip assertion to see all gradient comparisons
 

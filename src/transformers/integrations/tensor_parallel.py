@@ -449,7 +449,7 @@ class _AllReduceBackward(torch.autograd.Function):
         device_mesh = ctx.device_mesh
         if device_mesh.size() == 1:
             return grad_output, None
-        #TODO(3outeille): do it for other reduce ops as well
+        # TODO(3outeille): do it for other reduce ops as well
         grad_output = grad_output.clone()  # Clone to avoid in-place mutation (compile-compatible)
         dist.all_reduce(grad_output, op=dist.ReduceOp.SUM, group=device_mesh.get_group())
         return grad_output, None
@@ -1068,6 +1068,7 @@ class RouterParallel(TensorParallelLayer):
             self._prepare_output_fn,
         )
 
+
 class MoeTensorParalellExperts(TensorParallelLayer):
     """
     Note: For tensor parallel, the MoEExpertsParallel TP layer handles gradient sync:
@@ -1123,6 +1124,7 @@ class MoeTensorParalellExperts(TensorParallelLayer):
             self._prepare_input_fn,
             self._prepare_output_fn,
         )
+
 
 class ParallelInterface(GeneralInterface):
     # Class instance object, so that a call to `register` can be reflected into all other files correctly, even if
