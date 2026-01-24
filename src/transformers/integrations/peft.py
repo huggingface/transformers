@@ -337,7 +337,7 @@ def patch_moe_parameter_targeting(model, peft_config):
 
         @wraps(update_layer)
         def new_update_layer(layer, *args, **kwargs):
-            if not hasattr(layer, '_swapped_in_out') and layer.parameter_name in ("down_proj", "gate_up_proj"):
+            if not hasattr(layer, "_swapped_in_out") and layer.parameter_name in ("down_proj", "gate_up_proj"):
                 tmp_in_features = layer.in_features
                 layer.in_features = layer.out_features
                 layer.out_features = tmp_in_features
@@ -577,7 +577,7 @@ class PeftAdapterMixin:
         load_info = replace(
             load_info,
             missing_keys=[k for k in load_info.missing_keys if is_adapter_key(k)],
-            mismatched_keys=[item for item in load_info.mismatched_keys if is_adapter_key(item[0])],
+            mismatched_keys=load_info.mismatched_keys,
         )
 
         log_state_dict_report(
