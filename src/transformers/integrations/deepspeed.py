@@ -399,7 +399,7 @@ def _apply_weight_conversions_to_state_dict(model, state_dict, weight_mapping):
     return new_state_dict
 
 
-def _load_state_dict_into_zero3_model(model_to_load, state_dict, weight_mapping=None):
+def _load_state_dict_into_zero3_model(model_to_load, state_dict, load_config=None):
     """
     Loads state dict into a model specifically for Zero3, since DeepSpeed does not support the `transformers`
     tensor parallelism API.
@@ -409,13 +409,18 @@ def _load_state_dict_into_zero3_model(model_to_load, state_dict, weight_mapping=
     Args:
         model_to_load: The model to load weights into
         state_dict: The state dict containing the weights
-        weight_mapping: Optional list of WeightConverter/WeightRenaming operations to apply
+        load_config: Optional LoadStateDictConfig containing weight_mapping and other loading options
     """
     # copy state_dict so `_load_state_dict_into_zero3_model` can modify it
     metadata = getattr(state_dict, "_metadata", None)
     state_dict = state_dict.copy()
     if metadata is not None:
         state_dict._metadata = metadata
+
+    # Extract weight_mapping from load_config if provided
+    weight_mapping = None
+    if load_config is not None:
+        weight_mapping = getattr(load_config, "weight_mapping", None)
 
     # Apply weight conversions if provided
     if weight_mapping is not None and len(weight_mapping) > 0:
