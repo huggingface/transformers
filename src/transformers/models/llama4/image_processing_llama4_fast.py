@@ -19,7 +19,7 @@ from functools import lru_cache
 from typing import Optional
 
 import torch
-from torchvision.transforms.v2 import functional as F
+import torchvision.transforms.v2.functional as tvF
 
 from ...image_processing_utils import BatchFeature
 from ...image_processing_utils_fast import (
@@ -180,7 +180,7 @@ def pad_to_best_fit(
     target_height, target_width = target_size
     paste_x_right = target_width - width
     paste_y_right = target_height - height
-    padded_images = F.pad(images, padding=[0, 0, paste_x_right, paste_y_right], fill=background_color)
+    padded_images = tvF.pad(images, padding=[0, 0, paste_x_right, paste_y_right], fill=background_color)
 
     return padded_images
 
@@ -352,7 +352,7 @@ class Llama4ImageProcessorFast(BaseImageProcessorFast):
         size: SizeDict,
         max_patches: int,
         resize_to_max_canvas: bool,
-        interpolation: Optional["F.InterpolationMode"],
+        interpolation: Optional["tvF.InterpolationMode"],
         do_rescale: bool,
         rescale_factor: float,
         do_normalize: bool,

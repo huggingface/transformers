@@ -204,22 +204,7 @@
 هناك نوعان شائعان من الإجابة على الأسئلة:
 
 * الاستخراجية (Extractive): بالنظر إلى سؤال وسياق مُعيّن، فإن الإجابة هي مقطع نصيّ مُستخرج من السياق الذي يُحلّله النموذج.
-* التجريدية (Abstractive): بالنظر إلى سؤال وسياق مُعيّن، يتم إنشاء الإجابة من السياق؛ يتعامل نهج [`Text2TextGenerationPipeline`] مع هذا النهج بدلاً من [`QuestionAnsweringPipeline`] الموضح أدناه
-
-
-```py
->>> from transformers import pipeline
-
->>> question_answerer = pipeline(task="question-answering")
->>> preds = question_answerer(
-...     question="What is the name of the repository?",
-...     context="The name of the repository is huggingface/transformers",
-... )
->>> print(
-...     f"score: {round(preds['score'], 4)}, start: {preds['start']}, end: {preds['end']}, answer: {preds['answer']}"
-... )
-score: 0.9327, start: 30, end: 54, answer: huggingface/transformers
-```
+* التجريدية (Abstractive): بالنظر إلى سؤال وسياق مُعيّن، يتم إنشاء الإجابة من السياق؛ 
 
 ### التلخيص
 
@@ -228,17 +213,7 @@ score: 0.9327, start: 30, end: 54, answer: huggingface/transformers
 مثل الإجابة على الأسئلة، هناك نوعان من التلخيص:
 
 * الاستخراجية (Extractive): تحديد واستخراج أهم الجمل من النص الأصلي
-* التجريدي (Abstractive): إنشاء ملخص مستهدف (الذي قد يتضمن كلمات جديدة غير موجودة في النص الأصلي) انطلاقًا من النص الأصلي؛ يستخدم نهج التلخيص التجريدي [`SummarizationPipeline`]
-
-```py
->>> from transformers import pipeline
-
->>> summarizer = pipeline(task="summarization")
->>> summarizer(
-...     "In this work, we presented the Transformer, the first sequence transduction model based entirely on attention, replacing the recurrent layers most commonly used in encoder-decoder architectures with multi-headed self-attention. For translation tasks, the Transformer can be trained significantly faster than architectures based on recurrent or convolutional layers. On both WMT 2014 English-to-German and WMT 2014 English-to-French translation tasks, we achieve a new state of the art. In the former task our best model outperforms even all previously reported ensembles."
-... )
-[{'summary_text': ' The Transformer is the first sequence transduction model based entirely on attention . It replaces the recurrent layers most commonly used in encoder-decoder architectures with multi-headed self-attention . For translation tasks, the Transformer can be trained significantly faster than architectures based on recurrent or convolutional layers .'}]
-```
+* التجريدي (Abstractive): إنشاء ملخص مستهدف (الذي قد يتضمن كلمات جديدة غير موجودة في النص الأصلي) انطلاقًا من النص الأصلي
 
 ### الترجمة
 

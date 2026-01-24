@@ -46,6 +46,7 @@ from ...utils import (
     logging,
     replace_return_docstrings,
 )
+from ...utils.generic import is_flash_attention_requested
 from .configuration_kosmos2_5 import (
     Kosmos2_5Config,
     Kosmos2_5TextConfig,
@@ -566,7 +567,7 @@ class Kosmos2_5VisionEncoder(nn.Module):
         self.gradient_checkpointing = False
 
     def _prepare_attention_mask(self, attention_mask, input_shape, inputs_embeds):
-        if self.config._attn_implementation == "flash_attention_2":
+        if is_flash_attention_requested(self.config):
             if attention_mask is not None and 0.0 in attention_mask:
                 return attention_mask
             return None
@@ -936,7 +937,7 @@ class Kosmos2_5TextTransformer(nn.Module):
         past_key_values: Cache,
         output_attentions: bool = False,
     ):
-        if self.config._attn_implementation == "flash_attention_2":
+        if is_flash_attention_requested(self.config):
             if attention_mask is not None and (attention_mask == 0.0).any():
                 return attention_mask
             return None
@@ -1090,8 +1091,9 @@ class Kosmos2_5TextTransformer(nn.Module):
 
         # Ignore copy
         if image_embeds is not None:
+            inputs_embeds = inputs_embeds.clone()
             inputs_embeds[image_embeds_position_mask == 1] = image_embeds.to(inputs_embeds.device).view(
-                -1, image_embeds.size(-1)
+                -1, image_embeds.shape[-1]
             )
 
         inputs_embeds = inputs_embeds * self.embed_scale
@@ -1223,7 +1225,7 @@ class Kosmos2_5PreTrainedModel(PreTrainedModel):
     input_modalities = ("image", "text")
     supports_gradient_checkpointing = True
     _no_split_modules = ["Kosmos2_5VisionLayer", "Kosmos2_5TextBlock"]
-    _supports_flash_attn_2 = True
+    _supports_flash_attn = True
     _supports_cache_class = True
     _supports_sdpa = True
     _supports_attention_backend = True
@@ -1428,14 +1430,16 @@ class Kosmos2_5Model(Kosmos2_5PreTrainedModel):
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> from transformers import AutoProcessor, Kosmos2_5Model
 
         >>> model = Kosmos2_5Model.from_pretrained("microsoft/kosmos2.5")
         >>> processor = AutoProcessor.from_pretrained("microsoft/kosmos2.5")
 
         >>> url = "https://huggingface.co/microsoft/kosmos2.5/resolve/main/snowman.jpg"
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> text = (
         ...     "<grounding> An image of<phrase> a snowman</phrase><object><patch_index_0044><patch_index_0863>"
@@ -1727,7 +1731,8 @@ class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel, GenerationMixi
 
         ```python
         >>> from PIL import Image
-        >>> import requests
+        >>> import httpx
+        >>> from io import BytesIO
         >>> import torch
         >>> from transformers import AutoProcessor, Kosmos2_5ForConditionalGeneration
 
@@ -1739,7 +1744,8 @@ class Kosmos2_5ForConditionalGeneration(Kosmos2_5PreTrainedModel, GenerationMixi
 
         >>> url = "https://huggingface.co/microsoft/kosmos-2.5/resolve/main/receipt_00008.png"
 
-        >>> image = Image.open(requests.get(url, stream=True).raw)
+        >>> with httpx.stream("GET", url) as response:
+        ...     image = Image.open(BytesIO(response.read()))
 
         >>> prompt = "<ocr>" # <md>
 

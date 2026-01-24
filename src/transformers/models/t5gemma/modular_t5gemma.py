@@ -130,6 +130,9 @@ class T5GemmaModuleConfig(Gemma2Config):
             scaling factor when applying tanh softcapping on the logits.
         attn_logit_softcapping (`float`, *optional*, defaults to 50.0):
             scaling factor when applying tanh softcapping on the attention scores.
+        is_decoder (`bool`, *optional*, defaults to `False`):
+            Whether to only use the decoder in an encoder-decoder architecture, otherwise it has no effect on
+            decoder-only or encoder-only architectures.
 
     ```python
     >>> from transformers import T5GemmaModuleModel, T5GemmaModuleConfig
@@ -167,8 +170,10 @@ class T5GemmaModuleConfig(Gemma2Config):
         layer_types: list[str] | None = None,
         final_logit_softcapping: float | None = 30.0,
         attn_logit_softcapping: float | None = 50.0,
+        is_decoder: bool | None = False,
         **kwargs,
     ):
+        self.is_decoder = is_decoder
         super().__init__(
             vocab_size=vocab_size,
             hidden_size=hidden_size,
@@ -696,7 +701,7 @@ class T5GemmaEncoder(T5GemmaPreTrainedModel):
         position_ids: torch.LongTensor | None = None,
         inputs_embeds: torch.FloatTensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutput:
+    ) -> tuple | BaseModelOutput:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
 
@@ -795,7 +800,7 @@ class T5GemmaDecoder(T5GemmaPreTrainedModel):
         encoder_hidden_states: torch.Tensor | None = None,
         encoder_attention_mask: torch.Tensor | None = None,
         **kwargs: Unpack[TransformersKwargs],
-    ) -> BaseModelOutputWithPastAndCrossAttentions:
+    ) -> tuple | BaseModelOutputWithPastAndCrossAttentions:
         if (input_ids is None) ^ (inputs_embeds is not None):
             raise ValueError("You must specify exactly one of input_ids or inputs_embeds")
         if encoder_hidden_states is None:
