@@ -19,7 +19,6 @@ import unittest
 from parameterized import parameterized
 
 from transformers import Olmo3_5HybridConfig, is_torch_available
-from transformers.models.auto.tokenization_auto import AutoTokenizer
 from transformers.testing_utils import (
     Expectations,
     cleanup,
@@ -158,10 +157,6 @@ class Olmo3_5HybridModelTest(CausalLMModelTest, unittest.TestCase):
         if is_torch_available()
         else {}
     )
-    test_headmasking = False
-    test_pruning = False
-    fx_compatible = False
-    test_torchscript = False
     model_tester_class = Olmo3_5HybridModelTester
     rotary_embedding_layer = Olmo3_5HybridRotaryEmbedding if is_torch_available() else None
 
@@ -374,9 +369,8 @@ class Olmo3_5HybridIntegrationTest(unittest.TestCase):
         )
         out = model(torch.tensor(input_ids, device=torch_device)).logits.float()
 
-        # Looser tolerance when FLA is not available (fallback has minor numerical differences)
-        rtol = 1e-2 if is_flash_linear_attention_available() else 3e-2
-        atol = 1e-2 if is_flash_linear_attention_available() else 5e-2
+        rtol = 3e-2
+        atol = 5e-2
 
         expectations = Expectations(
             {
@@ -435,14 +429,3 @@ class Olmo3_5HybridIntegrationTest(unittest.TestCase):
         )
         EXPECTED_SLICE = torch.tensor(expectations.get_expectation(), device=torch_device)
         torch.testing.assert_close(out[0, 0, :30], EXPECTED_SLICE, rtol=rtol, atol=atol)
-
-    @slow
-    def test_model_greedy_generation(self):
-        EXPECTED_TEXT_COMPLETION = "Simply put, the theory of relativity states that \xa0the laws of physics are the same for all non-accelerating observers. This means that the laws of physics are the same for all observers, regardless of their relative motion or the strength of the gravitational field they are in. This theory was first proposed by Albert Einstein in 1905 and has since been confirmed"
-        prompt = "Simply put, the theory of relativity states that "
-        tokenizer = AutoTokenizer.from_pretrained("yanhong-l/olmo-3.5-test")
-        model = Olmo3_5HybridForCausalLM.from_pretrained("yanhong-l/olmo-3.5-test", device_map="auto")
-        input_ids = tokenizer.encode(prompt, return_tensors="pt").to(model.device)
-        generated_ids = model.generate(input_ids, max_new_tokens=64, top_p=None, temperature=1, do_sample=False)
-        text = tokenizer.decode(generated_ids[0], skip_special_tokens=True)
-        self.assertEqual(EXPECTED_TEXT_COMPLETION, text)

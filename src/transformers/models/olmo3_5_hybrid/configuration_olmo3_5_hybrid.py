@@ -18,7 +18,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-
 from ...configuration_utils import PreTrainedConfig, layer_type_validation
 
 
@@ -32,7 +31,7 @@ class Olmo3_5HybridConfig(PreTrainedConfig):
     The OLMo 3.5 Hybrid model combines standard transformer attention layers with GatedDeltaNet linear attention
     layers for improved efficiency while maintaining model quality.
 
-    Configuration objects inherit from [`Olmo3Config`] and can be used to control the model outputs. Read the
+    Configuration objects inherit from [`PreTrainedConfig`] and can be used to control the model outputs. Read the
     documentation from [`PreTrainedConfig`] for more information.
 
     Args:
@@ -82,12 +81,11 @@ class Olmo3_5HybridConfig(PreTrainedConfig):
             The dropout ratio for the attention probabilities.
         rms_norm_eps (`float`, *optional*, defaults to 1e-06):
             The epsilon used by the rms normalization layers.
-        sliding_window (`int`, *optional*, defaults to 4096):
-            Size of the sliding window for sliding window attention.
+        sliding_window (`int`, *optional*):
+            Size of the sliding window attention. Not used in OLMo 3.5 Hybrid.
         layer_types (`list`, *optional*):
-            Attention pattern for each layer. Can contain `"full_attention"`, `"sliding_attention"`, or
-            `"linear_attention"`. Defaults to linear attention for most layers with full attention for every
-            4th layer.
+            Attention pattern for each layer. Can contain `"full_attention"` or `"linear_attention"`.
+            Defaults to linear attention for most layers with full attention for every 4th layer.
         linear_num_key_heads (`int`, *optional*):
             Number of key heads for the linear attention layers. Defaults to `num_attention_heads`.
         linear_num_value_heads (`int`, *optional*):
@@ -154,7 +152,7 @@ class Olmo3_5HybridConfig(PreTrainedConfig):
         attention_bias: bool | None = False,
         attention_dropout: float | None = 0.0,
         rms_norm_eps: float | None = 1e-06,
-        sliding_window: int | None = 4096,
+        sliding_window: int | None = None,  # OLMo 3.5 Hybrid doesn't use swa
         layer_types: list[str] | None = None,
         linear_num_key_heads: int | None = None,
         linear_num_value_heads: int | None = None,
@@ -172,15 +170,12 @@ class Olmo3_5HybridConfig(PreTrainedConfig):
                 if i % 4 == 3:
                     layer_types[i] = "full_attention"
 
-        if len(layer_types) != int(num_hidden_layers):
-            raise ValueError(
-                f"`layer_types` must have length num_hidden_layers={num_hidden_layers}, got {len(layer_types)}."
-            )
+        layer_type_validation(layer_types, num_hidden_layers)
 
         if "linear_attention" not in layer_types:
             raise ValueError("OLMo3.5 Hybrid expects at least one 'linear_attention' layer.")
         if all(t == "linear_attention" for t in layer_types):
-            raise ValueError("OLMo3.5 Hybrid expects at least one attention layer (full or sliding).")
+            raise ValueError("OLMo3.5 Hybrid expects at least one attention layer.")
         self.vocab_size = vocab_size
         self.max_position_embeddings = max_position_embeddings
         self.hidden_size = hidden_size
@@ -200,8 +195,7 @@ class Olmo3_5HybridConfig(PreTrainedConfig):
         self.attention_dropout = attention_dropout
         self.rms_norm_eps = rms_norm_eps
         self.sliding_window = sliding_window
-
-        self.layer_types = list(layer_types)
+        self.layer_types = layer_types
         if self.layer_types is None:
             self.layer_types = [
                 "sliding_attention" if (i + 1) % 4 != 0 else "full_attention" for i in range(self.num_hidden_layers)
@@ -234,6 +228,8 @@ class Olmo3_5HybridConfig(PreTrainedConfig):
         self.linear_conv_kernel_dim = int(linear_conv_kernel_dim)
         self.linear_use_gate = bool(linear_use_gate)
         self.linear_allow_neg_eigval = bool(linear_allow_neg_eigval)
+
+        self.cache_implementation = "hybrid"
 
 
 __all__ = ["Olmo3_5HybridConfig"]

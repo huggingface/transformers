@@ -397,10 +397,8 @@ def convert_fla_layer_weights(
         f"model.layers.{layer_i}.mlp.gate_proj.weight": loaded[f"blocks.{layer_i}.feed_forward.w1.weight"],
         f"model.layers.{layer_i}.mlp.down_proj.weight": loaded[f"blocks.{layer_i}.feed_forward.w2.weight"],
         f"model.layers.{layer_i}.mlp.up_proj.weight": loaded[f"blocks.{layer_i}.feed_forward.w3.weight"],
-        f"model.layers.{layer_i}.post_attention_layernorm.weight": loaded[f"blocks.{layer_i}.fla_norm.weight"],
-        f"model.layers.{layer_i}.post_feedforward_layernorm.weight": loaded[
-            f"blocks.{layer_i}.feed_forward_norm.weight"
-        ],
+        f"model.layers.{layer_i}.attention_layer_norm.weight": loaded[f"blocks.{layer_i}.fla_norm.weight"],
+        f"model.layers.{layer_i}.feedforward_layer_norm.weight": loaded[f"blocks.{layer_i}.feed_forward_norm.weight"],
     }
     return state_dict
 
