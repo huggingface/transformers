@@ -28,11 +28,12 @@ import torch
 from safetensors.torch import safe_open
 
 from transformers import (
+    AudioFlamingo3Config,
+    AudioFlamingo3EncoderConfig,
+    AudioFlamingo3ForConditionalGeneration,
+    AudioFlamingo3Processor,
     AutoTokenizer,
     GenerationConfig,
-    MusicFlamingoConfig,
-    MusicFlamingoForConditionalGeneration,
-    MusicFlamingoProcessor,
     Qwen2Config,
     WhisperFeatureExtractor,
 )
@@ -103,10 +104,13 @@ def write_processor(src_root: Path, dst_root: Path):
     )
     # fmt: on
 
-    processor = MusicFlamingoProcessor(
+    processor = AudioFlamingo3Processor(
         feature_extractor=WhisperFeatureExtractor(feature_size=128, return_attention_mask=True),
         tokenizer=AutoTokenizer.from_pretrained(str(llm_dir), chat_template=tokenizer_chat_template, use_fast=True),
         chat_template=processor_chat_template,
+        max_audio_len=1200,
+        audio_bos_token="<|sound_bos|>",
+        audio_eos_token="<|sound_eos|>",
     )
     processor.save_pretrained(str(dst_root))
 
@@ -138,7 +142,7 @@ def _resolve_component_dir(dirpath: Path):
     return ("file", cands[0]) if len(cands) == 1 else None
 
 
-def merge_and_shard_weights(src_root: Path, dst_root: Path, processor: MusicFlamingoProcessor):
+def merge_and_shard_weights(src_root: Path, dst_root: Path, processor: AudioFlamingo3Processor):
     state: dict[str, Any] = {}
     for tag in PREFIX_MAP.keys():
         comp = _resolve_component_dir(src_root / tag)
@@ -182,10 +186,19 @@ def merge_and_shard_weights(src_root: Path, dst_root: Path, processor: MusicFlam
         rope_theta=1000000.0,
         use_cache=False,
     )
-    config = MusicFlamingoConfig(text_config=text_config, audio_token_id=tok.get_vocab()["<sound>"])
-    model = MusicFlamingoForConditionalGeneration(config).to(dtype=torch.bfloat16)
 
-    # Update state dict to new key names if necessary
+    audio_encoder_config = AudioFlamingo3EncoderConfig(
+        use_rotary_embedding=True,
+        rotary_max_time=1200.0,
+        rotary_freqs_for="lang",
+    )
+    config = AudioFlamingo3Config(
+        text_config=text_config,
+        audio_config=audio_encoder_config,
+        audio_token_id=tok.get_vocab()["<sound>"],
+    )
+    model = AudioFlamingo3ForConditionalGeneration(config).to(dtype=torch.bfloat16)
+
     projector_key_mapping = {
         "multi_modal_projector.layers.0.weight": "multi_modal_projector.linear_1.weight",
         "multi_modal_projector.layers.0.bias": "multi_modal_projector.linear_1.bias",
@@ -237,7 +250,7 @@ This will create a folder `music-flamingo/` containing the original components:
 2) Convert to the Hugging Face Transformers format (locally):
 
 ```
-python src/transformers/models/musicflamingo/convert_musicflamingo_to_hf.py \
+python src/transformers/models/audioflamingo3/convert_musicflamingo_to_hf.py \
   --src_dir music-flamingo \
   --dst_dir music-flamingo-hf
 ```
@@ -245,7 +258,7 @@ python src/transformers/models/musicflamingo/convert_musicflamingo_to_hf.py \
 3) Convert and push directly to the Hub (requires `huggingface-cli login` or `HF_TOKEN`):
 
 ```
-python src/transformers/models/musicflamingo/convert_musicflamingo_to_hf.py \
+python src/transformers/models/audioflamingo3/convert_musicflamingo_to_hf.py \
   --src_dir music-flamingo \
   --dst_dir music-flamingo-hf \
   --push_to_hub <username-or-org>/music-flamingo-hf

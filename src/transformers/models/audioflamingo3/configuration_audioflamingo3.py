@@ -63,6 +63,14 @@ class AudioFlamingo3EncoderConfig(PretrainedConfig):
             Scale embeddings by dividing by sqrt(hidden_size).
         max_source_positions (`int`, *optional*, defaults to 1500):
             The maximum sequence length of log-mel filter-bank features that this model might ever be used with.
+        use_rotary_embedding (`bool`, *optional*, defaults to `False`):
+            Whether to use rotary embeddings (RoTE) in the encoder.
+        rotary_dim (`int`, *optional*, defaults to 256):
+            Dimension for the rotary embeddings.
+        rotary_freqs_for (`str`, *optional*, defaults to `"lang"`):
+            Frequency type for rotary embeddings.
+        rotary_max_time (`float`, *optional*, defaults to 1200.0):
+            Maximum time (in seconds) for rotary embeddings scaling.
 
     Example:
 
@@ -104,6 +112,10 @@ class AudioFlamingo3EncoderConfig(PretrainedConfig):
         initializer_range=0.02,
         scale_embedding=False,
         max_source_positions=1500,
+        use_rotary_embedding=False,
+        rotary_dim=256,
+        rotary_freqs_for="lang",
+        rotary_max_time=1200.0,
         **kwargs,
     ):
         super().__init__(**kwargs)
@@ -122,6 +134,10 @@ class AudioFlamingo3EncoderConfig(PretrainedConfig):
         self.num_hidden_layers = num_hidden_layers
         self.scale_embedding = scale_embedding
         self.max_source_positions = max_source_positions
+        self.use_rotary_embedding = use_rotary_embedding
+        self.rotary_dim = rotary_dim
+        self.rotary_freqs_for = rotary_freqs_for
+        self.rotary_max_time = rotary_max_time
 
 
 class AudioFlamingo3Config(PretrainedConfig):

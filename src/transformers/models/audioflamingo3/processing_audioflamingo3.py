@@ -82,9 +82,15 @@ class AudioFlamingo3Processor(ProcessorMixin):
         audio_token="<sound>",
         default_transcription_prompt="Transcribe the input speech.",
         max_audio_len=600,
+        audio_bos_token=None,
+        audio_eos_token=None,
     ):
         self.audio_token = audio_token
+        self.audio_bos_token = audio_bos_token
+        self.audio_eos_token = audio_eos_token
         self.audio_token_id = tokenizer.convert_tokens_to_ids(audio_token)
+        self.audio_bos_token_id = tokenizer.convert_tokens_to_ids(audio_bos_token) if audio_bos_token else None
+        self.audio_eos_token_id = tokenizer.convert_tokens_to_ids(audio_eos_token) if audio_eos_token else None
         self.default_transcription_prompt = default_transcription_prompt
         self.max_audio_len = max_audio_len
         super().__init__(feature_extractor, tokenizer, chat_template=chat_template)
@@ -152,6 +158,7 @@ class AudioFlamingo3Processor(ProcessorMixin):
 
             per_sample_windows: list[int] = []
             flat_chunks: list[np.ndarray] = []
+            audio_times_list: list[torch.Tensor] = []
 
             for audio_el in audio:
                 n_samples = int(audio_el.shape[0])
@@ -168,11 +175,22 @@ class AudioFlamingo3Processor(ProcessorMixin):
                     start = i * window_size
                     end = min((i + 1) * window_size, time_cap)
                     flat_chunks.append(audio_el[start:end])
+                    # Calculate the start time of this audio chunk in seconds
+                    start_sec = start / audio_kwargs["sampling_rate"]
+
+                    # Generate 750 timestamps at 40ms intervals (30s / 750 = 0.04s)
+                    if is_torch_available():
+                        chunk_times = torch.arange(750).float() * 0.04 + start_sec
+                        audio_times_list.append(chunk_times)
 
             # Feature extraction
             audio_inputs = self.feature_extractor(flat_chunks, **audio_kwargs)
             padding_mask = audio_inputs.pop("attention_mask")
             audio_inputs["input_features_mask"] = padding_mask
+
+            # Add audio times as tensor
+            if return_tensors == "pt" and audio_times_list:
+                audio_inputs["audio_times"] = torch.stack(audio_times_list).to(dtype=torch.float32)
 
             # Compute sequence lengths token counting
             audio_lengths = torch.stack([s.sum() for s in torch.split(padding_mask.sum(-1), per_sample_windows)])
@@ -180,7 +198,10 @@ class AudioFlamingo3Processor(ProcessorMixin):
 
             # expand audio tokens in text
             for i, audio_length in enumerate(audio_tokens_lengths):
-                expanded = re.sub(re.escape(self.audio_token), self.audio_token * audio_length, text[i])
+                replacement = self.audio_token * audio_length
+                if self.audio_bos_token is not None and self.audio_eos_token is not None:
+                    replacement = self.audio_bos_token + replacement + self.audio_eos_token
+                expanded = re.sub(re.escape(self.audio_token), replacement, text[i])
                 text[i] = expanded
 
         # Tokenize
@@ -190,6 +211,10 @@ class AudioFlamingo3Processor(ProcessorMixin):
         if output_labels:
             labels = data["input_ids"].clone()
             labels[labels == self.audio_token_id] = -100
+            if self.audio_bos_token_id is not None:
+                labels[labels == self.audio_bos_token_id] = -100
+            if self.audio_eos_token_id is not None:
+                labels[labels == self.audio_eos_token_id] = -100
             labels[labels == self.tokenizer.pad_token_id] = -100
             data["labels"] = labels
 
@@ -199,7 +224,7 @@ class AudioFlamingo3Processor(ProcessorMixin):
     def model_input_names(self) -> list[str]:
         tok_names = self.tokenizer.model_input_names
         fea_names = self.feature_extractor.model_input_names
-        return list(dict.fromkeys(tok_names + fea_names + ["input_features_mask"]))
+        return list(dict.fromkeys(tok_names + fea_names + ["input_features_mask", "audio_times"]))
 
     def apply_transcription_request(
         self,
