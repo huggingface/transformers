@@ -1151,13 +1151,13 @@ class Sam3TrackerVideoVisionEncoderOutput(BaseModelOutputWithPooling):
     fpn_hidden_states (`tuple(torch.FloatTensor)`):
         Tuple of `torch.FloatTensor` (one for each feature level, from high to low resolution) of shape
         `(batch_size, hidden_size, height, width)`. Feature maps from the Feature Pyramid Network neck.
-    fpn_position_encoding (`tuple(torch.FloatTensor)`):
+    fpn_position_embeddings (`tuple(torch.FloatTensor)`):
         Tuple of `torch.FloatTensor` (one for each feature level, from high to low resolution) of shape
         `(batch_size, hidden_size, height, width)`. Positional encodings corresponding to the `fpn_hidden_states`.
     """
 
     fpn_hidden_states: torch.FloatTensor | None = None
-    fpn_position_encoding: torch.FloatTensor | None = None
+    fpn_position_embeddings: torch.FloatTensor | None = None
 
 
 class Sam3TrackerVideoPositionalEmbedding(nn.Module):
@@ -1873,7 +1873,7 @@ class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
         )
 
         feature_maps = vision_outputs.fpn_hidden_states
-        feature_maps_position_embeddings = vision_outputs.fpn_position_encoding
+        feature_maps_position_embeddings = vision_outputs.fpn_position_embeddings
 
         # precompute projected level 0 and level 1 features in SAM decoder
         # to avoid running it again on every SAM click
@@ -1888,7 +1888,7 @@ class Sam3TrackerVideoModel(Sam3TrackerVideoPreTrainedModel):
             for feature_map_position_embedding in feature_maps_position_embeddings[:-1]
         ]
         vision_outputs.fpn_hidden_states = feature_maps
-        vision_outputs.fpn_position_encoding = feature_maps_position_embeddings
+        vision_outputs.fpn_position_embeddings = feature_maps_position_embeddings
 
         return vision_outputs
 

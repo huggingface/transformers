@@ -204,15 +204,15 @@ class EdgeTamVisionModel(Sam2VisionModel):
         intermediate_hidden_states = backbone_output.last_hidden_state
         intermediate_hidden_states = [hidden_state.permute(0, 2, 3, 1) for hidden_state in intermediate_hidden_states]
 
-        fpn_hidden_states, fpn_position_encoding = self.neck(intermediate_hidden_states)
+        fpn_hidden_states, fpn_position_embeddings = self.neck(intermediate_hidden_states)
         # Select last `num_feature_levels` feature levels from FPN and reverse order to get features from high to low resolution
         fpn_hidden_states = fpn_hidden_states[-self.num_feature_levels :][::-1]
-        fpn_position_encoding = fpn_position_encoding[-self.num_feature_levels :][::-1]
+        fpn_position_embeddings = fpn_position_embeddings[-self.num_feature_levels :][::-1]
 
         return EdgeTamVisionEncoderOutput(
             last_hidden_state=intermediate_hidden_states[-1],
             fpn_hidden_states=fpn_hidden_states,
-            fpn_position_encoding=fpn_position_encoding,
+            fpn_position_embeddings=fpn_position_embeddings,
             hidden_states=backbone_output.hidden_states,
         )
 

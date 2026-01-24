@@ -125,7 +125,7 @@ class Sam3VisionModelTester:
 
         # Check FPN outputs
         self.parent.assertEqual(len(result.fpn_hidden_states), len(self.scale_factors))
-        self.parent.assertEqual(len(result.fpn_position_encoding), len(self.scale_factors))
+        self.parent.assertEqual(len(result.fpn_position_embeddings), len(self.scale_factors))
 
         # Check last hidden state shape
         expected_seq_len = (self.image_size // self.patch_size) ** 2
@@ -223,7 +223,7 @@ class Sam3VisionModelTest(ModelTesterMixin, unittest.TestCase):
                 outputs = model(**self._prepare_for_class(inputs_dict, model_class))
 
             # SAM3VisionModel doesn't return hidden_states in the same way as SAM2
-            # It returns last_hidden_state, fpn_hidden_states, and fpn_position_encoding
+            # It returns last_hidden_state, fpn_hidden_states, and fpn_position_embeddings
             self.assertIsNotNone(outputs.last_hidden_state)
             self.assertIsNotNone(outputs.fpn_hidden_states)
 

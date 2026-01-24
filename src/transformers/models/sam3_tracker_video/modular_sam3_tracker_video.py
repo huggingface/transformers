@@ -560,7 +560,7 @@ class Sam3TrackerVideoModel(Sam2VideoModel):
         )
 
         feature_maps = vision_outputs.fpn_hidden_states
-        feature_maps_position_embeddings = vision_outputs.fpn_position_encoding
+        feature_maps_position_embeddings = vision_outputs.fpn_position_embeddings
 
         # precompute projected level 0 and level 1 features in SAM decoder
         # to avoid running it again on every SAM click
@@ -575,7 +575,7 @@ class Sam3TrackerVideoModel(Sam2VideoModel):
             for feature_map_position_embedding in feature_maps_position_embeddings[:-1]
         ]
         vision_outputs.fpn_hidden_states = feature_maps
-        vision_outputs.fpn_position_encoding = feature_maps_position_embeddings
+        vision_outputs.fpn_position_embeddings = feature_maps_position_embeddings
 
         return vision_outputs
 

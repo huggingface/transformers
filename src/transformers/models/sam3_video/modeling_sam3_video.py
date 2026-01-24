@@ -547,7 +547,7 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         height, width = self.tracker_model.prompt_encoder.image_embedding_size
         hidden_states_spatial = hidden_states.view(batch_size, height, width, -1).permute(0, 3, 1, 2)
 
-        fpn_hidden_states, fpn_position_encoding = self.tracker_neck(hidden_states_spatial)
+        fpn_hidden_states, fpn_position_embeddings = self.tracker_neck(hidden_states_spatial)
 
         # precompute projected level 0 and level 1 features in SAM decoder
         # to avoid running it again on every SAM click
@@ -559,7 +559,7 @@ class Sam3VideoModel(Sam3VideoPreTrainedModel):
         feature_maps = [feature_map.flatten(2).permute(2, 0, 1) for feature_map in feature_maps]
         feature_maps_position_embeddings = [
             feature_map_position_embedding.flatten(2).permute(2, 0, 1)
-            for feature_map_position_embedding in fpn_position_encoding[:-1]
+            for feature_map_position_embedding in fpn_position_embeddings[:-1]
         ]
         return feature_maps, feature_maps_position_embeddings
 

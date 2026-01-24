@@ -60,12 +60,12 @@ class Sam3VisionEncoderOutput(BaseModelOutputWithPooling):
     r"""
     fpn_hidden_states (`tuple[torch.FloatTensor]`):
         Tuple of multi-level FPN feature maps.
-    fpn_position_encoding (`tuple[torch.FloatTensor]`):
+    fpn_position_embeddings (`tuple[torch.FloatTensor]`):
         Tuple of position encodings for each FPN level.
     """
 
     fpn_hidden_states: tuple[torch.FloatTensor, ...] = None
-    fpn_position_encoding: tuple[torch.FloatTensor, ...] = None
+    fpn_position_embeddings: tuple[torch.FloatTensor, ...] = None
 
 
 @dataclass
@@ -990,16 +990,16 @@ class Sam3VisionNeck(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[tuple[torch.Tensor, ...], tuple[torch.Tensor, ...]]:
         fpn_hidden_states = ()
-        fpn_position_encoding = ()
+        fpn_position_embeddings = ()
 
         for fpn_layer in self.fpn_layers:
             fpn_output = fpn_layer(hidden_states)
             fpn_hidden_states += (fpn_output,)
             # Generate position encoding for this FPN level
             pos_enc = self.position_encoding(fpn_output.shape, fpn_output.device, fpn_output.dtype)
-            fpn_position_encoding += (pos_enc,)
+            fpn_position_embeddings += (pos_enc,)
 
-        return fpn_hidden_states, fpn_position_encoding
+        return fpn_hidden_states, fpn_position_embeddings
 
 
 @auto_docstring(
@@ -1043,12 +1043,12 @@ class Sam3VisionModel(Sam3PreTrainedModel):
         height = pixel_values.shape[-2] // self.config.backbone_config.patch_size
         width = pixel_values.shape[-1] // self.config.backbone_config.patch_size
         hidden_states_spatial = hidden_states.view(batch_size, height, width, -1).permute(0, 3, 1, 2)
-        fpn_hidden_states, fpn_position_encoding = self.neck(hidden_states_spatial)
+        fpn_hidden_states, fpn_position_embeddings = self.neck(hidden_states_spatial)
 
         return Sam3VisionEncoderOutput(
             last_hidden_state=hidden_states,
             fpn_hidden_states=fpn_hidden_states,
-            fpn_position_encoding=fpn_position_encoding,
+            fpn_position_embeddings=fpn_position_embeddings,
         )
 
 
@@ -2280,7 +2280,7 @@ class Sam3Model(Sam3PreTrainedModel):
             vision_outputs = vision_embeds
 
         fpn_hidden_states = vision_outputs.fpn_hidden_states[:-1]
-        fpn_position_encoding = vision_outputs.fpn_position_encoding[:-1]
+        fpn_position_embeddings = vision_outputs.fpn_position_embeddings[:-1]
 
         if text_embeds is None:
             text_features = self.get_text_features(
@@ -2319,7 +2319,7 @@ class Sam3Model(Sam3PreTrainedModel):
                 box_mask=box_mask,
                 box_labels=box_labels,
                 img_feats=fpn_hidden_states,
-                img_pos_embeds=fpn_position_encoding,
+                img_pos_embeds=fpn_position_embeddings,
             )
 
             geometry_prompt_features = geometry_outputs.last_hidden_state
@@ -2352,7 +2352,7 @@ class Sam3Model(Sam3PreTrainedModel):
         encoder_outputs = self.detr_encoder(
             vision_features=[fpn_hidden_states[-1]],
             text_features=combined_prompt_features,
-            vision_pos_embeds=[fpn_position_encoding[-1]],
+            vision_pos_embeds=[fpn_position_embeddings[-1]],
             text_mask=combined_prompt_mask,
             **kwargs,
         )

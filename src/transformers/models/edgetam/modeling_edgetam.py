@@ -93,13 +93,13 @@ class EdgeTamVisionEncoderOutput(BaseModelOutputWithPooling):
     fpn_hidden_states (`tuple(torch.FloatTensor)`):
         Tuple of `torch.FloatTensor` (one for each feature level, from high to low resolution) of shape
         `(batch_size, hidden_size, height, width)`. Feature maps from the Feature Pyramid Network neck.
-    fpn_position_encoding (`tuple(torch.FloatTensor)`):
+    fpn_position_embeddings (`tuple(torch.FloatTensor)`):
         Tuple of `torch.FloatTensor` (one for each feature level, from high to low resolution) of shape
         `(batch_size, hidden_size, height, width)`. Positional encodings corresponding to the `fpn_hidden_states`.
     """
 
     fpn_hidden_states: torch.FloatTensor | None = None
-    fpn_position_encoding: torch.FloatTensor | None = None
+    fpn_position_embeddings: torch.FloatTensor | None = None
 
 
 def eager_attention_forward(
@@ -392,7 +392,7 @@ class EdgeTamVisionNeck(nn.Module):
 
     def forward(self, hidden_states: torch.Tensor) -> tuple[tuple[torch.Tensor, ...], tuple[torch.Tensor, ...]]:
         fpn_hidden_states = ()
-        fpn_position_encoding = ()
+        fpn_position_embeddings = ()
 
         # forward in top-down order (from low to high resolution)
         n = len(self.convs) - 1
@@ -416,9 +416,9 @@ class EdgeTamVisionNeck(nn.Module):
             ).to(prev_features.dtype)
 
             fpn_hidden_states += (prev_features,)
-            fpn_position_encoding += (prev_position_encoding,)
+            fpn_position_embeddings += (prev_position_encoding,)
 
-        return fpn_hidden_states, fpn_position_encoding
+        return fpn_hidden_states, fpn_position_embeddings
 
 
 @auto_docstring(
@@ -458,15 +458,15 @@ class EdgeTamVisionModel(EdgeTamPreTrainedModel):
         intermediate_hidden_states = backbone_output.last_hidden_state
         intermediate_hidden_states = [hidden_state.permute(0, 2, 3, 1) for hidden_state in intermediate_hidden_states]
 
-        fpn_hidden_states, fpn_position_encoding = self.neck(intermediate_hidden_states)
+        fpn_hidden_states, fpn_position_embeddings = self.neck(intermediate_hidden_states)
         # Select last `num_feature_levels` feature levels from FPN and reverse order to get features from high to low resolution
         fpn_hidden_states = fpn_hidden_states[-self.num_feature_levels :][::-1]
-        fpn_position_encoding = fpn_position_encoding[-self.num_feature_levels :][::-1]
+        fpn_position_embeddings = fpn_position_embeddings[-self.num_feature_levels :][::-1]
 
         return EdgeTamVisionEncoderOutput(
             last_hidden_state=intermediate_hidden_states[-1],
             fpn_hidden_states=fpn_hidden_states,
-            fpn_position_encoding=fpn_position_encoding,
+            fpn_position_embeddings=fpn_position_embeddings,
             hidden_states=backbone_output.hidden_states,
         )
 
@@ -1215,7 +1215,7 @@ class EdgeTamModel(EdgeTamPreTrainedModel):
         vision_outputs: EdgeTamVisionEncoderOutput = self.vision_encoder(pixel_values, return_dict=True, **kwargs)
 
         feature_maps = vision_outputs.fpn_hidden_states
-        feature_maps_position_embeddings = vision_outputs.fpn_position_encoding
+        feature_maps_position_embeddings = vision_outputs.fpn_position_embeddings
 
         # precompute projected level 0 and level 1 features in SAM decoder
         # to avoid running it again on every SAM click
@@ -1230,7 +1230,7 @@ class EdgeTamModel(EdgeTamPreTrainedModel):
             for feature_map_position_embedding in feature_maps_position_embeddings
         ]
         vision_outputs.fpn_hidden_states = feature_maps
-        vision_outputs.fpn_position_encoding = feature_maps_position_embeddings
+        vision_outputs.fpn_position_embeddings = feature_maps_position_embeddings
 
         return vision_outputs
 
