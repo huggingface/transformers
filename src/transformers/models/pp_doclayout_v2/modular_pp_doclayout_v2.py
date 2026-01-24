@@ -18,32 +18,19 @@ from typing import Optional, Union
 
 import torch
 from torch import nn
-from torchvision.transforms.v2.functional import InterpolationMode
 
 from ... import initialization as init
 from ...configuration_utils import PreTrainedConfig
-from ...feature_extraction_utils import BatchFeature
-from ...image_processing_utils import BaseImageProcessor, get_size_dict
 from ...image_processing_utils_fast import (
     BaseImageProcessorFast,
-    SizeDict,
 )
-from ...image_transforms import resize, to_channel_dimension_format
 from ...image_utils import (
-    ChannelDimension,
-    ImageInput,
     PILImageResampling,
-    infer_channel_dimension_format,
-    make_flat_list_of_images,
-    to_numpy_array,
-    valid_images,
-    validate_preprocess_arguments,
 )
 from ...utils import (
     ModelOutput,
     auto_docstring,
     can_return_tuple,
-    filter_out_non_signature_kwargs,
     logging,
 )
 from ...utils.backbone_utils import verify_backbone_config_arguments
@@ -144,7 +131,7 @@ class ReadingOrderConfig(PreTrainedConfig):
 class PPDocLayoutV2Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`PP-DocLayoutV2`]. It is used to instantiate a
-    RT-DETR model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    PP-DocLayoutV2 model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the PP-DocLayoutV2
     [PaddlePaddle/PP-DocLayoutV2_safetensors](https://huggingface.co/PaddlePaddle/PP-DocLayoutV2_safetensors) architecture.
 
@@ -438,258 +425,6 @@ def get_order_seqs(order_logits):
     return order_seq
 
 
-class PPDocLayoutV2ImageProcessor(BaseImageProcessor):
-    r"""
-    Constructs a PPDocLayoutV2 image processor.
-
-    Args:
-        do_resize (`bool`, *optional*, defaults to `True`):
-            Controls whether to resize the image's (height, width) dimensions to the specified `size`. Can be
-            overridden by the `do_resize` parameter in the `preprocess` method.
-        size (`dict[str, int]` *optional*, defaults to `{"height": 640, "width": 640}`):
-            Size of the image's `(height, width)` dimensions after resizing. Can be overridden by the `size` parameter
-            in the `preprocess` method. Available options are:
-                - `{"height": int, "width": int}`: The image will be resized to the exact size `(height, width)`.
-                    Do NOT keep the aspect ratio.
-                - `{"shortest_edge": int, "longest_edge": int}`: The image will be resized to a maximum size respecting
-                    the aspect ratio and keeping the shortest edge less or equal to `shortest_edge` and the longest edge
-                    less or equal to `longest_edge`.
-                - `{"max_height": int, "max_width": int}`: The image will be resized to the maximum size respecting the
-                    aspect ratio and keeping the height less or equal to `max_height` and the width less or equal to
-                    `max_width`.
-        resample (`PILImageResampling`, *optional*, defaults to `PILImageResampling.BICUBIC`):
-            Resampling filter to use if resizing the image.
-        do_rescale (`bool`, *optional*, defaults to `True`):
-            Controls whether to rescale the image by the specified scale `rescale_factor`. Can be overridden by the
-            `do_rescale` parameter in the `preprocess` method.
-        rescale_factor (`int` or `float`, *optional*, defaults to `1/255`):
-            Scale factor to use if rescaling the image. Can be overridden by the `rescale_factor` parameter in the
-            `preprocess` method.
-            Controls whether to normalize the image. Can be overridden by the `do_normalize` parameter in the
-            `preprocess` method.
-        do_normalize (`bool`, *optional*, defaults to `True`):
-            Whether to normalize the image.
-        image_mean (`float` or `list[float]`, *optional*, defaults to `[0, 0, 0]`):
-            Mean values to use when normalizing the image. Can be a single value or a list of values, one for each
-            channel. Can be overridden by the `image_mean` parameter in the `preprocess` method.
-        image_std (`float` or `list[float]`, *optional*, defaults to `[1, 1, 1]`):
-            Standard deviation values to use when normalizing the image. Can be a single value or a list of values, one
-            for each channel. Can be overridden by the `image_std` parameter in the `preprocess` method.
-    """
-
-    model_input_names = ["pixel_values"]
-
-    def __init__(
-        self,
-        do_resize: bool = True,
-        size: Optional[dict[str, int]] = None,
-        resample: Optional[PILImageResampling] = PILImageResampling.BICUBIC,
-        do_rescale: bool = True,
-        rescale_factor: Union[int, float] = 1 / 255,
-        do_normalize: bool = True,
-        image_mean: Optional[Union[float, list[float]]] = [0, 0, 0],
-        image_std: Optional[Union[float, list[float]]] = [1, 1, 1],
-        **kwargs,
-    ) -> None:
-        size = size if size is not None else {"height": 800, "width": 800}
-        size = get_size_dict(size, default_to_square=False)
-
-        super().__init__(**kwargs)
-        self.do_resize = do_resize
-        self.size = size
-        self.do_rescale = do_rescale
-        self.rescale_factor = rescale_factor
-        self.do_normalize = do_normalize
-        self.image_mean = image_mean
-        self.image_std = image_std
-        self.resample = resample
-
-    @filter_out_non_signature_kwargs()
-    def preprocess(
-        self,
-        images: ImageInput,
-        do_resize: Optional[bool] = None,
-        size: Optional[dict[str, int]] = None,
-        resample: Optional[PILImageResampling] = None,
-        do_rescale: Optional[bool] = None,
-        rescale_factor: Optional[Union[int, float]] = None,
-        do_normalize: Optional[bool] = None,
-        image_mean: Optional[Union[float, list[float]]] = None,
-        image_std: Optional[Union[float, list[float]]] = None,
-        return_tensors: Optional[Union[TensorType, str]] = None,
-        data_format: Union[str, ChannelDimension] = ChannelDimension.FIRST,
-        input_data_format: Optional[Union[str, ChannelDimension]] = None,
-    ) -> BatchFeature:
-        """
-        Preprocess an image or a batch of images so that it can be used by the model.
-
-        Args:
-            images (`ImageInput`):
-                Image or batch of images to preprocess. Expects a single or batch of images with pixel values ranging
-                from 0 to 255. If passing in images with pixel values between 0 and 1, set `do_rescale=False`.
-            do_resize (`bool`, *optional*, defaults to self.do_resize):
-                Whether to resize the image.
-            size (`dict[str, int]`, *optional*, defaults to self.size):
-                Size of the image's `(height, width)` dimensions after resizing. Available options are:
-                    - `{"height": int, "width": int}`: The image will be resized to the exact size `(height, width)`.
-                        Do NOT keep the aspect ratio.
-                    - `{"shortest_edge": int, "longest_edge": int}`: The image will be resized to a maximum size respecting
-                        the aspect ratio and keeping the shortest edge less or equal to `shortest_edge` and the longest edge
-                        less or equal to `longest_edge`.
-                    - `{"max_height": int, "max_width": int}`: The image will be resized to the maximum size respecting the
-                        aspect ratio and keeping the height less or equal to `max_height` and the width less or equal to
-                        `max_width`.
-            resample (`PILImageResampling`, *optional*, defaults to self.resample):
-                Resampling filter to use when resizing the image.
-            do_rescale (`bool`, *optional*, defaults to self.do_rescale):
-                Whether to rescale the image.
-            rescale_factor (`float`, *optional*, defaults to self.rescale_factor):
-                Rescale factor to use when rescaling the image.
-            do_normalize (`bool`, *optional*, defaults to self.do_normalize):
-                Whether to normalize the image.
-            image_mean (`float` or `list[float]`, *optional*, defaults to self.image_mean):
-                Mean to use when normalizing the image.
-            image_std (`float` or `list[float]`, *optional*, defaults to self.image_std):
-                Standard deviation to use when normalizing the image.
-            return_tensors (`str` or `TensorType`, *optional*, defaults to self.return_tensors):
-                Type of tensors to return. If `None`, will return the list of images.
-            data_format (`ChannelDimension` or `str`, *optional*, defaults to `ChannelDimension.FIRST`):
-                The channel dimension format for the output image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - Unset: Use the channel dimension format of the input image.
-            input_data_format (`ChannelDimension` or `str`, *optional*):
-                The channel dimension format for the input image. If unset, the channel dimension format is inferred
-                from the input image. Can be one of:
-                - `"channels_first"` or `ChannelDimension.FIRST`: image in (num_channels, height, width) format.
-                - `"channels_last"` or `ChannelDimension.LAST`: image in (height, width, num_channels) format.
-                - `"none"` or `ChannelDimension.NONE`: image in (height, width) format.
-        """
-        do_resize = self.do_resize if do_resize is None else do_resize
-        size = self.size if size is None else size
-        size = get_size_dict(size=size, default_to_square=True)
-        resample = self.resample if resample is None else resample
-        do_rescale = self.do_rescale if do_rescale is None else do_rescale
-        rescale_factor = self.rescale_factor if rescale_factor is None else rescale_factor
-        do_normalize = self.do_normalize if do_normalize is None else do_normalize
-        image_mean = self.image_mean if image_mean is None else image_mean
-        image_std = self.image_std if image_std is None else image_std
-
-        validate_preprocess_arguments(
-            do_rescale=do_rescale,
-            rescale_factor=rescale_factor,
-            do_normalize=do_normalize,
-            image_mean=image_mean,
-            image_std=image_std,
-            do_resize=do_resize,
-            size=size,
-            resample=resample,
-        )
-
-        images = make_flat_list_of_images(images)
-        if not valid_images(images):
-            raise ValueError("Invalid image type. Must be of type PIL.Image.Image, numpy.ndarray, or torch.Tensor")
-
-        # All transformations expect numpy arrays
-        images = [to_numpy_array(image) for image in images]
-
-        if input_data_format is None:
-            input_data_format = infer_channel_dimension_format(images[0])
-
-        # transformations
-        if do_resize:
-            images = [
-                resize(
-                    image, size=(size["height"], size["width"]), resample=resample, input_data_format=input_data_format
-                )
-                for image in images
-            ]
-
-        if do_rescale:
-            images = [self.rescale(image, rescale_factor, input_data_format=input_data_format) for image in images]
-
-        if do_normalize:
-            images = [
-                self.normalize(image, image_mean, image_std, input_data_format=input_data_format) for image in images
-            ]
-
-        images = [
-            to_channel_dimension_format(image, data_format, input_channel_dim=input_data_format) for image in images
-        ]
-        encoded_inputs = BatchFeature(data={"pixel_values": images}, tensor_type=return_tensors)
-
-        return encoded_inputs
-
-    def post_process_object_detection(
-        self,
-        outputs,
-        threshold: float = 0.5,
-        target_sizes: Optional[Union[TensorType, list[tuple]]] = None,
-    ):
-        """
-        Converts the raw output of [`PPDocLayoutV2ForObjectDetection`] into final bounding boxes in (top_left_x, top_left_y,
-        bottom_right_x, bottom_right_y) format. Only supports PyTorch.
-
-        Args:
-            outputs ([`PPDocLayoutV2ObjectDetectionOutput`]):
-                Raw outputs of the model.
-            threshold (`float`, *optional*, defaults to 0.5):
-                Score threshold to keep object detection predictions.
-            target_sizes (`torch.Tensor` or `list[tuple[int, int]]`, *optional*):
-                Tensor of shape `(batch_size, 2)` or list of tuples (`tuple[int, int]`) containing the target size
-                `(height, width)` of each image in the batch. If unset, predictions will not be resized.
-
-        Returns:
-            `list[Dict]`: An ordered list of dictionaries, each dictionary containing the scores, labels and boxes for an image
-            in the batch as predicted by the model.
-        """
-        boxes = outputs.pred_boxes
-        logits = outputs.logits
-        order_logits = outputs.order_logits
-
-        order_seqs = get_order_seqs(order_logits)
-
-        cxcy, wh = torch.split(boxes, 2, dim=-1)
-        boxes = torch.cat([cxcy - 0.5 * wh, cxcy + 0.5 * wh], dim=-1)
-
-        if target_sizes is not None:
-            if len(logits) != len(target_sizes):
-                raise ValueError(
-                    "Make sure that you pass in as many target sizes as the batch dimension of the logits"
-                )
-            if isinstance(target_sizes, list):
-                img_h, img_w = torch.as_tensor(target_sizes).unbind(1)
-            else:
-                img_h, img_w = target_sizes.unbind(1)
-            scale_fct = torch.stack([img_w, img_h, img_w, img_h], dim=1).to(boxes.device)
-            boxes = boxes * scale_fct[:, None, :]
-
-        num_top_queries = logits.shape[1]
-        num_classes = logits.shape[2]
-
-        scores = torch.nn.functional.sigmoid(logits)
-        scores, index = torch.topk(scores.flatten(1), num_top_queries, dim=-1)
-        labels = index % num_classes
-        index = index // num_classes
-        boxes = boxes.gather(dim=1, index=index.unsqueeze(-1).repeat(1, 1, boxes.shape[-1]))
-        order_seqs = order_seqs.gather(dim=1, index=index)
-
-        results = []
-        for score, label, box, order_seq in zip(scores, labels, boxes, order_seqs):
-            order_seq = order_seq[score >= threshold]
-            order_seq, indices = torch.sort(order_seq)
-            results.append(
-                {
-                    "scores": score[score >= threshold][indices],
-                    "labels": label[score >= threshold][indices],
-                    "boxes": box[score >= threshold][indices],
-                    "order_seq": order_seq,
-                }
-            )
-
-        return results
-
-
 class PPDocLayoutV2ImageProcessorFast(BaseImageProcessorFast):
     resample = PILImageResampling.BICUBIC
     image_mean = [0, 0, 0]
@@ -702,39 +437,33 @@ class PPDocLayoutV2ImageProcessorFast(BaseImageProcessorFast):
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
 
-    def _preprocess(
-        self,
-        images: list[torch.Tensor],
-        do_resize: bool,
-        size: SizeDict,
-        interpolation: Optional[InterpolationMode],
-        do_rescale: bool,
-        rescale_factor: float,
-        do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        return_tensors: Optional[Union[str, TensorType]],
-        **kwargs,
-    ) -> BatchFeature:
+    def _get_order_seqs(self, order_logits):
         """
-        Preprocess an image or a batch of images so that it can be used by the model.
+        Computes the order sequences for a batch of inputs based on logits.
+        This function takes in the order logits, calculates order scores using a sigmoid activation,
+        and determines the order sequences by ranking the votes derived from the scores.
+        Args:
+            order_logits (`torch.FloatTensor` of shape `(batch_size, num_queries, num_queries)`):
+                Stacked order logits.
+        Returns:
+            torch.Tensor: A tensor of shape `(batch_size, num_queries)`:
+                Containing the computed order sequences for each input in the batch. Each row represents the ranked order of elements for the corresponding input in the batch.
         """
-        data = {}
-        processed_images = []
-        for image in images:
-            if do_resize:
-                image = self.resize(image, size=size, interpolation=interpolation)
-            # Fused rescale and normalize
-            image = self.rescale_and_normalize(image, do_rescale, rescale_factor, do_normalize, image_mean, image_std)
+        order_scores = torch.sigmoid(order_logits)
+        batch_size, sequence_length, _ = order_scores.shape
 
-            processed_images.append(image)
+        order_votes = order_scores.triu(diagonal=1).sum(dim=1) + (1.0 - order_scores.transpose(1, 2)).tril(
+            diagonal=-1
+        ).sum(dim=1)
 
-        images = processed_images
+        order_pointers = torch.argsort(order_votes, dim=1)
+        order_seq = torch.empty_like(order_pointers)
+        ranks = torch.arange(sequence_length, device=order_pointers.device, dtype=order_pointers.dtype).expand(
+            batch_size, -1
+        )
+        order_seq.scatter_(1, order_pointers, ranks)
 
-        data.update({"pixel_values": torch.stack(images, dim=0)})
-        encoded_inputs = BatchFeature(data, tensor_type=return_tensors)
-
-        return encoded_inputs
+        return order_seq
 
     def post_process_object_detection(
         self,
@@ -757,7 +486,7 @@ class PPDocLayoutV2ImageProcessorFast(BaseImageProcessorFast):
         logits = outputs.logits
         order_logits = outputs.order_logits
 
-        order_seqs = get_order_seqs(order_logits)
+        order_seqs = self._get_order_seqs(order_logits)
 
         cxcy, wh = torch.split(boxes, 2, dim=-1)
         boxes = torch.cat([cxcy - 0.5 * wh, cxcy + 0.5 * wh], dim=-1)
@@ -1043,10 +772,6 @@ class LayoutLMv3TextEmbeddingsCustom(LayoutLMv3TextEmbeddings):
 
 @auto_docstring
 class PPDocLayoutV2PreTrainedModel(RTDetrPreTrainedModel):
-    config: PPDocLayoutV2Config
-    base_model_prefix = "pp_doclayout_v2"
-    _no_split_modules = [r"PPDocLayoutV2HybridEncoder", r"PPDocLayoutV2DecoderLayer"]
-
     _can_record_outputs = {
         "hidden_states": [
             OutputRecorder(PPDocLayoutV2DecoderLayer, index=0),  # noqa
@@ -1358,7 +1083,6 @@ class PPDocLayoutV2ForObjectDetection(RTDetrForObjectDetection, PPDocLayoutV2Pre
 
 __all__ = [
     "PPDocLayoutV2ForObjectDetection",
-    "PPDocLayoutV2ImageProcessor",
     "PPDocLayoutV2ImageProcessorFast",
     "PPDocLayoutV2Config",
     "PPDocLayoutV2Model",

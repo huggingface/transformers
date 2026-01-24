@@ -101,7 +101,7 @@ class ReadingOrderConfig(PreTrainedConfig):
 class PPDocLayoutV2Config(PreTrainedConfig):
     r"""
     This is the configuration class to store the configuration of a [`PP-DocLayoutV2`]. It is used to instantiate a
-    RT-DETR model according to the specified arguments, defining the model architecture. Instantiating a configuration
+    PP-DocLayoutV2 model according to the specified arguments, defining the model architecture. Instantiating a configuration
     with the defaults will yield a similar configuration to that of the PP-DocLayoutV2
     [PaddlePaddle/PP-DocLayoutV2_safetensors](https://huggingface.co/PaddlePaddle/PP-DocLayoutV2_safetensors) architecture.
 

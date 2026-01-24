@@ -21,7 +21,6 @@ from ...utils.import_utils import define_import_structure
 
 if TYPE_CHECKING:
     from .configuration_pp_doclayout_v2 import *
-    from .image_processing_pp_doclayout_v2 import *
     from .image_processing_pp_doclayout_v2_fast import *
     from .modeling_pp_doclayout_v2 import *
 else:

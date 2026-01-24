@@ -1348,7 +1348,6 @@ class PPDocLayoutV2PreTrainedModel(PreTrainedModel):
     main_input_name = "pixel_values"
     input_modalities = ("image",)
     _no_split_modules = [r"PPDocLayoutV2HybridEncoder", r"PPDocLayoutV2DecoderLayer"]
-
     _can_record_outputs = {
         "hidden_states": [
             OutputRecorder(PPDocLayoutV2DecoderLayer, index=0),  # noqa

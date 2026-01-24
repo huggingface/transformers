@@ -21,32 +21,10 @@
 from typing import Optional, Union
 
 import torch
-from torchvision.transforms.v2.functional import InterpolationMode
 
-from ...feature_extraction_utils import BatchFeature
-from ...image_processing_utils_fast import BaseImageProcessorFast, SizeDict
+from ...image_processing_utils_fast import BaseImageProcessorFast
 from ...image_utils import PILImageResampling
 from ...utils.generic import TensorType
-
-
-def get_order_seqs(order_logits):
-    # order_logits: (B, N, N) upper-triangular meaningful
-    order_scores = torch.sigmoid(order_logits)
-    B, N, _ = order_scores.shape
-
-    one = torch.ones((N, N), dtype=order_scores.dtype, device=order_scores.device)
-    upper = torch.triu(one, 1)
-    lower = torch.tril(one, -1)
-
-    Q = order_scores * upper + (1.0 - order_scores.transpose(1, 2)) * lower
-    order_votes = Q.sum(dim=1)  # (B, N)
-
-    order_pointers = torch.argsort(order_votes, dim=1)  # (B, N)
-    order_seq = torch.full_like(order_pointers, -1)
-    batch = torch.arange(B, device=order_pointers.device)[:, None]
-    order_seq[batch, order_pointers] = torch.arange(N, device=order_pointers.device)[None, :]
-
-    return order_seq
 
 
 class PPDocLayoutV2ImageProcessorFast(BaseImageProcessorFast):
@@ -61,39 +39,33 @@ class PPDocLayoutV2ImageProcessorFast(BaseImageProcessorFast):
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
 
-    def _preprocess(
-        self,
-        images: list[torch.Tensor],
-        do_resize: bool,
-        size: SizeDict,
-        interpolation: Optional[InterpolationMode],
-        do_rescale: bool,
-        rescale_factor: float,
-        do_normalize: bool,
-        image_mean: Optional[Union[float, list[float]]],
-        image_std: Optional[Union[float, list[float]]],
-        return_tensors: Optional[Union[str, TensorType]],
-        **kwargs,
-    ) -> BatchFeature:
+    def _get_order_seqs(self, order_logits):
         """
-        Preprocess an image or a batch of images so that it can be used by the model.
+        Computes the order sequences for a batch of inputs based on logits.
+        This function takes in the order logits, calculates order scores using a sigmoid activation,
+        and determines the order sequences by ranking the votes derived from the scores.
+        Args:
+            order_logits (`torch.FloatTensor` of shape `(batch_size, num_queries, num_queries)`):
+                Stacked order logits.
+        Returns:
+            torch.Tensor: A tensor of shape `(batch_size, num_queries)`:
+                Containing the computed order sequences for each input in the batch. Each row represents the ranked order of elements for the corresponding input in the batch.
         """
-        data = {}
-        processed_images = []
-        for image in images:
-            if do_resize:
-                image = self.resize(image, size=size, interpolation=interpolation)
-            # Fused rescale and normalize
-            image = self.rescale_and_normalize(image, do_rescale, rescale_factor, do_normalize, image_mean, image_std)
+        order_scores = torch.sigmoid(order_logits)
+        batch_size, sequence_length, _ = order_scores.shape
 
-            processed_images.append(image)
+        order_votes = order_scores.triu(diagonal=1).sum(dim=1) + (1.0 - order_scores.transpose(1, 2)).tril(
+            diagonal=-1
+        ).sum(dim=1)
 
-        images = processed_images
+        order_pointers = torch.argsort(order_votes, dim=1)
+        order_seq = torch.empty_like(order_pointers)
+        ranks = torch.arange(sequence_length, device=order_pointers.device, dtype=order_pointers.dtype).expand(
+            batch_size, -1
+        )
+        order_seq.scatter_(1, order_pointers, ranks)
 
-        data.update({"pixel_values": torch.stack(images, dim=0)})
-        encoded_inputs = BatchFeature(data, tensor_type=return_tensors)
-
-        return encoded_inputs
+        return order_seq
 
     def post_process_object_detection(
         self,
@@ -116,7 +88,7 @@ class PPDocLayoutV2ImageProcessorFast(BaseImageProcessorFast):
         logits = outputs.logits
         order_logits = outputs.order_logits
 
-        order_seqs = get_order_seqs(order_logits)
+        order_seqs = self._get_order_seqs(order_logits)
 
         cxcy, wh = torch.split(boxes, 2, dim=-1)
         boxes = torch.cat([cxcy - 0.5 * wh, cxcy + 0.5 * wh], dim=-1)

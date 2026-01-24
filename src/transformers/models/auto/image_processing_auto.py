@@ -163,7 +163,7 @@ else:
             ("pixio", ("BitImageProcessor", "BitImageProcessorFast")),
             ("pixtral", ("PixtralImageProcessor", "PixtralImageProcessorFast")),
             ("poolformer", ("PoolFormerImageProcessor", "PoolFormerImageProcessorFast")),
-            ("pp_doclayout_v2", ("PPDocLayoutV2ImageProcessor", "PPDocLayoutV2ImageProcessorFast")),
+            ("pp_doclayout_v2", (None, "PPDocLayoutV2ImageProcessorFast")),
             ("prompt_depth_anything", ("PromptDepthAnythingImageProcessor", "PromptDepthAnythingImageProcessorFast")),
             ("pvt", ("PvtImageProcessor", "PvtImageProcessorFast")),
             ("pvt_v2", ("PvtImageProcessor", "PvtImageProcessorFast")),
