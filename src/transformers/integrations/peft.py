@@ -19,7 +19,11 @@ import re
 from dataclasses import replace
 from typing import TYPE_CHECKING, Any, Literal, Optional
 
-from ..conversion_mapping import get_model_conversion_mapping, get_checkpoint_conversion_mapping, _MODEL_TO_CONVERSION_PATTERN
+from ..conversion_mapping import (
+    _MODEL_TO_CONVERSION_PATTERN,
+    get_checkpoint_conversion_mapping,
+    get_model_conversion_mapping,
+)
 from ..core_model_loading import (
     Concatenate,
     ConversionOps,
@@ -290,6 +294,7 @@ def _build_peft_weight_mapping(
                 new_weight_conversions.append(conversion)
 
     return new_weight_conversions
+
 
 # The main reason we have to explicit this is because the conversion mapping
 # has the full layer name, while the config do not. We coould regex match but
