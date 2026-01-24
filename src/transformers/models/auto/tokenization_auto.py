@@ -625,9 +625,21 @@ class AutoTokenizer:
         # Next, let's try to use the tokenizer_config file to get the tokenizer class.
         tokenizer_config = get_tokenizer_config(pretrained_model_name_or_path, **kwargs)
         tokenizer_config_class = tokenizer_config.get("tokenizer_class", None)
-        # if there is a config, we can check that the tokenizer class != than model class and can thus assume we need to use `TokenizersBackend`
+
+        # Check for auto_map early to handle dynamic tokenizers properly
+        tokenizer_auto_map = None
+        if "auto_map" in tokenizer_config:
+            if isinstance(tokenizer_config["auto_map"], (tuple, list)):
+                # Legacy format for dynamic tokenizers
+                tokenizer_auto_map = tokenizer_config["auto_map"]
+            else:
+                tokenizer_auto_map = tokenizer_config["auto_map"].get("AutoTokenizer", None)
+
+        # if there is a config, we can check that the tokenizer class != than model class and can thus assume we need to use TokenizersBackend
+        # Skip this early exit if auto_map is present (custom tokenizer with trust_remote_code)
         if (
-            tokenizer_config_class is not None
+            tokenizer_auto_map is None
+            and tokenizer_config_class is not None
             and config_model_type is not None
             and config_model_type != ""
             and TOKENIZER_MAPPING_NAMES.get(config_model_type, "").replace("Fast", "")
@@ -643,15 +655,6 @@ class AutoTokenizer:
 
         if "_commit_hash" in tokenizer_config:
             kwargs["_commit_hash"] = tokenizer_config["_commit_hash"]
-
-        # Check for auto_map early to handle dynamic tokenizers properly
-        tokenizer_auto_map = None
-        if "auto_map" in tokenizer_config:
-            if isinstance(tokenizer_config["auto_map"], (tuple, list)):
-                # Legacy format for dynamic tokenizers
-                tokenizer_auto_map = tokenizer_config["auto_map"]
-            else:
-                tokenizer_auto_map = tokenizer_config["auto_map"].get("AutoTokenizer", None)
 
         if tokenizer_config_class:
             tokenizer_config_class = tokenizer_config_class.replace("Fast", "")
