@@ -133,7 +133,6 @@ class ExamplesTests(TestCasePlus):
             run_glue.py
             --model_name_or_path distilbert/distilbert-base-uncased
             --output_dir {tmp_dir}
-            --overwrite_output_dir
             --do_train
             --do_eval
             --per_device_train_batch_size=2

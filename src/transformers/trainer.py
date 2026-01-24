@@ -306,9 +306,13 @@ class Trainer:
             The function to use to form a batch from a list of elements of `train_dataset` or `eval_dataset`. Will
             default to [`default_data_collator`] if no `processing_class` is provided, an instance of
             [`DataCollatorWithPadding`] otherwise if the processing_class is a feature extractor or tokenizer.
-        train_dataset (Union[`torch.utils.data.Dataset`, `torch.utils.data.IterableDataset`, `datasets.Dataset`], *optional*):
+        train_dataset (Union[`torch.utils.data.Dataset`, `torch.utils.data.IterableDataset`, `datasets.Dataset`, dict[str, Union[`torch.utils.data.Dataset`, `torch.utils.data.IterableDataset`, `datasets.Dataset`]]], *optional*):
             The dataset to use for training. If it is a [`~datasets.Dataset`], columns not accepted by the
             `model.forward()` method are automatically removed.
+
+            For multi-dataset training, pass a dictionary mapping domain names to datasets. Use `compute_loss_fns`
+            to specify domain-specific loss functions, and configure the training strategy with
+            `TrainingArguments.multi_dataset_strategy`.
 
             Note that if it's a `torch.utils.data.IterableDataset` with some randomization and you are training in a
             distributed fashion, your iterable dataset should either use a internal attribute `generator` that is a
@@ -358,6 +362,14 @@ class Trainer:
             by this function will be reflected in the predictions received by `compute_metrics`.
 
             Note that the labels (second parameter) will be `None` if the dataset does not have them.
+        compute_loss_fns (`dict[str, Callable]`, *optional*):
+            A dictionary mapping domain names to loss functions for multi-dataset training. Each loss function should
+            accept the model outputs and labels and return a loss tensor. Used in conjunction with a dictionary of
+            datasets passed to `train_dataset`. If provided, the trainer will use the corresponding loss function
+            for each domain during training.
+        loss_aggregation_strategy (`str`, *optional*, defaults to `"sum"`):
+            Strategy for aggregating losses when using `multi_dataset_strategy="aggregate"`. Can be either `"sum"` or
+            `"mean"`. Only used when training with multiple datasets in aggregate mode.
 
     Important attributes:
 
@@ -390,7 +402,8 @@ class Trainer:
             IterableDataset,
             "datasets.Dataset",
             dict[str, Union[Dataset, IterableDataset, "datasets.Dataset"]],
-        ] | None = None,
+        ]
+        | None = None,
         eval_dataset: Union[Dataset, dict[str, Dataset], "datasets.Dataset"] | None = None,
         processing_class: PreTrainedTokenizerBase
         | BaseImageProcessor
@@ -2310,7 +2323,6 @@ class Trainer:
             num_train_samples = num_examples * args.num_train_epochs
             num_train_epochs = args.num_train_epochs
             max_steps = math.ceil(args.num_train_epochs * num_update_steps_per_epoch)
-            epoch_based = True
 
         if DebugOption.UNDERFLOW_OVERFLOW in self.args.debug:
             if self.args.n_gpu > 1:
@@ -3898,6 +3910,12 @@ class Trainer:
 
                 The dictionary will be unpacked before being fed to the model. Most models expect the targets under the
                 argument `labels`. Check your model's documentation for all accepted arguments.
+            num_items_in_batch (`torch.Tensor`, *optional*):
+                The number of items in the batch, used for scaling the loss when training with variable batch sizes
+                or across multiple devices.
+            domain (`str`, *optional*):
+                The domain name for the current batch when training with multiple datasets. Used to select the
+                appropriate domain-specific loss function from `compute_loss_fns`.
 
         Return:
             `torch.Tensor`: The tensor with training loss on this batch.
@@ -3968,8 +3986,12 @@ class Trainer:
                 The input data for the model.
             return_outputs (`bool`, *optional*, defaults to `False`):
                 Whether to return the model outputs along with the loss.
-            num_items_in_batch (Optional[torch.Tensor], *optional*):
-                The number of items in the batch. If num_items_in_batch is not passed,
+            num_items_in_batch (`torch.Tensor`, *optional*):
+                The number of items in the batch, used for scaling the loss when training with variable batch sizes
+                or across multiple devices.
+            domain (`str`, *optional*):
+                The domain name for the current batch when training with multiple datasets. Used to select the
+                appropriate domain-specific loss function from `compute_loss_fns`.
 
         Returns:
             The loss of the model along with its output if return_outputs was set to True
@@ -5384,7 +5406,6 @@ class Trainer:
 
         num_items_in_batch = self._get_num_items_in_batch(batch_samples, device)
         return batch_samples, domains, num_items_in_batch
-
 
     def set_initial_training_values(
         self, args: TrainingArguments, dataloader: DataLoader, total_train_batch_size: int
