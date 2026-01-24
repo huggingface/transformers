@@ -46,10 +46,8 @@ class Siglip2Tokenizer(TokenizersBackend):
         eos_token: str = "<eos>",
         pad_token: str = "<pad>",
         mask_token: str = "<mask>",
-        do_lower_case: bool = True,
         **kwargs,
     ):
-        self.do_lower_case = do_lower_case
         if vocab is None:
             vocab = {
                 str(pad_token): 0,
@@ -88,16 +86,13 @@ class Siglip2Tokenizer(TokenizersBackend):
         # Persist for save/load + push_to_hub dynamic tokenizer test
         if hasattr(self, "init_kwargs") and isinstance(self.init_kwargs, dict):
             self.init_kwargs.setdefault("tokenizer_class", self.__class__.__name__)
-            self.init_kwargs["do_lower_case"] = do_lower_case
 
-        if do_lower_case:
-            backend = getattr(self, "_tokenizer", None)
-            if backend is not None and backend.normalizer is not None:
-                backend.normalizer = normalizers.Sequence([normalizers.Lowercase(), backend.normalizer])
+        backend = getattr(self, "_tokenizer", None)
+        if backend is not None and backend.normalizer is not None:
+            backend.normalizer = normalizers.Sequence([normalizers.Lowercase(), backend.normalizer])
 
     def _unk_id(self) -> int:
-        # Align with historical Siglip2 convention: pad, eos, bos, unk
-        return 3
+        raise ValueError("_unk_id is not needed for SigLIP2.")
 
 
 __all__ = ["Siglip2Tokenizer"]

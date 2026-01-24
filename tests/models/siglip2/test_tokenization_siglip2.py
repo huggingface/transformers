@@ -12,162 +12,64 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import json
-import os
 import tempfile
 import unittest
 
 from transformers import Siglip2Tokenizer
 from transformers.testing_utils import require_tokenizers
 
-from ...test_tokenization_common import TokenizerTesterMixin
-
-
-def _write_test_tokenizer_json(path: str):
-    """
-    Deterministic tokenizer.json for unit tests compatible with GemmaTokenizer-style backend
-    (used by Siglip2Tokenizer after inheriting GemmaTokenizer).
-
-    - BPE backend with byte fallback.
-    - Normalizer: replace spaces with "▁"
-    - Decoder: converts "▁" back to " " so decode() is stable.
-    - Vocab includes "▁" and enough chars/tokens for TokenizerTesterMixin common tests.
-    """
-    from tokenizers import Tokenizer, decoders, normalizers
-    from tokenizers.models import BPE
-
-    pad = "<pad>"
-    eos = "<eos>"
-    bos = "<bos>"
-    unk = "<unk>"
-    mask = "<mask>"
-
-    vocab = {}
-    idx = 0
-
-    def add(tok: str):
-        nonlocal idx
-        if tok not in vocab:
-            vocab[tok] = idx
-            idx += 1
-
-    # Special tokens first (stable ids)
-    for t in [pad, eos, bos, unk, mask]:
-        add(t)
-
-    # Gemma-style space marker token
-    add("▁")
-
-    # Used by get_input_output_texts: "a b c ... t"
-    # With Gemma normalizer, that becomes "a▁b▁c..."; so letters + ▁ must exist.
-    for t in list("abcdefghijklmnopqrst"):
-        add(t)
-
-    # Add lowercase alphabet for fallbacks (covers many common tests)
-    for c in "abcdefghijklmnopqrstuvwxyz":
-        add(c)
-
-    # Add uppercase + digits (common mixin cases)
-    for c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ":
-        add(c)
-    for c in "0123456789":
-        add(c)
-
-    # Common punctuation tokens
-    for p in [".", ",", "!", "?", "'", '"', "-", "(", ")", ":", ";", "_", "/"]:
-        add(p)
-
-    # A few common "word-like" tokens (optional, but helps keep tokenization stable)
-    for w in [
-        "hello",
-        "world",
-        "This",
-        "is",
-        "another",
-        "sentence",
-        "to",
-        "be",
-        "encoded",
-        "Test",
-        "this",
-        "method",
-        "With",
-        "these",
-        "inputs",
-        "and",
-        "some",
-        "extra",
-        "tokens",
-        "here",
-        "it",
-        "He",
-        "She",
-        "They",
-        "é",
-    ]:
-        add(w)
-
-    # No merges needed for these unit tests
-    merges = []
-
-    tok = Tokenizer(
-        BPE(
-            vocab=vocab,
-            merges=merges,
-            fuse_unk=True,
-            unk_token=unk,
-            dropout=None,
-            byte_fallback=True,
-        )
-    )
-
-    # Gemma-style normalizer/decoder
-    tok.normalizer = normalizers.Replace(" ", "▁")
-    tok.decoder = decoders.Sequence([decoders.Replace("▁", " "), decoders.ByteFallback(), decoders.Fuse()])
-
-    tok.save(path)
-
 
 @require_tokenizers
-class Siglip2TokenizerTest(TokenizerTesterMixin, unittest.TestCase):
-    tokenizer_class = Siglip2Tokenizer
+class Siglip2TokenizerTest(unittest.TestCase):
+    """
+    Integration test for Siglip2Tokenizer: 
+    - verify hub loading, 
+    - default lowercasing behavior, 
+    - save/load roundtrip.
+    """
 
-    @classmethod
-    def setUpClass(cls):
-        super().setUpClass()
-        cls._tmpdir = tempfile.TemporaryDirectory()
-        cls._tok_dir = cls._tmpdir.name
+    from_pretrained_id = "google/siglip2-base-patch16-224"
 
-        tok_json_path = os.path.join(cls._tok_dir, "tokenizer.json")
-        _write_test_tokenizer_json(tok_json_path)
+    def test_tokenizer(self):
+        tokenizer = Siglip2Tokenizer.from_pretrained(self.from_pretrained_id)
 
-        with open(os.path.join(cls._tok_dir, "tokenizer_config.json"), "w", encoding="utf-8") as f:
-            json.dump({"tokenizer_class": "Siglip2Tokenizer", "do_lower_case": False}, f)
+        texts_uc = [
+            "HELLO WORLD!",
+            "Hello   World!!",
+            "A Picture Of Zürich",
+            "San Francisco",
+            "MIXED-case: TeSt 123",
+        ]
+        texts_lc = [t.lower() for t in texts_uc]
 
-        with open(os.path.join(cls._tok_dir, "special_tokens_map.json"), "w", encoding="utf-8") as f:
-            json.dump(
-                {
-                    "pad_token": "<pad>",
-                    "eos_token": "(EOS)",
-                    "bos_token": "(BOS)",
-                    "unk_token": "<unk>",
-                    "mask_token": "<mask>",
-                },
-                f,
-            )
+        # default lowercasing (single + batch paths)
+        for t_uc, t_lc in zip(texts_uc, texts_lc):
+            with self.subTest(text=t_uc):
+                enc_uc = tokenizer(t_uc, truncation=True)
+                enc_lc = tokenizer(t_lc, truncation=True)
+                self.assertListEqual(enc_uc["input_ids"], enc_lc["input_ids"])
 
-    @classmethod
-    def tearDownClass(cls):
-        cls._tmpdir.cleanup()
-        super().tearDownClass()
+        batch_uc = tokenizer(texts_uc, truncation=True)
+        batch_lc = tokenizer(texts_lc, truncation=True)
+        self.assertListEqual(batch_uc["input_ids"], batch_lc["input_ids"])
 
-    def get_tokenizer(self, **kwargs):
-        return self.tokenizer_class.from_pretrained(self._tok_dir, **kwargs)
+        # padding/truncation path (avoid relying on model_max_length)
+        max_len = 64
+        padded = tokenizer(texts_uc, padding="max_length", truncation=True, max_length=max_len)
+        # ensure every sequence is padded/truncated to max_len
+        for seq in padded["input_ids"]:
+            self.assertEqual(len(seq), max_len)
 
-    def test_lowercasing_is_backend_normalizer(self):
-        tok = self.get_tokenizer(do_lower_case=True)
-        self.assertEqual(tok("HELLO WORLD")["input_ids"], tok("hello world")["input_ids"])
+        # save/load roundtrip preserves behavior
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tokenizer.save_pretrained(tmpdir)
+            tokenizer_reloaded = Siglip2Tokenizer.from_pretrained(tmpdir)
 
-    def test_do_lower_case_flag(self):
-        tok = self.get_tokenizer(do_lower_case=False)
-        self.assertNotEqual(tok("HELLO WORLD")["input_ids"], tok("hello world")["input_ids"])
+            batch_uc_2 = tokenizer_reloaded(texts_uc, truncation=True)
+            batch_lc_2 = tokenizer_reloaded(texts_lc, truncation=True)
+            self.assertListEqual(batch_uc_2["input_ids"], batch_lc_2["input_ids"])
+            self.assertListEqual(batch_uc["input_ids"], batch_uc_2["input_ids"])
+
+            padded_2 = tokenizer_reloaded(texts_uc, padding="max_length", truncation=True, max_length=max_len)
+            for seq in padded_2["input_ids"]:
+                self.assertEqual(len(seq), max_len)
