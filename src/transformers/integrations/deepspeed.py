@@ -339,11 +339,13 @@ def _apply_weight_conversions_to_state_dict(model, state_dict, weight_mapping):
     pattern_to_converter = {k: converter for converter in converters for k in converter.source_patterns}
 
     # Build a mapping of what needs to be converted
-    # Sort the state dict items to ensure consistent ordering (important for MoE conversions)
+    # Sort keys to ensure consistent ordering (important for MoE conversions)
+    # Iterate over sorted keys and pop from state_dict to free memory immediately
     conversion_mapping = {}
-    key_rename_cache = {}  # Cache rename results to avoid redundant processing in cleanup loop
-    sorted_state_dict = sorted(state_dict.items(), key=lambda kv: dot_natural_key(kv[0]))
-    for original_key, tensor in sorted_state_dict:
+    key_rename_cache = {}  # Cache rename results to avoid redundant processing
+    sorted_keys = sorted(state_dict.keys(), key=lambda k: dot_natural_key(k))
+    for original_key in sorted_keys:
+        tensor = state_dict.pop(original_key)  # Pop to free memory immediately
         # Rename the key according to all renaming pattern and optional weight converter patterns
         renamed_key, source_pattern = rename_source_key(original_key, renamings, converters, prefix, model_state_dict)
 
@@ -379,7 +381,7 @@ def _apply_weight_conversions_to_state_dict(model, state_dict, weight_mapping):
             for target_name, param in realized_value.items():
                 param = param[0] if isinstance(param, list) else param
                 new_state_dict[target_name] = param
-            # Track that this key was converted (skip original in cleanup)
+            # Track that this key was converted
             converted_renamed_keys.add(renamed_key)
             # Free memory by clearing source tensors
             if hasattr(mapping, "source_tensors"):
@@ -392,13 +394,14 @@ def _apply_weight_conversions_to_state_dict(model, state_dict, weight_mapping):
             ) from e
 
     # Add any keys that didn't need conversion (use cached rename results)
-    for key, tensor in sorted_state_dict:
-        renamed_key = key_rename_cache[key]
-        # Skip keys that were already converted - their tensors are now in new_state_dict
-        if renamed_key in converted_renamed_keys:
-            continue
+    # At this point, state_dict only contains unconverted keys (others were popped)
+    for key in list(state_dict.keys()):
+        renamed_key = key_rename_cache.get(key)
+        if renamed_key is None:
+            # Key wasn't in our cache, compute rename
+            renamed_key, _ = rename_source_key(key, renamings, [], prefix, model_state_dict)
         if renamed_key not in new_state_dict and renamed_key in model_state_dict:
-            new_state_dict[renamed_key] = tensor
+            new_state_dict[renamed_key] = state_dict.pop(key)
 
     # Attach metadata to the new state dict
     if metadata is not None:
