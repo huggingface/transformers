@@ -368,7 +368,9 @@ class VibeVoiceGenerationMixin(GenerationMixin):
                     audio_latent.device
                 ) - self.latent_bias_factor.to(audio_latent.device)
                 if diffusion_idx.numel() < batch_size:
-                    padded_latent = torch.zeros(batch_size, *scaled_latent.shape[1:]).to(scaled_latent.device, scaled_latent.dtype)
+                    padded_latent = torch.zeros(batch_size, *scaled_latent.shape[1:]).to(
+                        scaled_latent.device, scaled_latent.dtype
+                    )
                     padded_latent[diffusion_idx] = scaled_latent
                 else:
                     padded_latent = scaled_latent

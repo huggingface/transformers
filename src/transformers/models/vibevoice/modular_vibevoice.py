@@ -71,32 +71,19 @@ class VibeVoiceConv1dPaddingCache(MimiConv1dPaddingCache):
 class VibeVoiceDiffusionHeadTimestepEmbedder(nn.Module):
     def __init__(self, config):
         super().__init__()
+        self.config = config
         self.layer_1 = nn.Linear(config.frequency_embedding_size, config.hidden_size, bias=False)
         self.act = ACT2FN[config.hidden_act]
         self.layer_2 = nn.Linear(config.hidden_size, config.hidden_size, bias=False)
-        self.frequency_embedding_size = config.frequency_embedding_size
 
-    @staticmethod
-    def timestep_embedding(timesteps, dim, max_period=10000):
-        # NOTE (ebezzam) imitate `LlamaRotaryEmbedding` device handling
-        device_type = (
-            timesteps.device.type
-            if isinstance(timesteps.device.type, str) and timesteps.device.type != "mps"
-            else "cpu"
-        )
-        with torch.autocast(device_type=device_type, enabled=False):
-            freqs = torch.exp(
-                -math.log(max_period) * torch.arange(start=0, end=dim // 2, dtype=torch.float32) / (dim // 2)
-            ).to(timesteps.device)
-            args = timesteps[:, None].float() * freqs[None]
-            embedding = torch.cat([torch.cos(args), torch.sin(args)], dim=-1)
-        if dim % 2:
-            embedding = torch.cat([embedding, torch.zeros_like(embedding[:, :1])], dim=-1)
-        return embedding.to(timesteps.dtype)
-
-    def forward(self, timesteps):
-        t_freq = self.timestep_embedding(timesteps, dim=self.frequency_embedding_size)
-        return self.layer_2(self.act(self.layer_1(t_freq)))
+    def forward(self, timesteps, max_period=10000):
+        dim = self.config.frequency_embedding_size // 2
+        freq = torch.exp(-math.log(max_period) * torch.arange(dim, dtype=torch.float32) / dim)
+        args = timesteps[:, None].float() * freq[None].to(timesteps.device)
+        embedding = torch.cat([torch.cos(args), torch.sin(args)], dim=-1)
+        if self.config.frequency_embedding_size % 2:
+            embedding = nn.functional.pad(embedding, (0, 1))
+        return self.layer_2(self.act(self.layer_1(embedding.to(timesteps.dtype))))
 
 
 class VibeVoiceMLP(LlamaMLP):
@@ -345,9 +332,9 @@ class VibeVoiceModel(VibeVoicePreTrainedModel):
                 The audio embeddings.
         """
         # adjust padding mask according to tokenizer compression
-        num_audio_tokens = torch.ceil(
-            padding_mask.sum(dim=-1) / self.acoustic_tokenizer.config.hop_length
-        ).to(torch.int64)
+        num_audio_tokens = torch.ceil(padding_mask.sum(dim=-1) / self.acoustic_tokenizer.config.hop_length).to(
+            torch.int64
+        )
         padding_mask = torch.arange(max(num_audio_tokens)) < num_audio_tokens[:, None].cpu()
 
         with torch.no_grad():
