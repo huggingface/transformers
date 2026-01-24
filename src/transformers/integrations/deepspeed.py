@@ -318,7 +318,12 @@ def _apply_weight_conversions_to_state_dict(model, state_dict, weight_mapping):
     metadata = getattr(state_dict, "_metadata", None)
 
     prefix = model.base_model_prefix
-    model_state_dict = model.state_dict()
+
+    # Build a meta state dict for matching - only keys/shapes, no actual tensor data
+    # This minimizes memory since we don't duplicate the model's parameters
+    model_state_dict = {}
+    for key, param in model.state_dict().items():
+        model_state_dict[key] = torch.empty(param.shape, dtype=param.dtype, device="meta")
 
     renamings = [entry for entry in weight_mapping if isinstance(entry, WeightRenaming)]
     converters = [entry for entry in weight_mapping if isinstance(entry, WeightConverter)]
