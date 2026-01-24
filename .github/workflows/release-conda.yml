@@ -22,7 +22,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Install miniconda
-        uses: conda-incubator/setup-miniconda@v2
+        uses: conda-incubator/setup-miniconda@v3.3.0
         with:
           auto-update-conda: true
           auto-activate-base: false
