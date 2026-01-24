@@ -318,7 +318,7 @@ def _apply_weight_conversions_to_state_dict(model, state_dict, weight_mapping):
     metadata = getattr(state_dict, "_metadata", None)
 
     prefix = model.base_model_prefix
-    meta_model_state_dict = model.state_dict()
+    model_state_dict = model.state_dict()
 
     renamings = [entry for entry in weight_mapping if isinstance(entry, WeightRenaming)]
     converters = [entry for entry in weight_mapping if isinstance(entry, WeightConverter)]
