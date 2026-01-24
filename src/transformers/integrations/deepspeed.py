@@ -389,7 +389,7 @@ def _apply_weight_conversions_to_state_dict(model, state_dict, weight_mapping):
     # Add any keys that didn't need conversion (use cached rename results)
     for key, tensor in sorted_state_dict:
         renamed_key = key_rename_cache[key]
-        if renamed_key not in new_state_dict and renamed_key in meta_model_state_dict:
+        if renamed_key not in new_state_dict and renamed_key in model_state_dict:
             new_state_dict[renamed_key] = tensor
 
     # Attach metadata to the new state dict
