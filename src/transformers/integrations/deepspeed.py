@@ -328,7 +328,7 @@ def _apply_weight_conversions_to_state_dict(model, state_dict, weight_mapping):
         new_state_dict = {}
         for original_key, tensor in state_dict.items():
             renamed_key, _ = rename_source_key(original_key, renamings, [], prefix, model_state_dict)
-            if renamed_key in meta_model_state_dict:
+            if renamed_key in model_state_dict:
                 new_state_dict[renamed_key] = tensor
         # Attach metadata to the new state dict
         if metadata is not None:
