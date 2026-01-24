@@ -58,6 +58,38 @@ class RagTokenizer:
     def __call__(self, *args, **kwargs):
         return self.current_tokenizer(*args, **kwargs)
 
+    def encode(self, *args, **kwargs):
+        return self.current_tokenizer.encode(*args, **kwargs)
+
+    @property
+    def patch_token(self):
+        return getattr(self.current_tokenizer, "patch_token", None)
+
+    @patch_token.setter
+    def patch_token(self, value):
+        setattr(self.current_tokenizer, "patch_token", value)
+
+    @property
+    def patch_token_id(self):
+        patch_token_id = getattr(self.current_tokenizer, "patch_token_id", None)
+        if patch_token_id is not None:
+            return patch_token_id
+
+        patch_token = getattr(self.current_tokenizer, "patch_token", None)
+        if patch_token is None:
+            return None
+
+        convert = getattr(self.current_tokenizer, "convert_tokens_to_ids", None)
+        if convert is None:
+            return None
+
+        return convert(patch_token)
+
+    @patch_token_id.setter
+    def patch_token_id(self, value):
+        # Store/forward to the currently active tokenizer
+        setattr(self.current_tokenizer, "patch_token_id", value)
+
     def batch_decode(self, *args, **kwargs):
         return self.generator.batch_decode(*args, **kwargs)
 
